@@ -29,6 +29,10 @@ WORKDIR /app
 # Copy project files
 COPY . .
 
+# Copy Docker entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader
 
@@ -37,4 +41,4 @@ RUN chown -R www-data:www-data /app && chmod -R 755 /app
 
 EXPOSE 8000
 
-CMD ["php", "artisan", "serve", "--host=0.0.0.0"]
+CMD ["/usr/local/bin/docker-entrypoint.sh"]

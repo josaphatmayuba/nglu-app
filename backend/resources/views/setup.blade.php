@@ -78,7 +78,7 @@
                 @csrf
                 <div class="mb-3">
                     <label for="db_host" class="form-label">Database Host</label>
-                    <input type="text" class="form-control" id="db_host" name="db_host" placeholder="e.g., 127.0.0.1" required value="localhost">
+                    <input type="text" class="form-control" id="db_host" name="db_host" placeholder="e.g., mysql" required value="mysql">
                 </div>
                 <div class="mb-3">
                     <label for="db_port" class="form-label">Database Port</label>

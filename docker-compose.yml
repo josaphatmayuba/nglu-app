@@ -26,9 +26,10 @@ services:
     container_name: nglu_backend
     restart: unless-stopped
     working_dir: /app
+    env_file:
+      - ./backend/.env.docker
     environment:
       APP_ENV: ${APP_ENV:-local}
-      APP_KEY: ${APP_KEY}
       APP_DEBUG: ${APP_DEBUG:-true}
       DB_HOST: mysql
       DB_PORT: 3306
@@ -45,11 +46,6 @@ services:
       - mysql
     networks:
       - nglu_network
-    command: >
-      sh -c "composer install &&
-             php artisan key:generate --force &&
-             php artisan migrate --force &&
-             php artisan serve --host=0.0.0.0 --port=8000"
 
   # Frontend - React + Vite
   frontend:
@@ -77,6 +73,24 @@ services:
     ports:
       - "1025:1025"
       - "8025:8025"
+    networks:
+      - nglu_network
+
+  # phpMyAdmin - MySQL Management Interface
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: nglu_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: ${DB_USERNAME:-nglu_user}
+      PMA_PASSWORD: ${DB_PASSWORD:-password}
+      PMA_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      PMA_PORT: 3306
+    ports:
+      - "8080:80"
+    depends_on:
+      - mysql
     networks:
       - nglu_network
 
