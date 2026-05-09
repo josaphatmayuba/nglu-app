@@ -10,6 +10,7 @@ const initialState = {
   leases: [],
   payments: [],
   maintenance: [],
+  contracts: [],
   loading: false,
   error: "",
 };
@@ -186,6 +187,81 @@ export const deleteMaintenance = createAsyncThunk(
   },
 );
 
+export const loadContracts = createAsyncThunk(
+  "propertyManagement/loadContracts",
+  async () => {
+    try {
+      const { data } = await axios.get("property-management/contracts");
+      return successHandler(data);
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const createContract = createAsyncThunk(
+  "propertyManagement/createContract",
+  async (values) => {
+    try {
+      const data = await request("post", "property-management/contracts", values);
+      return successHandler(data, "Contrat créé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const sendContract = createAsyncThunk(
+  "propertyManagement/sendContract",
+  async (id) => {
+    try {
+      const data = await request("post", `property-management/contracts/${id}/send`);
+      return successHandler(data, "Contrat envoyé au locataire");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const deleteContract = createAsyncThunk(
+  "propertyManagement/deleteContract",
+  async (id) => {
+    try {
+      const data = await request("delete", `property-management/contracts/${id}`);
+      return successHandler({ ...data, id }, "Contrat supprimé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+// Public thunks (no auth header needed — use bare axios without interceptor)
+export const getContractForSigning = createAsyncThunk(
+  "propertyManagement/getContractForSigning",
+  async (token) => {
+    try {
+      const { data } = await axios.get(`property-management/contracts/sign/${token}`);
+      return { data };
+    } catch (error) {
+      return errorHandler(error, false);
+    }
+  },
+);
+
+export const submitSignature = createAsyncThunk(
+  "propertyManagement/submitSignature",
+  async ({ token, signatureData }) => {
+    try {
+      const { data } = await axios.post(`property-management/contracts/sign/${token}`, {
+        signatureData,
+      });
+      return { data };
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
 const upsert = (list, item) => {
   const existing = list.find((entry) => entry.id === item.id);
   if (!existing) return [item, ...list];
@@ -244,6 +320,22 @@ const propertyManagementSlice = createSlice({
         state.maintenance = state.maintenance.filter(
           (request) => request.id !== action.payload.data.id,
         );
+      })
+      .addCase(loadContracts.fulfilled, (state, action) => {
+        state.contracts = action.payload.data ?? [];
+      })
+      .addCase(createContract.fulfilled, (state, action) => {
+        if (action.payload.data) state.contracts = [action.payload.data, ...state.contracts];
+      })
+      .addCase(sendContract.fulfilled, (state, action) => {
+        if (action.payload.data?.id) {
+          state.contracts = state.contracts.map((c) =>
+            c.id === action.payload.data.id ? { ...c, status: "sent" } : c,
+          );
+        }
+      })
+      .addCase(deleteContract.fulfilled, (state, action) => {
+        state.contracts = state.contracts.filter((c) => c.id !== action.payload.data.id);
       });
   },
 });

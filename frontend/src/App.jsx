@@ -10,6 +10,7 @@ import LoaderSpinner from "./components/loader/LoaderSpinner";
 import Login from "./components/user/Login";
 import { getSetting } from "./redux/rtk/features/setting/settingSlice";
 import ServerError from "./components/404/ServerError";
+import SignContractPage from "./components/propertyManagement/SignContractPage";
 const CustomerLayout = lazy(() => import("@/layouts/CustomerLayout"));
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
 
@@ -29,6 +30,7 @@ function App() {
   else if (data && !loading) {
     content = (
       <Routes>
+        <Route path="/sign/:token" element={<SignContractPage />} />
         <Route
           path="/*"
           element={

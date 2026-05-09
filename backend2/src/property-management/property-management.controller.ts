@@ -9,16 +9,21 @@ import {
   Patch,
   Post,
   Put,
+  UseGuards,
 } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
+import { ContractsService } from "./contracts.service";
 import {
+  CreateContractDto,
   CreateLeaseDto,
   CreateMaintenanceDto,
   CreatePropertyDto,
@@ -32,9 +37,14 @@ import {
 import { PropertyManagementService } from "./property-management.service";
 
 @ApiTags("property-management")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("property-management")
 export class PropertyManagementController {
-  constructor(private readonly propertyManagementService: PropertyManagementService) {}
+  constructor(
+    private readonly propertyManagementService: PropertyManagementService,
+    private readonly contractsService: ContractsService,
+  ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
   @ApiOkResponse({ description: "Dashboard metrics" })
@@ -57,6 +67,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.properties();
   }
 
+  @ApiOperation({ summary: "Get single property by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("properties/:id")
+  findProperty(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.findProperty(id);
+  }
+
   @ApiOperation({ summary: "Create a property" })
   @ApiCreatedResponse({ description: "Created property" })
   @Post("properties")
@@ -67,7 +84,7 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Update a property" })
   @ApiParam({ name: "id", example: 1, type: Number })
   @Patch("properties/:id")
-  @Put("properties/:id")
+  @Post("properties/:id")
   updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
     return this.propertyManagementService.updateProperty(id, body);
   }
@@ -86,6 +103,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.units();
   }
 
+  @ApiOperation({ summary: "Get single unit by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("units/:id")
+  findUnit(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.findUnit(id);
+  }
+
   @ApiOperation({ summary: "Create a rental unit" })
   @Post("units")
   createUnit(@Body() body: CreateUnitDto) {
@@ -94,7 +118,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Update a rental unit" })
   @Patch("units/:id")
-  @Put("units/:id")
+  @Post("units/:id")
   updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
     return this.propertyManagementService.updateUnit(id, body);
   }
@@ -113,6 +137,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.leases();
   }
 
+  @ApiOperation({ summary: "Get single lease by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("leases/:id")
+  findLease(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.findLease(id);
+  }
+
   @ApiOperation({ summary: "Create a lease" })
   @Post("leases")
   createLease(@Body() body: CreateLeaseDto) {
@@ -121,7 +152,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Update a lease" })
   @Patch("leases/:id")
-  @Put("leases/:id")
+  @Post("leases/:id")
   updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto) {
     return this.propertyManagementService.updateLease(id, body);
   }
@@ -140,6 +171,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.payments();
   }
 
+  @ApiOperation({ summary: "Get single rent payment by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("payments/:id")
+  findPayment(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.findPayment(id);
+  }
+
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
   @Post("payments")
   createPayment(@Body() body: CreateRentPaymentDto) {
@@ -152,6 +190,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.maintenance();
   }
 
+  @ApiOperation({ summary: "Get single maintenance request by ID" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("maintenance/:id")
+  findMaintenance(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.findMaintenance(id);
+  }
+
   @ApiOperation({ summary: "Create a maintenance request" })
   @Post("maintenance")
   createMaintenance(@Body() body: CreateMaintenanceDto) {
@@ -160,7 +205,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Update a maintenance request" })
   @Patch("maintenance/:id")
-  @Put("maintenance/:id")
+  @Post("maintenance/:id")
   updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
     return this.propertyManagementService.updateMaintenance(id, body);
   }
@@ -171,5 +216,41 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteMaintenance(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.deleteMaintenance(id);
+  }
+
+  // ── Contracts ──────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List all contracts" })
+  @Get("contracts")
+  listContracts() {
+    return this.contractsService.listContracts();
+  }
+
+  @ApiOperation({ summary: "Get single contract with audit log" })
+  @ApiParam({ name: "id", type: Number })
+  @Get("contracts/:id")
+  getContract(@Param("id", ParseIntPipe) id: number) {
+    return this.contractsService.getContract(id);
+  }
+
+  @ApiOperation({ summary: "Create contract from a lease (auto-generates content)" })
+  @Post("contracts")
+  createContract(@Body() body: CreateContractDto) {
+    return this.contractsService.createContract(body);
+  }
+
+  @ApiOperation({ summary: "Send contract for e-signature by email" })
+  @ApiParam({ name: "id", type: Number })
+  @Post("contracts/:id/send")
+  @HttpCode(200)
+  sendContract(@Param("id", ParseIntPipe) id: number) {
+    return this.contractsService.sendContract(id);
+  }
+
+  @ApiOperation({ summary: "Delete a contract" })
+  @Delete("contracts/:id")
+  @HttpCode(200)
+  deleteContract(@Param("id", ParseIntPipe) id: number) {
+    return this.contractsService.deleteContract(id);
   }
 }

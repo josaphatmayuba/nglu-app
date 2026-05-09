@@ -200,6 +200,262 @@ export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance
   updatedAt: timestamp("updated_at"),
 });
 
+export const realEstateContracts = mysqlTable("real_estate_contracts", {
+  id: serial("id").primaryKey(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  status: varchar("status", { length: 50 }).default("draft").notNull(),
+  contractContent: text("contract_content"),
+  signatureData: text("signature_data"),
+  signerToken: varchar("signer_token", { length: 255 }),
+  signerTokenExpiry: timestamp("signer_token_expiry"),
+  signedAt: timestamp("signed_at"),
+  signerIp: varchar("signer_ip", { length: 100 }),
+  signerUserAgent: varchar("signer_user_agent", { length: 500 }),
+  sentAt: timestamp("sent_at"),
+  tenantEmail: varchar("tenant_email", { length: 255 }),
+  tenantName: varchar("tenant_name", { length: 255 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audit_logs", {
+  id: serial("id").primaryKey(),
+  contractId: bigint("contract_id", { mode: "number" }).notNull(),
+  event: varchar("event", { length: 100 }).notNull(),
+  ip: varchar("ip", { length: 100 }),
+  userAgent: varchar("user_agent", { length: 500 }),
+  details: text("details"),
+  createdAt: timestamp("created_at"),
+});
+
+export const users = mysqlTable("users", {
+  id: serial("id").primaryKey(),
+  firstName: varchar("firstName", { length: 255 }),
+  lastName: varchar("lastName", { length: 255 }),
+  username: varchar("username", { length: 255 }).notNull().unique(),
+  password: varchar("password", { length: 255 }).notNull(),
+  roleId: bigint("roleId", { mode: "number" }).notNull(),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 255 }),
+  street: varchar("street", { length: 255 }),
+  city: varchar("city", { length: 255 }),
+  state: varchar("state", { length: 255 }),
+  zipCode: varchar("zipCode", { length: 255 }),
+  country: varchar("country", { length: 255 }),
+  joinDate: datetime("joinDate"),
+  leaveDate: datetime("leaveDate"),
+  employeeId: varchar("employeeId", { length: 255 }),
+  bloodGroup: varchar("bloodGroup", { length: 255 }),
+  image: varchar("image", { length: 255 }),
+  designationId: bigint("designationId", { mode: "number" }),
+  employmentStatusId: bigint("employmentStatusId", { mode: "number" }),
+  departmentId: bigint("departmentId", { mode: "number" }),
+  shiftId: bigint("shiftId", { mode: "number" }),
+  refreshToken: varchar("refreshToken", { length: 512 }),
+  isLogin: varchar("isLogin", { length: 10 }).default("false").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const appSettings = mysqlTable("appSetting", {
+  id: serial("id").primaryKey(),
+  companyName: varchar("companyName", { length: 255 }),
+  dashboardType: varchar("dashboardType", { length: 255 }),
+  tagLine: varchar("tagLine", { length: 255 }),
+  address: varchar("address", { length: 255 }),
+  phone: varchar("phone", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  website: varchar("website", { length: 255 }),
+  footer: text("footer"),
+  logo: varchar("logo", { length: 255 }),
+  currencyId: bigint("currencyId", { mode: "number" }),
+  isPos: varchar("isPos", { length: 10 }).default("false"),
+  isDiscount: varchar("isDiscount", { length: 10 }).default("false"),
+  isTax: varchar("isTax", { length: 10 }).default("false"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const products = mysqlTable("product", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  productThumbnailImage: varchar("productThumbnailImage", { length: 255 }),
+  productSubCategoryId: bigint("productSubCategoryId", { mode: "number" }),
+  productBrandId: bigint("productBrandId", { mode: "number" }),
+  description: text("description"),
+  sku: varchar("sku", { length: 255 }),
+  productQuantity: double("productQuantity").default(0).notNull(),
+  productSalePrice: double("productSalePrice").default(0).notNull(),
+  productPurchasePrice: double("productPurchasePrice").default(0).notNull(),
+  uomId: bigint("uomId", { mode: "number" }),
+  uomValue: varchar("uomValue", { length: 255 }),
+  reorderQuantity: double("reorderQuantity").default(0),
+  productVatId: bigint("productVatId", { mode: "number" }),
+  productPurchaseVatId: bigint("productPurchaseVatId", { mode: "number" }),
+  discountId: bigint("discountId", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productCategories = mysqlTable("productCategory", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productSubCategories = mysqlTable("productSubCategory", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  productCategoryId: bigint("productCategoryId", { mode: "number" }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productBrands = mysqlTable("productBrand", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productVats = mysqlTable("productVat", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  percentage: double("percentage").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const uoms = mysqlTable("uom", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const manufacturers = mysqlTable("manufacturer", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const purchaseInvoiceProducts = mysqlTable("purchaseInvoiceProduct", {
+  id: serial("id").primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 50 }).notNull(),
+  productId: bigint("productId", { mode: "number" }).notNull(),
+  productQuantity: double("productQuantity").default(0).notNull(),
+  productUnitPurchasePrice: double("productUnitPurchasePrice").default(0).notNull(),
+  productFinalAmount: double("productFinalAmount").default(0).notNull(),
+  tax: double("tax").default(0),
+  taxAmount: double("taxAmount").default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const saleInvoices = mysqlTable("saleInvoice", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  date: datetime("date").notNull(),
+  invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
+  totalAmount: double("totalAmount").default(0).notNull(),
+  totalTaxAmount: double("totalTaxAmount").default(0).notNull(),
+  totalDiscountAmount: double("totalDiscountAmount").default(0).notNull(),
+  paidAmount: double("paidAmount").default(0).notNull(),
+  dueAmount: double("dueAmount").default(0).notNull(),
+  profit: double("profit").default(0).notNull(),
+  customerId: bigint("customerId", { mode: "number" }),
+  userId: bigint("userId", { mode: "number" }),
+  note: text("note"),
+  dueDate: datetime("dueDate"),
+  isHold: varchar("isHold", { length: 10 }).default("false"),
+  orderStatus: varchar("orderStatus", { length: 50 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const saleInvoiceProducts = mysqlTable("saleInvoiceProduct", {
+  id: serial("id").primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 50 }).notNull(),
+  productId: bigint("productId", { mode: "number" }).notNull(),
+  productQuantity: double("productQuantity").default(0).notNull(),
+  productUnitSalePrice: double("productUnitSalePrice").default(0).notNull(),
+  productDiscount: double("productDiscount").default(0).notNull(),
+  productFinalAmount: double("productFinalAmount").default(0).notNull(),
+  tax: double("tax").default(0),
+  taxAmount: double("taxAmount").default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const purchaseInvoices = mysqlTable("purchaseInvoice", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  date: datetime("date").notNull(),
+  invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
+  supplierMemoNo: varchar("supplierMemoNo", { length: 255 }),
+  totalAmount: double("totalAmount").default(0).notNull(),
+  totalTax: double("totalTax").default(0).notNull(),
+  paidAmount: double("paidAmount").default(0).notNull(),
+  dueAmount: double("dueAmount").default(0).notNull(),
+  supplierId: bigint("supplierId", { mode: "number" }),
+  note: text("note"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const returnSaleInvoices = mysqlTable("returnSaleInvoice", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  date: datetime("date").notNull(),
+  totalAmount: double("totalAmount").default(0).notNull(),
+  instantReturnAmount: double("instantReturnAmount").default(0),
+  tax: double("tax").default(0),
+  note: text("note"),
+  saleInvoiceId: varchar("saleInvoiceId", { length: 50 }),
+  invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const returnPurchaseInvoices = mysqlTable("returnPurchaseInvoice", {
+  id: varchar("id", { length: 50 }).primaryKey(),
+  date: datetime("date").notNull(),
+  totalAmount: double("totalAmount").default(0).notNull(),
+  instantReturnAmount: double("instantReturnAmount").default(0),
+  tax: double("tax").default(0),
+  note: text("note"),
+  purchaseInvoiceId: varchar("purchaseInvoiceId", { length: 50 }),
+  invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const paymentSaleInvoices = mysqlTable("paymentSaleInvoice", {
+  id: serial("id").primaryKey(),
+  date: datetime("date").notNull(),
+  amount: double("amount").default(0).notNull(),
+  saleInvoiceId: varchar("saleInvoiceId", { length: 50 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const paymentPurchaseInvoices = mysqlTable("paymentPurchaseInvoice", {
+  id: serial("id").primaryKey(),
+  date: datetime("date").notNull(),
+  amount: double("amount").default(0).notNull(),
+  purchaseInvoiceId: varchar("purchaseInvoiceId", { length: 50 }).notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const roles = mysqlTable("role", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull().unique(),

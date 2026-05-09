@@ -1,0 +1,19 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsInt, IsOptional, IsString } from "class-validator";
+
+export class UpdateAppSettingDto {
+  @ApiPropertyOptional({ example: "My Company" }) @IsOptional() @IsString() companyName?: string;
+  @ApiPropertyOptional({ example: "default" }) @IsOptional() @IsString() dashboardType?: string;
+  @ApiPropertyOptional({ example: "Best ERP" }) @IsOptional() @IsString() tagLine?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() address?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() website?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() footer?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() logo?: string;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() @IsInt() currencyId?: number;
+  @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isPos?: string;
+  @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isDiscount?: string;
+  @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isTax?: string;
+  @ApiPropertyOptional({ description: "Set to 'true' to clear the logo" }) @IsOptional() @IsString() clearLogo?: string;
+}

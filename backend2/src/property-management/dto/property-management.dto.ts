@@ -302,3 +302,21 @@ export class CreateMaintenanceDto {
 }
 
 export class UpdateMaintenanceDto extends PartialType(CreateMaintenanceDto) {}
+
+export class CreateContractDto {
+  @ApiProperty({ example: 1 })
+  @IsInt()
+  leaseId: number;
+
+  @ApiPropertyOptional({ example: "Contrat de bail personnalisé..." })
+  @IsOptional()
+  @IsString()
+  contractContent?: string;
+}
+
+export class SignContractDto {
+  @ApiProperty({ example: "data:image/png;base64,iVBORw0KGgo..." })
+  @IsString()
+  @IsNotEmpty()
+  signatureData: string;
+}

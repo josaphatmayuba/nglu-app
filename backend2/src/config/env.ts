@@ -6,6 +6,16 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 8001),
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
+  jwtSecret: process.env.JWT_SECRET || "jwt_secret_key",
+  refreshSecret: process.env.REFRESH_SECRET || "refresh_secret_key",
+  appUrl: process.env.APP_URL || "http://localhost:3000",
+  smtp: {
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT || 587),
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM || "noreply@nglu.app",
+  },
   db: {
     host: process.env.DB_HOST || "mysql",
     port: Number(process.env.DB_PORT || 3306),

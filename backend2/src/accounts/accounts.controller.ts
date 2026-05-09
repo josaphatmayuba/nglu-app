@@ -8,7 +8,7 @@ import {
 } from "./dto/account.dto";
 import { AccountsService } from "./accounts.service";
 
-@ApiTags("accounts")
+@ApiTags("account")
 @Controller()
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}

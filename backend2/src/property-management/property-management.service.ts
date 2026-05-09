@@ -466,31 +466,31 @@ export class PropertyManagementService {
     return { message: "Maintenance request deleted successfully." };
   }
 
-  private async findProperty(id: number) {
+  async findProperty(id: number) {
     const rows = await this.db.select().from(realEstateProperties).where(eq(realEstateProperties.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Property not found.");
     return rows[0];
   }
 
-  private async findUnit(id: number) {
+  async findUnit(id: number) {
     const rows = await this.units().where(eq(realEstateUnits.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Unit not found.");
     return rows[0];
   }
 
-  private async findLease(id: number) {
+  async findLease(id: number) {
     const rows = await this.leaseQuery().where(eq(realEstateLeases.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
   }
 
-  private async findPayment(id: number) {
+  async findPayment(id: number) {
     const rows = await this.payments().where(eq(realEstateRentPayments.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Payment not found.");
     return rows[0];
   }
 
-  private async findMaintenance(id: number) {
+  async findMaintenance(id: number) {
     const rows = await this.maintenance().where(eq(realEstateMaintenanceRequests.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance request not found.");
     return rows[0];

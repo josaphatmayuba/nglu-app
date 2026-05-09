@@ -25,6 +25,7 @@ import {
   saveUnit,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
+import ContractsTab from "./ContractsTab";
 
 const propertyTypes = [
   { label: "Immeuble", value: "building" },
@@ -478,6 +479,15 @@ const PropertyManagement = () => {
               actionColumn("maintenance", deleteMaintenance),
             ]}
           />
+        </div>
+      ),
+    },
+    {
+      key: "contracts",
+      label: "Contrats",
+      children: (
+        <div className="pm-panel">
+          <ContractsTab leases={leases} />
         </div>
       ),
     },
