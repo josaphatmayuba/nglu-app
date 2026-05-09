@@ -3,6 +3,7 @@ import type { Config } from "drizzle-kit";
 
 export default {
   schema: "./src/database/schema.ts",
+  out: "./drizzle",
   dialect: "mysql",
   dbCredentials: {
     host: process.env.DB_HOST || "mysql",
