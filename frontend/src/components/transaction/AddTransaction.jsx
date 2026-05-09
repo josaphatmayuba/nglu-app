@@ -1,4 +1,4 @@
-import { Button, DatePicker, Form, Input, Select, Typography } from "antd";
+import { Button, DatePicker, Form, Input, Select, Typography, Checkbox } from "antd";
 import dayjs from "dayjs";
 import moment from "moment";
 import { useEffect, useState } from "react";
@@ -12,7 +12,7 @@ import BigDrawer from "../Drawer/BigDrawer";
 import AddAccount from "../account/AddAccount";
 import toast from "react-hot-toast";
 import { loadSingleSale } from "@/redux/rtk/features/sale/saleSlice";
-import { loadSinglePurchase } from "@/redux/rtk/features/purchase/purchaseSlice";
+import { loadAllTransactionType } from "../../redux/rtk/features/transactionType/transactionTypeSlice";
 
 //Date functionalities
 let startdate = moment().startOf("month").format("YYYY-MM-DD");
@@ -22,13 +22,17 @@ const AddTransaction = ({ preFieldValue, id, isSale, dueAmount }) => {
   const dispatch = useDispatch();
   const { Title } = Typography;
   const { list: accounts, loading } = useSelector((state) => state.accounts);
+  const { list: transactionTypes, loading: loadingTypes } = useSelector((state) => state.transactionTypes);
   const [form] = Form.useForm();
 
   let [date, setDate] = useState(moment());
   const [loader, setLoader] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
+  const [selectedTransactionType, setSelectedTransactionType] = useState(null);
 
   useEffect(() => {
     dispatch(loadAllAccount());
+    dispatch(loadAllTransactionType());
   }, [dispatch]);
 
   const onFinish = async (values) => {
@@ -40,10 +44,8 @@ const AddTransaction = ({ preFieldValue, id, isSale, dueAmount }) => {
       return;
     }
     try {
-      const data = {
-        date: date,
-        ...values,
-      };
+      const type = manualEntry ? null : selectedTransactionType ? selectedTransactionType.name : null;
+      const data = { date, type, ...values };
 
       const resp = await dispatch(addTransaction(data));
 
@@ -68,15 +70,7 @@ const AddTransaction = ({ preFieldValue, id, isSale, dueAmount }) => {
     setLoader(false);
   };
 
-  const validator = (_, value) => {
-    const type = form.getFieldValue("type");
-    const relatedId = form.getFieldValue("relatedId");
-    if ((!type && relatedId) || (type && !relatedId)) {
-      return Promise.reject("Select type and input related Id");
-    } else {
-      return Promise.resolve();
-    }
-  };
+
 
   return (
     <>
@@ -111,6 +105,42 @@ const AddTransaction = ({ preFieldValue, id, isSale, dueAmount }) => {
               ]}
             />
           </Form.Item>
+          <Form.Item style={{ marginBottom: "10px" }}>
+            <Checkbox checked={manualEntry} onChange={(e) => setManualEntry(e.target.checked)}>
+              Manual Entry
+            </Checkbox>
+          </Form.Item>
+          {!manualEntry && (
+            <Form.Item
+              style={{ marginBottom: "10px" }}
+              label="Transaction Type"
+              name="transactionTypeId"
+            >
+              <Select
+                loading={loadingTypes}
+                showSearch
+                placeholder="Select Transaction Type"
+                optionFilterProp="children"
+                onChange={(value) => {
+                  const type = transactionTypes.find(t => t.id === value);
+                  setSelectedTransactionType(type);
+                  if (type) {
+                    form.setFieldsValue({
+                      debitId: type.debitAccountId,
+                      creditId: type.creditAccountId,
+                    });
+                  }
+                }}
+              >
+                {transactionTypes &&
+                  transactionTypes.map((type) => (
+                    <Select.Option key={type.id} value={type.id}>
+                      {type.name}
+                    </Select.Option>
+                  ))}
+              </Select>
+            </Form.Item>
+          )}
           <div className="grid md:grid-cols-2 gap-3">
             <div className="flex items-end mb-[10px]">
               <Form.Item
@@ -211,35 +241,9 @@ const AddTransaction = ({ preFieldValue, id, isSale, dueAmount }) => {
 
           <Form.Item
             style={{ marginBottom: "10px" }}
-            label="Invoice type - Id"
+            label="Transaction Reference"
             name="relatedId"
-            rules={[{ validator }]}>
-            <Input
-              addonBefore={
-                <Form.Item name="type" rules={[{ validator }]} noStyle>
-                  <Select
-                    allowClear
-                    size="small"
-                    popupClassName="min-w-[200px]"
-                    style={{
-                      width: 150,
-                    }}
-                    placeholder="Select type"
-                    optionFilterProp="children"
-                    className="transaction">
-                    <Select.Option value="sale">Sale</Select.Option>
-                    <Select.Option value="purchase">Purchase</Select.Option>
-                    <Select.Option value="sale_return">
-                      Sale Return
-                    </Select.Option>
-                    <Select.Option value="purchase_return">
-                      Purchase Return
-                    </Select.Option>
-                  </Select>
-                </Form.Item>
-              }
-              placeholder="Enter Invoice Id"
-            />
+          >
           </Form.Item>
 
           <Form.Item
