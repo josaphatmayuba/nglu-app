@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   IsDateString,
   IsInt,
@@ -47,24 +48,28 @@ export class CreatePropertyDto {
 
   @ApiPropertyOptional({ example: 4, default: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   floors?: number;
 
   @ApiPropertyOptional({ example: 12, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   parkingSpaces?: number;
 
   @ApiPropertyOptional({ example: 2500000, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   marketValue?: number;
 
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   defaultRent?: number;
@@ -79,6 +84,7 @@ export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
 
 export class CreateUnitDto {
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   propertyId: number;
@@ -105,30 +111,35 @@ export class CreateUnitDto {
 
   @ApiPropertyOptional({ example: 2, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   bedrooms?: number;
 
   @ApiPropertyOptional({ example: 1, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   bathrooms?: number;
 
   @ApiPropertyOptional({ example: 850, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   area?: number;
 
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   monthlyRent?: number;
 
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   securityDeposit?: number;
@@ -153,16 +164,19 @@ export class CreateLeaseDto {
   reference?: string;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   propertyId: number;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   unitId: number;
 
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   tenantId: number;
@@ -187,18 +201,21 @@ export class CreateLeaseDto {
   billingCycle?: string;
 
   @ApiProperty({ example: 1800 })
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   rentAmount: number;
 
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   securityDeposit?: number;
 
   @ApiPropertyOptional({ example: 123.45 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   moveInMeterReading?: number | null;
 
@@ -222,6 +239,7 @@ export class UpdateLeaseDto extends PartialType(CreateLeaseDto) {}
 
 export class CreateRentPaymentDto {
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   leaseId: number;
@@ -231,6 +249,7 @@ export class CreateRentPaymentDto {
   paymentDate: string;
 
   @ApiProperty({ example: 1800 })
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   amount: number;
@@ -252,6 +271,7 @@ export class CreateRentPaymentDto {
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   paymentAccountId?: number;
@@ -259,12 +279,14 @@ export class CreateRentPaymentDto {
 
 export class CreateMaintenanceDto {
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   propertyId: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   unitId?: number | null;
@@ -291,6 +313,7 @@ export class CreateMaintenanceDto {
 
   @ApiPropertyOptional({ example: 350, default: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   estimatedCost?: number;
@@ -305,6 +328,7 @@ export class UpdateMaintenanceDto extends PartialType(CreateMaintenanceDto) {}
 
 export class CreateContractDto {
   @ApiProperty({ example: 1 })
+  @Type(() => Number)
   @IsInt()
   leaseId: number;
 
