@@ -47,6 +47,34 @@ services:
     networks:
       - nglu_network
 
+  # Backend2 - Node.js API for progressive migration
+  backend2:
+    build:
+      context: ./backend2
+      dockerfile: Dockerfile
+    container_name: nglu_backend2
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      NODE_ENV: development
+      PORT: 8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-nglu_db}
+      DB_USERNAME: ${DB_USERNAME:-nglu_user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend2:/app
+      - /app/node_modules
+    depends_on:
+      - mysql
+    networks:
+      - nglu_network
+    command: npm run dev
+
   # Frontend - React + Vite
   frontend:
     build:
@@ -61,6 +89,7 @@ services:
       - /app/node_modules
     environment:
       VITE_API_URL: http://localhost:8000
+      VITE_APP_API_NODE: http://localhost:8001
     networks:
       - nglu_network
     command: npm run dev
