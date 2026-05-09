@@ -83,9 +83,14 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Update a property" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Put("properties/:id")
+  updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
+    return this.propertyManagementService.updateProperty(id, body);
+  }
+
   @Patch("properties/:id")
   @Post("properties/:id")
-  updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
+  updatePropertyAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
     return this.propertyManagementService.updateProperty(id, body);
   }
 
@@ -117,9 +122,14 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Update a rental unit" })
+  @Put("units/:id")
+  updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
+    return this.propertyManagementService.updateUnit(id, body);
+  }
+
   @Patch("units/:id")
   @Post("units/:id")
-  updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
+  updateUnitAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
     return this.propertyManagementService.updateUnit(id, body);
   }
 
@@ -151,8 +161,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Update a lease" })
-  @Patch("leases/:id")
-  @Post("leases/:id")
+  @Put("leases/:id")
   updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto) {
     return this.propertyManagementService.updateLease(id, body);
   }
@@ -204,9 +213,14 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Update a maintenance request" })
+  @Put("maintenance/:id")
+  updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
+    return this.propertyManagementService.updateMaintenance(id, body);
+  }
+
   @Patch("maintenance/:id")
   @Post("maintenance/:id")
-  updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
+  updateMaintenanceAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
     return this.propertyManagementService.updateMaintenance(id, body);
   }
 

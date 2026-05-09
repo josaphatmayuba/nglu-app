@@ -72,56 +72,51 @@ const tenantName = (tenant) =>
 const toFormRecord = (type, record) => {
   if (!record) return {};
 
-  const commonDates = {
-    start_date: record.startDate,
-    end_date: record.endDate,
-    next_invoice_date: record.nextInvoiceDate,
-    scheduled_date: record.scheduledDate,
-  };
-
   const maps = {
     property: {
       name: record.name,
       code: record.code,
-      property_type: record.propertyType,
+      propertyType: record.propertyType,
       status: record.status,
-      default_rent: record.defaultRent,
+      defaultRent: record.defaultRent,
       address: record.address,
       description: record.description,
     },
     unit: {
-      property_id: record.propertyId,
+      propertyId: record.propertyId,
       name: record.name,
-      unit_type: record.unitType,
+      unitType: record.unitType,
       status: record.status,
       floor: record.floor,
       bedrooms: record.bedrooms,
       bathrooms: record.bathrooms,
       area: record.area,
-      monthly_rent: record.monthlyRent,
-      security_deposit: record.securityDeposit,
+      monthlyRent: record.monthlyRent,
+      securityDeposit: record.securityDeposit,
     },
     lease: {
-      property_id: record.propertyId,
-      unit_id: record.unitId,
-      tenant_id: record.tenantId,
+      propertyId: record.propertyId,
+      unitId: record.unitId,
+      tenantId: record.tenantId,
       status: record.status,
-      billing_cycle: record.billingCycle,
-      rent_amount: record.rentAmount,
-      security_deposit: record.securityDeposit,
-      move_in_meter_reading: record.moveInMeterReading,
+      billingCycle: record.billingCycle,
+      rentAmount: record.rentAmount,
+      securityDeposit: record.securityDeposit,
+      moveInMeterReading: record.moveInMeterReading,
       terms: record.terms,
-      ...commonDates,
+      startDate: record.startDate,
+      endDate: record.endDate,
+      nextInvoiceDate: record.nextInvoiceDate,
     },
     maintenance: {
-      property_id: record.propertyId,
-      unit_id: record.unitId,
+      propertyId: record.propertyId,
+      unitId: record.unitId,
       title: record.title,
       priority: record.priority,
       status: record.status,
-      estimated_cost: record.estimatedCost,
+      estimatedCost: record.estimatedCost,
       description: record.description,
-      ...commonDates,
+      scheduledDate: record.scheduledDate,
     },
   };
 
@@ -203,50 +198,60 @@ const PropertyManagement = () => {
     }
   };
 
-  const propertyOptions = properties.map((property) => ({
+  const safeProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
+  const safeUnits = useMemo(() => (units ?? []).filter(Boolean), [units]);
+  const safeTenants = useMemo(() => (tenants ?? []).filter(Boolean), [tenants]);
+  const safeLeases = useMemo(() => (leases ?? []).filter(Boolean), [leases]);
+  const safePayments = useMemo(() => (payments ?? []).filter(Boolean), [payments]);
+  const safeMaintenance = useMemo(
+    () => (maintenance ?? []).filter(Boolean),
+    [maintenance],
+  );
+
+  const propertyOptions = safeProperties.map((property) => ({
     label: property.name,
     value: property.id,
   }));
 
-  const unitOptions = units.map((unit) => ({
+  const unitOptions = safeUnits.map((unit) => ({
     label: `${unit.name} - ${unit.property?.name || ""}`,
     value: unit.id,
   }));
 
-  const leaseOptions = leases
+  const leaseOptions = safeLeases
     .filter((lease) => lease.status === "active")
     .map((lease) => ({
       label: `${lease.reference} - ${lease.unit?.name} - ${tenantName(lease.tenant)}`,
       value: lease.id,
     }));
 
-  const cashBankAccounts = accounts.filter((account) =>
+  const cashBankAccounts = (accounts ?? []).filter((account) =>
     ["cash", "bank"].includes(account.name?.toLowerCase()),
   );
 
-  const selectedUnit = Form.useWatch("unit_id", form);
+  const selectedUnit = Form.useWatch("unitId", form);
 
   useEffect(() => {
-    if (modal?.type !== "lease" || !selectedUnit) return;
-    const unit = units.find((item) => item.id === selectedUnit);
+    if (modal?.type !== "lease" || !selectedUnit || modal?.record) return;
+    const unit = safeUnits.find((item) => item.id === selectedUnit);
     if (unit) {
       form.setFieldsValue({
-        property_id: unit.propertyId,
-        rent_amount: unit.monthlyRent,
-        security_deposit: unit.securityDeposit,
+        propertyId: unit.propertyId,
+        rentAmount: unit.monthlyRent,
+        securityDeposit: unit.securityDeposit,
       });
     }
-  }, [form, modal?.type, selectedUnit, units]);
+  }, [form, modal?.type, modal?.record, selectedUnit, safeUnits]);
 
   const availabilityRows = useMemo(
     () =>
-      units.map((unit) => {
-        const lease = leases.find(
+      safeUnits.map((unit) => {
+        const lease = safeLeases.find(
           (item) => item.unitId === unit.id && item.status === "active",
         );
         return { ...unit, currentLease: lease };
       }),
-    [leases, units],
+    [safeLeases, safeUnits],
   );
 
   const actionColumn = (editType, deleteAction) => ({
@@ -324,7 +329,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={properties}
+            dataSource={safeProperties}
             loading={loading}
             columns={[
               { title: "Nom", dataIndex: "name" },
@@ -350,7 +355,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={units}
+            dataSource={safeUnits}
             loading={loading}
             columns={[
               { title: "Unité", dataIndex: "name" },
@@ -377,7 +382,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={tenants}
+            dataSource={safeTenants}
             loading={loading}
             columns={[
               { title: "Nom", render: (_, record) => tenantName(record) },
@@ -387,7 +392,7 @@ const PropertyManagement = () => {
               {
                 title: "Baux",
                 render: (_, record) =>
-                  leases.filter((lease) => lease.tenantId === record.id).length,
+                  safeLeases.filter((lease) => lease.tenantId === record.id).length,
               },
             ]}
           />
@@ -405,7 +410,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={leases}
+            dataSource={safeLeases}
             loading={loading}
             columns={[
               { title: "Référence", dataIndex: "reference" },
@@ -437,7 +442,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={payments}
+            dataSource={safePayments}
             loading={loading}
             columns={[
               { title: "Date", dataIndex: "paymentDate", render: (date) => moment(date).format("YYYY-MM-DD") },
@@ -463,7 +468,7 @@ const PropertyManagement = () => {
           <Table
             size="small"
             rowKey="id"
-            dataSource={maintenance}
+            dataSource={safeMaintenance}
             loading={loading}
             columns={[
               { title: "Titre", dataIndex: "title" },
@@ -487,7 +492,7 @@ const PropertyManagement = () => {
       label: "Contrats",
       children: (
         <div className="pm-panel">
-          <ContractsTab leases={leases} />
+          <ContractsTab leases={safeLeases} />
         </div>
       ),
     },
@@ -531,7 +536,7 @@ const PropertyManagement = () => {
                 <Form.Item label="Code" name="code">
                   <Input />
                 </Form.Item>
-                <Form.Item label="Type de bien" name="property_type" initialValue="building">
+                <Form.Item label="Type de bien" name="propertyType" initialValue="building">
                   <Select options={propertyTypes} />
                 </Form.Item>
                 <Form.Item label="Statut" name="status" initialValue="available">
@@ -541,7 +546,7 @@ const PropertyManagement = () => {
                     { label: "Maintenance", value: "maintenance" },
                   ]} />
                 </Form.Item>
-                <Form.Item label="Loyer par défaut" name="default_rent">
+                <Form.Item label="Loyer par défaut" name="defaultRent">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
               </div>
@@ -556,14 +561,14 @@ const PropertyManagement = () => {
 
           {modal?.type === "unit" && (
             <>
-              <Form.Item label="Bien" name="property_id" rules={[{ required: true }]}>
+              <Form.Item label="Bien" name="propertyId" rules={[{ required: true }]}>
                 <Select options={propertyOptions} />
               </Form.Item>
               <div className="pm-form-grid">
                 <Form.Item label="Nom unité" name="name" rules={[{ required: true }]}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Type unité" name="unit_type" initialValue="apartment">
+                <Form.Item label="Type unité" name="unitType" initialValue="apartment">
                   <Select options={unitTypes} />
                 </Form.Item>
                 <Form.Item label="Statut" name="status" initialValue="vacant">
@@ -586,11 +591,11 @@ const PropertyManagement = () => {
                 <Form.Item label="Surface" name="area">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
-                <Form.Item label="Loyer mensuel" name="monthly_rent">
+                <Form.Item label="Loyer mensuel" name="monthlyRent">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
               </div>
-              <Form.Item label="Dépôt de garantie" name="security_deposit">
+              <Form.Item label="Dépôt de garantie" name="securityDeposit">
                 <InputNumber className="w-full" min={0} />
               </Form.Item>
             </>
@@ -599,15 +604,15 @@ const PropertyManagement = () => {
           {modal?.type === "lease" && (
             <>
               <div className="pm-form-grid">
-                <Form.Item label="Unité" name="unit_id" rules={[{ required: true }]}>
+                <Form.Item label="Unité" name="unitId" rules={[{ required: true }]}>
                   <Select options={unitOptions} />
                 </Form.Item>
-                <Form.Item label="Bien" name="property_id" rules={[{ required: true }]}>
+                <Form.Item label="Bien" name="propertyId" rules={[{ required: true }]}>
                   <Select options={propertyOptions} />
                 </Form.Item>
-                <Form.Item label="Locataire" name="tenant_id" rules={[{ required: true }]}>
+                <Form.Item label="Locataire" name="tenantId" rules={[{ required: true }]}>
                   <Select
-                    options={tenants.map((customer) => ({
+                    options={safeTenants.map((customer) => ({
                       label: tenantName(customer),
                       value: customer.id,
                     }))}
@@ -621,30 +626,30 @@ const PropertyManagement = () => {
                     { label: "Annulé", value: "cancelled" },
                   ]} />
                 </Form.Item>
-                <Form.Item label="Début" name="start_date" rules={[{ required: true }]}>
+                <Form.Item label="Début" name="startDate" rules={[{ required: true }]}>
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Fin" name="end_date">
+                <Form.Item label="Fin" name="endDate">
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Prochaine facture" name="next_invoice_date">
+                <Form.Item label="Prochaine facture" name="nextInvoiceDate">
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Cycle" name="billing_cycle" initialValue="monthly">
+                <Form.Item label="Cycle" name="billingCycle" initialValue="monthly">
                   <Select options={[
                     { label: "Mensuel", value: "monthly" },
                     { label: "Trimestriel", value: "quarterly" },
                     { label: "Annuel", value: "yearly" },
                   ]} />
                 </Form.Item>
-                <Form.Item label="Loyer" name="rent_amount" rules={[{ required: true }]}>
+                <Form.Item label="Loyer" name="rentAmount" rules={[{ required: true }]}>
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
-                <Form.Item label="Dépôt" name="security_deposit">
+                <Form.Item label="Dépôt" name="securityDeposit">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
               </div>
-              <Form.Item label="Relevé compteur entrée" name="move_in_meter_reading">
+              <Form.Item label="Relevé compteur entrée" name="moveInMeterReading">
                 <InputNumber className="w-full" min={0} />
               </Form.Item>
               <Form.Item label="Conditions / clauses" name="terms">
@@ -699,10 +704,10 @@ const PropertyManagement = () => {
                 <Input />
               </Form.Item>
               <div className="pm-form-grid">
-                <Form.Item label="Bien" name="property_id" rules={[{ required: true }]}>
+                <Form.Item label="Bien" name="propertyId" rules={[{ required: true }]}>
                   <Select options={propertyOptions} />
                 </Form.Item>
-                <Form.Item label="Unité" name="unit_id">
+                <Form.Item label="Unité" name="unitId">
                   <Select allowClear options={unitOptions} />
                 </Form.Item>
                 <Form.Item label="Priorité" name="priority" initialValue="medium">
@@ -720,10 +725,10 @@ const PropertyManagement = () => {
                     { label: "Terminé", value: "done" },
                   ]} />
                 </Form.Item>
-                <Form.Item label="Date prévue" name="scheduled_date">
+                <Form.Item label="Date prévue" name="scheduledDate">
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Coût estimé" name="estimated_cost">
+                <Form.Item label="Coût estimé" name="estimatedCost">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
               </div>

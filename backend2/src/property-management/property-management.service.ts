@@ -574,11 +574,11 @@ export class PropertyManagementService {
   }
 
   private date(value: string | null | undefined) {
-    return value ? new Date(value) : null;
+    return value || null;
   }
 
   private requiredDate(value: string) {
-    return new Date(value);
+    return value;
   }
 
   private pick(input: object, keys: string[]) {

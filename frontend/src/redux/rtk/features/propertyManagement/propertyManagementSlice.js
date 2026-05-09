@@ -28,6 +28,74 @@ const request = async (method, url, data) => {
   return response.data;
 };
 
+const mapPayload = (values, fieldMap) => {
+  const payload = { ...(values || {}) };
+
+  Object.entries(fieldMap).forEach(([formKey, apiKey]) => {
+    if (payload[formKey] !== undefined && payload[apiKey] === undefined) {
+      payload[apiKey] = payload[formKey];
+    }
+    delete payload[formKey];
+  });
+
+  return payload;
+};
+
+const nullifyEmpty = (payload, keys) => {
+  keys.forEach((key) => {
+    if (payload[key] === "") {
+      payload[key] = null;
+    }
+  });
+
+  return payload;
+};
+
+const propertyPayload = (values) =>
+  mapPayload(values, {
+    property_type: "propertyType",
+    parking_spaces: "parkingSpaces",
+    market_value: "marketValue",
+    default_rent: "defaultRent",
+  });
+
+const unitPayload = (values) =>
+  mapPayload(values, {
+    property_id: "propertyId",
+    unit_type: "unitType",
+    monthly_rent: "monthlyRent",
+    security_deposit: "securityDeposit",
+  });
+
+const leasePayload = (values) =>
+  nullifyEmpty(
+    mapPayload(values, {
+      property_id: "propertyId",
+      unit_id: "unitId",
+      tenant_id: "tenantId",
+      start_date: "startDate",
+      end_date: "endDate",
+      next_invoice_date: "nextInvoiceDate",
+      billing_cycle: "billingCycle",
+      rent_amount: "rentAmount",
+      security_deposit: "securityDeposit",
+      move_in_meter_reading: "moveInMeterReading",
+      move_in_notes: "moveInNotes",
+    }),
+    ["endDate", "nextInvoiceDate"],
+  );
+
+const maintenancePayload = (values) =>
+  nullifyEmpty(
+    mapPayload(values, {
+      property_id: "propertyId",
+      unit_id: "unitId",
+      scheduled_date: "scheduledDate",
+      estimated_cost: "estimatedCost",
+    }),
+    ["scheduledDate"],
+  );
+
 export const loadPropertyManagement = createAsyncThunk(
   "propertyManagement/loadAll",
   async () => {
@@ -65,7 +133,7 @@ export const saveProperty = createAsyncThunk(
       const data = await request(
         id ? "put" : "post",
         id ? `property-management/properties/${id}` : "property-management/properties",
-        values,
+        propertyPayload(values),
       );
       return successHandler(data, id ? "Property updated" : "Property created");
     } catch (error) {
@@ -93,7 +161,7 @@ export const saveUnit = createAsyncThunk(
       const data = await request(
         id ? "put" : "post",
         id ? `property-management/units/${id}` : "property-management/units",
-        values,
+        unitPayload(values),
       );
       return successHandler(data, id ? "Unit updated" : "Unit created");
     } catch (error) {
@@ -121,7 +189,7 @@ export const saveLease = createAsyncThunk(
       const data = await request(
         id ? "put" : "post",
         id ? `property-management/leases/${id}` : "property-management/leases",
-        values,
+        leasePayload(values),
       );
       return successHandler(data, id ? "Lease updated" : "Lease created");
     } catch (error) {
@@ -163,7 +231,7 @@ export const saveMaintenance = createAsyncThunk(
         id
           ? `property-management/maintenance/${id}`
           : "property-management/maintenance",
-        values,
+        maintenancePayload(values),
       );
       return successHandler(
         data,
@@ -263,7 +331,8 @@ export const submitSignature = createAsyncThunk(
 );
 
 const upsert = (list, item) => {
-  const existing = list.find((entry) => entry.id === item.id);
+  if (!item?.id) return list;
+  const existing = list.find((entry) => entry.id === item?.id);
   if (!existing) return [item, ...list];
   return list.map((entry) => (entry.id === item.id ? item : entry));
 };
@@ -322,7 +391,7 @@ const propertyManagementSlice = createSlice({
         );
       })
       .addCase(loadContracts.fulfilled, (state, action) => {
-        state.contracts = action.payload.data ?? [];
+        state.contracts = (action.payload.data ?? []).filter(Boolean);
       })
       .addCase(createContract.fulfilled, (state, action) => {
         if (action.payload.data) state.contracts = [action.payload.data, ...state.contracts];
@@ -330,12 +399,14 @@ const propertyManagementSlice = createSlice({
       .addCase(sendContract.fulfilled, (state, action) => {
         if (action.payload.data?.id) {
           state.contracts = state.contracts.map((c) =>
-            c.id === action.payload.data.id ? { ...c, status: "sent" } : c,
+            c?.id === action.payload.data.id ? { ...c, status: "sent" } : c,
           );
         }
       })
       .addCase(deleteContract.fulfilled, (state, action) => {
-        state.contracts = state.contracts.filter((c) => c.id !== action.payload.data.id);
+        state.contracts = state.contracts.filter(
+          (c) => c?.id !== action.payload.data?.id,
+        );
       });
   },
 });
