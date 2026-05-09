@@ -14,12 +14,12 @@ use App\Http\Controllers\TransactionTypeController;
 |
 */
 
-Route::middleware('permission:create-transaction')->post('/', [TransactionTypeController::class, 'createTransactionType']);
+Route::middleware('permission:create-transactionType')->post('/', [TransactionTypeController::class, 'createTransactionType']);
 
-Route::middleware('permission:readAll-transaction')->get('/', [TransactionTypeController::class, 'getAllTransactionType']);
+Route::middleware('permission:readAll-transactionType')->get('/', [TransactionTypeController::class, 'getAllTransactionType']);
 
-Route::middleware('permission:readSingle-transaction')->get('/{id}', [TransactionTypeController::class, 'getSingleTransactionType']);
+Route::middleware('permission:readSingle-transactionType')->get('/{id}', [TransactionTypeController::class, 'getSingleTransactionType']);
 
-Route::middleware('permission:update-transaction')->put('/{id}', [TransactionTypeController::class, 'updateTransactionType']);
+Route::middleware('permission:update-transactionType')->put('/{id}', [TransactionTypeController::class, 'updateTransactionType']);
 
-Route::middleware('permission:delete-transaction')->patch('/{id}', [TransactionTypeController::class, 'deleteTransactionType']);
+Route::middleware('permission:delete-transactionType')->patch('/{id}', [TransactionTypeController::class, 'deleteTransactionType']);

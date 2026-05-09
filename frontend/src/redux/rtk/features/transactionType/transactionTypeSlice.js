@@ -127,6 +127,51 @@ const transactionTypeSlice = createSlice({
       })
       .addCase(loadSingleTransactionType.rejected, (state) => {
         state.loading = false;
+      })
+      .addCase(addTransactionType.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(addTransactionType.fulfilled, (state, action) => {
+        state.transactionType = action.payload.data;
+        if (Array.isArray(state.list)) {
+          state.list = [action.payload.data, ...state.list];
+        }
+        state.loading = false;
+      })
+      .addCase(addTransactionType.rejected, (state) => {
+        state.loading = false;
+      })
+      .addCase(updateTransactionType.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateTransactionType.fulfilled, (state, action) => {
+        state.transactionType = action.payload.data;
+        if (Array.isArray(state.list)) {
+          state.list = state.list.map((transactionType) =>
+            transactionType.id === action.payload.data.id
+              ? action.payload.data
+              : transactionType
+          );
+        }
+        state.loading = false;
+      })
+      .addCase(updateTransactionType.rejected, (state) => {
+        state.loading = false;
+      })
+      .addCase(deleteTransactionType.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(deleteTransactionType.fulfilled, (state, action) => {
+        state.transactionType = null;
+        if (Array.isArray(state.list)) {
+          state.list = state.list.filter(
+            (transactionType) => transactionType.id !== action.meta.arg
+          );
+        }
+        state.loading = false;
+      })
+      .addCase(deleteTransactionType.rejected, (state) => {
+        state.loading = false;
       });
   },
 });

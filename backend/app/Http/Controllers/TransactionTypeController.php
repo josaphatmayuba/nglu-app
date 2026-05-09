@@ -13,7 +13,7 @@ class TransactionTypeController extends Controller
     public function getAllTransactionType(Request $request): JsonResponse
     {
         try {
-            $transactionTypes = TransactionType::where('is_active', true)->get();
+            $transactionTypes = TransactionType::with('debitAccount', 'creditAccount')->where('is_active', true)->get();
             $converted = arrayKeysToCamelCase($transactionTypes->toArray());
             return response()->json($converted, 200);
         } catch (Exception $error) {
@@ -32,6 +32,7 @@ class TransactionTypeController extends Controller
                 'description' => $request->input('description'),
                 'is_active' => $request->input('isActive', true),
             ]);
+            $createdTransactionType->load('debitAccount', 'creditAccount');
             $converted = arrayKeysToCamelCase($createdTransactionType->toArray());
             return response()->json($converted, 201);
         } catch (Exception $error) {
@@ -43,7 +44,7 @@ class TransactionTypeController extends Controller
     public function getSingleTransactionType($id): JsonResponse
     {
         try {
-            $transactionType = TransactionType::findOrFail($id);
+            $transactionType = TransactionType::with('debitAccount', 'creditAccount')->findOrFail($id);
             $converted = arrayKeysToCamelCase($transactionType->toArray());
             return response()->json($converted, 200);
         } catch (Exception $error) {
@@ -63,6 +64,7 @@ class TransactionTypeController extends Controller
                 'description' => $request->input('description', $transactionType->description),
                 'is_active' => $request->input('isActive', $transactionType->is_active),
             ]);
+            $transactionType->load('debitAccount', 'creditAccount');
             $converted = arrayKeysToCamelCase($transactionType->toArray());
             return response()->json($converted, 200);
         } catch (Exception $error) {

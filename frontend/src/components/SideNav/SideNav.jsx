@@ -313,6 +313,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           "readAll-account",
           "create-transaction",
           "readAll-transaction",
+          "create-transactionType",
+          "readAll-transactionType",
           "create-productReports",
           "readAll-productReports",
         ],
@@ -358,6 +360,25 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           },
           key: "transactionList",
           icon: <UnorderedListOutlined />,
+        },
+        {
+          label: (
+            <NavLink to="/admin/transaction-type/">
+              <span>TRANSACTION TYPE</span>
+            </NavLink>
+          ),
+          permit: {
+            permissions: [
+              "create-transactionType",
+              "readAll-transactionType",
+              "readSingle-transactionType",
+              "update-transactionType",
+              "delete-transactionType",
+            ],
+            operator: "or",
+          },
+          key: "transactionTypeList",
+          icon: <FileProtectOutlined />,
         },
         {
           label: (

@@ -31,10 +31,13 @@ export default function CommonDelete({
       );
       return;
     }
+    const actionWord = title === "Delete"
+      ? "delete"
+      : values?.status === "true"
+        ? "hide"
+        : "show";
     var result = window.confirm(
-      `Are you sure you want to ${
-        values?.status === "true" ? "hide" : "show"
-      }?`,
+      `Are you sure you want to ${actionWord}?`,
     );
     if (result) {
       const res = await dispatch(
