@@ -85,6 +85,10 @@ class Kernel extends HttpKernel
             ThrottleRequests::class,
             SubstituteBindings::class,
         ],
+        'property-management' => [
+            ThrottleRequests::class,
+            SubstituteBindings::class,
+        ],
         'designation' => [
             ThrottleRequests::class,
             SubstituteBindings::class,

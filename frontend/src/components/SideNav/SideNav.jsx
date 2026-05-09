@@ -315,6 +315,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           "readAll-transaction",
           "create-transactionType",
           "readAll-transactionType",
+          "create-propertyManagement",
+          "readAll-propertyManagement",
           "create-productReports",
           "readAll-productReports",
         ],
@@ -379,6 +381,25 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           },
           key: "transactionTypeList",
           icon: <FileProtectOutlined />,
+        },
+        {
+          label: (
+            <NavLink to="/admin/property-management/">
+              <span>GESTION IMMOBILIERE</span>
+            </NavLink>
+          ),
+          permit: {
+            permissions: [
+              "create-propertyManagement",
+              "readAll-propertyManagement",
+              "readSingle-propertyManagement",
+              "update-propertyManagement",
+              "delete-propertyManagement",
+            ],
+            operator: "or",
+          },
+          key: "propertyManagement",
+          icon: <BsBuildingFillGear />,
         },
         {
           label: (

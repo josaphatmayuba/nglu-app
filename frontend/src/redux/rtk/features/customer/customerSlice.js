@@ -179,9 +179,11 @@ const customerSlice = createSlice({
       state.loading = false;
       if (Array.isArray(action.payload?.data)) {
         state.list = action.payload?.data;
-      } else {
+      } else if (action.payload?.data?.getAllCustomer) {
         state.list = action.payload?.data.getAllCustomer;
         state.total = action.payload?.data.totalCustomer;
+      } else {
+        state.list = action.payload?.data || [];
       }
     });
 
@@ -200,9 +202,12 @@ const customerSlice = createSlice({
       state.loading = false;
       if (Array.isArray(action.payload?.data)) {
         state.list = action.payload?.data;
+      } else if (action.payload?.data?.getAllCustomer) {
+        state.list = action.payload.data.getAllCustomer;
+        state.total = action.payload.data.totalCustomer;
       } else {
-        state.list = action.payload?.data.getAllCustomer;
-        state.total = action.payload?.data.totalCustomer;
+        state.list = [];
+        state.total = 0;
       }
     });
 

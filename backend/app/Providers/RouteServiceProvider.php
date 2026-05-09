@@ -52,6 +52,9 @@ class RouteServiceProvider extends ServiceProvider
             Route::middleware('transaction')
                 ->prefix('transaction-type')
                 ->group(base_path('routes/transactionTypeRoutes.php'));
+            Route::middleware('property-management')
+                ->prefix('property-management')
+                ->group(base_path('routes/propertyManagementRoutes.php'));
             Route::middleware('role-permission')
                 ->prefix('role-permission')
                 ->group(base_path('routes/rolePermissionRoutes.php'));

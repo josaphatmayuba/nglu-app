@@ -14,6 +14,7 @@ const CustomerRoutes = lazy(() => import("./AdminRoutes/CustomerRoutes"));
 const SaleRoutes = lazy(() => import("./AdminRoutes/SaleRoutes"));
 const TransactionRoutes = lazy(() => import("./AdminRoutes/TransactionRoutes"));
 const TransactionTypeRoutes = lazy(() => import("./AdminRoutes/TransactionTypeRoutes"));
+const PropertyManagementRoutes = lazy(() => import("./AdminRoutes/PropertyManagementRoutes"));
 const StaffRoutes = lazy(() => import("./AdminRoutes/StaffRoutes"));
 const RoleRoutes = lazy(() => import("./AdminRoutes/RoleRoutes"));
 const AccountRoutes = lazy(() => import("./AdminRoutes/AccountRoutes"));
@@ -50,6 +51,7 @@ export default function AdminRoutes() {
         {/* <AdjustInventoryRoutes /> */}
         <TransactionRoutes />
         <TransactionTypeRoutes />
+        <PropertyManagementRoutes />
         <StaffRoutes />
         <RoleRoutes />
         <AccountRoutes />

@@ -39,6 +39,7 @@ import roleSlice from "../features/hr/role/roleSlice";
 import manualPaymentSlice from "../features/manualPayment/manualPaymentSlice";
 import paymentMethodSlice from "../features/paymentMethod/paymentMethodSlice";
 import printPageSlice from "../features/printPage/printPageSlice";
+import propertyManagementSlice from "../features/propertyManagement/propertyManagementSlice";
 import productSearchSlice from "../features/product/productSearchSlice";
 import productReducer from "../features/product/productSlice";
 import productBrandReducer from "../features/productBrand/productBrandSlice";
@@ -82,6 +83,7 @@ const store = configureStore({
     dashboard: dashboardReducer,
     transactions: transactionReducer,
     transactionTypes: transactionTypeReducer,
+    propertyManagement: propertyManagementSlice,
     productCategories: productCategoryReducer,
     productSubCategories: productSubCategoryReducer,
     productBrands: productBrandReducer,
