@@ -36,11 +36,7 @@ pipelines:
           name: Deploy to Lightsail
           image: alpine
           script:
-            - apk add --no-cache openssh-client rsync bash
-            - mkdir -p ~/.ssh && chmod 700 ~/.ssh
-            - echo "$LIGHTSAIL_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
-            - chmod 600 ~/.ssh/id_rsa
-            - ssh-keyscan 3.96.200.54 >> ~/.ssh/known_hosts
+            - apk add --no-cache openssh-client rsync
             # Pull latest code on server
             - ssh admin@3.96.200.54 "cd /opt/nglu-app && git pull"
             # Copy built dist folders to server
