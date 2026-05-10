@@ -36,12 +36,12 @@ pipelines:
           name: Deploy to Lightsail
           image: alpine
           script:
-            - apk add --no-cache openssh-client rsync
+            - apk add --no-cache openssh-client
             # Pull latest code on server
             - ssh admin@3.96.200.54 "cd /opt/nglu-app && git pull"
             # Copy built dist folders to server
-            - rsync -avz --delete frontend/dist/ admin@3.96.200.54:/opt/nglu-app/frontend/dist/
-            - rsync -avz --delete backend2/dist/ admin@3.96.200.54:/opt/nglu-app/backend2/dist/
+            - scp -r frontend/dist admin@3.96.200.54:/opt/nglu-app/frontend/
+            - scp -r backend2/dist admin@3.96.200.54:/opt/nglu-app/backend2/
             # Rebuild and restart containers (fast: no compilation on server)
             - ssh admin@3.96.200.54 "cd /opt/nglu-app && docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d"
             - ssh admin@3.96.200.54 "docker compose -f /opt/nglu-app/docker-compose.prod.yml ps"
