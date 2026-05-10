@@ -1,0 +1,66 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: nglu_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-nglu_db}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+      MYSQL_USER: ${DB_USERNAME:-nglu_user}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - nglu_network
+    mem_limit: 256m
+    command: --innodb-buffer-pool-size=64M --performance-schema=OFF
+
+  backend2:
+    build:
+      context: ./backend2
+      dockerfile: Dockerfile.prod
+    container_name: nglu_backend2
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-nglu_db}
+      DB_USERNAME: ${DB_USERNAME:-nglu_user}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://3.96.200.54}
+      FRONTEND_URL: ${FRONTEND_URL:-http://3.96.200.54}
+      DB_WAIT_RETRIES: 40
+      DB_WAIT_DELAY_MS: 1500
+      JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
+    ports:
+      - "8001:8001"
+    depends_on:
+      - mysql
+    networks:
+      - nglu_network
+    mem_limit: 200m
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_APP_API: ${VITE_APP_API:-http://3.96.200.54:8001}
+        VITE_API_URL: ${VITE_API_URL:-http://3.96.200.54:8001}
+        VITE_APP_API_NODE: ${VITE_APP_API_NODE:-http://3.96.200.54:8001}
+    container_name: nglu_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - nglu_network
+    mem_limit: 32m
+
+volumes:
+  mysql_data:
+
+networks:
+  nglu_network:
+    driver: bridge
