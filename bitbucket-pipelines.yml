@@ -1,0 +1,51 @@
+image: node:20-alpine
+
+definitions:
+  caches:
+    node-frontend: frontend/node_modules
+    node-backend2: backend2/node_modules
+
+pipelines:
+  branches:
+    master:
+      - step:
+          name: Build Backend2
+          image: node:20-alpine
+          caches:
+            - node-backend2
+          script:
+            - cd backend2
+            - npm ci
+            - npm run build
+          artifacts:
+            - backend2/dist/**
+
+      - step:
+          name: Build Frontend
+          image: node:20-alpine
+          caches:
+            - node-frontend
+          script:
+            - cd frontend
+            - npm install --legacy-peer-deps
+            - VITE_APP_API=http://3.96.200.54:8001 VITE_API_URL=http://3.96.200.54:8001 VITE_APP_API_NODE=http://3.96.200.54:8001 npm run build
+          artifacts:
+            - frontend/dist/**
+
+      - step:
+          name: Deploy to Lightsail
+          image: alpine
+          script:
+            - apk add --no-cache openssh-client rsync bash
+            - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            - echo "$LIGHTSAIL_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+            - chmod 600 ~/.ssh/id_rsa
+            - ssh-keyscan 3.96.200.54 >> ~/.ssh/known_hosts
+            # Pull latest code on server
+            - ssh admin@3.96.200.54 "cd /opt/nglu-app && git pull"
+            # Copy built dist folders to server
+            - rsync -avz --delete frontend/dist/ admin@3.96.200.54:/opt/nglu-app/frontend/dist/
+            - rsync -avz --delete backend2/dist/ admin@3.96.200.54:/opt/nglu-app/backend2/dist/
+            # Rebuild and restart containers (fast: no compilation on server)
+            - ssh admin@3.96.200.54 "cd /opt/nglu-app && docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d"
+            - ssh admin@3.96.200.54 "docker compose -f /opt/nglu-app/docker-compose.prod.yml ps"

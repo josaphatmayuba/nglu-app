@@ -1,17 +1,8 @@
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN NODE_OPTIONS="--max-old-space-size=1500" npm run build
-
 FROM node:20-alpine
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/drizzle ./drizzle
-COPY src/database ./src/database
-COPY tsconfig*.json ./
+RUN npm ci --omit=dev
+COPY dist/ ./dist/
+COPY drizzle/ ./drizzle/
 EXPOSE 8001
-CMD ["sh", "-c", "npm run db:wait && npm run db:migrate:run && node dist/main.js"]
+CMD ["npm", "run", "docker:prod"]
