@@ -18,7 +18,7 @@
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "db:migrate:run": "ts-node -r tsconfig-paths/register src/database/migrate.ts",
     "docker:dev": "npm run db:wait && npm run db:migrate:run && npm run db:seed && npm run dev",
-    "docker:prod": "node dist/database/wait-for-db.js && node dist/database/migrate.js && node dist/main.js"
+    "docker:prod": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && node dist/src/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
