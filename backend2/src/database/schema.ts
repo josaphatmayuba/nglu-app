@@ -292,7 +292,6 @@ export const products = mysqlTable("product", {
   uomValue: varchar("uomValue", { length: 255 }),
   reorderQuantity: double("reorderQuantity").default(0),
   productVatId: bigint("productVatId", { mode: "number" }),
-  productPurchaseVatId: bigint("productPurchaseVatId", { mode: "number" }),
   discountId: bigint("discountId", { mode: "number" }),
   status: varchar("status", { length: 10 }).default("true").notNull(),
   createdAt: timestamp("created_at"),

@@ -41,13 +41,24 @@ const escapeHtml = (value = "") =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const formatSignedAt = (value) => {
+  if (!value) return "Non signé";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Non signé";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours()
+  )} h ${pad(date.getMinutes())} min ${pad(date.getSeconds())}`;
+};
+
 const contractPrintHtml = (contract) => {
-  const signedAt = contract?.signedAt
-    ? new Date(contract.signedAt).toLocaleString("fr-CA")
-    : "Non signé";
-  const signature = contract?.signatureData
+  const company = contract?.companyInfo || {};
+  const landlordName = contract?.landlordName || company.companyName || "Bailleur";
+  const signedAt = formatSignedAt(contract?.signedAt);
+  const tenantSignature = contract?.signatureData
     ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
     : `<div class="signature-line">Signature non disponible</div>`;
+  const landlordSignature = `<div class="typed-signature">${escapeHtml(landlordName)}</div>`;
 
   return `<!doctype html>
 <html>
@@ -62,13 +73,18 @@ const contractPrintHtml = (contract) => {
     h1 { font-size: 26px; margin: 6px 0 8px; }
     .meta { color: #4b5563; font-size: 13px; line-height: 1.5; }
     .content { font-family: "Courier New", monospace; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+    .company { color: #374151; font-size: 13px; line-height: 1.45; margin-top: 8px; }
     .signature { border-top: 1px solid #d1d5db; margin-top: 34px; padding-top: 18px; }
+    .signature-grid { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
     .signature h2 { font-size: 16px; margin: 0 0 10px; }
+    .signature-name { color: #374151; font-size: 13px; font-weight: 700; margin-top: 10px; }
     .signature-image { border: 1px solid #d1d5db; max-height: 120px; max-width: 320px; padding: 8px; }
     .signature-line { border-bottom: 1px solid #111827; color: #6b7280; display: inline-block; min-width: 280px; padding: 28px 0 8px; }
+    .typed-signature { border: 1px solid #d1d5db; display: inline-block; font-family: "Brush Script MT", "Segoe Script", cursive; font-size: 30px; min-width: 240px; padding: 20px 18px 12px; }
+    .signed-date { border-top: 1px solid #e5e7eb; color: #374151; font-size: 13px; margin-top: 22px; padding-top: 12px; }
     .print-actions { margin-bottom: 18px; }
     .print-actions button { background: #1677ff; border: 0; border-radius: 4px; color: white; cursor: pointer; padding: 8px 14px; }
-    @media print { .print-actions { display: none; } }
+    @media print { .print-actions { display: none; } .signature { break-inside: avoid; } }
   </style>
 </head>
 <body>
@@ -79,14 +95,30 @@ const contractPrintHtml = (contract) => {
     <div class="meta">
       Locataire: ${escapeHtml(contract?.tenantName || "-")}<br />
       Courriel: ${escapeHtml(contract?.tenantEmail || "-")}<br />
-      Statut: ${escapeHtml(STATUS_LABEL[contract?.status] || contract?.status || "-")}<br />
-      Signé le: ${escapeHtml(signedAt)}
+      Statut: ${escapeHtml(STATUS_LABEL[contract?.status] || contract?.status || "-")}
+      <div class="company">
+        Bailleur: ${escapeHtml(company.companyName || "-")}<br />
+        Adresse: ${escapeHtml(company.address || "-")}<br />
+        Téléphone: ${escapeHtml(company.phone || "-")}<br />
+        Email: ${escapeHtml(company.email || "-")}
+      </div>
     </div>
   </div>
   <pre class="content">${escapeHtml(contract?.contractContent || "")}</pre>
   <div class="signature">
-    <h2>Signature du locataire</h2>
-    ${signature}
+    <div class="signature-grid">
+      <div>
+        <h2>Signature du bailleur</h2>
+        ${landlordSignature}
+        <div class="signature-name">${escapeHtml(landlordName)}</div>
+      </div>
+      <div>
+        <h2>Signature du locataire</h2>
+        ${tenantSignature}
+        <div class="signature-name">${escapeHtml(contract?.tenantName || "Locataire")}</div>
+      </div>
+    </div>
+    <div class="signed-date">Signé le: ${escapeHtml(signedAt)}</div>
   </div>
 </body>
 </html>`;
@@ -312,6 +344,12 @@ export default function ContractsTab({ leases }) {
             </div>
             <strong>{previewContract?.tenantName || "-"}</strong>
             <div style={{ color: "#6b7280" }}>{previewContract?.tenantEmail || "-"}</div>
+            <div style={{ color: "#6b7280", marginTop: 8 }}>
+              <strong>Bailleur :</strong> {previewContract?.companyInfo?.companyName || "-"}<br />
+              <strong>Adresse :</strong> {previewContract?.companyInfo?.address || "-"}<br />
+              <strong>Téléphone :</strong> {previewContract?.companyInfo?.phone || "-"}<br />
+              <strong>Email :</strong> {previewContract?.companyInfo?.email || "-"}
+            </div>
           </div>
           <pre
             style={{
@@ -327,23 +365,47 @@ export default function ContractsTab({ leases }) {
             {previewContract?.contractContent}
           </pre>
           <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 16, paddingTop: 16 }}>
-            <strong>Signature du locataire</strong>
-            <div style={{ marginTop: 10 }}>
-              {previewContract?.signatureData ? (
-                <img
-                  alt="Signature du locataire"
-                  src={previewContract.signatureData}
-                  style={{ border: "1px solid #d1d5db", maxHeight: 120, maxWidth: 320, padding: 8 }}
-                />
-              ) : (
-                <span style={{ color: "#6b7280" }}>Signature non disponible</span>
-              )}
-            </div>
-            {previewContract?.signedAt && (
-              <div style={{ color: "#6b7280", marginTop: 8 }}>
-                Signé le : {new Date(previewContract.signedAt).toLocaleString("fr-CA")}
+            <div style={{ display: "grid", gap: 24, gridTemplateColumns: "1fr 1fr" }}>
+              <div>
+                <strong>Signature du bailleur</strong>
+                <div
+                  style={{
+                    border: "1px solid #d1d5db",
+                    display: "inline-block",
+                    fontFamily: '"Brush Script MT", "Segoe Script", cursive',
+                    fontSize: 30,
+                    marginTop: 10,
+                    minWidth: 220,
+                    padding: "18px 16px 10px",
+                  }}
+                >
+                  {previewContract?.landlordName || previewContract?.companyInfo?.companyName || "Bailleur"}
+                </div>
+                <div style={{ color: "#374151", fontWeight: 600, marginTop: 8 }}>
+                  {previewContract?.landlordName || previewContract?.companyInfo?.companyName || "Bailleur"}
+                </div>
               </div>
-            )}
+              <div>
+                <strong>Signature du locataire</strong>
+                <div style={{ marginTop: 10 }}>
+                  {previewContract?.signatureData ? (
+                    <img
+                      alt="Signature du locataire"
+                      src={previewContract.signatureData}
+                      style={{ border: "1px solid #d1d5db", maxHeight: 120, maxWidth: 320, padding: 8 }}
+                    />
+                  ) : (
+                    <span style={{ color: "#6b7280" }}>Signature non disponible</span>
+                  )}
+                </div>
+                <div style={{ color: "#374151", fontWeight: 600, marginTop: 8 }}>
+                  {previewContract?.tenantName || "Locataire"}
+                </div>
+              </div>
+            </div>
+            <div style={{ borderTop: "1px solid #e5e7eb", color: "#6b7280", marginTop: 16, paddingTop: 10 }}>
+              Signé le: {formatSignedAt(previewContract?.signedAt)}
+            </div>
           </div>
         </div>
       </Modal>

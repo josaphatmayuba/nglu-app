@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1778344498351,
+      "tag": "0000_nervous_rumiko_fujikawa",
+      "breakpoints": true
+    }
+  ]
+}

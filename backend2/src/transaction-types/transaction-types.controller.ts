@@ -56,7 +56,6 @@ export class TransactionTypesController {
   @ApiParam({ name: "id", example: 1, type: Number })
   @ApiOkResponse({ type: TransactionTypeResponseDto })
   @ApiNotFoundResponse({ description: "Transaction type not found." })
-  @Patch(":id")
   @Put(":id")
   update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTransactionTypeDto) {
     return this.transactionTypesService.update(id, body);
@@ -66,6 +65,7 @@ export class TransactionTypesController {
   @ApiParam({ name: "id", example: 1, type: Number })
   @ApiOkResponse({ type: MessageResponseDto })
   @ApiNotFoundResponse({ description: "Transaction type not found." })
+  @Patch(":id")
   @Delete(":id")
   @HttpCode(200)
   remove(@Param("id", ParseIntPipe) id: number) {

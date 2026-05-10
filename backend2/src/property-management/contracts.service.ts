@@ -5,6 +5,7 @@ import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
   customers,
   realEstateContractAuditLogs,
   realEstateContracts,
@@ -24,10 +25,13 @@ type LeaseDetails = {
   securityDeposit: string | null;
   billingCycle: string | null;
   terms: string | null;
+  moveInMeterReading: string | null;
   propertyName: string | null;
+  propertyType: string | null;
   propertyAddress: string | null;
   propertyCity: string | null;
   unitName: string | null;
+  unitType: string | null;
   tenantFirstName: string | null;
   tenantLastName: string | null;
   tenantEmail: string | null;
@@ -36,13 +40,21 @@ type LeaseDetails = {
   tenantName: string;
 };
 
+type CompanyInfo = {
+  companyName: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
 @Injectable()
 export class ContractsService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   async createContract(dto: CreateContractDto) {
     const lease = await this.getLeaseDetails(dto.leaseId);
-    const content = dto.contractContent ?? this.generateContent(lease);
+    const company = await this.getCompanyInfo();
+    const content = dto.contractContent ?? this.generateContent(lease, company);
 
     const [result] = await this.db.insert(realEstateContracts).values({
       leaseId: dto.leaseId,
@@ -90,7 +102,8 @@ export class ContractsService {
       .where(eq(realEstateContractAuditLogs.contractId, id))
       .orderBy(desc(realEstateContractAuditLogs.id));
 
-    return { ...rows[0], auditLogs };
+    const companyInfo = await this.getCompanyInfo();
+    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName };
   }
 
   async sendContract(id: number) {
@@ -150,6 +163,7 @@ export class ContractsService {
       contractContent: contract.contractContent,
       tenantName: contract.tenantName,
       signedAt: contract.signedAt,
+      companyInfo: await this.getCompanyInfo(),
     };
   }
 
@@ -228,10 +242,13 @@ export class ContractsService {
         securityDeposit: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         terms: realEstateLeases.terms,
+        moveInMeterReading: realEstateLeases.moveInMeterReading,
         propertyName: realEstateProperties.name,
+        propertyType: realEstateProperties.propertyType,
         propertyAddress: realEstateProperties.address,
         propertyCity: realEstateProperties.city,
         unitName: realEstateUnits.name,
+        unitType: realEstateUnits.unitType,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
         tenantEmail: customers.email,
@@ -254,41 +271,172 @@ export class ContractsService {
     };
   }
 
-  private generateContent(lease: LeaseDetails): string {
-    const today = new Date().toLocaleDateString("fr-CA");
-    return `CONTRAT DE BAIL RÉSIDENTIEL
-Date : ${today}
+  private generateContent(lease: LeaseDetails, company: CompanyInfo): string {
+    const today = this.formatDate(new Date());
+    const startDate = this.formatDate(lease.startDate);
+    const endDate = this.formatDate(lease.endDate);
+    const duration = this.durationInMonths(lease.startDate, lease.endDate);
+    const rentAmount = this.formatMoney(lease.rentAmount);
+    const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const guaranteeMonths = this.guaranteeMonths(lease.rentAmount, lease.securityDeposit);
+    const city = lease.propertyCity || "[VILLE]";
+    const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
+    const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
+    const landlordName = company.companyName || "[NOM COMPLET DU BAILLEUR]";
+    const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
+    const landlordPhone = company.phone || "N/A";
+    const landlordEmail = company.email || "N/A";
+
+    return `CONTRAT DE BAIL À LOYER
 Référence : ${lease.reference ?? "N/A"}
 
-PROPRIÉTAIRE
-[Nom du propriétaire]
-[Adresse du propriétaire]
+ARTICLE 1 : DÉSIGNATION DES PARTIES
 
-LOCATAIRE
-Nom : ${lease.tenantName}
+LE BAILLEUR : Monsieur/Madame/Société ${landlordName}, résidant au ${landlordAddress}.
+Téléphone : ${landlordPhone}
+Courriel : ${landlordEmail}
+
+LE PRENEUR (Locataire) : Monsieur/Madame/Société ${lease.tenantName}, titulaire de la pièce d'identité n° [NUMÉRO DE PIÈCE D'IDENTITÉ], résidant au ${lease.tenantAddress ?? "[ADRESSE DU PRENEUR]"}.
 Téléphone : ${lease.tenantPhone ?? "N/A"}
-Adresse actuelle : ${lease.tenantAddress ?? "N/A"}
 Courriel : ${lease.tenantEmail ?? "N/A"}
 
-BIEN LOUÉ
+ARTICLE 2 : OBJET ET DESTINATION DES LIEUX
+
+Le Bailleur donne en location au Preneur un local situé à l'adresse suivante :
+Adresse : ${rentalAddress}
 Propriété : ${lease.propertyName ?? "N/A"}
 Unité : ${lease.unitName ?? "N/A"}
-Adresse : ${[lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A"}
+Destination des lieux : ${destination}.
 
-CONDITIONS DU BAIL
-Durée : du ${lease.startDate ?? "N/A"} au ${lease.endDate ?? "N/A"}
-Cycle de facturation : ${lease.billingCycle ?? "mensuel"}
-Loyer mensuel : ${lease.rentAmount ?? "0"}
-Dépôt de garantie : ${lease.securityDeposit ?? "0"}
+ARTICLE 3 : DURÉE ET PRÉAVIS
+
+Le présent bail est conclu pour une durée de ${duration}, commençant le ${startDate} à ${endDate}.
+
+Le délai de préavis est fixé à TROIS (3) MOIS pour un usage résidentiel ou SIX (6) MOIS pour un usage professionnel. Toute notification de préavis doit être faite par écrit avec accusé de réception.
+
+ARTICLE 4 : LOYER ET GARANTIE LOCATIVE
+
+4.1. Loyer : Le loyer mensuel est fixé à ${rentAmount} USD. Conformément à la réglementation applicable en République Démocratique du Congo, le paiement s'effectue en Francs Congolais (CDF) au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
+
+4.2. Garantie Locative : Le Preneur verse ce jour une garantie de ${securityDeposit} USD, correspondant à ${guaranteeMonths}. Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées ou réparations locatives. Pour un usage résidentiel, la garantie ne peut pas excéder trois (3) mois de loyer.
+
+ARTICLE 5 : ÉTAT DES LIEUX
+
+Un état des lieux contradictoire est obligatoirement annexé au présent contrat lors de la remise des clés. À défaut d'état des lieux, le locataire est présumé avoir reçu le bien en bon état de réparations locatives.
+Relevé compteur à l'entrée : ${lease.moveInMeterReading ?? "N/A"}.
+
+ARTICLE 6 : CHARGES ET ENTRETIEN
+
+Le Preneur prend à sa charge les consommations d'eau (REGIDESO), d'électricité (SNEL) et l'entretien courant des équipements. Le Bailleur reste responsable des grosses réparations, notamment toiture, murs, structure, étanchéité, ainsi que de l'Impôt sur le Revenu Locatif (IRL), sauf disposition légale ou convention écrite contraire.
+
+ARTICLE 7 : REMISE EN ÉTAT
+
+À l'expiration du bail et lors de la libération du bâtiment, le Preneur a l'obligation de rendre la maison dans l'état exact où elle se trouvait lors de la remise des clés, tel que décrit dans l'état des lieux initial, à l'exception de l'usure normale due au temps.
+
+ARTICLE 8 : RÉPARATION ET FACTURATION
+
+Toute destruction, dégradation ou modification non autorisée constatée lors de la sortie sera intégralement facturée au Preneur. Les frais de remise en état seront déduits de la garantie locative. Si le montant des dégâts excède la garantie locative, le Preneur s'engage à payer le reliquat sur présentation des factures de réparation.
+
+ARTICLE 9 : CLAUSE RÉSOLUTOIRE
+
+À défaut de paiement d'un seul terme de loyer à l'échéance, le bail sera résilié de plein droit UN (1) MOIS après une mise en demeure restée infructueuse.
 
 CONDITIONS PARTICULIÈRES
+
 ${lease.terms ?? "Aucune condition particulière."}
 
----
-Les parties déclarent avoir lu et accepté les termes du présent contrat.
+Fait à ${city} le ${today}.
+`;
+  }
 
-Signature du locataire : ________________________________
-Date : ________________________________`;
+  private async getCompanyInfo(): Promise<CompanyInfo> {
+    const rows = await this.db
+      .select({
+        companyName: appSettings.companyName,
+        address: appSettings.address,
+        phone: appSettings.phone,
+        email: appSettings.email,
+      })
+      .from(appSettings)
+      .where(eq(appSettings.id, 1))
+      .limit(1);
+
+    return rows[0] ?? { companyName: null, address: null, phone: null, email: null };
+  }
+
+  private formatDate(value: Date | string | null | undefined) {
+    if (!value) return "N/A";
+    if (value instanceof Date) {
+      return value.toLocaleDateString("fr-FR");
+    }
+
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    if (match) {
+      return `${match[3]}/${match[2]}/${match[1]}`;
+    }
+
+    return value;
+  }
+
+  private formatMoney(value: string | number | null | undefined) {
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount)
+      ? amount.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : "0,00";
+  }
+
+  private durationInMonths(start: Date | string | null | undefined, end: Date | string | null | undefined) {
+    const startParts = this.dateParts(start);
+    const endParts = this.dateParts(end);
+
+    if (!startParts || !endParts) {
+      return "[NUMÉRO DE MOIS] mois";
+    }
+
+    const months =
+      (endParts.year - startParts.year) * 12 +
+      (endParts.month - startParts.month) +
+      (endParts.day >= startParts.day ? 0 : -1);
+
+    return `${Math.max(months, 0)} mois`;
+  }
+
+  private guaranteeMonths(rent: string | null | undefined, deposit: string | null | undefined) {
+    const rentAmount = Number(rent ?? 0);
+    const depositAmount = Number(deposit ?? 0);
+
+    if (!rentAmount || !depositAmount) {
+      return "[NUMÉRO DE MOIS DE GARANTIE] mois de loyer";
+    }
+
+    const months = depositAmount / rentAmount;
+    const rounded = Number.isInteger(months) ? months.toString() : months.toFixed(2).replace(".", ",");
+    return `${rounded} mois de loyer`;
+  }
+
+  private dateParts(value: Date | string | null | undefined) {
+    if (!value) return null;
+    if (value instanceof Date) {
+      return { year: value.getFullYear(), month: value.getMonth() + 1, day: value.getDate() };
+    }
+
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    if (!match) return null;
+
+    return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  }
+
+  private humanizeType(type: string) {
+    const labels: Record<string, string> = {
+      apartment: "Habitation - appartement",
+      house: "Habitation - maison",
+      studio: "Habitation - studio",
+      office: "Bureaux",
+      commercial: "Commerce",
+      building: "Habitation - immeuble",
+    };
+
+    return labels[type] ?? type;
   }
 
   private async log(contractId: number, event: string, ip: string | null, ua: string | null, details: string | null) {

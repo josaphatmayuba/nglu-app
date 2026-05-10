@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { count, desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   productBrands,
@@ -34,10 +34,60 @@ export class ProductsService {
       return this.baseQuery().orderBy(desc(products.id));
     }
 
+    if (query["query"] === "sku") {
+      const [product] = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.sku, query["key"] ?? ""))
+        .limit(1);
+
+      return { status: product ? "true" : "false" };
+    }
+
+    if (query["query"] === "name") {
+      const [product] = await this.db
+        .select({ id: products.id })
+        .from(products)
+        .where(eq(products.name, query["key"] ?? ""))
+        .limit(1);
+
+      return { status: product ? "true" : "false" };
+    }
+
+    if (query["query"] === "info") {
+      const [{ total }] = await this.db
+        .select({ total: count(products.id) })
+        .from(products)
+        .where(eq(products.status, "true"));
+
+      return { _count: { id: Number(total ?? 0) } };
+    }
+
+    if (query["query"] === "card") {
+      const [card] = await this.db
+        .select({
+          totalProductCount: count(products.id),
+          uniqueProduct: sql<number>`SUM(CASE WHEN ${products.productQuantity} > 0 THEN 1 ELSE 0 END)`,
+          inventorySalesValue: sql<number>`COALESCE(SUM(${products.productSalePrice}), 0)`,
+          inventoryPurchaseValue: sql<number>`COALESCE(SUM(${products.productPurchasePrice}), 0)`,
+          shortProductCount: sql<number>`SUM(CASE WHEN ${products.productQuantity} <= ${products.reorderQuantity} THEN 1 ELSE 0 END)`,
+        })
+        .from(products)
+        .where(eq(products.status, "true"));
+
+      return {
+        uniqueProduct: Number(card?.uniqueProduct ?? 0),
+        totalProductCount: Number(card?.totalProductCount ?? 0),
+        inventorySalesValue: Number(card?.inventorySalesValue ?? 0),
+        inventoryPurchaseValue: Number(card?.inventoryPurchaseValue ?? 0),
+        shortProductCount: Number(card?.shortProductCount ?? 0),
+      };
+    }
+
     if (query["query"] === "search") {
       const key = `%${query["key"] ?? ""}%`;
       const { skip, limit } = this.pagination(query);
-      const where = like(products.name, key);
+      const where = or(like(products.name, key), like(products.sku, key));
 
       const rows = await this.baseQuery()
         .where(where)
@@ -53,8 +103,42 @@ export class ProductsService {
       return { getAllProduct: rows, totalProduct: Number(total ?? 0) };
     }
 
+    if (query["query"] === "report") {
+      const rows = await this.baseQuery()
+        .where(eq(products.status, "true"))
+        .orderBy(desc(products.id));
+
+      const getAllProduct = rows.map((product) => ({
+        ...product,
+        totalSalePrice: Number(product.productQuantity ?? 0) * Number(product.productSalePrice ?? 0),
+        totalPurchasePrice:
+          Number(product.productQuantity ?? 0) * Number(product.productPurchasePrice ?? 0),
+      }));
+
+      return {
+        aggregations: {
+          _count: { id: getAllProduct.length },
+          _sum: {
+            totalProductQuantity: getAllProduct.reduce(
+              (sum, product) => sum + Number(product.productQuantity ?? 0),
+              0,
+            ),
+            totalSalePrice: getAllProduct.reduce(
+              (sum, product) => sum + product.totalSalePrice,
+              0,
+            ),
+            totalPurchasePrice: getAllProduct.reduce(
+              (sum, product) => sum + product.totalPurchasePrice,
+              0,
+            ),
+          },
+        },
+        getAllProduct,
+      };
+    }
+
     const { skip, limit } = this.pagination(query);
-    const where = query["status"] ? eq(products.status, query["status"]) : undefined;
+    const where = this.listWhere(query);
 
     const rows = await this.baseQuery()
       .where(where)
@@ -94,7 +178,6 @@ export class ProductsService {
       uomValue: input.uomValue ?? null,
       reorderQuantity: input.reorderQuantity ?? 0,
       productVatId: input.productVatId ?? null,
-      productPurchaseVatId: input.productPurchaseVatId ?? null,
       discountId: input.discountId ?? null,
       productThumbnailImage: input.productThumbnailImage ?? null,
       status: "true",
@@ -120,7 +203,6 @@ export class ProductsService {
         uomValue: item.uomValue ?? null,
         reorderQuantity: item.reorderQuantity ?? 0,
         productVatId: item.productVatId ?? null,
-        productPurchaseVatId: item.productPurchaseVatId ?? null,
         discountId: item.discountId ?? null,
         productThumbnailImage: item.productThumbnailImage ?? null,
         status: "true",
@@ -155,7 +237,6 @@ export class ProductsService {
     if (input.uomValue !== undefined) updateData.uomValue = input.uomValue;
     if (input.reorderQuantity !== undefined) updateData.reorderQuantity = input.reorderQuantity;
     if (input.productVatId !== undefined) updateData.productVatId = input.productVatId;
-    if (input.productPurchaseVatId !== undefined) updateData.productPurchaseVatId = input.productPurchaseVatId;
     if (input.discountId !== undefined) updateData.discountId = input.discountId;
     if (input.productThumbnailImage !== undefined) updateData.productThumbnailImage = input.productThumbnailImage;
     updateData.updatedAt = sql`CURRENT_TIMESTAMP`;
@@ -249,7 +330,6 @@ export class ProductsService {
         uomValue: products.uomValue,
         reorderQuantity: products.reorderQuantity,
         productVatId: products.productVatId,
-        productPurchaseVatId: products.productPurchaseVatId,
         discountId: products.discountId,
         status: products.status,
         createdAt: products.createdAt,
@@ -282,7 +362,6 @@ export class ProductsService {
         uomValue: products.uomValue,
         reorderQuantity: products.reorderQuantity,
         productVatId: products.productVatId,
-        productPurchaseVatId: products.productPurchaseVatId,
         discountId: products.discountId,
         status: products.status,
         createdAt: products.createdAt,
@@ -318,5 +397,37 @@ export class ProductsService {
     const page = Number(q["page"] ?? 1);
     const cnt = Number(q["count"] ?? 10);
     return { skip: (page - 1) * cnt, limit: cnt };
+  }
+
+  private listWhere(query: Record<string, string>) {
+    const conditions = [
+      this.csvCondition(query["productSubCategoryId"], products.productSubCategoryId),
+      this.csvCondition(query["productBrandId"], products.productBrandId),
+      this.csvCondition(query["uomId"], products.uomId),
+      this.csvCondition(query["status"], products.status),
+    ].filter((condition): condition is NonNullable<typeof condition> => Boolean(condition));
+
+    return conditions.length ? and(...conditions) : undefined;
+  }
+
+  private csvCondition(value: string | undefined, column: unknown) {
+    if (!value) {
+      return undefined;
+    }
+
+    const values = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!values.length) {
+      return undefined;
+    }
+
+    if (values.length === 1) {
+      return eq(column as never, values[0] as never);
+    }
+
+    return inArray(column as never, values as never[]);
   }
 }

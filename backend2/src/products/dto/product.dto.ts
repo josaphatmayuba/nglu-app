@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from "class-validator";
 
 export class CreateProductDto {
@@ -9,11 +10,13 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productSubCategoryId?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productBrandId?: number;
 
@@ -29,24 +32,28 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productQuantity?: number;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productSalePrice?: number;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productPurchasePrice?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   uomId?: number;
 
@@ -57,22 +64,20 @@ export class CreateProductDto {
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   reorderQuantity?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productVatId?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
-  @IsNumber()
-  productPurchaseVatId?: number;
-
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   discountId?: number;
 
@@ -90,11 +95,13 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productSubCategoryId?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productBrandId?: number;
 
@@ -110,24 +117,28 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productQuantity?: number;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productSalePrice?: number;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   productPurchasePrice?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   uomId?: number;
 
@@ -138,22 +149,20 @@ export class UpdateProductDto {
 
   @ApiPropertyOptional({ example: 5 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   reorderQuantity?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   productVatId?: number;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
-  @IsNumber()
-  productPurchaseVatId?: number;
-
-  @ApiPropertyOptional({ example: 1 })
-  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   discountId?: number;
 
