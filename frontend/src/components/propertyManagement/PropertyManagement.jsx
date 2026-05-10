@@ -3,6 +3,7 @@ import {
   CalendarOutlined,
   DollarOutlined,
   HomeOutlined,
+  PlusOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
 import { Button, Form, Input, InputNumber, Modal, Select, Table, Tabs, Tag } from "antd";
@@ -22,6 +23,7 @@ import {
   saveLease,
   saveMaintenance,
   saveProperty,
+  saveTenant,
   saveUnit,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
@@ -42,6 +44,16 @@ const unitTypes = [
   { label: "Magasin", value: "shop" },
   { label: "Maison entière", value: "house" },
 ];
+
+const maritalStatuses = [
+  { label: "Célibataire", value: "célibataire" },
+  { label: "Marié", value: "marié" },
+  { label: "Conjoint de fait", value: "conjoint de fait" },
+  { label: "Divorcé", value: "divorcé" },
+  { label: "Veuf", value: "veuf" },
+];
+
+const coupleStatuses = ["marié", "marie", "conjoint de fait", "union libre"];
 
 const statusColor = {
   available: "green",
@@ -180,6 +192,18 @@ const PropertyManagement = () => {
     let response;
     if (type === "payment") {
       response = await dispatch(createRentPayment(values));
+    } else if (type === "tenant") {
+      const normalizedChildNumber = Number(values.child_number || 0);
+      response = await dispatch(
+        saveTenant({
+          ...values,
+          child_number: normalizedChildNumber,
+          child_age:
+            normalizedChildNumber > 0
+              ? (values.child_age || []).slice(0, normalizedChildNumber)
+              : [],
+        }),
+      );
     } else {
       response = await dispatch(actions[type]({ id, values }));
     }
@@ -230,6 +254,9 @@ const PropertyManagement = () => {
   );
 
   const selectedUnit = Form.useWatch("unitId", form);
+  const maritalStatus = Form.useWatch("marital_status", form);
+  const childNumber = Number(Form.useWatch("child_number", form) || 0);
+  const isCouple = coupleStatuses.includes(String(maritalStatus || "").toLowerCase());
 
   useEffect(() => {
     if (modal?.type !== "lease" || !selectedUnit || modal?.record) return;
@@ -379,6 +406,9 @@ const PropertyManagement = () => {
       label: "Locataires",
       children: (
         <div className="pm-panel">
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal("tenant")}>
+            Nouveau Locataire
+          </Button>
           <Table
             size="small"
             rowKey="id"
@@ -520,10 +550,10 @@ const PropertyManagement = () => {
 
       <Modal
         open={Boolean(modal)}
-        title={modal?.record ? "Modifier" : "Créer"}
+        title={modal?.type === "tenant" ? "Nouveau Locataire" : modal?.record ? "Modifier" : "Créer"}
         onCancel={closeModal}
         footer={null}
-        width={720}
+        width={modal?.type === "tenant" ? 920 : 720}
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={submitModal}>
@@ -655,6 +685,134 @@ const PropertyManagement = () => {
               <Form.Item label="Conditions / clauses" name="terms">
                 <Input.TextArea rows={4} />
               </Form.Item>
+            </>
+          )}
+
+          {modal?.type === "tenant" && (
+            <>
+              <div className="pm-section-title">Identité</div>
+              <div className="pm-form-grid">
+                <Form.Item label="Prénom" name="firstName" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Nom" name="lastName" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Email" name="email">
+                  <Input type="email" />
+                </Form.Item>
+                <Form.Item label="Téléphone" name="phone" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+              </div>
+              <Form.Item label="Adresse actuelle" name="address" rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+
+              <div className="pm-section-title">Profil Personnel & Civil</div>
+              <div className="pm-form-grid">
+                <Form.Item label="Date de naissance" name="birth_date" rules={[{ required: true }]}>
+                  <Input type="date" />
+                </Form.Item>
+                <Form.Item label="Sexe" name="sex" rules={[{ required: true }]}>
+                  <Select options={[{ label: "M", value: "M" }, { label: "F", value: "F" }]} />
+                </Form.Item>
+                <Form.Item label="Nationalité" name="nationality" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="État civil" name="marital_status" rules={[{ required: true }]}>
+                  <Select options={maritalStatuses} />
+                </Form.Item>
+                <Form.Item label="Province d'origine" name="origin_province" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+              </div>
+
+              {isCouple && (
+                <div className="pm-form-grid">
+                  <Form.Item label="Nom du partenaire" name="partenair_name" rules={[{ required: true }]}>
+                    <Input />
+                  </Form.Item>
+                  <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={[{ required: true }]}>
+                    <Input />
+                  </Form.Item>
+                </div>
+              )}
+
+              <div className="pm-section-title">Contact d'Urgence</div>
+              <div className="pm-form-grid">
+                <Form.Item label="Téléphone secondaire" name="phone2">
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Personne à contacter" name="contacted_person" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+              </div>
+
+              <div className="pm-section-title">Situation Professionnelle & Revenus</div>
+              <div className="pm-form-grid">
+                <Form.Item label="Statut professionnel" name="prossional_status" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Activité principale" name="main_activity" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Nom de l'entité" name="entity_name" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Adresse de l'entité" name="entity_address" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Date d'embauche" name="hiring_date" rules={[{ required: true }]}>
+                  <Input type="date" />
+                </Form.Item>
+                <Form.Item label="Type de contrat" name="contract_type" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Salaire mensuel" name="monthly_pay" rules={[{ required: true }]}>
+                  <InputNumber className="w-full" min={0} />
+                </Form.Item>
+                <Form.Item label="Autres revenus mensuels" name="other_monthly_income">
+                  <InputNumber className="w-full" min={0} />
+                </Form.Item>
+              </div>
+
+              <div className="pm-section-title">Historique & Ménage</div>
+              <div className="pm-form-grid">
+                <Form.Item label="Ancienne adresse" name="old_address" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Ancien bailleur" name="old_lessor" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Motif du déménagement" name="moving_reason" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Nombre d'occupants" name="occupant_number" rules={[{ required: true }]}>
+                  <InputNumber className="w-full" min={1} />
+                </Form.Item>
+                <Form.Item label="Nombre d'enfants" name="child_number" initialValue={0}>
+                  <InputNumber className="w-full" min={0} />
+                </Form.Item>
+              </div>
+
+              {childNumber > 0 && (
+                <div className="pm-form-grid">
+                  {Array.from({ length: childNumber }).map((_, index) => (
+                    <Form.Item
+                      key={index}
+                      label={`Âge enfant ${index + 1}`}
+                      name={["child_age", index]}
+                      rules={[{ required: true }]}
+                    >
+                      <InputNumber className="w-full" min={0} />
+                    </Form.Item>
+                  ))}
+                </div>
+              )}
             </>
           )}
 

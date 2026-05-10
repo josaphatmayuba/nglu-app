@@ -1,4 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
@@ -9,7 +11,9 @@ import {
   realEstateProperties,
   realEstateRentPayments,
   realEstateUnits,
+  roles,
   subAccounts,
+  tenantDetails,
   transactions,
   transactionTypes,
 } from "../database/schema";
@@ -19,6 +23,7 @@ import {
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  CreateTenantDto,
   CreateUnitDto,
   UpdateLeaseDto,
   UpdateMaintenanceDto,
@@ -77,6 +82,13 @@ export class PropertyManagementService {
   }
 
   tenants() {
+    return this.tenantQuery().orderBy(desc(customers.id));
+  }
+
+  private tenantQuery(customerId?: number) {
+    const tenantWhere = and(eq(customers.status, "true"), inArray(roles.name, ["Locataire", "locataire", "tenant"]));
+    const where = customerId ? and(tenantWhere, eq(customers.id, customerId)) : tenantWhere;
+
     return this.db
       .select({
         id: customers.id,
@@ -86,10 +98,102 @@ export class PropertyManagementService {
         email: customers.email,
         phone: customers.phone,
         address: customers.address,
+        roleId: customers.roleId,
+        birthDate: tenantDetails.birthDate,
+        sex: tenantDetails.sex,
+        nationality: tenantDetails.nationality,
+        maritalStatus: tenantDetails.maritalStatus,
+        originProvince: tenantDetails.originProvince,
+        phone2: tenantDetails.phone2,
+        contactedPerson: tenantDetails.contactedPerson,
+        contactedPersonPhoneNumber: tenantDetails.contactedPersonPhoneNumber,
+        professionalStatus: tenantDetails.professionalStatus,
+        mainActivity: tenantDetails.mainActivity,
+        entityName: tenantDetails.entityName,
+        entityAddress: tenantDetails.entityAddress,
+        hiringDate: tenantDetails.hiringDate,
+        contractType: tenantDetails.contractType,
+        monthlyPay: tenantDetails.monthlyPay,
+        otherMonthlyIncome: tenantDetails.otherMonthlyIncome,
+        oldAddress: tenantDetails.oldAddress,
+        oldLessor: tenantDetails.oldLessor,
+        movingReason: tenantDetails.movingReason,
+        occupantNumber: tenantDetails.occupantNumber,
+        partenairName: tenantDetails.partenairName,
+        partenairNumber: tenantDetails.partenairNumber,
+        childNumber: tenantDetails.childNumber,
+        childAges: tenantDetails.childAges,
       })
       .from(customers)
-      .where(eq(customers.status, "true"))
-      .orderBy(desc(customers.id));
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
+      .leftJoin(roles, eq(roles.id, customers.roleId))
+      .where(where);
+  }
+
+  async createTenant(input: CreateTenantDto) {
+    await this.ensureTenantForm(input);
+    if (input.email) {
+      await this.ensureCustomerEmailAvailable(input.email);
+    }
+
+    const tenantRole = await this.getTenantRole();
+    const password = await bcrypt.hash(randomBytes(12).toString("hex"), 10);
+    const username = input.username || this.usernameFromEmail(input.email) || input.phone || `${input.firstName}${input.lastName}`;
+
+    const customerId = await this.db.transaction(async (tx) => {
+      const [customerResult] = await tx.insert(customers).values({
+        username,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email ?? null,
+        phone: input.phone,
+        address: input.address,
+        password,
+        roleId: tenantRole.id,
+        isLogin: "false",
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+
+      const createdCustomerId = Number(customerResult.insertId);
+      await tx.insert(tenantDetails).values({
+        customerId: createdCustomerId,
+        birthDate: input.birth_date,
+        sex: input.sex,
+        nationality: input.nationality,
+        maritalStatus: input.marital_status,
+        originProvince: input.origin_province,
+        phone2: input.phone2 ?? null,
+        contactedPerson: input.contacted_person,
+        contactedPersonPhoneNumber: input.contacted_person_phone_number,
+        professionalStatus: input.prossional_status,
+        mainActivity: input.main_activity,
+        entityName: input.entity_name,
+        entityAddress: input.entity_address,
+        hiringDate: input.hiring_date,
+        contractType: input.contract_type,
+        monthlyPay: this.money(input.monthly_pay),
+        otherMonthlyIncome:
+          input.other_monthly_income === undefined || input.other_monthly_income === null
+            ? null
+            : this.money(input.other_monthly_income),
+        oldAddress: input.old_address,
+        oldLessor: input.old_lessor,
+        movingReason: input.moving_reason,
+        occupantNumber: input.occupant_number,
+        partenairName: input.partenair_name ?? null,
+        partenairNumber: input.partenair_number ?? null,
+        childNumber: input.child_number ?? 0,
+        childAges: input.child_age?.length ? JSON.stringify(input.child_age) : null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+
+      return createdCustomerId;
+    });
+
+    return this.findTenant(customerId);
   }
 
   async properties() {
@@ -496,6 +600,12 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  private async findTenant(id: number) {
+    const rows = await this.tenantQuery(id).limit(1);
+    if (!rows.length) throw new NotFoundException("Tenant not found.");
+    return rows[0];
+  }
+
   private leaseQuery() {
     return this.db
       .select({
@@ -553,6 +663,47 @@ export class PropertyManagementService {
     await this.ensureExists(realEstateProperties, propertyId, "Property not found.");
     await this.ensureExists(realEstateUnits, unitId, "Unit not found.");
     await this.ensureExists(customers, tenantId, "Tenant not found.");
+  }
+
+  private async getTenantRole() {
+    const rows = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(inArray(roles.name, ["Locataire", "locataire", "tenant"]))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new BadRequestException("Role 'Locataire' not found.");
+    }
+
+    return rows[0];
+  }
+
+  private async ensureCustomerEmailAvailable(email: string) {
+    const rows = await this.db.select({ id: customers.id }).from(customers).where(eq(customers.email, email)).limit(1);
+    if (rows.length) {
+      throw new BadRequestException("Customer email already exists.");
+    }
+  }
+
+  private ensureTenantForm(input: CreateTenantDto) {
+    if (this.isCoupleStatus(input.marital_status) && (!input.partenair_name || !input.partenair_number)) {
+      throw new BadRequestException("Partner name and phone number are required for couple marital statuses.");
+    }
+
+    const childNumber = input.child_number ?? 0;
+    const childAges = input.child_age ?? [];
+    if (childNumber > 0 && childAges.length !== childNumber) {
+      throw new BadRequestException("Child ages count must match child_number.");
+    }
+  }
+
+  private isCoupleStatus(value: string) {
+    return ["marié", "marie", "conjoint de fait", "union libre"].includes(value.trim().toLowerCase());
+  }
+
+  private usernameFromEmail(email?: string | null) {
+    return email ? email.split("@")[0] : null;
   }
 
   private async ensureExists(table: any, id: number, message: string) {

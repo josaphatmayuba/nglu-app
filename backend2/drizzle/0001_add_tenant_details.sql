@@ -1,0 +1,35 @@
+CREATE TABLE IF NOT EXISTS `tenant_details` (
+	`id` serial AUTO_INCREMENT NOT NULL,
+	`customer_id` bigint NOT NULL,
+	`birth_date` date NOT NULL,
+	`sex` varchar(10) NOT NULL,
+	`nationality` varchar(255) NOT NULL,
+	`marital_status` varchar(255) NOT NULL,
+	`origin_province` varchar(255) NOT NULL,
+	`phone2` varchar(255),
+	`contacted_person` varchar(255) NOT NULL,
+	`contacted_person_phone_number` varchar(255) NOT NULL,
+	`prossional_status` varchar(255) NOT NULL,
+	`main_activity` varchar(255) NOT NULL,
+	`entity_name` varchar(255) NOT NULL,
+	`entity_address` varchar(255) NOT NULL,
+	`hiring_date` date NOT NULL,
+	`contract_type` varchar(255) NOT NULL,
+	`monthly_pay` decimal(15,2) NOT NULL,
+	`other_monthly_income` decimal(15,2),
+	`old_address` varchar(255) NOT NULL,
+	`old_lessor` varchar(255) NOT NULL,
+	`moving_reason` varchar(255) NOT NULL,
+	`occupant_number` int NOT NULL,
+	`partenair_name` varchar(255),
+	`partenair_number` varchar(255),
+	`child_number` int NOT NULL DEFAULT 0,
+	`child_ages` text,
+	`created_at` timestamp,
+	`updated_at` timestamp,
+	CONSTRAINT `tenant_details_id` PRIMARY KEY(`id`),
+	CONSTRAINT `tenant_details_customer_id_unique` UNIQUE(`customer_id`)
+);
+--> statement-breakpoint
+INSERT IGNORE INTO `role` (`name`, `status`, `created_at`, `updated_at`)
+VALUES ('Locataire', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

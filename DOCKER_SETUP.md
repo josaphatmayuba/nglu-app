@@ -36,6 +36,7 @@ The first startup takes a few minutes as it:
 Check logs:
 ```bash
 docker-compose logs -f backend
+docker-compose logs -f backend2
 docker-compose logs -f frontend
 ```
 
@@ -48,6 +49,7 @@ docker-compose logs -f
 
 # Specific service
 docker-compose logs -f backend
+docker-compose logs -f backend2
 docker-compose logs -f frontend
 ```
 
@@ -71,8 +73,15 @@ docker-compose down
 # Run Laravel artisan commands
 docker-compose exec backend php artisan migrate:refresh --seed
 
+# Run backend2 Drizzle migrations and seeders
+docker-compose exec backend2 npm run db:migrate:run
+docker-compose exec backend2 npm run db:seed
+
 # Access backend shell
 docker-compose exec backend bash
+
+# Access backend2 shell
+docker-compose exec backend2 sh
 
 # Access frontend shell
 docker-compose exec frontend sh
@@ -92,6 +101,8 @@ Connect with any MySQL client (Workbench, TablePlus, etc.)
 ### Reset database
 ```bash
 docker-compose exec backend php artisan migrate:fresh --seed
+docker-compose exec backend2 npm run db:migrate:run
+docker-compose exec backend2 npm run db:seed
 ```
 
 ## Database Backup
@@ -139,7 +150,8 @@ Edit these files to customize:
 
 1. **Backend code changes** → Automatically reloaded (volume mounted)
 2. **Frontend code changes** → Automatically reloaded by Vite HMR
-3. **Database changes** → Update migrations and run `docker-compose exec backend php artisan migrate`
+3. **Laravel database changes** → Update migrations and run `docker-compose exec backend php artisan migrate`
+4. **Backend2 database changes** → Update Drizzle schema/migrations and run `docker-compose exec backend2 npm run db:migrate:run`
 
 ## Production Deployment
 For production, you'll want to:

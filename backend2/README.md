@@ -57,6 +57,7 @@ Stack:
 - `GET|PUT|PATCH /supplier/:id`
 - `GET /property-management/dashboard`
 - `GET /property-management/tenants`
+- `POST /property-management/tenants`
 - `GET|POST /property-management/properties`
 - `PUT|PATCH|DELETE /property-management/properties/:id`
 - `GET|POST /property-management/units`
@@ -80,4 +81,18 @@ The Docker Compose service injects the same MySQL credentials used by Laravel.
 
 ## Drizzle
 
-The Drizzle schema is in `src/database/schema.ts` and maps to the existing Laravel tables. Laravel can remain responsible for migrations while backend2 progressively adopts API modules.
+The Drizzle schema is in `src/database/schema.ts` and maps to the existing Laravel tables. Backend2 Docker now runs this startup chain automatically:
+
+```bash
+npm run db:wait
+npm run db:migrate:run
+npm run db:seed
+npm run dev
+```
+
+To run backend2 database setup manually in Docker:
+
+```bash
+docker-compose exec backend2 npm run db:migrate:run
+docker-compose exec backend2 npm run db:seed
+```

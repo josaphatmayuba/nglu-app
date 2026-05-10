@@ -8,6 +8,13 @@
       "when": 1778344498351,
       "tag": "0000_nervous_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778371200000,
+      "tag": "0001_add_tenant_details",
+      "breakpoints": true
     }
   ]
 }

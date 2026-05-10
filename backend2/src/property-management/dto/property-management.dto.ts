@@ -1,13 +1,18 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsArray,
   IsDateString,
+  IsEmail,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
 } from "class-validator";
 
 export class CreatePropertyDto {
@@ -325,6 +330,167 @@ export class CreateMaintenanceDto {
 }
 
 export class UpdateMaintenanceDto extends PartialType(CreateMaintenanceDto) {}
+
+export class CreateTenantDto {
+  @ApiProperty({ example: "Jean" })
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @ApiProperty({ example: "Dupont" })
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @ApiPropertyOptional({ example: "jean.dupont@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
+  @ApiProperty({ example: "+243810000000" })
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @ApiProperty({ example: "12 Avenue des Palmiers" })
+  @IsString()
+  @IsNotEmpty()
+  address: string;
+
+  @ApiPropertyOptional({ example: "jdupont" })
+  @IsOptional()
+  @IsString()
+  username?: string | null;
+
+  @ApiProperty({ example: "1992-03-14" })
+  @IsDateString()
+  birth_date: string;
+
+  @ApiProperty({ example: "M", enum: ["M", "F"] })
+  @IsIn(["M", "F"])
+  sex: "M" | "F";
+
+  @ApiProperty({ example: "Congolaise" })
+  @IsString()
+  @IsNotEmpty()
+  nationality: string;
+
+  @ApiProperty({ example: "marié" })
+  @IsString()
+  @IsNotEmpty()
+  marital_status: string;
+
+  @ApiProperty({ example: "Kinshasa" })
+  @IsString()
+  @IsNotEmpty()
+  origin_province: string;
+
+  @ApiPropertyOptional({ example: "+243820000000" })
+  @IsOptional()
+  @IsString()
+  phone2?: string | null;
+
+  @ApiProperty({ example: "Marie Dupont" })
+  @IsString()
+  @IsNotEmpty()
+  contacted_person: string;
+
+  @ApiProperty({ example: "+243830000000" })
+  @IsString()
+  @IsNotEmpty()
+  contacted_person_phone_number: string;
+
+  @ApiProperty({ example: "salarié" })
+  @IsString()
+  @IsNotEmpty()
+  prossional_status: string;
+
+  @ApiProperty({ example: "Comptable" })
+  @IsString()
+  @IsNotEmpty()
+  main_activity: string;
+
+  @ApiProperty({ example: "NGLU SARL" })
+  @IsString()
+  @IsNotEmpty()
+  entity_name: string;
+
+  @ApiProperty({ example: "45 Boulevard du 30 Juin" })
+  @IsString()
+  @IsNotEmpty()
+  entity_address: string;
+
+  @ApiProperty({ example: "2021-01-15" })
+  @IsDateString()
+  hiring_date: string;
+
+  @ApiProperty({ example: "CDI" })
+  @IsString()
+  @IsNotEmpty()
+  contract_type: string;
+
+  @ApiProperty({ example: 1500 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  monthly_pay: number;
+
+  @ApiPropertyOptional({ example: 200 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  other_monthly_income?: number | null;
+
+  @ApiProperty({ example: "Ancienne adresse" })
+  @IsString()
+  @IsNotEmpty()
+  old_address: string;
+
+  @ApiProperty({ example: "Monsieur Bailleur" })
+  @IsString()
+  @IsNotEmpty()
+  old_lessor: string;
+
+  @ApiProperty({ example: "Rapprochement du lieu de travail" })
+  @IsString()
+  @IsNotEmpty()
+  moving_reason: string;
+
+  @ApiProperty({ example: 3 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  occupant_number: number;
+
+  @ApiPropertyOptional({ example: "Jeanne Dupont" })
+  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @IsString()
+  @IsNotEmpty()
+  partenair_name?: string | null;
+
+  @ApiPropertyOptional({ example: "+243840000000" })
+  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @IsString()
+  @IsNotEmpty()
+  partenair_number?: string | null;
+
+  @ApiPropertyOptional({ example: 2, default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  child_number?: number;
+
+  @ApiPropertyOptional({ example: [4, 9] })
+  @ValidateIf((dto) => Number(dto.child_number ?? 0) > 0)
+  @IsArray()
+  @ArrayMinSize(1)
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  child_age?: number[];
+}
 
 export class CreateContractDto {
   @ApiProperty({ example: 1 })

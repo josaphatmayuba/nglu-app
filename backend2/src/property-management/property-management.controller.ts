@@ -28,6 +28,7 @@ import {
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  CreateTenantDto,
   CreateUnitDto,
   UpdateLeaseDto,
   UpdateMaintenanceDto,
@@ -58,6 +59,13 @@ export class PropertyManagementController {
   @Get("tenants")
   tenants() {
     return this.propertyManagementService.tenants();
+  }
+
+  @ApiOperation({ summary: "Create a tenant customer with extended tenant details" })
+  @ApiCreatedResponse({ description: "Created tenant" })
+  @Post("tenants")
+  createTenant(@Body() body: CreateTenantDto) {
+    return this.propertyManagementService.createTenant(body);
   }
 
   @ApiOperation({ summary: "List properties with unit counts" })

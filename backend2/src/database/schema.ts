@@ -59,6 +59,37 @@ export const customers = mysqlTable("customer", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const tenantDetails = mysqlTable("tenant_details", {
+  id: serial("id").primaryKey(),
+  customerId: bigint("customer_id", { mode: "number" }).notNull().unique(),
+  birthDate: date("birth_date", { mode: "string" }).notNull(),
+  sex: varchar("sex", { length: 10 }).notNull(),
+  nationality: varchar("nationality", { length: 255 }).notNull(),
+  maritalStatus: varchar("marital_status", { length: 255 }).notNull(),
+  originProvince: varchar("origin_province", { length: 255 }).notNull(),
+  phone2: varchar("phone2", { length: 255 }),
+  contactedPerson: varchar("contacted_person", { length: 255 }).notNull(),
+  contactedPersonPhoneNumber: varchar("contacted_person_phone_number", { length: 255 }).notNull(),
+  professionalStatus: varchar("prossional_status", { length: 255 }).notNull(),
+  mainActivity: varchar("main_activity", { length: 255 }).notNull(),
+  entityName: varchar("entity_name", { length: 255 }).notNull(),
+  entityAddress: varchar("entity_address", { length: 255 }).notNull(),
+  hiringDate: date("hiring_date", { mode: "string" }).notNull(),
+  contractType: varchar("contract_type", { length: 255 }).notNull(),
+  monthlyPay: decimal("monthly_pay", { precision: 15, scale: 2 }).notNull(),
+  otherMonthlyIncome: decimal("other_monthly_income", { precision: 15, scale: 2 }),
+  oldAddress: varchar("old_address", { length: 255 }).notNull(),
+  oldLessor: varchar("old_lessor", { length: 255 }).notNull(),
+  movingReason: varchar("moving_reason", { length: 255 }).notNull(),
+  occupantNumber: int("occupant_number").notNull(),
+  partenairName: varchar("partenair_name", { length: 255 }),
+  partenairNumber: varchar("partenair_number", { length: 255 }),
+  childNumber: int("child_number").default(0).notNull(),
+  childAges: text("child_ages"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const paymentMethods = mysqlTable("paymentMethod", {
   id: serial("id").primaryKey(),
   subAccountId: bigint("subAccountId", { mode: "number" }).notNull(),

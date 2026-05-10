@@ -51,6 +51,15 @@ const formatSignedAt = (value) => {
   )} h ${pad(date.getMinutes())} min ${pad(date.getSeconds())}`;
 };
 
+const hasHtmlMarkup = (value = "") => /<\/?[a-z][\s\S]*>/i.test(String(value));
+
+const contractContentHtml = (value = "") => {
+  const content = String(value || "");
+  return hasHtmlMarkup(content)
+    ? content
+    : `<pre class="plain-contract-content">${escapeHtml(content)}</pre>`;
+};
+
 const contractPrintHtml = (contract) => {
   const company = contract?.companyInfo || {};
   const landlordName = contract?.landlordName || company.companyName || "Bailleur";
@@ -72,7 +81,9 @@ const contractPrintHtml = (contract) => {
     .eyebrow { color: #6b7280; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
     h1 { font-size: 26px; margin: 6px 0 8px; }
     .meta { color: #4b5563; font-size: 13px; line-height: 1.5; }
-    .content { font-family: "Courier New", monospace; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
+    .contract-content { color: #1f2937; font-size: 14px; line-height: 1.65; }
+    .contract-content * { box-sizing: border-box; }
+    .plain-contract-content { font-family: "Courier New", monospace; font-size: 13px; line-height: 1.55; margin: 0; white-space: pre-wrap; }
     .company { color: #374151; font-size: 13px; line-height: 1.45; margin-top: 8px; }
     .signature { border-top: 1px solid #d1d5db; margin-top: 34px; padding-top: 18px; }
     .signature-grid { display: grid; gap: 24px; grid-template-columns: 1fr 1fr; }
@@ -104,7 +115,7 @@ const contractPrintHtml = (contract) => {
       </div>
     </div>
   </div>
-  <pre class="content">${escapeHtml(contract?.contractContent || "")}</pre>
+  <div class="contract-content">${contractContentHtml(contract?.contractContent || "")}</div>
   <div class="signature">
     <div class="signature-grid">
       <div>
@@ -351,7 +362,7 @@ export default function ContractsTab({ leases }) {
               <strong>Email :</strong> {previewContract?.companyInfo?.email || "-"}
             </div>
           </div>
-          <pre
+          <div
             style={{
               background: "#f9fafb",
               border: "1px solid #e5e7eb",
@@ -359,11 +370,16 @@ export default function ContractsTab({ leases }) {
               maxHeight: 420,
               overflow: "auto",
               padding: 14,
-              whiteSpace: "pre-wrap",
             }}
           >
-            {previewContract?.contractContent}
-          </pre>
+            {hasHtmlMarkup(previewContract?.contractContent) ? (
+              <div dangerouslySetInnerHTML={{ __html: previewContract?.contractContent || "" }} />
+            ) : (
+              <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                {previewContract?.contractContent}
+              </pre>
+            )}
+          </div>
           <div style={{ borderTop: "1px solid #e5e7eb", marginTop: 16, paddingTop: 16 }}>
             <div style={{ display: "grid", gap: 24, gridTemplateColumns: "1fr 1fr" }}>
               <div>

@@ -96,6 +96,16 @@ const maintenancePayload = (values) =>
     ["scheduledDate"],
   );
 
+const tenantPayload = (values) =>
+  nullifyEmpty({ ...(values || {}) }, [
+    "email",
+    "username",
+    "phone2",
+    "other_monthly_income",
+    "partenair_name",
+    "partenair_number",
+  ]);
+
 export const loadPropertyManagement = createAsyncThunk(
   "propertyManagement/loadAll",
   async () => {
@@ -164,6 +174,18 @@ export const saveUnit = createAsyncThunk(
         unitPayload(values),
       );
       return successHandler(data, id ? "Unit updated" : "Unit created");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const saveTenant = createAsyncThunk(
+  "propertyManagement/saveTenant",
+  async (values) => {
+    try {
+      const data = await request("post", "property-management/tenants", tenantPayload(values));
+      return successHandler(data, "Locataire créé");
     } catch (error) {
       return errorHandler(error, true);
     }
@@ -372,6 +394,9 @@ const propertyManagementSlice = createSlice({
       })
       .addCase(deleteUnit.fulfilled, (state, action) => {
         state.units = state.units.filter((unit) => unit.id !== action.payload.data.id);
+      })
+      .addCase(saveTenant.fulfilled, (state, action) => {
+        state.tenants = upsert(state.tenants, action.payload.data);
       })
       .addCase(saveLease.fulfilled, (state, action) => {
         state.leases = upsert(state.leases, action.payload.data);
