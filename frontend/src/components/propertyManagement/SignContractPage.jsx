@@ -173,14 +173,10 @@ export default function SignContractPage() {
 
         {/* Contract content */}
         <div style={styles.contentBox}>
-          {contract?.contractContent?.trimStart().startsWith("<") ? (
-            <div
-              style={styles.htmlContent}
-              dangerouslySetInnerHTML={{ __html: contract.contractContent }}
-            />
-          ) : (
-            <pre style={styles.content}>{contract?.contractContent}</pre>
-          )}
+          <div
+            style={styles.htmlContent}
+            dangerouslySetInnerHTML={{ __html: contract?.contractContent ?? "" }}
+          />
         </div>
 
         {/* Signature section */}
@@ -316,6 +312,7 @@ const styles = {
     color: "#1a1a2e",
     fontSize: 14,
     lineHeight: 1.8,
+    whiteSpace: "pre-wrap",
   },
   signSection: {
     borderTop: "1px solid #e8e8e8",
