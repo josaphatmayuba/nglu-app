@@ -272,6 +272,7 @@ export class ContractsService {
   }
 
   private generateContent(lease: LeaseDetails, company: CompanyInfo): string {
+    const e = (s: string | null | undefined) => this.escapeHtml(s);
     const today = this.formatDate(new Date());
     const startDate = this.formatDate(lease.startDate);
     const endDate = this.formatDate(lease.endDate);
@@ -282,71 +283,165 @@ export class ContractsService {
     const city = lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = company.companyName || "[NOM COMPLET DU BAILLEUR]";
+    const landlordName = company.companyName || "[NOM DU BAILLEUR]";
     const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
     const landlordPhone = company.phone || "N/A";
     const landlordEmail = company.email || "N/A";
 
-    return `CONTRAT DE BAIL À LOYER
-Référence : ${lease.reference ?? "N/A"}
+    const art = (num: string, title: string, body: string) =>
+      `<div style="margin-bottom:22px;">
+        <div style="background:#1a237e;color:#fff;padding:9px 18px;border-radius:4px 4px 0 0;font-size:12.5px;font-weight:bold;text-transform:uppercase;letter-spacing:0.8px;">
+          Article ${num} &mdash; ${title}
+        </div>
+        <div style="border:1px solid #c5cae9;border-top:none;border-radius:0 0 4px 4px;padding:16px 20px;font-size:14px;line-height:1.8;">
+          ${body}
+        </div>
+      </div>`;
 
-ARTICLE 1 : DÉSIGNATION DES PARTIES
+    const tr = (label: string, value: string, shaded = false) =>
+      `<tr style="${shaded ? "background:#f0f2ff;" : ""}">
+        <td style="padding:7px 12px;font-weight:bold;width:36%;border:1px solid #e0e4f0;font-size:13px;">${label}</td>
+        <td style="padding:7px 12px;border:1px solid #e0e4f0;font-size:13px;">${value}</td>
+      </tr>`;
 
-LE BAILLEUR : Monsieur/Madame/Société ${landlordName}, résidant au ${landlordAddress}.
-Téléphone : ${landlordPhone}
-Courriel : ${landlordEmail}
+    const termsSection = lease.terms
+      ? art("10", "Conditions Particulières", `<p style="margin:0;">${e(lease.terms).replace(/\n/g, "<br>")}</p>`)
+      : "";
 
-LE PRENEUR (Locataire) : Monsieur/Madame/Société ${lease.tenantName}, titulaire de la pièce d'identité n° [NUMÉRO DE PIÈCE D'IDENTITÉ], résidant au ${lease.tenantAddress ?? "[ADRESSE DU PRENEUR]"}.
-Téléphone : ${lease.tenantPhone ?? "N/A"}
-Courriel : ${lease.tenantEmail ?? "N/A"}
+    return `<div style="font-family:Georgia,'Times New Roman',serif;color:#1a1a2e;line-height:1.8;font-size:14px;max-width:800px;margin:0 auto;">
 
-ARTICLE 2 : OBJET ET DESTINATION DES LIEUX
+  <div style="text-align:center;padding-bottom:20px;border-bottom:3px double #1a237e;margin-bottom:28px;">
+    <div style="font-size:20px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:2px;">${e(landlordName)}</div>
+    <div style="font-size:12px;color:#666;margin-top:4px;">${e(landlordAddress)} &nbsp;|&nbsp; Tél&nbsp;: ${e(landlordPhone)} &nbsp;|&nbsp; ${e(landlordEmail)}</div>
+    <div style="margin-top:18px;">
+      <span style="font-size:17px;font-weight:bold;text-transform:uppercase;letter-spacing:3px;color:#1a1a2e;border:2px solid #1a237e;padding:7px 28px;border-radius:3px;display:inline-block;">
+        Contrat de Bail à Loyer
+      </span>
+    </div>
+    <div style="margin-top:12px;font-size:13px;color:#444;">
+      Réf.&nbsp;: <strong>${e(lease.reference ?? "N/A")}</strong>
+      &nbsp;&nbsp;—&nbsp;&nbsp;
+      Établi le <strong>${today}</strong>
+    </div>
+  </div>
 
-Le Bailleur donne en location au Preneur un local situé à l'adresse suivante :
-Adresse : ${rentalAddress}
-Propriété : ${lease.propertyName ?? "N/A"}
-Unité : ${lease.unitName ?? "N/A"}
-Destination des lieux : ${destination}.
+  ${art("1", "Désignation des Parties", `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Bailleur</div>
+      <strong>${e(landlordName)}</strong><br>
+      Adresse&nbsp;: ${e(landlordAddress)}<br>
+      Téléphone&nbsp;: ${e(landlordPhone)} &nbsp;&nbsp; Courriel&nbsp;: ${e(landlordEmail)}
+    </div>
+    <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
+    <div>
+      <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Preneur (Locataire)</div>
+      <strong>${e(lease.tenantName)}</strong> &mdash; Pièce d&rsquo;identité n°&nbsp;<em>[NUMÉRO]</em><br>
+      Adresse&nbsp;: ${e(lease.tenantAddress ?? "[ADRESSE DU PRENEUR]")}<br>
+      Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
+    </div>
+  `)}
 
-ARTICLE 3 : DURÉE ET PRÉAVIS
+  ${art("2", "Objet et Destination des Lieux", `
+    <p style="margin:0 0 12px;">Le Bailleur donne en location au Preneur le bien immobilier désigné ci-dessous&nbsp;:</p>
+    <table style="width:100%;border-collapse:collapse;">
+      ${tr("Adresse", e(rentalAddress), false)}
+      ${tr("Propriété", e(lease.propertyName ?? "N/A"), true)}
+      ${tr("Unité / Local", e(lease.unitName ?? "N/A"), false)}
+      ${tr("Destination", e(destination), true)}
+    </table>
+  `)}
 
-Le présent bail est conclu pour une durée de ${duration}, commençant le ${startDate} à ${endDate}.
+  ${art("3", "Durée et Préavis", `
+    Le présent bail est conclu pour une durée de <strong>${duration}</strong>,
+    prenant effet le <strong>${startDate}</strong> et se terminant le <strong>${endDate}</strong>.<br><br>
+    Le délai de préavis est fixé à <strong>TROIS (3) MOIS</strong> pour un usage résidentiel
+    ou <strong>SIX (6) MOIS</strong> pour un usage professionnel.
+    Toute notification de préavis doit être faite par écrit avec accusé de réception.
+  `)}
 
-Le délai de préavis est fixé à TROIS (3) MOIS pour un usage résidentiel ou SIX (6) MOIS pour un usage professionnel. Toute notification de préavis doit être faite par écrit avec accusé de réception.
+  ${art("4", "Loyer et Garantie Locative", `
+    <p style="margin:0 0 10px;">
+      <strong>4.1. Loyer&nbsp;:</strong> Le loyer mensuel est fixé à
+      <strong style="color:#1a237e;">${rentAmount} USD</strong>.
+      Conformément à la réglementation en RDC, le paiement s&rsquo;effectue en Francs Congolais (CDF)
+      au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
+    </p>
+    <p style="margin:0;">
+      <strong>4.2. Garantie Locative&nbsp;:</strong> Le Preneur verse ce jour une garantie de
+      <strong style="color:#1a237e;">${securityDeposit} USD</strong> correspondant à ${guaranteeMonths}.
+      Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées
+      ou réparations locatives. La garantie ne peut pas excéder <strong>trois (3) mois</strong> de loyer
+      pour un usage résidentiel.
+    </p>
+  `)}
 
-ARTICLE 4 : LOYER ET GARANTIE LOCATIVE
+  ${art("5", "État des Lieux", `
+    Un état des lieux contradictoire est obligatoirement annexé au présent contrat lors de la remise des clés.
+    À défaut d&rsquo;état des lieux, le locataire est présumé avoir reçu le bien en bon état de réparations locatives.<br><br>
+    <strong>Relevé de compteur à l&rsquo;entrée&nbsp;:</strong> ${e(String(lease.moveInMeterReading ?? "N/A"))}.
+  `)}
 
-4.1. Loyer : Le loyer mensuel est fixé à ${rentAmount} USD. Conformément à la réglementation applicable en République Démocratique du Congo, le paiement s'effectue en Francs Congolais (CDF) au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
+  ${art("6", "Charges et Entretien", `
+    Le Preneur prend à sa charge les consommations d&rsquo;eau (REGIDESO), d&rsquo;électricité (SNEL)
+    et l&rsquo;entretien courant des équipements.
+    Le Bailleur reste responsable des grosses réparations (toiture, murs, structure, étanchéité)
+    ainsi que de l&rsquo;Impôt sur le Revenu Locatif (IRL), sauf disposition légale ou convention écrite contraire.
+  `)}
 
-4.2. Garantie Locative : Le Preneur verse ce jour une garantie de ${securityDeposit} USD, correspondant à ${guaranteeMonths}. Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées ou réparations locatives. Pour un usage résidentiel, la garantie ne peut pas excéder trois (3) mois de loyer.
+  ${art("7", "Remise en État", `
+    À l&rsquo;expiration du bail, le Preneur rendra le bien dans l&rsquo;état exact où il se trouvait
+    lors de la remise des clés, tel que décrit dans l&rsquo;état des lieux initial,
+    à l&rsquo;exception de l&rsquo;usure normale due au temps.
+  `)}
 
-ARTICLE 5 : ÉTAT DES LIEUX
+  ${art("8", "Réparation et Facturation", `
+    Toute destruction, dégradation ou modification non autorisée constatée lors de la sortie sera
+    intégralement facturée au Preneur. Les frais de remise en état seront déduits de la garantie locative.
+    Si le montant des dégâts excède la garantie, le Preneur s&rsquo;engage à payer le reliquat
+    sur présentation des factures de réparation.
+  `)}
 
-Un état des lieux contradictoire est obligatoirement annexé au présent contrat lors de la remise des clés. À défaut d'état des lieux, le locataire est présumé avoir reçu le bien en bon état de réparations locatives.
-Relevé compteur à l'entrée : ${lease.moveInMeterReading ?? "N/A"}.
+  ${art("9", "Clause Résolutoire", `
+    À défaut de paiement d&rsquo;un seul terme de loyer à son échéance, le bail sera résilié de plein droit
+    <strong>UN (1) MOIS</strong> après une mise en demeure restée infructueuse,
+    conformément aux dispositions légales applicables.
+  `)}
 
-ARTICLE 6 : CHARGES ET ENTRETIEN
+  ${termsSection}
 
-Le Preneur prend à sa charge les consommations d'eau (REGIDESO), d'électricité (SNEL) et l'entretien courant des équipements. Le Bailleur reste responsable des grosses réparations, notamment toiture, murs, structure, étanchéité, ainsi que de l'Impôt sur le Revenu Locatif (IRL), sauf disposition légale ou convention écrite contraire.
+  <div style="margin-top:36px;padding-top:20px;border-top:2px solid #1a237e;">
+    <div style="text-align:center;margin-bottom:24px;font-style:italic;color:#555;font-size:13px;">
+      Fait à <strong>${e(city)}</strong>, le <strong>${today}</strong> &mdash; en deux (2) exemplaires originaux.
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:48px;margin-top:20px;">
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Bailleur</div>
+        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
+          <div style="font-size:12px;color:#333;">${e(landlordName)}</div>
+          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
+        </div>
+      </div>
+      <div style="flex:1;text-align:center;">
+        <div style="font-size:11px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:64px;">Le Preneur (Locataire)</div>
+        <div style="border-top:1.5px solid #1a1a2e;padding-top:6px;">
+          <div style="font-size:12px;color:#333;">${e(lease.tenantName)}</div>
+          <div style="font-size:11px;color:#888;font-style:italic;">Lu et approuvé</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-ARTICLE 7 : REMISE EN ÉTAT
+</div>`;
+  }
 
-À l'expiration du bail et lors de la libération du bâtiment, le Preneur a l'obligation de rendre la maison dans l'état exact où elle se trouvait lors de la remise des clés, tel que décrit dans l'état des lieux initial, à l'exception de l'usure normale due au temps.
-
-ARTICLE 8 : RÉPARATION ET FACTURATION
-
-Toute destruction, dégradation ou modification non autorisée constatée lors de la sortie sera intégralement facturée au Preneur. Les frais de remise en état seront déduits de la garantie locative. Si le montant des dégâts excède la garantie locative, le Preneur s'engage à payer le reliquat sur présentation des factures de réparation.
-
-ARTICLE 9 : CLAUSE RÉSOLUTOIRE
-
-À défaut de paiement d'un seul terme de loyer à l'échéance, le bail sera résilié de plein droit UN (1) MOIS après une mise en demeure restée infructueuse.
-
-CONDITIONS PARTICULIÈRES
-
-${lease.terms ?? "Aucune condition particulière."}
-
-Fait à ${city} le ${today}.
-`;
+  private escapeHtml(s: string | null | undefined): string {
+    if (!s) return "";
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   private async getCompanyInfo(): Promise<CompanyInfo> {

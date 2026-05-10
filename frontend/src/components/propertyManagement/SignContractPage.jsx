@@ -173,7 +173,14 @@ export default function SignContractPage() {
 
         {/* Contract content */}
         <div style={styles.contentBox}>
-          <pre style={styles.content}>{contract?.contractContent}</pre>
+          {contract?.contractContent?.trimStart().startsWith("<") ? (
+            <div
+              style={styles.htmlContent}
+              dangerouslySetInnerHTML={{ __html: contract.contractContent }}
+            />
+          ) : (
+            <pre style={styles.content}>{contract?.contractContent}</pre>
+          )}
         </div>
 
         {/* Signature section */}
@@ -261,12 +268,12 @@ const styles = {
     fontFamily: "sans-serif",
   },
   container: {
-    maxWidth: 680,
+    maxWidth: 780,
     margin: "0 auto",
     background: "#fff",
     borderRadius: 12,
-    boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-    padding: "32px 32px 40px",
+    boxShadow: "0 4px 32px rgba(26,35,126,0.12)",
+    padding: "36px 40px 48px",
   },
   header: {
     display: "flex",
@@ -288,13 +295,14 @@ const styles = {
     fontWeight: 600,
   },
   contentBox: {
-    background: "#fafafa",
-    border: "1px solid #e8e8e8",
+    background: "#fff",
+    border: "1px solid #e0e4f0",
     borderRadius: 8,
-    padding: "20px 24px",
+    padding: "24px 28px",
     margin: "16px 0 24px",
-    maxHeight: 420,
+    maxHeight: 560,
     overflowY: "auto",
+    boxShadow: "inset 0 1px 4px rgba(26,35,126,0.06)",
   },
   content: {
     margin: 0,
@@ -303,6 +311,11 @@ const styles = {
     lineHeight: 1.7,
     whiteSpace: "pre-wrap",
     color: "#222",
+  },
+  htmlContent: {
+    color: "#1a1a2e",
+    fontSize: 14,
+    lineHeight: 1.8,
   },
   signSection: {
     borderTop: "1px solid #e8e8e8",
