@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
@@ -14,6 +14,7 @@ import {
   roles,
   subAccounts,
   tenantDetails,
+  tenantOnboardings,
   transactions,
   transactionTypes,
 } from "../database/schema";
@@ -25,6 +26,8 @@ import {
   CreateRentPaymentDto,
   CreateTenantDto,
   CreateUnitDto,
+  GenerateTenantOnboardingDto,
+  SaveTenantOnboardingDto,
   UpdateLeaseDto,
   UpdateMaintenanceDto,
   UpdatePropertyDto,
@@ -131,6 +134,122 @@ export class PropertyManagementService {
   }
 
   async createTenant(input: CreateTenantDto) {
+    return this.createTenantRecord(input);
+  }
+
+  async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
+    const token = randomBytes(32).toString("hex");
+    const tokenHash = this.hashToken(token);
+    const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
+    const data = JSON.stringify({ phone: input.phone });
+
+    const [result] = await this.db.insert(tenantOnboardings).values({
+      phone: input.phone,
+      tokenHash,
+      token,
+      status: "sent",
+      data,
+      expiresAt,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const onboarding = await this.findOnboarding(Number(result.insertId));
+    return this.adminOnboardingResponse(onboarding);
+  }
+
+  async onboardingList() {
+    const rows = await this.db
+      .select({
+        id: tenantOnboardings.id,
+        phone: tenantOnboardings.phone,
+        token: tenantOnboardings.token,
+        status: tenantOnboardings.status,
+        data: tenantOnboardings.data,
+        expiresAt: tenantOnboardings.expiresAt,
+        submittedAt: tenantOnboardings.submittedAt,
+        validatedAt: tenantOnboardings.validatedAt,
+        customerId: tenantOnboardings.customerId,
+        createdAt: tenantOnboardings.createdAt,
+        updatedAt: tenantOnboardings.updatedAt,
+      })
+      .from(tenantOnboardings)
+      .orderBy(desc(tenantOnboardings.id));
+
+    return rows.map((row) => this.adminOnboardingResponse(row));
+  }
+
+  async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {
+    const onboarding = await this.findOnboarding(id);
+    if (onboarding.status === "validated") {
+      throw new BadRequestException("This onboarding dossier has already been validated.");
+    }
+    await this.updateOnboardingData(id, { ...this.parseOnboardingData(onboarding.data), ...input }, "draft");
+    return this.adminOnboardingResponse(await this.findOnboarding(id));
+  }
+
+  async validateOnboarding(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    if (onboarding.status === "validated") {
+      throw new BadRequestException("This onboarding dossier has already been validated.");
+    }
+
+    const payload = this.validatedTenantPayload(this.parseOnboardingData(onboarding.data), onboarding.phone);
+    const customer = await this.createTenantRecord(payload);
+
+    await this.db
+      .update(tenantOnboardings)
+      .set({
+        status: "validated",
+        customerId: customer.id,
+        validatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantOnboardings.id, id));
+
+    return { ...this.adminOnboardingResponse(await this.findOnboarding(id)), customer };
+  }
+
+  async getPublicOnboarding(token: string) {
+    const onboarding = await this.getActiveOnboardingByToken(token, false);
+    return {
+      id: onboarding.id,
+      phone: onboarding.phone,
+      status: onboarding.status,
+      data: this.parseOnboardingData(onboarding.data),
+      expiresAt: onboarding.expiresAt,
+    };
+  }
+
+  async savePublicOnboarding(token: string, input: SaveTenantOnboardingDto) {
+    const onboarding = await this.getActiveOnboardingByToken(token, true);
+    const nextData = { ...this.parseOnboardingData(onboarding.data), ...input, phone: onboarding.phone };
+    await this.updateOnboardingData(onboarding.id, nextData, "draft");
+    return this.getPublicOnboarding(token);
+  }
+
+  async submitPublicOnboarding(token: string, input: SaveTenantOnboardingDto) {
+    const onboarding = await this.getActiveOnboardingByToken(token, true);
+    const nextData = { ...this.parseOnboardingData(onboarding.data), ...input, phone: onboarding.phone };
+    this.validatedTenantPayload(nextData, onboarding.phone);
+    await this.db
+      .update(tenantOnboardings)
+      .set({
+        data: JSON.stringify(nextData),
+        status: "submitted",
+        submittedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantOnboardings.id, onboarding.id));
+
+    return {
+      id: onboarding.id,
+      status: "submitted",
+      message: "Dossier soumis avec succès.",
+    };
+  }
+
+  private async createTenantRecord(input: CreateTenantDto) {
     await this.ensureTenantForm(input);
     if (input.email) {
       await this.ensureCustomerEmailAvailable(input.email);
@@ -225,9 +344,10 @@ export class PropertyManagementService {
   }
 
   async createProperty(input: CreatePropertyDto) {
+    const code = input.code?.trim() || (await this.nextPropertyCode());
     const [result] = await this.db.insert(realEstateProperties).values({
       name: input.name,
-      code: input.code ?? null,
+      code,
       propertyType: input.propertyType ?? "building",
       status: input.status ?? "available",
       address: input.address ?? null,
@@ -294,6 +414,7 @@ export class PropertyManagementService {
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
         propertyName: realEstateProperties.name,
+        propertyAddress: realEstateProperties.address,
       })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
@@ -576,6 +697,17 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  private async nextPropertyCode() {
+    const rows = await this.db.select({ code: realEstateProperties.code }).from(realEstateProperties);
+    const maxCode = rows.reduce((max, row) => {
+      const code = String(row.code || "").trim();
+      if (!/^\d+$/.test(code)) return max;
+      return Math.max(max, Number(code));
+    }, 0);
+
+    return String(maxCode + 1);
+  }
+
   async findUnit(id: number) {
     const rows = await this.units().where(eq(realEstateUnits.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Unit not found.");
@@ -606,6 +738,20 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  private async findOnboarding(id: number) {
+    const rows = await this.db.select().from(tenantOnboardings).where(eq(tenantOnboardings.id, id)).limit(1);
+    if (!rows.length) throw new NotFoundException("Tenant onboarding not found.");
+    return rows[0];
+  }
+
+  private adminOnboardingResponse(onboarding: any) {
+    const { tokenHash: _tokenHash, token, ...payload } = onboarding;
+    return {
+      ...payload,
+      url: token ? this.onboardingUrl(token) : null,
+    };
+  }
+
   private leaseQuery() {
     return this.db
       .select({
@@ -625,6 +771,7 @@ export class PropertyManagementService {
         terms: realEstateLeases.terms,
         status: realEstateLeases.status,
         propertyName: leaseProperty.name,
+        propertyAddress: leaseProperty.address,
         unitName: leaseUnit.name,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
@@ -661,7 +808,17 @@ export class PropertyManagementService {
 
   private async ensureLeaseReferences(propertyId: number, unitId: number, tenantId: number) {
     await this.ensureExists(realEstateProperties, propertyId, "Property not found.");
-    await this.ensureExists(realEstateUnits, unitId, "Unit not found.");
+    const units = await this.db
+      .select({ id: realEstateUnits.id, propertyId: realEstateUnits.propertyId })
+      .from(realEstateUnits)
+      .where(eq(realEstateUnits.id, unitId))
+      .limit(1);
+    if (!units.length) {
+      throw new NotFoundException("Unit not found.");
+    }
+    if (units[0].propertyId !== propertyId) {
+      throw new BadRequestException("Cette unité n'appartient pas au bien sélectionné.");
+    }
     await this.ensureExists(customers, tenantId, "Tenant not found.");
   }
 
@@ -684,6 +841,119 @@ export class PropertyManagementService {
     if (rows.length) {
       throw new BadRequestException("Customer email already exists.");
     }
+  }
+
+  private async getActiveOnboardingByToken(token: string, forMutation: boolean) {
+    const rows = await this.db
+      .select()
+      .from(tenantOnboardings)
+      .where(eq(tenantOnboardings.tokenHash, this.hashToken(token)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Lien invalide ou expiré.");
+    }
+
+    const onboarding = rows[0];
+    if (onboarding.expiresAt && new Date(onboarding.expiresAt).getTime() < Date.now()) {
+      await this.db
+        .update(tenantOnboardings)
+        .set({ status: "expired", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(tenantOnboardings.id, onboarding.id));
+      throw new BadRequestException("Lien invalide ou expiré.");
+    }
+
+    if (["submitted", "validated"].includes(onboarding.status)) {
+      throw new BadRequestException("Ce lien n'est plus modifiable.");
+    }
+
+    return onboarding;
+  }
+
+  private updateOnboardingData(id: number, data: Record<string, unknown>, status: string) {
+    return this.db
+      .update(tenantOnboardings)
+      .set({
+        data: JSON.stringify(data),
+        status,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantOnboardings.id, id));
+  }
+
+  private parseOnboardingData(data?: string | null): Record<string, any> {
+    if (!data) return {};
+    try {
+      return JSON.parse(data);
+    } catch {
+      return {};
+    }
+  }
+
+  private validatedTenantPayload(data: Record<string, any>, expectedPhone: string): CreateTenantDto {
+    const required = [
+      "firstName",
+      "lastName",
+      "phone",
+      "address",
+      "birth_date",
+      "sex",
+      "nationality",
+      "marital_status",
+      "origin_province",
+      "contacted_person",
+      "contacted_person_phone_number",
+      "prossional_status",
+      "main_activity",
+      "entity_name",
+      "entity_address",
+      "hiring_date",
+      "contract_type",
+      "monthly_pay",
+      "old_address",
+      "old_lessor",
+      "moving_reason",
+      "occupant_number",
+    ];
+    const missing = required.filter((key) => data[key] === undefined || data[key] === null || data[key] === "");
+    if (missing.length) {
+      throw new BadRequestException(`Missing required tenant fields: ${missing.join(", ")}.`);
+    }
+    if (data.phone !== expectedPhone) {
+      throw new BadRequestException("Le numéro de téléphone ne correspond pas au lien d'inscription.");
+    }
+    if (data.sex !== "M" && data.sex !== "F") {
+      throw new BadRequestException("Sex must be M or F.");
+    }
+    const childNumber = Number(data.child_number ?? 0);
+    const childAges = Array.isArray(data.child_age) ? data.child_age : [];
+    if (childNumber > 0 && childAges.length !== childNumber) {
+      throw new BadRequestException("Child ages count must match child_number.");
+    }
+    if (this.isCoupleStatus(String(data.marital_status)) && (!data.partenair_name || !data.partenair_number)) {
+      throw new BadRequestException("Partner name and phone number are required for couple marital statuses.");
+    }
+
+    return {
+      ...data,
+      monthly_pay: Number(data.monthly_pay),
+      other_monthly_income:
+        data.other_monthly_income === undefined || data.other_monthly_income === null || data.other_monthly_income === ""
+          ? null
+          : Number(data.other_monthly_income),
+      occupant_number: Number(data.occupant_number),
+      child_number: childNumber,
+      child_age: childAges.map((age) => Number(age)),
+    } as CreateTenantDto;
+  }
+
+  private hashToken(token: string) {
+    return createHash("sha256").update(token).digest("hex");
+  }
+
+  private onboardingUrl(token: string) {
+    const base = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || "http://localhost:3000";
+    return `${base.replace(/\/$/, "")}/onboarding/tenant?token=${token}`;
   }
 
   private ensureTenantForm(input: CreateTenantDto) {

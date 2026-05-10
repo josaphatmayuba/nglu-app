@@ -11,6 +11,7 @@ import Login from "./components/user/Login";
 import { getSetting } from "./redux/rtk/features/setting/settingSlice";
 import ServerError from "./components/404/ServerError";
 import SignContractPage from "./components/propertyManagement/SignContractPage";
+import TenantOnboardingPage from "./components/propertyManagement/TenantOnboardingPage";
 const CustomerLayout = lazy(() => import("@/layouts/CustomerLayout"));
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
 
@@ -31,6 +32,7 @@ function App() {
     content = (
       <Routes>
         <Route path="/sign/:token" element={<SignContractPage />} />
+        <Route path="/onboarding/tenant" element={<TenantOnboardingPage />} />
         <Route
           path="/*"
           element={

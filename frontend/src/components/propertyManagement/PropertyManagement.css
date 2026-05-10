@@ -109,6 +109,24 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.pm-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tenant-onboarding-page {
+  background: #f7f8fa;
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.tenant-onboarding-page > .ant-card {
+  margin: 0 auto;
+  max-width: 960px;
+}
+
 @media (max-width: 768px) {
   .pm-hero {
     align-items: flex-start;
@@ -118,5 +136,9 @@
 
   .pm-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .tenant-onboarding-page {
+    padding: 12px;
   }
 }

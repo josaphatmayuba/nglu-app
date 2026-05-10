@@ -1,6 +1,7 @@
 import {
   BankOutlined,
   CalendarOutlined,
+  CopyOutlined,
   DollarOutlined,
   HomeOutlined,
   PlusOutlined,
@@ -19,12 +20,15 @@ import {
   deleteMaintenance,
   deleteProperty,
   deleteUnit,
+  generateTenantOnboarding,
   loadPropertyManagement,
   saveLease,
   saveMaintenance,
   saveProperty,
   saveTenant,
+  saveTenantOnboardingAdmin,
   saveUnit,
+  validateTenantOnboarding,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 import ContractsTab from "./ContractsTab";
@@ -81,6 +85,30 @@ const tenantName = (tenant) =>
   tenant?.email ||
   "-";
 
+const onboardingStatus = {
+  sent: { label: "Lien envoyé", color: "blue" },
+  draft: { label: "Brouillon en cours", color: "gold" },
+  submitted: { label: "Soumis", color: "green" },
+  validated: { label: "Validé", color: "purple" },
+  expired: { label: "Expiré", color: "red" },
+};
+
+const paymentMethodLabels = {
+  cash: "Cash",
+  bank: "Bank",
+  mobile_money: "Mobile money",
+  cheque: "Cheque",
+};
+
+const parseOnboardingData = (record) => {
+  if (!record?.data) return {};
+  try {
+    return JSON.parse(record.data);
+  } catch {
+    return {};
+  }
+};
+
 const toFormRecord = (type, record) => {
   if (!record) return {};
 
@@ -130,6 +158,7 @@ const toFormRecord = (type, record) => {
       description: record.description,
       scheduledDate: record.scheduledDate,
     },
+    onboardingEdit: parseOnboardingData(record),
   };
 
   return maps[type] || record;
@@ -154,6 +183,7 @@ const PropertyManagement = () => {
     properties,
     units,
     tenants,
+    onboarding,
     leases,
     payments,
     maintenance,
@@ -187,11 +217,14 @@ const PropertyManagement = () => {
       unit: saveUnit,
       lease: saveLease,
       maintenance: saveMaintenance,
+      onboardingEdit: saveTenantOnboardingAdmin,
     };
 
     let response;
     if (type === "payment") {
       response = await dispatch(createRentPayment(values));
+    } else if (type === "onboardingGenerate") {
+      response = await dispatch(generateTenantOnboarding(values));
     } else if (type === "tenant") {
       const normalizedChildNumber = Number(values.child_number || 0);
       response = await dispatch(
@@ -204,6 +237,8 @@ const PropertyManagement = () => {
               : [],
         }),
       );
+    } else if (type === "onboardingEdit") {
+      response = await dispatch(saveTenantOnboardingAdmin({ id, values }));
     } else {
       response = await dispatch(actions[type]({ id, values }));
     }
@@ -222,9 +257,22 @@ const PropertyManagement = () => {
     }
   };
 
+  const validateOnboardingRecord = async (id) => {
+    const response = await dispatch(validateTenantOnboarding(id));
+    if (response.payload?.message === "success") {
+      dispatch(loadPropertyManagement());
+    }
+  };
+
+  const copyText = (value) => {
+    if (!value) return;
+    navigator.clipboard?.writeText(value);
+  };
+
   const safeProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
   const safeUnits = useMemo(() => (units ?? []).filter(Boolean), [units]);
   const safeTenants = useMemo(() => (tenants ?? []).filter(Boolean), [tenants]);
+  const safeOnboarding = useMemo(() => (onboarding ?? []).filter(Boolean), [onboarding]);
   const safeLeases = useMemo(() => (leases ?? []).filter(Boolean), [leases]);
   const safePayments = useMemo(() => (payments ?? []).filter(Boolean), [payments]);
   const safeMaintenance = useMemo(
@@ -238,9 +286,17 @@ const PropertyManagement = () => {
   }));
 
   const unitOptions = safeUnits.map((unit) => ({
-    label: `${unit.name} - ${unit.property?.name || ""}`,
+    label: `${unit.name} - ${unit.propertyAddress || unit.propertyName || ""}`,
     value: unit.id,
   }));
+
+  const selectedProperty = Form.useWatch("propertyId", form);
+  const leaseUnitOptions = safeUnits
+    .filter((unit) => !selectedProperty || unit.propertyId === selectedProperty)
+    .map((unit) => ({
+      label: unit.name,
+      value: unit.id,
+    }));
 
   const leaseOptions = safeLeases
     .filter((lease) => lease.status === "active")
@@ -257,18 +313,36 @@ const PropertyManagement = () => {
   const maritalStatus = Form.useWatch("marital_status", form);
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
   const isCouple = coupleStatuses.includes(String(maritalStatus || "").toLowerCase());
+  const tenantRequiredRules = modal?.type === "tenant" ? [{ required: true }] : [];
+  const modalTitleByType = {
+    tenant: "Nouveau Locataire",
+    onboardingGenerate: "Générer un lien d'inscription",
+    onboardingEdit: "Dossier locataire en ligne",
+  };
+  const modalTitle = modalTitleByType[modal?.type] || (modal?.record ? "Modifier" : "Créer");
 
   useEffect(() => {
     if (modal?.type !== "lease" || !selectedUnit || modal?.record) return;
     const unit = safeUnits.find((item) => item.id === selectedUnit);
     if (unit) {
       form.setFieldsValue({
-        propertyId: unit.propertyId,
         rentAmount: unit.monthlyRent,
         securityDeposit: unit.securityDeposit,
       });
     }
   }, [form, modal?.type, modal?.record, selectedUnit, safeUnits]);
+
+  const handleLeasePropertyChange = (propertyId) => {
+    const currentUnitId = form.getFieldValue("unitId");
+    const currentUnit = safeUnits.find((unit) => unit.id === currentUnitId);
+    if (!currentUnit || currentUnit.propertyId !== propertyId) {
+      form.setFieldsValue({
+        unitId: undefined,
+        rentAmount: undefined,
+        securityDeposit: undefined,
+      });
+    }
+  };
 
   const availabilityRows = useMemo(
     () =>
@@ -324,7 +398,7 @@ const PropertyManagement = () => {
             pagination={false}
             columns={[
               { title: "Unité", dataIndex: "name" },
-              { title: "Bien", render: (_, record) => record.property?.name || "-" },
+              { title: "Bien", render: (_, record) => record.propertyAddress || "-" },
               { title: "Type", dataIndex: "unitType" },
               {
                 title: "Statut",
@@ -363,7 +437,7 @@ const PropertyManagement = () => {
               { title: "Code", dataIndex: "code" },
               { title: "Type", dataIndex: "propertyType" },
               { title: "Adresse", dataIndex: "address" },
-              { title: "Unités", render: (_, record) => record.units?.length || 0 },
+              { title: "Unités", render: (_, record) => Number(record.unitsCount || 0) },
               { title: "Loyer défaut", dataIndex: "defaultRent", render: money },
               actionColumn("property", deleteProperty),
             ]}
@@ -386,7 +460,7 @@ const PropertyManagement = () => {
             loading={loading}
             columns={[
               { title: "Unité", dataIndex: "name" },
-              { title: "Bien", render: (_, record) => record.property?.name || "-" },
+              { title: "Bien", render: (_, record) => record.propertyAddress || "-" },
               { title: "Type", dataIndex: "unitType" },
               {
                 title: "Statut",
@@ -406,9 +480,14 @@ const PropertyManagement = () => {
       label: "Locataires",
       children: (
         <div className="pm-panel">
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal("tenant")}>
-            Nouveau Locataire
-          </Button>
+          <div className="pm-actions-row">
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal("tenant")}>
+              Nouveau Locataire
+            </Button>
+            <Button onClick={() => openModal("onboardingGenerate")}>
+              Générer un lien d'inscription
+            </Button>
+          </div>
           <Table
             size="small"
             rowKey="id"
@@ -423,6 +502,64 @@ const PropertyManagement = () => {
                 title: "Baux",
                 render: (_, record) =>
                   safeLeases.filter((lease) => lease.tenantId === record.id).length,
+              },
+            ]}
+          />
+          <div className="pm-section-title">Liens d'inscription</div>
+          <Table
+            size="small"
+            rowKey="id"
+            dataSource={safeOnboarding}
+            loading={loading}
+            columns={[
+              { title: "Téléphone", dataIndex: "phone" },
+              {
+                title: "Statut",
+                dataIndex: "status",
+                render: (status) => (
+                  <Tag color={onboardingStatus[status]?.color || "default"}>
+                    {onboardingStatus[status]?.label || status}
+                  </Tag>
+                ),
+              },
+              {
+                title: "Nom saisi",
+                render: (_, record) => {
+                  const data = parseOnboardingData(record);
+                  return [data.firstName, data.lastName].filter(Boolean).join(" ") || "-";
+                },
+              },
+              {
+                title: "Expire le",
+                dataIndex: "expiresAt",
+                render: (date) => (date ? moment(date).format("YYYY-MM-DD HH:mm") : "-"),
+              },
+              {
+                title: "Actions",
+                width: 330,
+                render: (_, record) => (
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="small" onClick={() => openModal("onboardingEdit", record)}>
+                      Ouvrir
+                    </Button>
+                    <Button
+                      size="small"
+                      icon={<CopyOutlined />}
+                      disabled={!record.url}
+                      onClick={() => copyText(record.url)}
+                    >
+                      Lien
+                    </Button>
+                    <Button
+                      size="small"
+                      type="primary"
+                      disabled={!["submitted", "draft"].includes(record.status)}
+                      onClick={() => validateOnboardingRecord(record.id)}
+                    >
+                      Valider
+                    </Button>
+                  </div>
+                ),
               },
             ]}
           />
@@ -444,9 +581,13 @@ const PropertyManagement = () => {
             loading={loading}
             columns={[
               { title: "Référence", dataIndex: "reference" },
-              { title: "Bien", render: (_, record) => record.property?.name || "-" },
-              { title: "Unité", render: (_, record) => record.unit?.name || "-" },
-              { title: "Locataire", render: (_, record) => tenantName(record.tenant) },
+              { title: "Bien", render: (_, record) => record.propertyAddress || record.propertyName || "-" },
+              { title: "Unité", render: (_, record) => record.unitName || "-" },
+              {
+                title: "Locataire",
+                render: (_, record) =>
+                  [record.tenantFirstName, record.tenantLastName].filter(Boolean).join(" ") || "-",
+              },
               { title: "Début", dataIndex: "startDate", render: (date) => moment(date).format("YYYY-MM-DD") },
               { title: "Fin", dataIndex: "endDate", render: (date) => (date ? moment(date).format("YYYY-MM-DD") : "-") },
               { title: "Loyer", dataIndex: "rentAmount", render: money },
@@ -476,12 +617,18 @@ const PropertyManagement = () => {
             loading={loading}
             columns={[
               { title: "Date", dataIndex: "paymentDate", render: (date) => moment(date).format("YYYY-MM-DD") },
-              { title: "Bail", render: (_, record) => record.lease?.reference || "-" },
-              { title: "Locataire", render: (_, record) => tenantName(record.lease?.tenant) },
-              { title: "Unité", render: (_, record) => record.lease?.unit?.name || "-" },
+              { title: "Bail", render: (_, record) => record.leaseReference || "-" },
+              {
+                title: "Locataire",
+                render: (_, record) =>
+                  [record.tenantFirstName, record.tenantLastName].filter(Boolean).join(" ") || "-",
+              },
+              { title: "Unité", render: (_, record) => record.unitName || "-" },
               { title: "Montant", dataIndex: "amount", render: money },
-              { title: "Débit", render: (_, record) => record.transaction?.debit?.name || "-" },
-              { title: "Crédit", render: (_, record) => record.transaction?.credit?.name || "-" },
+              {
+                title: "Mode de paiement",
+                render: (_, record) => paymentMethodLabels[record.method] || record.method || "-",
+              },
             ]}
           />
         </div>
@@ -550,13 +697,24 @@ const PropertyManagement = () => {
 
       <Modal
         open={Boolean(modal)}
-        title={modal?.type === "tenant" ? "Nouveau Locataire" : modal?.record ? "Modifier" : "Créer"}
+        title={modalTitle}
         onCancel={closeModal}
         footer={null}
-        width={modal?.type === "tenant" ? 920 : 720}
+        width={["tenant", "onboardingEdit"].includes(modal?.type) ? 920 : 720}
         destroyOnClose
       >
         <Form form={form} layout="vertical" onFinish={submitModal}>
+          {modal?.type === "onboardingGenerate" && (
+            <>
+              <Form.Item label="Téléphone du futur locataire" name="phone" rules={[{ required: true }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item label="Validité du lien (jours)" name="expiresInDays" initialValue={7}>
+                <InputNumber className="w-full" min={1} max={30} />
+              </Form.Item>
+            </>
+          )}
+
           {modal?.type === "property" && (
             <>
               <Form.Item label="Nom" name="name" rules={[{ required: true }]}>
@@ -564,7 +722,7 @@ const PropertyManagement = () => {
               </Form.Item>
               <div className="pm-form-grid">
                 <Form.Item label="Code" name="code">
-                  <Input />
+                  <Input disabled placeholder="Généré automatiquement" />
                 </Form.Item>
                 <Form.Item label="Type de bien" name="propertyType" initialValue="building">
                   <Select options={propertyTypes} />
@@ -634,11 +792,11 @@ const PropertyManagement = () => {
           {modal?.type === "lease" && (
             <>
               <div className="pm-form-grid">
-                <Form.Item label="Unité" name="unitId" rules={[{ required: true }]}>
-                  <Select options={unitOptions} />
-                </Form.Item>
                 <Form.Item label="Bien" name="propertyId" rules={[{ required: true }]}>
-                  <Select options={propertyOptions} />
+                  <Select options={propertyOptions} onChange={handleLeasePropertyChange} />
+                </Form.Item>
+                <Form.Item label="Unité" name="unitId" rules={[{ required: true }]}>
+                  <Select options={leaseUnitOptions} disabled={!selectedProperty} />
                 </Form.Item>
                 <Form.Item label="Locataire" name="tenantId" rules={[{ required: true }]}>
                   <Select
@@ -688,52 +846,52 @@ const PropertyManagement = () => {
             </>
           )}
 
-          {modal?.type === "tenant" && (
+          {["tenant", "onboardingEdit"].includes(modal?.type) && (
             <>
               <div className="pm-section-title">Identité</div>
               <div className="pm-form-grid">
-                <Form.Item label="Prénom" name="firstName" rules={[{ required: true }]}>
+                <Form.Item label="Prénom" name="firstName" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Nom" name="lastName" rules={[{ required: true }]}>
+                <Form.Item label="Nom" name="lastName" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
                 <Form.Item label="Email" name="email">
                   <Input type="email" />
                 </Form.Item>
-                <Form.Item label="Téléphone" name="phone" rules={[{ required: true }]}>
+                <Form.Item label="Téléphone" name="phone" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
               </div>
-              <Form.Item label="Adresse actuelle" name="address" rules={[{ required: true }]}>
+              <Form.Item label="Adresse actuelle" name="address" rules={tenantRequiredRules}>
                 <Input />
               </Form.Item>
 
               <div className="pm-section-title">Profil Personnel & Civil</div>
               <div className="pm-form-grid">
-                <Form.Item label="Date de naissance" name="birth_date" rules={[{ required: true }]}>
+                <Form.Item label="Date de naissance" name="birth_date" rules={tenantRequiredRules}>
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Sexe" name="sex" rules={[{ required: true }]}>
+                <Form.Item label="Sexe" name="sex" rules={tenantRequiredRules}>
                   <Select options={[{ label: "M", value: "M" }, { label: "F", value: "F" }]} />
                 </Form.Item>
-                <Form.Item label="Nationalité" name="nationality" rules={[{ required: true }]}>
+                <Form.Item label="Nationalité" name="nationality" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="État civil" name="marital_status" rules={[{ required: true }]}>
+                <Form.Item label="État civil" name="marital_status" rules={tenantRequiredRules}>
                   <Select options={maritalStatuses} />
                 </Form.Item>
-                <Form.Item label="Province d'origine" name="origin_province" rules={[{ required: true }]}>
+                <Form.Item label="Province d'origine" name="origin_province" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
               </div>
 
               {isCouple && (
                 <div className="pm-form-grid">
-                  <Form.Item label="Nom du partenaire" name="partenair_name" rules={[{ required: true }]}>
+                  <Form.Item label="Nom du partenaire" name="partenair_name" rules={tenantRequiredRules}>
                     <Input />
                   </Form.Item>
-                  <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={[{ required: true }]}>
+                  <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={tenantRequiredRules}>
                     <Input />
                   </Form.Item>
                 </div>
@@ -744,35 +902,35 @@ const PropertyManagement = () => {
                 <Form.Item label="Téléphone secondaire" name="phone2">
                   <Input />
                 </Form.Item>
-                <Form.Item label="Personne à contacter" name="contacted_person" rules={[{ required: true }]}>
+                <Form.Item label="Personne à contacter" name="contacted_person" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={[{ required: true }]}>
+                <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
               </div>
 
               <div className="pm-section-title">Situation Professionnelle & Revenus</div>
               <div className="pm-form-grid">
-                <Form.Item label="Statut professionnel" name="prossional_status" rules={[{ required: true }]}>
+                <Form.Item label="Statut professionnel" name="prossional_status" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Activité principale" name="main_activity" rules={[{ required: true }]}>
+                <Form.Item label="Activité principale" name="main_activity" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Nom de l'entité" name="entity_name" rules={[{ required: true }]}>
+                <Form.Item label="Nom de l'entité" name="entity_name" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Adresse de l'entité" name="entity_address" rules={[{ required: true }]}>
+                <Form.Item label="Adresse de l'entité" name="entity_address" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Date d'embauche" name="hiring_date" rules={[{ required: true }]}>
+                <Form.Item label="Date d'embauche" name="hiring_date" rules={tenantRequiredRules}>
                   <Input type="date" />
                 </Form.Item>
-                <Form.Item label="Type de contrat" name="contract_type" rules={[{ required: true }]}>
+                <Form.Item label="Type de contrat" name="contract_type" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Salaire mensuel" name="monthly_pay" rules={[{ required: true }]}>
+                <Form.Item label="Salaire mensuel" name="monthly_pay" rules={tenantRequiredRules}>
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
                 <Form.Item label="Autres revenus mensuels" name="other_monthly_income">
@@ -782,16 +940,16 @@ const PropertyManagement = () => {
 
               <div className="pm-section-title">Historique & Ménage</div>
               <div className="pm-form-grid">
-                <Form.Item label="Ancienne adresse" name="old_address" rules={[{ required: true }]}>
+                <Form.Item label="Ancienne adresse" name="old_address" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Ancien bailleur" name="old_lessor" rules={[{ required: true }]}>
+                <Form.Item label="Ancien bailleur" name="old_lessor" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Motif du déménagement" name="moving_reason" rules={[{ required: true }]}>
+                <Form.Item label="Motif du déménagement" name="moving_reason" rules={tenantRequiredRules}>
                   <Input />
                 </Form.Item>
-                <Form.Item label="Nombre d'occupants" name="occupant_number" rules={[{ required: true }]}>
+                <Form.Item label="Nombre d'occupants" name="occupant_number" rules={tenantRequiredRules}>
                   <InputNumber className="w-full" min={1} />
                 </Form.Item>
                 <Form.Item label="Nombre d'enfants" name="child_number" initialValue={0}>
@@ -806,7 +964,7 @@ const PropertyManagement = () => {
                       key={index}
                       label={`Âge enfant ${index + 1}`}
                       name={["child_age", index]}
-                      rules={[{ required: true }]}
+                      rules={tenantRequiredRules}
                     >
                       <InputNumber className="w-full" min={0} />
                     </Form.Item>

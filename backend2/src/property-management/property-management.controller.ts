@@ -30,6 +30,8 @@ import {
   CreateRentPaymentDto,
   CreateTenantDto,
   CreateUnitDto,
+  GenerateTenantOnboardingDto,
+  SaveTenantOnboardingDto,
   UpdateLeaseDto,
   UpdateMaintenanceDto,
   UpdatePropertyDto,
@@ -66,6 +68,35 @@ export class PropertyManagementController {
   @Post("tenants")
   createTenant(@Body() body: CreateTenantDto) {
     return this.propertyManagementService.createTenant(body);
+  }
+
+  @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
+  @Post("onboarding")
+  generateTenantOnboarding(@Body() body: GenerateTenantOnboardingDto) {
+    return this.propertyManagementService.generateTenantOnboarding(body);
+  }
+
+  @ApiOperation({ summary: "List tenant onboarding dossiers" })
+  @Get("onboarding")
+  tenantOnboardingList() {
+    return this.propertyManagementService.onboardingList();
+  }
+
+  @ApiOperation({ summary: "Admin update tenant onboarding draft" })
+  @Put("onboarding/:id")
+  updateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
+    return this.propertyManagementService.saveOnboardingByAdmin(id, body);
+  }
+
+  @Patch("onboarding/:id")
+  updateTenantOnboardingPatch(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
+    return this.propertyManagementService.saveOnboardingByAdmin(id, body);
+  }
+
+  @ApiOperation({ summary: "Validate onboarding dossier and create tenant customer" })
+  @Post("onboarding/:id/validate")
+  validateTenantOnboarding(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.validateOnboarding(id);
   }
 
   @ApiOperation({ summary: "List properties with unit counts" })

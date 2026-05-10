@@ -7,6 +7,7 @@ const initialState = {
   properties: [],
   units: [],
   tenants: [],
+  onboarding: [],
   leases: [],
   payments: [],
   maintenance: [],
@@ -110,10 +111,11 @@ export const loadPropertyManagement = createAsyncThunk(
   "propertyManagement/loadAll",
   async () => {
     try {
-      const [dashboard, tenants, properties, units, leases, payments, maintenance] =
+      const [dashboard, tenants, onboarding, properties, units, leases, payments, maintenance] =
         await Promise.all([
           axios.get("property-management/dashboard"),
           axios.get("property-management/tenants"),
+          axios.get("property-management/onboarding"),
           axios.get("property-management/properties"),
           axios.get("property-management/units"),
           axios.get("property-management/leases"),
@@ -124,6 +126,7 @@ export const loadPropertyManagement = createAsyncThunk(
       return successHandler({
         dashboard: dashboard.data,
         tenants: tenants.data,
+        onboarding: onboarding.data,
         properties: properties.data,
         units: units.data,
         leases: leases.data,
@@ -186,6 +189,42 @@ export const saveTenant = createAsyncThunk(
     try {
       const data = await request("post", "property-management/tenants", tenantPayload(values));
       return successHandler(data, "Locataire créé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const generateTenantOnboarding = createAsyncThunk(
+  "propertyManagement/generateTenantOnboarding",
+  async (values) => {
+    try {
+      const data = await request("post", "property-management/onboarding", values);
+      return successHandler(data, "Lien d'inscription généré");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const saveTenantOnboardingAdmin = createAsyncThunk(
+  "propertyManagement/saveTenantOnboardingAdmin",
+  async ({ id, values }) => {
+    try {
+      const data = await request("put", `property-management/onboarding/${id}`, tenantPayload(values));
+      return successHandler(data, "Brouillon locataire mis à jour");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const validateTenantOnboarding = createAsyncThunk(
+  "propertyManagement/validateTenantOnboarding",
+  async (id) => {
+    try {
+      const data = await request("post", `property-management/onboarding/${id}/validate`);
+      return successHandler(data, "Dossier locataire validé");
     } catch (error) {
       return errorHandler(error, true);
     }
@@ -352,6 +391,48 @@ export const submitSignature = createAsyncThunk(
   },
 );
 
+export const getTenantOnboarding = createAsyncThunk(
+  "propertyManagement/getTenantOnboarding",
+  async (token) => {
+    try {
+      const { data } = await axios.get(`tenant-onboarding?token=${encodeURIComponent(token)}`);
+      return { data };
+    } catch (error) {
+      return errorHandler(error, false);
+    }
+  },
+);
+
+export const saveTenantOnboardingDraft = createAsyncThunk(
+  "propertyManagement/saveTenantOnboardingDraft",
+  async ({ token, values }) => {
+    try {
+      const { data } = await axios.post(
+        `tenant-onboarding/save?token=${encodeURIComponent(token)}`,
+        tenantPayload(values),
+      );
+      return { data };
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const submitTenantOnboarding = createAsyncThunk(
+  "propertyManagement/submitTenantOnboarding",
+  async ({ token, values }) => {
+    try {
+      const { data } = await axios.post(
+        `tenant-onboarding/submit?token=${encodeURIComponent(token)}`,
+        tenantPayload(values),
+      );
+      return { data };
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
 const upsert = (list, item) => {
   if (!item?.id) return list;
   const existing = list.find((entry) => entry.id === item?.id);
@@ -372,6 +453,7 @@ const propertyManagementSlice = createSlice({
         state.loading = false;
         state.dashboard = action.payload.data.dashboard;
         state.tenants = action.payload.data.tenants;
+        state.onboarding = action.payload.data.onboarding;
         state.properties = action.payload.data.properties;
         state.units = action.payload.data.units;
         state.leases = action.payload.data.leases;
@@ -397,6 +479,18 @@ const propertyManagementSlice = createSlice({
       })
       .addCase(saveTenant.fulfilled, (state, action) => {
         state.tenants = upsert(state.tenants, action.payload.data);
+      })
+      .addCase(generateTenantOnboarding.fulfilled, (state, action) => {
+        state.onboarding = upsert(state.onboarding, action.payload.data);
+      })
+      .addCase(saveTenantOnboardingAdmin.fulfilled, (state, action) => {
+        state.onboarding = upsert(state.onboarding, action.payload.data);
+      })
+      .addCase(validateTenantOnboarding.fulfilled, (state, action) => {
+        state.onboarding = upsert(state.onboarding, action.payload.data);
+        if (action.payload.data?.customer) {
+          state.tenants = upsert(state.tenants, action.payload.data.customer);
+        }
       })
       .addCase(saveLease.fulfilled, (state, action) => {
         state.leases = upsert(state.leases, action.payload.data);

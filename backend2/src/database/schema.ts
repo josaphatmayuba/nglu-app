@@ -90,6 +90,21 @@ export const tenantDetails = mysqlTable("tenant_details", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const tenantOnboardings = mysqlTable("tenant_onboardings", {
+  id: serial("id").primaryKey(),
+  phone: varchar("phone", { length: 255 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
+  token: varchar("token", { length: 128 }),
+  status: varchar("status", { length: 50 }).default("sent").notNull(),
+  data: text("data"),
+  expiresAt: timestamp("expires_at").notNull(),
+  submittedAt: timestamp("submitted_at"),
+  validatedAt: timestamp("validated_at"),
+  customerId: bigint("customer_id", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const paymentMethods = mysqlTable("paymentMethod", {
   id: serial("id").primaryKey(),
   subAccountId: bigint("subAccountId", { mode: "number" }).notNull(),
