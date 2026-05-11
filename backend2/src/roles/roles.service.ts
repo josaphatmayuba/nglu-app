@@ -47,10 +47,14 @@ export class RolesService {
 
     const { skip, limit } = this.pagination(query);
 
+    const statusFilter = query["status"]
+      ? eq(roles.status, query["status"] === "true" ? "active" : query["status"] === "false" ? "inactive" : query["status"])
+      : undefined;
+
     const rows = await this.db
       .select()
       .from(roles)
-      .where(query["status"] ? eq(roles.status, query["status"]) : undefined)
+      .where(statusFilter)
       .orderBy(desc(roles.id))
       .limit(limit)
       .offset(skip);
@@ -58,7 +62,7 @@ export class RolesService {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(roles)
-      .where(query["status"] ? eq(roles.status, query["status"]) : undefined);
+      .where(statusFilter);
 
     const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
