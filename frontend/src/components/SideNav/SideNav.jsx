@@ -594,6 +594,10 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           "readAll-department",
           "create-shift",
           "readAll-shift",
+          "create-award",
+          "readAll-award",
+          "create-salaryHistory",
+          "readAll-salaryHistory",
           "create-employmentStatus",
           "readAll-employmentStatus",
           "create-role",
@@ -668,6 +672,32 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           },
           key: "shift",
           icon: <FaBusinessTime />,
+        },
+        {
+          label: (
+            <NavLink to="/admin/award">
+              <span>AWARDS</span>
+            </NavLink>
+          ),
+          permit: {
+            permissions: ["create-award", "readAll-award"],
+            operator: "or",
+          },
+          key: "award",
+          icon: <SolutionOutlined />,
+        },
+        {
+          label: (
+            <NavLink to="/admin/salary-history">
+              <span>SALAIRES</span>
+            </NavLink>
+          ),
+          permit: {
+            permissions: ["create-salaryHistory", "readAll-salaryHistory"],
+            operator: "or",
+          },
+          key: "salaryHistory",
+          icon: <MdOutlineAttachMoney />,
         },
         {
           label: (

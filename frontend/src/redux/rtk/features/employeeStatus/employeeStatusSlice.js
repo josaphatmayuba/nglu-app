@@ -89,7 +89,7 @@ export const updateEmployeeStatus = createAsyncThunk(
           Accept: "application/json",
           "Content-Type": "application/json;charset=UTF-8",
         },
-        url: `employment-status${id}`,
+        url: `employment-status/${id}`,
         data: {
           ...values,
         },

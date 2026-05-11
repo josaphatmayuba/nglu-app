@@ -7,7 +7,9 @@ import { CurrenciesModule } from "./currencies/currencies.module";
 import { CustomersModule } from "./customers/customers.module";
 import { DatabaseModule } from "./database/database.module";
 import { DiscountsModule } from "./discounts/discounts.module";
+import { FrontModulesModule } from "./front-modules/front-modules.module";
 import { HealthModule } from "./health/health.module";
+import { HrModule } from "./hr/hr.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
@@ -37,7 +39,9 @@ import { UsersModule } from "./users/users.module";
     CurrenciesModule,
     CustomersModule,
     DiscountsModule,
+    FrontModulesModule,
     HealthModule,
+    HrModule,
     ManufacturersModule,
     PaymentMethodsModule,
     PermissionsModule,

@@ -304,6 +304,144 @@ export const users = mysqlTable("users", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const departments = mysqlTable("department", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const employmentStatuses = mysqlTable("employmentStatus", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  colourValue: varchar("colourValue", { length: 255 }).notNull(),
+  description: varchar("description", { length: 255 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const educations = mysqlTable("education", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  degree: varchar("degree", { length: 255 }).notNull(),
+  institution: varchar("institution", { length: 255 }).notNull(),
+  fieldOfStudy: varchar("fieldOfStudy", { length: 255 }).notNull(),
+  result: varchar("result", { length: 255 }).notNull(),
+  studyStartDate: datetime("studyStartDate").notNull(),
+  studyEndDate: datetime("studyEndDate"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const designations = mysqlTable("designations", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const shifts = mysqlTable("shifts", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  startTime: varchar("startTime", { length: 20 }).notNull(),
+  endTime: varchar("endTime", { length: 20 }).notNull(),
+  workHour: double("workHour").default(0).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const awards = mysqlTable("awards", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const designationHistories = mysqlTable("designation_histories", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  designationId: bigint("designationId", { mode: "number" }).notNull(),
+  startDate: date("startDate", { mode: "string" }),
+  endDate: date("endDate", { mode: "string" }),
+  comment: text("comment"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const salaryHistories = mysqlTable("salary_histories", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  salary: double("salary").notNull(),
+  startDate: date("startDate", { mode: "string" }),
+  endDate: date("endDate", { mode: "string" }),
+  comment: text("comment"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const awardHistories = mysqlTable("award_histories", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  awardId: bigint("awardId", { mode: "number" }).notNull(),
+  awardedDate: date("awardedDate", { mode: "string" }).notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const colors = mysqlTable("colors", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  colorCode: varchar("colorCode", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productAttributes = mysqlTable("productAttribute", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productAttributeValues = mysqlTable("productAttributeValue", {
+  id: serial("id").primaryKey(),
+  productAttributeId: bigint("productAttributeId", { mode: "number" }),
+  name: varchar("name", { length: 255 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const termsAndConditions = mysqlTable("termsAndCondition", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  subject: text("subject").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const pageSizes = mysqlTable("pageSize", {
+  id: serial("id").primaryKey(),
+  pageSizeName: varchar("pageSizeName", { length: 255 }).notNull(),
+  width: double("width").notNull(),
+  height: double("height").notNull(),
+  unit: varchar("unit", { length: 255 }).default("inches").notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const appSettings = mysqlTable("appSetting", {
   id: serial("id").primaryKey(),
   companyName: varchar("companyName", { length: 255 }),

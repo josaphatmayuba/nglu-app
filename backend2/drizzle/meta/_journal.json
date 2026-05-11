@@ -29,6 +29,34 @@
       "when": 1778459400000,
       "tag": "0003_add_tenant_onboarding_token",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1778547600000,
+      "tag": "0004_add_hr_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778549400000,
+      "tag": "0005_grant_hr_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778551200000,
+      "tag": "0006_add_remaining_front_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778553000000,
+      "tag": "0007_grant_remaining_module_permissions",
+      "breakpoints": true
     }
   ]
 }

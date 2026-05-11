@@ -8,7 +8,19 @@ import {
 import * as bcrypt from "bcryptjs";
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { roles, users } from "../database/schema";
+import {
+  awardHistories,
+  awards,
+  departments,
+  designationHistories,
+  designations,
+  educations,
+  employmentStatuses,
+  roles,
+  salaryHistories,
+  shifts,
+  users,
+} from "../database/schema";
 import type { Database } from "../database/types";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -94,7 +106,33 @@ export class UsersService {
     if (!rows.length) throw new NotFoundException("User not found!");
 
     const { user, role } = rows[0];
-    return { ...this.safeUser(user), role };
+    const [designationHistory, salaryHistory, awardHistory, shiftRows, departmentRows, employmentRows, education] = await Promise.all([
+      this.userDesignationHistory(id),
+      this.userSalaryHistory(id),
+      this.userAwardHistory(id),
+      user.shiftId
+        ? this.db.select().from(shifts).where(eq(shifts.id, user.shiftId)).limit(1)
+        : Promise.resolve([]),
+      user.departmentId
+        ? this.db.select().from(departments).where(eq(departments.id, user.departmentId)).limit(1)
+        : Promise.resolve([]),
+      user.employmentStatusId
+        ? this.db.select().from(employmentStatuses).where(eq(employmentStatuses.id, user.employmentStatusId)).limit(1)
+        : Promise.resolve([]),
+      this.userEducation(id),
+    ]);
+
+    return {
+      ...this.safeUser(user),
+      role,
+      shift: shiftRows[0] ?? null,
+      department: departmentRows[0] ?? null,
+      employmentStatus: employmentRows[0] ?? null,
+      education,
+      designationHistory,
+      salaryHistory,
+      awardHistory,
+    };
   }
 
   async create(dto: CreateUserDto) {
@@ -168,6 +206,66 @@ export class UsersService {
   private safeUser(u: typeof users.$inferSelect) {
     const { password: _, refreshToken: __, isLogin: ___, ...safe } = u;
     return safe;
+  }
+
+  private userDesignationHistory(userId: number) {
+    return this.db
+      .select({
+        id: designationHistories.id,
+        userId: designationHistories.userId,
+        designationId: designationHistories.designationId,
+        startDate: designationHistories.startDate,
+        endDate: designationHistories.endDate,
+        comment: designationHistories.comment,
+        createdAt: designationHistories.createdAt,
+        updatedAt: designationHistories.updatedAt,
+        designation: {
+          id: designations.id,
+          name: designations.name,
+        },
+      })
+      .from(designationHistories)
+      .leftJoin(designations, eq(designations.id, designationHistories.designationId))
+      .where(eq(designationHistories.userId, userId))
+      .orderBy(desc(designationHistories.id));
+  }
+
+  private userSalaryHistory(userId: number) {
+    return this.db
+      .select()
+      .from(salaryHistories)
+      .where(eq(salaryHistories.userId, userId))
+      .orderBy(desc(salaryHistories.id));
+  }
+
+  private userAwardHistory(userId: number) {
+    return this.db
+      .select({
+        id: awardHistories.id,
+        userId: awardHistories.userId,
+        awardId: awardHistories.awardId,
+        awardedDate: awardHistories.awardedDate,
+        comment: awardHistories.comment,
+        createdAt: awardHistories.createdAt,
+        updatedAt: awardHistories.updatedAt,
+        award: {
+          id: awards.id,
+          name: awards.name,
+          description: awards.description,
+        },
+      })
+      .from(awardHistories)
+      .leftJoin(awards, eq(awards.id, awardHistories.awardId))
+      .where(eq(awardHistories.userId, userId))
+      .orderBy(desc(awardHistories.id));
+  }
+
+  private userEducation(userId: number) {
+    return this.db
+      .select()
+      .from(educations)
+      .where(eq(educations.userId, userId))
+      .orderBy(desc(educations.id));
   }
 
   private pagination(q: Record<string, string>) {

@@ -24,6 +24,7 @@ const TermsAndConditionRoutes = lazy(() =>
 );
 const DepartmentRoutes = lazy(() => import("./AdminRoutes/DepartmentRoutes"));
 const ShiftRoutes = lazy(() => import("./AdminRoutes/ShiftRoutes"));
+const HrExtraRoutes = lazy(() => import("./AdminRoutes/HrExtraRoutes"));
 const EmploymentRoutes = lazy(() => import("./AdminRoutes/EmploymentRoutes"));
 const OrderRoutes = lazy(() => import("./AdminRoutes/OrderRoutes"));
 const CourierMediumRoutes = lazy(() =>
@@ -59,6 +60,7 @@ export default function AdminRoutes() {
         <TermsAndConditionRoutes />
         <DepartmentRoutes />
         <ShiftRoutes />
+        <HrExtraRoutes />
         <EmploymentRoutes />
         <OrderRoutes />
         <CourierMediumRoutes />
