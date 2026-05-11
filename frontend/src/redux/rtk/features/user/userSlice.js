@@ -23,7 +23,7 @@ export const addStaff = createAsyncThunk("user/addStaff", async (values) => {
         Accept: "application/json",
         "Content-Type": "application/json;charset=UTF-8",
       },
-      url: `user/register`,
+      url: `auth/register`,
       data: {
         ...values,
       },
@@ -127,7 +127,7 @@ export const addUser = createAsyncThunk("user/addUser", async (values) => {
         Accept: "application/json",
         "Content-Type": "application/json;charset=UTF-8",
       },
-      url: `user/login`,
+      url: `auth/login`,
       data: values,
     });
 
@@ -152,7 +152,7 @@ export const logOut = createAsyncThunk("user/addUser", async () => {
         Accept: "application/json",
         "Content-Type": "application/json;charset=UTF-8",
       },
-      url: `user/logout`,
+      url: `auth/logout`,
       data: { id },
     });
     localStorage.clear();

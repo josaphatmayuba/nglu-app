@@ -33,7 +33,7 @@ axios.interceptors.request.use(async (config) => {
 const refreshAccessToken = async () => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_APP_API}/user/refresh-token`,
+      `${import.meta.env.VITE_APP_API}/auth/refresh-token`,
       {
         credentials: "include",
         headers: {
