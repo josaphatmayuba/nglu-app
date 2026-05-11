@@ -34,8 +34,6 @@ services:
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
       JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
-    ports:
-      - "8001:8001"
     depends_on:
       - mysql
     networks:
