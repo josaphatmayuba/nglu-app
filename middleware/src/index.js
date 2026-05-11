@@ -13,7 +13,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'changeme_in_prod';
 // ── Logging ───────────────────────────────────────────────
 app.use(morgan(':method :url :status :response-time ms - :remote-addr'));
 
-// ── Rate limiting ─────────────────────────────────────────
+// ── Rate limiting global (100 req/min) ────────────────────
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 100,
@@ -21,6 +21,16 @@ const limiter = rateLimit({
   message: { error: 'Too many requests', message: 'Réessaie dans 1 minute' },
 });
 app.use(limiter);
+
+// ── Rate limiting strict sur auth (10 tentatives/15 min) ──
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  message: { error: 'Too many attempts', message: 'Trop de tentatives de connexion. Réessaie dans 15 minutes.' },
+});
+app.use('/auth/login', authLimiter);
+app.use('/auth/register', authLimiter);
 
 // ── Vérification whitelist + JWT ──────────────────────────
 app.use((req, res, next) => {
