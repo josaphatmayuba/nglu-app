@@ -29,8 +29,8 @@ services:
       DB_DATABASE: ${DB_DATABASE:-nglu_db}
       DB_USERNAME: ${DB_USERNAME:-nglu_user}
       DB_PASSWORD: ${DB_PASSWORD:-password}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://3.96.200.54}
-      FRONTEND_URL: ${FRONTEND_URL:-http://3.96.200.54}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
+      FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
       JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
@@ -64,6 +64,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot
     depends_on:
       - middleware
     networks:
@@ -72,6 +76,7 @@ services:
 
 volumes:
   mysql_data:
+  certbot_webroot:
 
 networks:
   nglu_network:
