@@ -17,7 +17,7 @@ export const loadAllAwardPaginated = createAsyncThunk(
   async (arg) => {
     try {
       const query = queryGenerator(arg);
-      const { data } = await axios.get(`award${query}`);
+      const { data } = await axios.get(`award?${query}`);
 
       return successHandler(data);
     } catch (error) {
@@ -42,7 +42,7 @@ export const loadSingleAward = createAsyncThunk(
   "award/loadSingleAward",
   async (id) => {
     try {
-      const { data } = await axios.get(`award${id}`);
+      const { data } = await axios.get(`award/${id}`);
 
       return successHandler(data);
     } catch (error) {
@@ -128,6 +128,8 @@ const awardSlice = createSlice({
 
     builder.addCase(loadAllAwardPaginated.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data?.getAllAward;
+      state.total = action.payload?.data?.totalAward;
     });
 
     builder.addCase(loadAllAwardPaginated.rejected, (state, action) => {
@@ -157,6 +159,7 @@ const awardSlice = createSlice({
 
     builder.addCase(loadSingleAward.fulfilled, (state, action) => {
       state.loading = false;
+      state.award = action.payload?.data;
     });
 
     builder.addCase(loadSingleAward.rejected, (state, action) => {
