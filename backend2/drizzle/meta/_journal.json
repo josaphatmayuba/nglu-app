@@ -71,6 +71,13 @@
       "when": 1778556600000,
       "tag": "0009_grant_legacy_module_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1778558400000,
+      "tag": "0010_add_customer_google_id",
+      "breakpoints": true
     }
   ]
 }

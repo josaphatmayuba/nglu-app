@@ -49,6 +49,7 @@ export const customers = mysqlTable("customer", {
   lastName: varchar("lastName", { length: 255 }),
   username: varchar("username", { length: 255 }),
   email: varchar("email", { length: 255 }),
+  googleId: varchar("googleId", { length: 255 }),
   phone: varchar("phone", { length: 255 }),
   address: varchar("address", { length: 255 }),
   password: varchar("password", { length: 255 }).notNull(),

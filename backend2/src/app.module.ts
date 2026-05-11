@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { AccountsModule } from "./accounts/accounts.module";
 import { AppSettingsModule } from "./app-settings/app-settings.module";
 import { AuthModule } from "./auth/auth.module";
+import { CompatModule } from "./compat/compat.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { CurrenciesModule } from "./currencies/currencies.module";
 import { CustomersModule } from "./customers/customers.module";
@@ -37,6 +38,7 @@ import { UsersModule } from "./users/users.module";
     AccountsModule,
     AppSettingsModule,
     DashboardModule,
+    CompatModule,
     CurrenciesModule,
     CustomersModule,
     DiscountsModule,
