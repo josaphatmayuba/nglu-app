@@ -799,7 +799,7 @@ export const paymentPurchaseInvoices = mysqlTable("paymentPurchaseInvoice", {
 export const roles = mysqlTable("role", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull().unique(),
-  status: varchar("status", { length: 255 }).default("active").notNull(),
+  status: varchar("status", { length: 255 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

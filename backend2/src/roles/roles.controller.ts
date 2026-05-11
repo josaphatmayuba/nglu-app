@@ -1,10 +1,10 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   HttpCode,
   Param,
+  Patch,
   ParseIntPipe,
   Post,
   Put,
@@ -58,7 +58,7 @@ export class RolesController {
   }
 
   @ApiOperation({ summary: "Soft delete role (update status)" })
-  @Delete(":id")
+  @Patch(":id")
   @HttpCode(200)
   remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string) {
     return this.rolesService.remove(id, status);

@@ -15,7 +15,7 @@ export class RolesService {
       const rows = await this.db
         .select()
         .from(roles)
-        .where(eq(roles.status, "active"))
+        .where(eq(roles.status, "true"))
         .orderBy(desc(roles.id));
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
@@ -47,9 +47,7 @@ export class RolesService {
 
     const { skip, limit } = this.pagination(query);
 
-    const statusFilter = query["status"]
-      ? eq(roles.status, query["status"] === "true" ? "active" : query["status"] === "false" ? "inactive" : query["status"])
-      : undefined;
+    const statusFilter = query["status"] ? eq(roles.status, query["status"]) : undefined;
 
     const rows = await this.db
       .select()
@@ -80,6 +78,7 @@ export class RolesService {
   async create(dto: CreateRoleDto) {
     const [result] = await this.db.insert(roles).values({
       name: dto.name,
+      status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -99,6 +98,7 @@ export class RolesService {
       if (!existing.length) {
         await this.db.insert(roles).values({
           name: item.name,
+          status: "true",
           createdAt: sql`CURRENT_TIMESTAMP`,
           updatedAt: sql`CURRENT_TIMESTAMP`,
         });
