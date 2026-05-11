@@ -1,120 +1,217 @@
+/* ── Property Management – redesign ─────────────────────────── */
+
 .property-management-page .ant-card-body {
   background: #f7f8fa;
 }
 
+/* ── Hero banner ────────────────────────────────────────────── */
+
 .pm-hero {
-  align-items: center;
-  background: linear-gradient(135deg, #ffffff 0%, #f3f7f5 54%, #eef1f8 100%);
-  border: 1px solid #e5e8ee;
-  border-radius: 8px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
-  padding: 18px 20px;
+  gap: 24px;
+  background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
+  border-radius: 12px;
+  padding: 22px 26px;
+  margin-bottom: 20px;
+  color: #fff;
 }
 
 .pm-hero h2 {
-  color: #263238;
-  font-size: 22px;
+  margin: 4px 0 6px;
+  font-size: 1.15rem;
   font-weight: 700;
-  margin: 0 0 6px;
+  color: #fff;
 }
 
 .pm-hero p {
-  color: #65727f;
   margin: 0;
-  max-width: 720px;
+  font-size: 0.82rem;
+  opacity: 0.82;
+  color: #fff;
 }
 
 .pm-eyebrow {
-  color: #6b5b95;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  margin-bottom: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
+  opacity: 0.78;
 }
 
+/* ── Sidebar + content layout ─────────────────────────────── */
+
+.pm-layout {
+  display: flex;
+  min-height: 560px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pm-sidebar {
+  width: 190px;
+  flex-shrink: 0;
+  background: #f8fafd;
+  border-right: 1px solid #e2e8f0;
+  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.pm-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 13px;
+  font-family: 'Poppins', sans-serif;
+  text-align: left;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.pm-nav-item:hover {
+  background: #eef0ff;
+  color: #4338ca;
+}
+
+.pm-nav-item.active {
+  background: #eff2ff;
+  color: #4338ca;
+  font-weight: 600;
+  border-left-color: #4338ca;
+}
+
+.pm-nav-icon {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 18px;
+}
+
+.pm-nav-label {
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Main content area ──────────────────────────────────────── */
+
+.pm-content {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 22px;
+}
+
+/* ── Section panel ──────────────────────────────────────────── */
+
 .pm-panel {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
+/* ── KPI grid ───────────────────────────────────────────────── */
+
 .pm-kpi-grid {
   display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 14px;
+  margin-bottom: 4px;
 }
 
 .pm-kpi {
-  align-items: center;
-  background: #ffffff;
-  border: 1px solid #e7eaf0;
-  border-left: 4px solid #6b7280;
-  border-radius: 8px;
   display: flex;
-  gap: 12px;
-  min-height: 86px;
-  padding: 14px;
+  align-items: center;
+  gap: 13px;
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  padding: 14px 15px;
+  box-shadow: 0 1px 4px rgba(67, 56, 202, 0.05);
+  transition: box-shadow 0.15s;
 }
 
-.pm-kpi-green {
-  border-left-color: #2f855a;
-}
-
-.pm-kpi-amber {
-  border-left-color: #b7791f;
-}
-
-.pm-kpi-blue {
-  border-left-color: #2b6cb0;
-}
-
-.pm-kpi-red {
-  border-left-color: #c53030;
+.pm-kpi:hover {
+  box-shadow: 0 4px 14px rgba(67, 56, 202, 0.11);
 }
 
 .pm-kpi-icon {
-  align-items: center;
-  background: #f5f6f8;
-  border-radius: 8px;
-  color: #3a4552;
+  width: 40px;
+  height: 40px;
   display: flex;
-  height: 38px;
+  align-items: center;
   justify-content: center;
-  width: 38px;
+  border-radius: 10px;
+  font-size: 17px;
+  flex-shrink: 0;
+  background: #f1f4f9;
+  color: #64748b;
 }
 
 .pm-kpi-label {
-  color: #6b7280;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #8898aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .pm-kpi-value {
-  color: #1f2933;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+  margin-top: 2px;
 }
+
+/* tone variants – icon bubble colors */
+.pm-kpi-green .pm-kpi-icon { background: #dcfce7; color: #16a34a; }
+.pm-kpi-amber .pm-kpi-icon { background: #fef3c7; color: #d97706; }
+.pm-kpi-blue  .pm-kpi-icon { background: #dbeafe; color: #2563eb; }
+.pm-kpi-red   .pm-kpi-icon { background: #fee2e2; color: #dc2626; }
+
+/* ── Section title ──────────────────────────────────────────── */
 
 .pm-section-title {
-  color: #2f3a45;
-  font-size: 16px;
+  font-size: 11.5px;
   font-weight: 700;
-  margin-top: 4px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 6px 0 2px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.pm-form-grid {
-  display: grid;
-  gap: 0 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
+/* ── Action row ─────────────────────────────────────────────── */
 
 .pm-actions-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: flex-end;
+  align-items: center;
 }
+
+/* ── Form grid ──────────────────────────────────────────────── */
+
+.pm-form-grid {
+  display: grid;
+  gap: 0 20px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
+/* ── Tenant onboarding page ─────────────────────────────────── */
 
 .tenant-onboarding-page {
   background: #f7f8fa;
@@ -127,11 +224,49 @@
   max-width: 960px;
 }
 
+/* ── Responsive ─────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   .pm-hero {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
     gap: 12px;
+  }
+
+  .pm-layout {
+    flex-direction: column;
+  }
+
+  .pm-sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 8px;
+    gap: 4px;
+  }
+
+  .pm-nav-item {
+    flex: 0 0 auto;
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 12px;
+  }
+
+  .pm-nav-item.active {
+    border-left-color: transparent;
+    border-bottom-color: #4338ca;
+  }
+
+  .pm-content {
+    padding: 14px;
+  }
+
+  .pm-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .pm-form-grid {

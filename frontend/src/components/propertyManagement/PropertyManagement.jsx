@@ -1,13 +1,17 @@
 import {
+  AppstoreOutlined,
   BankOutlined,
   CalendarOutlined,
   CopyOutlined,
   DollarOutlined,
+  FileDoneOutlined,
+  FileTextOutlined,
   HomeOutlined,
   PlusOutlined,
+  TeamOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { Button, Form, Input, InputNumber, Modal, Select, Table, Tabs, Tag } from "antd";
+import { Button, Form, Input, InputNumber, Modal, Select, Table, Tag } from "antd";
 import moment from "moment";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -177,6 +181,7 @@ const Kpi = ({ icon, label, value, tone = "slate" }) => (
 const PropertyManagement = () => {
   const dispatch = useDispatch();
   const [modal, setModal] = useState(null);
+  const [activeSection, setActiveSection] = useState("overview");
   const [form] = Form.useForm();
   const {
     dashboard,
@@ -692,7 +697,32 @@ const PropertyManagement = () => {
       </div>
 
       <UserPrivateComponent permission={"readAll-propertyManagement"}>
-        <Tabs defaultActiveKey="overview" items={items} />
+        <div className="pm-layout">
+          <aside className="pm-sidebar">
+            {[
+              { key: "overview",     label: "Vue d'ensemble",   icon: <AppstoreOutlined /> },
+              { key: "properties",   label: "Biens",             icon: <HomeOutlined /> },
+              { key: "units",        label: "Unités",            icon: <BankOutlined /> },
+              { key: "tenants",      label: "Locataires",        icon: <TeamOutlined /> },
+              { key: "leases",       label: "Baux & contrats",   icon: <FileTextOutlined /> },
+              { key: "payments",     label: "Paiements loyer",   icon: <DollarOutlined /> },
+              { key: "maintenance",  label: "Maintenance",       icon: <ToolOutlined /> },
+              { key: "contracts",    label: "Contrats",          icon: <FileDoneOutlined /> },
+            ].map((nav) => (
+              <button
+                key={nav.key}
+                className={`pm-nav-item${activeSection === nav.key ? " active" : ""}`}
+                onClick={() => setActiveSection(nav.key)}
+              >
+                <span className="pm-nav-icon">{nav.icon}</span>
+                <span className="pm-nav-label">{nav.label}</span>
+              </button>
+            ))}
+          </aside>
+          <div className="pm-content">
+            {items.find((item) => item.key === activeSection)?.children}
+          </div>
+        </div>
       </UserPrivateComponent>
 
       <Modal
