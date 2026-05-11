@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { desc, eq, like, sql } from "drizzle-orm";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { desc, eq, inArray, like, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions, roles } from "../database/schema";
 import type { Database } from "../database/types";
@@ -20,7 +20,12 @@ export class RolesService {
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
-      return { getAllRole: withPerms, totalRole: withPerms.length };
+      const [{ count }] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(roles)
+        .where(eq(roles.status, "true"));
+
+      return { getAllRole: withPerms, totalRole: Number(count) };
     }
 
     if (query["query"] === "search") {
@@ -45,9 +50,13 @@ export class RolesService {
       return { getAllRole: withPerms, totalRole: Number(count) };
     }
 
+    if (!Object.keys(query).length) {
+      throw new BadRequestException({ error: "Invalid query!" });
+    }
+
     const { skip, limit } = this.pagination(query);
 
-    const statusFilter = query["status"] ? eq(roles.status, query["status"]) : undefined;
+    const statusFilter = query["status"] ? inArray(roles.status, query["status"].split(",")) : undefined;
 
     const rows = await this.db
       .select()
