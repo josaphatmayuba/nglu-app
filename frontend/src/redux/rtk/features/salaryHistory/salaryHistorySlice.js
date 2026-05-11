@@ -16,7 +16,7 @@ export const loadAllSalaryHistoryPaginated = createAsyncThunk(
   async (arg) => {
     try {
       const query = queryGenerator(arg);
-      const { data } = await axios.get(`salary-history${query}`);
+      const { data } = await axios.get(`salary-history?${query}`);
 
       return successHandler(data);
     } catch (error) {
@@ -44,7 +44,7 @@ export const loadSingleSalaryHistory = createAsyncThunk(
   "salary/loadSingleSalaryHistory",
   async (id) => {
     try {
-      const { data } = await axios.get(`salary-history${id}`);
+      const { data } = await axios.get(`salary-history/${id}`);
 
       return successHandler(data);
     } catch (error) {
@@ -135,6 +135,11 @@ const salaryHistorySlice = createSlice({
       loadAllSalaryHistoryPaginated.fulfilled,
       (state, action) => {
         state.loading = false;
+        state.list =
+          action.payload?.data?.getAllSalaryHistory ?? action.payload?.data;
+        state.total =
+          action.payload?.data?.totalSalaryHistory ??
+          (Array.isArray(action.payload?.data) ? action.payload.data.length : 0);
       }
     );
 
@@ -150,6 +155,10 @@ const salaryHistorySlice = createSlice({
 
     builder.addCase(loadAllSalaryHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data;
+      state.total = Array.isArray(action.payload?.data)
+        ? action.payload.data.length
+        : state.total;
     });
 
     builder.addCase(loadAllSalaryHistory.rejected, (state, action) => {
@@ -164,6 +173,7 @@ const salaryHistorySlice = createSlice({
 
     builder.addCase(loadSingleSalaryHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.salaryHistory = action.payload?.data;
     });
 
     builder.addCase(loadSingleSalaryHistory.rejected, (state, action) => {

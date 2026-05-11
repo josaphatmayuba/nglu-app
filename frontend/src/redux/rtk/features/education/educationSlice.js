@@ -17,7 +17,7 @@ export const loadAllEducationPaginated = createAsyncThunk(
   async (arg) => {
     try {
       const query = queryGenerator(arg);
-      const { data } = await axios.get(`education${query}`);
+      const { data } = await axios.get(`education?${query}`);
 
       return successHandler(data);
     } catch (error) {
@@ -45,7 +45,7 @@ export const loadSingleEducation = createAsyncThunk(
   "education/loadSingleEducation",
   async (id) => {
     try {
-      const { data } = await axios.get(`education${id}`);
+      const { data } = await axios.get(`education/${id}`);
 
       return successHandler(data);
     } catch (error) {
@@ -134,6 +134,10 @@ const educationSlice = createSlice({
 
     builder.addCase(loadAllEducationPaginated.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data?.getAllEducation ?? action.payload?.data;
+      state.total =
+        action.payload?.data?.totalEducation ??
+        (Array.isArray(action.payload?.data) ? action.payload.data.length : 0);
     });
 
     builder.addCase(loadAllEducationPaginated.rejected, (state, action) => {
@@ -148,6 +152,10 @@ const educationSlice = createSlice({
 
     builder.addCase(loadAllEducation.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data;
+      state.total = Array.isArray(action.payload?.data)
+        ? action.payload.data.length
+        : state.total;
     });
 
     builder.addCase(loadAllEducation.rejected, (state, action) => {
@@ -162,6 +170,7 @@ const educationSlice = createSlice({
 
     builder.addCase(loadSingleEducation.fulfilled, (state, action) => {
       state.loading = false;
+      state.education = action.payload?.data;
     });
 
     builder.addCase(loadSingleEducation.rejected, (state, action) => {

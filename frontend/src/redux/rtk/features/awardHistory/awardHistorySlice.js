@@ -17,7 +17,7 @@ export const loadAllAwardHistoryPaginated = createAsyncThunk(
   async (arg) => {
     try {
       const query = queryGenerator(arg);
-      const { data } = await axios.get(`award-history${query}`);
+      const { data } = await axios.get(`award-history?${query}`);
 
       return successHandler(data);
     } catch (error) {
@@ -45,7 +45,7 @@ export const loadSingleAwardHistory = createAsyncThunk(
   "awardHistory/loadSingleAwardHistory",
   async (id) => {
     try {
-      const { data } = await axios.get(`award-history${id}`);
+      const { data } = await axios.get(`award-history/${id}`);
 
       return successHandler(data);
     } catch (error) {
@@ -137,6 +137,11 @@ const awardHistorySlice = createSlice({
 
     builder.addCase(loadAllAwardHistoryPaginated.fulfilled, (state, action) => {
       state.loading = false;
+      state.list =
+        action.payload?.data?.getAllAwardHistory ?? action.payload?.data;
+      state.total =
+        action.payload?.data?.totalAwardHistory ??
+        (Array.isArray(action.payload?.data) ? action.payload.data.length : 0);
     });
 
     builder.addCase(loadAllAwardHistoryPaginated.rejected, (state, action) => {
@@ -151,6 +156,10 @@ const awardHistorySlice = createSlice({
 
     builder.addCase(loadAllAwardHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data;
+      state.total = Array.isArray(action.payload?.data)
+        ? action.payload.data.length
+        : state.total;
     });
 
     builder.addCase(loadAllAwardHistory.rejected, (state, action) => {
@@ -165,6 +174,7 @@ const awardHistorySlice = createSlice({
 
     builder.addCase(loadSingleAwardHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.awardHistory = action.payload?.data;
     });
 
     builder.addCase(loadSingleAwardHistory.rejected, (state, action) => {

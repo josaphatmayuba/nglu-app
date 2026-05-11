@@ -16,7 +16,7 @@ export const loadAllDesignationHistoryPaginated = createAsyncThunk(
   async (arg) => {
     try {
       const query = queryGenerator(arg);
-      const { data } = await axios.get(`designation-history${query}`);
+      const { data } = await axios.get(`designation-history?${query}`);
 
       return successHandler(data);
     } catch (error) {
@@ -44,7 +44,7 @@ export const loadSingleDesignationHistory = createAsyncThunk(
   "designationHistory/loadSingleSalaryHistory",
   async (id) => {
     try {
-      const { data } = await axios.get(`designation-history${id}`);
+      const { data } = await axios.get(`designation-history/${id}`);
 
       return successHandler(data);
     } catch (error) {
@@ -135,6 +135,12 @@ const designationHistorySlice = createSlice({
       loadAllDesignationHistoryPaginated.fulfilled,
       (state, action) => {
         state.loading = false;
+        state.list =
+          action.payload?.data?.getAllDesignationHistory ??
+          action.payload?.data;
+        state.total =
+          action.payload?.data?.totalDesignationHistory ??
+          (Array.isArray(action.payload?.data) ? action.payload.data.length : 0);
       }
     );
 
@@ -153,6 +159,10 @@ const designationHistorySlice = createSlice({
 
     builder.addCase(loadAllDesignationHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.list = action.payload?.data;
+      state.total = Array.isArray(action.payload?.data)
+        ? action.payload.data.length
+        : state.total;
     });
 
     builder.addCase(loadAllDesignationHistory.rejected, (state, action) => {
@@ -167,6 +177,7 @@ const designationHistorySlice = createSlice({
 
     builder.addCase(loadSingleDesignationHistory.fulfilled, (state, action) => {
       state.loading = false;
+      state.designationHistory = action.payload?.data;
     });
 
     builder.addCase(loadSingleDesignationHistory.rejected, (state, action) => {
