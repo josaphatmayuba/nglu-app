@@ -442,6 +442,162 @@ export const pageSizes = mysqlTable("pageSize", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const announcements = mysqlTable("announcement", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }),
+  description: text("description"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const emailConfigs = mysqlTable("emailConfig", {
+  id: serial("id").primaryKey(),
+  emailConfigName: varchar("emailConfigName", { length: 255 }),
+  emailHost: varchar("emailHost", { length: 255 }),
+  emailPort: int("emailPort"),
+  emailUser: varchar("emailUser", { length: 255 }),
+  emailPass: varchar("emailPass", { length: 255 }),
+  emailFrom: varchar("emailFrom", { length: 255 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const emails = mysqlTable("email", {
+  id: serial("id").primaryKey(),
+  emailConfigName: varchar("emailConfigName", { length: 255 }),
+  to: varchar("to", { length: 255 }),
+  subject: varchar("subject", { length: 255 }),
+  body: text("body"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const manualPayments = mysqlTable("manualPayment", {
+  id: serial("id").primaryKey(),
+  date: datetime("date"),
+  amount: double("amount").default(0).notNull(),
+  paymentMethodId: bigint("paymentMethodId", { mode: "number" }),
+  customerId: bigint("customerId", { mode: "number" }),
+  transactionId: bigint("transactionId", { mode: "number" }),
+  note: text("note"),
+  paymentStatus: varchar("paymentStatus", { length: 50 }).default("pending"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const adjustInvoices = mysqlTable("adjustInvoice", {
+  id: serial("id").primaryKey(),
+  date: datetime("date"),
+  note: text("note"),
+  userId: bigint("userId", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const adjustInvoiceProducts = mysqlTable("adjustInvoiceProduct", {
+  id: serial("id").primaryKey(),
+  invoiceId: bigint("invoiceId", { mode: "number" }).notNull(),
+  productId: bigint("productId", { mode: "number" }),
+  productQuantity: double("productQuantity").default(0),
+  type: varchar("type", { length: 50 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const quotes = mysqlTable("quote", {
+  id: serial("id").primaryKey(),
+  quoteName: varchar("quoteName", { length: 255 }),
+  quoteDate: datetime("quoteDate"),
+  quoteOwnerId: bigint("quoteOwnerId", { mode: "number" }),
+  customerId: bigint("customerId", { mode: "number" }),
+  totalAmount: double("totalAmount").default(0),
+  note: text("note"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const quoteProducts = mysqlTable("quoteProduct", {
+  id: serial("id").primaryKey(),
+  quoteId: bigint("quoteId", { mode: "number" }).notNull(),
+  productId: bigint("productId", { mode: "number" }),
+  productQuantity: double("productQuantity").default(0),
+  productUnitSalePrice: double("productUnitSalePrice").default(0),
+  productFinalAmount: double("productFinalAmount").default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const purchaseReorderInvoices = mysqlTable("purchaseReorderInvoice", {
+  id: serial("id").primaryKey(),
+  reorderInvoiceId: varchar("reorderInvoiceId", { length: 50 }),
+  productId: bigint("productId", { mode: "number" }),
+  quantity: double("quantity").default(0),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const returnPurchaseInvoiceProducts = mysqlTable("returnPurchaseInvoiceProduct", {
+  id: serial("id").primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 50 }).notNull(),
+  productId: bigint("productId", { mode: "number" }),
+  productQuantity: double("productQuantity").default(0),
+  productUnitPurchasePrice: double("productUnitPurchasePrice").default(0),
+  productFinalAmount: double("productFinalAmount").default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const returnSaleInvoiceProducts = mysqlTable("returnSaleInvoiceProduct", {
+  id: serial("id").primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 50 }).notNull(),
+  productId: bigint("productId", { mode: "number" }),
+  productQuantity: double("productQuantity").default(0),
+  productUnitSalePrice: double("productUnitSalePrice").default(0),
+  productFinalAmount: double("productFinalAmount").default(0),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const productProductAttributeValues = mysqlTable("productProductAttributeValue", {
+  id: serial("id").primaryKey(),
+  productId: bigint("productId", { mode: "number" }),
+  productAttributeValueId: bigint("productAttributeValueId", { mode: "number" }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const dimensionUnits = mysqlTable("dimensionUnit", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const weightUnits = mysqlTable("weightUnit", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const attachments = mysqlTable("attachment", {
+  id: serial("id").primaryKey(),
+  emailId: bigint("emailId", { mode: "number" }).notNull(),
+  name: varchar("name", { length: 255 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const appSettings = mysqlTable("appSetting", {
   id: serial("id").primaryKey(),
   companyName: varchar("companyName", { length: 255 }),
