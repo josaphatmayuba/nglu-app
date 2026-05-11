@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions } from "../database/schema";
 import type { Database } from "../database/types";
@@ -14,16 +14,10 @@ export class RolePermissionsService {
 
     // Add missing
     for (const permId of incoming) {
-      const existing = await this.db
-        .select({ id: rolePermissions.id })
-        .from(rolePermissions)
-        .where(eq(rolePermissions.roleId, roleId))
-        .limit(1);
-
       const found = await this.db
         .select({ id: rolePermissions.id })
         .from(rolePermissions)
-        .where(eq(rolePermissions.permissionId, permId))
+        .where(and(eq(rolePermissions.roleId, roleId), eq(rolePermissions.permissionId, permId)))
         .limit(1);
 
       if (!found.length) {
@@ -34,7 +28,6 @@ export class RolePermissionsService {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         });
       }
-      void existing;
     }
 
     // Remove permissions no longer in the list
