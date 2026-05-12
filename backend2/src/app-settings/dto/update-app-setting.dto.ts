@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Transform } from "class-transformer";
 import { IsInt, IsOptional, IsString } from "class-validator";
 
 export class UpdateAppSettingDto {
@@ -11,7 +12,7 @@ export class UpdateAppSettingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() website?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() footer?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() logo?: string;
-  @ApiPropertyOptional({ example: 1 }) @IsOptional() @IsInt() currencyId?: number;
+  @ApiPropertyOptional({ example: 1 }) @IsOptional() @Transform(({ value }) => (value === undefined || value === "" ? undefined : Number(value))) @IsInt() currencyId?: number;
   @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isPos?: string;
   @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isDiscount?: string;
   @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isTax?: string;

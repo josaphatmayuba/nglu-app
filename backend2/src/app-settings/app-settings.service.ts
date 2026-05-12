@@ -1,5 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { eq, sql } from "drizzle-orm";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { DRIZZLE } from "../database/database.constants";
 import { appSettings, currencies } from "../database/schema";
 import type { Database } from "../database/types";
@@ -7,6 +9,8 @@ import { UpdateAppSettingDto } from "./dto/update-app-setting.dto";
 
 @Injectable()
 export class AppSettingsService {
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   async findOne() {
@@ -47,10 +51,11 @@ export class AppSettingsService {
     };
   }
 
-  async update(dto: UpdateAppSettingDto) {
+  async update(dto: UpdateAppSettingDto, files: any[] = [], publicApiBase?: string) {
     const current = await this.findOne();
 
-    const logo = dto.clearLogo === "true" ? null : (dto.logo ?? current.logo);
+    const uploadedLogo = this.saveLogo(files, publicApiBase);
+    const logo = dto.clearLogo === "true" ? null : (uploadedLogo ?? dto.logo ?? current.logo);
 
     await this.db
       .update(appSettings)
@@ -73,5 +78,20 @@ export class AppSettingsService {
       .where(eq(appSettings.id, 1));
 
     return this.findOne();
+  }
+
+  private saveLogo(files: any[], publicApiBase?: string) {
+    const file = files?.find((item) => item?.fieldname === "images" || item?.fieldname === "images[]" || item?.fieldname === "image") ?? files?.[0];
+    if (!file?.buffer) return null;
+
+    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
+
+    const rawExtension = file.originalname?.split(".").pop() || "png";
+    const extension = rawExtension.replace(/[^a-zA-Z0-9]/g, "") || "png";
+    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
+    writeFileSync(join(this.uploadDir, name), file.buffer);
+
+    const base = publicApiBase?.replace(/\/$/, "");
+    return base ? `${base}/files/${name}` : `/files/${name}`;
   }
 }

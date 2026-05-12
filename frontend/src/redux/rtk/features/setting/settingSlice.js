@@ -25,10 +25,6 @@ export const updateSetting = createAsyncThunk(
       const { data } = await axios({
         method: "POST",
         url: "setting",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
         data: values,
       });
       return successHandler(data);
