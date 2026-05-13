@@ -61,6 +61,8 @@ services:
       # Dev frontend dist (served on dev.ongdngolu.org via the dev server block)
       # Path is on the host: /opt/nglu-app-dev/frontend/dist
       - /opt/nglu-app-dev/frontend/dist:/usr/share/nginx/html-dev:ro
+      # Marketing site (served on dev.ongdngolu.org/site/)
+      - /opt/nglu-app-dev/marketing-site:/usr/share/nginx/html-marketing:ro
     depends_on:
       - middleware
     networks:
