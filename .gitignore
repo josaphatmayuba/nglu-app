@@ -48,3 +48,28 @@ Thumbs.db
 *.mov
 *.wmv
 
+# ── Environment files (NEVER commit real secrets) ───────────
+# Ignore all live env files
+.env
+.env.local
+.env.prod
+.env.dev
+backend2/.env
+backend2/.env.local
+middleware/.env
+middleware/.env.local
+frontend/.env.local
+
+# But keep committed templates
+!.env.example
+!.env.prod.example
+!.env.dev.example
+!frontend/.env.production
+!frontend/.env.development
+!backend2/.env.example
+
+# Local Claude settings
+.claude/
+
+# Backend2 storage
+backend2/storage/

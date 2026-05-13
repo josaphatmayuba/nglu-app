@@ -5,43 +5,77 @@ definitions:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
 
+  steps:
+    - step: &build-backend2
+        name: Build Backend2
+        image: node:20-alpine
+        caches:
+          - node-backend2
+        script:
+          - cd backend2
+          - npm ci
+          - npm run build
+        artifacts:
+          - backend2/dist/**
+
+    - step: &build-frontend-prod
+        name: Build Frontend (production mode)
+        image: node:20-alpine
+        caches:
+          - node-frontend
+        script:
+          - cd frontend
+          - npm install --legacy-peer-deps
+          - npm run build           # picks .env.production → https://ongdngolu.org/api
+        artifacts:
+          - frontend/dist/**
+
+    - step: &build-frontend-dev
+        name: Build Frontend (development mode)
+        image: node:20-alpine
+        caches:
+          - node-frontend
+        script:
+          - cd frontend
+          - npm install --legacy-peer-deps
+          - npm run build -- --mode development   # picks .env.development → https://dev.ongdngolu.org/api
+        artifacts:
+          - frontend/dist/**
+
+    - step: &deploy-prod
+        name: Deploy to Production (ongdngolu.org)
+        image: alpine
+        script:
+          - apk add --no-cache openssh-client
+          - SERVER=admin@16.54.167.125
+          - APP_DIR=/opt/nglu-app
+          - ssh $SERVER "cd $APP_DIR && git pull origin master"
+          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
+          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
+          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up --build -d"
+          - ssh $SERVER "docker compose -p nglu_prod -f $APP_DIR/docker-compose.prod.yml ps"
+
+    - step: &deploy-dev
+        name: Deploy to Development (dev.ongdngolu.org)
+        image: alpine
+        script:
+          - apk add --no-cache openssh-client
+          - SERVER=admin@16.54.167.125
+          - APP_DIR=/opt/nglu-app-dev
+          - ssh $SERVER "cd $APP_DIR && git pull origin develop"
+          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
+          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
+          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up --build -d"
+          - ssh $SERVER "docker compose -p nglu_dev -f $APP_DIR/docker-compose.dev.yml ps"
+
 pipelines:
   branches:
     master:
-      - step:
-          name: Build Backend2
-          image: node:20-alpine
-          caches:
-            - node-backend2
-          script:
-            - cd backend2
-            - npm ci
-            - npm run build
-          artifacts:
-            - backend2/dist/**
+      - step: *build-backend2
+      - step: *build-frontend-prod
+      - step: *deploy-prod
 
-      - step:
-          name: Build Frontend
-          image: node:20-alpine
-          caches:
-            - node-frontend
-          script:
-            - cd frontend
-            - npm install --legacy-peer-deps
-            - VITE_APP_API=http://3.96.200.54:8001 VITE_API_URL=http://3.96.200.54:8001 VITE_APP_API_NODE=http://3.96.200.54:8001 npm run build
-          artifacts:
-            - frontend/dist/**
-
-      - step:
-          name: Deploy to Lightsail
-          image: alpine
-          script:
-            - apk add --no-cache openssh-client
-            # Pull latest code on server
-            - ssh admin@3.96.200.54 "cd /opt/nglu-app && git pull"
-            # Copy built dist folders to server
-            - scp -r frontend/dist admin@3.96.200.54:/opt/nglu-app/frontend/
-            - scp -r backend2/dist admin@3.96.200.54:/opt/nglu-app/backend2/
-            # Rebuild and restart containers (fast: no compilation on server)
-            - ssh admin@3.96.200.54 "cd /opt/nglu-app && docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d"
-            - ssh admin@3.96.200.54 "docker compose -f /opt/nglu-app/docker-compose.prod.yml ps"
+    develop:
+      - step: *build-backend2
+      - step: *build-frontend-dev
+      - step: *deploy-dev

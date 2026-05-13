@@ -1,4 +1,7 @@
-.PHONY: help up down restart logs bash-backend bash-backend2 bash-frontend migrate migrate-backend2 seed seed-backend2 db-backend2
+.PHONY: help up down restart logs bash-backend bash-backend2 bash-frontend migrate migrate-backend2 seed seed-backend2 db-backend2 \
+        prod-up prod-down prod-build prod-logs prod-restart \
+        dev-up dev-down dev-build dev-logs dev-restart \
+        status mem nginx-reload nginx-test
 
 help:
 	@echo "NgluERP Docker Commands"
@@ -93,3 +96,56 @@ composer-install:
 
 composer-update:
 	docker-compose exec backend composer update
+
+# ════════════════════════════════════════════════════════════════════
+# Server-side commands (run on admin@16.54.167.125 Lightsail)
+# ════════════════════════════════════════════════════════════════════
+
+# ─── Production (ongdngolu.org) ─────────────────────────────
+prod-up:
+	cd /opt/nglu-app && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d
+
+prod-down:
+	cd /opt/nglu-app && docker compose -p nglu_prod -f docker-compose.prod.yml down
+
+prod-build:
+	cd /opt/nglu-app && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+prod-logs:
+	docker logs -f nglu_prod_backend2
+
+prod-restart:
+	cd /opt/nglu-app && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod restart
+
+# ─── Development (dev.ongdngolu.org) ────────────────────────
+dev-up:
+	cd /opt/nglu-app-dev && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d
+
+dev-down:
+	cd /opt/nglu-app-dev && docker compose -p nglu_dev -f docker-compose.dev.yml down
+
+dev-build:
+	cd /opt/nglu-app-dev && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build
+
+dev-logs:
+	docker logs -f nglu_dev_backend2
+
+dev-restart:
+	cd /opt/nglu-app-dev && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev restart
+
+# ─── Utilities ──────────────────────────────────────────────
+status:
+	docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
+mem:
+	@echo "=== System memory ==="
+	@free -h
+	@echo ""
+	@echo "=== Container memory ==="
+	@docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+
+nginx-reload:
+	docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload
+
+nginx-test:
+	docker exec nglu_prod_frontend nginx -t

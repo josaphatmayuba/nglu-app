@@ -1,0 +1,79 @@
+# Dev environment stack
+# Deployed to /opt/nglu-app-dev/ on the same Lightsail server as prod
+# Launch: docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d
+# NOTE: No frontend nginx here — the prod nginx (nglu_prod_frontend) serves
+#       this stack's frontend/dist via a bind mount and routes /api/ to nglu_dev_middleware.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: nglu_dev_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - nglu_dev_mysql_data:/var/lib/mysql
+    networks:
+      - nglu_dev_network
+    mem_limit: 200m
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend2:
+    build:
+      context: ./backend2
+      dockerfile: Dockerfile.prod
+    container_name: nglu_dev_backend2
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://dev.ongdngolu.org}
+      FRONTEND_URL: ${FRONTEND_URL:-https://dev.ongdngolu.org}
+      DB_WAIT_RETRIES: 40
+      DB_WAIT_DELAY_MS: 1500
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - nglu_dev_network
+    mem_limit: 160m
+
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile
+    container_name: nglu_dev_middleware
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      BACKEND_URL: http://backend2:8001
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - backend2
+    networks:
+      - nglu_dev_network
+      - nglu_shared
+    mem_limit: 48m
+
+volumes:
+  nglu_dev_mysql_data:
+    name: nglu_dev_mysql_data
+
+networks:
+  nglu_dev_network:
+    name: nglu_dev_network
+  nglu_shared:
+    external: true
