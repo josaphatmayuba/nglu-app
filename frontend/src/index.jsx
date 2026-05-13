@@ -60,12 +60,22 @@ const refreshAccessToken = async () => {
   }
 };
 
+const clearSession = () => {
+  localStorage.removeItem("access-token");
+  localStorage.removeItem("id");
+  localStorage.removeItem("role");
+  localStorage.removeItem("roleId");
+  localStorage.removeItem("user");
+  localStorage.removeItem("isLogged");
+};
+
 axios.interceptors.response.use(
   (response) => response,
   async (error) => {
     const prevRequest = error?.config;
     const isLoginPath = window.location.pathname.includes("/login");
     const isAdminPath = window.location.pathname.includes("/admin");
+
     if (
       error?.response?.status === 401 &&
       !prevRequest?.sent &&
@@ -73,25 +83,20 @@ axios.interceptors.response.use(
       !isLoginPath
     ) {
       prevRequest.sent = true;
-
       const refreshedToken = await refreshAccessToken();
 
       if (refreshedToken) {
-        // Retry the original request with the new token
         error.config.headers.Authorization = `Bearer ${refreshedToken}`;
         return axios(error.config);
       }
-    } else if (error?.response?.status === 401 && !isAdminPath) {
-      //  localStorage.removeItem("id");
-      // localStorage.removeItem("access-token");
-      // localStorage.removeItem("role");
-      // localStorage.removeItem("user");
-      // localStorage.removeItem("isLogged");
-    } else if (isLoginPath) {
-      return Promise.reject(error);
-    } else {
+
+      // Refresh failed — clear session and redirect to login
+      clearSession();
+      window.location.replace("/admin/auth/login");
       return Promise.reject(error);
     }
+
+    return Promise.reject(error);
   }
 );
 
