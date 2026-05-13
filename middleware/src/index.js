@@ -77,10 +77,13 @@ app.use((req, res, next) => {
 });
 
 // ── Proxy vers backend2 ───────────────────────────────────
+// changeOrigin: false → preserves the original Host header from nginx
+// (e.g. "dev.ongdngolu.org") so the backend can build public URLs
+// correctly (logo upload returns the right host).
 app.use(
   createProxyMiddleware({
     target: BACKEND_URL,
-    changeOrigin: true,
+    changeOrigin: false,
     on: {
       error: (err, req, res) => {
         console.error('[PROXY ERROR]', err.message);
