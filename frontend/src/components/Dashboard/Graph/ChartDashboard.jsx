@@ -56,7 +56,7 @@ const isEmptyArray = (arr) => !Array.isArray(arr) || arr.length === 0;
 ========================================================= */
 const Card = ({ children, className = '' }) => (
     <div
-        className={`bg-white dark:bg-gray-800 rounded-2xl  dark:border-gray-700 p-4 sm:p-6 transition-all duration-200 hover:shadow-md ${className}`}
+        className={`bg-white dark:bg-gray-800 rounded-xl border border-ink-200 dark:border-gray-700 p-4 sm:p-6 transition-colors hover:border-ink-300 ${className}`}
     >
         {children}
     </div>
@@ -89,55 +89,51 @@ const SafeChartContainer = ({ data, children, emptyTitle, emptySubtitle }) => {
 };
 
 const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol }) => {
-    const [localLoading, setLocalLoading] = useState(true);
     const isPositive = (change ?? 0) >= 0;
-
-    useEffect(() => {
-        const t = setTimeout(() => setLocalLoading(false), 300);
-        return () => clearTimeout(t);
-    }, []);
-
     const sparklineData = (trend || []).map((val, idx) => ({ idx, val }));
-
     const strokeColor = lineColor || (isPositive ? '#10b981' : '#ef4444');
+    const hasChange = change !== null && change !== undefined && !Number.isNaN(change);
 
     return (
-        <Card className="relative overflow-hidden shadow-none border-none p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-2">
-                <div className="p-1.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+        <div className="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border border-ink-200 dark:border-gray-700 p-3 sm:p-5 hover:border-ink-300 transition-colors">
+            <div className="flex items-start justify-between mb-3">
+                <div className="w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center">
+                    <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-brand-600 dark:text-brand-400" />
                 </div>
-                {localLoading ? (
-                    <div className="h-8 w-20 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
-                ) : isEmptyArray(sparklineData) ? (
-                    <div className="h-8 w-20">
-                        <EmptyState title="No trend" subtitle="Not enough data" />
-                    </div>
-                ) : (
-                    <ResponsiveContainer width={80} height={40}>
+                {hasChange && (
+                    <span
+                        className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-md ${
+                            isPositive
+                                ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20'
+                                : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20'
+                        }`}
+                    >
+                        {isPositive ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                    </span>
+                )}
+            </div>
+            <div className="text-start">
+                <p className="text-xs text-ink-500 dark:text-gray-400 font-medium mb-1">{title}</p>
+                <p className="text-lg sm:text-2xl font-semibold text-ink-900 dark:text-white tracking-tight truncate">
+                    <span dangerouslySetInnerHTML={{ __html: typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0 }} />
+                </p>
+            </div>
+            {!isEmptyArray(sparklineData) && (
+                <div className="mt-3 h-8">
+                    <ResponsiveContainer width="100%" height={32}>
                         <LineChart data={sparklineData}>
                             <Line
                                 type="monotone"
                                 dataKey="val"
                                 stroke={strokeColor}
-                                strokeWidth={2}
+                                strokeWidth={1.5}
                                 dot={false}
                             />
                         </LineChart>
                     </ResponsiveContainer>
-                )}
-            </div>
-            <div className="text-start">
-                <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-0.5">{title}</p>
-                {localLoading ? (
-                    <div className="h-6 w-24 sm:h-7 sm:w-28 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mx-auto" />
-                ) : (
-                    <p className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                        <span dangerouslySetInnerHTML={{ __html: typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0 }} />
-                    </p>
-                )}
-            </div>
-        </Card>
+                </div>
+            )}
+        </div>
     );
 };
 

@@ -6,6 +6,9 @@
   --text: #ffffff;
   --body-bg: #1c1b20;
   --sidenav-bg: #2e2d35;
+  --sidenav-text: #ffffff;
+  --sidenav-text-muted: #a1a1aa;
+  --sidenav-border: #3f3f46;
   --table-cell-row-hover: #26252b;
   --form-item-label: rgba(255, 255, 255, 1);
   --table-head: #1c1b20;
@@ -16,28 +19,38 @@
 
 .light-theme {
   --bg: #ffffff;
-  --bg-secondary: #F4F5F6;
-  --bg-item-selected: #e6f7ff;
-  --bg-item-active: #cef0ff;
-  --text: #000000;
-  --body-bg: white;
-  --sidenav-bg: #2a2d3e;
+  --bg-secondary: #fafafa;
+  --bg-item-selected: #eef2ff;
+  --bg-item-active: #e0e7ff;
+  --text: #18181b;
+  --body-bg: #fafafa;
+  --sidenav-bg: #ffffff;
+  --sidenav-text: #3f3f46;
+  --sidenav-text-muted: #71717a;
+  --sidenav-border: #e4e4e7;
   --table-cell-row-hover: #fafafa;
   --form-item-label: rgba(0, 0, 0, 0.85);
-  --table-head: #f1f5f9;
-  --input-border: 1px solid #d9d9d9;
-  --quick-links-bg: #f4f4f4;
+  --table-head: #fafafa;
+  --input-border: 1px solid #e4e4e7;
+  --quick-links-bg: #fafafa;
   --shadow-color: #c7d2fe;
+}
+
+html,
+body {
+  font-family: "Inter", "Poppins", system-ui, -apple-system, sans-serif;
 }
 
 body {
   background-color: var(--body-bg) !important;
-  font-size: 0.8em;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 @media only screen and (max-width: 600px) {
   body {
-    font-size: 0.7em;
+    font-size: 13px;
   }
 }
 

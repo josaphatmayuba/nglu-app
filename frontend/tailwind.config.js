@@ -6,15 +6,38 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        Popins: ["'Poppins'", "sans-serif"],
+        sans: ["'Inter'", "system-ui", "sans-serif"],
+        Popins: ["'Inter'", "'Poppins'", "sans-serif"],
       },
       colors: {
         primary: "#4F46E5",
-        headerBg: "#f7f7fe",
-        sideNavBg: "#0d0d1c",
+        headerBg: "#ffffff",
+        sideNavBg: "#ffffff",
         tableBg: "white",
-        tableHeaderBg: "#f1f5f9",
-        cardBg: "#f7f7fe",
+        tableHeaderBg: "#fafafa",
+        cardBg: "#ffffff",
+
+        brand: {
+          50: "#eef2ff",
+          100: "#e0e7ff",
+          500: "#6366f1",
+          600: "#4f46e5",
+          700: "#4338ca",
+          900: "#312e81",
+        },
+        ink: {
+          50: "#fafafa",
+          100: "#f4f4f5",
+          200: "#e4e4e7",
+          300: "#d4d4d8",
+          400: "#a1a1aa",
+          500: "#71717a",
+          600: "#52525b",
+          700: "#3f3f46",
+          800: "#27272a",
+          900: "#18181b",
+          950: "#09090b",
+        },
 
         // E-commerce colors
         ePrimary: "#4F46E5",
@@ -25,7 +48,7 @@ module.exports = {
       },
       screens: {
         xxs: "375px",
-        xs: "425px",
+        xs: "475px",
         sm: "576px",
 
         md: "769px",
@@ -38,7 +61,7 @@ module.exports = {
         "3xl": "1900px",
       },
       fontSize: {
-        xxs: ".35rem",
+        xxs: ".65rem",
       },
     },
   },

@@ -99,6 +99,14 @@
 
 .menu-item {
   position: relative;
+  color: var(--sidenav-text, #3f3f46);
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.menu-item:hover {
+  background-color: var(--bg-item-selected, #eef2ff);
+  color: var(--text, #18181b);
 }
 
 .menu-item a::before {
@@ -110,10 +118,24 @@
 
 .menu-item:has(.active) {
   background-color: rgb(79, 70, 229) !important;
-  /* color: #319AF6 !important; */
-  border-radius: 10px !important;
-  /* margin-left: 0 !important; */
+  color: #ffffff !important;
+  border-radius: 8px !important;
   width: 100%;
+}
+
+.menu-item:has(.active) a,
+.menu-item:has(.active) span {
+  color: #ffffff !important;
+}
+
+.menu-item-with-children {
+  color: var(--sidenav-text, #3f3f46);
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.menu-item-with-children:hover {
+  background-color: var(--bg-secondary, #fafafa);
 }
 
 .totalMargin {
