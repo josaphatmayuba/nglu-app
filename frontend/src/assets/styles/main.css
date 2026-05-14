@@ -156,11 +156,49 @@
 }
 
 .ant-btn {
-  height: 40px !important;
-  line-height: 40px !important;
-  padding: 0 15px !important;
-  border-radius: 6px !important;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 7%);
+  height: 38px !important;
+  line-height: 38px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  font-weight: 500;
+  box-shadow: none;
+  transition: all 0.15s ease;
+}
+
+.ant-btn-primary {
+  background-color: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+.ant-btn-primary:hover,
+.ant-btn-primary:focus {
+  background-color: #4338ca !important;
+  border-color: #4338ca !important;
+}
+
+.ant-btn-default {
+  border-color: #e4e4e7 !important;
+  color: #3f3f46 !important;
+}
+
+.ant-btn-default:hover,
+.ant-btn-default:focus {
+  background-color: #fafafa !important;
+  border-color: #d4d4d8 !important;
+  color: #18181b !important;
+}
+
+.ant-btn-dangerous {
+  border-color: #e4e4e7 !important;
+  color: #dc2626 !important;
+}
+
+.ant-btn-dangerous:hover,
+.ant-btn-dangerous:focus {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #b91c1c !important;
 }
 
 .ant-picker {
@@ -176,17 +214,38 @@
 }
 
 .ant-input,
-.ant-select-selector {
-  border-radius: 5px !important;
+.ant-select-selector,
+.ant-picker,
+.ant-input-number,
+.ant-input-affix-wrapper {
+  border-radius: 8px !important;
+  border-color: #e4e4e7 !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.ant-input:hover,
+.ant-select-selector:hover,
+.ant-picker:hover,
+.ant-input-number:hover {
+  border-color: #a1a1aa !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused,
+.ant-input-number-focused,
+.ant-input-affix-wrapper-focused {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
 }
 
 .ant-input {
-  padding: 5.5px 11px !important;
+  padding: 7px 12px !important;
 }
 
-/* .ant-picker, */
 .ant-input-number {
-  border-radius: 5px !important;
+  border-radius: 8px !important;
   padding: 5px 4px !important;
 }
 
@@ -196,6 +255,150 @@
 
 .ant-table {
   background-color: transparent !important;
+}
+
+/* Modern Ant Tables */
+.ant-table-thead > tr > th {
+  background-color: #fafafa !important;
+  color: #71717a !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border-bottom: 1px solid #e4e4e7 !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid #f4f4f5 !important;
+  color: #3f3f46;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background-color: #fafafa !important;
+}
+
+.ant-table-row-expand-icon-cell {
+  background-color: transparent !important;
+}
+
+/* Tags / Pills modernes */
+.ant-tag {
+  border-radius: 6px !important;
+  font-weight: 500;
+  padding: 2px 8px !important;
+  border: none;
+  font-size: 11px;
+}
+
+/* Modal */
+.ant-modal-content {
+  border-radius: 16px !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.ant-modal-header {
+  padding: 16px 24px !important;
+  border-bottom: 1px solid #f4f4f5 !important;
+  margin-bottom: 0 !important;
+}
+
+.ant-modal-title {
+  font-weight: 600 !important;
+  color: #18181b !important;
+}
+
+.ant-modal-body {
+  padding: 20px 24px !important;
+}
+
+.ant-modal-footer {
+  padding: 12px 24px !important;
+  border-top: 1px solid #f4f4f5 !important;
+  margin-top: 0 !important;
+}
+
+/* Drawer */
+.ant-drawer-header {
+  border-bottom: 1px solid #f4f4f5 !important;
+}
+
+.ant-drawer-title {
+  font-weight: 600 !important;
+  color: #18181b !important;
+}
+
+/* Dropdown menu */
+.ant-dropdown-menu {
+  border-radius: 10px !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
+  padding: 4px !important;
+}
+
+.ant-dropdown-menu-item {
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background-color: #fafafa !important;
+}
+
+/* Form */
+.ant-form-item-label > label {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #3f3f46 !important;
+}
+
+/* Pagination ant */
+.ant-pagination .ant-pagination-item {
+  border-radius: 6px !important;
+  border-color: #e4e4e7 !important;
+}
+
+.ant-pagination .ant-pagination-item-active {
+  background-color: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+}
+
+.ant-pagination .ant-pagination-item-active a {
+  color: #ffffff !important;
+}
+
+.ant-pagination .ant-pagination-prev .ant-pagination-item-link,
+.ant-pagination .ant-pagination-next .ant-pagination-item-link {
+  border-radius: 6px !important;
+  border-color: #e4e4e7 !important;
+}
+
+/* Card antd */
+.ant-card {
+  border-radius: 12px !important;
+  border: 1px solid #e4e4e7 !important;
+  box-shadow: none !important;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid #f4f4f5 !important;
+  min-height: 48px !important;
+}
+
+.ant-card-head-title {
+  font-weight: 600 !important;
+  color: #18181b !important;
+}
+
+/* Tabs */
+.ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #4f46e5 !important;
+  font-weight: 500;
+}
+
+.ant-tabs-ink-bar {
+  background: #4f46e5 !important;
 }
 
 .ant-input-affix-wrapper-status-error:not(
