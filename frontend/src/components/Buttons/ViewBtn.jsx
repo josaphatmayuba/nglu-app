@@ -1,4 +1,4 @@
-import { EyeOutlined } from "@ant-design/icons";
+import { Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const ViewBtn = ({ path, title }) => {
@@ -6,14 +6,14 @@ const ViewBtn = ({ path, title }) => {
     <div>
       {title ? (
         <Link to={path}>
-          <button className='flex justify-center items-center gap-2 rounded'>
-            <EyeOutlined className='text-[1rem]' /> {title}
+          <button className="flex items-center gap-2 py-1 text-ink-700 hover:text-brand-600 transition rounded">
+            <Eye className="w-4 h-4" /> {title}
           </button>
         </Link>
       ) : (
         <Link to={path}>
-          <button className='flex justify-center items-center bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded mr-2'>
-            <EyeOutlined />
+          <button className="flex justify-center items-center bg-brand-600 hover:bg-brand-700 text-white py-2 px-3 rounded-lg mr-2 transition shadow-sm">
+            <Eye className="w-4 h-4" />
           </button>
         </Link>
       )}

@@ -31,7 +31,7 @@ export default function Filter({ setPageConfig, filters }) {
       {filteredFromSelected.map((item) => {
         const { className, popupClassName } = item;
         return (
-          <div key={item.key} className='flex bg-[#F4F5F6] rounded-md pr-2'>
+          <div key={item.key} className='flex items-center bg-ink-100 border border-ink-200 rounded-lg pr-2'>
             <div
               className={cn(
                 "filterTag float-left min-w-[100px] max-w-[150px]",
@@ -68,6 +68,8 @@ export default function Filter({ setPageConfig, filters }) {
                   return prev.filter((n) => n !== item.key);
                 })
               }
+              className="text-ink-500 hover:text-ink-900 transition"
+              title="Retirer le filtre"
             >
               <RxCross2 />
             </button>

@@ -39,43 +39,44 @@ export default function ModalUi({
       {button ? <span onClick={handleClick}>{button}</span> : null}
       {(openLocal || open) &&
         createPortal(
-          <div className="h-screen w-screen absolute top-0 left-0 right-0 z-[31] bottom-0 flex items-center justify-center">
+          <div className="h-screen w-screen fixed top-0 left-0 right-0 z-[31] bottom-0 flex items-center justify-center p-4">
             <div
               onClick={outsideClick ? handleClose : null}
-              className="absolute inset-0 bg-black opacity-70"></div>
+              className="absolute inset-0 bg-ink-900/50 backdrop-blur-sm"></div>
             <div
               className={cn(
-                `relative  bg-modalBg  min-w-[370px] w-screen md:w-auto h-full md:h-auto md:max-h-[90%]  md:rounded-md flex flex-col`,
+                `relative bg-white min-w-[320px] w-full md:w-auto max-h-[90vh] rounded-2xl border border-ink-200 shadow-2xl flex flex-col overflow-hidden`,
                 { [className]: className }
               )}>
-              <div className="bg-modalBg flex justify-between items-start sticky top-0 md:rounded-t-md">
+              <div className="bg-white flex justify-between items-center sticky top-0 border-b border-ink-100 rounded-t-2xl">
                 <div
                   className={cn(
-                    "text-lg font-semibold text-gray-600 select-none w-full",
+                    "text-base font-semibold text-ink-900 select-none w-full",
                     {
-                      "p-2": title,
+                      "px-5 py-4": title,
                     }
                   )}>
                   {title}
                 </div>
 
                 {(extra || closeIcon) && (
-                  <div className="flex  gap-2 p-2">
+                  <div className="flex items-center gap-1 px-3 py-2">
                     {extra || null}
                     {closeIcon && (
                       <button
-                        className="p-2 rounded-md hover:bg-gray-200 hover:text-black"
-                        onClick={handleClose}>
+                        className="p-1.5 rounded-md text-ink-500 hover:bg-ink-100 hover:text-ink-900 transition"
+                        onClick={handleClose}
+                        aria-label="Fermer">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className="h-6 w-6"
+                          className="h-5 w-5"
                           fill="none"
                           viewBox="0 0 24 24"
-                          stroke="currentColor">
+                          stroke="currentColor"
+                          strokeWidth="2">
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            strokeWidth="2"
                             d="M6 18L18 6M6 6l12 12"
                           />
                         </svg>
@@ -84,7 +85,7 @@ export default function ModalUi({
                   </div>
                 )}
               </div>
-              <div className="flex-grow px-2 pb-2 overflow-y-auto overflow-x-hidden">
+              <div className="flex-grow px-5 py-4 overflow-y-auto overflow-x-hidden">
                 {children}
               </div>
             </div>
