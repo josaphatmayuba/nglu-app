@@ -625,16 +625,40 @@
 .immo-actions .primary,
 .immo-panel-head > .primary {
   background: #4f46e5;
+  background-color: #4f46e5;
   border: 1px solid #4f46e5;
-  color: #fff;
-  padding: 0 16px;
+  color: #fff !important;
+  padding: 0 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+}
+
+/* Force icon + text colors regardless of parent inherits / Tailwind preflight */
+.immo-primary-button,
+.immo-primary-button span,
+.immo-primary-button svg,
+.immo-actions .primary,
+.immo-actions .primary svg,
+.immo-panel-head > .primary,
+.immo-panel-head > .primary svg {
+  color: #fff !important;
+  stroke: currentColor;
 }
 
 .immo-primary-button:hover,
 .immo-actions .primary:hover,
 .immo-panel-head > .primary:hover {
   background: #4338ca;
+  background-color: #4338ca;
   border-color: #4338ca;
+  box-shadow: 0 6px 16px rgba(67, 56, 202, 0.35);
+}
+
+.immo-primary-button:active,
+.immo-actions .primary:active,
+.immo-panel-head > .primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 6px rgba(67, 56, 202, 0.25);
 }
 
 .immo-metrics-grid {
