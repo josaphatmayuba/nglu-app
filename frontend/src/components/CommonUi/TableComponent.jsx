@@ -1,10 +1,7 @@
-import Button from "@/UI/Button";
 import CSV from "@/UI/CSV";
-import Menu from "@/UI/Menu";
-import { FiFilter } from "react-icons/fi";
 import { Popover } from "antd";
 import { useEffect, useState } from "react";
-import { BsThreeDotsVertical } from "react-icons/bs";
+import { MoreHorizontal } from "lucide-react";
 import Pagination from "../../UI/Pagination";
 import Table from "../../UI/Table";
 import ColVisibilityDropdown from "../Shared/ColVisibilityDropdown";
@@ -61,16 +58,17 @@ const TableComponent = ({
       <div className="mt-2">
         {/* Mobile View */}
         {isMobile ? (
-          <div className="p-4 sm:p-6">
+          <div className="bg-white rounded-xl border border-ink-200 overflow-hidden">
+            <div className="p-3 border-b border-ink-100 space-y-3">
             {/* Search Bar */}
             {isSearch && (
-              <div className="w-full mb-3">
+              <div className="w-full">
                 <CommonSearch setPageConfig={setPageConfig} />
               </div>
             )}
 
             {/* Filter and 3-Dot Menu */}
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex justify-between items-center gap-2">
               {/* Filter Button */}
               <Filter setPageConfig={setPageConfig} filters={filters} />
 
@@ -91,14 +89,15 @@ const TableComponent = ({
                 arrow={false}
                 trigger="click"
               >
-                <button className="p-2 hover:bg-gray-100 rounded-md transition-colors">
-                  <BsThreeDotsVertical className="text-lg text-gray-600" />
+                <button className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition-colors">
+                  <MoreHorizontal className="w-4 h-4" />
                 </button>
               </Popover>
             </div>
+            </div>
 
             {/* Responsive Mobile Card Design */}
-            <div className="space-y-4">
+            <div className="space-y-3 p-3">
               {list?.length > 0 ? (
                 list.map((item) => (
                   <ResponsiveMobileCard
@@ -108,17 +107,17 @@ const TableComponent = ({
                   />
                 ))
               ) : (
-                <div className="text-center text-gray-500">No Records Found</div>
+                <div className="text-center text-ink-500 py-10">Aucun enregistrement</div>
               )}
             </div>
           </div>
         ) : (
           // Desktop View
-          <>
-            <div className="w-full px-3 flex flex-wrap gap-2 items-center flex-col-reverse sm:flex-row justify-between mb-3">
-              <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full md:w-auto">
+          <div className="bg-white rounded-xl border border-ink-200 overflow-hidden">
+            <div className="w-full px-3 py-3 flex flex-wrap gap-2 items-center flex-col-reverse sm:flex-row justify-between border-b border-ink-100">
+              <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full md:w-auto min-w-0">
                 {isSearch && (
-                  <div className="w-full sm:w-[250px]">
+                  <div className="w-full sm:w-[260px]">
                     <CommonSearch setPageConfig={setPageConfig} />
                   </div>
                 )}
@@ -149,7 +148,7 @@ const TableComponent = ({
               scroll={list?.length > 10 ? { y: 500 } : {}}
               loadingUiSize={loadingUiSize}
             />
-          </>
+          </div>
         )}
       </div>
 

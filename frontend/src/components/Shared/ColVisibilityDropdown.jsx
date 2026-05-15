@@ -1,4 +1,5 @@
 import { Select, Tag } from "antd";
+import { Columns3 } from "lucide-react";
 
 const tagRender = (props) => {
   const { label, closable, onClose } = props;
@@ -45,15 +46,19 @@ const ColVisibilityDropdown = ({ options, columns, columnsToShowHandler }) => {
   };
 
   return (
-    <div className='min-w-[110px] md:max-w-[165px] w-1/2 md:w-auto'>
+    <div className='min-w-[120px] md:max-w-[165px] w-1/2 md:w-auto'>
       <Select
         mode='multiple'
         tagRender={tagRender}
         defaultValue={defaultValue}
         maxTagCount={0}
         options={modOptions}
-        maxTagPlaceholder='Columns'
-        placeholder='Column Visibility'
+        maxTagPlaceholder={
+          <span className="inline-flex items-center gap-1">
+            <Columns3 size={14} /> Colonnes
+          </span>
+        }
+        placeholder='Colonnes'
         onChange={handleChange}
         popupClassName='w-[200px]'
         showSearch={false}

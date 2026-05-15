@@ -71,7 +71,7 @@ const Table = ({
     <div className="tableContainer tableScrollBar w-full overflow-x-auto">
       <div
         style={{ maxHeight }}
-        className="bg-white overflow-x-auto overflow-y-auto p-0 rounded-lg"
+        className="bg-white overflow-x-auto overflow-y-auto p-0"
       >
         <table style={tableStyle} className={tableClass}>
           {/* Header */}
@@ -86,7 +86,7 @@ const Table = ({
                 <th
                   key={column.key ?? index}
                   className={cn(
-                    "py-2.5 sm:py-3 px-2 sm:px-4 text-left font-medium align-middle whitespace-nowrap"
+                    "py-3 px-4 text-left font-medium align-middle whitespace-nowrap"
                   )}
                 >
                   <span>{column.title || null}</span>
@@ -113,7 +113,7 @@ const Table = ({
                           undefined,
                       }}
                       className={cn(
-                        "py-2.5 sm:py-3 px-2 sm:px-4 align-middle text-ink-700 text-xs sm:text-sm whitespace-nowrap break-words",
+                        "py-3 px-4 align-middle text-ink-700 text-xs sm:text-sm whitespace-nowrap break-words",
                         {
                           "rounded-bl-lg":
                             index === data.length - 1 && colIndex === 0,
@@ -166,10 +166,10 @@ const Table = ({
               <BsDatabaseExclamation className="text-ink-400" size={22} />
             </div>
             <h4 className="text-sm md:text-base font-medium text-ink-700">
-              No Records Found
+              Aucun enregistrement
             </h4>
             <p className="text-ink-500 text-xs md:text-sm mt-1">
-              Try adjusting your filters or search query
+              Ajustez vos filtres ou votre recherche
             </p>
           </div>
         )}

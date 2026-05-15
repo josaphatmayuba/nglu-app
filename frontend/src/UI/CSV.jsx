@@ -1,5 +1,5 @@
 import { CSVLink } from "react-csv";
-import { AiOutlineDownload } from "react-icons/ai";
+import { Download } from "lucide-react";
 
 export default function CSV({
   columns,
@@ -32,14 +32,14 @@ export default function CSV({
   });
 
   return (
-    <div className="flex bg-[#F4F5F6] rounded-md p-2 cursor-pointer items-center gap-2 border">
-      <AiOutlineDownload size={16} />
+    <div className="flex cursor-pointer items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-700 transition hover:border-ink-300 hover:bg-ink-50">
+      <Download className="h-4 w-4" />
       <CSVLink
         data={newList ? newList : ""}
-        className="text-black"
+        className="text-ink-700"
         filename={title || "data"}
       >
-        {btnName ? btnName : "Download CSV"}
+        <span className="hidden sm:inline">{btnName ? btnName : "Exporter"}</span>
       </CSVLink>
     </div>
   );

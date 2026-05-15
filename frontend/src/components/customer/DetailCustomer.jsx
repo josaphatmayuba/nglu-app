@@ -35,17 +35,25 @@ const DetailCustomer = () => {
       <div className="">
         {customer ? (
           <Fragment key={customer.id}>
-            <div className="flex flex-col md:flex-row gap-2 md:gap-4">
-              <Card className="w-full md:w-2/3" bodyClass={"p-0"}>
-                <div className="flex justify-between mx-2 py-2 border-b items-center">
-                  <h2 className="text-lg font-semibold">Customer Details</h2>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_270px]">
+              <Card bodyClass={"p-0"}>
+                <div className="flex items-center justify-between border-b border-ink-200 px-5 py-4">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight text-ink-900">
+                      Détails client
+                    </h2>
+                    <p className="mt-1 text-sm text-ink-500">
+                      Factures, retours et historique des transactions
+                    </p>
+                  </div>
                 </div>
-                <Tabs className="mt-4">
+                <Tabs>
                   <Tab
+                    tabKey="invoices"
                     label={
-                      <span>
-                        Invoice{" "}
-                        <span className="ml-2 rounded-full bg-slate-300 text-slate-700 px-1">
+                      <span className="inline-flex items-center gap-2">
+                        Factures
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink-100 px-1.5 text-xs text-ink-600">
                           {customer?.totalSaleInvoice}
                         </span>
                       </span>
@@ -56,10 +64,11 @@ const DetailCustomer = () => {
                     />
                   </Tab>
                   <Tab
+                    tabKey="return-invoices"
                     label={
-                      <span>
-                        Return Invoice{" "}
-                        <span className="ml-2 rounded-full bg-slate-300 text-slate-700 px-1">
+                      <span className="inline-flex items-center gap-2">
+                        Retours
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-ink-100 px-1.5 text-xs text-ink-600">
                           {customer?.totalReturnSaleInvoice}
                         </span>
                       </span>
@@ -68,18 +77,18 @@ const DetailCustomer = () => {
                       list={customer?.returnSaleInvoice}
                     />
                   </Tab>
-                  <Tab label="Transactions">
+                  <Tab tabKey="transactions" label="Transactions">
                     <CustomerTransactionList list={customer?.allTransaction} />
                   </Tab>
                 </Tabs>
               </Card>
-              <div className="w-full md:w-1/3 flex flex-col gap-2 md:gap-4">
-                <Card title="Customer">
+              <div className="flex flex-col gap-4">
+                <Card title="Client">
                   <List
                     labelClassName="w-[30%] pl-4"
                     list={[
                       {
-                        label: "Name",
+                        label: "Nom",
                         value: customer?.username,
                       },
                       {
@@ -87,11 +96,11 @@ const DetailCustomer = () => {
                         value: customer?.email || "N/A",
                       },
                       {
-                        label: "Phone",
+                        label: "Téléphone",
                         value: customer?.phone,
                       },
                       {
-                        label: "Address",
+                        label: "Adresse",
                         value: customer?.address,
                       },
                     ]}
@@ -102,13 +111,13 @@ const DetailCustomer = () => {
                     labelClassName="w-[30%] pl-4"
                     list={[
                       {
-                        label: "Total Amount",
+                        label: "Total",
                         value: customer?.totalAmount
                           ? Number(customer.totalAmount).toFixed(2)
                           : 0,
                       },
                       {
-                        label: "Return Amount",
+                        label: "Retours",
                         value: (
                           <div className="before:content-['-'] relative before:absolute before:text-red-500 before:font-bold before:-left-3 before:top-0">
                             {customer?.totalReturnAmount}
@@ -116,7 +125,7 @@ const DetailCustomer = () => {
                         ),
                       },
                       {
-                        label: "Paid Amount",
+                        label: "Payé",
                         value: (
                           <div className="before:content-['-'] relative before:absolute before:text-red-500 before:font-bold before:-left-3 before:top-0">
                             {customer?.totalPaidAmount}
@@ -125,7 +134,7 @@ const DetailCustomer = () => {
                         className: "border-b pb-1",
                       },
                       {
-                        label: "Due Amount",
+                        label: "Dû",
                         value: customer?.dueAmount,
                       },
                     ]}

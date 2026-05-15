@@ -28,7 +28,7 @@ const ResponsiveMobileCard = ({ item, columns }) => {
     };
 
     return (
-        <div className="bg-white border border-ink-200 rounded-xl p-4 sm:p-5 hover:border-ink-300 hover:shadow-sm transition w-full overflow-hidden">
+        <div className="bg-white border border-ink-200 rounded-xl p-4 sm:p-5 hover:border-brand-300 hover:shadow-sm transition w-full overflow-hidden">
             {/* Header with action menu */}
             <div className="flex flex-wrap justify-between items-start mb-3 pb-3 border-b border-ink-100 gap-3">
                 <div className="flex-1 min-w-0">
@@ -54,7 +54,7 @@ const ResponsiveMobileCard = ({ item, columns }) => {
                             placement="bottomRight"
                             arrow={false}
                             trigger="click">
-                            <button className="p-2 hover:bg-ink-100 rounded-md transition-colors">
+                            <button className="p-2 hover:bg-ink-100 rounded-lg transition-colors">
                                 <BsThreeDots className="text-lg text-ink-500" />
                             </button>
                         </Popover>

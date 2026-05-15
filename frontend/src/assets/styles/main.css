@@ -216,6 +216,20 @@
   width: 100%;
 }
 
+.common-search input {
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+.filterTag .ant-select-selector,
+.ant-select-selector {
+  min-height: 36px !important;
+}
+
+.filterTag .ant-select-selector {
+  background-color: #ffffff !important;
+  border-color: #e4e4e7 !important;
+}
+
 .ant-input,
 .ant-select-selector,
 .ant-picker,
@@ -224,6 +238,12 @@
   border-radius: 8px !important;
   border-color: #e4e4e7 !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.ant-select-selection-placeholder,
+.ant-select-selection-item {
+  color: #52525b !important;
+  font-size: 13px !important;
 }
 
 .ant-input:hover,

@@ -80,7 +80,7 @@ export default function Filter({ setPageConfig, filters }) {
         <div className='filterTag float-left min-w-[90px] max-w-[150px]'>
           <Select
             placeholder={<div className='flex items-center gap-1'>
-              <FilterIcon size={14} /><span>{"Filter"}</span>
+              <FilterIcon size={14} /><span>{"Filtres"}</span>
             </div>}
             className=''
             popupClassName='w-[150px]'
@@ -89,7 +89,7 @@ export default function Filter({ setPageConfig, filters }) {
             mode='multiple'
             style={{ width: "100%" }}
             maxTagPlaceholder={(item) => <div className='flex items-center gap-1'>
-              <FilterIcon size={14} /><span>{"Filter"}</span>
+              <FilterIcon size={14} /><span>{"Filtres"}</span>
             </div>}
             maxTagCount={0}
             onChange={(value) => setSelectedFilters(value)}
