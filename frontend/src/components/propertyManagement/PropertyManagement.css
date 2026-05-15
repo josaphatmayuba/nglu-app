@@ -625,30 +625,32 @@
    Applies to:
      - .immo-primary-button (used in toolbars + section actions)
      - any button.primary nested inside the immobilier page
-   Layout properties + colors are forced together so the button
-   never appears washed out / borderless. */
+   Uses !important defensively to win against Tailwind preflight
+   (button{background-color:transparent}) and any future global resets. */
 .immo-page button.primary,
 .immo-primary-button,
 .immo-actions .primary,
 .immo-panel-head > .primary,
 .immo-contract-footer .primary {
-  align-items: center;
-  background: #4f46e5;
-  background-color: #4f46e5;
-  border: 1px solid #4f46e5;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(79, 70, 229, 0.20);
+  align-items: center !important;
+  background: #4f46e5 !important;
+  background-color: #4f46e5 !important;
+  background-image: none !important;
+  border: 1px solid #4f46e5 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(79, 70, 229, 0.20) !important;
   color: #fff !important;
-  cursor: pointer;
-  display: inline-flex;
-  font-size: 14px;
-  font-weight: 500;
-  gap: 8px;
-  height: 38px;
-  justify-content: center;
-  padding: 0 14px;
-  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
-  white-space: nowrap;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  gap: 8px !important;
+  height: 38px !important;
+  justify-content: center !important;
+  padding: 0 14px !important;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s !important;
+  white-space: nowrap !important;
+  opacity: 1 !important;
 }
 
 /* Force icon + text colors against Tailwind preflight / Ant Design resets */
@@ -667,10 +669,10 @@
 .immo-actions .primary:hover,
 .immo-panel-head > .primary:hover,
 .immo-contract-footer .primary:hover {
-  background: #4338ca;
-  background-color: #4338ca;
-  border-color: #4338ca;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 18px rgba(67, 56, 202, 0.32);
+  background: #4338ca !important;
+  background-color: #4338ca !important;
+  border-color: #4338ca !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 6px 18px rgba(67, 56, 202, 0.32) !important;
 }
 
 .immo-page button.primary:active,
