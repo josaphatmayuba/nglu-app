@@ -14,6 +14,8 @@ import {
   realEstateUnits,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { ContractTemplatesService } from "./contract-templates.service";
+import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
 
 type LeaseDetails = {
@@ -49,12 +51,15 @@ type CompanyInfo = {
 
 @Injectable()
 export class ContractsService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly templates: ContractTemplatesService,
+  ) {}
 
   async createContract(dto: CreateContractDto) {
     const lease = await this.getLeaseDetails(dto.leaseId);
     const company = await this.getCompanyInfo();
-    const content = dto.contractContent ?? this.generateContent(lease, company);
+    const content = dto.contractContent ?? (await this.renderContent(lease, company, dto.templateId));
 
     const [result] = await this.db.insert(realEstateContracts).values({
       leaseId: dto.leaseId,
@@ -69,6 +74,81 @@ export class ContractsService {
     const id = Number(result.insertId);
     await this.log(id, "created", null, null, `Contract created for lease #${dto.leaseId}`);
     return this.getContract(id);
+  }
+
+  /**
+   * Pick the active template (or one explicitly chosen) and render it.
+   * If no template is found, fall back to the legacy hardcoded HTML so existing flows keep working.
+   */
+  private async renderContent(lease: LeaseDetails, company: CompanyInfo, templateId?: number): Promise<string> {
+    let template = templateId ? await this.templates.getById(templateId).catch(() => null) : null;
+
+    if (!template) {
+      const type = this.resolveTemplateType(lease.unitType, lease.propertyType);
+      template = await this.templates.getActiveByType(type);
+    }
+
+    if (!template) {
+      // Fallback: legacy hardcoded HTML so a missing template never breaks generation.
+      return this.generateContent(lease, company);
+    }
+
+    const vars = this.buildVariables(lease, company);
+    return ContractTemplatesService.applyVariables(template.body, vars);
+  }
+
+  private resolveTemplateType(unitType: string | null, propertyType: string | null): ContractTemplateType {
+    const haystack = `${unitType ?? ""} ${propertyType ?? ""}`.toLowerCase();
+    if (/(office|bureau|commercial|commerce|shop|magasin|store)/.test(haystack)) return "commercial";
+    if (/(short|saison|courte|court|temporary)/.test(haystack)) return "short_term";
+    return "residential";
+  }
+
+  /**
+   * Build the [PLACEHOLDER] map used when rendering a template.
+   * Keys mirror the placeholders used in the seeded templates.
+   * When a value is empty, the placeholder is preserved verbatim so the gestionnaire sees what's missing.
+   */
+  private buildVariables(lease: LeaseDetails, company: CompanyInfo): Record<string, string> {
+    const today = this.formatDate(new Date());
+    const startDate = this.formatDate(lease.startDate);
+    const endDate = this.formatDate(lease.endDate);
+    const rawMonths = this.monthsBetween(lease.startDate, lease.endDate);
+    const numberOfMonths = rawMonths > 0 ? String(rawMonths) : "";
+    const rentAmount = this.formatMoney(lease.rentAmount);
+    const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const guaranteeMonths = this.guaranteeMonthsRaw(lease.rentAmount, lease.securityDeposit);
+    const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ");
+    const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
+
+    return {
+      "NOM COMPLET DU BAILLEUR": company.companyName ?? "",
+      "ADRESSE DU BAILLEUR": company.address ?? "",
+      "TÉLÉPHONE DU BAILLEUR": company.phone ?? "",
+      "EMAIL DU BAILLEUR": company.email ?? "",
+      "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
+      "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
+      "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
+      "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
+      "NUMÉRO DE PIÈCE D'IDENTITÉ": "", // collected outside of the lease form for now
+      "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION": rentalAddress,
+      "TYPE DE LOGEMENT": destination,
+      "PROPRIÉTÉ": lease.propertyName ?? "",
+      "UNITÉ": lease.unitName ?? "",
+      "RÉFÉRENCE BAIL": lease.reference ?? "",
+      "NUMÉRO DE MOIS": numberOfMonths,
+      "DATE DE DÉBUT DE BAIL": startDate,
+      "DATE DE DÉBUT DE BAIL JJ/MM/AAAA": startDate,
+      "DATE DE FIN DE BAIL": endDate,
+      "DATE DE FIN DE BAIL JJ/MM/AAAA": endDate,
+      "MONTANT DU LOYER": rentAmount,
+      "MONTANT GARANTIE": securityDeposit,
+      "NUMÉRO DE MOIS DE GARANTIE": guaranteeMonths,
+      "VILLE": lease.propertyCity ?? "",
+      "DATE DE SIGNATURE DE BAIL": today,
+      "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA": today,
+      "DATE DU JOUR": today,
+    };
   }
 
   async listContracts() {
@@ -198,6 +278,73 @@ export class ContractsService {
     }
 
     return { message: "Contract signed successfully." };
+  }
+
+  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }) {
+    const rows = await this.db
+      .select()
+      .from(realEstateLeases)
+      .where(eq(realEstateLeases.id, leaseId))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Bail introuvable.");
+    const current = rows[0];
+
+    const baseStart = current.endDate ? new Date(current.endDate as unknown as string) : new Date();
+    if (current.endDate) {
+      // start = day after current lease end
+      baseStart.setDate(baseStart.getDate() + 1);
+    }
+    const newStart = dto.startDate ? new Date(dto.startDate) : baseStart;
+
+    let newEnd: Date;
+    if (dto.endDate) {
+      newEnd = new Date(dto.endDate);
+    } else if (current.startDate && current.endDate) {
+      const months = this.monthsBetween(current.startDate as unknown as string, current.endDate as unknown as string) || 12;
+      newEnd = new Date(newStart);
+      newEnd.setMonth(newEnd.getMonth() + months);
+    } else {
+      newEnd = new Date(newStart);
+      newEnd.setFullYear(newEnd.getFullYear() + 1);
+    }
+
+    const formatDate = (d: Date) => d.toISOString().slice(0, 10);
+
+    const reference = `${current.reference ?? `BAIL-${current.id}`}-R${Date.now().toString().slice(-4)}`;
+    const rentAmount = dto.rentAmount != null ? String(dto.rentAmount) : current.rentAmount;
+
+    const [insertResult] = await this.db.insert(realEstateLeases).values({
+      reference,
+      propertyId: current.propertyId,
+      unitId: current.unitId,
+      tenantId: current.tenantId,
+      startDate: formatDate(newStart),
+      endDate: formatDate(newEnd),
+      nextInvoiceDate: formatDate(newStart),
+      billingCycle: current.billingCycle,
+      rentAmount,
+      securityDeposit: current.securityDeposit,
+      moveInMeterReading: current.moveInMeterReading,
+      moveInNotes: current.moveInNotes,
+      terms: current.terms,
+      status: "active",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const newLeaseId = Number(insertResult.insertId);
+
+    if (dto.endCurrentLease) {
+      await this.db
+        .update(realEstateLeases)
+        .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(eq(realEstateLeases.id, leaseId));
+    }
+
+    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId });
+
+    return { lease: { id: newLeaseId, reference }, contract: newContract };
   }
 
   async deleteContract(id: number) {
@@ -481,32 +628,36 @@ export class ContractsService {
   }
 
   private durationInMonths(start: Date | string | null | undefined, end: Date | string | null | undefined) {
+    const months = this.monthsBetween(start, end);
+    if (months <= 0) return "[NUMÉRO DE MOIS] mois";
+    return `${months} mois`;
+  }
+
+  private monthsBetween(start: Date | string | null | undefined, end: Date | string | null | undefined): number {
     const startParts = this.dateParts(start);
     const endParts = this.dateParts(end);
-
-    if (!startParts || !endParts) {
-      return "[NUMÉRO DE MOIS] mois";
-    }
+    if (!startParts || !endParts) return 0;
 
     const months =
       (endParts.year - startParts.year) * 12 +
       (endParts.month - startParts.month) +
       (endParts.day >= startParts.day ? 0 : -1);
 
-    return `${Math.max(months, 0)} mois`;
+    return Math.max(months, 0);
   }
 
   private guaranteeMonths(rent: string | null | undefined, deposit: string | null | undefined) {
+    const raw = this.guaranteeMonthsRaw(rent, deposit);
+    if (!raw) return "[NUMÉRO DE MOIS DE GARANTIE] mois de loyer";
+    return `${raw} mois de loyer`;
+  }
+
+  private guaranteeMonthsRaw(rent: string | null | undefined, deposit: string | null | undefined): string {
     const rentAmount = Number(rent ?? 0);
     const depositAmount = Number(deposit ?? 0);
-
-    if (!rentAmount || !depositAmount) {
-      return "[NUMÉRO DE MOIS DE GARANTIE] mois de loyer";
-    }
-
+    if (!rentAmount || !depositAmount) return "";
     const months = depositAmount / rentAmount;
-    const rounded = Number.isInteger(months) ? months.toString() : months.toFixed(2).replace(".", ",");
-    return `${rounded} mois de loyer`;
+    return Number.isInteger(months) ? months.toString() : months.toFixed(2).replace(".", ",");
   }
 
   private dateParts(value: Date | string | null | undefined) {

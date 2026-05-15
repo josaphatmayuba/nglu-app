@@ -12,7 +12,9 @@ const initialState = {
   payments: [],
   maintenance: [],
   contracts: [],
+  contractTemplates: [],
   loading: false,
+  templatesLoading: false,
   error: "",
 };
 
@@ -364,6 +366,82 @@ export const deleteContract = createAsyncThunk(
   },
 );
 
+// ── Contract templates ─────────────────────────────────────────────────────
+
+export const loadContractTemplates = createAsyncThunk(
+  "propertyManagement/loadContractTemplates",
+  async () => {
+    try {
+      const { data } = await axios.get("property-management/contract-templates");
+      return successHandler(data);
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const saveContractTemplate = createAsyncThunk(
+  "propertyManagement/saveContractTemplate",
+  async ({ id, values }) => {
+    try {
+      const data = id
+        ? await request("put", `property-management/contract-templates/${id}`, values)
+        : await request("post", "property-management/contract-templates", values);
+      return successHandler(data, id ? "Modèle mis à jour" : "Modèle créé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const setActiveContractTemplate = createAsyncThunk(
+  "propertyManagement/setActiveContractTemplate",
+  async (id) => {
+    try {
+      const data = await request("patch", `property-management/contract-templates/${id}/activate`);
+      return successHandler(data, "Modèle activé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const duplicateContractTemplate = createAsyncThunk(
+  "propertyManagement/duplicateContractTemplate",
+  async (id) => {
+    try {
+      const data = await request("post", `property-management/contract-templates/${id}/duplicate`);
+      return successHandler(data, "Modèle dupliqué");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const deleteContractTemplate = createAsyncThunk(
+  "propertyManagement/deleteContractTemplate",
+  async (id) => {
+    try {
+      const data = await request("delete", `property-management/contract-templates/${id}`);
+      return successHandler({ ...data, id }, "Modèle supprimé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const renewLease = createAsyncThunk(
+  "propertyManagement/renewLease",
+  async ({ id, values }) => {
+    try {
+      const data = await request("post", `property-management/leases/${id}/renew`, values || {});
+      return successHandler(data, "Bail renouvelé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
 // Public thunks (no auth header needed — use bare axios without interceptor)
 export const getContractForSigning = createAsyncThunk(
   "propertyManagement/getContractForSigning",
@@ -526,6 +604,55 @@ const propertyManagementSlice = createSlice({
         state.contracts = state.contracts.filter(
           (c) => c?.id !== action.payload.data?.id,
         );
+      })
+      .addCase(loadContractTemplates.pending, (state) => {
+        state.templatesLoading = true;
+      })
+      .addCase(loadContractTemplates.fulfilled, (state, action) => {
+        state.templatesLoading = false;
+        state.contractTemplates = (action.payload.data ?? []).filter(Boolean);
+      })
+      .addCase(loadContractTemplates.rejected, (state) => {
+        state.templatesLoading = false;
+      })
+      .addCase(saveContractTemplate.fulfilled, (state, action) => {
+        if (!action.payload.data) return;
+        const next = upsert(state.contractTemplates, action.payload.data);
+        // If this template was set active, deactivate other templates of the same type locally.
+        if (action.payload.data.isActive) {
+          const { id, type } = action.payload.data;
+          state.contractTemplates = next.map((tpl) =>
+            tpl?.type === type && tpl.id !== id ? { ...tpl, isActive: false } : tpl,
+          );
+        } else {
+          state.contractTemplates = next;
+        }
+      })
+      .addCase(setActiveContractTemplate.fulfilled, (state, action) => {
+        if (!action.payload.data) return;
+        const { id, type } = action.payload.data;
+        state.contractTemplates = state.contractTemplates.map((tpl) => {
+          if (!tpl) return tpl;
+          if (tpl.id === id) return { ...tpl, isActive: true };
+          if (tpl.type === type) return { ...tpl, isActive: false };
+          return tpl;
+        });
+      })
+      .addCase(duplicateContractTemplate.fulfilled, (state, action) => {
+        if (action.payload.data) {
+          state.contractTemplates = [action.payload.data, ...state.contractTemplates];
+        }
+      })
+      .addCase(deleteContractTemplate.fulfilled, (state, action) => {
+        state.contractTemplates = state.contractTemplates.filter(
+          (tpl) => tpl?.id !== action.payload.data?.id,
+        );
+      })
+      .addCase(renewLease.fulfilled, (state, action) => {
+        const newContract = action.payload.data?.contract;
+        if (newContract) {
+          state.contracts = [newContract, ...state.contracts];
+        }
       });
   },
 });

@@ -60,6 +60,7 @@ const ENDPOINTS = [
   { name: "transaction", type: "account" },
   { name: "transactionType", type: "account" },
   { name: "propertyManagement", type: "account" },
+  { name: "contractTemplate", type: "account" },
   { name: "account", type: "account" },
   { name: "adjust", type: "account" },
 

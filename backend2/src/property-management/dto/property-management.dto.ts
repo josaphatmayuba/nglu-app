@@ -679,6 +679,15 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   contractContent?: string;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: "ID du modèle de contrat à appliquer. Si omis, on prend le modèle actif du type du bien.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  templateId?: number;
 }
 
 export class SignContractDto {

@@ -265,6 +265,20 @@ export const realEstateContracts = mysqlTable("real_estate_contracts", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const realEstateContractTemplates = mysqlTable("real_estate_contract_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).default("residential").notNull(),
+  body: text("body").notNull(),
+  description: varchar("description", { length: 500 }),
+  isActive: boolean("is_active").default(false).notNull(),
+  version: int("version").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  updatedBy: bigint("updated_by", { mode: "number" }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audit_logs", {
   id: serial("id").primaryKey(),
   contractId: bigint("contract_id", { mode: "number" }).notNull(),
