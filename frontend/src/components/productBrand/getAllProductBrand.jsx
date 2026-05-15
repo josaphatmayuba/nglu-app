@@ -6,6 +6,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteProductBrand,
   loadAllProductBrandByPaginated,
@@ -125,12 +126,10 @@ const GetAllProductBrand = (props) => {
 
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Product Brand"}
-        extra={
+      <PageHeader
+        title="Marques"
+        subtitle="Marques de produits du catalogue"
+        actions={
           <CreateDrawer
             permission={"create-productBrand"}
             title={"Create Brand"}
@@ -139,6 +138,10 @@ const GetAllProductBrand = (props) => {
             <AddProductBrand />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-productBrand"}>
           <TableComponent

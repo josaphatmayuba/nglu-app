@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteShift,
   loadAllShiftPaginated,
@@ -114,38 +115,42 @@ const GetAllShift = () => {
     },
   ];
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Shift List"}
-      extra={
-        <CreateDrawer
-          permission={"create-shift"}
-          title={"Create Shift"}
-          width={35}
-        >
-          <AddShift />
-        </CreateDrawer>
-      }
-    >
-      <UserPrivateComponent permission={"readAll-shift"}>
-        <TableComponent
-          actionPermission={[
-            "update-shift",
-            "delete-shift",
-            "readSingle-shift",
-          ]}
-          total={total}
-          columns={columns}
-          list={list}
-          loading={loading}
-          setPageConfig={setPageConfig}
-          title={"Shift List"}
-          filters={filters}
-        />
-      </UserPrivateComponent>
-    </Card>
+    <>
+      <PageHeader
+        title="Plannings"
+        subtitle="Horaires et rotations du personnel"
+        actions={
+          <CreateDrawer
+            permission={"create-shift"}
+            title={"Create Shift"}
+            width={35}
+          >
+            <AddShift />
+          </CreateDrawer>
+        }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
+        <UserPrivateComponent permission={"readAll-shift"}>
+          <TableComponent
+            actionPermission={[
+              "update-shift",
+              "delete-shift",
+              "readSingle-shift",
+            ]}
+            total={total}
+            columns={columns}
+            list={list}
+            loading={loading}
+            setPageConfig={setPageConfig}
+            title={"Shift List"}
+            filters={filters}
+          />
+        </UserPrivateComponent>
+      </Card>
+    </>
   );
 };
 

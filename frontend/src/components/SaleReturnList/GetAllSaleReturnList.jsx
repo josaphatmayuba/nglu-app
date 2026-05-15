@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllSaleReturn } from "../../redux/rtk/features/SaleReturnList/SaleReturnListSlice";
 import { stringShorter } from "../../utils/functions";
 import ViewBtn from "../Buttons/ViewBtn";
@@ -93,22 +94,25 @@ export default function GetAllSaleReturnList() {
     setEndDate(endDate);
   };
   return (
+    <>
+      <PageHeader
+        title="Retours de vente"
+        subtitle="Marchandises retournées par les clients"
+        actions={
+          <RangePicker
+            onCalendarChange={onCalendarChange}
+            defaultValue={[
+              dayjs(startDate, "YYYY-MM-DD"),
+              dayjs(endDate, "YYYY-MM-DD"),
+            ]}
+            className='range-picker'
+            style={{ maxWidth: "400px" }}
+          />
+        }
+      />
     <Card
       className='max-md:border-0 max-md:bg-white'
       bodyClass='max-md:p-0 '
-      headClass='border-none'
-      title={"Sale Return "}
-      extra={
-        <RangePicker
-          onCalendarChange={onCalendarChange}
-          defaultValue={[
-            dayjs(startDate, "YYYY-MM-DD"),
-            dayjs(endDate, "YYYY-MM-DD"),
-          ]}
-          className='range-picker'
-          style={{ maxWidth: "400px" }}
-        />
-      }
     >
       <UserPrivateComponent permission={"readAll-returnSaleInvoice"}>
         <TableComponent
@@ -122,5 +126,6 @@ export default function GetAllSaleReturnList() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

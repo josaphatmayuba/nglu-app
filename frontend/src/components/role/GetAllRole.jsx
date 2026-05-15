@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteRole,
   loadRolePaginated,
@@ -95,18 +96,21 @@ const GetAllRole = () => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      title={"Roles"}
-      extra={
-        <CreateDrawer
-          permission={"create-role"}
-          title={"Create Role"}
-          width={35}
-        >
-          <AddRole />
-        </CreateDrawer>
-      }
-    >
+    <>
+      <PageHeader
+        title="Rôles"
+        subtitle="Permissions et accès des utilisateurs"
+        actions={
+          <CreateDrawer
+            permission={"create-role"}
+            title={"Create Role"}
+            width={35}
+          >
+            <AddRole />
+          </CreateDrawer>
+        }
+      />
+      <Card>
       <UserPrivateComponent permission={"readAll-role"}>
         <TableComponent
           actionPermission={["update-role", "delete-role", "readSingle-role"]}
@@ -121,6 +125,7 @@ const GetAllRole = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

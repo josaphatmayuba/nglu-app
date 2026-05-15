@@ -38,9 +38,14 @@ export class AppSettingsController {
   }
 
   private publicApiBase(req: Request) {
-    const forwardedProto = req.headers["x-forwarded-proto"];
-    const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
-    const host = req.headers.host;
+    // Prefer X-Forwarded-Host (set by nginx → the real public domain)
+    // over the Host header, which the proxy rewrites to "backend2:8001"
+    // when changeOrigin: true is enabled in the middleware.
+    const pickFirst = (v?: string | string[]) =>
+      Array.isArray(v) ? v[0] : v;
+    const proto = pickFirst(req.headers["x-forwarded-proto"]);
+    const host =
+      pickFirst(req.headers["x-forwarded-host"]) ?? req.headers.host;
     if (proto && host) return `${proto}://${host}/api`;
     return `${req.protocol}://${host}`;
   }

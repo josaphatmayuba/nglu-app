@@ -77,13 +77,14 @@ app.use((req, res, next) => {
 });
 
 // ── Proxy vers backend2 ───────────────────────────────────
-// changeOrigin: false → preserves the original Host header from nginx
-// (e.g. "dev.ongdngolu.org") so the backend can build public URLs
-// correctly (logo upload returns the right host).
+// changeOrigin: true rewrites Host to the target ("backend2:8001"),
+// which is the secure default — the backend always sees a canonical
+// hostname and isn't influenced by Host-header attacks.
+// The backend reads X-Forwarded-Host (set by nginx) for public URLs.
 app.use(
   createProxyMiddleware({
     target: BACKEND_URL,
-    changeOrigin: false,
+    changeOrigin: true,
     on: {
       error: (err, req, res) => {
         console.error('[PROXY ERROR]', err.message);

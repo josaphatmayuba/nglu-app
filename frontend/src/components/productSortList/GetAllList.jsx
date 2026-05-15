@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllProductSortList } from "../../redux/rtk/features/productSortList/ProductSortListSlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import CreateDrawer from "../CommonUi/CreateDrawer";
@@ -91,36 +92,34 @@ const GetAllList = () => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      className='max-md:border-0 max-md:bg-white'
-      bodyClass='max-md:p-0 '
-      // headClass='border-none'
-      title={"Product Short List"}
-      extra={
-        productList.length ? (
-          <>
+    <>
+      <PageHeader
+        title="Produits en rupture"
+        subtitle="Articles à recommander auprès des fournisseurs"
+        actions={
+          productList.length ? (
             <CreateDrawer
               permission={"create-product"}
               title={"Create Purchase Order"}
             >
               <AddPurchaseOrder list={productList} />
             </CreateDrawer>
-          </>
-        ) : (
-          <button
-            disabled
-            title='Select at least one product'
-            className={`xs:px-3 px-2 md:text-base py-[6px] lg:px-5  border bg-gray-400
-                    text-white rounded cursor-not-allowed`}
-          >
-            <span className='flex items-center justify-center gap-1 md:gap-2 '>
+          ) : (
+            <button
+              disabled
+              title='Sélectionnez au moins un produit'
+              className="flex items-center gap-2 px-3 md:px-4 py-2 bg-ink-200 text-ink-500 text-sm font-medium rounded-lg cursor-not-allowed"
+            >
               <PlusOutlined />
-              <span className=''>Create Purchase Order</span>
-            </span>
-          </button>
-        )
-      }
-    >
+              <span>Créer bon de commande</span>
+            </button>
+          )
+        }
+      />
+      <Card
+        className='max-md:border-0 max-md:bg-white'
+        bodyClass='max-md:p-0 '
+      >
       <UserPrivateComponent permission={"readAll-reorderQuantity"}>
         <TableComponent
           list={list}
@@ -134,6 +133,7 @@ const GetAllList = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteDesignation,
   loadAllDesignationPaginated,
@@ -105,31 +106,35 @@ const GetAllDesignation = () => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Designations"}
-      extra={<AddDesignation />}
-    >
-      <UserPrivateComponent permission={"readAll-designation"}>
-        <TableComponent
-          actionPermission={[
-            "update-designation",
-            "delete-designation",
-            "readSingle-designation",
-          ]}
-          list={list}
-          total={total}
-          loading={loading}
-          columns={columns}
-          setPageConfig={setPageConfig}
-          title={"Designation List"}
-          filters={filters}
-          isSearch
-        />
-      </UserPrivateComponent>
-    </Card>
+    <>
+      <PageHeader
+        title="Postes"
+        subtitle="Intitulés de fonction"
+        actions={<AddDesignation />}
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
+        <UserPrivateComponent permission={"readAll-designation"}>
+          <TableComponent
+            actionPermission={[
+              "update-designation",
+              "delete-designation",
+              "readSingle-designation",
+            ]}
+            list={list}
+            total={total}
+            loading={loading}
+            columns={columns}
+            setPageConfig={setPageConfig}
+            title={"Designation List"}
+            filters={filters}
+            isSearch
+          />
+        </UserPrivateComponent>
+      </Card>
+    </>
   );
 };
 

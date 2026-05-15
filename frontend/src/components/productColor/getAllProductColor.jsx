@@ -7,6 +7,7 @@ import {
 
 import { useState } from "react";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import CommonDelete from "../CommonUi/CommonDelete";
 import CreateDrawer from "../CommonUi/CreateDrawer";
 import TableComponent from "../CommonUi/TableComponent";
@@ -116,21 +117,24 @@ const GetAllProductColor = (props) => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Product Color"}
-      extra={
-        <CreateDrawer
-          permission={"create-color"}
-          title={"Create Color"}
-          width={35}
-        >
-          <AddProductColor />
-        </CreateDrawer>
-      }
-    >
+    <>
+      <PageHeader
+        title="Couleurs"
+        subtitle="Couleurs disponibles pour les produits"
+        actions={
+          <CreateDrawer
+            permission={"create-color"}
+            title={"Create Color"}
+            width={35}
+          >
+            <AddProductColor />
+          </CreateDrawer>
+        }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
       {" "}
       <UserPrivateComponent permission={"readAll-color"}>
         <TableComponent
@@ -150,6 +154,7 @@ const GetAllProductColor = (props) => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

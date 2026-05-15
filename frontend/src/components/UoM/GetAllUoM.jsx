@@ -4,6 +4,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteUom,
   editUoM,
@@ -114,12 +115,10 @@ export default function GetAllUoM() {
   ];
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"UoM List"}
-        extra={
+      <PageHeader
+        title="Unités de mesure"
+        subtitle="Unités utilisées pour les produits (kg, L, pcs...)"
+        actions={
           <CreateDrawer
             permission={"create-uom"}
             title={"Create UoM"}
@@ -128,6 +127,10 @@ export default function GetAllUoM() {
             <AddUoM />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-uom"}>
           <TableComponent
