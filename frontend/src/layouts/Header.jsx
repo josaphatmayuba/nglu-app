@@ -176,7 +176,7 @@ function Header({ onPress, data, loading }) {
 
               {/* New sale CTA */}
               <button
-                onClick={() => navigate("/admin/sale-create")}
+                onClick={() => navigate("/admin/sale/add")}
                 className="flex items-center gap-2 p-2 md:px-3 md:py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
                 title="Nouvelle vente"
               >

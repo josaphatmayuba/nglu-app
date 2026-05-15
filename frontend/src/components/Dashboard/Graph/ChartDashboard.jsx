@@ -23,12 +23,12 @@ import {
 } from 'recharts';
 
 import {
-    TrendingUp,
     TrendingDown,
     RefreshCw,
     AlertTriangle,
     Package,
     ShoppingCart,
+    Download,
 } from 'lucide-react';
 import { IoTrendingDownSharp } from 'react-icons/io5';
 import { NavLink } from 'react-router-dom';
@@ -542,23 +542,37 @@ export default function ChartDashboard({
     const safetopProduct = Array.isArray(topProduct) ? topProduct : [];
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="min-h-screen bg-ink-50 dark:from-gray-900 dark:to-gray-800">
             <main className="mx-auto">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5 md:mb-6">
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            Real-time overview of sales, finance, and operations
+                        <h1 className="text-xl md:text-2xl font-semibold text-ink-900 dark:text-white tracking-tight">Tableau de bord</h1>
+                        <p className="text-xs md:text-sm text-ink-500 dark:text-gray-400 mt-1">
+                            Aperçu de l'activité commerciale, financière et opérationnelle
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
                         <RangePicker
-                            className="rounded-lg shadow-sm"
+                            className="rounded-lg shadow-sm flex-1 md:flex-none min-w-[220px]"
                             value={pickerValue}
                             onChange={handleRangeChange}
                             allowClear={true}
                         />
+                        <button
+                            type="button"
+                            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+                            title="Actualiser"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+                            title="Exporter"
+                        >
+                            <Download className="w-4 h-4" />
+                        </button>
                     </div>
                 </div>
 
@@ -569,7 +583,7 @@ export default function ChartDashboard({
                 ) : null}
 
                 {loading ? (
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
                         {[...Array(4)].map((_, i) => (
                             <div key={i} className="h-28 sm:h-32 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
                         ))}
@@ -577,10 +591,10 @@ export default function ChartDashboard({
                 ) : null}
 
                 {!loading && (
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
                         <KpiCard
                             icon={ShoppingCart}
-                            title="Total Sale Amount"
+                            title="Chiffre d'affaires"
                             value={safeKpis?.totalSaleAmount?.value}
                             trend={safeKpis?.totalSaleAmount?.trend}
                             change={safeKpis?.totalSaleAmount?.change}
@@ -590,7 +604,7 @@ export default function ChartDashboard({
                         />
                         <KpiCard
                             icon={AlertTriangle}
-                            title="Total Sale Due"
+                            title="Ventes à encaisser"
                             value={safeKpis?.totalSaleDue?.value}
                             trend={safeKpis?.totalSaleDue?.trend}
                             change={safeKpis?.totalSaleDue?.change}
@@ -600,7 +614,7 @@ export default function ChartDashboard({
                         />
                         <KpiCard
                             icon={Package}
-                            title="Total Purchase Amount"
+                            title="Total achats"
                             value={safeKpis?.totalPurchaseAmount?.value}
                             trend={safeKpis?.totalPurchaseAmount?.trend}
                             change={safeKpis?.totalPurchaseAmount?.change}
@@ -610,7 +624,7 @@ export default function ChartDashboard({
                         />
                         <KpiCard
                             icon={TrendingDown}
-                            title="Total Purchase Due"
+                            title="Achats à payer"
                             value={safeKpis?.totalPurchaseDue?.value}
                             trend={safeKpis?.totalPurchaseDue?.trend}
                             change={safeKpis?.totalPurchaseDue?.change}
@@ -621,27 +635,26 @@ export default function ChartDashboard({
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-3 md:gap-4 mb-5 md:mb-6">
                     <SalesDonut breakdown={safeSales.breakdown} currencySymbol={currencySymbol} />
                     <SalesVsPurchasesLine data={safeMonthly} currencySymbol={currencySymbol} />
-                    {/* Eikhane currencySymbol prop pass kora hoyeche */}
                     <AccountWiseTransactions data={safeAccounts} currencySymbol={currencySymbol} />
                     <PurchasesDonut breakdown={safePurchases.breakdown} currencySymbol={currencySymbol} />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
                     <Card>
                         <div className="flex items-center justify-between mb-3 sm:mb-4">
-                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Top Customers</h3>
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Meilleurs clients</h3>
                             <div className="text-xs text-gray-500 ml-3">
-                                Top 5 Customers
+                                Top 5
                             </div>
                         </div>
                         <Table
                             columns={[
-                                { key: 'customer', label: 'Customer Name' },
+                                { key: 'customer', label: 'Client' },
                                 {
-                                    key: 'total_sales', label: 'Total Sales', render: (value) => (
+                                    key: 'total_sales', label: 'Ventes', render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white">
                                             {formatCurrency(value, currencySymbol)}
                                         </span>
@@ -649,7 +662,7 @@ export default function ChartDashboard({
                                 },
                                 {
                                     key: 'phone',
-                                    label: 'Phone',
+                                    label: 'Téléphone',
                                     render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white">{value || 0}</span>
                                     ),
@@ -661,18 +674,18 @@ export default function ChartDashboard({
 
                     <Card>
                         <div className="flex items-center justify-between mb-3 sm:mb-4">
-                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Top Products</h3>
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Meilleurs produits</h3>
                             <div className="text-xs text-gray-500 ml-3">
-                                Top 5 Products
+                                Top 5
                             </div>
                         </div>
                         <Table
                             columns={[
-                                { key: 'product', label: 'Product Name' },
-                                { key: 'quantity', label: 'Quantity' },
+                                { key: 'product', label: 'Produit' },
+                                { key: 'quantity', label: 'Quantité' },
                                 {
                                     key: 'amount',
-                                    label: 'Amount',
+                                    label: 'Montant',
                                     align: 'right',
                                     render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white" >

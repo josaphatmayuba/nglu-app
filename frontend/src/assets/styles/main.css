@@ -102,6 +102,7 @@
   color: var(--sidenav-text, #3f3f46);
   border-radius: 8px;
   transition: background-color 0.15s ease, color 0.15s ease;
+  min-height: 36px;
 }
 
 .menu-item:hover {
@@ -117,21 +118,23 @@
 }
 
 .menu-item:has(.active) {
-  background-color: rgb(79, 70, 229) !important;
-  color: #ffffff !important;
+  background-color: #eef2ff !important;
+  color: #4338ca !important;
   border-radius: 8px !important;
   width: 100%;
 }
 
 .menu-item:has(.active) a,
 .menu-item:has(.active) span {
-  color: #ffffff !important;
+  color: #4338ca !important;
+  font-weight: 600;
 }
 
 .menu-item-with-children {
   color: var(--sidenav-text, #3f3f46);
   border-radius: 8px;
   transition: background-color 0.15s ease;
+  min-height: 36px;
 }
 
 .menu-item-with-children:hover {

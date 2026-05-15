@@ -53,27 +53,6 @@ function AdminLayout() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden flex flex-row bg-ink-50">
-      {/* Desktop sidebar collapse button (integrated, not floating) */}
-      <div
-        className={cn(
-          "hidden md:flex absolute top-4 z-30 transition-[left] duration-300 bg-white border border-ink-200 hover:border-brand-300 text-ink-600 hover:text-brand-600 w-7 h-7 rounded-md justify-center items-center shadow-sm",
-          collapsed
-            ? "left-[70px]"
-            : "left-[185px] 2xl:left-[225px]"
-        )}>
-        {collapsed ? (
-          <RightOutlined
-            onClick={() => handleCollapsed(!collapsed)}
-            className="text-[12px] cursor-pointer"
-          />
-        ) : (
-          <LeftOutlined
-            onClick={() => handleCollapsed(!collapsed)}
-            className="text-[12px] cursor-pointer"
-          />
-        )}
-      </div>
-
       {/* Mobile drawer */}
       <Drawer
         title={false}
@@ -82,38 +61,27 @@ function AdminLayout() {
         onClose={() => setVisible(false)}
         open={visible}
         key={placement === "right" ? "left" : "right"}
-        width={260}
+        width={294}
         bodyStyle={{ padding: 0 }}>
-        <div className="pt-3 min-h-screen overflow-auto no-scrollbar w-[260px] bg-white text-ink-700 select-none border-r border-ink-200">
+        <div className="min-h-screen overflow-auto no-scrollbar w-[294px] bg-white text-ink-700 select-none border-r border-ink-200">
           {data && !loading && (
-            <div className="w-full h-[60px] flex items-center justify-center mb-3 px-4">
-              <Link to="/admin/dashboard" className="block w-full h-full flex items-center justify-center">
-                {data?.logo && !imageError ? (
-                  <img
-                    alt="logo"
-                    src={data.logo}
-                    style={{ maxWidth: "160px", maxHeight: "48px", objectFit: "contain" }}
-                    onError={() => setImageError(true)}
-                  />
-                ) : (
-                  <h2 className="text-ink-900 text-center flex items-center justify-center gap-2 text-lg font-semibold tracking-tight">
-                    {data?.companyName?.includes(" ") ? (
-                      <>
-                        <strong className="text-brand-600 font-bold">
-                          {data?.companyName?.split(" ")[0]}
-                        </strong>
-                        {data?.companyName?.slice(
-                          data?.companyName?.indexOf(" ") + 1
-                        )}
-                      </>
-                    ) : (
-                      <strong className="text-brand-600 font-bold">
-                        {data?.companyName || "NGOLU"}
-                      </strong>
-                    )}
-                  </h2>
-                )}
+            <div className="h-[60px] px-4 flex items-center justify-between border-b border-ink-100 shrink-0">
+              <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white text-base font-bold shrink-0">
+                  N
+                </div>
+                <span className="truncate text-base font-semibold tracking-tight text-ink-950">
+                  NGOLU
+                </span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setVisible(false)}
+                className="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"
+                title="Fermer le menu"
+              >
+                <LeftOutlined className="text-[12px]" />
+              </button>
             </div>
           )}
 
@@ -130,49 +98,51 @@ function AdminLayout() {
       {/* Desktop sidebar */}
       <div
         className={cn(
-          "hidden md:block left-0 top-0 z-10 duration-300 h-screen w-[200px] 2xl:w-[240px] bg-white border-r border-ink-200 text-ink-700 select-none",
+          "hidden md:flex flex-col left-0 top-0 z-10 duration-300 h-screen w-[294px] 2xl:w-[294px] bg-white border-r border-ink-200 text-ink-700 select-none",
           { "w-[86px] 2xl:w-[86px]": collapsed }
         )}>
         {data && !loading && (
           <div
             className={cn(
-              "h-[70px] mx-auto flex items-center justify-center my-3 px-4",
-              !collapsed ? "visible w-[180px]" : "invisible w-[60px]"
+              "h-[60px] px-4 flex items-center justify-between border-b border-ink-100 shrink-0",
+              collapsed && "justify-center px-3"
             )}>
-            <Link to="/admin/dashboard" className="block w-full h-full flex items-center justify-center">
-              {data?.logo && !imageError ? (
-                <img
-                  className="object-contain"
-                  alt="logo"
-                  src={data.logo}
-                  style={{ maxWidth: "160px", maxHeight: "60px" }}
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <h2 className="text-ink-900 text-center flex items-center justify-center gap-2 text-xl font-semibold tracking-tight">
-                  {data?.companyName?.includes(" ") ? (
-                    <>
-                      <strong className="text-brand-600 font-bold">
-                        {data?.companyName?.split(" ")[0]}
-                      </strong>
-                      {data?.companyName?.slice(
-                        data?.companyName?.indexOf(" ") + 1
-                      )}
-                    </>
-                  ) : (
-                    <strong className="text-brand-600 font-bold">
-                      {data?.companyName || "NGOLU"}
-                    </strong>
-                  )}
-                </h2>
+            <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white text-base font-bold shrink-0">
+                N
+              </div>
+              {!collapsed && (
+                <span className="truncate text-base font-semibold tracking-tight text-ink-950">
+                  NGOLU
+                </span>
               )}
             </Link>
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={() => handleCollapsed(true)}
+                className="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"
+                title="Réduire le menu"
+              >
+                <LeftOutlined className="text-[12px]" />
+              </button>
+            )}
+            {collapsed && (
+              <button
+                type="button"
+                onClick={() => handleCollapsed(false)}
+                className="absolute left-[68px] top-4 z-30 flex h-7 w-7 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-600 shadow-sm hover:border-brand-300 hover:text-brand-600"
+                title="Ouvrir le menu"
+              >
+                <RightOutlined className="text-[12px]" />
+              </button>
+            )}
           </div>
         )}
         {loading && (
           <div
             className={cn(
-              "h-[70px] mx-auto flex flex-col gap-1 my-3 px-4",
+              "h-16 mx-auto flex flex-col gap-1 my-3 px-4",
               !collapsed ? "visible w-[180px]" : "invisible w-[60px]"
             )}>
             <div className="bg-ink-100 h-4 rounded w-full animate-pulse"></div>
@@ -186,7 +156,7 @@ function AdminLayout() {
 
       <div
         className={cn(
-          `flex flex-col w-full 2xl:w-[calc(100vw-240px)] md:w-[calc(100vw-200px)] duration-300`,
+          `flex flex-col w-full 2xl:w-[calc(100vw-294px)] md:w-[calc(100vw-294px)] duration-300`,
           {
             "md:w-[calc(100vw-86px)] 2xl:w-[calc(100vw-86px)]": collapsed,
           }
