@@ -9,6 +9,7 @@ import { IoIosSend } from "react-icons/io";
 import { MdPayments } from "react-icons/md";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   loadAllPurchase,
   loadSinglePurchase,
@@ -231,31 +232,30 @@ const GetAllPurchase = () => {
 
   return (
     <div>
-    
+      <PageHeader
+        title="Achats"
+        subtitle="Bons de commande et paiements fournisseurs"
+        actions={
+          <>
+            <RangePicker
+              className="range-picker"
+              onCalendarChange={onCalendarChange}
+              defaultValue={[
+                dayjs(pageConfig.startDate, "YYYY-MM-DD"),
+                dayjs(pageConfig.endDate, "YYYY-MM-DD"),
+              ]}
+            />
+            <CreateButton to="/admin/purchase/add" title="Nouvel achat" />
+          </>
+        }
+      />
+
         <DashboardCard information={information} count={total} />
-        <br />
 
         <Card
-          className="max-md:border-0 max-md:bg-white"
+          className="max-md:border-0 max-md:bg-white mt-5"
           bodyClass="max-md:p-0 "
-          // // headClass="border-none"
-          title={"Purchase Invoice"}
-          extra={
-            <div className="justify-between md:justify-start flex gap-3 items-center">
-              <div>
-                <RangePicker
-                  className="range-picker "
-                  onCalendarChange={onCalendarChange}
-                  defaultValue={[
-                    dayjs(pageConfig.startDate, "YYYY-MM-DD"),
-                    dayjs(pageConfig.endDate, "YYYY-MM-DD"),
-                  ]}
-                />
-              </div>
-
-              <CreateButton to="/admin/purchase/add" title="Create Purchase" />
-            </div>
-          }>
+        >
           <UserPrivateComponent permission={"readAll-purchaseInvoice"}>
             <TableComponent
               actionPermission={[

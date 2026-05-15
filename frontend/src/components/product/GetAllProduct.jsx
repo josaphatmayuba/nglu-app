@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { CiBarcode } from "react-icons/ci";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteProduct,
   loadProductbyPaginated,
@@ -259,20 +260,23 @@ const GetAllProduct = () => {
 
   return (
     <>
-      {card && <ProductCard card={card} />}
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // // headClass="border-none"
-        title={"Products"}
-        extra={
+      <PageHeader
+        title="Produits"
+        subtitle="Catalogue et gestion d'inventaire"
+        actions={
           <CreateDrawer
             permission={"create-product"}
             title={"Create Product"}
             width={60}>
             <AddProd />
           </CreateDrawer>
-        }>
+        }
+      />
+      {card && <ProductCard card={card} />}
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
         <UserPrivateComponent permission={"readAll-product"}>
           <TableComponent
             actionPermission={["update-product", "delete-product"]}

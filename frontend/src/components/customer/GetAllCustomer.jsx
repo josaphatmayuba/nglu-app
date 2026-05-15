@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteCustomer,
   loadAllCustomer,
@@ -130,37 +131,41 @@ const GetAllCustomer = () => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Customers"}
-      extra={
-        <CreateDrawer
-          permission={"create-customer"}
-          title={"Create Customer"}
-          width={35}>
-          <AddCustomer />
-        </CreateDrawer>
-      }>
-      <UserPrivateComponent permission={"readAll-customer"}>
-        <TableComponent
-          actionPermission={[
-            "update-customer",
-            "delete-customer",
-            "readSingle-customer",
-          ]}
-          columns={columns}
-          list={list}
-          total={total}
-          loading={loading}
-          title={"Customer List"}
-          setPageConfig={setPageConfig}
-          filters={filters}
-          isSearch
-        />
-      </UserPrivateComponent>
-    </Card>
+    <>
+      <PageHeader
+        title="Clients"
+        subtitle="Base clients et historique d'achats"
+        actions={
+          <CreateDrawer
+            permission={"create-customer"}
+            title={"Create Customer"}
+            width={35}>
+            <AddCustomer />
+          </CreateDrawer>
+        }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 ">
+        <UserPrivateComponent permission={"readAll-customer"}>
+          <TableComponent
+            actionPermission={[
+              "update-customer",
+              "delete-customer",
+              "readSingle-customer",
+            ]}
+            columns={columns}
+            list={list}
+            total={total}
+            loading={loading}
+            title={"Customer List"}
+            setPageConfig={setPageConfig}
+            filters={filters}
+            isSearch
+          />
+        </UserPrivateComponent>
+      </Card>
+    </>
   );
 };
 

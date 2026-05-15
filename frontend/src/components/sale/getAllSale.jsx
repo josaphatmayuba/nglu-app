@@ -16,6 +16,7 @@ import { IoIosSend } from "react-icons/io";
 import { MdPayments } from "react-icons/md";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import CreateButton from "../Buttons/CreateButton";
 import ViewBtn from "../Buttons/ViewBtn";
 import DashboardCard from "../Card/DashboardCard";
@@ -317,46 +318,35 @@ const GetAllSale = () => {
 
   return (
     <div>
+      <PageHeader
+        title="Ventes"
+        subtitle="Factures et paiements clients"
+        actions={
+          <>
+            <RangePicker
+              className="range-picker"
+              onCalendarChange={onCalendarChange}
+              defaultValue={[
+                dayjs(pageConfig.startDate, "YYYY-MM-DD"),
+                dayjs(pageConfig.endDate, "YYYY-MM-DD"),
+              ]}
+            />
+            <UserPrivateComponent permission={"create-saleInvoice"}>
+              <CreateButton to="/admin/sale/add" title="Nouvelle vente" />
+            </UserPrivateComponent>
+          </>
+        }
+      />
 
       <DashboardCard
         information={total?._sum}
         count={total?._count?.id}
         isCustomer={true}
       />
-      <br />
 
       <Card
-        className="max-md:border-0 max-md:bg-white"
+        className="max-md:border-0 max-md:bg-white mt-5"
         bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Sale Invoice"}
-        extra={
-          <>
-            {" "}
-            <div>
-              <RangePicker
-                className="range-picker"
-                onCalendarChange={onCalendarChange}
-                defaultValue={[
-                  dayjs(pageConfig.startDate, "YYYY-MM-DD"),
-                  dayjs(pageConfig.endDate, "YYYY-MM-DD"),
-                ]}
-              />
-            </div>
-            <UserPrivateComponent permission={"create-saleInvoice"}>
-              <CreateButton to="/admin/sale/add" title="Create Sale" />
-            </UserPrivateComponent>
-            {/* <SaleReportPrint
-                data={list}
-                date={{
-                  startdate: pageConfig.startDate,
-                  enddate: pageConfig.endDate,
-                }}
-                user={user}
-                total={total?._sum}
-              /> */}
-          </>
-        }
       >
         <UserPrivateComponent permission={"readAll-saleInvoice"}>
           <TableComponent
