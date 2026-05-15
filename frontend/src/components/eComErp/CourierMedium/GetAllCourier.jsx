@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import { loadAllCourierMediumPaginated } from "../../../redux/rtk/features/eCommerce/courierMedium/courierMediumSlice";
 import ViewBtn from "../../Buttons/ViewBtn";
 import CreateDrawer from "../../CommonUi/CreateDrawer";
@@ -103,20 +104,23 @@ export default function GetAllCourier() {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Modes de livraison"
+        subtitle="Transporteurs et services de coursier"
+        actions={
+          <CreateDrawer
+            permission={"create-courier"}
+            title={"Create Delivery Medium"}
+            width={35}
+          >
+            <AddCourier />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Delivery Medium"}
-      extra={
-        <CreateDrawer
-          permission={"create-courier"}
-          title={"Create Delivery Medium"}
-          width={35}
-        >
-          <AddCourier />
-        </CreateDrawer>
-      }
     >
       <UserPrivateComponent permission={"readAll-courier"}>
         <TableComponent
@@ -131,5 +135,6 @@ export default function GetAllCourier() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

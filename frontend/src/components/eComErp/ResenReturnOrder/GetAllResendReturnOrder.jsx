@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import { addReOrderSale } from "../../../redux/rtk/features/eCommerce/cartOrder/cartOrderSlice";
 import { loadAllResendReturnOrder } from "../../../redux/rtk/features/eCommerce/returnOrder/returnOrderSlice";
 import { stringShorter } from "../../../utils/functions";
@@ -89,11 +90,13 @@ export default function GetAllResendReturnOrder() {
   }, [dispatch]);
   return (
     <div>
+      <PageHeader
+        title="Renvois de retour"
+        subtitle="Retours réexpédiés aux clients"
+      />
       <Card
         className='max-md:border-0 max-md:bg-white'
         bodyClass='max-md:p-0 '
-        headClass='border-none'
-        title={"Resend Return list"}
       >
         <UserPrivateComponent permission={"readAll-purchaseInvoice"}>
           <TableComponent

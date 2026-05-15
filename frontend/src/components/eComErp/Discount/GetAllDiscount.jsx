@@ -2,6 +2,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import {
   deleteDiscount,
   loadAllDiscountPaginated,
@@ -110,19 +111,23 @@ export default function GetAllDiscount() {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Promotions"
+        subtitle="Remises et codes promotionnels"
+        actions={
+          <CreateDrawer
+            permission={"create-discount"}
+            title={"Create Discount"}
+            width={35}>
+            <AddDiscount />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Discount"}
-      extra={
-        <CreateDrawer
-          permission={"create-discount"}
-          title={"Create Discount"}
-          width={35}>
-          <AddDiscount />
-        </CreateDrawer>
-      }>
+    >
       {" "}
       <UserPrivateComponent permission={"readAll-discount"}>
         <TableComponent
@@ -141,5 +146,6 @@ export default function GetAllDiscount() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

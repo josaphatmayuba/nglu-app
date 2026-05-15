@@ -3,6 +3,7 @@ import { Modal } from "antd";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import {
   deleteCurrency,
   editCurrency,
@@ -117,19 +118,22 @@ export default function GetAllCurrency() {
   }, [dispatch, pageConfig]);
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Currency"}
-        extra={
+      <PageHeader
+        title="Devises"
+        subtitle="Monnaies acceptées et taux de change"
+        actions={
           <CreateDrawer
             permission={"create-currency"}
             title={"Create Currency"}
             width={35}>
             <AddCurrency />
           </CreateDrawer>
-        }>
+        }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
         <UserPrivateComponent permission={"readAll-currency"}>
           <TableComponent
             actionPermission={[

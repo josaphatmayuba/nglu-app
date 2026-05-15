@@ -4,6 +4,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteTransactionType,
   loadAllTransactionType,
@@ -110,11 +111,10 @@ const GetAllTransactionType = () => {
 
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0"
-        title="Transaction Types"
-        extra={
+      <PageHeader
+        title="Types de transaction"
+        subtitle="Catégorisation des mouvements"
+        actions={
           <CreateDrawer
             permission={"create-transactionType"}
             title={"Create Transaction Type"}
@@ -123,6 +123,10 @@ const GetAllTransactionType = () => {
             <TransactionTypeForm />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0"
       >
         <UserPrivateComponent permission={"readAll-transactionType"}>
           <TableComponent

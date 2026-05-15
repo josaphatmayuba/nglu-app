@@ -4,6 +4,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteVatTax,
   editVatTax,
@@ -127,20 +128,23 @@ const GetAllVatTax = () => {
 
   return (
     <>
-      {/* <VatStatementCards information={information} /> */}
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Vat tax List"}
-        extra={
+      <PageHeader
+        title="TVA / Taxes"
+        subtitle="Taux et types de taxe applicables"
+        actions={
           <CreateDrawer
             permission={"create-vat"}
             title={"Create Vat Type"}
             width={35}>
             <AddVatTax />
           </CreateDrawer>
-        }>
+        }
+      />
+      {/* <VatStatementCards information={information} /> */}
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
+      >
         <UserPrivateComponent permission={"readAll-vat"}>
           <TableComponent
             actionPermission={["update-vat", "delete-vat", "readSingle-vat"]}

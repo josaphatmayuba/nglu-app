@@ -2,6 +2,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deletePaymentMethod,
   loadAllPaymentMethodPaginated,
@@ -166,20 +167,23 @@ export default function GetAllPaymentMethod() {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Modes de paiement"
+        subtitle="Espèces, mobile money, virement, etc."
+        actions={
+          <CreateDrawer
+            permission={"create-paymentMethod"}
+            title={"Create Payment Method"}
+            width={35}
+          >
+            <AddPayMethod />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Payment Methods"}
-      extra={
-        <CreateDrawer
-          permission={"create-paymentMethod"}
-          title={"Create Payment Method"}
-          width={35}
-        >
-          <AddPayMethod />
-        </CreateDrawer>
-      }
     >
       <UserPrivateComponent permission={"readAll-paymentMethod"}>
         <TableComponent
@@ -194,5 +198,6 @@ export default function GetAllPaymentMethod() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

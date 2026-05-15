@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllPurchaseReturn } from "../../redux/rtk/features/PurchaseReturnList/PurchaseReturnListSlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import TableComponent from "../CommonUi/TableComponent";
@@ -87,22 +88,26 @@ export default function GetAllPurchaseReturnList() {
     setEndDate(endDate);
   };
   return (
+    <>
+      <PageHeader
+        title="Retours d'achat"
+        subtitle="Marchandises retournées aux fournisseurs"
+        actions={
+          <RangePicker
+            onCalendarChange={onCalendarChange}
+            defaultValue={[
+              dayjs(startDate, "YYYY-MM-DD"),
+              dayjs(endDate, "YYYY-MM-DD"),
+            ]}
+            className="range-picker"
+            style={{ maxWidth: "400px" }}
+          />
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Purchase Return "}
-      extra={
-        <RangePicker
-          onCalendarChange={onCalendarChange}
-          defaultValue={[
-            dayjs(startDate, "YYYY-MM-DD"),
-            dayjs(endDate, "YYYY-MM-DD"),
-          ]}
-          className="range-picker"
-          style={{ maxWidth: "400px" }}
-        />
-      }>
+    >
       <UserPrivateComponent permission={"readAll-returnPurchaseInvoice"}>
         <TableComponent
           actionPermission={["readSingle-returnPurchaseInvoice"]}
@@ -117,5 +122,6 @@ export default function GetAllPurchaseReturnList() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }
