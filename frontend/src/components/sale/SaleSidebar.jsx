@@ -1,5 +1,6 @@
 import {
   CalendarOutlined,
+  DollarOutlined,
   EditOutlined,
   FileTextOutlined,
   HomeOutlined,
@@ -34,9 +35,13 @@ const SaleSidebar = ({
   setLoader,
   onFormSubmit,
   invoiceMode = "vente",
+  currencyList,
 }) => {
   const { Option } = Select;
   const customer = allCustomer?.find((item) => item.id === selectedCustomer);
+  const activeCurrencies = (currencyList || []).filter(
+    (c) => c?.status === true || c?.status === "true"
+  );
 
   return (
     <div className="h-full overflow-y-auto">
@@ -131,6 +136,34 @@ const SaleSidebar = ({
                     format={"YYYY-MM-DD"}
                     className="w-full"
                   />
+                </Form.Item>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-4 mt-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5 mb-2">
+                  <DollarOutlined className="text-gray-500 text-xs" />
+                  Devise
+                </label>
+                <Form.Item className="w-full mb-0" name="currencyId">
+                  <Select
+                    className="w-full"
+                    allowClear
+                    placeholder="Devise par défaut de l'entreprise"
+                    loading={!currencyList}
+                    showSearch
+                    optionFilterProp="children"
+                    filterOption={(input, option) =>
+                      String(option.children)
+                        .toLowerCase()
+                        .includes(input.toLowerCase())
+                    }>
+                    {activeCurrencies.map((c) => (
+                      <Option key={c.currencyId} value={c.currencyId}>
+                        {c.currencyName} ({c.currencySymbol})
+                      </Option>
+                    ))}
+                  </Select>
                 </Form.Item>
               </div>
             </div>

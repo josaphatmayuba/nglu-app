@@ -5,6 +5,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
+  currencies,
   customers,
   realEstateLeases,
   realEstateMaintenanceRequests,
@@ -482,11 +484,13 @@ export class PropertyManagementService {
 
   async createLease(input: CreateLeaseDto) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId);
+    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency());
     const [result] = await this.db.insert(realEstateLeases).values({
       reference: input.reference || `LEASE-${Date.now()}`,
       propertyId: input.propertyId,
       unitId: input.unitId,
       tenantId: input.tenantId,
+      currencyId,
       startDate: this.requiredDate(input.startDate),
       endDate: this.date(input.endDate),
       nextInvoiceDate: this.date(input.nextInvoiceDate),
@@ -576,6 +580,9 @@ export class PropertyManagementService {
         method: realEstateRentPayments.method,
         reference: realEstateRentPayments.reference,
         notes: realEstateRentPayments.notes,
+        currencyId: realEstateRentPayments.currencyId,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
         leaseReference: paymentLease.reference,
         propertyName: paymentProperty.name,
         unitName: paymentUnit.name,
@@ -587,6 +594,7 @@ export class PropertyManagementService {
       .leftJoin(paymentProperty, eq(paymentProperty.id, paymentLease.propertyId))
       .leftJoin(paymentUnit, eq(paymentUnit.id, paymentLease.unitId))
       .leftJoin(customers, eq(customers.id, paymentLease.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateRentPayments.currencyId))
       .orderBy(desc(realEstateRentPayments.id));
   }
 
@@ -609,8 +617,15 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    // Currency precedence: explicit input → lease's currency → app default
+    const paymentCurrencyId =
+      (input as any).currencyId
+      ?? (lease as any).currencyId
+      ?? (await this.resolveDefaultCurrency());
+
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
       leaseId: lease.id,
+      currencyId: paymentCurrencyId,
       transactionId: Number(transactionResult.insertId),
       paymentDate: this.requiredDate(input.paymentDate),
       amount: this.money(input.amount),
@@ -760,6 +775,7 @@ export class PropertyManagementService {
         propertyId: realEstateLeases.propertyId,
         unitId: realEstateLeases.unitId,
         tenantId: realEstateLeases.tenantId,
+        currencyId: realEstateLeases.currencyId,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
@@ -775,11 +791,14 @@ export class PropertyManagementService {
         unitName: leaseUnit.name,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
       })
       .from(realEstateLeases)
       .leftJoin(leaseProperty, eq(leaseProperty.id, realEstateLeases.propertyId))
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
-      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId));
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
   }
 
   private async getLeaseOrThrow(id: number) {
@@ -988,6 +1007,17 @@ export class PropertyManagementService {
       .update(realEstateUnits)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateUnits.id, id));
+  }
+
+  // Returns the appSetting's currencyId or null if no row exists yet.
+  // Used as fallback when a transaction is created without an explicit
+  // currencyId (legacy clients).
+  private async resolveDefaultCurrency(): Promise<number | null> {
+    const [row] = await this.db
+      .select({ currencyId: appSettings.currencyId })
+      .from(appSettings)
+      .limit(1);
+    return row?.currencyId ?? null;
   }
 
   private money(value: number | undefined | null) {

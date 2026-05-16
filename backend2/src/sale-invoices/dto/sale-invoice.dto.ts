@@ -64,6 +64,12 @@ export class CreateSaleInvoiceDto {
   @Min(1)
   customerId: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the company's appSetting.currencyId when omitted." })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiProperty({ example: 1 })
   @IsInt()
   @Min(1)

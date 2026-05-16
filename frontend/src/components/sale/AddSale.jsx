@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import { loadAllTermsAndConditions } from "../../redux/rtk/features/termsAndCondition/termsAndConditionSlice";
 import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
 import { loadAllVatTax } from "../../redux/rtk/features/vatTax/vatTaxSlice";
+import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import getStaffId from "../../utils/getStaffId";
 import SaleSidebar from "./SaleSidebar";
 
@@ -41,6 +42,7 @@ const AddSale = () => {
   const { list: termsAndConditions, loading } = useSelector(
     (state) => state.termsAndConditions
   );
+  const currencyList = useSelector((state) => state.currency?.list);
 
   const staffId = getStaffId();
   const [userId, setUserId] = useState(staffId);
@@ -52,6 +54,7 @@ const AddSale = () => {
     dispatch(loadProduct({ query: "all" }));
     dispatch(loadAllVatTax());
     dispatch(loadAllTermsAndConditions());
+    dispatch(loadAllCurrency());
   }, [dispatch]);
 
   const onFormSubmit = async (values) => {
@@ -282,6 +285,7 @@ const AddSale = () => {
               setLoader={setLoader}
               onFormSubmit={onFormSubmit}
               invoiceMode={invoiceMode}
+              currencyList={currencyList}
             />
           </div>
         </div>

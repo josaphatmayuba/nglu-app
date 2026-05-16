@@ -72,6 +72,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import "./PropertyManagement.css";
 import { loadAllAccount } from "../../redux/rtk/features/account/accountSlice";
+import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import { deleteCustomer } from "../../redux/rtk/features/customer/customerSlice";
 import {
   createRentPayment,
@@ -144,20 +145,21 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
-const compactMoney = (value) =>
-  `CDF ${Number(value || 0).toLocaleString(undefined, {
+const compactMoney = (value, symbol) =>
+  `${symbol || "CDF"} ${Number(value || 0).toLocaleString(undefined, {
     maximumFractionDigits: 0,
   })}`;
 
-const shortMoney = (value) => {
+const shortMoney = (value, symbol) => {
   const amount = Number(value || 0);
+  const sym = symbol || "CDF";
   if (Math.abs(amount) >= 1000000) {
     const millions = amount / 1000000;
     const formatted = Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1);
-    return `CDF ${formatted}M`;
+    return `${sym} ${formatted}M`;
   }
-  if (Math.abs(amount) >= 1000) return `CDF ${Math.round(amount / 1000)}K`;
-  return compactMoney(amount);
+  if (Math.abs(amount) >= 1000) return `${sym} ${Math.round(amount / 1000)}K`;
+  return compactMoney(amount, sym);
 };
 
 const normalize = (value) =>
@@ -268,6 +270,7 @@ const toFormRecord = (type, record) => {
       status: record.status,
       billingCycle: record.billingCycle,
       rentAmount: record.rentAmount,
+      currencyId: record.currencyId,
       securityDeposit: record.securityDeposit,
       moveInMeterReading: record.moveInMeterReading,
       terms: record.terms,
@@ -395,12 +398,18 @@ const PropertyManagement = () => {
     loading,
   } = useSelector((state) => state.propertyManagement);
   const accounts = useSelector((state) => state.accounts?.list) || [];
+  const currencyList = useSelector((state) => state.currency?.list) || [];
+  const activeCurrencies = useMemo(
+    () => currencyList.filter((c) => c?.status === true || c?.status === "true"),
+    [currencyList]
+  );
 
   useEffect(() => {
     dispatch(loadPropertyManagement());
     dispatch(loadAllAccount());
     dispatch(loadContracts());
     dispatch(loadContractTemplates());
+    dispatch(loadAllCurrency());
   }, [dispatch]);
 
   useEffect(() => {
@@ -1954,7 +1963,7 @@ const PropertyManagement = () => {
                         <span className={`immo-pill ${tone}`}>{label}</span>
                       </td>
                       <td className={`right ${tone === "danger" ? "danger" : ""}`}>
-                        {compactMoney(payment.amount)}
+                        {compactMoney(payment.amount, payment.currencySymbol)}
                       </td>
                     </tr>
                   );
@@ -2027,7 +2036,7 @@ const PropertyManagement = () => {
             </div>
             <div className="immo-row-meta">
               <span>{tenantNameFromLease(lease)}</span>
-              <strong>{compactMoney(lease.rentAmount)}</strong>
+              <strong>{compactMoney(lease.rentAmount, lease.currencySymbol)}</strong>
             </div>
             <button type="button" onClick={() => openModal("lease", lease)}>
               Modifier
@@ -2066,7 +2075,7 @@ const PropertyManagement = () => {
           <article key={payment.id} className="immo-row-card">
             <div className="immo-avatar green"><WalletCards size={18} /></div>
             <div>
-              <h4>{compactMoney(payment.amount)}</h4>
+              <h4>{compactMoney(payment.amount, payment.currencySymbol)}</h4>
               <p>{payment.leaseReference || "Paiement loyer"} · {paymentMethodLabels[payment.method] || payment.method || "-"}</p>
             </div>
             <div className="immo-row-meta">
@@ -2172,7 +2181,7 @@ const PropertyManagement = () => {
                   <span className={isLate ? "danger" : ""}>
                     Loyer · échéance {activeLease?.nextInvoiceDate ? moment(activeLease.nextInvoiceDate).format("DD/MM") : "-"}
                   </span>
-                  <strong className={isLate ? "danger" : ""}>{compactMoney(activeLease?.rentAmount || activeUnit?.monthlyRent)}</strong>
+                  <strong className={isLate ? "danger" : ""}>{compactMoney(activeLease?.rentAmount || activeUnit?.monthlyRent, activeLease?.currencySymbol)}</strong>
                 </div>
               </div>
             </article>
@@ -2315,7 +2324,7 @@ const PropertyManagement = () => {
 
                   <div className="immo-lease-card-foot">
                     <div>
-                      <strong className={info.variant === "noContract" ? "danger" : ""}>{shortMoney(lease.rentAmount)}<span>/mois</span></strong>
+                      <strong className={info.variant === "noContract" ? "danger" : ""}>{shortMoney(lease.rentAmount, lease.currencySymbol)}<span>/mois</span></strong>
                       <small className={info.variant === "noContract" ? "danger" : info.variant === "expired" ? "muted" : "success"}>
                         {info.variant === "noContract" && <CircleAlert size={13} />}
                         {info.variant === "pendingSignature" && <Check size={13} />}
@@ -2390,7 +2399,7 @@ const PropertyManagement = () => {
                     </button>
                   )}
                 </span>
-                <strong>{compactMoney(lease.rentAmount)}</strong>
+                <strong>{compactMoney(lease.rentAmount, lease.currencySymbol)}</strong>
                 <span className="immo-menu-anchor">
                   <button
                     type="button"
@@ -2452,7 +2461,7 @@ const PropertyManagement = () => {
                           style={{ left: `${left}%`, width: `${width}%` }}
                           onClick={() => setOpenLeaseMenu(openLeaseMenu === `timeline-${lease.id}` ? null : `timeline-${lease.id}`)}
                         >
-                          {shortMoney(lease.rentAmount)} · {info.contractLabel}
+                          {shortMoney(lease.rentAmount, lease.currencySymbol)} · {info.contractLabel}
                         </button>
                         {openLeaseMenu === `timeline-${lease.id}` && (
                           <span className="immo-timeline-menu">
@@ -2547,7 +2556,7 @@ const PropertyManagement = () => {
                 )}
               </span>
               <span><span className={`immo-pill ${paymentStatus}`}>{paymentStatus === "success" ? "Payé" : paymentStatus === "warning" ? "En attente" : "En retard"}</span></span>
-              <strong className={paymentStatus === "danger" ? "red-text" : ""}>{compactMoney(payment.amount)}</strong>
+              <strong className={paymentStatus === "danger" ? "red-text" : ""}>{compactMoney(payment.amount, payment.currencySymbol)}</strong>
             </div>
           );
           })}
@@ -3224,6 +3233,16 @@ const PropertyManagement = () => {
                 <Form.Item label="Loyer" name="rentAmount" rules={[{ required: true }]}>
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
+                <Form.Item label="Devise" name="currencyId">
+                  <Select
+                    allowClear
+                    placeholder="Devise par défaut"
+                    options={activeCurrencies.map((c) => ({
+                      label: `${c.currencyName} (${c.currencySymbol})`,
+                      value: c.currencyId,
+                    }))}
+                  />
+                </Form.Item>
                 <Form.Item label="Dépôt" name="securityDeposit">
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
@@ -3392,6 +3411,16 @@ const PropertyManagement = () => {
                     options={cashBankAccounts.map((account) => ({
                       label: account.name,
                       value: account.id,
+                    }))}
+                  />
+                </Form.Item>
+                <Form.Item label="Devise" name="currencyId">
+                  <Select
+                    allowClear
+                    placeholder="Devise du bail ou par défaut"
+                    options={activeCurrencies.map((c) => ({
+                      label: `${c.currencyName} (${c.currencySymbol})`,
+                      value: c.currencyId,
                     }))}
                   />
                 </Form.Item>

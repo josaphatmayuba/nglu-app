@@ -211,6 +211,13 @@ export class CreateLeaseDto {
   @Min(0)
   rentAmount: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the company's appSetting.currencyId when omitted." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -280,6 +287,13 @@ export class CreateRentPaymentDto {
   @IsInt()
   @Min(1)
   paymentAccountId?: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the lease's currency, then the company's appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
 }
 
 export class CreateMaintenanceDto {

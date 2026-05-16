@@ -29,6 +29,11 @@ import SendSaleInvoice from "./SendSaleInvoice";
 const fmtCDF = (n) =>
   `CDF ${Math.round(Number(n || 0)).toLocaleString("fr-FR")}`;
 
+const fmtMoney = (n, symbol) => {
+  const amount = Math.round(Number(n || 0)).toLocaleString("fr-FR");
+  return `${symbol || "CDF"} ${amount}`;
+};
+
 const fmtDate = (d) => (d ? moment(d).locale("fr").format("D MMM YYYY") : "—");
 
 /**
@@ -364,7 +369,7 @@ const GetAllSale = () => {
                       </span>
                     </td>
                     <td className={"px-4 py-3 text-right font-medium " + (status === "cancelled" ? "text-ink-400 line-through" : "text-ink-900")}>
-                      {fmtCDF(inv.totalAmount)}
+                      {fmtMoney(inv.totalAmount, inv.currencySymbol)}
                     </td>
                     <td className="px-4 py-3 text-right relative invoice-menu-anchor">
                       <button
