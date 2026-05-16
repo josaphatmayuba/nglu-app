@@ -99,7 +99,7 @@ function AdminLayout() {
       <div
         className={cn(
           "hidden md:flex flex-col left-0 top-0 z-10 duration-300 h-screen w-[280px] 2xl:w-[280px] bg-white border-r border-ink-200 text-ink-700 select-none",
-          { "w-[240px] 2xl:w-[240px]": collapsed }
+          { "w-[72px] 2xl:w-[72px]": collapsed }
         )}>
         {data && !loading && (
           <div
@@ -131,7 +131,7 @@ function AdminLayout() {
               <button
                 type="button"
                 onClick={() => handleCollapsed(false)}
-                className="absolute left-[68px] top-4 z-30 flex h-7 w-7 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-600 shadow-sm hover:border-brand-300 hover:text-brand-600"
+                className="absolute left-[58px] top-4 z-30 flex h-7 w-7 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-600 shadow-sm hover:border-brand-300 hover:text-brand-600"
                 title="Ouvrir le menu"
               >
                 <RightOutlined className="text-[12px]" />
@@ -158,7 +158,7 @@ function AdminLayout() {
         className={cn(
           `flex flex-col w-full 2xl:w-[calc(100vw-280px)] md:w-[calc(100vw-280px)] duration-300`,
           {
-            "md:w-[calc(100vw-240px)] 2xl:w-[calc(100vw-240px)]": collapsed,
+            "md:w-[calc(100vw-72px)] 2xl:w-[calc(100vw-72px)]": collapsed,
           }
         )}>
         <Header onPress={openDrawer} data={data} loading={loading} />
