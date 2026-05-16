@@ -11,7 +11,7 @@ import {
   TeamOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { Button, Form, Input, InputNumber, Modal, Select, Table, Tag, message } from "antd";
+import { Button, Form, Input, InputNumber, Modal, Radio, Select, Table, Tag, message } from "antd";
 import axios from "axios";
 import {
   AlertTriangle,
@@ -33,6 +33,9 @@ import {
   Droplets,
   Eye,
   FileCheck,
+  Info,
+  Layers,
+  MapPin,
   FileSignature,
   FileText,
   Grid3X3,
@@ -57,6 +60,7 @@ import {
   UserPlus,
   UserRound,
   Users,
+  Wallet,
   WalletCards,
   Wrench,
   X,
@@ -237,6 +241,11 @@ const toFormRecord = (type, record) => {
       status: record.status,
       defaultRent: record.defaultRent,
       address: record.address,
+      city: record.city,
+      country: record.country,
+      floors: record.floors,
+      parkingSpaces: record.parkingSpaces,
+      marketValue: record.marketValue,
       description: record.description,
     },
     unit: {
@@ -916,7 +925,21 @@ const PropertyManagement = () => {
     onboardingGenerate: "Générer un lien d'inscription",
     onboardingEdit: "Dossier locataire en ligne",
   };
-  const modalTitle = modalTitleByType[modal?.type] || (modal?.record ? "Modifier" : "Créer");
+  const buildRichTitle = (Icon, iconTone, title, subtitle) => (
+    <div className="immo-modal-title">
+      <span className={`immo-modal-title-icon ${iconTone}`}><Icon size={18} /></span>
+      <div>
+        <strong>{title}</strong>
+        <span>{subtitle}</span>
+      </div>
+    </div>
+  );
+  const richTitleByType = {
+    property: buildRichTitle(Building2, "brand", modal?.record ? "Modifier la propriété" : "Nouvelle propriété", "Ajoutez un bien à votre portefeuille immobilier"),
+  };
+  const modalTitle = richTitleByType[modal?.type]
+    || modalTitleByType[modal?.type]
+    || (modal?.record ? "Modifier" : "Créer");
 
   useEffect(() => {
     if (modal?.type !== "lease" || !selectedUnit || modal?.record) return;
@@ -2811,35 +2834,85 @@ const PropertyManagement = () => {
           )}
 
           {modal?.type === "property" && (
-            <>
-              <Form.Item label="Nom" name="name" rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-              <div className="pm-form-grid">
-                <Form.Item label="Code" name="code">
-                  <Input disabled placeholder="Généré automatiquement" />
+            <div className="immo-property-form">
+              {/* ─── Section: Informations générales ─── */}
+              <div className="immo-form-section">
+                <h3 className="immo-form-section-title"><Info size={14} /> Informations générales</h3>
+                <Form.Item label={<>Nom <span className="immo-required">*</span></>} name="name" rules={[{ required: true, message: "Le nom est requis" }]}>
+                  <Input placeholder="ex. Résidence Tombalbaye" />
                 </Form.Item>
-                <Form.Item label="Type de bien" name="propertyType" initialValue="building">
-                  <Select options={propertyTypes} />
-                </Form.Item>
-                <Form.Item label="Statut" name="status" initialValue="available">
-                  <Select options={[
-                    { label: "Disponible", value: "available" },
-                    { label: "Occupé", value: "occupied" },
-                    { label: "Maintenance", value: "maintenance" },
-                  ]} />
-                </Form.Item>
-                <Form.Item label="Loyer par défaut" name="defaultRent">
-                  <InputNumber className="w-full" min={0} />
+                <div className="pm-form-grid">
+                  <Form.Item label="Code interne" name="code">
+                    <Input disabled placeholder="Auto-généré" />
+                  </Form.Item>
+                  <Form.Item label={<>Type de bien <span className="immo-required">*</span></>} name="propertyType" initialValue="building" rules={[{ required: true }]}>
+                    <Select options={propertyTypes} />
+                  </Form.Item>
+                </div>
+                <Form.Item label="Statut initial" name="status" initialValue="available">
+                  <Radio.Group className="immo-radio-cards">
+                    <Radio.Button value="available">Disponible</Radio.Button>
+                    <Radio.Button value="occupied">Occupé</Radio.Button>
+                    <Radio.Button value="maintenance">Maintenance</Radio.Button>
+                  </Radio.Group>
                 </Form.Item>
               </div>
-              <Form.Item label="Adresse" name="address">
-                <Input />
-              </Form.Item>
-              <Form.Item label="Description" name="description">
-                <Input.TextArea rows={3} />
-              </Form.Item>
-            </>
+
+              {/* ─── Section: Localisation ─── */}
+              <div className="immo-form-section">
+                <h3 className="immo-form-section-title"><MapPin size={14} /> Localisation</h3>
+                <Form.Item label="Adresse" name="address">
+                  <Input placeholder="ex. 15 Av. Tombalbaye" />
+                </Form.Item>
+                <div className="pm-form-grid">
+                  <Form.Item label="Ville" name="city" initialValue="Kinshasa">
+                    <Input />
+                  </Form.Item>
+                  <Form.Item label="Pays" name="country" initialValue="RDC">
+                    <Input />
+                  </Form.Item>
+                </div>
+              </div>
+
+              {/* ─── Section: Caractéristiques ─── */}
+              <div className="immo-form-section">
+                <h3 className="immo-form-section-title"><Layers size={14} /> Caractéristiques</h3>
+                <div className="pm-form-grid">
+                  <Form.Item label="Nombre d'étages" name="floors" initialValue={1}>
+                    <InputNumber className="w-full" min={0} />
+                  </Form.Item>
+                  <Form.Item label="Places de parking" name="parkingSpaces" initialValue={0}>
+                    <InputNumber className="w-full" min={0} />
+                  </Form.Item>
+                </div>
+                <Form.Item label="Description" name="description">
+                  <Input.TextArea rows={2} placeholder="Notes, équipements, particularités du bien..." />
+                </Form.Item>
+              </div>
+
+              {/* ─── Section: Informations financières ─── */}
+              <div className="immo-form-section">
+                <h3 className="immo-form-section-title"><Wallet size={14} /> Informations financières</h3>
+                <div className="pm-form-grid">
+                  <Form.Item label="Valeur marchande estimée" name="marketValue" extra="Pour analyse de patrimoine">
+                    <InputNumber className="w-full" min={0} addonBefore="CDF" placeholder="ex. 480000000" />
+                  </Form.Item>
+                  <Form.Item label="Loyer mensuel par défaut" name="defaultRent" extra="Hérité par défaut sur chaque unité créée">
+                    <InputNumber className="w-full" min={0} addonBefore="CDF" placeholder="ex. 850000" />
+                  </Form.Item>
+                </div>
+              </div>
+
+              {/* ─── Info note ─── */}
+              <div className="immo-form-info-note">
+                <Info size={14} />
+                <span>
+                  <strong>Le code interne est généré automatiquement</strong> après création
+                  (format <code>PROP-YYYY-NNN</code>). Vous pourrez ajouter photo et documents
+                  juridiques (titre de propriété, plan cadastral) après la création.
+                </span>
+              </div>
+            </div>
           )}
 
           {modal?.type === "unit" && (
@@ -3149,11 +3222,15 @@ const PropertyManagement = () => {
             </>
           )}
 
-          <div className="flex justify-end gap-2">
-            <Button onClick={closeModal}>Cancel</Button>
-            <Button type="primary" htmlType="submit">
-              Save
-            </Button>
+          <div className="immo-modal-footer">
+            <Button onClick={closeModal} className="immo-modal-cancel">Annuler</Button>
+            <div className="immo-modal-footer-right">
+              <Button type="primary" htmlType="submit" className="immo-modal-submit">
+                {modal?.type === "property"
+                  ? (modal?.record ? "Mettre à jour la propriété" : "Créer la propriété")
+                  : (modal?.record ? "Enregistrer" : "Créer")}
+              </Button>
+            </div>
           </div>
         </Form>
       </Modal>
