@@ -114,7 +114,7 @@ const SidebarLink = ({ item, collapsed }) => {
           "group relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-ink-700 transition hover:bg-ink-100 hover:text-ink-950",
           collapsed && "justify-center px-0",
           isActive &&
-            "bg-gradient-to-r from-brand-50 to-transparent text-ink-950 before:absolute before:left-0 before:top-1/2 before:h-6 before:w-1 before:-translate-y-1/2 before:rounded-r before:bg-brand-600"
+            "bg-gradient-to-r from-brand-50 to-transparent text-ink-950"
         )
       }
       title={collapsed ? item.label : undefined}

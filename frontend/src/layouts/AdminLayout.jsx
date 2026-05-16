@@ -61,11 +61,11 @@ function AdminLayout() {
         onClose={() => setVisible(false)}
         open={visible}
         key={placement === "right" ? "left" : "right"}
-        width={294}
+        width={280}
         bodyStyle={{ padding: 0 }}>
-        <div className="min-h-screen overflow-auto no-scrollbar w-[294px] bg-white text-ink-700 select-none border-r border-ink-200">
+        <div className="min-h-screen overflow-auto no-scrollbar w-[280px] bg-white text-ink-700 select-none border-r border-ink-200">
           {data && !loading && (
-            <div className="h-[60px] px-4 flex items-center justify-between border-b border-ink-100 shrink-0">
+            <div className="h-16 px-5 flex items-center justify-between border-b border-ink-100 shrink-0">
               <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white text-base font-bold shrink-0">
                   N
@@ -98,13 +98,13 @@ function AdminLayout() {
       {/* Desktop sidebar */}
       <div
         className={cn(
-          "hidden md:flex flex-col left-0 top-0 z-10 duration-300 h-screen w-[294px] 2xl:w-[294px] bg-white border-r border-ink-200 text-ink-700 select-none",
-          { "w-[86px] 2xl:w-[86px]": collapsed }
+          "hidden md:flex flex-col left-0 top-0 z-10 duration-300 h-screen w-[280px] 2xl:w-[280px] bg-white border-r border-ink-200 text-ink-700 select-none",
+          { "w-[240px] 2xl:w-[240px]": collapsed }
         )}>
         {data && !loading && (
           <div
             className={cn(
-              "h-[60px] px-4 flex items-center justify-between border-b border-ink-100 shrink-0",
+              "h-16 px-5 flex items-center justify-between border-b border-ink-100 shrink-0",
               collapsed && "justify-center px-3"
             )}>
             <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
@@ -156,9 +156,9 @@ function AdminLayout() {
 
       <div
         className={cn(
-          `flex flex-col w-full 2xl:w-[calc(100vw-294px)] md:w-[calc(100vw-294px)] duration-300`,
+          `flex flex-col w-full 2xl:w-[calc(100vw-280px)] md:w-[calc(100vw-280px)] duration-300`,
           {
-            "md:w-[calc(100vw-86px)] 2xl:w-[calc(100vw-86px)]": collapsed,
+            "md:w-[calc(100vw-240px)] 2xl:w-[calc(100vw-240px)]": collapsed,
           }
         )}>
         <Header onPress={openDrawer} data={data} loading={loading} />

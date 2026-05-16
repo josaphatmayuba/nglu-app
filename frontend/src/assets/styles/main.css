@@ -117,16 +117,29 @@
   background-color: transparent;
 }
 
+/* Active nav item with vertical bar indicator (mockup style) */
 .menu-item:has(.active) {
-  background-color: #eef2ff !important;
-  color: #4338ca !important;
+  background: linear-gradient(90deg, rgba(99,102,241,0.08) 0%, transparent 100%) !important;
+  color: #18181b !important;
   border-radius: 8px !important;
   width: 100%;
+  position: relative;
+}
+
+.menu-item:has(.active)::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: #6366f1;
+  border-radius: 0 3px 3px 0;
 }
 
 .menu-item:has(.active) a,
 .menu-item:has(.active) span {
-  color: #4338ca !important;
+  color: #18181b !important;
   font-weight: 600;
 }
 

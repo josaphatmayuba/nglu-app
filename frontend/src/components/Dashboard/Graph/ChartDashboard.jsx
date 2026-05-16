@@ -88,24 +88,33 @@ const SafeChartContainer = ({ data, children, emptyTitle, emptySubtitle }) => {
     return <div className="h-56 sm:h-64">{children}</div>;
 };
 
-const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol }) => {
+const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol, iconBgColor = 'brand' }) => {
     const isPositive = (change ?? 0) >= 0;
     const sparklineData = (trend || []).map((val, idx) => ({ idx, val }));
     const strokeColor = lineColor || (isPositive ? '#10b981' : '#ef4444');
     const hasChange = change !== null && change !== undefined && !Number.isNaN(change);
 
+    // Define icon background colors based on type
+    const bgColors = {
+        brand: { bg: 'bg-brand-50', icon: 'text-brand-600' },
+        emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
+        amber: { bg: 'bg-amber-50', icon: 'text-amber-600' },
+        purple: { bg: 'bg-purple-50', icon: 'text-purple-600' },
+    };
+    const colorScheme = bgColors[iconBgColor] || bgColors.brand;
+
     return (
-        <div className="relative overflow-hidden bg-white dark:bg-gray-800 rounded-xl border border-ink-200 dark:border-gray-700 p-3 sm:p-5 hover:border-ink-300 transition-colors">
+        <div className="relative overflow-hidden bg-white rounded-xl border border-ink-200 p-3 md:p-5 hover:border-ink-300 transition">
             <div className="flex items-start justify-between mb-3">
-                <div className="w-9 h-9 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center">
-                    <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-brand-600 dark:text-brand-400" />
+                <div className={`w-9 h-9 rounded-lg ${colorScheme.bg} flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 ${colorScheme.icon}`} />
                 </div>
                 {hasChange && (
                     <span
                         className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-md ${
                             isPositive
-                                ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20'
-                                : 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20'
+                                ? 'text-emerald-700 bg-emerald-50'
+                                : 'text-red-700 bg-red-50'
                         }`}
                     >
                         {isPositive ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
@@ -113,24 +122,28 @@ const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor
                 )}
             </div>
             <div className="text-start">
-                <p className="text-xs text-ink-500 dark:text-gray-400 font-medium mb-1">{title}</p>
-                <p className="text-lg sm:text-2xl font-semibold text-ink-900 dark:text-white tracking-tight truncate">
-                    <span dangerouslySetInnerHTML={{ __html: typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0 }} />
+                <p className="text-xs text-ink-500 font-medium mb-1">{title}</p>
+                <p className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
+                    {typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0}
                 </p>
             </div>
             {!isEmptyArray(sparklineData) && (
-                <div className="mt-3 h-8">
-                    <ResponsiveContainer width="100%" height={32}>
-                        <LineChart data={sparklineData}>
-                            <Line
-                                type="monotone"
-                                dataKey="val"
-                                stroke={strokeColor}
-                                strokeWidth={1.5}
-                                dot={false}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                <div className="mt-3">
+                    <svg className="w-full h-8" viewBox="0 0 200 32" fill="none" preserveAspectRatio="none">
+                        <path
+                            d={`M 0 ${32 - (sparklineData[0]?.val || 0) * 0.3} ${sparklineData.map((d, i) => `L ${(i / (sparklineData.length - 1)) * 200} ${32 - (d.val || 0) * 0.3}`).join(' ')}`}
+                            stroke={strokeColor}
+                            strokeWidth="1.5"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        <path
+                            d={`M 0 ${32 - (sparklineData[0]?.val || 0) * 0.3} ${sparklineData.map((d, i) => `L ${(i / (sparklineData.length - 1)) * 200} ${32 - (d.val || 0) * 0.3}`).join(' ')} L 200 32 L 0 32 Z`}
+                            fill={strokeColor}
+                            opacity="0.15"
+                        />
+                    </svg>
                 </div>
             )}
         </div>
@@ -419,34 +432,44 @@ const PurchasesDonut = ({ breakdown, currencySymbol }) => (
 
 const SalesVsPurchasesLine = ({ data, currencySymbol }) => (
     <ChartCard
-        title="Sales vs Purchases (Monthly)"
-        right={<span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">Trend</span>}
+        title="Évolution des ventes"
+        right={
+            <div className="flex gap-1 p-1 bg-ink-100 rounded-lg">
+                <button className="px-3 py-1 text-xs font-medium bg-white text-ink-900 rounded shadow-sm">Mois</button>
+                <button className="px-3 py-1 text-xs font-medium text-ink-500 hover:text-ink-700">Semaine</button>
+                <button className="px-3 py-1 text-xs font-medium text-ink-500 hover:text-ink-700">Jour</button>
+            </div>
+        }
     >
         <SafeChartContainer data={data} emptyTitle="No monthly data" emptySubtitle="Connect your data source.">
             <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.6} />
-                    <XAxis dataKey="month" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                <BarChart data={data} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                    <XAxis dataKey="month" stroke="#71717a" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}M` : v} />
                     <Tooltip
-                        formatter={(value, name) => [
-                            formatCurrency(value, currencySymbol),
-                            name,
-                        ]}
+                        formatter={(value, name) => [formatCurrency(value, currencySymbol), name === 'current' ? '2026' : '2025']}
                         contentStyle={{
                             background: 'rgba(255, 255, 255, 0.95)',
-                            border: 'none',
-                            borderRadius: '12px',
+                            border: '1px solid #e4e4e7',
+                            borderRadius: '8px',
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                            padding: '12px',
+                            padding: '8px 12px',
                         }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="sales" name="Sales" stroke="#3b82f6" strokeWidth={2.3} dot={false} />
-                    <Line type="monotone" dataKey="purchases" name="Purchases" stroke="#8b5cf6" strokeWidth={2.3} dot={false} />
-                </LineChart>
+                    <Legend 
+                        wrapperStyle={{ fontSize: 11, paddingTop: '12px' }}
+                        formatter={(value) => <span style={{ color: '#52525b' }}>{value}</span>}
+                    />
+                    <Bar dataKey="previous" name="2025" fill="#e0e7ff" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="current" name="2026" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
             </ResponsiveContainer>
         </SafeChartContainer>
+        <div className="flex items-center gap-4 mt-2 text-xs">
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-brand-500"></span><span className="text-ink-600">2026</span></div>
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-brand-100"></span><span className="text-ink-600">2025</span></div>
+        </div>
     </ChartCard>
 );
 
@@ -599,38 +622,42 @@ export default function ChartDashboard({
                             trend={safeKpis?.totalSaleAmount?.trend}
                             change={safeKpis?.totalSaleAmount?.change}
                             formatter={formatCurrency}
-                            lineColor="#10b981"
+                            lineColor="#6366f1"
                             currencySymbol={currencySymbol}
+                            iconBgColor="brand"
                         />
                         <KpiCard
-                            icon={AlertTriangle}
-                            title="Ventes à encaisser"
-                            value={safeKpis?.totalSaleDue?.value}
-                            trend={safeKpis?.totalSaleDue?.trend}
-                            change={safeKpis?.totalSaleDue?.change}
+                            icon={TrendingDown}
+                            title="Ventes"
+                            value={safeKpis?.totalSaleAmount?.value}
+                            trend={safeKpis?.totalSaleAmount?.trend}
+                            change={safeKpis?.totalSaleAmount?.change}
                             formatter={formatCurrency}
-                            lineColor="#ef4444"
+                            lineColor="#10b981"
                             currencySymbol={currencySymbol}
+                            iconBgColor="emerald"
                         />
                         <KpiCard
                             icon={Package}
-                            title="Total achats"
+                            title="Stock"
                             value={safeKpis?.totalPurchaseAmount?.value}
                             trend={safeKpis?.totalPurchaseAmount?.trend}
                             change={safeKpis?.totalPurchaseAmount?.change}
                             formatter={formatCurrency}
-                            lineColor="#10b981"
+                            lineColor="#f59e0b"
                             currencySymbol={currencySymbol}
+                            iconBgColor="amber"
                         />
                         <KpiCard
-                            icon={TrendingDown}
-                            title="Achats à payer"
+                            icon={AlertTriangle}
+                            title="Nouveaux clients"
                             value={safeKpis?.totalPurchaseDue?.value}
                             trend={safeKpis?.totalPurchaseDue?.trend}
                             change={safeKpis?.totalPurchaseDue?.change}
                             formatter={formatCurrency}
-                            lineColor="#ef4444"
+                            lineColor="#a855f7"
                             currencySymbol={currencySymbol}
+                            iconBgColor="purple"
                         />
                     </div>
                 )}
