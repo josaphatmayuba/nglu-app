@@ -145,8 +145,80 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
+const decodeCurrencyText = (value) => {
+  const text = String(value || "");
+  return text.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&amp;/g, "&")
+    .replace(/&euro;/gi, "€")
+    .replace(/&pound;/gi, "£")
+    .replace(/&yen;/gi, "¥")
+    .replace(/â‚¬/g, "€")
+    .replace(/à§³/g, "৳")
+    .replace(/Â£/g, "£")
+    .replace(/â‚¹/g, "₹")
+    .replace(/Â¥/g, "¥")
+    .replace(/â‚©/g, "₩")
+    .replace(/â‚±/g, "₱")
+    .replace(/â‚º/g, "₺")
+    .replace(/â‚£/g, "₣")
+    .replace(/â‚½/g, "₽");
+};
+
+const currencySymbolFallbacks = {
+  DOLLAR: "$",
+  EURO: "€",
+  BDT: "৳",
+  POUND: "£",
+  RUPEE: "₹",
+  YEN: "¥",
+  WON: "₩",
+  YUAN: "¥",
+  PESO: "₱",
+  LIRA: "₺",
+  REAL: "R$",
+  RUBLE: "₽",
+  RINGGIT: "RM",
+  CAD: "CA$",
+};
+
+const cleanCurrencySymbol = (currency) => {
+  const name = String(currency?.currencyName || "").toUpperCase();
+  const rawSymbol = String(currency?.currencySymbol || "");
+  const decoded = decodeCurrencyText(rawSymbol).trim();
+  if (name.includes("FRANC CONGOLAIS")) return "FC";
+  if (/&#|&[a-z]+;|Â|â|à/i.test(rawSymbol) && currencySymbolFallbacks[name]) {
+    return currencySymbolFallbacks[name];
+  }
+  if (decoded && !/[&;Ââà]/.test(decoded)) return decoded;
+  return currencySymbolFallbacks[name] || decoded || "";
+};
+
+const getCurrencyValue = (currency) => currency?.currencyId ?? currency?.id;
+
+const optionalNumber = (value) =>
+  value === undefined || value === null || value === "" ? undefined : Number(value);
+
+const modalSelectProps = {
+  popupClassName: "immo-select-popup",
+  getPopupContainer: (trigger) => trigger?.parentElement || document.body,
+};
+
+const buildCurrencyOptions = (currencies) =>
+  currencies
+    .map((currency) => {
+      const value = getCurrencyValue(currency);
+      if (value === undefined || value === null) return null;
+      const name = decodeCurrencyText(currency?.currencyName).trim();
+      const symbol = cleanCurrencySymbol(currency);
+      return {
+        label: symbol ? `${name} (${symbol})` : name,
+        value,
+      };
+    })
+    .filter(Boolean);
+
 const compactMoney = (value, symbol) =>
-  `${symbol || "CDF"} ${Number(value || 0).toLocaleString(undefined, {
+  `${decodeCurrencyText(symbol || "CDF")} ${Number(value || 0).toLocaleString(undefined, {
     maximumFractionDigits: 0,
   })}`;
 
@@ -403,6 +475,10 @@ const PropertyManagement = () => {
     () => currencyList.filter((c) => c?.status === true || c?.status === "true"),
     [currencyList]
   );
+  const currencyOptions = useMemo(
+    () => buildCurrencyOptions(activeCurrencies),
+    [activeCurrencies]
+  );
 
   useEffect(() => {
     dispatch(loadPropertyManagement());
@@ -495,7 +571,12 @@ const PropertyManagement = () => {
 
     let response;
     if (type === "payment") {
-      response = await dispatch(createRentPayment(values));
+      response = await dispatch(createRentPayment({
+        ...values,
+        leaseId: Number(values.leaseId),
+        paymentAccountId: optionalNumber(values.paymentAccountId),
+        currencyId: optionalNumber(values.currencyId),
+      }));
     } else if (type === "onboardingGenerate") {
       response = await dispatch(generateTenantOnboarding(values));
     } else if (type === "tenant") {
@@ -547,7 +628,10 @@ const PropertyManagement = () => {
         }
       }
     } else {
-      response = await dispatch(actions[type]({ id, values }));
+      const normalizedValues = type === "lease"
+        ? { ...values, currencyId: optionalNumber(values.currencyId) }
+        : values;
+      response = await dispatch(actions[type]({ id, values: normalizedValues }));
     }
 
     if (response.payload?.message === "success") {
@@ -3160,7 +3244,7 @@ const PropertyManagement = () => {
                   <Select options={unitTypes} />
                 </Form.Item>
                 <Form.Item label="Statut" name="status" initialValue="vacant">
-                  <Select options={[
+                  <Select {...modalSelectProps} options={[
                     { label: "Vacant", value: "vacant" },
                     { label: "Occupé", value: "occupied" },
                     { label: "Réservé", value: "reserved" },
@@ -3207,7 +3291,7 @@ const PropertyManagement = () => {
                   />
                 </Form.Item>
                 <Form.Item label="Statut" name="status" initialValue="active">
-                  <Select options={[
+                  <Select {...modalSelectProps} options={[
                     { label: "Brouillon", value: "draft" },
                     { label: "Actif", value: "active" },
                     { label: "Terminé", value: "ended" },
@@ -3224,7 +3308,7 @@ const PropertyManagement = () => {
                   <Input type="date" />
                 </Form.Item>
                 <Form.Item label="Cycle" name="billingCycle" initialValue="monthly">
-                  <Select options={[
+                  <Select {...modalSelectProps} options={[
                     { label: "Mensuel", value: "monthly" },
                     { label: "Trimestriel", value: "quarterly" },
                     { label: "Annuel", value: "yearly" },
@@ -3237,10 +3321,8 @@ const PropertyManagement = () => {
                   <Select
                     allowClear
                     placeholder="Devise par défaut"
-                    options={activeCurrencies.map((c) => ({
-                      label: `${c.currencyName} (${c.currencySymbol})`,
-                      value: c.currencyId,
-                    }))}
+                    {...modalSelectProps}
+                    options={currencyOptions}
                   />
                 </Form.Item>
                 <Form.Item label="Dépôt" name="securityDeposit">
@@ -3387,7 +3469,7 @@ const PropertyManagement = () => {
           {modal?.type === "payment" && (
             <>
               <Form.Item label="Bail" name="leaseId" rules={[{ required: true }]}>
-                <Select options={leaseOptions} />
+                <Select {...modalSelectProps} options={leaseOptions} />
               </Form.Item>
               <div className="pm-form-grid">
                 <Form.Item label="Date paiement" name="paymentDate" rules={[{ required: true }]}>
@@ -3397,7 +3479,7 @@ const PropertyManagement = () => {
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
                 <Form.Item label="Méthode" name="method" initialValue="cash">
-                  <Select options={[
+                  <Select {...modalSelectProps} options={[
                     { label: "Cash", value: "cash" },
                     { label: "Bank", value: "bank" },
                     { label: "Mobile money", value: "mobile_money" },
@@ -3408,6 +3490,7 @@ const PropertyManagement = () => {
                   <Select
                     placeholder="Par défaut: compte du type Rent Payment"
                     allowClear
+                    {...modalSelectProps}
                     options={cashBankAccounts.map((account) => ({
                       label: account.name,
                       value: account.id,
@@ -3418,10 +3501,8 @@ const PropertyManagement = () => {
                   <Select
                     allowClear
                     placeholder="Devise du bail ou par défaut"
-                    options={activeCurrencies.map((c) => ({
-                      label: `${c.currencyName} (${c.currencySymbol})`,
-                      value: c.currencyId,
-                    }))}
+                    {...modalSelectProps}
+                    options={currencyOptions}
                   />
                 </Form.Item>
               </div>
