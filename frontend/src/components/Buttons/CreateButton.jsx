@@ -5,10 +5,10 @@ export default function CreateButton({ title, to }) {
   return (
     <Link to={to}>
       <button
-        className="flex items-center gap-2 px-3 md:px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-100"
+        className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-100"
       >
         <Plus className="w-4 h-4" />
-        <span className="whitespace-nowrap">{title || "Add Item"}</span>
+        <span className="whitespace-nowrap">{title || "Nouveau"}</span>
       </button>
     </Link>
   );

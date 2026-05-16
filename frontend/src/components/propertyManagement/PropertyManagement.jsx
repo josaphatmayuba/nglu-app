@@ -1049,6 +1049,86 @@ const PropertyManagement = () => {
     });
   }, [enrichedUnits, searchTerm, typeFilter]);
 
+  // ─── Search-aware filtered lists for all sections ─────────────────
+  // The header search bar ("Rechercher adresse, locataire…") now filters
+  // every tab, not just Propriétés.
+  const filteredTenants = useMemo(() => {
+    const q = normalize(searchTerm);
+    if (!q) return safeTenants;
+    return safeTenants.filter((tenant) => {
+      const haystack = normalize(
+        [
+          tenant.firstName,
+          tenant.lastName,
+          tenant.username,
+          tenant.email,
+          tenant.phone,
+          tenant.address,
+          tenantName(tenant),
+        ].join(" "),
+      );
+      return haystack.includes(q);
+    });
+  }, [safeTenants, searchTerm]);
+
+  const filteredLeases = useMemo(() => {
+    const q = normalize(searchTerm);
+    if (!q) return safeLeases;
+    return safeLeases.filter((lease) => {
+      const haystack = normalize(
+        [
+          lease.reference,
+          tenantNameFromLease(lease),
+          lease.propertyName,
+          lease.propertyAddress,
+          lease.unitName,
+          lease.tenantEmail,
+        ].join(" "),
+      );
+      return haystack.includes(q);
+    });
+  }, [safeLeases, searchTerm]);
+
+  const filteredPayments = useMemo(() => {
+    const q = normalize(searchTerm);
+    if (!q) return safePayments;
+    return safePayments.filter((payment) => {
+      const haystack = normalize(
+        [
+          payment.reference,
+          payment.leaseReference,
+          payment.tenantFirstName,
+          payment.tenantLastName,
+          payment.propertyName,
+          payment.unitName,
+          payment.method,
+          String(payment.amount || ""),
+        ].join(" "),
+      );
+      return haystack.includes(q);
+    });
+  }, [safePayments, searchTerm]);
+
+  const filteredMaintenance = useMemo(() => {
+    const q = normalize(searchTerm);
+    if (!q) return safeMaintenance;
+    return safeMaintenance.filter((req) => {
+      const haystack = normalize(
+        [
+          req.title,
+          req.description,
+          req.propertyName,
+          req.unitName,
+          req.priority,
+          req.status,
+          req.property?.name,
+          req.unit?.name,
+        ].join(" "),
+      );
+      return haystack.includes(q);
+    });
+  }, [safeMaintenance, searchTerm]);
+
   const activeLeases = safeLeases.filter((lease) => lease.status === "active");
   const occupiedUnits = enrichedUnits.filter(
     (unit) => unit.status === "occupied" || unit.activeLease,
@@ -2037,8 +2117,8 @@ const PropertyManagement = () => {
 
   const renderTenantsMockup = () => (
     <div className="immo-tenant-grid">
-      {safeTenants.length ? (
-        safeTenants.map((tenant, index) => {
+      {filteredTenants.length ? (
+        filteredTenants.map((tenant, index) => {
           const tenantLeases = safeLeases.filter((lease) => lease.tenantId === tenant.id);
           const activeLease = tenantLeases.find((lease) => lease.status === "active") || tenantLeases[0];
           const activeUnit = enrichedUnits.find((unit) => unit.id === activeLease?.unitId);
@@ -2099,19 +2179,26 @@ const PropertyManagement = () => {
           );
         })
       ) : (
-        <EmptyState title="Aucun locataire" text="Créez un locataire ou générez un lien d'inscription." />
+        <EmptyState
+          title={searchTerm ? "Aucun locataire trouvé" : "Aucun locataire"}
+          text={searchTerm ? `Aucun résultat pour « ${searchTerm} ».` : "Créez un locataire ou générez un lien d'inscription."}
+        />
       )}
     </div>
   );
 
   const renderLeasesMockup = () => {
-    const missingContractCount = safeLeases.filter((lease) => !leaseContractFor(lease)).length;
-    const renewLeases = safeLeases.filter((lease) => {
+    // The toolbar counters + missing-contract banner reflect the search
+    // result if a query is active; otherwise they show totals.
+    const leasesView = filteredLeases;
+    const missingContractCount = leasesView.filter((lease) => !leaseContractFor(lease)).length;
+    const renewLeases = leasesView.filter((lease) => {
       if (!lease.endDate) return false;
       const daysLeft = moment(lease.endDate).diff(moment(), "days");
       return daysLeft >= 0 && daysLeft <= 60;
     });
-    const expiredLeases = safeLeases.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
+    const expiredLeases = leasesView.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
+    const activeLeasesView = leasesView.filter((lease) => lease.status === "active");
 
     return (
       <div className="immo-table-flow">
@@ -2129,8 +2216,8 @@ const PropertyManagement = () => {
         )}
         <div className="immo-table-toolbar">
           <div className="immo-filter-group">
-            <button type="button" className="active">Tous <span>{safeLeases.length}</span></button>
-            <button type="button">Actifs <span>{activeLeases.length}</span></button>
+            <button type="button" className="active">Tous <span>{leasesView.length}</span></button>
+            <button type="button">Actifs <span>{activeLeasesView.length}</span></button>
             <button type="button">À renouveler <span>{renewLeases.length}</span></button>
             <button type="button">Expirés <span>{expiredLeases.length}</span></button>
             <button type="button">Sans contrat <span>{missingContractCount}</span></button>
@@ -2161,7 +2248,7 @@ const PropertyManagement = () => {
         </div>
         {leaseView === "grid" && (
           <div className="immo-lease-grid">
-            {safeLeases.map((lease, index) => {
+            {leasesView.map((lease, index) => {
               const contract = leaseContractFor(lease);
               const info = leaseDisplayInfo(lease, contract);
               const paymentNote =
@@ -2275,7 +2362,7 @@ const PropertyManagement = () => {
             <span>Loyer/mois</span>
             <span></span>
             </div>
-            {safeLeases.map((lease, index) => {
+            {leasesView.map((lease, index) => {
             const contract = leaseContractFor(lease);
             const isExpired = lease.endDate && moment(lease.endDate).isBefore(moment());
             const daysLeft = lease.endDate ? moment(lease.endDate).diff(moment(), "days") : null;
@@ -2339,7 +2426,7 @@ const PropertyManagement = () => {
                 <span>Aujourd'hui</span>
               </div>
               <div className="immo-timeline-rows">
-                {safeLeases.map((lease, index) => {
+                {leasesView.map((lease, index) => {
                   const contract = leaseContractFor(lease);
                   const info = leaseDisplayInfo(lease, contract);
                   const left = Math.min(70, Math.max(0, index * 7 + (info.start ? Math.max(0, info.start.year() - 2024) * 18 : 0)));
@@ -2385,11 +2472,12 @@ const PropertyManagement = () => {
   };
 
   const renderPaymentsMockup = () => {
+    const paymentsView = filteredPayments;
     const pageSize = 10;
-    const totalPages = Math.max(1, Math.ceil(safePayments.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(paymentsView.length / pageSize));
     const currentPage = Math.min(paymentsPage, totalPages);
     const pageStart = (currentPage - 1) * pageSize;
-    const pageItems = safePayments.slice(pageStart, pageStart + pageSize);
+    const pageItems = paymentsView.slice(pageStart, pageStart + pageSize);
     const pageNumbers = [];
     if (totalPages <= 5) {
       for (let i = 1; i <= totalPages; i += 1) pageNumbers.push(i);
@@ -2412,8 +2500,8 @@ const PropertyManagement = () => {
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
-          <button type="button" className="active">Tous <span>{safePayments.length}</span></button>
-          <button type="button">Payés <span>{paidPayments.length}</span></button>
+          <button type="button" className="active">Tous <span>{paymentsView.length}</span></button>
+          <button type="button">Payés <span>{paymentsView.length}</span></button>
           <button type="button">En attente <span>{pendingPayments.length}</span></button>
           <button type="button">En retard <span>{latePayments.length}</span></button>
         </div>
@@ -2467,7 +2555,7 @@ const PropertyManagement = () => {
         {totalPages > 1 && (
           <div className="immo-pagination">
             <span className="immo-pagination-count">
-              {pageStart + 1}–{Math.min(pageStart + pageSize, safePayments.length)} sur {safePayments.length}
+              {pageStart + 1}–{Math.min(pageStart + pageSize, paymentsView.length)} sur {paymentsView.length}
             </span>
             <div className="immo-pagination-pages">
               <button
@@ -2520,7 +2608,7 @@ const PropertyManagement = () => {
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
-          <button type="button" className="active">Tous <span>{safeMaintenance.length}</span></button>
+          <button type="button" className="active">Tous <span>{filteredMaintenance.length}</span></button>
           <button type="button">Urgent <span>{urgentMaintenance.length}</span></button>
           <button type="button">En cours <span>{inProgressMaintenance.length}</span></button>
           <button type="button">Résolus <span>{resolvedMaintenance.length}</span></button>
@@ -2530,7 +2618,7 @@ const PropertyManagement = () => {
         </button>
       </div>
       <div className="immo-ticket-list">
-        {safeMaintenance.map((request, index) => {
+        {filteredMaintenance.map((request, index) => {
           const urgent = ["urgent", "high"].includes(request.priority);
           const done = request.status === "done";
           const iconTone = ticketIconTone(request);
