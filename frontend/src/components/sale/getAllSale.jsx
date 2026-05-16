@@ -93,7 +93,7 @@ const GetAllSale = () => {
   const columns = [
     {
       id: 1,
-      title: "Invoice",
+      title: "Facture",
       dataIndex: "id",
       key: "id",
       render: (name, { id }) => <Link to={`/admin/sale/${id}`}>{id}</Link>,
@@ -109,7 +109,7 @@ const GetAllSale = () => {
     },
     {
       id: 3,
-      title: "Customer",
+      title: "Client",
       dataIndex: `customer`,
       key: "customerId",
       render: (customer) => (
@@ -120,7 +120,7 @@ const GetAllSale = () => {
 
     {
       id: 4,
-      title: "Total Amount",
+      title: "Montant total",
       dataIndex: "totalAmount",
       key: "totalAmount",
       render: (totalAmount) => Number(totalAmount).toFixed(2),
@@ -129,7 +129,7 @@ const GetAllSale = () => {
 
     {
       id: 7,
-      title: "Paid",
+      title: "Encaissé",
       dataIndex: "paidAmount",
       key: "paidAmount",
       render: (paidAmount) => Number(paidAmount).toFixed(2),
@@ -138,7 +138,7 @@ const GetAllSale = () => {
     },
     {
       id: 6,
-      title: "Due",
+      title: "Dû",
       dataIndex: "dueAmount",
       key: "dueAmount",
       render: (dueAmount) => Number(dueAmount).toFixed(2),
@@ -148,7 +148,7 @@ const GetAllSale = () => {
 
     {
       id: 6,
-      title: "Tax",
+      title: "TVA",
       dataIndex: "totalTaxAmount",
       key: "totalTaxAmount",
       render: (totalTaxAmount) => Number(totalTaxAmount).toFixed(2),
@@ -158,7 +158,7 @@ const GetAllSale = () => {
 
     {
       id: 5,
-      title: "Due date",
+      title: "Échéance",
       dataIndex: "dueDate",
       key: "discount",
       render: (dueDate) =>
@@ -178,7 +178,7 @@ const GetAllSale = () => {
 
     {
       id: 8,
-      title: "Profit",
+      title: "Bénéfice",
       dataIndex: "profit",
       key: "profit",
       render: (profit) => Number(profit).toFixed(2),
@@ -187,7 +187,7 @@ const GetAllSale = () => {
     },
     {
       id: 9,
-      title: "Sale Person",
+      title: "Commercial",
       dataIndex: "user",
       key: "user",
       render: (user) => (
@@ -319,8 +319,8 @@ const GetAllSale = () => {
   return (
     <div>
       <PageHeader
-        title="Ventes"
-        subtitle="Factures et paiements clients"
+        title="Factures"
+        subtitle="Toutes les factures de vente"
         actions={
           <>
             <RangePicker
@@ -332,7 +332,7 @@ const GetAllSale = () => {
               ]}
             />
             <UserPrivateComponent permission={"create-saleInvoice"}>
-              <CreateButton to="/admin/sale/add" title="Nouvelle vente" />
+              <CreateButton to="/admin/sale/add" title="Nouvelle facture" />
             </UserPrivateComponent>
           </>
         }
