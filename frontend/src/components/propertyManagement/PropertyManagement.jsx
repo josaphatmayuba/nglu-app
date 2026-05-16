@@ -1066,9 +1066,33 @@ const PropertyManagement = () => {
   const collectedRent =
     dashboard?.collectedRent ??
     safePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const overduePayments = safePayments.filter((payment) =>
-    ["overdue", "late", "pending"].includes(payment.status),
-  );
+
+  // ─── Derived payment buckets (the DB doesn't store payment.status —
+  //     every recorded payment IS paid; pending/overdue are *expected*
+  //     payments computed from each active lease's nextInvoiceDate
+  //     and the absence of a payment for that period.) ──────────────
+  const today = moment();
+  const leaseHasPaymentInPeriod = (leaseId, periodStart, periodEnd) =>
+    safePayments.some((p) =>
+      p.leaseId === leaseId
+      && p.paymentDate
+      && moment(p.paymentDate).isBetween(periodStart, periodEnd, "day", "[]"),
+    );
+  const overdueLeases = activeLeases.filter((lease) => {
+    if (!lease.nextInvoiceDate) return false;
+    const due = moment(lease.nextInvoiceDate);
+    if (!due.isBefore(today, "day")) return false;
+    return !leaseHasPaymentInPeriod(lease.id, due.clone().subtract(1, "month"), due);
+  });
+  const upcomingLeases = activeLeases.filter((lease) => {
+    if (!lease.nextInvoiceDate) return false;
+    const due = moment(lease.nextInvoiceDate);
+    if (due.isBefore(today, "day")) return false;
+    if (due.diff(today, "days") > 5) return false;
+    return !leaseHasPaymentInPeriod(lease.id, today.clone().subtract(1, "month"), due);
+  });
+  const overduePayments = overdueLeases;
+  const upcomingPayments = upcomingLeases;
   const occupancyRate = enrichedUnits.length
     ? Math.round((occupiedUnits.length / enrichedUnits.length) * 100)
     : 0;
@@ -1321,17 +1345,20 @@ const PropertyManagement = () => {
     );
   };
 
-  const paidPayments = safePayments.filter((payment) =>
-    ["paid", "completed", "success"].includes(payment.status),
-  );
-  const pendingPayments = safePayments.filter((payment) =>
-    ["pending", "waiting", "draft"].includes(payment.status),
-  );
-  const latePayments = overduePayments;
-  const paidAmount = paidPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const pendingAmount = pendingPayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const lateAmount = latePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const plannedAmount = paidAmount + pendingAmount + lateAmount || monthlyRent;
+  // Every recorded payment in the table IS paid by definition (status
+  // column doesn't exist server-side — a row only exists once the rent
+  // was received).
+  const paidPayments = safePayments;
+  const pendingPayments = upcomingPayments;  // leases, due ≤ 5 days
+  const latePayments = overduePayments;       // leases, due < today
+  const currentMonthStart = today.clone().startOf("month");
+  const currentMonthEnd = today.clone().endOf("month");
+  const paidAmount = safePayments
+    .filter((p) => p.paymentDate && moment(p.paymentDate).isBetween(currentMonthStart, currentMonthEnd, "day", "[]"))
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const pendingAmount = pendingPayments.reduce((sum, item) => sum + Number(item.rentAmount || 0), 0);
+  const lateAmount = latePayments.reduce((sum, item) => sum + Number(item.rentAmount || 0), 0);
+  const plannedAmount = monthlyRent;
   const recentRentPayments = useMemo(
     () =>
       [...safePayments]

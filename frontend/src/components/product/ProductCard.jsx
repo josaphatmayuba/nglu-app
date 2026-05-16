@@ -50,60 +50,56 @@ export default function ProductCard({ card }) {
     },
   ];
 
-  // New KPI-like card design to match dashboard KPI cards
+  // KPI card design matching mockup style
   const KpiCard = ({ item }) => {
     const Icon = item.icon;
     const isCurrency = item.isCurrency;
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-2xl dark:border-gray-700 p-3 sm:p-4 shadow-none border-none">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-              <Icon className={`w-5 h-5 ${item.color}`} />
-            </div>
-            <div className="flex flex-col">
-              <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-0.5">
-                {item.label}
-              </p>
-              <Tooltip
-                title={
-                  <span className="text-base font-medium">
-                    {isCurrency && (
-                      <span
-                        dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
-                        }}
-                      />
-                    )}
-                    {item.fullValue ?? 0}
-                  </span>
-                }
-              >
-                <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                  {isCurrency && (
-                    <span
-                      className="text-base mr-1"
-                      dangerouslySetInnerHTML={{
-                        __html: currency?.currencySymbol,
-                      }}
-                    />
-                  )}
-                  {typeof item.value === "number"
-                    ? abbreviateNumber(item.value)
-                    : item.value}
-                </div>
-              </Tooltip>
-            </div>
-          </div>
+    
+    // Map colors to mockup-style backgrounds
+    const colorMap = {
+      'text-blue-500': { bg: 'bg-blue-50', icon: 'text-blue-600' },
+      'text-emerald-500': { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
+      'text-amber-500': { bg: 'bg-amber-50', icon: 'text-amber-600' },
+      'text-rose-500': { bg: 'bg-rose-50', icon: 'text-rose-600' },
+    };
+    const colors = colorMap[item.color] || { bg: 'bg-brand-50', icon: 'text-brand-600' };
 
-          {item.link ? (
-            <Link
-              to={item.link}
-              className="text-xs text-blue-500 hover:underline"
-            >
-              View
-            </Link>
-          ) : null}
+    return (
+      <div className="bg-white rounded-xl border border-ink-200 p-3 md:p-5 hover:border-ink-300 transition">
+        <div className="flex items-start justify-between mb-3">
+          <div className={`w-9 h-9 rounded-lg ${colors.bg} flex items-center justify-center`}>
+            <Icon className={`w-4 h-4 ${colors.icon}`} />
+          </div>
+        </div>
+        <div className="text-start">
+          <p className="text-xs text-ink-500 font-medium mb-1">{item.label}</p>
+          <Tooltip
+            title={
+              <span className="text-base font-medium">
+                {isCurrency && (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: currency?.currencySymbol,
+                    }}
+                  />
+                )}
+                {item.fullValue ?? 0}
+              </span>
+            }
+          >
+            <div className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
+              {isCurrency && (
+                <span className="text-base mr-1"
+                  dangerouslySetInnerHTML={{
+                    __html: currency?.currencySymbol,
+                  }}
+                />
+              )}
+              {typeof item.value === "number"
+                ? abbreviateNumber(item.value)
+                : item.value}
+            </div>
+          </Tooltip>
         </div>
       </div>
     );
