@@ -215,17 +215,28 @@
    IMMOBILIER MODAL — match design-mockup.html
    ════════════════════════════════════════════════════════════════ */
 
-/* Rich modal title with icon + subtitle */
+/* Rich modal title with icon + subtitle — matches design-mockup.html
+   header: 40px rounded brand-50 square + 16px semibold title + 12px subtitle */
+
+/* Ant Design Modal wraps title text in .ant-modal-title with a default
+   font-size/line-height. Reset that so our custom layout drives sizing. */
+.ant-modal-header .ant-modal-title {
+  font-size: inherit !important;
+  font-weight: 400 !important;
+  line-height: 1.2;
+}
+
 .immo-modal-title {
   align-items: center;
   display: flex;
   gap: 12px;
+  min-height: 40px;
 }
 
 .immo-modal-title-icon {
   align-items: center;
   border-radius: 10px;
-  display: flex;
+  display: inline-flex;
   flex-shrink: 0;
   height: 40px;
   justify-content: center;
@@ -237,11 +248,25 @@
   color: #4f46e5;
 }
 
+.immo-modal-title-icon svg {
+  height: 20px;
+  width: 20px;
+}
+
+.immo-modal-title > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
 .immo-modal-title strong {
   color: #18181b;
   display: block;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .immo-modal-title span {
@@ -249,7 +274,8 @@
   display: block;
   font-size: 12px;
   font-weight: 400;
-  margin-top: 1px;
+  line-height: 1.4;
+  margin-top: 2px;
 }
 
 /* Form sections inside property modal */

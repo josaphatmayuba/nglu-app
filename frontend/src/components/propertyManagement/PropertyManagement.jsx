@@ -963,7 +963,7 @@ const PropertyManagement = () => {
   };
   const buildRichTitle = (Icon, iconTone, title, subtitle) => (
     <div className="immo-modal-title">
-      <span className={`immo-modal-title-icon ${iconTone}`}><Icon size={18} /></span>
+      <span className={`immo-modal-title-icon ${iconTone}`}><Icon size={20} /></span>
       <div>
         <strong>{title}</strong>
         <span>{subtitle}</span>
