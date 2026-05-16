@@ -33,6 +33,7 @@ const SaleSidebar = ({
   loader,
   setLoader,
   onFormSubmit,
+  invoiceMode = "vente",
 }) => {
   const { Option } = Select;
   const customer = allCustomer?.find((item) => item.id === selectedCustomer);
@@ -305,7 +306,7 @@ const SaleSidebar = ({
             onClick={() => setLoader(true)}
             size="large"
             className="h-12 text-base font-semibold rounded-lg">
-            Create Sale
+            {invoiceMode === "service" ? "Créer la facture (prestation)" : "Créer la facture"}
           </Button>
         </Form.Item>
       </div>
