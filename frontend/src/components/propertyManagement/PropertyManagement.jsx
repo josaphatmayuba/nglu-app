@@ -98,6 +98,7 @@ import {
 import { Link } from "react-router-dom";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 import ContractsTab from "./ContractsTab";
+import PropertyMapView from "./PropertyMapView";
 
 const propertyTypes = [
   { label: "🏢 Immeuble",         value: "building" },
@@ -396,6 +397,163 @@ const EmptyState = ({ title, text }) => (
   </div>
 );
 
+const propertyListColumns = [
+  { key: "code", label: "Code" },
+  { key: "name", label: "Nom" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Statut" },
+  { key: "tenant", label: "Locataire" },
+  { key: "rent", label: "Loyer", align: "right" },
+];
+
+const propertyListSortValue = (unit, key) => {
+  const status = unit.activeLease ? "occupied" : unit.status || "vacant";
+  const late = unit.activeLease?.status === "late" || unit.activeLease?.isOverdue;
+
+  switch (key) {
+    case "code":
+      return unit.code || unit.name || `U-${unit.id || ""}`;
+    case "name":
+      return unit.displayName || "";
+    case "type":
+      return unit.unitKindLabel || "";
+    case "status":
+      return late ? "En retard" : statusLabel[status] || status;
+    case "tenant":
+      return tenantNameFromLease(unit.activeLease);
+    case "rent":
+      return Number(unit.monthlyRent || 0);
+    default:
+      return "";
+  }
+};
+
+const PropertyListTable = ({ units, avatarColors, initials, onAssignTenant, onEditUnit }) => {
+  const [sortState, setSortState] = useState({ key: "code", direction: "asc" });
+
+  const sortedUnits = useMemo(() => {
+    const direction = sortState.direction === "asc" ? 1 : -1;
+    return [...units].sort((a, b) => {
+      const left = propertyListSortValue(a, sortState.key);
+      const right = propertyListSortValue(b, sortState.key);
+      if (typeof left === "number" || typeof right === "number") {
+        return ((Number(left) || 0) - (Number(right) || 0)) * direction;
+      }
+      return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" }) * direction;
+    });
+  }, [sortState, units]);
+
+  const toggleSort = (key) => {
+    setSortState((current) => ({
+      key,
+      direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  return (
+    <div className="immo-property-list-table">
+      <div className="immo-table-scroll">
+        <table>
+          <thead>
+            <tr>
+              {propertyListColumns.map((column) => (
+                <th key={column.key} className={column.align === "right" ? "right" : ""}>
+                  <button
+                    type="button"
+                    className={sortState.key === column.key ? "active" : ""}
+                    onClick={() => toggleSort(column.key)}
+                    aria-sort={
+                      sortState.key === column.key
+                        ? sortState.direction === "asc" ? "ascending" : "descending"
+                        : "none"
+                    }
+                  >
+                    {column.label}
+                    <span>{sortState.key === column.key ? (sortState.direction === "asc" ? "↑" : "↓") : "↕"}</span>
+                  </button>
+                </th>
+              ))}
+              <th className="actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedUnits.map((unit, index) => {
+              const status = unit.activeLease ? "occupied" : unit.status || "vacant";
+              const late = unit.activeLease?.status === "late" || unit.activeLease?.isOverdue;
+              const statusTone =
+                late ? "danger"
+                : status === "maintenance" ? "warning"
+                : status === "occupied" ? "success"
+                : "neutral";
+              const tenantLabel = tenantNameFromLease(unit.activeLease);
+              const hasTenant = unit.activeLease && tenantLabel !== "-";
+              const unitCode = unit.code || unit.name || `U-${unit.id}`;
+
+              return (
+                <tr key={unit.id || `${unitCode}-${index}`}>
+                  <td>
+                    <span className="immo-property-code-cell">
+                      {unitTypeIcon(unit.unitKind, 15)}
+                      <span className="mono">{unitCode}</span>
+                    </span>
+                  </td>
+                  <td>
+                    <div className="immo-property-name-cell">
+                      <strong>{unit.displayName}</strong>
+                      <span>{unit.displayAddress}</span>
+                    </div>
+                  </td>
+                  <td>{unit.unitKindLabel}</td>
+                  <td>
+                    <span className={`immo-property-table-status ${statusTone}`}>
+                      {late ? "En retard" : statusLabel[status] || status}
+                    </span>
+                  </td>
+                  <td>
+                    {hasTenant ? (
+                      <span className="immo-property-table-tenant">
+                        <span className={`mini-avatar ${avatarColors[index % avatarColors.length]}`}>
+                          {initials(tenantLabel)}
+                        </span>
+                        {tenantLabel}
+                      </span>
+                    ) : (
+                      <span className="immo-empty-cell">Libre</span>
+                    )}
+                  </td>
+                  <td className="right">
+                    <strong>{shortMoney(unit.monthlyRent)}</strong>
+                  </td>
+                  <td className="actions">
+                    {!hasTenant && (
+                      <button
+                        type="button"
+                        className="immo-flat-icon"
+                        title="Assigner locataire"
+                        onClick={() => onAssignTenant(unit)}
+                      >
+                        <UserPlus size={15} />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="immo-flat-icon"
+                      title="Modifier unite"
+                      onClick={() => onEditUnit(unit)}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const unitTypeIcon = (kind, size = 14) => {
   switch (kind) {
     case "office":
@@ -443,6 +601,17 @@ const PropertyManagement = () => {
   const [openTenantMenu, setOpenTenantMenu] = useState(null);
   const [contractModal, setContractModal] = useState(null);
   const [paymentsPage, setPaymentsPage] = useState(1);
+  const [leaseStatusFilter, setLeaseStatusFilter] = useState("all");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState("all");
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState({
+    city: "",
+    minRent: "",
+    maxRent: "",
+    minBedrooms: "",
+    minArea: "",
+  });
   const [contractTemplate, setContractTemplate] = useState("standard");
   const [renewModal, setRenewModal] = useState(null);
   const [renewBusy, setRenewBusy] = useState(false);
@@ -1127,6 +1296,11 @@ const PropertyManagement = () => {
 
   const filteredUnits = useMemo(() => {
     const q = normalize(searchTerm);
+    const cityQ = normalize(advancedFilters.city);
+    const minRent = advancedFilters.minRent === "" ? null : Number(advancedFilters.minRent);
+    const maxRent = advancedFilters.maxRent === "" ? null : Number(advancedFilters.maxRent);
+    const minBeds = advancedFilters.minBedrooms === "" ? null : Number(advancedFilters.minBedrooms);
+    const minArea = advancedFilters.minArea === "" ? null : Number(advancedFilters.minArea);
     return enrichedUnits.filter((unit) => {
       const matchesType = typeFilter === "all" || getUnitKind(unit) === typeFilter;
       const haystack = normalize(
@@ -1138,9 +1312,27 @@ const PropertyManagement = () => {
           tenantNameFromLease(unit.activeLease),
         ].join(" "),
       );
-      return matchesType && (!q || haystack.includes(q));
+      if (!matchesType) return false;
+      if (q && !haystack.includes(q)) return false;
+        if (cityQ) {
+        const cityHay = normalize(
+          [unit.property?.city, unit.city, unit.displayAddress].filter(Boolean).join(" "),
+        );
+        if (!cityHay.includes(cityQ)) return false;
+      }
+      const rent = Number(unit.monthlyRent || 0);
+      if (minRent != null && rent < minRent) return false;
+      if (maxRent != null && rent > maxRent) return false;
+      if (minBeds != null && Number(unit.bedrooms || 0) < minBeds) return false;
+      if (minArea != null && Number(unit.area || 0) < minArea) return false;
+      return true;
     });
-  }, [enrichedUnits, searchTerm, typeFilter]);
+  }, [enrichedUnits, searchTerm, typeFilter, advancedFilters]);
+
+  const activeFilterCount = useMemo(
+    () => Object.values(advancedFilters).filter((v) => v !== "" && v != null).length,
+    [advancedFilters],
+  );
 
   // ─── Search-aware filtered lists for all sections ─────────────────
   // The header search bar ("Rechercher adresse, locataire…") now filters
@@ -1910,24 +2102,38 @@ const PropertyManagement = () => {
       </div>
 
       {filteredUnits.length ? (
-        <div className={viewMode === "list" ? "immo-property-list" : "immo-property-grid"}>
-          {filteredUnits.map((unit, index) => {
-            const status = unit.activeLease ? "occupied" : unit.status || "vacant";
-            const late = unit.activeLease?.status === "late" || unit.activeLease?.isOverdue;
-            const cardTone =
-              status === "maintenance"
-                ? "maintenance"
-                : late
-                  ? "late"
-                  : status === "occupied"
-                    ? "occupied"
-                    : "available";
-            const tenantLabel = tenantNameFromLease(unit.activeLease);
-            const hasTenant = unit.activeLease && tenantLabel !== "-";
-            const overdueDays = unit.activeLease?.overdueDays;
+        viewMode === "map" ? (
+          <PropertyMapView
+            units={filteredUnits}
+            onAssignTenant={(unit) => openModal("lease", { unitId: unit.id, propertyId: unit.propertyId })}
+          />
+        ) : viewMode === "list" ? (
+          <PropertyListTable
+            units={filteredUnits}
+            avatarColors={avatarColors}
+            initials={initials}
+            onAssignTenant={(unit) => openModal("lease", { unitId: unit.id, propertyId: unit.propertyId })}
+            onEditUnit={(unit) => openModal("unit", unit)}
+          />
+        ) : (
+          <div className="immo-property-grid">
+            {filteredUnits.map((unit, index) => {
+              const status = unit.activeLease ? "occupied" : unit.status || "vacant";
+              const late = unit.activeLease?.status === "late" || unit.activeLease?.isOverdue;
+              const cardTone =
+                status === "maintenance"
+                  ? "maintenance"
+                  : late
+                    ? "late"
+                    : status === "occupied"
+                      ? "occupied"
+                      : "available";
+              const tenantLabel = tenantNameFromLease(unit.activeLease);
+              const hasTenant = unit.activeLease && tenantLabel !== "-";
+              const overdueDays = unit.activeLease?.overdueDays;
 
-            return (
-              <article key={unit.id || index} className={`immo-property-card ${cardTone}`}>
+              return (
+                <article key={unit.id || index} className={`immo-property-card ${cardTone}`}>
                 <div className="immo-property-media">
                   <span className={`immo-status-chip ${cardTone}`}>
                     {late ? "En retard" : statusLabel[status] || status}
@@ -1985,9 +2191,10 @@ const PropertyManagement = () => {
                   </div>
                 </div>
               </article>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )
       ) : (
         <EmptyState
           title="Aucune propriété"
@@ -2281,17 +2488,30 @@ const PropertyManagement = () => {
   );
 
   const renderLeasesMockup = () => {
-    // The toolbar counters + missing-contract banner reflect the search
-    // result if a query is active; otherwise they show totals.
-    const leasesView = filteredLeases;
-    const missingContractCount = leasesView.filter((lease) => !leaseContractFor(lease)).length;
-    const renewLeases = leasesView.filter((lease) => {
+    // Counters reflect the *search-scoped* set; the visible list reflects
+    // search AND the active status filter chip.
+    const searchScope = filteredLeases;
+    const missingContractCount = searchScope.filter((lease) => !leaseContractFor(lease)).length;
+    const renewLeases = searchScope.filter((lease) => {
       if (!lease.endDate) return false;
       const daysLeft = moment(lease.endDate).diff(moment(), "days");
       return daysLeft >= 0 && daysLeft <= 60;
     });
-    const expiredLeases = leasesView.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
-    const activeLeasesView = leasesView.filter((lease) => lease.status === "active");
+    const expiredLeases = searchScope.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
+    const activeLeasesView = searchScope.filter((lease) => lease.status === "active");
+    const leasesView =
+      leaseStatusFilter === "active" ? activeLeasesView
+      : leaseStatusFilter === "renew" ? renewLeases
+      : leaseStatusFilter === "expired" ? expiredLeases
+      : leaseStatusFilter === "no-contract" ? searchScope.filter((lease) => !leaseContractFor(lease))
+      : searchScope;
+    const leaseFilterChips = [
+      { key: "all",         label: "Tous",         count: searchScope.length },
+      { key: "active",      label: "Actifs",       count: activeLeasesView.length },
+      { key: "renew",       label: "À renouveler", count: renewLeases.length },
+      { key: "expired",     label: "Expirés",      count: expiredLeases.length },
+      { key: "no-contract", label: "Sans contrat", count: missingContractCount },
+    ];
 
     return (
       <div className="immo-table-flow">
@@ -2309,11 +2529,16 @@ const PropertyManagement = () => {
         )}
         <div className="immo-table-toolbar">
           <div className="immo-filter-group">
-            <button type="button" className="active">Tous <span>{leasesView.length}</span></button>
-            <button type="button">Actifs <span>{activeLeasesView.length}</span></button>
-            <button type="button">À renouveler <span>{renewLeases.length}</span></button>
-            <button type="button">Expirés <span>{expiredLeases.length}</span></button>
-            <button type="button">Sans contrat <span>{missingContractCount}</span></button>
+            {leaseFilterChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                className={leaseStatusFilter === chip.key ? "active" : ""}
+                onClick={() => setLeaseStatusFilter(chip.key)}
+              >
+                {chip.label} <span>{chip.count}</span>
+              </button>
+            ))}
           </div>
           <div className="immo-lease-actions">
             <div className="immo-view-toggle" aria-label="Vue des baux">
@@ -2565,7 +2790,27 @@ const PropertyManagement = () => {
   };
 
   const renderPaymentsMockup = () => {
-    const paymentsView = filteredPayments;
+    // `pendingPayments`/`latePayments` hold lease objects derived from
+    // due-date logic, not real payment rows. Every row in `safePayments`
+    // is a recorded (paid) transaction. The status chip a row would
+    // render is determined by `latePayments.includes(payment)` /
+    // `pendingPayments.includes(payment)` — which never matches for
+    // recorded rows, so they all render as "Payé". We filter using the
+    // same predicate to stay consistent with the row rendering.
+    const paymentMatchesStatus = (payment) => {
+      if (paymentStatusFilter === "all") return true;
+      if (paymentStatusFilter === "late") return latePayments.includes(payment);
+      if (paymentStatusFilter === "pending") return pendingPayments.includes(payment);
+      // "paid" → neither late nor pending
+      return !latePayments.includes(payment) && !pendingPayments.includes(payment);
+    };
+    const paymentsView = filteredPayments.filter(paymentMatchesStatus);
+    const paymentFilterChips = [
+      { key: "all",     label: "Tous",       count: filteredPayments.length },
+      { key: "paid",    label: "Payés",      count: filteredPayments.filter((p) => !latePayments.includes(p) && !pendingPayments.includes(p)).length },
+      { key: "pending", label: "En attente", count: pendingPayments.length },
+      { key: "late",    label: "En retard",  count: latePayments.length },
+    ];
     const pageSize = 10;
     const totalPages = Math.max(1, Math.ceil(paymentsView.length / pageSize));
     const currentPage = Math.min(paymentsPage, totalPages);
@@ -2593,10 +2838,19 @@ const PropertyManagement = () => {
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
-          <button type="button" className="active">Tous <span>{paymentsView.length}</span></button>
-          <button type="button">Payés <span>{paymentsView.length}</span></button>
-          <button type="button">En attente <span>{pendingPayments.length}</span></button>
-          <button type="button">En retard <span>{latePayments.length}</span></button>
+          {paymentFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={paymentStatusFilter === chip.key ? "active" : ""}
+              onClick={() => {
+                setPaymentStatusFilter(chip.key);
+                setPaymentsPage(1);
+              }}
+            >
+              {chip.label} <span>{chip.count}</span>
+            </button>
+          ))}
         </div>
         <button type="button" className="immo-primary-button" onClick={() => openModal("payment")}>
           <Plus size={16} /> Enregistrer paiement
@@ -2691,7 +2945,22 @@ const PropertyManagement = () => {
     );
   };
 
-  const renderMaintenanceMockup = () => (
+  const renderMaintenanceMockup = () => {
+    const maintenanceMatchesStatus = (req) => {
+      if (maintenanceStatusFilter === "all") return true;
+      if (maintenanceStatusFilter === "urgent") return ["urgent", "high"].includes(req.priority);
+      if (maintenanceStatusFilter === "in_progress") return req.status === "in_progress";
+      if (maintenanceStatusFilter === "done") return req.status === "done";
+      return true;
+    };
+    const maintenanceView = filteredMaintenance.filter(maintenanceMatchesStatus);
+    const maintenanceFilterChips = [
+      { key: "all",         label: "Tous",    count: filteredMaintenance.length },
+      { key: "urgent",      label: "Urgent",  count: urgentMaintenance.length },
+      { key: "in_progress", label: "En cours", count: inProgressMaintenance.length },
+      { key: "done",        label: "Résolus", count: resolvedMaintenance.length },
+    ];
+    return (
     <div className="immo-table-flow">
       <div className="immo-mini-kpis">
         <div><span>Tickets ouverts</span><strong className="red">{openMaintenance.length}</strong></div>
@@ -2701,17 +2970,23 @@ const PropertyManagement = () => {
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
-          <button type="button" className="active">Tous <span>{filteredMaintenance.length}</span></button>
-          <button type="button">Urgent <span>{urgentMaintenance.length}</span></button>
-          <button type="button">En cours <span>{inProgressMaintenance.length}</span></button>
-          <button type="button">Résolus <span>{resolvedMaintenance.length}</span></button>
+          {maintenanceFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={maintenanceStatusFilter === chip.key ? "active" : ""}
+              onClick={() => setMaintenanceStatusFilter(chip.key)}
+            >
+              {chip.label} <span>{chip.count}</span>
+            </button>
+          ))}
         </div>
         <button type="button" className="immo-primary-button" onClick={() => openModal("maintenance")}>
           <Plus size={16} /> Nouveau ticket
         </button>
       </div>
       <div className="immo-ticket-list">
-        {filteredMaintenance.map((request, index) => {
+        {maintenanceView.map((request, index) => {
           const urgent = ["urgent", "high"].includes(request.priority);
           const done = request.status === "done";
           const iconTone = ticketIconTone(request);
@@ -2765,7 +3040,8 @@ const PropertyManagement = () => {
         })}
       </div>
     </div>
-  );
+    );
+  };
 
   const renderActivePanel = () => {
     const panels = {
@@ -2994,8 +3270,16 @@ const PropertyManagement = () => {
                 placeholder="Rechercher adresse, locataire..."
               />
             </label>
-            <button type="button" className="immo-filter-button">
+            <button
+              type="button"
+              className={`immo-filter-button${advancedFiltersOpen ? " active" : ""}`}
+              onClick={() => setAdvancedFiltersOpen((v) => !v)}
+              aria-expanded={advancedFiltersOpen}
+            >
               <SlidersHorizontal size={17} /> Filtres
+              {activeFilterCount > 0 && (
+                <span className="immo-filter-badge">{activeFilterCount}</span>
+              )}
             </button>
             <Link to="/admin/property-management/contract-templates" className="immo-filter-button">
               <FileSignature size={17} /> Modèles de contrat
@@ -3003,6 +3287,85 @@ const PropertyManagement = () => {
             {renderSectionActions()}
           </div>
         </div>
+
+        {advancedFiltersOpen && (
+          <div className="immo-advanced-filters" role="region" aria-label="Filtres avancés">
+            <div className="immo-advanced-filters-grid">
+              <label>
+                <span>Ville / quartier</span>
+                <input
+                  type="text"
+                  value={advancedFilters.city}
+                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, city: e.target.value }))}
+                  placeholder="ex. Gombe"
+                />
+              </label>
+              <label>
+                <span>Loyer min</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advancedFilters.minRent}
+                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minRent: e.target.value }))}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                <span>Loyer max</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advancedFilters.maxRent}
+                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, maxRent: e.target.value }))}
+                  placeholder="∞"
+                />
+              </label>
+              <label>
+                <span>Chambres (min)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advancedFilters.minBedrooms}
+                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minBedrooms: e.target.value }))}
+                  placeholder="0"
+                />
+              </label>
+              <label>
+                <span>Surface min (m²)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advancedFilters.minArea}
+                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minArea: e.target.value }))}
+                  placeholder="0"
+                />
+              </label>
+            </div>
+            <div className="immo-advanced-filters-foot">
+              <span className="immo-advanced-filters-summary">
+                {activeFilterCount === 0
+                  ? "Aucun filtre actif"
+                  : `${activeFilterCount} filtre${activeFilterCount > 1 ? "s" : ""} actif${activeFilterCount > 1 ? "s" : ""}`}
+              </span>
+              <button
+                type="button"
+                className="immo-advanced-filters-clear"
+                onClick={() =>
+                  setAdvancedFilters({
+                    city: "",
+                    minRent: "",
+                    maxRent: "",
+                    minBedrooms: "",
+                    minArea: "",
+                  })
+                }
+                disabled={activeFilterCount === 0}
+              >
+                Réinitialiser
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="immo-metrics-grid">
           <MetricCard
