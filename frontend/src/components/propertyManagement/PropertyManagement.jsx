@@ -503,6 +503,40 @@ const PropertyManagement = () => {
       );
     } else if (type === "onboardingEdit") {
       response = await dispatch(saveTenantOnboardingAdmin({ id, values }));
+    } else if (type === "property") {
+      // Split out non-backend fields before saving the property
+      const { addUnitsNow, units, _draft, ...propertyValues } = values;
+      // Backend schema doesn't have a 'draft' status — Brouillon just
+      // saves the partial record + shows a different toast.
+      const isDraft = Boolean(_draft);
+
+      response = await dispatch(saveProperty({ id, values: propertyValues }));
+      if (response.payload?.message === "success" && isDraft) {
+        message.success("Brouillon enregistré");
+      }
+
+      // If user chose to add units inline, batch-create them now
+      if (
+        response.payload?.message === "success"
+        && addUnitsNow
+        && Array.isArray(units)
+        && units.length > 0
+      ) {
+        const createdPropertyId = response.payload?.data?.id ?? id;
+        if (createdPropertyId) {
+          const validUnits = units.filter((u) => u && u.name);
+          let failed = 0;
+          for (const unit of validUnits) {
+            const unitResp = await dispatch(saveUnit({ values: { ...unit, propertyId: createdPropertyId, status: "vacant" } }));
+            if (unitResp.payload?.message !== "success") failed++;
+          }
+          if (failed > 0) {
+            message.warning(`${validUnits.length - failed}/${validUnits.length} unités créées (${failed} échouées)`);
+          } else if (validUnits.length > 0) {
+            message.success(`${validUnits.length} unité${validUnits.length > 1 ? "s" : ""} créée${validUnits.length > 1 ? "s" : ""}`);
+          }
+        }
+      }
     } else {
       response = await dispatch(actions[type]({ id, values }));
     }
@@ -919,6 +953,7 @@ const PropertyManagement = () => {
   const selectedUnit = Form.useWatch("unitId", form);
   const maritalStatus = Form.useWatch("marital_status", form);
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
+  const addUnitsNow = Form.useWatch("addUnitsNow", form);
   const isCouple = coupleStatuses.includes(String(maritalStatus || "").toLowerCase());
   const tenantRequiredRules = modal?.type === "tenant" ? [{ required: true }] : [];
   const modalTitleByType = {
@@ -2914,7 +2949,7 @@ const PropertyManagement = () => {
                 </Checkbox>
               </Form.Item>
 
-              {Form.useWatch("addUnitsNow", form) && (
+              {addUnitsNow && (
                 <Form.List name="units">
                   {(fields, { add, remove }) => (
                     <div className="immo-units-list">
