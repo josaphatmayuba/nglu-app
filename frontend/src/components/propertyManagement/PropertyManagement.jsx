@@ -11,7 +11,7 @@ import {
   TeamOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { Button, Form, Input, InputNumber, Modal, Radio, Select, Table, Tag, message } from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Select, Table, Tag, message } from "antd";
 import axios from "axios";
 import {
   AlertTriangle,
@@ -36,6 +36,7 @@ import {
   Info,
   Layers,
   MapPin,
+  Save,
   FileSignature,
   FileText,
   Grid3X3,
@@ -2851,9 +2852,9 @@ const PropertyManagement = () => {
                 </div>
                 <Form.Item label="Statut initial" name="status" initialValue="available">
                   <Radio.Group className="immo-radio-cards">
-                    <Radio.Button value="available">Disponible</Radio.Button>
-                    <Radio.Button value="occupied">Occupé</Radio.Button>
-                    <Radio.Button value="maintenance">Maintenance</Radio.Button>
+                    <Radio value="available"   className="immo-radio-card">Disponible</Radio>
+                    <Radio value="occupied"    className="immo-radio-card">Occupé</Radio>
+                    <Radio value="maintenance" className="immo-radio-card">Maintenance</Radio>
                   </Radio.Group>
                 </Form.Item>
               </div>
@@ -2895,13 +2896,85 @@ const PropertyManagement = () => {
                 <h3 className="immo-form-section-title"><Wallet size={14} /> Informations financières</h3>
                 <div className="pm-form-grid">
                   <Form.Item label="Valeur marchande estimée" name="marketValue" extra="Pour analyse de patrimoine">
-                    <InputNumber className="w-full" min={0} addonBefore="CDF" placeholder="ex. 480000000" />
+                    <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 480 000 000" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
                   </Form.Item>
                   <Form.Item label="Loyer mensuel par défaut" name="defaultRent" extra="Hérité par défaut sur chaque unité créée">
-                    <InputNumber className="w-full" min={0} addonBefore="CDF" placeholder="ex. 850000" />
+                    <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 850 000" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
                   </Form.Item>
                 </div>
               </div>
+
+              {/* ─── Section: Ajouter des unités maintenant (toggle) ─── */}
+              <Form.Item name="addUnitsNow" valuePropName="checked" noStyle initialValue={false}>
+                <Checkbox className="immo-units-toggle">
+                  <div>
+                    <strong><Grid3X3 size={14} /> Ajouter des unités maintenant</strong>
+                    <p>Définissez les appartements/locaux du bien. Vous pourrez aussi le faire plus tard.</p>
+                  </div>
+                </Checkbox>
+              </Form.Item>
+
+              {Form.useWatch("addUnitsNow", form) && (
+                <Form.List name="units">
+                  {(fields, { add, remove }) => (
+                    <div className="immo-units-list">
+                      {fields.map((field, index) => (
+                        <div key={field.key} className="immo-unit-card">
+                          <div className="immo-unit-card-head">
+                            <div className="immo-unit-card-title">
+                              <span className="immo-unit-card-number">{index + 1}</span>
+                              <span>Unité {index + 1}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="immo-unit-card-remove"
+                              onClick={() => remove(field.name)}
+                              aria-label="Supprimer cette unité"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div className="immo-unit-card-grid">
+                            <Form.Item label={<>Nom <span className="immo-required">*</span></>} name={[field.name, "name"]} rules={[{ required: true }]}>
+                              <Input placeholder="ex. A-203" size="small" />
+                            </Form.Item>
+                            <Form.Item label="Type" name={[field.name, "unitType"]} initialValue="apartment">
+                              <Select size="small" options={unitTypes} />
+                            </Form.Item>
+                            <Form.Item label="Étage" name={[field.name, "floor"]}>
+                              <Input placeholder="ex. 2 ou RDC" size="small" />
+                            </Form.Item>
+                            <Form.Item label="Surface (m²)" name={[field.name, "area"]}>
+                              <InputNumber className="w-full" min={0} placeholder="120" size="small" controls={false} />
+                            </Form.Item>
+                            <Form.Item label="Chambres" name={[field.name, "bedrooms"]} initialValue={0}>
+                              <InputNumber className="w-full" min={0} size="small" controls={false} />
+                            </Form.Item>
+                            <Form.Item label="Salles de bain" name={[field.name, "bathrooms"]} initialValue={0}>
+                              <InputNumber className="w-full" min={0} size="small" controls={false} />
+                            </Form.Item>
+                          </div>
+                          <div className="immo-unit-card-grid">
+                            <Form.Item label="Loyer mensuel" name={[field.name, "monthlyRent"]}>
+                              <InputNumber className="w-full immo-cdf-field" min={0} placeholder="850 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                            </Form.Item>
+                            <Form.Item label="Caution (2× loyer suggéré)" name={[field.name, "securityDeposit"]}>
+                              <InputNumber className="w-full immo-cdf-field" min={0} placeholder="1 700 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                            </Form.Item>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="immo-unit-add"
+                        onClick={() => add({ unitType: "apartment", bedrooms: 0, bathrooms: 0 })}
+                      >
+                        <Plus size={16} /> Ajouter une unité
+                      </button>
+                    </div>
+                  )}
+                </Form.List>
+              )}
 
               {/* ─── Info note ─── */}
               <div className="immo-form-info-note">
@@ -3225,7 +3298,19 @@ const PropertyManagement = () => {
           <div className="immo-modal-footer">
             <Button onClick={closeModal} className="immo-modal-cancel">Annuler</Button>
             <div className="immo-modal-footer-right">
-              <Button type="primary" htmlType="submit" className="immo-modal-submit">
+              {modal?.type === "property" && (
+                <Button
+                  className="immo-modal-draft"
+                  icon={<Save size={14} />}
+                  onClick={() => {
+                    form.setFieldsValue({ _draft: true });
+                    form.submit();
+                  }}
+                >
+                  Brouillon
+                </Button>
+              )}
+              <Button type="primary" htmlType="submit" className="immo-modal-submit" icon={modal?.type === "property" ? <Check size={14} /> : null}>
                 {modal?.type === "property"
                   ? (modal?.record ? "Mettre à jour la propriété" : "Créer la propriété")
                   : (modal?.record ? "Enregistrer" : "Créer")}
