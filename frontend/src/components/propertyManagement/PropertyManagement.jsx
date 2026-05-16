@@ -99,11 +99,11 @@ import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 import ContractsTab from "./ContractsTab";
 
 const propertyTypes = [
-  { label: "Immeuble", value: "building" },
-  { label: "Maison", value: "house" },
-  { label: "Villa", value: "villa" },
-  { label: "Local commercial", value: "commercial" },
-  { label: "Terrain", value: "land" },
+  { label: "🏢 Immeuble",         value: "building" },
+  { label: "🏠 Maison",            value: "house" },
+  { label: "🏡 Villa",             value: "villa" },
+  { label: "🏪 Local commercial",  value: "commercial" },
+  { label: "🟫 Terrain",           value: "land" },
 ];
 
 const unitTypes = [
@@ -2882,7 +2882,7 @@ const PropertyManagement = () => {
                     <Input disabled placeholder="Auto-généré" />
                   </Form.Item>
                   <Form.Item label={<>Type de bien <span className="immo-required">*</span></>} name="propertyType" initialValue="building" rules={[{ required: true }]}>
-                    <Select options={propertyTypes} />
+                    <Select options={propertyTypes} getPopupContainer={() => document.body} />
                   </Form.Item>
                 </div>
                 <Form.Item label="Statut initial" name="status" initialValue="available">
@@ -2974,7 +2974,7 @@ const PropertyManagement = () => {
                               <Input placeholder="ex. A-203" size="small" />
                             </Form.Item>
                             <Form.Item label="Type" name={[field.name, "unitType"]} initialValue="apartment">
-                              <Select size="small" options={unitTypes} />
+                              <Select size="small" options={unitTypes} getPopupContainer={() => document.body} />
                             </Form.Item>
                             <Form.Item label="Étage" name={[field.name, "floor"]}>
                               <Input placeholder="ex. 2 ou RDC" size="small" />

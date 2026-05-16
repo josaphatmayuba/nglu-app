@@ -308,7 +308,9 @@
   height: 44px;
   margin: 0 !important;
   padding: 0 12px;
+  position: relative;
   transition: border-color .15s, box-shadow .15s, color .15s, background .15s;
+  z-index: 0; /* keep below floating dropdowns (z 1050+) */
 }
 
 .immo-radio-card:hover {
@@ -344,6 +346,19 @@
   background: #4f46e5;
   height: 10px;
   width: 10px;
+}
+
+/* Ensure ALL Ant Design dropdowns appearing while a modal is open
+   render ABOVE the modal body content (radio cards, panels, etc.). */
+.ant-select-dropdown {
+  z-index: 1100 !important;
+}
+
+/* Allow the modal body to overflow horizontally just enough so that
+   the Select dropdown isn't visually clipped by the rounded card edges
+   when its position is computed within the modal scroll container. */
+.ant-modal-body {
+  overflow: visible;
 }
 
 /* CDF inline prefix on Ant Design InputNumber (uses native `prefix` prop) */
