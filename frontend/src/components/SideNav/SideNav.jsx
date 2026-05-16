@@ -23,7 +23,7 @@ import {
   UsergroupAddOutlined,
   WalletOutlined,
 } from "@ant-design/icons";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   BadgePercent,
@@ -154,6 +154,32 @@ const SideNav = ({ collapsed, setCollapsed }) => {
   const { permissions } = usePermissions();
   const [isSetting, setIsSetting] = useState(false);
   const { loading } = useSelector((state) => state.auth);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef(null);
+
+  // ⌘K / Ctrl+K to focus the sidebar search
+  useEffect(() => {
+    const handler = (event) => {
+      const isCmdOrCtrlK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+      if (isCmdOrCtrlK) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (event.key === "Escape" && document.activeElement === searchInputRef.current) {
+        setSearchQuery("");
+        searchInputRef.current?.blur();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const normalizeForSearch = (value) =>
+    String(value ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      // strip combining diacritical marks so 'éàç' matches 'eac'
+      .replace(/[̀-ͯ]/g, "");
 
   const { data } = useSelector((state) => state?.setting) || {};
   const flatSections = [
@@ -1264,45 +1290,83 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           >
             {!collapsed && (
               <div className="px-5 py-4">
-                <button
-                  type="button"
-                  className="w-full h-11 flex items-center gap-2 rounded-lg bg-ink-100 px-3 text-sm text-ink-500 hover:bg-ink-200 transition"
-                >
-                  <SearchOutlined className="text-[15px]" />
-                  <span className="flex-1 text-left">Rechercher...</span>
-                  <kbd className="rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] font-mono text-ink-400">
-                    ⌘K
-                  </kbd>
-                </button>
+                <div className="relative w-full h-11 flex items-center gap-2 rounded-lg bg-ink-100 px-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-100 focus-within:border focus-within:border-brand-300 transition">
+                  <SearchOutlined className="text-[15px] text-ink-500" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Rechercher..."
+                    className="flex-1 bg-transparent text-sm text-ink-700 placeholder:text-ink-500 outline-none border-0"
+                    aria-label="Rechercher dans le menu"
+                  />
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchQuery(""); searchInputRef.current?.focus(); }}
+                      className="text-ink-400 hover:text-ink-700 text-xs"
+                      aria-label="Effacer la recherche"
+                    >
+                      ✕
+                    </button>
+                  ) : (
+                    <kbd className="rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] font-mono text-ink-400">
+                      ⌘K
+                    </kbd>
+                  )}
+                </div>
               </div>
             )}
             <nav className={cn("space-y-3 px-3", collapsed && "px-2 pt-4")}>
-              {flatSections.map((section) => {
-                const visibleItems = section.items
-                  .filter(Boolean)
-                  .filter((item) => canSee(permissions, item.permit));
+              {(() => {
+                const q = normalizeForSearch(searchQuery.trim());
+                let totalMatches = 0;
+                const rendered = flatSections.map((section) => {
+                  const visibleItems = section.items
+                    .filter(Boolean)
+                    .filter((item) => canSee(permissions, item.permit))
+                    .filter((item) => {
+                      if (!q) return true;
+                      const haystack = normalizeForSearch(
+                        [item.label, item.to, section.label, item.badge].join(" "),
+                      );
+                      return haystack.includes(q);
+                    });
 
-                if (!visibleItems.length) return null;
+                  if (!visibleItems.length) return null;
+                  totalMatches += visibleItems.length;
 
-                return (
-                  <div key={section.label}>
-                    {!collapsed && (
-                      <p className="px-3 pb-2 text-[12px] font-semibold uppercase tracking-wider text-ink-400">
-                        {section.label}
-                      </p>
-                    )}
-                    <div className="space-y-1">
-                      {visibleItems.map((item) => (
-                        <SidebarLink
-                          key={item.label}
-                          item={item}
-                          collapsed={collapsed}
-                        />
-                      ))}
+                  return (
+                    <div key={section.label}>
+                      {!collapsed && (
+                        <p className="px-3 pb-2 text-[12px] font-semibold uppercase tracking-wider text-ink-400">
+                          {section.label}
+                        </p>
+                      )}
+                      <div className="space-y-1">
+                        {visibleItems.map((item) => (
+                          <SidebarLink
+                            key={item.label}
+                            item={item}
+                            collapsed={collapsed}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+
+                if (q && totalMatches === 0) {
+                  return (
+                    <div className="px-3 py-6 text-center text-xs text-ink-500">
+                      Aucun résultat pour <span className="text-ink-900 font-medium">« {searchQuery} »</span>
+                    </div>
+                  );
+                }
+
+                return rendered;
+              })()}
             </nav>
           </div>
 
