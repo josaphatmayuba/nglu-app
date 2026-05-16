@@ -67,6 +67,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import "./PropertyManagement.css";
 import { loadAllAccount } from "../../redux/rtk/features/account/accountSlice";
+import { deleteCustomer } from "../../redux/rtk/features/customer/customerSlice";
 import {
   createRentPayment,
   createContract,
@@ -354,6 +355,7 @@ const PropertyManagement = () => {
   const [viewMode, setViewMode] = useState("grid");
   const [leaseView, setLeaseView] = useState("grid");
   const [openLeaseMenu, setOpenLeaseMenu] = useState(null);
+  const [openTenantMenu, setOpenTenantMenu] = useState(null);
   const [contractModal, setContractModal] = useState(null);
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [contractTemplate, setContractTemplate] = useState("standard");
@@ -409,6 +411,25 @@ const PropertyManagement = () => {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [openLeaseMenu]);
+
+  useEffect(() => {
+    if (!openTenantMenu) return undefined;
+
+    const closeMenu = (event) => {
+      if (event.target.closest?.(".immo-menu-anchor")) return;
+      setOpenTenantMenu(null);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setOpenTenantMenu(null);
+    };
+
+    document.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("click", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openTenantMenu]);
 
   useEffect(() => {
     if (!contractModal) return undefined;
@@ -1082,6 +1103,95 @@ const PropertyManagement = () => {
       {label}
     </button>
   );
+
+  const tenantActiveLease = (tenant) =>
+    safeLeases.find((lease) => lease.tenantId === tenant.id && lease.status === "active") ||
+    safeLeases.find((lease) => lease.tenantId === tenant.id);
+
+  const handleTenantAction = async (action, tenant) => {
+    setOpenTenantMenu(null);
+    if (action === "edit") {
+      openModal("tenant", tenant);
+      return;
+    }
+    if (action === "viewLease") {
+      const lease = tenantActiveLease(tenant);
+      if (lease) {
+        setActiveSection("leases");
+        setOpenLeaseMenu(`card-${lease.id}`);
+      } else {
+        message.info("Ce locataire n'a pas encore de bail.");
+      }
+      return;
+    }
+    if (action === "viewPayments") {
+      setActiveSection("payments");
+      return;
+    }
+    if (action === "copyEmail") {
+      if (tenant.email) {
+        navigator.clipboard?.writeText(tenant.email);
+        message.success("Email copié");
+      } else {
+        message.warning("Pas d'email enregistré");
+      }
+      return;
+    }
+    if (action === "copyPhone") {
+      if (tenant.phone) {
+        navigator.clipboard?.writeText(tenant.phone);
+        message.success("Téléphone copié");
+      } else {
+        message.warning("Pas de téléphone enregistré");
+      }
+      return;
+    }
+    if (action === "delete") {
+      const hasLease = safeLeases.some((lease) => lease.tenantId === tenant.id);
+      if (hasLease) {
+        message.warning("Impossible : ce locataire a un bail actif. Résiliez d'abord le bail.");
+        return;
+      }
+      if (!window.confirm(`Supprimer définitivement le locataire « ${tenantName(tenant)} » ?`)) return;
+      const result = await dispatch(deleteCustomer(tenant.id));
+      if (result?.payload?.message === "success" || result?.meta?.requestStatus === "fulfilled") {
+        message.success("Locataire supprimé");
+        dispatch(loadPropertyManagement());
+      } else {
+        message.error("Échec de la suppression");
+      }
+    }
+  };
+
+  const renderTenantContextMenu = (tenant) => {
+    const lease = tenantActiveLease(tenant);
+    const Item = ({ icon, label, onClick, tone, highlight }) => (
+      <button
+        type="button"
+        className={`immo-menu-item${tone === "danger" ? " danger" : ""}${highlight ? " highlight" : ""}`}
+        onClick={onClick}
+      >
+        {icon}
+        <span>{label}</span>
+      </button>
+    );
+    return (
+      <div className="immo-context-menu">
+        <div className="immo-menu-head">
+          <strong>{tenantName(tenant)}</strong>
+          <span>{lease ? `Bail ${lease.reference || `#${lease.id}`}` : "Sans bail"}</span>
+        </div>
+        <Item icon={<Pencil size={16} />}      label="Modifier le locataire" onClick={() => handleTenantAction("edit", tenant)} highlight />
+        <Item icon={<FileText size={16} />}    label="Voir le bail"          onClick={() => handleTenantAction("viewLease", tenant)} />
+        <Item icon={<ReceiptText size={16} />} label="Voir les paiements"    onClick={() => handleTenantAction("viewPayments", tenant)} />
+        <div className="immo-menu-separator" />
+        <Item icon={<Mail size={16} />}        label="Copier l'email"        onClick={() => handleTenantAction("copyEmail", tenant)} />
+        <Item icon={<ClipboardCopy size={16} />} label="Copier le téléphone" onClick={() => handleTenantAction("copyPhone", tenant)} />
+        <div className="immo-menu-separator" />
+        <Item icon={<Trash2 size={16} />}      label="Supprimer le locataire" onClick={() => handleTenantAction("delete", tenant)} tone="danger" />
+      </div>
+    );
+  };
 
   const renderLeaseContextMenu = (lease, contract, statusText) => {
     const variant = leaseMenuVariant(lease, contract);
@@ -1861,11 +1971,25 @@ const PropertyManagement = () => {
                   : { label: `Standard · ${tenancyYears || 1} an`, tone: "neutral" };
 
           return (
-            <article key={tenant.id} className={`immo-tenant-card ${isLate ? "late" : ""}`}>
+            <article key={tenant.id} className={`immo-tenant-card ${isLate ? "late" : ""} ${openTenantMenu === tenant.id ? "menu-open" : ""}`}>
               <div className={`immo-letter-avatar ${avatarColors[index % avatarColors.length]}`}>
                 {initials(tenantName(tenant))}
               </div>
-              <button type="button" className="immo-card-menu"><MoreHorizontal size={16} /></button>
+              <span className="immo-card-menu-anchor immo-menu-anchor">
+                <button
+                  type="button"
+                  className={`immo-card-menu${openTenantMenu === tenant.id ? " active" : ""}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenTenantMenu(openTenantMenu === tenant.id ? null : tenant.id);
+                  }}
+                  aria-label="Actions du locataire"
+                  aria-expanded={openTenantMenu === tenant.id}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {openTenantMenu === tenant.id && renderTenantContextMenu(tenant)}
+              </span>
               <div className="immo-tenant-main">
                 <h3>{tenantName(tenant)}</h3>
                 <p>{tenant.email || "email non renseigné"}</p>
