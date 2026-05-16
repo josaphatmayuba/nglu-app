@@ -1388,10 +1388,20 @@
   color: #fff;
 }
 
-.immo-card-menu-anchor {
+/* Positions the '...' kebab + its dropdown menu in the top-right of the
+   tenant card. Higher specificity than generic .immo-menu-anchor below
+   (which forces position:relative) so the absolute positioning wins. */
+.immo-tenant-card .immo-card-menu-anchor {
   position: absolute;
-  right: 18px;
-  top: 18px;
+  right: 14px;
+  top: 14px;
+  z-index: 5;
+}
+
+/* Drop the dropdown below-left of the kebab when it opens */
+.immo-tenant-card .immo-card-menu-anchor .immo-context-menu {
+  right: 0;
+  top: calc(100% + 6px);
 }
 
 .immo-card-menu {
