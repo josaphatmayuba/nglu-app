@@ -1289,31 +1289,29 @@ const SideNav = ({ collapsed, setCollapsed }) => {
             )}
           >
             {!collapsed && (
-              <div className="px-5 py-4">
-                <div className="relative w-full h-11 flex items-center gap-2 rounded-lg bg-ink-100 px-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-100 focus-within:border focus-within:border-brand-300 transition">
-                  <SearchOutlined className="text-[15px] text-ink-500" />
+              <div className="px-3 pt-3 pb-2">
+                <div className="relative w-full flex items-center gap-2 rounded-lg bg-ink-100 hover:bg-ink-200 px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-brand-100 focus-within:border focus-within:border-brand-300 transition">
+                  <SearchOutlined className="text-[14px] text-ink-500 shrink-0" />
                   <input
                     ref={searchInputRef}
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Rechercher..."
-                    className="flex-1 bg-transparent text-sm text-ink-700 placeholder:text-ink-500 outline-none border-0"
+                    className="flex-1 bg-transparent text-sm text-ink-700 placeholder:text-ink-500 outline-none border-0 min-w-0"
                     aria-label="Rechercher dans le menu"
                   />
                   {searchQuery ? (
                     <button
                       type="button"
                       onClick={() => { setSearchQuery(""); searchInputRef.current?.focus(); }}
-                      className="text-ink-400 hover:text-ink-700 text-xs"
+                      className="shrink-0 text-ink-400 hover:text-ink-700 text-xs leading-none p-0.5"
                       aria-label="Effacer la recherche"
                     >
                       ✕
                     </button>
                   ) : (
-                    <kbd className="rounded border border-ink-200 bg-white px-1.5 py-0.5 text-[10px] font-mono text-ink-400">
-                      ⌘K
-                    </kbd>
+                    <kbd className="shrink-0 inline-flex items-center text-[11px] bg-white px-1.5 py-0.5 rounded border border-ink-200 font-mono text-ink-400 leading-none">⌘K</kbd>
                   )}
                 </div>
               </div>
