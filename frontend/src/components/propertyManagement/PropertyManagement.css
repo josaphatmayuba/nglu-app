@@ -348,15 +348,40 @@
   width: 10px;
 }
 
-/* Ensure ALL Ant Design dropdowns appearing while a modal is open
-   render ABOVE the modal body content (radio cards, panels, etc.). */
+/* Force Select dropdowns to render above EVERYTHING. App.css sets the
+   bg via var(--bg) but with !important — we re-assert solid white +
+   opacity so the dropdown is never see-through (was bleeding radio
+   cards through it on the property modal). */
+.immo-select-popup.ant-select-dropdown,
 .ant-select-dropdown {
-  z-index: 1100 !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+  z-index: 9999 !important;
 }
 
-/* Allow the modal body to overflow horizontally just enough so that
-   the Select dropdown isn't visually clipped by the rounded card edges
-   when its position is computed within the modal scroll container. */
+/* Each item must also be solid (App.css sets bg-secondary on items
+   which is grey but transparent in some color modes). */
+.immo-select-popup .ant-select-item,
+.immo-select-popup .ant-select-item .ant-select-item-option {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.immo-select-popup .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: #eef2ff !important;
+  background-color: #eef2ff !important;
+}
+
+.immo-select-popup .ant-select-item-option-selected {
+  background: #eef2ff !important;
+  background-color: #eef2ff !important;
+  font-weight: 600 !important;
+}
+
+/* Allow the modal body to overflow visibly so popups portaled inside
+   the modal aren't clipped by rounded corners + scrollbars. */
 .ant-modal-body {
   overflow: visible;
 }
