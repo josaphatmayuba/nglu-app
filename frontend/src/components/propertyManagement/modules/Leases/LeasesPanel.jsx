@@ -134,16 +134,16 @@ const LeasesPanel = ({
     }
     if (action === "payments") {
       if (onViewPayments) onViewPayments(lease);
-      else message.info("Le lien vers le module Paiements sera branché en Phase F.");
+      else message.info("Ouvrez l'onglet Paiements pour consulter les paiements de ce bail.");
       return;
     }
     if (action === "maintenance") {
       if (onViewMaintenance) onViewMaintenance(lease);
-      else message.info("Le lien vers le module Maintenance sera branché en Phase F.");
+      else message.info("Ouvrez l'onglet Maintenance pour consulter les tickets de ce bail.");
       return;
     }
     if (["resend", "copyLink", "cancelSend", "archive"].includes(action)) {
-      message.info("Cette action sera finalisée dans l'assemblage Phase F.");
+      message.info("Cette action sera ajoutée dans le workflow contrat.");
     }
   };
 

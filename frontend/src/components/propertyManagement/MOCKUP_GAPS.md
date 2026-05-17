@@ -255,6 +255,24 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 
 ---
 
+## Phase F - Cutover PropertyManagement
+
+**Objectif** : La page modulaire doit être la seule route active de `/admin/property-management` et ne plus afficher de restes de wiring Phase F dans l'interface.
+
+- [x] Garder `PropertyManagementNew` comme composant de la route principale
+- [x] Supprimer les routes preview `_new`, `_new/properties`, `_new/tenants`
+- [x] Retirer le bouton de filtres avancés global du header, car les filtres s'appliquent dans l'onglet Propriétés
+- [x] Brancher l'action `Voir bail` des cartes Propriétés vers l'onglet Baux
+- [x] Nettoyer les messages utilisateur qui mentionnaient encore "Phase F"
+
+**Notes de travail** :
+
+- **2026-05-17** - Corrigé dans [PropertyManagementRoutes.jsx](../../layouts/AdminRoutes/PropertyManagementRoutes.jsx), [PropertyManagementNew.jsx](./PropertyManagementNew.jsx), [modules/Properties/PropertiesPanel.jsx](./modules/Properties/PropertiesPanel.jsx), [modules/Tenants/TenantsPanel.jsx](./modules/Tenants/TenantsPanel.jsx), [modules/Leases/LeasesPanel.jsx](./modules/Leases/LeasesPanel.jsx) et [MIGRATION_STATUS.md](./MIGRATION_STATUS.md).
+- Le legacy [PropertyManagement.jsx](./PropertyManagement.jsx) reste dans le repo comme référence non routée. Ne pas le supprimer tant que l'équipe n'a pas validé plusieurs jours en dev/prod.
+- Limite restante : onboarding locataire encore à migrer dans un vrai sous-module Locataires.
+
+---
+
 ## Convention de mise à jour
 
 Pour chaque tâche entamée :

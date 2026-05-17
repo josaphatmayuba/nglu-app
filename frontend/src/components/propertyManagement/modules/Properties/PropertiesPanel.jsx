@@ -30,6 +30,7 @@ const PropertiesPanel = ({
   onAssignTenant,
   onEditUnit,
   onViewAllPayments,
+  onViewUnitLease,
 }) => {
   const data = usePropertyManagementData();
   const { enrichedUnits, safePayments, overduePayments, upcomingPayments, currencyOptions } = data;
@@ -113,6 +114,10 @@ const PropertiesPanel = ({
     else window.alert(`(demo) Voir paiements pour ${unit.displayName || unit.name}`);
   };
   const handleViewUnitLease = (unit) => {
+    if (onViewUnitLease) {
+      onViewUnitLease(unit);
+      return;
+    }
     if (unit.activeLease?.id) {
       window.alert(`(demo) Voir bail ${unit.activeLease.reference || unit.activeLease.id}`);
       return;

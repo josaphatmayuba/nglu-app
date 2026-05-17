@@ -1,13 +1,5 @@
-// Phase F — modular assembly of the Property Management page.
-//
-// This file is INTENTIONALLY NOT WIRED as the default route. The legacy
-// PropertyManagement.jsx remains the production component at
-// /admin/property-management. PropertyManagementNew is reachable only via
-// the dormant preview route /admin/property-management/_new so the user can
-// validate the new assembly side-by-side before the final cutover.
-//
-// To activate this in place of the legacy: edit PropertyManagementRoutes.jsx
-// and swap the import on the root /property-management route.
+// Phase F cutover component for the Property Management page.
+// This is now the default route at /admin/property-management.
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -18,7 +10,6 @@ import {
   CreditCard,
   FileSignature,
   Search,
-  SlidersHorizontal,
   Users,
 } from "lucide-react";
 
@@ -34,14 +25,6 @@ import TenantsPanel from "./modules/Tenants/TenantsPanel";
 import LeasesPanel from "./modules/Leases/LeasesPanel";
 import PaymentsPanel from "./modules/Payments/PaymentsPanel";
 import MaintenancePanel from "./modules/Maintenance/MaintenancePanel";
-
-const EMPTY_ADVANCED = {
-  city: "",
-  minRent: "",
-  maxRent: "",
-  minBedrooms: "",
-  minArea: "",
-};
 
 const PropertyManagementNew = () => {
   const {
@@ -63,23 +46,17 @@ const PropertyManagementNew = () => {
 
   const [activeSection, setActiveSection] = useState("properties");
   const [searchTerm, setSearchTerm] = useState("");
-  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
-  const [advancedFilters, setAdvancedFilters] = useState(EMPTY_ADVANCED);
 
   // Unit modal is owned at page level because it can be triggered from any
   // Properties view (grid card "Modifier", list "Edit", map popup, etc.).
   const [unitModalRecord, setUnitModalRecord] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
 
-  const activeFilterCount = Object.values(advancedFilters).filter(
-    (v) => v !== "" && v != null,
-  ).length;
-
   const tabItems = [
-    { key: "properties",  label: "Propriétés",  count: enrichedUnits.length || safeProperties.length },
-    { key: "tenants",     label: "Locataires",  count: safeTenants.length },
-    { key: "leases",      label: "Baux",        count: safeLeases.length },
-    { key: "payments",    label: "Paiements",   count: safePayments.length },
+    { key: "properties", label: "Propriétés", count: enrichedUnits.length || safeProperties.length },
+    { key: "tenants", label: "Locataires", count: safeTenants.length },
+    { key: "leases", label: "Baux", count: safeLeases.length },
+    { key: "payments", label: "Paiements", count: safePayments.length },
     { key: "maintenance", label: "Maintenance", count: openMaintenance.length, danger: true },
   ];
 
@@ -93,7 +70,7 @@ const PropertyManagementNew = () => {
             onNavigateToLeases={() => setActiveSection("leases")}
             onNavigateToPayments={() => setActiveSection("payments")}
             onGenerateOnboardingLink={() =>
-              message.info("La génération du lien d'inscription n'est pas encore migrée dans le module — utilisez la page legacy en attendant.")
+              message.info("La génération du lien d'inscription sera ajoutée dans le module Locataires.")
             }
           />
         );
@@ -121,6 +98,7 @@ const PropertyManagementNew = () => {
               setUnitModalOpen(true);
             }}
             onViewAllPayments={() => setActiveSection("payments")}
+            onViewUnitLease={() => setActiveSection("leases")}
           />
         );
     }
@@ -143,93 +121,11 @@ const PropertyManagementNew = () => {
                 placeholder="Rechercher adresse, locataire..."
               />
             </label>
-            <button
-              type="button"
-              className={`immo-filter-button${advancedFiltersOpen ? " active" : ""}`}
-              onClick={() => setAdvancedFiltersOpen((v) => !v)}
-              aria-expanded={advancedFiltersOpen}
-            >
-              <SlidersHorizontal size={17} /> Filtres
-              {activeFilterCount > 0 && (
-                <span className="immo-filter-badge">{activeFilterCount}</span>
-              )}
-            </button>
             <Link to="/admin/property-management/contract-templates" className="immo-filter-button">
               <FileSignature size={17} /> Modèles de contrat
             </Link>
           </div>
         </div>
-
-        {advancedFiltersOpen && (
-          <div className="immo-advanced-filters" role="region" aria-label="Filtres avancés">
-            <div className="immo-advanced-filters-grid">
-              <label>
-                <span>Ville / quartier</span>
-                <input
-                  type="text"
-                  value={advancedFilters.city}
-                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, city: e.target.value }))}
-                  placeholder="ex. Gombe"
-                />
-              </label>
-              <label>
-                <span>Loyer min</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={advancedFilters.minRent}
-                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minRent: e.target.value }))}
-                  placeholder="0"
-                />
-              </label>
-              <label>
-                <span>Loyer max</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={advancedFilters.maxRent}
-                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, maxRent: e.target.value }))}
-                  placeholder="∞"
-                />
-              </label>
-              <label>
-                <span>Chambres (min)</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={advancedFilters.minBedrooms}
-                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minBedrooms: e.target.value }))}
-                  placeholder="0"
-                />
-              </label>
-              <label>
-                <span>Surface min (m²)</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={advancedFilters.minArea}
-                  onChange={(e) => setAdvancedFilters((prev) => ({ ...prev, minArea: e.target.value }))}
-                  placeholder="0"
-                />
-              </label>
-            </div>
-            <div className="immo-advanced-filters-foot">
-              <span className="immo-advanced-filters-summary">
-                {activeFilterCount === 0
-                  ? "Aucun filtre actif (les filtres avancés ne sont appliqués qu'à l'onglet Propriétés pour l'instant)"
-                  : `${activeFilterCount} filtre${activeFilterCount > 1 ? "s" : ""} actif${activeFilterCount > 1 ? "s" : ""}`}
-              </span>
-              <button
-                type="button"
-                className="immo-advanced-filters-clear"
-                onClick={() => setAdvancedFilters(EMPTY_ADVANCED)}
-                disabled={activeFilterCount === 0}
-              >
-                Réinitialiser
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="immo-metrics-grid">
           <MetricCard
@@ -237,7 +133,7 @@ const PropertyManagementNew = () => {
             label="Propriétés"
             value={enrichedUnits.length || safeProperties.length}
             helper={`${occupiedUnits.length} louées · ${vacantUnits.length} vacantes · ${maintenanceUnits.length} maintenance`}
-            trend={{ label: "↑ 2" }}
+            trend={{ label: "+2" }}
           />
           <MetricCard
             icon={<Users size={20} />}
@@ -253,7 +149,7 @@ const PropertyManagementNew = () => {
             value={compactMoney(monthlyRent)}
             helper={`${safePayments.length} reçus · ${Math.max(activeLeases.length - safePayments.length, 0)} en attente`}
             tone="amber"
-            trend={{ label: "↑ 8.2%" }}
+            trend={{ label: "+8.2%" }}
           />
           <MetricCard
             icon={<AlertTriangle size={20} />}
@@ -261,7 +157,7 @@ const PropertyManagementNew = () => {
             value={overduePayments.length}
             helper={`${compactMoney(overduePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0))} à recouvrer`}
             tone="red"
-            trend={{ label: `↑ ${overduePayments.length}`, tone: "danger" }}
+            trend={{ label: `+${overduePayments.length}`, tone: "danger" }}
           />
         </div>
 
