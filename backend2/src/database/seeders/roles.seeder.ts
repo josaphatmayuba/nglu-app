@@ -17,7 +17,11 @@ export async function seedRoles() {
   await db.insert(roles).values(
     missingRoles.map((name) => ({
       name,
-      status: "active",
+      // "true" pour matcher la convention attendue par roles.service.ts
+      // (qui filtre `where(eq(roles.status, "true"))`). Cohérent avec
+      // users.seeder.ts. Avant ce fix le seeder posait "active" et les
+      // rôles seedés étaient invisibles dans le UI.
+      status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })),
