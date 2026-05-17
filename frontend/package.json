@@ -71,6 +71,10 @@
 	"scripts": {
 		"dev": "vite --port 3000 --host",
 		"build": "vite build",
+		"build:prod": "vite build --mode production && node scripts/assert-api-target.mjs production",
+		"build:dev": "vite build --mode development && node scripts/assert-api-target.mjs development",
+		"assert:api:prod": "node scripts/assert-api-target.mjs production",
+		"assert:api:dev": "node scripts/assert-api-target.mjs development",
 		"lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
 		"preview": "vite preview"
 	},
