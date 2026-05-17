@@ -333,6 +333,7 @@ export class PropertyManagementService {
         parkingSpaces: realEstateProperties.parkingSpaces,
         marketValue: realEstateProperties.marketValue,
         defaultRent: realEstateProperties.defaultRent,
+        currencyId: realEstateProperties.currencyId,
         description: realEstateProperties.description,
         createdAt: realEstateProperties.createdAt,
         updatedAt: realEstateProperties.updatedAt,
@@ -348,6 +349,10 @@ export class PropertyManagementService {
 
   async createProperty(input: CreatePropertyDto) {
     const code = input.code?.trim() || (await this.nextPropertyCode());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) {
+      await this.ensureExists(currencies, currencyId, "Currency not found.");
+    }
     const [result] = await this.db.insert(realEstateProperties).values({
       name: input.name,
       code,
@@ -360,6 +365,7 @@ export class PropertyManagementService {
       parkingSpaces: input.parkingSpaces ?? 0,
       marketValue: this.money(input.marketValue),
       defaultRent: this.money(input.defaultRent),
+      currencyId,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -370,6 +376,9 @@ export class PropertyManagementService {
 
   async updateProperty(id: number, input: UpdatePropertyDto) {
     await this.ensureExists(realEstateProperties, id, "Property not found.");
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
     await this.db
       .update(realEstateProperties)
       .set({
@@ -384,6 +393,7 @@ export class PropertyManagementService {
           "floors",
           "parkingSpaces",
           "description",
+          "currencyId",
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),

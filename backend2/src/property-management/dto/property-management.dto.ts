@@ -79,6 +79,13 @@ export class CreatePropertyDto {
   @Min(0)
   defaultRent?: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id for marketValue and defaultRent. Inherited by new units when omitted. Defaults to appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ example: "Mixed-use rental building" })
   @IsOptional()
   @IsString()
