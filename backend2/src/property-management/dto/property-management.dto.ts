@@ -142,6 +142,13 @@ export class CreateUnitDto {
   @Min(0)
   monthlyRent?: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id for monthly rent and security deposit. Defaults to appSetting.currencyId when omitted." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
   @Type(() => Number)

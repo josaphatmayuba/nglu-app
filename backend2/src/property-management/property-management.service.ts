@@ -43,6 +43,7 @@ const paymentProperty = alias(realEstateProperties, "paymentProperty");
 const paymentUnit = alias(realEstateUnits, "paymentUnit");
 const maintenanceProperty = alias(realEstateProperties, "maintenanceProperty");
 const maintenanceUnit = alias(realEstateUnits, "maintenanceUnit");
+const unitCurrency = alias(currencies, "unitCurrency");
 
 @Injectable()
 export class PropertyManagementService {
@@ -412,6 +413,9 @@ export class PropertyManagementService {
         bathrooms: realEstateUnits.bathrooms,
         area: realEstateUnits.area,
         monthlyRent: realEstateUnits.monthlyRent,
+        currencyId: realEstateUnits.currencyId,
+        currencyName: unitCurrency.currencyName,
+        currencySymbol: unitCurrency.currencySymbol,
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
@@ -420,11 +424,16 @@ export class PropertyManagementService {
       })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
+      .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
       .orderBy(desc(realEstateUnits.id));
   }
 
   async createUnit(input: CreateUnitDto) {
     await this.ensureExists(realEstateProperties, input.propertyId, "Property not found.");
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) {
+      await this.ensureExists(currencies, currencyId, "Currency not found.");
+    }
     const [result] = await this.db.insert(realEstateUnits).values({
       propertyId: input.propertyId,
       name: input.name,
@@ -435,6 +444,7 @@ export class PropertyManagementService {
       bathrooms: input.bathrooms ?? 0,
       area: this.money(input.area),
       monthlyRent: this.money(input.monthlyRent),
+      currencyId,
       securityDeposit: this.money(input.securityDeposit),
       amenities: input.amenities ?? null,
       description: input.description ?? null,
@@ -449,6 +459,9 @@ export class PropertyManagementService {
     if (input.propertyId !== undefined) {
       await this.ensureExists(realEstateProperties, input.propertyId, "Property not found.");
     }
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
     await this.db
       .update(realEstateUnits)
       .set({
@@ -460,6 +473,7 @@ export class PropertyManagementService {
           "floor",
           "bedrooms",
           "bathrooms",
+          "currencyId",
           "amenities",
           "description",
         ]),

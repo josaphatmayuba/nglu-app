@@ -35,6 +35,11 @@ services:
       dockerfile: Dockerfile.prod
     container_name: nglu_dev_backend2
     restart: unless-stopped
+    # Override the Dockerfile CMD (which runs `docker:prod` and skips
+    # seeding) with `docker:dev-deployed` so the dev DB gets RBAC + demo
+    # data on first boot. Both seed scripts are idempotent — they skip if
+    # data is already present, so this is safe to keep across restarts.
+    command: ["npm", "run", "docker:dev-deployed"]
     environment:
       NODE_ENV: development
       PORT: 8001

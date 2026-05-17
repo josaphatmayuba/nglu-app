@@ -28,3 +28,34 @@
   border-color: #6366f1;
   box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
+
+.immo-property-card.menu-open {
+  overflow: visible;
+}
+
+.immo-property-card.menu-open .immo-property-media {
+  overflow: visible;
+}
+
+.immo-property-menu-anchor {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 30;
+}
+
+.immo-property-menu-anchor .immo-icon-button {
+  position: static;
+}
+
+.immo-property-menu-anchor .immo-icon-button.active,
+.immo-property-menu-anchor .immo-icon-button:hover {
+  background: #f8fafc;
+  color: #18181b;
+}
+
+.immo-property-context-menu {
+  min-width: 240px;
+  right: 0;
+  top: calc(100% + 8px);
+}

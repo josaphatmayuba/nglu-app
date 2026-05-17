@@ -10,6 +10,8 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -36,6 +38,7 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
     pets: false,
     rentReview: false,
   });
+  const [customClauses, setCustomClauses] = useState([]);
   const [busy, setBusy] = useState(false);
 
   if (!lease) return null;
@@ -71,11 +74,20 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
   ];
 
   const buildLeaseContractContent = () => {
+    const customClauseTexts = customClauses
+      .filter((clause) => clause.enabled && (clause.title.trim() || clause.description.trim()))
+      .map((clause) => {
+        const title = clause.title.trim();
+        const description = clause.description.trim();
+        if (title && description) return `${title}: ${description}`;
+        return title || description;
+      });
     const selectedClauses = [
       contractClauses.inventory && "État des lieux annexé au contrat.",
       contractClauses.guarantor && "Caution solidaire avec garant et pièce d'identité.",
       contractClauses.pets && "Animaux autorisés selon les conditions du bail.",
       contractClauses.rentReview && "Révision annuelle du loyer selon l'indice BCC.",
+      ...customClauseTexts,
     ].filter(Boolean);
 
     return [
@@ -91,6 +103,28 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
       "Clauses additionnelles:",
       selectedClauses.length ? selectedClauses.map((clause) => `- ${clause}`).join("\n") : "- Aucune clause additionnelle sélectionnée.",
     ].join("\n");
+  };
+
+  const addCustomClause = () => {
+    setCustomClauses((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${prev.length}`,
+        enabled: true,
+        title: "",
+        description: "",
+      },
+    ]);
+  };
+
+  const updateCustomClause = (id, updates) => {
+    setCustomClauses((prev) =>
+      prev.map((clause) => (clause.id === id ? { ...clause, ...updates } : clause)),
+    );
+  };
+
+  const removeCustomClause = (id) => {
+    setCustomClauses((prev) => prev.filter((clause) => clause.id !== id));
   };
 
   const ensureContract = async () => {
@@ -242,7 +276,47 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
                   </span>
                 </label>
               ))}
-              <button type="button" className="immo-add-clause">
+              {customClauses.map((clause, index) => (
+                <div key={clause.id} className="immo-custom-clause">
+                  <div className="immo-custom-clause-row">
+                    <input
+                      type="checkbox"
+                      checked={clause.enabled}
+                      onChange={(event) => updateCustomClause(clause.id, { enabled: event.target.checked })}
+                      aria-label="Activer la clause personnalisée"
+                    />
+                    <div className="immo-custom-clause-fields">
+                      <input
+                        type="text"
+                        value={clause.title}
+                        autoFocus={index === customClauses.length - 1 && !clause.title}
+                        placeholder="Titre de la clause (ex. Interdiction de sous-location)"
+                        onChange={(event) => updateCustomClause(clause.id, { title: event.target.value })}
+                      />
+                      <textarea
+                        rows={2}
+                        maxLength={500}
+                        value={clause.description}
+                        placeholder="Décrivez la clause en détail. Elle sera ajoutée au contrat."
+                        onChange={(event) => updateCustomClause(clause.id, { description: event.target.value })}
+                      />
+                      <div className="immo-custom-clause-meta">
+                        <span><Sparkles size={12} /> Clause personnalisée</span>
+                        <small>{clause.description.length} / 500</small>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="immo-custom-clause-remove"
+                      onClick={() => removeCustomClause(clause.id)}
+                      aria-label="Supprimer cette clause"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button type="button" className="immo-add-clause" onClick={addCustomClause}>
                 <Plus size={16} /> Ajouter une clause personnalisée
               </button>
             </div>

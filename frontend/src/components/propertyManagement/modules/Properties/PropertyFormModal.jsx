@@ -59,7 +59,7 @@ const richTitle = (record) => (
   </div>
 );
 
-const PropertyFormModal = ({ open, record, onClose, onSaved }) => {
+const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSaved }) => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const addUnitsNow = Form.useWatch("addUnitsNow", form);
@@ -243,6 +243,16 @@ const PropertyFormModal = ({ open, record, onClose, onSaved }) => {
                       <div className="immo-unit-card-grid">
                         <Form.Item label="Loyer mensuel" name={[field.name, "monthlyRent"]}>
                           <InputNumber className="w-full immo-cdf-field" min={0} placeholder="850 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                        </Form.Item>
+                        <Form.Item label="Devise" name={[field.name, "currencyId"]}>
+                          <Select
+                            allowClear
+                            placeholder="Devise par défaut"
+                            size="small"
+                            options={currencyOptions}
+                            popupClassName="immo-select-popup"
+                            getPopupContainer={() => document.body}
+                          />
                         </Form.Item>
                         <Form.Item label="Caution (2× loyer suggéré)" name={[field.name, "securityDeposit"]}>
                           <InputNumber className="w-full immo-cdf-field" min={0} placeholder="1 700 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />

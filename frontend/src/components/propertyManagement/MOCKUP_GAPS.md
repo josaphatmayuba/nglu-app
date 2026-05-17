@@ -169,6 +169,92 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 
 ---
 
+## Correctif post-cutover - Menu cartes Proprietes
+
+**Objectif** : Le bouton `...` des cartes Proprietes doit ouvrir un menu visible comme dans l'intention du mockup.
+
+- [x] Ajouter un etat de menu dans `PropertyCardGrid`
+- [x] Rendre un dropdown sous le bouton `...`
+- [x] Fermer le menu au clic exterieur
+- [x] Documenter la passation pour l'autre agent
+
+**Notes de travail** :
+
+- **2026-05-16** - Corrige dans [modules/Properties/PropertyCardGrid.jsx](./modules/Properties/PropertyCardGrid.jsx), [modules/Properties/PropertiesPanel.jsx](./modules/Properties/PropertiesPanel.jsx) et [modules/Properties/PropertiesPanel.css](./modules/Properties/PropertiesPanel.css).
+- Le fichier de passation est ici : [modules/Properties/PROPERTIES_DESIGN_HANDOFF.md](./modules/Properties/PROPERTIES_DESIGN_HANDOFF.md).
+- Les actions `Voir paiements` et `Voir bail` ont encore des fallback demo tant que la navigation inter-onglets n'est pas branchee.
+
+---
+
+## Correctif post-cutover - Devise modal Proprietes
+
+**Objectif** : Le modal de modification Proprietes doit permettre de choisir la devise utilisee par le loyer mensuel et le depot de garantie.
+
+- [x] Remplacer le titre `Modifier l'unite` par `Modifier propriétés`
+- [x] Ajouter le select `Devise loyer / dépôt`
+- [x] Envoyer `currencyId` avec `monthlyRent` et `securityDeposit`
+- [x] Documenter la passation pour l'autre agent
+
+**Notes de travail** :
+
+- **2026-05-17** - Corrige dans [modules/Properties/UnitFormModal.jsx](./modules/Properties/UnitFormModal.jsx) et [PropertyManagementNew.jsx](./PropertyManagementNew.jsx).
+- Le fichier de passation est ici : [modules/Properties/PROPERTIES_DESIGN_HANDOFF.md](./modules/Properties/PROPERTIES_DESIGN_HANDOFF.md).
+- Une seule devise est stockee par unite via `currencyId`; elle s'applique aux deux montants.
+
+---
+
+## Correctif post-cutover - Clause personnalisée contrat bail
+
+**Objectif** : Le bouton `Ajouter une clause personnalisée` dans le workflow contrat doit ajouter un bloc editable comme dans le mockup.
+
+- [x] Ajouter l'etat React des clauses personnalisées
+- [x] Brancher le bouton `Ajouter une clause personnalisée`
+- [x] Ajouter suppression, checkbox, titre, description et compteur
+- [x] Inclure les clauses cochees dans le contenu genere
+- [x] Documenter la passation pour l'autre agent
+
+**Notes de travail** :
+
+- **2026-05-17** - Corrige dans [modules/Leases/ContractWorkflowModal.jsx](./modules/Leases/ContractWorkflowModal.jsx) et [PropertyManagement.css](./PropertyManagement.css).
+- Le fichier de passation est ici : [modules/Leases/LEASES_DESIGN_HANDOFF.md](./modules/Leases/LEASES_DESIGN_HANDOFF.md).
+- Cause : le mockup utilisait `addCustomClause()` en JS imperatif, mais la version modulaire avait seulement le bouton sans `onClick`.
+
+---
+
+## Correctif post-cutover - Symboles devise encodés
+
+**Objectif** : Les cartes ne doivent pas afficher les entites HTML de devise comme `&#36;`.
+
+- [x] Decoder le symbole dans `shortMoney()`
+- [x] Documenter la correction pour l'autre agent
+
+**Notes de travail** :
+
+- **2026-05-17** - Corrige dans [shared/format.js](./shared/format.js).
+- Le fichier de passation est ici : [modules/Leases/LEASES_DESIGN_HANDOFF.md](./modules/Leases/LEASES_DESIGN_HANDOFF.md).
+- Cause : `compactMoney()` decodait deja les devises, mais `shortMoney()` utilisait le symbole brut pour les formats `K` / `M`.
+
+---
+
+## Correctif full-stack - Devise des unités Propriétés
+
+**Objectif** : La devise choisie pour `Loyer mensuel` et `Dépôt de garantie` doit être envoyée, sauvegardée par backend2 et renvoyée à l'UI.
+
+- [x] Ajouter `currency_id` sur `real_estate_units`
+- [x] Accepter `currencyId` dans `CreateUnitDto` / `UpdateUnitDto`
+- [x] Sauvegarder `currencyId` dans `createUnit` / `updateUnit`
+- [x] Renvoyer `currencyId`, `currencyName`, `currencySymbol` dans `/property-management/units`
+- [x] Envoyer `currencyId` depuis le formulaire d'unités de `Nouvelle propriété`
+- [x] Afficher les loyers Propriétés avec `unit.currencySymbol`
+
+**Notes de travail** :
+
+- **2026-05-17** - Corrige dans backend2 (`schema.ts`, `property-management.dto.ts`, `property-management.service.ts`, migration `0014_add_currency_id_to_property_units.sql`) et frontend (`PropertyFormModal.jsx`, `PropertiesPanel.jsx`, `PropertyCardGrid.jsx`, `PropertyListTable.jsx`, `PropertyMapView.jsx`).
+- Le fichier de passation est ici : [modules/Properties/PROPERTIES_DESIGN_HANDOFF.md](./modules/Properties/PROPERTIES_DESIGN_HANDOFF.md).
+- La migration doit etre appliquee sur local/dev avant que le backend accepte la colonne.
+
+---
+
 ## Convention de mise à jour
 
 Pour chaque tâche entamée :

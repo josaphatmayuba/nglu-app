@@ -131,7 +131,7 @@ const PropertyListTable = ({
                     )}
                   </td>
                   <td className="right">
-                    <strong>{shortMoney(unit.monthlyRent)}</strong>
+                    <strong>{shortMoney(unit.monthlyRent, unit.currencySymbol)}</strong>
                   </td>
                   <td className="actions">
                     {!hasTenant && (
