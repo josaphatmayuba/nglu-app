@@ -193,6 +193,7 @@ export const realEstateUnits = mysqlTable("real_estate_units", {
   bathrooms: int("bathrooms").default(0).notNull(),
   area: decimal("area", { precision: 12, scale: 2 }).default("0").notNull(),
   monthlyRent: decimal("monthly_rent", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
   securityDeposit: decimal("security_deposit", { precision: 15, scale: 2 }).default("0").notNull(),
   amenities: text("amenities"),
   description: text("description"),

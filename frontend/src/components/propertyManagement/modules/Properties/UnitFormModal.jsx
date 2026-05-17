@@ -11,6 +11,7 @@ import {
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { modalSelectProps, unitTypes } from "../../shared/constants";
+import { optionalNumber } from "../../shared/format";
 
 const REQUIRED = [{ required: true }];
 
@@ -26,11 +27,19 @@ const toUnitFormRecord = (record) => {
     bathrooms: record.bathrooms,
     area: record.area,
     monthlyRent: record.monthlyRent,
+    currencyId: optionalNumber(record.currencyId),
     securityDeposit: record.securityDeposit,
   };
 };
 
-const UnitFormModal = ({ open, record, properties = [], onClose, onSaved }) => {
+const UnitFormModal = ({
+  open,
+  record,
+  properties = [],
+  currencyOptions = [],
+  onClose,
+  onSaved,
+}) => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
 
@@ -44,7 +53,11 @@ const UnitFormModal = ({ open, record, properties = [], onClose, onSaved }) => {
   }, [open, record, form]);
 
   const handleSubmit = async (values) => {
-    const response = await dispatch(saveUnit({ id: record?.id, values }));
+    const payload = {
+      ...values,
+      currencyId: optionalNumber(values.currencyId),
+    };
+    const response = await dispatch(saveUnit({ id: record?.id, values: payload }));
     if (response.payload?.message === "success") {
       dispatch(loadPropertyManagement());
       onSaved?.();
@@ -59,7 +72,7 @@ const UnitFormModal = ({ open, record, properties = [], onClose, onSaved }) => {
   return (
     <Modal
       open={open}
-      title={record ? "Modifier l'unité" : "Nouvelle unité"}
+      title={record ? "Modifier propriétés" : "Nouvelle propriété"}
       onCancel={onClose}
       footer={null}
       width={720}
@@ -92,6 +105,9 @@ const UnitFormModal = ({ open, record, properties = [], onClose, onSaved }) => {
           <Form.Item label="Salles de bain" name="bathrooms"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Surface" name="area"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Loyer mensuel" name="monthlyRent"><InputNumber className="w-full" min={0} /></Form.Item>
+          <Form.Item label="Devise loyer / dépôt" name="currencyId">
+            <Select allowClear placeholder="Devise par défaut" options={currencyOptions} {...modalSelectProps} />
+          </Form.Item>
         </div>
         <Form.Item label="Dépôt de garantie" name="securityDeposit">
           <InputNumber className="w-full" min={0} />

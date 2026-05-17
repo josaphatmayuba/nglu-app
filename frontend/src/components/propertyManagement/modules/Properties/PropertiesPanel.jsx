@@ -32,7 +32,7 @@ const PropertiesPanel = ({
   onViewAllPayments,
 }) => {
   const data = usePropertyManagementData();
-  const { enrichedUnits, safePayments, overduePayments, upcomingPayments } = data;
+  const { enrichedUnits, safePayments, overduePayments, upcomingPayments, currencyOptions } = data;
 
   const [internalSearch, setInternalSearch] = useState("");
   const searchTerm = searchTermProp != null ? searchTermProp : internalSearch;
@@ -106,6 +106,18 @@ const PropertiesPanel = ({
   const handleEditUnit = (unit) => {
     if (onEditUnit) onEditUnit(unit);
     else window.alert(`(demo) Modifier l'unité ${unit.displayName || unit.name}`);
+  };
+
+  const handleViewUnitPayments = (unit) => {
+    if (onViewAllPayments) onViewAllPayments(unit);
+    else window.alert(`(demo) Voir paiements pour ${unit.displayName || unit.name}`);
+  };
+  const handleViewUnitLease = (unit) => {
+    if (unit.activeLease?.id) {
+      window.alert(`(demo) Voir bail ${unit.activeLease.reference || unit.activeLease.id}`);
+      return;
+    }
+    handleAssignTenant(unit);
   };
 
   return (
@@ -258,6 +270,8 @@ const PropertiesPanel = ({
             units={filteredUnits}
             onAssignTenant={handleAssignTenant}
             onEditUnit={handleEditUnit}
+            onViewPayments={handleViewUnitPayments}
+            onViewLease={handleViewUnitLease}
           />
         )
       ) : (
@@ -277,6 +291,7 @@ const PropertiesPanel = ({
       <PropertyFormModal
         open={propertyModalOpen}
         record={propertyModalRecord}
+        currencyOptions={currencyOptions}
         onClose={() => setPropertyModalOpen(false)}
         onSaved={() => setPropertyModalOpen(false)}
       />

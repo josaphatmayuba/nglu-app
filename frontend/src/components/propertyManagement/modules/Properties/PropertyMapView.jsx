@@ -4,6 +4,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { AlertTriangle } from "lucide-react";
 
+import { shortMoney } from "../../shared/format";
+
 // Default Leaflet markers reference image assets via relative URLs that
 // the Webpack build does not resolve correctly inside CRA. Forcing the
 // CDN URLs is the standard workaround.
@@ -103,7 +105,7 @@ const PropertyMapView = ({ units, onAssignTenant }) => {
                   </span>
                 </p>
                 {unit.monthlyRent != null && (
-                  <p>Loyer : <strong>{Number(unit.monthlyRent).toLocaleString()} /mois</strong></p>
+                  <p>Loyer : <strong>{shortMoney(unit.monthlyRent, unit.currencySymbol)} /mois</strong></p>
                 )}
                 {!isReal && <small className="immo-map-popup-warning">Position approximative</small>}
                 {!unit.activeLease && (status === "vacant" || status === "available") && (

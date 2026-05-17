@@ -66,7 +66,7 @@ export const compactMoney = (value, symbol) =>
 
 export const shortMoney = (value, symbol) => {
   const amount = Number(value || 0);
-  const sym = symbol || "CDF";
+  const sym = decodeCurrencyText(symbol || "CDF").trim() || "CDF";
   if (Math.abs(amount) >= 1000000) {
     const millions = amount / 1000000;
     const formatted = Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1);

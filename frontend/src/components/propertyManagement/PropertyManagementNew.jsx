@@ -55,6 +55,7 @@ const PropertyManagementNew = () => {
     openMaintenance,
     safeTenants,
     safeLeases,
+    currencyOptions,
     occupancyRate,
     monthlyRent,
     overduePayments,
@@ -285,6 +286,7 @@ const PropertyManagementNew = () => {
         open={unitModalOpen}
         record={unitModalRecord}
         properties={safeProperties}
+        currencyOptions={currencyOptions}
         onClose={() => setUnitModalOpen(false)}
         onSaved={() => setUnitModalOpen(false)}
       />
