@@ -99,6 +99,13 @@
       "when": 1779038400000,
       "tag": "0014_add_currency_id_to_property_units",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1779120000000,
+      "tag": "0015_add_currency_id_to_property",
+      "breakpoints": true
     }
   ]
 }

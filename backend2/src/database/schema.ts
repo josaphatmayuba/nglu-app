@@ -177,6 +177,7 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   parkingSpaces: int("parking_spaces").default(0).notNull(),
   marketValue: decimal("market_value", { precision: 15, scale: 2 }).default("0").notNull(),
   defaultRent: decimal("default_rent", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
   description: text("description"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),

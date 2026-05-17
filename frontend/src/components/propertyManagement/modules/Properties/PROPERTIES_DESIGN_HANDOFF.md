@@ -2,6 +2,39 @@
 
 Date: 2026-05-16
 
+## Correctif design - modal Nouvelle propriete
+
+Le modal `Nouvelle propriete` de la version modulaire ne respectait plus le
+mockup `frontend/design-mockup.html`: largeur trop fragile, header/body/footer
+pilotes par les styles Ant Design globaux, et body/footer pas scopes au modal
+Proprietes.
+
+Fichiers modifies:
+
+- `PropertyFormModal.jsx`
+  - ajout de `className="immo-property-modal"`;
+  - ajout de `wrapClassName="immo-property-modal-wrap"`.
+- `PropertiesPanel.css`
+  - couche CSS scopee pour ce modal uniquement;
+  - modal limite a `min(768px, 100vw - 24px)`;
+  - `ant-modal-content` en flex column avec `max-height`;
+  - header/footer fixes et body scrollable;
+  - grilles a deux colonnes desktop, une colonne mobile;
+  - champs, labels, radio cards, notes et footer alignes sur le mockup.
+
+Point important: les styles sont volontairement scopes sous
+`.immo-property-modal` pour eviter de casser les modals Baux/Paiements/Tenants.
+Si un autre agent ajuste les styles globaux `.ant-modal-*`, il doit verifier que
+ces overrides scopes restent prioritaires.
+
+Verification attendue:
+
+1. Ouvrir `/admin/property-management`.
+2. Onglet `Proprietes` puis `Nouvelle propriete`.
+3. Comparer avec `frontend/design-mockup.html` section `PROPERTY MODAL`.
+4. Tester desktop et mobile: footer visible, contenu scrollable, pas de grille
+   ecrasee, boutons `Annuler/Brouillon/Creer la propriete` alignes.
+
 ## Correctif devise modal propriete
 
 Le modal ouvert depuis les cartes Proprietes affichait `Modifier l'unite` et ne

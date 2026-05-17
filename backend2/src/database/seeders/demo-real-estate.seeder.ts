@@ -88,6 +88,7 @@ export async function seedDemoRealEstate() {
     PROPERTIES.map(async (p) => {
       const res = await db.insert(realEstateProperties).values({
         ...p,
+        currencyId,
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       });

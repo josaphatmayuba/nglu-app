@@ -59,3 +59,194 @@
   right: 0;
   top: calc(100% + 8px);
 }
+
+/* Nouvelle propriete modal: scoped mockup parity layer.
+   Keeps the Ant modal close to frontend/design-mockup.html without
+   changing the other property-management modals. */
+.immo-property-modal-wrap {
+  padding: 24px 12px;
+}
+
+.immo-property-modal-wrap .ant-modal {
+  max-width: min(768px, calc(100vw - 24px));
+  padding-bottom: 0;
+  top: 0;
+}
+
+.immo-property-modal .ant-modal-content {
+  border: 1px solid #e4e4e7;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(24, 24, 27, 0.28);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.immo-property-modal .ant-modal-header {
+  border-bottom: 1px solid #f4f4f5;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 16px 24px;
+}
+
+.immo-property-modal .ant-modal-close {
+  align-items: center;
+  border-radius: 8px;
+  color: #71717a;
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  inset-inline-end: 16px;
+  top: 18px;
+  width: 36px;
+}
+
+.immo-property-modal .ant-modal-close:hover {
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.immo-property-modal .ant-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 0;
+}
+
+.immo-property-modal .ant-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.immo-property-modal .immo-property-form {
+  gap: 24px;
+}
+
+.immo-property-modal .immo-form-section {
+  gap: 0;
+}
+
+.immo-property-modal .immo-form-section-title {
+  color: #71717a;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+.immo-property-modal .ant-form-item {
+  margin-bottom: 14px;
+}
+
+.immo-property-modal .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.immo-property-modal .ant-form-item-label > label {
+  color: #3f3f46;
+  font-size: 13px;
+  font-weight: 500;
+  height: auto;
+}
+
+.immo-property-modal .pm-form-grid {
+  gap: 0 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.immo-property-modal .ant-input,
+.immo-property-modal .ant-input-number,
+.immo-property-modal .ant-input-number-affix-wrapper,
+.immo-property-modal .ant-select-selector {
+  border-color: #e4e4e7 !important;
+  border-radius: 8px !important;
+  min-height: 40px;
+}
+
+.immo-property-modal .ant-input,
+.immo-property-modal .ant-input-number-input,
+.immo-property-modal .ant-select-selection-item,
+.immo-property-modal .ant-select-selection-placeholder {
+  font-size: 13px;
+}
+
+.immo-property-modal .ant-input::placeholder,
+.immo-property-modal .ant-input-number-input::placeholder {
+  color: #a1a1aa;
+}
+
+.immo-property-modal .ant-input:focus,
+.immo-property-modal .ant-input-focused,
+.immo-property-modal .ant-input-number-affix-wrapper-focused,
+.immo-property-modal .ant-select-focused .ant-select-selector {
+  border-color: #4f46e5 !important;
+  box-shadow: 0 0 0 3px #e0e7ff !important;
+}
+
+.immo-property-modal .ant-input[disabled] {
+  background: #fafafa;
+  color: #a1a1aa;
+  cursor: not-allowed;
+}
+
+.immo-property-modal .immo-radio-cards {
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.immo-property-modal .immo-radio-card {
+  border-radius: 8px;
+  font-size: 12px;
+  height: 42px;
+  padding: 0 12px;
+}
+
+.immo-property-modal .ant-form-item-extra {
+  color: #71717a;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.immo-property-modal .immo-units-toggle.ant-checkbox-wrapper,
+.immo-property-modal .immo-form-info-note {
+  border-radius: 10px;
+  margin: 0;
+}
+
+.immo-property-modal .immo-modal-footer {
+  flex: 0 0 auto;
+  margin: 18px -24px 0;
+  padding: 14px 24px;
+}
+
+@media (max-width: 640px) {
+  .immo-property-modal-wrap {
+    padding: 12px 8px;
+  }
+
+  .immo-property-modal .ant-modal-content {
+    max-height: calc(100vh - 24px);
+  }
+
+  .immo-property-modal .ant-modal-header,
+  .immo-property-modal .ant-modal-body,
+  .immo-property-modal .immo-modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .immo-property-modal .pm-form-grid,
+  .immo-property-modal .immo-radio-cards,
+  .immo-property-modal .immo-unit-card-grid,
+  .immo-property-modal .immo-unit-card-grid + .immo-unit-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .immo-property-modal .immo-modal-footer {
+    margin-left: -16px;
+    margin-right: -16px;
+  }
+}

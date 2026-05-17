@@ -45,8 +45,16 @@ const toPropertyFormRecord = (record) => {
     floors: record.floors,
     parkingSpaces: record.parkingSpaces,
     marketValue: record.marketValue,
+    currencyId: record.currencyId ?? undefined,
     description: record.description,
   };
+};
+
+// Le label des options du frontend est `"NAME (SYMBOL)"` (cf. buildCurrencyOptions
+// dans shared/format.js). Extrait le symbole pour piloter le prefix dynamique.
+const symbolFromOptionLabel = (label) => {
+  const m = String(label || "").match(/\(([^)]+)\)\s*$/);
+  return m ? m[1] : "CDF";
 };
 
 const richTitle = (record) => (
@@ -63,6 +71,10 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const addUnitsNow = Form.useWatch("addUnitsNow", form);
+  const selectedCurrencyId = Form.useWatch("currencyId", form);
+  const selectedCurrencySymbol = symbolFromOptionLabel(
+    currencyOptions.find((c) => c.value === selectedCurrencyId)?.label,
+  );
 
   useEffect(() => {
     if (!open) {
@@ -71,10 +83,16 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
     }
     if (record) {
       form.setFieldsValue(toPropertyFormRecord(record));
-    } else {
-      form.resetFields();
+      return;
     }
-  }, [open, record, form]);
+    form.resetFields();
+    // Préselectionne la devise par défaut (FRANC CONGOLAIS si présente,
+    // sinon la première option). Évite que la modal s'ouvre sans devise.
+    if (currencyOptions.length) {
+      const cdf = currencyOptions.find((c) => /FRANC CONGOLAIS/i.test(c.label));
+      form.setFieldValue("currencyId", (cdf || currencyOptions[0]).value);
+    }
+  }, [open, record, form, currencyOptions]);
 
   const handleSubmit = async (values) => {
     const id = record?.id;
@@ -123,6 +141,8 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
       onCancel={onClose}
       footer={null}
       width={720}
+      className="immo-property-modal"
+      wrapClassName="immo-property-modal-wrap"
       destroyOnClose
     >
       <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -181,12 +201,27 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
 
           <div className="immo-form-section">
             <h3 className="immo-form-section-title"><Wallet size={14} /> Informations financières</h3>
+            <Form.Item
+              label="Devise"
+              name="currencyId"
+              extra="Appliquée à la valeur marchande, au loyer par défaut et héritée par les unités créées"
+              rules={[{ required: true, message: "La devise est requise" }]}
+            >
+              <Select
+                options={currencyOptions}
+                placeholder="Sélectionnez une devise"
+                popupClassName="immo-select-popup"
+                getPopupContainer={() => document.body}
+                showSearch
+                optionFilterProp="label"
+              />
+            </Form.Item>
             <div className="pm-form-grid">
               <Form.Item label="Valeur marchande estimée" name="marketValue" extra="Pour analyse de patrimoine">
-                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 480 000 000" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 480 000 000" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
               </Form.Item>
               <Form.Item label="Loyer mensuel par défaut" name="defaultRent" extra="Hérité par défaut sur chaque unité créée">
-                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 850 000" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 850 000" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
               </Form.Item>
             </div>
           </div>
