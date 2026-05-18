@@ -26,6 +26,7 @@ export class AppSettingsService {
         website: appSettings.website,
         footer: appSettings.footer,
         logo: appSettings.logo,
+        landlordSignature: appSettings.landlordSignature,
         currencyId: appSettings.currencyId,
         isPos: appSettings.isPos,
         isDiscount: appSettings.isDiscount,
@@ -56,6 +57,12 @@ export class AppSettingsService {
 
     const uploadedLogo = this.saveLogo(files, publicApiBase);
     const logo = dto.clearLogo === "true" ? null : (uploadedLogo ?? dto.logo ?? current.logo);
+    // Landlord signature : stored inline as a base64 data URL (LONGTEXT).
+    // Update only if explicitly cleared or a new value is provided.
+    const landlordSignature =
+      dto.clearLandlordSignature === "true"
+        ? null
+        : (dto.landlordSignature ?? current.landlordSignature);
 
     await this.db
       .update(appSettings)
@@ -73,6 +80,7 @@ export class AppSettingsService {
         isDiscount: dto.isDiscount ?? current.isDiscount,
         isTax: dto.isTax ?? current.isTax,
         logo,
+        landlordSignature,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(appSettings.id, 1));

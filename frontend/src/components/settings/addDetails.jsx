@@ -29,6 +29,10 @@ const AddDetails = () => {
   const dispatch = useDispatch();
   const [fileList, setFileList] = useState([]);
   const [footer, setFooter] = useState("");
+  const [landlordSigList, setLandlordSigList] = useState([]);
+  const [landlordSignatureDataUrl, setLandlordSignatureDataUrl] = useState(null);
+  // null = pas de changement, true = effacer, false = nouvelle valeur dans landlordSignatureDataUrl
+  const [clearLandlordSignature, setClearLandlordSignature] = useState(false);
 
   const data = useSelector((state) => state?.setting?.data) || null;
   const { list, loading } = useSelector((state) => state?.currency) || null;
@@ -62,6 +66,14 @@ const AddDetails = () => {
         }
       } else {
         formData.append("clearLogo", "true");
+      }
+
+      // Landlord signature : envoyé en data URL (base64). Si vidée par
+      // l'utilisateur (clearLandlordSignature), on l'efface en DB.
+      if (landlordSignatureDataUrl) {
+        formData.append("landlordSignature", landlordSignatureDataUrl);
+      } else if (clearLandlordSignature) {
+        formData.append("clearLandlordSignature", "true");
       }
 
       formData.append("_method", "PUT");
@@ -105,6 +117,55 @@ const AddDetails = () => {
   const handelImageChange = ({ fileList }) => {
     setFileList(fileList);
   };
+
+  // Convertit un File en data URL base64 (≤ ~1 Mo recommandé). Réutilisé
+  // pour la signature du bailleur (stockée dans appSetting.landlordSignature).
+  const fileToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const handleLandlordSigChange = async ({ fileList: list }) => {
+    setLandlordSigList(list);
+    if (!list.length) {
+      // L'utilisateur a retiré l'image → on demande au backend de l'effacer
+      setLandlordSignatureDataUrl(null);
+      setClearLandlordSignature(true);
+      return;
+    }
+    const first = list[0];
+    const fileObj = first?.originFileObj;
+    if (fileObj) {
+      try {
+        const dataUrl = await fileToDataUrl(fileObj);
+        setLandlordSignatureDataUrl(dataUrl);
+        setClearLandlordSignature(false);
+      } catch {
+        toast.error("Impossible de lire l'image de signature.");
+      }
+    }
+  };
+
+  // Pré-remplit l'upload avec la signature existante venant du backend.
+  useEffect(() => {
+    if (data?.landlordSignature) {
+      setLandlordSigList([
+        {
+          uid: "landlord-signature",
+          name: "Signature du bailleur",
+          status: "done",
+          url: data.landlordSignature,
+        },
+      ]);
+      setLandlordSignatureDataUrl(null);
+      setClearLandlordSignature(false);
+    } else {
+      setLandlordSigList([]);
+    }
+  }, [data?.landlordSignature]);
 
   const textEditorFormats = [
     "header",
@@ -313,6 +374,28 @@ const AddDetails = () => {
                   </Upload>
                   <p className="font-semibold text-rose-500">
                     Required image size 180x70 px & transparent png format
+                  </p>
+                </Form.Item>
+                <Form.Item label="Signature du bailleur (contrats de bail)">
+                  <Upload
+                    listType="picture-card"
+                    beforeUpload={() => false}
+                    accept="image/png,image/jpeg"
+                    fileList={landlordSigList}
+                    maxCount={1}
+                    onChange={handleLandlordSigChange}
+                  >
+                    {landlordSigList.length === 0 && (
+                      <div>
+                        <UploadOutlined />
+                        <div style={{ marginTop: 8 }}>Upload</div>
+                      </div>
+                    )}
+                  </Upload>
+                  <p className="text-xs text-slate-500" style={{ marginTop: 4 }}>
+                    Image PNG/JPG transparente recommandée (largeur ≤ 360px). Apparaîtra
+                    automatiquement sur tous les contrats de bail signés à la place du cachet
+                    textuel par défaut. Laisser vide = cachet électronique textuel.
                   </p>
                 </Form.Item>
                 <Form.Item
