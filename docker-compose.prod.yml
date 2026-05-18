@@ -18,6 +18,7 @@ services:
       DB_USERNAME: ${DB_USERNAME:-nglu_user}
       DB_PASSWORD: ${DB_PASSWORD:-password}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
+      APP_URL: ${APP_URL:-https://ongdngolu.org}
       # Production routing contract: marketing lives at /, CRM entrypoint is /crm.
       FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org/crm}
       DB_WAIT_RETRIES: 40
