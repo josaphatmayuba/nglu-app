@@ -5,6 +5,8 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
+  currencies,
   customers,
   realEstateLeases,
   realEstateMaintenanceRequests,
@@ -41,6 +43,7 @@ const paymentProperty = alias(realEstateProperties, "paymentProperty");
 const paymentUnit = alias(realEstateUnits, "paymentUnit");
 const maintenanceProperty = alias(realEstateProperties, "maintenanceProperty");
 const maintenanceUnit = alias(realEstateUnits, "maintenanceUnit");
+const unitCurrency = alias(currencies, "unitCurrency");
 
 @Injectable()
 export class PropertyManagementService {
@@ -330,6 +333,7 @@ export class PropertyManagementService {
         parkingSpaces: realEstateProperties.parkingSpaces,
         marketValue: realEstateProperties.marketValue,
         defaultRent: realEstateProperties.defaultRent,
+        currencyId: realEstateProperties.currencyId,
         description: realEstateProperties.description,
         createdAt: realEstateProperties.createdAt,
         updatedAt: realEstateProperties.updatedAt,
@@ -345,6 +349,10 @@ export class PropertyManagementService {
 
   async createProperty(input: CreatePropertyDto) {
     const code = input.code?.trim() || (await this.nextPropertyCode());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) {
+      await this.ensureExists(currencies, currencyId, "Currency not found.");
+    }
     const [result] = await this.db.insert(realEstateProperties).values({
       name: input.name,
       code,
@@ -357,6 +365,7 @@ export class PropertyManagementService {
       parkingSpaces: input.parkingSpaces ?? 0,
       marketValue: this.money(input.marketValue),
       defaultRent: this.money(input.defaultRent),
+      currencyId,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -367,6 +376,9 @@ export class PropertyManagementService {
 
   async updateProperty(id: number, input: UpdatePropertyDto) {
     await this.ensureExists(realEstateProperties, id, "Property not found.");
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
     await this.db
       .update(realEstateProperties)
       .set({
@@ -381,6 +393,7 @@ export class PropertyManagementService {
           "floors",
           "parkingSpaces",
           "description",
+          "currencyId",
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
@@ -410,6 +423,9 @@ export class PropertyManagementService {
         bathrooms: realEstateUnits.bathrooms,
         area: realEstateUnits.area,
         monthlyRent: realEstateUnits.monthlyRent,
+        currencyId: realEstateUnits.currencyId,
+        currencyName: unitCurrency.currencyName,
+        currencySymbol: unitCurrency.currencySymbol,
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
@@ -418,11 +434,16 @@ export class PropertyManagementService {
       })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
+      .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
       .orderBy(desc(realEstateUnits.id));
   }
 
   async createUnit(input: CreateUnitDto) {
     await this.ensureExists(realEstateProperties, input.propertyId, "Property not found.");
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) {
+      await this.ensureExists(currencies, currencyId, "Currency not found.");
+    }
     const [result] = await this.db.insert(realEstateUnits).values({
       propertyId: input.propertyId,
       name: input.name,
@@ -433,6 +454,7 @@ export class PropertyManagementService {
       bathrooms: input.bathrooms ?? 0,
       area: this.money(input.area),
       monthlyRent: this.money(input.monthlyRent),
+      currencyId,
       securityDeposit: this.money(input.securityDeposit),
       amenities: input.amenities ?? null,
       description: input.description ?? null,
@@ -447,6 +469,9 @@ export class PropertyManagementService {
     if (input.propertyId !== undefined) {
       await this.ensureExists(realEstateProperties, input.propertyId, "Property not found.");
     }
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
     await this.db
       .update(realEstateUnits)
       .set({
@@ -458,6 +483,7 @@ export class PropertyManagementService {
           "floor",
           "bedrooms",
           "bathrooms",
+          "currencyId",
           "amenities",
           "description",
         ]),
@@ -482,11 +508,13 @@ export class PropertyManagementService {
 
   async createLease(input: CreateLeaseDto) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId);
+    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency());
     const [result] = await this.db.insert(realEstateLeases).values({
       reference: input.reference || `LEASE-${Date.now()}`,
       propertyId: input.propertyId,
       unitId: input.unitId,
       tenantId: input.tenantId,
+      currencyId,
       startDate: this.requiredDate(input.startDate),
       endDate: this.date(input.endDate),
       nextInvoiceDate: this.date(input.nextInvoiceDate),
@@ -576,6 +604,9 @@ export class PropertyManagementService {
         method: realEstateRentPayments.method,
         reference: realEstateRentPayments.reference,
         notes: realEstateRentPayments.notes,
+        currencyId: realEstateRentPayments.currencyId,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
         leaseReference: paymentLease.reference,
         propertyName: paymentProperty.name,
         unitName: paymentUnit.name,
@@ -587,6 +618,7 @@ export class PropertyManagementService {
       .leftJoin(paymentProperty, eq(paymentProperty.id, paymentLease.propertyId))
       .leftJoin(paymentUnit, eq(paymentUnit.id, paymentLease.unitId))
       .leftJoin(customers, eq(customers.id, paymentLease.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateRentPayments.currencyId))
       .orderBy(desc(realEstateRentPayments.id));
   }
 
@@ -609,8 +641,15 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    // Currency precedence: explicit input → lease's currency → app default
+    const paymentCurrencyId =
+      (input as any).currencyId
+      ?? (lease as any).currencyId
+      ?? (await this.resolveDefaultCurrency());
+
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
       leaseId: lease.id,
+      currencyId: paymentCurrencyId,
       transactionId: Number(transactionResult.insertId),
       paymentDate: this.requiredDate(input.paymentDate),
       amount: this.money(input.amount),
@@ -760,6 +799,7 @@ export class PropertyManagementService {
         propertyId: realEstateLeases.propertyId,
         unitId: realEstateLeases.unitId,
         tenantId: realEstateLeases.tenantId,
+        currencyId: realEstateLeases.currencyId,
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         nextInvoiceDate: realEstateLeases.nextInvoiceDate,
@@ -775,11 +815,14 @@ export class PropertyManagementService {
         unitName: leaseUnit.name,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
       })
       .from(realEstateLeases)
       .leftJoin(leaseProperty, eq(leaseProperty.id, realEstateLeases.propertyId))
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
-      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId));
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
   }
 
   private async getLeaseOrThrow(id: number) {
@@ -988,6 +1031,17 @@ export class PropertyManagementService {
       .update(realEstateUnits)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateUnits.id, id));
+  }
+
+  // Returns the appSetting's currencyId or null if no row exists yet.
+  // Used as fallback when a transaction is created without an explicit
+  // currencyId (legacy clients).
+  private async resolveDefaultCurrency(): Promise<number | null> {
+    const [row] = await this.db
+      .select({ currencyId: appSettings.currencyId })
+      .from(appSettings)
+      .limit(1);
+    return row?.currencyId ?? null;
   }
 
   private money(value: number | undefined | null) {

@@ -6,6 +6,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteProductCategory,
   loadallproductCatagoryPaginated,
@@ -126,22 +127,22 @@ const GetAllProductCategory = (props) => {
 
   return (
     <>
+      <PageHeader
+        title="Catégories"
+        subtitle="Catégories de produits du catalogue"
+        actions={
+          <CreateDrawer
+            permission={"create-productCategory"}
+            title={"Create Category"}
+            width={35}
+          >
+            <AddProductCategory />
+          </CreateDrawer>
+        }
+      />
       <Card
         className="max-md:border-0 max-md:bg-white"
         bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Product Category"}
-        extra={
-          <div className="flex justify-between md:justify-start gap-3 items-center">
-            <CreateDrawer
-              permission={"create-productCategory"}
-              title={"Create Category"}
-              width={35}
-            >
-              <AddProductCategory />
-            </CreateDrawer>
-          </div>
-        }
       >
         <UserPrivateComponent permission={"readAll-productCategory"}>
           <TableComponent

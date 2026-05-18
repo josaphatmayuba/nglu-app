@@ -79,6 +79,13 @@ export class CreatePropertyDto {
   @Min(0)
   defaultRent?: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id for marketValue and defaultRent. Inherited by new units when omitted. Defaults to appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ example: "Mixed-use rental building" })
   @IsOptional()
   @IsString()
@@ -141,6 +148,13 @@ export class CreateUnitDto {
   @IsNumber()
   @Min(0)
   monthlyRent?: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Currency id for monthly rent and security deposit. Defaults to appSetting.currencyId when omitted." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
 
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
@@ -211,6 +225,13 @@ export class CreateLeaseDto {
   @Min(0)
   rentAmount: number;
 
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the company's appSetting.currencyId when omitted." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
   @ApiPropertyOptional({ example: 1800, default: 0 })
   @IsOptional()
   @Type(() => Number)
@@ -280,6 +301,13 @@ export class CreateRentPaymentDto {
   @IsInt()
   @Min(1)
   paymentAccountId?: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Currency id. Defaults to the lease's currency, then the company's appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
 }
 
 export class CreateMaintenanceDto {
@@ -679,6 +707,15 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   contractContent?: string;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: "ID du modèle de contrat à appliquer. Si omis, on prend le modèle actif du type du bien.",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  templateId?: number;
 }
 
 export class SignContractDto {

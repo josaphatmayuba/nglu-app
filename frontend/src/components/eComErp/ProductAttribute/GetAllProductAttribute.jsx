@@ -11,6 +11,7 @@ import {
   loadAllProductAttributePaginated,
 } from "../../../redux/rtk/features/eCommerce/productAttribute/productAttribute";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import ViewBtn from "../../Buttons/ViewBtn";
 import CreateDrawer from "../../CommonUi/CreateDrawer";
 import TableComponent from "../../CommonUi/TableComponent";
@@ -135,12 +136,10 @@ export default function GetAllProductAttribute() {
   ];
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Product Attribute "}
-        extra={
+      <PageHeader
+        title="Attributs produits"
+        subtitle="Tailles, couleurs et variations du catalogue"
+        actions={
           <CreateDrawer
             permission={"create-productAttribute"}
             title={"Create Attribute"}
@@ -149,6 +148,10 @@ export default function GetAllProductAttribute() {
             <AddProductAttribute />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-productAttribute"}>
           <TableComponent

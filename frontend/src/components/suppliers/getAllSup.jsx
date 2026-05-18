@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteSupplier,
   loadAllSupplierPaginated,
@@ -120,19 +121,23 @@ const GetAllSup = () => {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Fournisseurs"
+        subtitle="Partenaires d'approvisionnement"
+        actions={
+          <CreateDrawer
+            permission={"create-supplier"}
+            title={"Create Supplier"}
+            width={35}>
+            <AddSup />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // // headClass="border-none"
-      title={"Supplier List"}
-      extra={
-        <CreateDrawer
-          permission={"create-supplier"}
-          title={"Create Supplier"}
-          width={35}>
-          <AddSup />
-        </CreateDrawer>
-      }>
+    >
       <UserPrivateComponent permission={"readAll-supplier"}>
         <TableComponent
           actionPermission={["readSingle-supplier"]}
@@ -147,6 +152,7 @@ const GetAllSup = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

@@ -26,7 +26,7 @@ const Table = ({
   const isOverflow = forceMinWidth ? true : estimatedWidth > autoFitThreshold;
 
   const tableClass = cn(
-    "text-slate-700 text-xs sm:text-sm md:text-base",
+    "text-ink-700 text-xs sm:text-sm",
     isOverflow ? "min-w-max" : "w-full table-auto"
   );
 
@@ -71,13 +71,13 @@ const Table = ({
     <div className="tableContainer tableScrollBar w-full overflow-x-auto">
       <div
         style={{ maxHeight }}
-        className="shadow-sm bg-white overflow-x-auto overflow-y-auto p-0"
+        className="bg-white overflow-x-auto overflow-y-auto p-0"
       >
         <table style={tableStyle} className={tableClass}>
           {/* Header */}
           <thead
             className={cn(
-              "bg-white rounded-lg text-slate-600 uppercase text-[8px] sm:text-[10px] md:text-xs tracking-wider border-t border-b border-slate-200 sticky top-0 z-10",
+              "bg-ink-50 text-ink-500 uppercase text-[10px] sm:text-xs tracking-wider border-b border-ink-200 sticky top-0 z-10",
               { [headClass]: headClass }
             )}
           >
@@ -86,7 +86,7 @@ const Table = ({
                 <th
                   key={column.key ?? index}
                   className={cn(
-                    "py-1 sm:py-2 md:py-3 px-1 sm:px-2 md:px-4 text-left font-semibold align-middle whitespace-nowrap"
+                    "py-3 px-4 text-left font-medium align-middle whitespace-nowrap"
                   )}
                 >
                   <span>{column.title || null}</span>
@@ -97,14 +97,11 @@ const Table = ({
 
           {/* Body (data rows) */}
           {!loading && data?.length > 0 && (
-            <tbody className={cn("bg-white transition-all duration-200", { [className]: className })}>
+            <tbody className={cn("bg-white divide-y divide-ink-100", { [className]: className })}>
               {data.map((item, index) => (
                 <tr
                   key={`row-${index}`}
-                  className={cn(
-                    "border-slate-200",
-                    { "bg-slate-50/50": index % 2 === 1 }
-                  )}
+                  className="hover:bg-ink-50 transition-colors"
                 >
                   {columns.map((column, colIndex) => (
                     <td
@@ -116,7 +113,7 @@ const Table = ({
                           undefined,
                       }}
                       className={cn(
-                        "py-1 sm:py-2 md:py-3 px-1 sm:px-2 md:px-4 align-middle text-slate-700 text-[10px] sm:text-[11px] md:text-sm whitespace-nowrap break-words",
+                        "py-3 px-4 align-middle text-ink-700 text-xs sm:text-sm whitespace-nowrap break-words",
                         {
                           "rounded-bl-lg":
                             index === data.length - 1 && colIndex === 0,
@@ -139,15 +136,9 @@ const Table = ({
 
           {/* Column-wise Skeleton Rows (loading) */}
           {loading && (
-            <tbody className="animate-pulse">
+            <tbody className="animate-pulse divide-y divide-ink-100">
               {Array.from({ length: loadingUiSize }).map((_, rIdx) => (
-                <tr
-                  key={`sk-row-${rIdx}`}
-                  className={cn(
-                    "border-b border-slate-200",
-                    { "bg-slate-50/50": rIdx % 2 === 1 }
-                  )}
-                >
+                <tr key={`sk-row-${rIdx}`}>
                   {columns.map((column, cIdx) => (
                     <td
                       key={`sk-cell-${rIdx}-${cIdx}`}
@@ -157,9 +148,9 @@ const Table = ({
                           toNumber(column?.width) ??
                           undefined,
                       }}
-                      className="py-1 sm:py-2 md:py-3 px-1 sm:px-2 md:px-4 align-middle"
+                      className="py-2.5 sm:py-3 px-2 sm:px-4 align-middle"
                     >
-                      <div className="h-2 sm:h-3 md:h-4 w-[70%] bg-slate-200 rounded" />
+                      <div className="h-3 sm:h-4 w-[70%] bg-ink-100 rounded" />
                     </td>
                   ))}
                 </tr>
@@ -170,13 +161,15 @@ const Table = ({
 
         {/* Empty State */}
         {!data?.length && !loading && (
-          <div className="flex flex-col items-center justify-center py-8 sm:py-12 md:py-16 text-center px-2 sm:px-4">
-            <BsDatabaseExclamation className="text-slate-300" size={40} sm:size={50} md:size={60} />
-            <h4 className="mt-2 text-xs sm:text-sm md:text-lg font-medium text-slate-500">
-              No Records Found
+          <div className="flex flex-col items-center justify-center py-12 md:py-16 text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-ink-100 flex items-center justify-center mb-3">
+              <BsDatabaseExclamation className="text-ink-400" size={22} />
+            </div>
+            <h4 className="text-sm md:text-base font-medium text-ink-700">
+              Aucun enregistrement
             </h4>
-            <p className="text-slate-400 text-[10px] sm:text-xs md:text-sm">
-              Try adjusting your filters or search query
+            <p className="text-ink-500 text-xs md:text-sm mt-1">
+              Ajustez vos filtres ou votre recherche
             </p>
           </div>
         )}

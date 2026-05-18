@@ -2,6 +2,7 @@ import moment from "moment";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import {
   deleteSlider,
   loadAllSliderImages,
@@ -96,20 +97,23 @@ export default function GetAllSlider() {
     dispatch(loadAllSliderImages());
   }, [dispatch]);
   return (
+    <>
+      <PageHeader
+        title="Carrousel boutique"
+        subtitle="Images de la page d'accueil eCommerce"
+        actions={
+          <CreateDrawer
+            permission={"create-currency"}
+            title={"Create Slider"}
+            width={35}
+          >
+            <AddSlider />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Slider Images"}
-      extra={
-        <CreateDrawer
-          permission={"create-currency"}
-          title={"Create Slider"}
-          width={35}
-        >
-          <AddSlider />
-        </CreateDrawer>
-      }
     >
       <UserPrivateComponent permission={"readAll-currency"}>
         <TableComponent
@@ -121,5 +125,6 @@ export default function GetAllSlider() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

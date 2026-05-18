@@ -19,7 +19,9 @@ import {
   ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
+import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
 import { ContractsService } from "./contracts.service";
 import {
@@ -37,11 +39,12 @@ import {
   UpdatePropertyDto,
   UpdateUnitDto,
 } from "./dto/property-management.dto";
+import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
 
 @ApiTags("property-management")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("property-management")
 export class PropertyManagementController {
   constructor(
@@ -305,5 +308,15 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteContract(@Param("id", ParseIntPipe) id: number) {
     return this.contractsService.deleteContract(id);
+  }
+
+  @ApiOperation({
+    summary: "Renew a lease: clones it and generates a new contract from the active template",
+  })
+  @ApiParam({ name: "id", type: Number, description: "ID of the lease to renew" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("leases/:id/renew")
+  renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto) {
+    return this.contractsService.renewLease(id, body);
   }
 }

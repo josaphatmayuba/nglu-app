@@ -17,6 +17,32 @@ const initialState = {
   loading: false,
 };
 
+const getPayloadData = (payload) => payload?.data?.data ?? payload?.data ?? null;
+
+const getCustomerListPayload = (payload) => {
+  const data = getPayloadData(payload);
+
+  if (Array.isArray(data)) {
+    return {
+      list: data,
+      total: data.length,
+    };
+  }
+
+  const list = data?.getAllCustomer ?? data?.customers ?? data?.allCustomer;
+
+  return {
+    list: Array.isArray(list) ? list : [],
+    total: data?.totalCustomer ?? data?.total ?? (Array.isArray(list) ? list.length : 0),
+  };
+};
+
+const getSingleCustomerPayload = (payload) => {
+  const data = getPayloadData(payload);
+
+  return data?.customer ?? data?.getSingleCustomer ?? data;
+};
+
 export const customerRegister = createAsyncThunk(
   "customer/register",
   async (values) => {
@@ -274,12 +300,9 @@ const customerECommerce = createSlice({
 
     builder.addCase(loadAllCustomer.fulfilled, (state, action) => {
       state.loading = false;
-      if (Array.isArray(action.payload?.data)) {
-        state.list = action.payload?.data;
-      } else {
-        state.list = action.payload?.data.getAllCustomer;
-        state.total = action.payload?.data.totalCustomer;
-      }
+      const { list, total } = getCustomerListPayload(action.payload);
+      state.list = list;
+      state.total = total;
     });
 
     builder.addCase(loadAllCustomer.rejected, (state, action) => {
@@ -310,7 +333,7 @@ const customerECommerce = createSlice({
 
     builder.addCase(loadSingleCustomer.fulfilled, (state, action) => {
       state.loading = false;
-      state.customer = action.payload?.data;
+      state.customer = getSingleCustomerPayload(action.payload);
     });
 
     builder.addCase(loadSingleCustomer.rejected, (state, action) => {
@@ -326,7 +349,7 @@ const customerECommerce = createSlice({
 
     builder.addCase(loadSingleCustomerEcom.fulfilled, (state, action) => {
       state.loading = false;
-      state.customer = action.payload?.data;
+      state.customer = getSingleCustomerPayload(action.payload);
     });
 
     builder.addCase(loadSingleCustomerEcom.rejected, (state, action) => {

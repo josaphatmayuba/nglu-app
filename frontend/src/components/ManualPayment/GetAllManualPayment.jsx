@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllManualPaymentPaginated } from "../../redux/rtk/features/manualPayment/manualPaymentSlice";
 import { loadALLPaymentMethod } from "../../redux/rtk/features/paymentMethod/paymentMethodSlice";
 import CreateDrawer from "../CommonUi/CreateDrawer";
@@ -129,32 +130,32 @@ export default function GetAllManualPayment() {
 
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"E-Com Payments"}
-        extra={
-          <div className="flex gap-2 justify-end">
+      <PageHeader
+        title="Paiements manuels"
+        subtitle="Saisie manuelle des paiements eCommerce"
+        actions={
+          <>
             <DatePicker
               onChange={onDateChange}
               allowClear
-              className="sm:w-2/5 md:w-[30%]"
               defaultValue={dayjs(
                 moment().endOf("month").format("YYYY-MM-DD"),
                 "YYYY-MM-DD"
               )}
             />
             <CreateDrawer
-              className="sm:w-3/5 md:w-[70%]"
               permission={"create-manualPayment"}
               title={"Create Manual Payment"}
               width={35}
             >
               <AddManualPay />
             </CreateDrawer>
-          </div>
+          </>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-manualPayment"}>
           <TableComponent

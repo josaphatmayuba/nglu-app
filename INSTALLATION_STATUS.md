@@ -9,7 +9,8 @@
 
 ### Services Lancés ✅
 - **MySQL Database**: Port 3306 - ✅ En cours d'exécution
-- **Backend API (Laravel)**: Port 8000 - ✅ En cours d'exécution  
+- **Backend API (Laravel)**: Port 8000 - ⚠️ **DÉPRÉCIÉ** - N'est plus utilisé en production (migration NestJS terminée)
+- **Backend2 API (NestJS)**: Port 8001 - ✅ En cours d'exécution (API active)
 - **Frontend (React + Vite)**: Port 3000 - ✅ En cours d'exécution
 - **Mailpit (Test Email)**: Port 8025 - ✅ En cours d'exécution (sain)
 
@@ -35,7 +36,7 @@ docker-compose up -d
 
 ## 3. Fichiers de Configuration Mis à Jour
 
-### Backend (.env)
+### Backend Laravel (.env) ⚠️ DÉPRÉCIÉ
 ✅ **Fichier**: `backend/.env`
 - ✅ `APP_KEY`: Généré automatiquement
 - ✅ `DB_HOST`: `mysql` (pour Docker)
@@ -44,10 +45,21 @@ docker-compose up -d
 - ✅ `DB_USERNAME`: `nglu_user`
 - ✅ `DB_PASSWORD`: `password`
 - ✅ `MAIL_HOST`: `mailpit` (pour les tests d'email)
+- ⚠️ **Note**: Ce backend n'est plus utilisé en production. Gardé pour référence historique.
+
+### Backend2 NestJS (.env) ✅ ACTIF
+✅ **Fichier**: `backend2/.env`
+- ✅ `PORT`: `8001`
+- ✅ `DB_HOST`: `mysql`
+- ✅ `DB_PORT`: `3306`
+- ✅ `DB_DATABASE`: `nglu_db`
+- ✅ `DB_USERNAME`: `nglu_user`
+- ✅ `DB_PASSWORD`: `password`
 
 ### Frontend (.env)
 ✅ **Fichier**: `frontend/.env`
-- ✅ `VITE_APP_API`: `http://localhost:8000`
+- ✅ `VITE_APP_API`: `http://localhost:8001` (pointe vers NestJS)
+- ✅ `VITE_API_URL`: `http://localhost:8000` (Laravel - déprécié)
 
 ---
 
@@ -87,10 +99,17 @@ Les migrations Laravel suivantes ont été appliquées avec succès:
 
 ## 5. Accès aux Services
 
-### Backend API
+### Backend2 API (NestJS) ✅ API ACTIVE
+- **URL**: `http://localhost:8001`
+- **Statut**: ✅ En cours d'exécution (API de production)
+- **Documentation API (Swagger)**: `http://localhost:8001/api-docs`
+- **Health Check**: `http://localhost:8001/health`
+
+### Backend API (Laravel) ⚠️ DÉPRÉCIÉ
 - **URL**: `http://localhost:8000`
-- **Statut**: ✅ En cours d'exécution
+- **Statut**: ⚠️ N'est plus utilisé en production
 - **Documentation API**: `http://localhost:8000/api/documentation`
+- **Note**: Migration vers NestJS terminée. Ce service peut être arrêté.
 
 ### Frontend Application
 - **URL**: `http://localhost:3000`
@@ -165,16 +184,26 @@ docker-compose exec mysql mysqldump -u nglu_user -ppassword nglu_db > backup.sql
 3. ✅ Création de la base de données
 4. ✅ Exécution des migrations (67 tables)
 5. ✅ Démarrage des services Docker
+6. ✅ **Migration NestJS terminée** - Le backend2 est maintenant l'API de production
+
+### ⚠️ Important - Migration Backend
+- **Backend Laravel (port 8000)**: N'est plus utilisé en production
+- **Backend NestJS (port 8001)**: Est l'API active pour toutes les nouvelles fonctionnalités
+- **Base de données**: Le schéma Laravel (67 tables) est toujours utilisé par NestJS via Drizzle ORM
 
 ### 📋 Étapes Suggérées
-1. **Vérifier l'API**: Accéder à `http://localhost:8000`
+1. **Vérifier l'API NestJS**: Accéder à `http://localhost:8001/api-docs` (Swagger)
 2. **Accéder au Frontend**: Accéder à `http://localhost:3000`
 3. **Configuration initiale**: Ajouter les utilisateurs administrateur
-4. **Seeders (optionnel)**: Remplir la base de données avec des données de test
+4. **Seeders NestJS (optionnel)**: Remplir la base de données avec des données de test
    ```bash
-   docker-compose exec backend php artisan db:seed
+   docker-compose exec backend2 npm run db:seed
    ```
 5. **Tests**: Lancer les tests automatisés si disponibles
+6. **Nettoyage (optionnel)**: Arrêter le backend Laravel s'il n'est plus nécessaire
+   ```bash
+   docker stop nglu_backend
+   ```
 
 ---
 
@@ -188,3 +217,21 @@ docker-compose exec mysql mysqldump -u nglu_user -ppassword nglu_db > backup.sql
 
 **Installation réussie! 🎉**  
 Tous les services sont prêts à l'emploi.
+
+---
+
+## 9. ⚠️ Note Importante - Migration Backend
+
+**Statut de la migration Laravel → NestJS:**
+- ✅ **Migration terminée** - Le backend NestJS (port 8001) est maintenant l'API de production
+- ⚠️ **Backend Laravel (port 8000)** - N'est plus utilisé pour les nouvelles fonctionnalités
+- ✅ **Base de données** - Le schéma Laravel (67 tables) est préservé et utilisé par NestJS
+
+**Pour les développeurs:**
+- Toutes les nouvelles API doivent être développées dans `backend2/` (NestJS)
+- Le frontend pointe vers `http://localhost:8001` (NestJS) par défaut
+- Consulter `backend2/README.md` pour la liste complète des endpoints NestJS
+
+**Pour plus de détails, voir:**
+- `backend2/README.md` - Documentation complète du backend NestJS
+- `DEPLOY.md` - Guide de déploiement avec les deux backends

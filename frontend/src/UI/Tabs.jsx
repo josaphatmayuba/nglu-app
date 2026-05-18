@@ -1,8 +1,21 @@
 import { cn } from "@/utils/functions";
-import { useState } from "react";
+import { Children, useEffect, useMemo, useState } from "react";
 
 export default function Tabs({ children, className }) {
-  const [activeTab, setActiveTab] = useState(children[0]?.props?.label);
+  const tabs = useMemo(() => Children.toArray(children), [children]);
+  const getTabKey = (tab, index) => tab.props.tabKey ?? tab.key ?? `tab-${index}`;
+  const [activeTab, setActiveTab] = useState(() =>
+    tabs[0] ? getTabKey(tabs[0], 0) : null
+  );
+
+  useEffect(() => {
+    if (!tabs.length) return;
+
+    const hasActiveTab = tabs.some((tab, index) => getTabKey(tab, index) === activeTab);
+    if (!hasActiveTab) {
+      setActiveTab(getTabKey(tabs[0], 0));
+    }
+  }, [activeTab, tabs]);
 
   const handleClick = (e, newActiveTab) => {
     e.preventDefault();
@@ -11,29 +24,35 @@ export default function Tabs({ children, className }) {
 
   return (
     <div className={cn("", { [className]: className })}>
-      <ul className='ml-4 flex cursor-pointer gap-4'>
-        {children.map((tab) => (
-          <li
-            key={tab.props.label}
-            className={`py-2 relative px-4 text-sm border text-center rounded-t-md font-semibold text-gray-500  ${
-              activeTab === tab.props.label
-                ? "text-blue-500 border-b-white border-b-2"
-                : "border-transparent"
-            } hover:text-blue-500`}
-            onClick={(e) => handleClick(e, tab.props.label)}
-          >
-            {tab.props.label}
-            {activeTab === tab.props.label && (
-              <div className='absolute -bottom-[3px] left-0 w-full h-1 bg-white'></div>
-            )}
-          </li>
-        ))}
+      <ul className='flex cursor-pointer gap-1 overflow-x-auto border-b border-ink-200 px-3'>
+        {tabs.map((tab, index) => {
+          const tabKey = getTabKey(tab, index);
+          const isActive = activeTab === tabKey;
+
+          return (
+            <li
+              key={tabKey}
+              className={`relative whitespace-nowrap rounded-t-lg border px-4 py-3 text-center text-sm font-semibold transition-colors ${
+                isActive
+                  ? "border-ink-200 border-b-white bg-white text-primary"
+                  : "border-transparent text-ink-500 hover:bg-ink-50 hover:text-ink-800"
+              }`}
+              onClick={(e) => handleClick(e, tabKey)}
+            >
+              {tab.props.label}
+              {isActive && (
+                <div className='absolute -bottom-[1px] left-0 h-[2px] w-full bg-white'></div>
+              )}
+            </li>
+          );
+        })}
       </ul>
-      <div className='border-t  '>
-        {children.map((one) => {
-          if (one.props.label === activeTab)
-            return <div key={one.props.label}>{one.props.children}</div>;
-          else return null;
+      <div>
+        {tabs.map((one, index) => {
+          const tabKey = getTabKey(one, index);
+          if (tabKey === activeTab)
+            return <div key={`${tabKey}-panel`}>{one.props.children}</div>;
+          return null;
         })}
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllPurchaseReorder } from "../../redux/rtk/features/purchaseOrder/purchaseOrderSlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import CreateDrawer from "../CommonUi/CreateDrawer";
@@ -57,21 +58,23 @@ export default function GetAllPurchaseOrderList() {
   ];
 
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Purchase Order "}
-      extra={
-        <>
+    <>
+      <PageHeader
+        title="Bons de commande"
+        subtitle="Commandes émises aux fournisseurs"
+        actions={
           <CreateDrawer
             permission={"create-purchaseReorderInvoice"}
             title={"Create Purchase order"}
             width={50}>
             <AddPurchaseOrder />
           </CreateDrawer>
-        </>
-      }>
+        }
+      />
+    <Card
+      className="max-md:border-0 max-md:bg-white"
+      bodyClass="max-md:p-0 "
+    >
       <UserPrivateComponent permission={"readAll-purchaseReorderInvoice"}>
         <TableComponent
           actionPermission={["readSingle-purchaseReorderInvoice"]}
@@ -85,5 +88,6 @@ export default function GetAllPurchaseOrderList() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

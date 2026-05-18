@@ -11,7 +11,7 @@ const getCardData = (information, count) => [
     icon: Coins,
     value: information?.totalAmount || 0,
     fullValue: information?.totalAmount?.toFixed(3),
-    label: `Total Sales #${count ? abbreviateNumber(count) : 0}`,
+    label: `Total ventes · ${count ? abbreviateNumber(count) : 0}`,
     color: "text-emerald-500",
     isCurrency: true,
   },
@@ -20,7 +20,7 @@ const getCardData = (information, count) => [
     icon: CreditCard,
     value: information?.paidAmount || 0,
     fullValue: information?.paidAmount?.toFixed(3),
-    label: "Total Sale Paid",
+    label: "Total encaissé",
     color: "text-violet-500",
     isCurrency: true,
   },
@@ -29,7 +29,7 @@ const getCardData = (information, count) => [
     icon: DollarSign,
     value: information?.dueAmount || 0,
     fullValue: information?.dueAmount?.toFixed(3),
-    label: "Total Sale Due",
+    label: "Total dû",
     color: "text-blue-600",
     isCurrency: true,
   },
@@ -38,59 +38,66 @@ const getCardData = (information, count) => [
     icon: TrendingUp,
     value: information?.profit || 0,
     fullValue: information?.profit?.toFixed(3),
-    label: "Total Sale Profit",
+    label: "Bénéfice",
     color: "text-blue-600",
     isCurrency: true,
   },
 ];
 
-// KPI-like Card to match ProductCard design
+// Background tint per color to match icon
+const ICON_BG = {
+  "text-emerald-500": "bg-emerald-50 dark:bg-emerald-900/20",
+  "text-violet-500": "bg-violet-50 dark:bg-violet-900/20",
+  "text-blue-600": "bg-blue-50 dark:bg-blue-900/20",
+  "text-amber-500": "bg-amber-50 dark:bg-amber-900/20",
+  "text-rose-500": "bg-rose-50 dark:bg-rose-900/20",
+};
+
+// Modern KPI card with bordered style + colored icon tile
 const KpiCard = ({ item, currency }) => {
   const Icon = item.icon;
   const isCurrency = item.isCurrency;
+  const iconBg = ICON_BG[item.color] || "bg-brand-50 dark:bg-brand-900/20";
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl dark:border-gray-700 p-3 sm:p-4 shadow-none border-none">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-            <Icon className={`w-5 h-5 ${item.color}`} />
-          </div>
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-ink-200 dark:border-gray-700 p-4 sm:p-5 hover:border-ink-300 transition-colors">
+      <div className="flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+          <Icon className={`w-5 h-5 ${item.color}`} />
+        </div>
 
-          <div className="flex flex-col">
-            <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-0.5">
-              {item.label}
-            </p>
-
-            <Tooltip
-              title={
-                <span className="text-base font-medium">
-                  {isCurrency && (
-                    <span
-                      dangerouslySetInnerHTML={{
-                        __html: currency?.currencySymbol,
-                      }}
-                    />
-                  )}
-                  {item.fullValue ?? 0}
-                </span>
-              }
-            >
-              <div className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+        <div className="flex flex-col min-w-0 flex-1">
+          <p className="text-xs text-ink-500 dark:text-gray-400 font-medium mb-1 truncate">
+            {item.label}
+          </p>
+          <Tooltip
+            title={
+              <span className="text-base font-medium">
                 {isCurrency && (
                   <span
-                    className="text-base mr-1"
                     dangerouslySetInnerHTML={{
                       __html: currency?.currencySymbol,
                     }}
                   />
                 )}
-                {typeof item.value === "number"
-                  ? abbreviateNumber(item.value)
-                  : item.value}
-              </div>
-            </Tooltip>
-          </div>
+                {item.fullValue ?? 0}
+              </span>
+            }
+          >
+            <div className="text-lg sm:text-xl font-semibold text-ink-900 dark:text-white tracking-tight truncate">
+              {isCurrency && (
+                <span
+                  className="text-sm mr-1 text-ink-500"
+                  dangerouslySetInnerHTML={{
+                    __html: currency?.currencySymbol,
+                  }}
+                />
+              )}
+              {typeof item.value === "number"
+                ? abbreviateNumber(item.value)
+                : item.value}
+            </div>
+          </Tooltip>
         </div>
       </div>
     </div>

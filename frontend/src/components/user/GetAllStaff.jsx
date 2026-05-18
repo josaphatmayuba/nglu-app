@@ -1,4 +1,5 @@
 import Card from "@/UI/Card";
+import PageHeader from "@/UI/PageHeader";
 import {
   deleteStaff,
   loadAllStaff,
@@ -128,12 +129,10 @@ export default function GetAllStaff() {
 
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Staff List"}
-        extra={
+      <PageHeader
+        title="Personnel"
+        subtitle="Employés et profils RH"
+        actions={
           <CreateDrawer
             permission={"create-user"}
             title={"Create Staff"}
@@ -142,6 +141,10 @@ export default function GetAllStaff() {
             <AddStaff />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-user"}>
           <TableComponent

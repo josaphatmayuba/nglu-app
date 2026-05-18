@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import { loadAlleCommerceSalePaginated } from "../../../redux/rtk/features/eCommerce/cartOrder/cartOrderSlice";
 import ViewBtn from "../../Buttons/ViewBtn";
 import TableComponent from "../../CommonUi/TableComponent";
@@ -169,18 +170,13 @@ export default function GetAllOrder() {
   }, [dispatch, pageConfig]);
 
   return (
-    <div className='card card-custom mt-2'>
-      <div className='card-body'>
-        <DashboardCard information={info?._sum} count={info?._count?.id} />
-        <br />
-        <Card
-          className='max-md:border-0 max-md:bg-white'
-          bodyClass='max-md:p-0 '
-          headClass='border-none'
-          title={"Order list"}
-          extra={
+    <div>
+        <PageHeader
+          title="Commandes en ligne"
+          subtitle="Commandes eCommerce et statuts de livraison"
+          actions={
             <RangePicker
-              className='range-picker '
+              className='range-picker'
               onCalendarChange={onCalendarChange}
               defaultValue={[
                 dayjs(pageConfig.startDate, "YYYY-MM-DD"),
@@ -188,6 +184,11 @@ export default function GetAllOrder() {
               ]}
             />
           }
+        />
+        <DashboardCard information={info?._sum} count={info?._count?.id} />
+        <Card
+          className='max-md:border-0 max-md:bg-white mt-5'
+          bodyClass='max-md:p-0 '
         >
           <UserPrivateComponent permission={"readAll-cartOrder"}>
             <TableComponent
@@ -202,7 +203,6 @@ export default function GetAllOrder() {
             />
           </UserPrivateComponent>
         </Card>
-      </div>
     </div>
   );
 }

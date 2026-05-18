@@ -1,10 +1,10 @@
-import { EyeOutlined } from "@ant-design/icons";
+import { Eye } from "lucide-react";
 import React from "react";
 
 const ViewBtnOnly = () => {
 	return (
-		<div className='flex justify-center items-center bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded mr-2'>
-			<EyeOutlined />
+		<div className='flex justify-center items-center bg-brand-600 hover:bg-brand-700 text-white py-2 px-3 rounded-lg mr-2 transition shadow-sm'>
+			<Eye className="w-4 h-4" />
 		</div>
 	);
 };

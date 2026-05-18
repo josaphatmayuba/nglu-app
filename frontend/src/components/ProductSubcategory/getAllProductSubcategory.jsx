@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteProductSubCategory,
   loadallproductSubCatagoryPaginated,
@@ -145,12 +146,10 @@ const GetAllProductSubCategory = () => {
 
   return (
     <>
-      <Card
-        className="max-md:border-0 max-md:bg-white"
-        bodyClass="max-md:p-0 "
-        // headClass="border-none"
-        title={"Product Sub Category"}
-        extra={
+      <PageHeader
+        title="Sous-catégories"
+        subtitle="Sous-catégories de produits"
+        actions={
           <CreateDrawer
             permission={"create-productSubCategory"}
             title={"Create Subcategory"}
@@ -159,6 +158,10 @@ const GetAllProductSubCategory = () => {
             <AddProductSubCategory />
           </CreateDrawer>
         }
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0 "
       >
         <UserPrivateComponent permission={"readAll-productSubCategory"}>
           <TableComponent

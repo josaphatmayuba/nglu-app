@@ -54,9 +54,10 @@
 html,
 body {
   margin: 0;
-  font-family: "Lato", sans-serif;
+  font-family: "Inter", "Lato", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #fafafa;
 }
 
 code {

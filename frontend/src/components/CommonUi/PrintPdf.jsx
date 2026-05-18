@@ -1,7 +1,7 @@
 import { Table } from "antd";
 import { forwardRef, useRef } from "react";
 import { useReactToPrint } from "react-to-print";
-import { AiOutlinePrinter } from "react-icons/ai";
+import { Printer } from "lucide-react";
 
 const PrintToPdf = forwardRef(({ title, list, columns }, ref) => {
   return (
@@ -36,13 +36,14 @@ export default function PrintPdf({ title, list, columns }) {
           title={title}
         />
       </div>
-      <div
-        className="flex bg-[#F4F5F6] rounded-md p-2 cursor-pointer items-center gap-2 border"
+      <button
+        type="button"
+        className="flex items-center gap-2 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-700 transition hover:border-ink-300 hover:bg-ink-50"
         onClick={handlePrint}
       >
-        <AiOutlinePrinter size={16} />
-        <span>Print PDF</span>
-      </div>
+        <Printer className="h-4 w-4" />
+        <span className="hidden sm:inline">Imprimer</span>
+      </button>
     </>
   );
 }

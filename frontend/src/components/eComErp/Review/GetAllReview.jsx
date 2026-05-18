@@ -2,6 +2,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import { loadAllReviewRatingPaginated } from "../../../redux/rtk/features/eCommerce/reviewRating/reviewRatingSlice";
 import { stringShorter } from "../../../utils/functions";
 import TableComponent from "../../CommonUi/TableComponent";
@@ -90,12 +91,15 @@ export default function GetAllReview() {
     dispatch(loadAllReviewRatingPaginated(pageConfig));
   }, [dispatch, pageConfig]);
   return (
-    <Card
-      className='max-md:border-0 max-md:bg-white'
-      bodyClass='max-md:p-0 '
-      headClass='border-none'
-      title={"Review"}
-    >
+    <>
+      <PageHeader
+        title="Avis clients"
+        subtitle="Notes et commentaires des produits"
+      />
+      <Card
+        className='max-md:border-0 max-md:bg-white'
+        bodyClass='max-md:p-0 '
+      >
       <UserPrivateComponent permission={"readAll-reviewRating"}>
         <TableComponent
           total={total}
@@ -107,5 +111,6 @@ export default function GetAllReview() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

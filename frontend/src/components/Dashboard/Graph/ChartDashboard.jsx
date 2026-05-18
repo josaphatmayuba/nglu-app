@@ -23,12 +23,12 @@ import {
 } from 'recharts';
 
 import {
-    TrendingUp,
     TrendingDown,
     RefreshCw,
     AlertTriangle,
     Package,
     ShoppingCart,
+    Download,
 } from 'lucide-react';
 import { IoTrendingDownSharp } from 'react-icons/io5';
 import { NavLink } from 'react-router-dom';
@@ -56,7 +56,7 @@ const isEmptyArray = (arr) => !Array.isArray(arr) || arr.length === 0;
 ========================================================= */
 const Card = ({ children, className = '' }) => (
     <div
-        className={`bg-white dark:bg-gray-800 rounded-2xl  dark:border-gray-700 p-4 sm:p-6 transition-all duration-200 hover:shadow-md ${className}`}
+        className={`bg-white dark:bg-gray-800 rounded-xl border border-ink-200 dark:border-gray-700 p-4 sm:p-6 transition-colors hover:border-ink-300 ${className}`}
     >
         {children}
     </div>
@@ -88,56 +88,65 @@ const SafeChartContainer = ({ data, children, emptyTitle, emptySubtitle }) => {
     return <div className="h-56 sm:h-64">{children}</div>;
 };
 
-const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol }) => {
-    const [localLoading, setLocalLoading] = useState(true);
+const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol, iconBgColor = 'brand' }) => {
     const isPositive = (change ?? 0) >= 0;
-
-    useEffect(() => {
-        const t = setTimeout(() => setLocalLoading(false), 300);
-        return () => clearTimeout(t);
-    }, []);
-
     const sparklineData = (trend || []).map((val, idx) => ({ idx, val }));
-
     const strokeColor = lineColor || (isPositive ? '#10b981' : '#ef4444');
+    const hasChange = change !== null && change !== undefined && !Number.isNaN(change);
+
+    // Define icon background colors based on type
+    const bgColors = {
+        brand: { bg: 'bg-brand-50', icon: 'text-brand-600' },
+        emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
+        amber: { bg: 'bg-amber-50', icon: 'text-amber-600' },
+        purple: { bg: 'bg-purple-50', icon: 'text-purple-600' },
+    };
+    const colorScheme = bgColors[iconBgColor] || bgColors.brand;
 
     return (
-        <Card className="relative overflow-hidden shadow-none border-none p-3 sm:p-4">
-            <div className="flex items-center justify-between mb-2">
-                <div className="p-1.5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg">
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+        <div className="relative overflow-hidden bg-white rounded-xl border border-ink-200 p-3 md:p-5 hover:border-ink-300 transition">
+            <div className="flex items-start justify-between mb-3">
+                <div className={`w-9 h-9 rounded-lg ${colorScheme.bg} flex items-center justify-center`}>
+                    <Icon className={`w-4 h-4 ${colorScheme.icon}`} />
                 </div>
-                {localLoading ? (
-                    <div className="h-8 w-20 bg-gray-100 dark:bg-gray-700 rounded animate-pulse" />
-                ) : isEmptyArray(sparklineData) ? (
-                    <div className="h-8 w-20">
-                        <EmptyState title="No trend" subtitle="Not enough data" />
-                    </div>
-                ) : (
-                    <ResponsiveContainer width={80} height={40}>
-                        <LineChart data={sparklineData}>
-                            <Line
-                                type="monotone"
-                                dataKey="val"
-                                stroke={strokeColor}
-                                strokeWidth={2}
-                                dot={false}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
+                {hasChange && (
+                    <span
+                        className={`inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-md ${
+                            isPositive
+                                ? 'text-emerald-700 bg-emerald-50'
+                                : 'text-red-700 bg-red-50'
+                        }`}
+                    >
+                        {isPositive ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
+                    </span>
                 )}
             </div>
             <div className="text-start">
-                <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-0.5">{title}</p>
-                {localLoading ? (
-                    <div className="h-6 w-24 sm:h-7 sm:w-28 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mx-auto" />
-                ) : (
-                    <p className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                        <span dangerouslySetInnerHTML={{ __html: typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0 }} />
-                    </p>
-                )}
+                <p className="text-xs text-ink-500 font-medium mb-1">{title}</p>
+                <p className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
+                    {typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0}
+                </p>
             </div>
-        </Card>
+            {!isEmptyArray(sparklineData) && (
+                <div className="mt-3">
+                    <svg className="w-full h-8" viewBox="0 0 200 32" fill="none" preserveAspectRatio="none">
+                        <path
+                            d={`M 0 ${32 - (sparklineData[0]?.val || 0) * 0.3} ${sparklineData.map((d, i) => `L ${(i / (sparklineData.length - 1)) * 200} ${32 - (d.val || 0) * 0.3}`).join(' ')}`}
+                            stroke={strokeColor}
+                            strokeWidth="1.5"
+                            fill="none"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                        />
+                        <path
+                            d={`M 0 ${32 - (sparklineData[0]?.val || 0) * 0.3} ${sparklineData.map((d, i) => `L ${(i / (sparklineData.length - 1)) * 200} ${32 - (d.val || 0) * 0.3}`).join(' ')} L 200 32 L 0 32 Z`}
+                            fill={strokeColor}
+                            opacity="0.15"
+                        />
+                    </svg>
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -423,34 +432,44 @@ const PurchasesDonut = ({ breakdown, currencySymbol }) => (
 
 const SalesVsPurchasesLine = ({ data, currencySymbol }) => (
     <ChartCard
-        title="Sales vs Purchases (Monthly)"
-        right={<span className="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">Trend</span>}
+        title="Évolution des ventes"
+        right={
+            <div className="flex gap-1 p-1 bg-ink-100 rounded-lg">
+                <button className="px-3 py-1 text-xs font-medium bg-white text-ink-900 rounded shadow-sm">Mois</button>
+                <button className="px-3 py-1 text-xs font-medium text-ink-500 hover:text-ink-700">Semaine</button>
+                <button className="px-3 py-1 text-xs font-medium text-ink-500 hover:text-ink-700">Jour</button>
+            </div>
+        }
     >
         <SafeChartContainer data={data} emptyTitle="No monthly data" emptySubtitle="Connect your data source.">
             <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.6} />
-                    <XAxis dataKey="month" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                <BarChart data={data} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                    <XAxis dataKey="month" stroke="#71717a" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#a1a1aa" style={{ fontSize: '11px' }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}M` : v} />
                     <Tooltip
-                        formatter={(value, name) => [
-                            formatCurrency(value, currencySymbol),
-                            name,
-                        ]}
+                        formatter={(value, name) => [formatCurrency(value, currencySymbol), name === 'current' ? '2026' : '2025']}
                         contentStyle={{
                             background: 'rgba(255, 255, 255, 0.95)',
-                            border: 'none',
-                            borderRadius: '12px',
+                            border: '1px solid #e4e4e7',
+                            borderRadius: '8px',
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                            padding: '12px',
+                            padding: '8px 12px',
                         }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="sales" name="Sales" stroke="#3b82f6" strokeWidth={2.3} dot={false} />
-                    <Line type="monotone" dataKey="purchases" name="Purchases" stroke="#8b5cf6" strokeWidth={2.3} dot={false} />
-                </LineChart>
+                    <Legend 
+                        wrapperStyle={{ fontSize: 11, paddingTop: '12px' }}
+                        formatter={(value) => <span style={{ color: '#52525b' }}>{value}</span>}
+                    />
+                    <Bar dataKey="previous" name="2025" fill="#e0e7ff" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="current" name="2026" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
             </ResponsiveContainer>
         </SafeChartContainer>
+        <div className="flex items-center gap-4 mt-2 text-xs">
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-brand-500"></span><span className="text-ink-600">2026</span></div>
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-brand-100"></span><span className="text-ink-600">2025</span></div>
+        </div>
     </ChartCard>
 );
 
@@ -546,23 +565,37 @@ export default function ChartDashboard({
     const safetopProduct = Array.isArray(topProduct) ? topProduct : [];
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="min-h-screen bg-ink-50 dark:from-gray-900 dark:to-gray-800">
             <main className="mx-auto">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5 md:mb-6">
                     <div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                            Real-time overview of sales, finance, and operations
+                        <h1 className="text-xl md:text-2xl font-semibold text-ink-900 dark:text-white tracking-tight">Tableau de bord</h1>
+                        <p className="text-xs md:text-sm text-ink-500 dark:text-gray-400 mt-1">
+                            Aperçu de l'activité commerciale, financière et opérationnelle
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
                         <RangePicker
-                            className="rounded-lg shadow-sm"
+                            className="rounded-lg shadow-sm flex-1 md:flex-none min-w-[220px]"
                             value={pickerValue}
                             onChange={handleRangeChange}
                             allowClear={true}
                         />
+                        <button
+                            type="button"
+                            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+                            title="Actualiser"
+                        >
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
+                            title="Exporter"
+                        >
+                            <Download className="w-4 h-4" />
+                        </button>
                     </div>
                 </div>
 
@@ -573,7 +606,7 @@ export default function ChartDashboard({
                 ) : null}
 
                 {loading ? (
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
                         {[...Array(4)].map((_, i) => (
                             <div key={i} className="h-28 sm:h-32 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />
                         ))}
@@ -581,71 +614,74 @@ export default function ChartDashboard({
                 ) : null}
 
                 {!loading && (
-                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
                         <KpiCard
                             icon={ShoppingCart}
-                            title="Total Sale Amount"
+                            title="Chiffre d'affaires"
+                            value={safeKpis?.totalSaleAmount?.value}
+                            trend={safeKpis?.totalSaleAmount?.trend}
+                            change={safeKpis?.totalSaleAmount?.change}
+                            formatter={formatCurrency}
+                            lineColor="#6366f1"
+                            currencySymbol={currencySymbol}
+                            iconBgColor="brand"
+                        />
+                        <KpiCard
+                            icon={TrendingDown}
+                            title="Ventes"
                             value={safeKpis?.totalSaleAmount?.value}
                             trend={safeKpis?.totalSaleAmount?.trend}
                             change={safeKpis?.totalSaleAmount?.change}
                             formatter={formatCurrency}
                             lineColor="#10b981"
                             currencySymbol={currencySymbol}
-                        />
-                        <KpiCard
-                            icon={AlertTriangle}
-                            title="Total Sale Due"
-                            value={safeKpis?.totalSaleDue?.value}
-                            trend={safeKpis?.totalSaleDue?.trend}
-                            change={safeKpis?.totalSaleDue?.change}
-                            formatter={formatCurrency}
-                            lineColor="#ef4444"
-                            currencySymbol={currencySymbol}
+                            iconBgColor="emerald"
                         />
                         <KpiCard
                             icon={Package}
-                            title="Total Purchase Amount"
+                            title="Stock"
                             value={safeKpis?.totalPurchaseAmount?.value}
                             trend={safeKpis?.totalPurchaseAmount?.trend}
                             change={safeKpis?.totalPurchaseAmount?.change}
                             formatter={formatCurrency}
-                            lineColor="#10b981"
+                            lineColor="#f59e0b"
                             currencySymbol={currencySymbol}
+                            iconBgColor="amber"
                         />
                         <KpiCard
-                            icon={TrendingDown}
-                            title="Total Purchase Due"
+                            icon={AlertTriangle}
+                            title="Nouveaux clients"
                             value={safeKpis?.totalPurchaseDue?.value}
                             trend={safeKpis?.totalPurchaseDue?.trend}
                             change={safeKpis?.totalPurchaseDue?.change}
                             formatter={formatCurrency}
-                            lineColor="#ef4444"
+                            lineColor="#a855f7"
                             currencySymbol={currencySymbol}
+                            iconBgColor="purple"
                         />
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-3 md:gap-4 mb-5 md:mb-6">
                     <SalesDonut breakdown={safeSales.breakdown} currencySymbol={currencySymbol} />
                     <SalesVsPurchasesLine data={safeMonthly} currencySymbol={currencySymbol} />
-                    {/* Eikhane currencySymbol prop pass kora hoyeche */}
                     <AccountWiseTransactions data={safeAccounts} currencySymbol={currencySymbol} />
                     <PurchasesDonut breakdown={safePurchases.breakdown} currencySymbol={currencySymbol} />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
                     <Card>
                         <div className="flex items-center justify-between mb-3 sm:mb-4">
-                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Top Customers</h3>
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Meilleurs clients</h3>
                             <div className="text-xs text-gray-500 ml-3">
-                                Top 5 Customers
+                                Top 5
                             </div>
                         </div>
                         <Table
                             columns={[
-                                { key: 'customer', label: 'Customer Name' },
+                                { key: 'customer', label: 'Client' },
                                 {
-                                    key: 'total_sales', label: 'Total Sales', render: (value) => (
+                                    key: 'total_sales', label: 'Ventes', render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white">
                                             {formatCurrency(value, currencySymbol)}
                                         </span>
@@ -653,7 +689,7 @@ export default function ChartDashboard({
                                 },
                                 {
                                     key: 'phone',
-                                    label: 'Phone',
+                                    label: 'Téléphone',
                                     render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white">{value || 0}</span>
                                     ),
@@ -665,18 +701,18 @@ export default function ChartDashboard({
 
                     <Card>
                         <div className="flex items-center justify-between mb-3 sm:mb-4">
-                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Top Products</h3>
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Meilleurs produits</h3>
                             <div className="text-xs text-gray-500 ml-3">
-                                Top 5 Products
+                                Top 5
                             </div>
                         </div>
                         <Table
                             columns={[
-                                { key: 'product', label: 'Product Name' },
-                                { key: 'quantity', label: 'Quantity' },
+                                { key: 'product', label: 'Produit' },
+                                { key: 'quantity', label: 'Quantité' },
                                 {
                                     key: 'amount',
-                                    label: 'Amount',
+                                    label: 'Montant',
                                     align: 'right',
                                     render: (value) => (
                                         <span className="font-semibold text-gray-900 dark:text-white" >

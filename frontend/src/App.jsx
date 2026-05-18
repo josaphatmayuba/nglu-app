@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { ConfigProvider } from "antd";
 import "./App.css";
 import "./assets/styles/main.css";
 
@@ -14,6 +15,36 @@ import SignContractPage from "./components/propertyManagement/SignContractPage";
 import TenantOnboardingPage from "./components/propertyManagement/TenantOnboardingPage";
 const CustomerLayout = lazy(() => import("@/layouts/CustomerLayout"));
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
+
+const antdTheme = {
+  token: {
+    colorPrimary: "#4f46e5",
+    colorLink: "#4f46e5",
+    colorLinkHover: "#4338ca",
+    colorBorder: "#e4e4e7",
+    colorBorderSecondary: "#f4f4f5",
+    borderRadius: 8,
+    borderRadiusLG: 12,
+    borderRadiusSM: 6,
+    fontFamily:
+      "'Inter', 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+    fontSize: 14,
+    colorTextHeading: "#18181b",
+    colorText: "#3f3f46",
+    colorTextSecondary: "#71717a",
+    colorTextTertiary: "#a1a1aa",
+    controlHeight: 38,
+  },
+  components: {
+    Button: { borderRadius: 8, controlHeight: 38 },
+    Input: { borderRadius: 8, controlHeight: 38 },
+    Select: { borderRadius: 8, controlHeight: 38 },
+    DatePicker: { borderRadius: 8, controlHeight: 38 },
+    Table: { headerBg: "#fafafa", headerColor: "#71717a", rowHoverBg: "#fafafa" },
+    Modal: { borderRadiusLG: 16 },
+    Card: { borderRadiusLG: 12 },
+  },
+};
 
 function App() {
   const { data, loading, error } = useSelector((state) => state?.setting) || {};
@@ -59,11 +90,13 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
-      <Toaster position='top-center' reverseOrder={false} />
+    <ConfigProvider theme={antdTheme}>
+      <BrowserRouter>
+        <Toaster position='top-center' reverseOrder={false} />
 
-      {content}
-    </BrowserRouter>
+        {content}
+      </BrowserRouter>
+    </ConfigProvider>
   );
 }
 

@@ -1,3 +1,4 @@
+import { cn } from "@/utils/functions";
 import usePermissions from "@/utils/usePermissions";
 import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Drawer, Tooltip } from "antd";
@@ -38,9 +39,10 @@ export default function CreateDrawer({
         <>
           <button
             onClick={() => setOpen(true)}
-            className={`xs:px-3 px-2 flex items-center gap-1 md:gap-2 md:text-base py-[6px] lg:px-5 border ${
-              color ? color : "bg-primary"
-            } hover:bg-primary/60 text-white rounded cursor-pointer`}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm cursor-pointer",
+              color
+            )}
           >
             {buttonContent}
           </button>
@@ -61,7 +63,7 @@ export default function CreateDrawer({
           <Tooltip title="Permission denied">
             <button
               disabled
-              className="xs:px-3 px-2 flex items-center gap-1 md:gap-2 md:text-base py-[6px] lg:px-5 border bg-gray-400 text-white rounded cursor-not-allowed opacity-70"
+              className="flex items-center gap-2 px-3 py-1.5 bg-ink-300 text-white rounded-lg text-sm font-medium cursor-not-allowed opacity-70"
             >
               {buttonContent}
             </button>

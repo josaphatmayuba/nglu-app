@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deletePrintPage,
   loadAllPrintPagePaginated,
@@ -107,20 +108,23 @@ export default function GetAllPrintPage() {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Formats d'impression"
+        subtitle="Tailles de page pour factures et reçus"
+        actions={
+          <CreateDrawer
+            permission={"create-pageSize"}
+            title={"Create Print Page"}
+            width={35}
+          >
+            {<AddPrintPage />}
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // // headClass="border-none"
-      title={"Print Page"}
-      extra={
-        <CreateDrawer
-          permission={"create-pageSize"}
-          title={"Create Print Page"}
-          width={35}
-        >
-          {<AddPrintPage />}
-        </CreateDrawer>
-      }
     >
       <UserPrivateComponent permission={"readAll-pageSize"}>
         <TableComponent
@@ -141,5 +145,6 @@ export default function GetAllPrintPage() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

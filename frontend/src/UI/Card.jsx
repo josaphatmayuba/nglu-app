@@ -11,7 +11,7 @@ export default function Card({
   return (
     <div
       className={cn(
-        "cardContainer border border-gray-200 rounded-sm bg-white  dark:bg-[#1C1B20] transition-all duration-300",
+        "cardContainer border border-ink-200 rounded-xl bg-white dark:bg-[#1C1B20] hover:border-ink-300 transition-colors",
         {
           [className]: className,
         }
@@ -20,13 +20,13 @@ export default function Card({
       {(title || extra) && (
         <div
           className={cn(
-            "cartHeadContainer flex justify-between items-center p-3 border-b bg-white dark:bg-[#2A2A2F]",
+            "cartHeadContainer flex justify-between items-center gap-2 px-5 py-4 border-b border-ink-100 bg-white dark:bg-[#2A2A2F] rounded-t-xl",
             {
               [headClass]: headClass,
             }
           )}
         >
-          <h1 className="cartTitle text-sm sm:text-base md:text-lg font-semibold px-2 pt-1 text-black/80 dark:text-white">
+          <h1 className="cartTitle text-sm sm:text-base md:text-base font-semibold text-ink-900 dark:text-white tracking-tight">
             {title}
           </h1>
           <div className="cartExtra flex gap-2 items-center">{extra}</div>

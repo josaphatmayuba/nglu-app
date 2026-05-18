@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllAccountPaginated } from "../../redux/rtk/features/account/accountSlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import CreateDrawer from "../CommonUi/CreateDrawer";
@@ -73,19 +74,23 @@ const GetAllAccount = () => {
   }, [dispatch, pageConfig]);
 
   return (
+    <>
+      <PageHeader
+        title="Comptes"
+        subtitle="Plan comptable et soldes"
+        actions={
+          <CreateDrawer
+            permission={"create-account"}
+            title={"Create Account"}
+            width={35}>
+            <AddAccount />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // // headClass="border-none"
-      title={"Accounts"}
-      extra={
-        <CreateDrawer
-          permission={"create-account"}
-          title={"Create Account"}
-          width={35}>
-          <AddAccount />
-        </CreateDrawer>
-      }>
+    >
       <UserPrivateComponent permission={"readAll-account"}>
         <TableComponent
           actionPermission={[
@@ -103,6 +108,7 @@ const GetAllAccount = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

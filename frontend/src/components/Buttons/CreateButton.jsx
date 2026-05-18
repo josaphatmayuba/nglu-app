@@ -1,17 +1,14 @@
-import { PlusOutlined } from "@ant-design/icons";
+import { Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function CreateButton({ title, to }) {
   return (
     <Link to={to}>
       <button
-        className={`xs:px-3 px-2 md:text-base py-[6px] lg:px-5  border bg-primary
-         hover:bg-primary/60 text-white rounded cursor-pointer`}
+        className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-100"
       >
-        <span className='flex items-center justify-center gap-1 md:gap-2 '>
-          {<PlusOutlined />}
-          <span className=''>{title || "Add Item"}</span>
-        </span>
+        <Plus className="w-4 h-4" />
+        <span className="whitespace-nowrap">{title || "Nouveau"}</span>
       </button>
     </Link>
   );

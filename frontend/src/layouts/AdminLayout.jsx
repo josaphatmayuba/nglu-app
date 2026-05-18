@@ -52,24 +52,8 @@ function AdminLayout() {
   }, [location.pathname]);
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden flex flex-row">
-      <div
-        className={`hidden md:flex dark:bg-transparent bg-primary dark:border-gray-50 border-black hover:bg-primary  border-2 text-white absolute top-[10px] left-[225px] w-[30px] h-[30px] leading-[30px] rounded-full justify-center items-center z-30 duration-300  ${!collapsed
-          ? "top-[10px] md:left-[185px] 2xl:left-[225px]"
-          : "top-[10px] left-[70px]"
-          }`}>
-        {collapsed ? (
-          <RightOutlined
-            onClick={() => handleCollapsed(!collapsed)}
-            className="text-[16px] cursor-pointer"
-          />
-        ) : (
-          <LeftOutlined
-            onClick={() => handleCollapsed(!collapsed)}
-            className="text-[16px] cursor-pointer"
-          />
-        )}
-      </div>
+    <main className="relative h-screen w-screen overflow-hidden flex flex-row bg-ink-50">
+      {/* Mobile drawer */}
       <Drawer
         title={false}
         placement={placement === "right" ? "left" : "right"}
@@ -77,45 +61,33 @@ function AdminLayout() {
         onClose={() => setVisible(false)}
         open={visible}
         key={placement === "right" ? "left" : "right"}
-        width={240}>
-        {/* for small device */}
-        <div className="pt-[12px] min-h-screen overflow-auto no-scrollbar w-[240px] bg-sideNavBg  text-white select-none">
-          {/* Mobile top logo inside Drawer */}
+        width={280}
+        bodyStyle={{ padding: 0 }}>
+        <div className="min-h-screen overflow-auto no-scrollbar w-[280px] bg-white text-ink-700 select-none border-r border-ink-200">
           {data && !loading && (
-            <div className="w-full h-[60px] flex items-center justify-center mb-3">
-              <Link to="/admin/dashboard" className="block w-full h-full flex items-center justify-center">
-                {data?.logo && !imageError ? (
-                  <img
-                    alt="logo"
-                    src={data.logo}
-                    style={{ width: "160px", height: "60px", objectFit: "contain" }}
-                    onError={() => setImageError(true)}
-                  />
-                ) : (
-                  <h2 className="text-white text-center flex items-center justify-center gap-2 text-[18px]">
-                    {data?.companyName?.includes(" ") ? (
-                      <>
-                        <strong style={{ color: "#55F", fontWeight: "bold" }}>
-                          {data?.companyName?.split(" ")[0]}
-                        </strong>
-                        {data?.companyName?.slice(
-                          data?.companyName?.indexOf(" ") + 1
-                        )}
-                      </>
-                    ) : (
-                      <strong style={{ color: "#55F", fontWeight: "bold" }}>
-                        {data?.companyName}
-                      </strong>
-                    )}
-                  </h2>
-                )}
+            <div className="h-16 px-5 flex items-center justify-between border-b border-ink-100 shrink-0">
+              <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white text-base font-bold shrink-0">
+                  N
+                </div>
+                <span className="truncate text-base font-semibold tracking-tight text-ink-950">
+                  NGOLU
+                </span>
               </Link>
+              <button
+                type="button"
+                onClick={() => setVisible(false)}
+                className="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"
+                title="Fermer le menu"
+              >
+                <LeftOutlined className="text-[12px]" />
+              </button>
             </div>
           )}
 
           {loading && (
-            <div className="w-full h-[60px] flex items-center justify-center mb-3">
-              <div className="bg-slate-50 opacity-10 h-4 rounded w-3/4 animate-pulse"></div>
+            <div className="w-full h-[60px] flex items-center justify-center mb-3 px-4">
+              <div className="bg-ink-100 h-4 rounded w-3/4 animate-pulse"></div>
             </div>
           )}
 
@@ -123,52 +95,59 @@ function AdminLayout() {
         </div>
       </Drawer>
 
+      {/* Desktop sidebar */}
       <div
         className={cn(
-          " hidden md:block left-0 top-0 z-10  duration-300 h-screen  w-[200px] 2xl:w-[240px] bg-sideNavBg  text-white select-none",
-          { "w-[86px] 2xl:w-[86px]": collapsed }
+          "hidden md:flex flex-col left-0 top-0 z-10 duration-300 h-screen w-[280px] 2xl:w-[280px] bg-white border-r border-ink-200 text-ink-700 select-none",
+          { "w-[72px] 2xl:w-[72px]": collapsed }
         )}>
         {data && !loading && (
           <div
-            className={`w-[180px] h-[70px] mx-auto flex items-center justify-center my-3  ${!collapsed ? "visible" : "invisible"
-              }`}>
-            <Link to="/admin/dashboard" className="block w-full h-full flex items-center justify-center">
-              {data?.logo && !imageError ? (
-                <img
-                  className="text-white text-center"
-                  alt="logo"
-                  src={data.logo}
-                  style={{ width: "180PX", height: "70px" }}
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <h2 className="text-white text-center flex items-center justify-center gap-2 text-[25px]">
-                  {data?.companyName?.includes(" ") ? (
-                    <>
-                      <strong style={{ color: "#55F", fontWeight: "bold" }}>
-                        {data?.companyName?.split(" ")[0]}
-                      </strong>
-                      {data?.companyName?.slice(
-                        data?.companyName?.indexOf(" ") + 1
-                      )}
-                    </>
-                  ) : (
-                    <strong style={{ color: "#55F", fontWeight: "bold" }}>
-                      {data?.companyName}
-                    </strong>
-                  )}
-                </h2>
+            className={cn(
+              "h-16 px-5 flex items-center justify-between border-b border-ink-100 shrink-0",
+              collapsed && "justify-center px-3"
+            )}>
+            <Link to="/admin/dashboard" className="flex min-w-0 items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white text-base font-bold shrink-0">
+                N
+              </div>
+              {!collapsed && (
+                <span className="truncate text-base font-semibold tracking-tight text-ink-950">
+                  NGOLU
+                </span>
               )}
             </Link>
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={() => handleCollapsed(true)}
+                className="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"
+                title="Réduire le menu"
+              >
+                <LeftOutlined className="text-[12px]" />
+              </button>
+            )}
+            {collapsed && (
+              <button
+                type="button"
+                onClick={() => handleCollapsed(false)}
+                className="absolute left-[58px] top-4 z-30 flex h-7 w-7 items-center justify-center rounded-md border border-ink-200 bg-white text-ink-600 shadow-sm hover:border-brand-300 hover:text-brand-600"
+                title="Ouvrir le menu"
+              >
+                <RightOutlined className="text-[12px]" />
+              </button>
+            )}
           </div>
         )}
         {loading && (
           <div
-            className={`w-[180px] h-[70px] mx-auto flex flex-col gap-1 my-3 ${!collapsed ? "visible" : "invisible"
-              }`}>
-            <h1 className="bg-slate-50 opacity-10 h-4 rounded  w-full  animate-pulse"></h1>
-            <h1 className="bg-slate-50 opacity-10 h-4 rounded w-full  animate-pulse"></h1>
-            <h1 className="bg-slate-50 opacity-10 h-4 rounded  w-full animate-pulse"></h1>
+            className={cn(
+              "h-16 mx-auto flex flex-col gap-1 my-3 px-4",
+              !collapsed ? "visible w-[180px]" : "invisible w-[60px]"
+            )}>
+            <div className="bg-ink-100 h-4 rounded w-full animate-pulse"></div>
+            <div className="bg-ink-100 h-4 rounded w-full animate-pulse"></div>
+            <div className="bg-ink-100 h-4 rounded w-full animate-pulse"></div>
           </div>
         )}
 
@@ -177,13 +156,13 @@ function AdminLayout() {
 
       <div
         className={cn(
-          `flex flex-col w-full 2xl:w-[calc(100vw-240px)] md:w-[calc(100vw-200px)] duration-300`,
+          `flex flex-col w-full 2xl:w-[calc(100vw-280px)] md:w-[calc(100vw-280px)] duration-300`,
           {
-            "md:w-[calc(100vw-86px)] 2xl:w-[calc(100vw-86px)]": collapsed,
+            "md:w-[calc(100vw-72px)] 2xl:w-[calc(100vw-72px)]": collapsed,
           }
         )}>
         <Header onPress={openDrawer} data={data} loading={loading} />
-        <div className="flex-1 p-4 min-h-0 overflow-auto bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="flex-1 p-4 min-h-0 overflow-auto bg-ink-50 dark:from-gray-900 dark:to-gray-800">
           <AdminRoutes />
         </div>
       </div>

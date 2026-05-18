@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllTransaction } from "../../redux/rtk/features/transaction/transactionSlice";
 import CreateDrawer from "../CommonUi/CreateDrawer";
 import TableComponent from "../CommonUi/TableComponent";
@@ -140,29 +141,33 @@ const GetAllTransaction = () => {
   };
 
   return (
+    <>
+      <PageHeader
+        title="Transactions"
+        subtitle="Mouvements financiers et écritures"
+        actions={
+          <>
+            <RangePicker
+              className="range-picker"
+              onCalendarChange={onCalendarChange}
+              defaultValue={[
+                dayjs(pageConfig.startDate, "YYYY-MM-DD"),
+                dayjs(pageConfig.endDate, "YYYY-MM-DD"),
+              ]}
+            />
+            <CreateDrawer
+              width={35}
+              permission={"create-transaction"}
+              title={"Create Transaction"}>
+              <AddTransaction />
+            </CreateDrawer>
+          </>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // // headClass="border-none"
-      title={"Transaction List"}
-      extra={
-        <div className="flex gap-3 md:justify-end justify-between  items-center">
-          <RangePicker
-            className="range-picker w-3/6"
-            onCalendarChange={onCalendarChange}
-            defaultValue={[
-              dayjs(pageConfig.startDate, "YYYY-MM-DD"),
-              dayjs(pageConfig.endDate, "YYYY-MM-DD"),
-            ]}
-          />{" "}
-          <CreateDrawer
-            width={35}
-            permission={"create-transaction"}
-            title={"Create Transaction"}>
-            <AddTransaction />
-          </CreateDrawer>
-        </div>
-      }>
+    >
       {" "}
       <UserPrivateComponent permission={"readAll-transaction"}>
         <TableComponent
@@ -182,6 +187,7 @@ const GetAllTransaction = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

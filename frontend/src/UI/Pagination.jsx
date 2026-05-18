@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "../utils/functions";
 
 export default function Pagination({
   defaultPageStart = 1,
@@ -37,14 +38,14 @@ export default function Pagination({
 
   return (
     <nav className='flex items-center gap-3'>
-      <ul className='flex space-x-2'>
+      <ul className='flex space-x-1'>
         <li>
           <button
             disabled={currentPage <= 1}
             onClick={() => handleOnPageChange(currentPage - 1, itemsPerPage)}
-            className='flex items-center justify-center w-8 h-8 rounded-md bg-gray-200 hover:bg-gray-300 focus:outline-none'
+            className='flex items-center justify-center w-8 h-8 rounded-md border border-ink-200 bg-white hover:bg-ink-50 text-ink-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-100 transition'
           >
-            <FiChevronLeft className='w-5 h-5 text-gray-700' />
+            <FiChevronLeft className='w-4 h-4' />
           </button>
         </li>
 
@@ -52,11 +53,12 @@ export default function Pagination({
           <li key={page}>
             <button
               onClick={() => handleOnPageChange(page, itemsPerPage)}
-              className={`flex items-center justify-center w-8 h-8 rounded-md ${
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-md text-sm font-medium focus:outline-none transition",
                 currentPage === page
-                  ? "bg-primary text-white"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-              } focus:outline-none`}
+                  ? "bg-brand-600 text-white shadow-sm"
+                  : "border border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
+              )}
             >
               {page}
             </button>
@@ -67,9 +69,9 @@ export default function Pagination({
           <button
             disabled={currentPage >= totalPages}
             onClick={() => handleOnPageChange(currentPage + 1, itemsPerPage)}
-            className='flex items-center justify-center w-8 h-8 rounded-md bg-gray-200 hover:bg-gray-300 focus:outline-none'
+            className='flex items-center justify-center w-8 h-8 rounded-md border border-ink-200 bg-white hover:bg-ink-50 text-ink-600 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-brand-100 transition'
           >
-            <FiChevronRight className='w-5 h-5 text-gray-700' />
+            <FiChevronRight className='w-4 h-4' />
           </button>
         </li>
       </ul>
@@ -77,7 +79,7 @@ export default function Pagination({
       <div>
         <select
           id='itemsPerPage'
-          className='h-8 min-w-[110px] px-2 py-1 border border-gray-300 rounded focus:outline-none'
+          className='h-8 min-w-[110px] px-2 py-1 border border-ink-200 bg-white text-ink-700 text-sm rounded-md focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100'
           value={itemsPerPage}
           onChange={handleItemsPerPageChange}
         >

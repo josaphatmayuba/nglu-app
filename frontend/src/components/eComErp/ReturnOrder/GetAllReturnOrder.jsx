@@ -4,6 +4,7 @@ import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../../UI/Card";
+import PageHeader from "../../../UI/PageHeader";
 import { loadAllReturnOrderByPaginated } from "../../../redux/rtk/features/eCommerce/returnOrder/returnOrderSlice";
 import ViewBtn from "../../Buttons/ViewBtn";
 import TableComponent from "../../CommonUi/TableComponent";
@@ -135,21 +136,13 @@ export default function GetAllReturnOrder() {
     dispatch(loadAllReturnOrderByPaginated(pageConfig));
   }, [dispatch, pageConfig]);
   return (
-    <div className='card card-custom mt-2'>
-      <div className='card-body'>
-        {info?._count && info?._sum && (
-          <ReturnDashboard count={info._count?.id} sum={info._sum} />
-        )}
-        <br />
-
-        <Card
-          className='max-md:border-0 max-md:bg-white'
-          bodyClass='max-md:p-0 '
-          headClass='border-none'
-          title={"Return Order list"}
-          extra={
+    <div>
+        <PageHeader
+          title="Retours de commande"
+          subtitle="Demandes de retour eCommerce"
+          actions={
             <RangePicker
-              className='range-picker '
+              className='range-picker'
               onCalendarChange={onCalendarChange}
               defaultValue={[
                 dayjs(pageConfig.startDate, "YYYY-MM-DD"),
@@ -157,6 +150,14 @@ export default function GetAllReturnOrder() {
               ]}
             />
           }
+        />
+        {info?._count && info?._sum && (
+          <ReturnDashboard count={info._count?.id} sum={info._sum} />
+        )}
+
+        <Card
+          className='max-md:border-0 max-md:bg-white mt-5'
+          bodyClass='max-md:p-0 '
         >
           <UserPrivateComponent permission={"readAll-cartOrder"}>
             <TableComponent
@@ -171,7 +172,6 @@ export default function GetAllReturnOrder() {
             />
           </UserPrivateComponent>
         </Card>
-      </div>
     </div>
   );
 }

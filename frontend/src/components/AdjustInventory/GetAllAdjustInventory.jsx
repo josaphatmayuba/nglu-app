@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllAdjustInventory } from "../../redux/rtk/features/adjustInventory/adjustInventorySlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import CreateDrawer from "../CommonUi/CreateDrawer";
@@ -122,14 +123,12 @@ const GetAllAdjustInventory = () => {
   };
 
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Adjust Inventory"}
-      extra={
-        <div className="justify-between md:justify-start flex gap-3 items-center">
-          <div>
+    <>
+      <PageHeader
+        title="Ajustement de stock"
+        subtitle="Inventaires et corrections de quantités"
+        actions={
+          <>
             <RangePicker
               onCalendarChange={onCalendarChange}
               defaultValue={[
@@ -139,16 +138,19 @@ const GetAllAdjustInventory = () => {
               className="range-picker"
               style={{ maxWidth: "400px" }}
             />
-          </div>
-          <CreateDrawer
-            permission={"create-adjust"}
-            title={"Create Adjust Inventory"}
-            width={80}
-          >
-            <AddAdjustInventory />
-          </CreateDrawer>
-        </div>
-      }
+            <CreateDrawer
+              permission={"create-adjust"}
+              title={"Create Adjust Inventory"}
+              width={80}
+            >
+              <AddAdjustInventory />
+            </CreateDrawer>
+          </>
+        }
+      />
+    <Card
+      className="max-md:border-0 max-md:bg-white"
+      bodyClass="max-md:p-0 "
     >
       <UserPrivateComponent permission={"readAll-adjust"}>
         <TableComponent
@@ -165,6 +167,7 @@ const GetAllAdjustInventory = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

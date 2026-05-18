@@ -1,7 +1,8 @@
-import { Card } from "antd";
 import moment from "moment";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
 import ViewBtn from "../Buttons/ViewBtn";
 import TableComponent from "../CommonUi/TableComponent";
@@ -50,25 +51,28 @@ const GetAllDeliveryBoy = () => {
   }, [dispatch, pageConfig]);
 
   return (
-    <Card
-      className='border-0 md:border md:p-6 bg-transparent md:bg-[#fafafa]'
-      bodyStyle={{ padding: 0 }}
-    >
-      <div className='md:flex items-center justify-between pb-3'>
-        <h1 className='text-lg font-bold'>Delivery Boy</h1>
-      </div>
-      <UserPrivateComponent permission={"readAll-user"}>
-        <TableComponent
-          columns={columns}
-          list={list}
-          total={total}
-          loading={loading}
-          setPageConfig={setPageConfig}
-          title={"Staff List"}
-          isSearch
-        />
-      </UserPrivateComponent>
-    </Card>
+    <>
+      <PageHeader
+        title="Livreurs"
+        subtitle="Personnel de livraison et coursiers"
+      />
+      <Card
+        className="max-md:border-0 max-md:bg-white"
+        bodyClass="max-md:p-0"
+      >
+        <UserPrivateComponent permission={"readAll-user"}>
+          <TableComponent
+            columns={columns}
+            list={list}
+            total={total}
+            loading={loading}
+            setPageConfig={setPageConfig}
+            title={"Staff List"}
+            isSearch
+          />
+        </UserPrivateComponent>
+      </Card>
+    </>
   );
 };
 

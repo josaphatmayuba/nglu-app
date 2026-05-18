@@ -7,6 +7,7 @@ import TableComponent from "../CommonUi/TableComponent";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 import UpdateEmailConfig from "./UpdateEmailConfig";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 
 export default function GetAllEmailConfig() {
   const dispatch = useDispatch();
@@ -49,13 +50,11 @@ export default function GetAllEmailConfig() {
     },
   ];
   return (
-    <Card
-      className="max-md:border-0 max-md:bg-white"
-      bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Email Configs"}
-      extra={
-        <>
+    <>
+      <PageHeader
+        title="Configuration email"
+        subtitle="Paramètres SMTP pour l'envoi des emails"
+        actions={
           <CreateDrawer
             permission={"update-emailConfig"}
             title={"Update Email Config"}
@@ -63,8 +62,11 @@ export default function GetAllEmailConfig() {
           >
             <UpdateEmailConfig data={list} />
           </CreateDrawer>
-        </>
-      }
+        }
+      />
+    <Card
+      className="max-md:border-0 max-md:bg-white"
+      bodyClass="max-md:p-0 "
     >
       <UserPrivateComponent permission={"readAll-emailConfig"}>
         <TableComponent
@@ -78,5 +80,6 @@ export default function GetAllEmailConfig() {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 }

@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { and, count, desc, eq, gte, lte, sql, sum } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
+  currencies,
   customers,
   paymentSaleInvoices,
   products,
@@ -99,6 +101,13 @@ export class SaleInvoicesService {
     // 3. Create invoice
     const invoiceId = generateInvoiceId("S");
 
+    // Resolve currency: explicit input or fallback to app default
+    let currencyId = input.currencyId ?? null;
+    if (!currencyId) {
+      const [setting] = await this.db.select({ currencyId: appSettings.currencyId }).from(appSettings).limit(1);
+      currencyId = setting?.currencyId ?? null;
+    }
+
     await this.db.insert(saleInvoices).values({
       id: invoiceId,
       date: new Date(input.date),
@@ -110,6 +119,7 @@ export class SaleInvoicesService {
       dueAmount,
       profit,
       customerId: input.customerId,
+      currencyId,
       userId: input.userId,
       note: input.note ?? null,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
@@ -261,6 +271,7 @@ export class SaleInvoicesService {
         dueAmount: saleInvoices.dueAmount,
         profit: saleInvoices.profit,
         customerId: saleInvoices.customerId,
+        currencyId: saleInvoices.currencyId,
         userId: saleInvoices.userId,
         note: saleInvoices.note,
         dueDate: saleInvoices.dueDate,
@@ -271,9 +282,12 @@ export class SaleInvoicesService {
         customerFirstName: customers.firstName,
         customerLastName: customers.lastName,
         customerPhone: customers.phone,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
       })
       .from(saleInvoices)
       .leftJoin(customers, eq(customers.id, saleInvoices.customerId))
+      .leftJoin(currencies, eq(currencies.id, saleInvoices.currencyId))
       .where(where)
       .orderBy(desc(saleInvoices.createdAt))
       .limit(limit)

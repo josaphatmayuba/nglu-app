@@ -3,6 +3,7 @@ import { db } from "../seed.db";
 import { currencies } from "../schema";
 
 const CURRENCIES = [
+  { currencyName: "FRANC CONGOLAIS", currencySymbol: "FC" }, // CDF — devise principale (frontend la reconnaît par ce nom exact)
   { currencyName: "DOLLAR", currencySymbol: "$" },
   { currencyName: "EURO", currencySymbol: "€" },
   { currencyName: "BDT", currencySymbol: "৳" },
@@ -21,19 +22,25 @@ const CURRENCIES = [
 ];
 
 export async function seedCurrencies() {
-  const existing = await db.select({ id: currencies.id }).from(currencies).limit(1);
-  if (existing.length) {
-    console.log("  [currencies] already seeded, skipping.");
+  // Idempotent per-name : on n'insère que les devises absentes par nom.
+  // Permet d'ajouter de nouvelles entrées (ex. FRANC CONGOLAIS) à une DB
+  // déjà peuplée sans skipper le seeder entièrement.
+  const existing = await db.select({ currencyName: currencies.currencyName }).from(currencies);
+  const existingNames = new Set(existing.map((c) => c.currencyName));
+  const missing = CURRENCIES.filter((c) => !existingNames.has(c.currencyName));
+
+  if (!missing.length) {
+    console.log("  [currencies] already seeded, all required currencies present.");
     return;
   }
 
   await db.insert(currencies).values(
-    CURRENCIES.map((c) => ({
+    missing.map((c) => ({
       ...c,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })),
   );
-  console.log(`  [currencies] ✔ ${CURRENCIES.length} records inserted.`);
+  console.log(`  [currencies] inserted ${missing.length} missing currency(ies): ${missing.map((c) => c.currencyName).join(", ")}.`);
 }

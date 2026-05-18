@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import {
   deleteDepartment,
   loadAllDepartmentPaginated,
@@ -98,20 +99,23 @@ const GetAllDepartment = () => {
     },
   ];
   return (
+    <>
+      <PageHeader
+        title="Départements"
+        subtitle="Structure organisationnelle"
+        actions={
+          <CreateDrawer
+            permission={"create-department"}
+            title={"Create Department"}
+            width={35}
+          >
+            <AddDepartment />
+          </CreateDrawer>
+        }
+      />
     <Card
       className="max-md:border-0 max-md:bg-white"
       bodyClass="max-md:p-0 "
-      // headClass="border-none"
-      title={"Departments"}
-      extra={
-        <CreateDrawer
-          permission={"create-department"}
-          title={"Create Department"}
-          width={35}
-        >
-          <AddDepartment />
-        </CreateDrawer>
-      }
     >
       <UserPrivateComponent permission={"readAll-department"}>
         <TableComponent
@@ -130,6 +134,7 @@ const GetAllDepartment = () => {
         />
       </UserPrivateComponent>
     </Card>
+    </>
   );
 };
 

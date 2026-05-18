@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import Card from "../../UI/Card";
+import PageHeader from "../../UI/PageHeader";
 import { loadAllTermsAndConditions } from "../../redux/rtk/features/termsAndCondition/termsAndConditionSlice";
 import { stringShorter } from "../../utils/functions";
 import ViewBtn from "../Buttons/ViewBtn";
@@ -71,12 +72,10 @@ export default function GetAllTermsAndConditions() {
   }, [dispatch]);
   return (
     <>
-      <Card
-        className='max-md:border-0 max-md:bg-white'
-        bodyClass='max-md:p-0 '
-        // headClass='border-none'
-        title={"Terms And Conditions"}
-        extra={
+      <PageHeader
+        title="Conditions générales"
+        subtitle="Mentions légales pour devis et factures"
+        actions={
           <CreateDrawer
             permission={"create-termsAndCondition"}
             title={"Create Terms"}
@@ -85,6 +84,10 @@ export default function GetAllTermsAndConditions() {
             <AddTermsAndConditions />
           </CreateDrawer>
         }
+      />
+      <Card
+        className='max-md:border-0 max-md:bg-white'
+        bodyClass='max-md:p-0 '
       >
         <UserPrivateComponent permission={"readAll-termsAndCondition"}>
           <TableComponent

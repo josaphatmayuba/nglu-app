@@ -26,7 +26,7 @@ definitions:
         script:
           - cd frontend
           - npm install --legacy-peer-deps
-          - npm run build           # picks .env.production → https://ongdngolu.org/api
+          - npm run build:prod
         artifacts:
           - frontend/dist/**
 
@@ -38,7 +38,7 @@ definitions:
         script:
           - cd frontend
           - npm install --legacy-peer-deps
-          - npm run build -- --mode development   # picks .env.development → https://dev.ongdngolu.org/api
+          - npm run build:dev
         artifacts:
           - frontend/dist/**
 
