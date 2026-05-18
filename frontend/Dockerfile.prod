@@ -1,4 +1,8 @@
 FROM nginx:alpine
-COPY dist/ /usr/share/nginx/html
+# Build context is the REPO ROOT (see docker-compose.prod.yml).
+# CRM (admin SPA) — served under /crm -> /admin
+COPY frontend/dist/ /usr/share/nginx/html
+# Production marketing landing — baked into the image (no host bind mount).
+COPY marketing-site/dist/ /usr/share/nginx/html-marketing-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)
 EXPOSE 80

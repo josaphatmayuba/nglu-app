@@ -1,0 +1,12 @@
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+**/dist-dev
+**/dist-prod
+**/.vscode
+**/.idea
+**/*.log
+backups/
+backend2/dist
+middleware/node_modules
