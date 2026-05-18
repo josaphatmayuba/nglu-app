@@ -1969,6 +1969,26 @@
 
         <!-- ============= PANEL: LOCATAIRES ============= -->
         <div data-immo-panel="locataires" class="hidden">
+          <!-- Header : search + Lien d'inscription + Nouveau locataire -->
+          <div class="flex items-center gap-2 mb-5 flex-wrap">
+            <div class="flex-1 min-w-[240px] relative">
+              <i data-lucide="search" class="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input
+                type="text"
+                placeholder="Rechercher locataire (nom, email, téléphone)..."
+                class="w-full pl-10 pr-3 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </div>
+            <button onclick="openOnboardingLinkModal()" class="flex items-center gap-2 px-3 py-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Lien d'inscription</span>
+            </button>
+            <button class="flex items-center gap-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Nouveau locataire</span>
+            </button>
+          </div>
+
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             <!-- Tenant card 1 - VIP -->
             <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
@@ -4901,6 +4921,138 @@
     </div>
   </div>
 
+  <!-- ============= TENANT ONBOARDING LINK MODAL (SCRUM-79) ============= -->
+  <div id="onboarding-link-modal" class="fixed inset-0 z-[55] hidden">
+    <div class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm" onclick="closeOnboardingLinkModal()"></div>
+    <div class="relative max-w-xl mx-3 md:mx-auto mt-12 md:mt-20 bg-white rounded-2xl border border-ink-200 shadow-2xl overflow-hidden flex flex-col">
+
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 md:px-6 py-4 border-b border-ink-100 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+            <i data-lucide="user-plus" class="w-5 h-5 text-brand-600"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 class="font-semibold text-ink-900 text-base truncate">Générer un lien d'inscription</h2>
+            <p class="text-xs text-ink-500 mt-0.5">Le futur locataire complètera son dossier via ce lien sécurisé</p>
+          </div>
+        </div>
+        <button onclick="closeOnboardingLinkModal()" class="p-2 hover:bg-ink-100 rounded-lg text-ink-500" aria-label="Fermer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- ============= STEP 1: form ============= -->
+      <div data-onb-step="form" class="px-5 md:px-6 py-5 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Prénom <span class="text-red-500">*</span></label>
+            <input type="text" placeholder="ex. Marie" class="w-full px-3.5 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-ink-700 mb-1.5">Nom <span class="text-red-500">*</span></label>
+            <input type="text" placeholder="ex. Kabongo" class="w-full px-3.5 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-ink-700 mb-1.5">Email <span class="text-red-500">*</span></label>
+          <div class="relative">
+            <i data-lucide="mail" class="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input type="email" placeholder="marie.kabongo@email.cd" class="w-full pl-10 pr-3.5 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-ink-700 mb-1.5">Téléphone</label>
+          <div class="relative">
+            <i data-lucide="phone" class="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input type="tel" placeholder="+243 999 123 456" class="w-full pl-10 pr-3.5 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button onclick="closeOnboardingLinkModal()" class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+          <button onclick="onboardingShowStep('share')" class="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
+            <i data-lucide="link" class="w-4 h-4"></i>
+            Générer le lien
+          </button>
+        </div>
+      </div>
+
+      <!-- ============= STEP 2: share ============= -->
+      <div data-onb-step="share" class="hidden px-5 md:px-6 py-5 space-y-4">
+        <!-- Success banner -->
+        <div class="flex items-start gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+          <div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+            <i data-lucide="check" class="w-4 h-4 text-emerald-700"></i>
+          </div>
+          <div class="text-sm">
+            <div class="font-medium text-emerald-900">Lien généré avec succès</div>
+            <div class="text-xs text-emerald-700 mt-0.5">Valide 7 jours · usage unique</div>
+          </div>
+        </div>
+
+        <!-- Generated link (readonly) -->
+        <div>
+          <label class="block text-xs font-semibold uppercase tracking-wider text-ink-500 mb-1.5">Lien d'inscription</label>
+          <div class="flex items-stretch gap-1">
+            <input
+              type="text"
+              readonly
+              value="https://ongdngolu.org/onboarding/8f3c2a1d-9e4b-4f7a-b2c5-d1e0f8a9b3c4"
+              class="flex-1 px-3 py-2 bg-ink-50 border border-ink-200 rounded-lg text-sm text-ink-700 font-mono text-xs"
+            />
+            <button onclick="onboardingCopyLink()" class="flex items-center gap-1.5 px-3 py-2 bg-white border border-ink-200 hover:border-brand-300 hover:bg-brand-50 text-ink-700 hover:text-brand-700 rounded-lg text-sm transition" title="Copier le lien">
+              <i data-lucide="copy" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Copier</span>
+            </button>
+            <button onclick="window.open(document.querySelector('#onboarding-link-modal input[readonly]').value, '_blank')" class="flex items-center gap-1.5 px-3 py-2 bg-white border border-ink-200 hover:border-brand-300 hover:bg-brand-50 text-ink-700 hover:text-brand-700 rounded-lg text-sm transition" title="Ouvrir le lien">
+              <i data-lucide="external-link" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Ouvrir</span>
+            </button>
+          </div>
+          <p class="text-xs text-ink-500 mt-1.5" id="onboarding-copy-feedback">&nbsp;</p>
+        </div>
+
+        <!-- Delivery options -->
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-ink-500 mb-2">Envoyer le lien</div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <button onclick="alert('Email envoyé à marie.kabongo@email.cd ✓')" class="flex items-center gap-3 p-3 bg-white border border-ink-200 hover:border-brand-300 hover:bg-brand-50 rounded-lg text-left transition group">
+              <div class="w-9 h-9 rounded-lg bg-brand-50 group-hover:bg-white flex items-center justify-center shrink-0">
+                <i data-lucide="mail" class="w-4 h-4 text-brand-600"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-ink-900">Envoyer par email</div>
+                <div class="text-xs text-ink-500 truncate">marie.kabongo@email.cd</div>
+              </div>
+            </button>
+            <button onclick="alert('SMS / WhatsApp envoyé au +243 999 123 456 ✓')" class="flex items-center gap-3 p-3 bg-white border border-ink-200 hover:border-emerald-300 hover:bg-emerald-50 rounded-lg text-left transition group">
+              <div class="w-9 h-9 rounded-lg bg-emerald-50 group-hover:bg-white flex items-center justify-center shrink-0">
+                <i data-lucide="message-square" class="w-4 h-4 text-emerald-600"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-ink-900">SMS / WhatsApp</div>
+                <div class="text-xs text-ink-500 truncate">+243 999 123 456</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="flex items-center justify-between gap-2 pt-2 border-t border-ink-100">
+          <button onclick="onboardingShowStep('form')" class="flex items-center gap-1.5 px-3 py-2 text-sm text-ink-600 hover:bg-ink-100 rounded-lg transition">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            Retour
+          </button>
+          <button onclick="closeOnboardingLinkModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
+            Terminé
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ============= /TENANT ONBOARDING LINK MODAL ============= -->
+
   <!-- ============= CONTRACT MODAL ============= -->
   <div id="contract-modal" class="fixed inset-0 z-[55] hidden">
     <div class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm" onclick="closeContractModal()"></div>
@@ -5112,6 +5264,45 @@
     function closePropertyModal() {
       document.getElementById('property-modal').classList.add('hidden');
       document.body.style.overflow = '';
+    }
+
+    // ============= TENANT ONBOARDING LINK MODAL (SCRUM-79) =============
+    function openOnboardingLinkModal() {
+      document.getElementById('onboarding-link-modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      onboardingShowStep('form');
+      lucide.createIcons();
+    }
+    function closeOnboardingLinkModal() {
+      document.getElementById('onboarding-link-modal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+    function onboardingShowStep(step) {
+      document.querySelectorAll('#onboarding-link-modal [data-onb-step]').forEach((el) => {
+        el.classList.toggle('hidden', el.dataset.onbStep !== step);
+      });
+      const fb = document.getElementById('onboarding-copy-feedback');
+      if (fb) fb.innerHTML = '&nbsp;';
+      lucide.createIcons();
+    }
+    function onboardingCopyLink() {
+      const input = document.querySelector('#onboarding-link-modal input[readonly]');
+      const url = input ? input.value : '';
+      const feedback = document.getElementById('onboarding-copy-feedback');
+      const writer = navigator.clipboard && navigator.clipboard.writeText
+        ? navigator.clipboard.writeText(url)
+        : new Promise((resolve, reject) => {
+            try {
+              input.select();
+              document.execCommand('copy');
+              resolve();
+            } catch (e) { reject(e); }
+          });
+      writer.then(() => {
+        if (feedback) feedback.innerHTML = '<span class="text-emerald-600">✓ Lien copié dans le presse-papier</span>';
+      }).catch(() => {
+        if (feedback) feedback.innerHTML = '<span class="text-red-600">Impossible de copier — sélectionnez le lien manuellement.</span>';
+      });
     }
 
     function toggleUnitsSection(checked) {
