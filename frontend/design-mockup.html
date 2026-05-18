@@ -332,7 +332,15 @@
               </span>
             </div>
             <div class="text-xs text-ink-500 font-medium mb-1">Chiffre d'affaires</div>
-            <div class="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">CDF 24,580,000</div>
+            <!-- Multi-currency : une ligne par devise dans les transactions -->
+            <div class="space-y-0.5">
+              <div class="text-lg md:text-xl font-semibold text-ink-900 tracking-tight truncate">
+                <span class="text-xs text-ink-500 mr-1">CDF</span>24,580,000
+              </div>
+              <div class="text-base md:text-lg font-semibold text-ink-700 tracking-tight truncate">
+                <span class="text-xs text-ink-500 mr-1">USD</span>8,920
+              </div>
+            </div>
             <!-- Sparkline -->
             <svg class="sparkline mt-3 w-full h-8" viewBox="0 0 200 32" fill="none">
               <path d="M 0 22 L 25 18 L 50 20 L 75 14 L 100 16 L 125 10 L 150 12 L 175 6 L 200 8" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
