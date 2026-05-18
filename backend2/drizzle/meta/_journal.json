@@ -120,6 +120,13 @@
       "when": 1779292800000,
       "tag": "0017_add_created_by_to_contracts",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1779379200000,
+      "tag": "0018_backfill_currency_id_real_estate",
+      "breakpoints": true
     }
   ]
 }
