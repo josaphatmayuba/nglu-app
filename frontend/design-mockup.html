@@ -2987,7 +2987,7 @@
             <div class="bg-white rounded-xl border border-ink-200 p-4"><div class="text-xs text-ink-500 font-medium">Coût total</div><div class="text-xl font-semibold text-ink-900 mt-1">CDF 485K</div></div>
           </div>
 
-          <!-- Header + new ticket -->
+          <!-- Header + view toggle + new ticket -->
           <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
             <div class="flex gap-2 flex-wrap">
               <button class="px-2.5 py-1 text-xs font-medium bg-brand-50 text-brand-700 border border-brand-100 rounded-md">Tous <span class="ml-1 text-ink-400">20</span></button>
@@ -2995,14 +2995,35 @@
               <button class="px-2.5 py-1 text-xs font-medium text-ink-600 bg-white border border-ink-200 hover:border-ink-300 rounded-md">En cours <span class="ml-1 text-amber-600 font-semibold">3</span></button>
               <button class="px-2.5 py-1 text-xs font-medium text-ink-600 bg-white border border-ink-200 hover:border-ink-300 rounded-md">Résolus</button>
             </div>
-            <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
-              <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>Nouveau ticket</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <!-- View toggle -->
+              <div class="inline-flex p-0.5 bg-ink-100 rounded-lg" id="mtn-view-toggle">
+                <button data-mtn-view="list" class="mtn-view-btn px-2.5 py-1 bg-white rounded-md shadow-sm text-ink-700 flex items-center gap-1.5 text-xs font-medium transition" title="Vue liste">
+                  <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Liste</span>
+                </button>
+                <button data-mtn-view="table" class="mtn-view-btn px-2.5 py-1 text-ink-500 hover:text-ink-700 rounded-md flex items-center gap-1.5 text-xs font-medium transition" title="Vue tableau">
+                  <i data-lucide="table" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Tableau</span>
+                </button>
+                <button data-mtn-view="kanban" class="mtn-view-btn px-2.5 py-1 text-ink-500 hover:text-ink-700 rounded-md flex items-center gap-1.5 text-xs font-medium transition" title="Vue kanban">
+                  <i data-lucide="columns-3" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Kanban</span>
+                </button>
+                <button data-mtn-view="calendar" class="mtn-view-btn px-2.5 py-1 text-ink-500 hover:text-ink-700 rounded-md flex items-center gap-1.5 text-xs font-medium transition" title="Vue calendrier">
+                  <i data-lucide="calendar-range" class="w-3.5 h-3.5"></i>
+                  <span class="hidden sm:inline">Calendrier</span>
+                </button>
+              </div>
+              <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Nouveau ticket</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Tickets list -->
-          <div class="space-y-3">
+          <!-- ============= VIEW: LIST (default) ============= -->
+          <div data-mtn-view-panel="list" class="space-y-3">
 
             <!-- Ticket urgent -->
             <div class="bg-white rounded-xl border border-red-200 p-4 md:p-5 hover:shadow-sm transition cursor-pointer">
@@ -3158,6 +3179,304 @@
               </div>
             </div>
           </div>
+          <!-- ============= /VIEW: LIST ============= -->
+
+          <!-- ============= VIEW: TABLE ============= -->
+          <div data-mtn-view-panel="table" class="hidden bg-white rounded-xl border border-ink-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-ink-50 border-b border-ink-200">
+                  <tr class="text-left text-xs font-medium text-ink-500 uppercase tracking-wider">
+                    <th class="px-4 py-3">Ticket</th>
+                    <th class="px-4 py-3">Propriété</th>
+                    <th class="px-4 py-3">Priorité</th>
+                    <th class="px-4 py-3">Assigné</th>
+                    <th class="px-4 py-3">Statut</th>
+                    <th class="px-4 py-3">Reporté</th>
+                    <th class="px-4 py-3 text-right">Coût</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-ink-100">
+                  <tr class="hover:bg-ink-50 transition cursor-pointer">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+                          <i data-lucide="droplets" class="w-4 h-4 text-red-600"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-ink-900">Fuite d'eau plafond</div>
+                          <div class="text-xs text-ink-500">#M-241</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-ink-700">Villa Bandalungwa Sud · M-07</td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md"><i data-lucide="alert-triangle" class="w-3 h-3"></i>Urgent</span></td>
+                    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold flex items-center justify-center">JM</div><span class="text-ink-700">Plombier Joseph</span></div></td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>En cours</span></td>
+                    <td class="px-4 py-3 text-ink-500">il y a 2h · Jean B.</td>
+                    <td class="px-4 py-3 text-right text-ink-900 font-medium">CDF 250K</td>
+                  </tr>
+                  <tr class="hover:bg-ink-50 transition cursor-pointer">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                          <i data-lucide="zap" class="w-4 h-4 text-amber-600"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-ink-900">Panne électrique — coupures fréquentes</div>
+                          <div class="text-xs text-ink-500">#M-240</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-ink-700">Villa Bandalungwa Sud · M-07</td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md"><i data-lucide="alert-triangle" class="w-3 h-3"></i>Urgent</span></td>
+                    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-ink-100 text-ink-500 text-[10px] font-semibold flex items-center justify-center">?</div><span class="text-ink-500">Non assigné</span></div></td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Ouvert</span></td>
+                    <td class="px-4 py-3 text-ink-500">il y a 1 j · Jean B.</td>
+                    <td class="px-4 py-3 text-right text-ink-400">—</td>
+                  </tr>
+                  <tr class="hover:bg-ink-50 transition cursor-pointer">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                          <i data-lucide="paintbrush" class="w-4 h-4 text-blue-600"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-ink-900">Réfection peinture salon</div>
+                          <div class="text-xs text-ink-500">#M-238</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-ink-700">Résidence Limete · B-301</td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">Moyen</span></td>
+                    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center">PM</div><span class="text-ink-700">Peintre Manu</span></div></td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>En cours</span></td>
+                    <td class="px-4 py-3 text-ink-500">il y a 3 j · Jean B.</td>
+                    <td class="px-4 py-3 text-right text-ink-900 font-medium">CDF 120K</td>
+                  </tr>
+                  <tr class="hover:bg-ink-50 transition cursor-pointer">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center shrink-0">
+                          <i data-lucide="key" class="w-4 h-4 text-purple-600"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-ink-900">Changement serrure porte d'entrée</div>
+                          <div class="text-xs text-ink-500">#M-235</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-ink-700">Tour Wagenia · 4ème étage</td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded-md">Bas</span></td>
+                    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-ink-100 text-ink-500 text-[10px] font-semibold flex items-center justify-center">?</div><span class="text-ink-500">Non assigné</span></div></td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Ouvert</span></td>
+                    <td class="px-4 py-3 text-ink-500">il y a 5 j · Sysconnect</td>
+                    <td class="px-4 py-3 text-right text-ink-400">—</td>
+                  </tr>
+                  <tr class="hover:bg-ink-50 transition cursor-pointer opacity-75">
+                    <td class="px-4 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                          <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i>
+                        </div>
+                        <div>
+                          <div class="font-medium text-ink-700 line-through decoration-1">Remplacement climatiseur</div>
+                          <div class="text-xs text-ink-500">#M-220</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-ink-700">Résidence Tombalbaye · A-203</td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">Moyen</span></td>
+                    <td class="px-4 py-3"><div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold flex items-center justify-center">TC</div><span class="text-ink-700">Technicien Clim</span></div></td>
+                    <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Résolu</span></td>
+                    <td class="px-4 py-3 text-ink-500">il y a 8 j · Marie K.</td>
+                    <td class="px-4 py-3 text-right text-ink-900 font-medium">CDF 380K</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <!-- ============= /VIEW: TABLE ============= -->
+
+          <!-- ============= VIEW: KANBAN ============= -->
+          <div data-mtn-view-panel="kanban" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+              <!-- Column: Ouvert -->
+              <div class="bg-ink-50 rounded-xl p-3">
+                <div class="flex items-center justify-between mb-3 px-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <h3 class="text-sm font-semibold text-ink-800">Ouvert</h3>
+                    <span class="text-xs text-ink-500 bg-white px-2 py-0.5 rounded-full border border-ink-200">2</span>
+                  </div>
+                  <button class="text-ink-400 hover:text-ink-600" title="Ajouter">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                  </button>
+                </div>
+                <div class="space-y-2">
+                  <div class="bg-white rounded-lg border border-red-200 p-3 hover:shadow-sm transition cursor-pointer">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="w-8 h-8 rounded-md bg-amber-50 flex items-center justify-center shrink-0"><i data-lucide="zap" class="w-4 h-4 text-amber-600"></i></div>
+                      <span class="inline-flex items-center gap-1 text-[10px] font-medium text-red-700 bg-red-50 px-1.5 py-0.5 rounded">Urgent</span>
+                    </div>
+                    <h4 class="font-medium text-sm text-ink-900 mb-1.5">Panne électrique — coupures fréquentes</h4>
+                    <div class="text-xs text-ink-500 mb-2">Villa Bandalungwa Sud · M-07</div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-ink-500">il y a 1 j</span>
+                      <div class="w-6 h-6 rounded-full bg-ink-100 text-ink-500 text-[10px] font-semibold flex items-center justify-center">?</div>
+                    </div>
+                  </div>
+                  <div class="bg-white rounded-lg border border-ink-200 p-3 hover:shadow-sm transition cursor-pointer">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="w-8 h-8 rounded-md bg-purple-50 flex items-center justify-center shrink-0"><i data-lucide="key" class="w-4 h-4 text-purple-600"></i></div>
+                      <span class="inline-flex items-center gap-1 text-[10px] font-medium text-ink-600 bg-ink-100 px-1.5 py-0.5 rounded">Bas</span>
+                    </div>
+                    <h4 class="font-medium text-sm text-ink-900 mb-1.5">Changement serrure porte d'entrée</h4>
+                    <div class="text-xs text-ink-500 mb-2">Tour Wagenia · 4ème étage</div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-ink-500">il y a 5 j</span>
+                      <div class="w-6 h-6 rounded-full bg-ink-100 text-ink-500 text-[10px] font-semibold flex items-center justify-center">?</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Column: En cours -->
+              <div class="bg-ink-50 rounded-xl p-3">
+                <div class="flex items-center justify-between mb-3 px-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <h3 class="text-sm font-semibold text-ink-800">En cours</h3>
+                    <span class="text-xs text-ink-500 bg-white px-2 py-0.5 rounded-full border border-ink-200">2</span>
+                  </div>
+                </div>
+                <div class="space-y-2">
+                  <div class="bg-white rounded-lg border border-amber-200 p-3 hover:shadow-sm transition cursor-pointer">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="w-8 h-8 rounded-md bg-red-50 flex items-center justify-center shrink-0"><i data-lucide="droplets" class="w-4 h-4 text-red-600"></i></div>
+                      <span class="inline-flex items-center gap-1 text-[10px] font-medium text-red-700 bg-red-50 px-1.5 py-0.5 rounded">Urgent</span>
+                    </div>
+                    <h4 class="font-medium text-sm text-ink-900 mb-1.5">Fuite d'eau plafond — chambre principale</h4>
+                    <div class="text-xs text-ink-500 mb-2">Villa Bandalungwa Sud · M-07</div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-ink-500">il y a 2h</span>
+                      <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold flex items-center justify-center">JM</div>
+                    </div>
+                  </div>
+                  <div class="bg-white rounded-lg border border-ink-200 p-3 hover:shadow-sm transition cursor-pointer">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="w-8 h-8 rounded-md bg-blue-50 flex items-center justify-center shrink-0"><i data-lucide="paintbrush" class="w-4 h-4 text-blue-600"></i></div>
+                      <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Moyen</span>
+                    </div>
+                    <h4 class="font-medium text-sm text-ink-900 mb-1.5">Réfection peinture salon — humidité</h4>
+                    <div class="text-xs text-ink-500 mb-2">Résidence Limete · B-301</div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-ink-500">il y a 3 j</span>
+                      <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold flex items-center justify-center">PM</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Column: Résolu -->
+              <div class="bg-ink-50 rounded-xl p-3">
+                <div class="flex items-center justify-between mb-3 px-1">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <h3 class="text-sm font-semibold text-ink-800">Résolu</h3>
+                    <span class="text-xs text-ink-500 bg-white px-2 py-0.5 rounded-full border border-ink-200">1</span>
+                  </div>
+                </div>
+                <div class="space-y-2">
+                  <div class="bg-white rounded-lg border border-ink-200 p-3 hover:shadow-sm transition cursor-pointer opacity-75">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="w-8 h-8 rounded-md bg-emerald-50 flex items-center justify-center shrink-0"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600"></i></div>
+                      <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Moyen</span>
+                    </div>
+                    <h4 class="font-medium text-sm text-ink-700 line-through decoration-1 mb-1.5">Remplacement climatiseur salon</h4>
+                    <div class="text-xs text-ink-500 mb-2">Résidence Tombalbaye · A-203</div>
+                    <div class="flex items-center justify-between text-xs">
+                      <span class="text-emerald-600 font-medium">CDF 380K</span>
+                      <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold flex items-center justify-center">TC</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- ============= /VIEW: KANBAN ============= -->
+
+          <!-- ============= VIEW: CALENDAR ============= -->
+          <div data-mtn-view-panel="calendar" class="hidden bg-white rounded-xl border border-ink-200 p-4 md:p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-2">
+                <button class="p-1.5 rounded-md hover:bg-ink-100 text-ink-600" title="Mois précédent"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                <h3 class="text-sm font-semibold text-ink-900">Mai 2026</h3>
+                <button class="p-1.5 rounded-md hover:bg-ink-100 text-ink-600" title="Mois suivant"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-ink-500">
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span>Urgent</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span>En cours</span>
+                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Résolu</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-7 gap-px bg-ink-100 border border-ink-200 rounded-lg overflow-hidden text-xs">
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Lun</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Mar</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Mer</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Jeu</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Ven</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Sam</div>
+              <div class="bg-ink-50 px-2 py-2 text-center text-ink-500 font-medium">Dim</div>
+
+              <!-- Week 1 -->
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-400 text-[11px]">28</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-400 text-[11px]">29</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-400 text-[11px]">30</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">1</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">2</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">3</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">4</div></div>
+
+              <!-- Week 2 -->
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">5</div><div class="mt-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] truncate">Clim Tombalbaye ✓</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">6</div><div class="mt-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] truncate">Clim installée</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">7</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">8</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">9</div><div class="mt-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] truncate">Peinture Limete</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">10</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">11</div><div class="mt-1 px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] truncate">Serrure Wagenia</div></div>
+
+              <!-- Week 3 -->
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">12</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">13</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">14</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">15</div><div class="mt-1 px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] truncate">Panne élec.</div></div>
+              <div class="bg-brand-50 min-h-[80px] p-1.5 ring-1 ring-brand-300"><div class="text-brand-700 font-semibold">16</div><div class="mt-1 space-y-0.5"><div class="px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] truncate">Fuite plafond</div><div class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] truncate">Peinture suite</div></div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">17</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">18</div></div>
+
+              <!-- Week 4 -->
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">19</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">20</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">21</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">22</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">23</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">24</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">25</div></div>
+
+              <!-- Week 5 -->
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">26</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">27</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">28</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">29</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">30</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-700 font-medium">31</div></div>
+              <div class="bg-white min-h-[80px] p-1.5"><div class="text-ink-400 text-[11px]">1</div></div>
+            </div>
+          </div>
+          <!-- ============= /VIEW: CALENDAR ============= -->
         </div>
         <!-- ============= /PANEL: MAINTENANCE ============= -->
 
@@ -5220,6 +5539,31 @@
 
         bauxViewPanels.forEach(panel => {
           panel.classList.toggle('hidden', panel.dataset.bauxViewPanel !== target);
+        });
+
+        lucide.createIcons();
+      });
+    });
+
+    // ============= MAINTENANCE VIEW TOGGLE (List / Table / Kanban / Calendar) =============
+    const mtnViewBtns = document.querySelectorAll('.mtn-view-btn');
+    const mtnViewPanels = document.querySelectorAll('[data-mtn-view-panel]');
+
+    mtnViewBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.mtnView;
+
+        mtnViewBtns.forEach(b => {
+          const isActive = b.dataset.mtnView === target;
+          b.classList.toggle('bg-white', isActive);
+          b.classList.toggle('shadow-sm', isActive);
+          b.classList.toggle('text-ink-700', isActive);
+          b.classList.toggle('text-ink-500', !isActive);
+          b.classList.toggle('hover:text-ink-700', !isActive);
+        });
+
+        mtnViewPanels.forEach(panel => {
+          panel.classList.toggle('hidden', panel.dataset.mtnViewPanel !== target);
         });
 
         lucide.createIcons();
