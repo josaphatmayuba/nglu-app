@@ -9,8 +9,10 @@ import {
   Patch,
   Post,
   Put,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -291,8 +293,9 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create contract from a lease (auto-generates content)" })
   @Post("contracts")
-  createContract(@Body() body: CreateContractDto) {
-    return this.contractsService.createContract(body);
+  createContract(@Body() body: CreateContractDto, @Req() req: Request) {
+    const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
+    return this.contractsService.createContract(body, userId);
   }
 
   @ApiOperation({ summary: "Send contract for e-signature by email" })
@@ -316,7 +319,8 @@ export class PropertyManagementController {
   @ApiParam({ name: "id", type: Number, description: "ID of the lease to renew" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("leases/:id/renew")
-  renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto) {
-    return this.contractsService.renewLease(id, body);
+  renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto, @Req() req: Request) {
+    const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
+    return this.contractsService.renewLease(id, body, userId);
   }
 }

@@ -265,6 +265,7 @@ export const realEstateContracts = mysqlTable("real_estate_contracts", {
   sentAt: timestamp("sent_at"),
   tenantEmail: varchar("tenant_email", { length: 255 }),
   tenantName: varchar("tenant_name", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
