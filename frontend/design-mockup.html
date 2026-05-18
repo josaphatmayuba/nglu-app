@@ -1581,8 +1581,14 @@
               </span>
             </div>
             <div class="text-xs text-ink-500 font-medium mb-1">Loyers du mois</div>
-            <div class="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight">
-              <span class="text-sm text-ink-500 mr-1">CDF</span>14,250,000
+            <!-- Multi-currency breakdown: une ligne par devise utilisee dans les baux -->
+            <div class="space-y-0.5">
+              <div class="text-lg md:text-xl font-semibold text-ink-900 tracking-tight">
+                <span class="text-xs text-ink-500 mr-1">CDF</span>14,250,000
+              </div>
+              <div class="text-base md:text-lg font-semibold text-ink-700 tracking-tight">
+                <span class="text-xs text-ink-500 mr-1">USD</span>5,200
+              </div>
             </div>
             <div class="mt-2 text-xs text-emerald-600">15 reçus · 3 en attente</div>
           </div>
@@ -1598,8 +1604,10 @@
             </div>
             <div class="text-xs text-ink-500 font-medium mb-1">Loyers en retard</div>
             <div class="text-lg md:text-2xl font-semibold text-red-600 tracking-tight">3</div>
-            <div class="mt-2 text-xs text-ink-400">
-              <span class="text-red-600 font-medium">CDF 2,150,000</span> à recouvrer
+            <!-- Multi-currency a recouvrer -->
+            <div class="mt-2 text-xs text-ink-400 space-y-0.5">
+              <div><span class="text-red-600 font-medium">CDF 2,150,000</span> à recouvrer</div>
+              <div><span class="text-red-600 font-medium">USD 850</span> à recouvrer</div>
             </div>
           </div>
         </div>
@@ -2849,12 +2857,36 @@
 
         <!-- ============= PANEL: PAIEMENTS ============= -->
         <div data-immo-panel="paiements" class="hidden">
-          <!-- Mini KPIs paiements -->
+          <!-- Mini KPIs paiements — multi-currency : une ligne par devise reellement utilisee -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-            <div class="bg-white rounded-xl border border-ink-200 p-4"><div class="text-xs text-ink-500 font-medium">Encaissé ce mois</div><div class="text-xl font-semibold text-emerald-600 mt-1">CDF 12.1M</div></div>
-            <div class="bg-white rounded-xl border border-ink-200 p-4"><div class="text-xs text-ink-500 font-medium">En attente</div><div class="text-xl font-semibold text-amber-600 mt-1">CDF 1.8M</div></div>
-            <div class="bg-white rounded-xl border border-ink-200 p-4"><div class="text-xs text-ink-500 font-medium">En retard</div><div class="text-xl font-semibold text-red-600 mt-1">CDF 2.15M</div></div>
-            <div class="bg-white rounded-xl border border-ink-200 p-4"><div class="text-xs text-ink-500 font-medium">Total prévu</div><div class="text-xl font-semibold text-ink-900 mt-1">CDF 16.05M</div></div>
+            <div class="bg-white rounded-xl border border-ink-200 p-4">
+              <div class="text-xs text-ink-500 font-medium">Encaissé ce mois</div>
+              <div class="mt-1 space-y-0.5">
+                <div class="text-lg font-semibold text-emerald-600"><span class="text-xs text-ink-500 mr-1">CDF</span>12.1M</div>
+                <div class="text-base font-semibold text-emerald-600"><span class="text-xs text-ink-500 mr-1">USD</span>4,850</div>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border border-ink-200 p-4">
+              <div class="text-xs text-ink-500 font-medium">En attente</div>
+              <div class="mt-1 space-y-0.5">
+                <div class="text-lg font-semibold text-amber-600"><span class="text-xs text-ink-500 mr-1">CDF</span>1.8M</div>
+                <div class="text-base font-semibold text-amber-600"><span class="text-xs text-ink-500 mr-1">USD</span>350</div>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border border-ink-200 p-4">
+              <div class="text-xs text-ink-500 font-medium">En retard</div>
+              <div class="mt-1 space-y-0.5">
+                <div class="text-lg font-semibold text-red-600"><span class="text-xs text-ink-500 mr-1">CDF</span>2.15M</div>
+                <div class="text-base font-semibold text-red-600"><span class="text-xs text-ink-500 mr-1">USD</span>850</div>
+              </div>
+            </div>
+            <div class="bg-white rounded-xl border border-ink-200 p-4">
+              <div class="text-xs text-ink-500 font-medium">Total prévu</div>
+              <div class="mt-1 space-y-0.5">
+                <div class="text-lg font-semibold text-ink-900"><span class="text-xs text-ink-500 mr-1">CDF</span>16.05M</div>
+                <div class="text-base font-semibold text-ink-900"><span class="text-xs text-ink-500 mr-1">USD</span>6,050</div>
+              </div>
+            </div>
           </div>
 
           <!-- Status filter -->
