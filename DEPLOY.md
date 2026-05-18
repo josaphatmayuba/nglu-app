@@ -14,12 +14,14 @@ Three environments, three configurations.
 
 Ne pas remettre le CRM a la racine du domaine.
 
-- `https://ongdngolu.org/` sert le dossier `marketing-site/`.
+- `https://ongdngolu.org/` sert le build Vue `marketing-site/dist/`.
 - `https://ongdngolu.org/crm` est l'entree officielle du CRM.
 - Le CRM React utilise encore les routes internes `/admin/*` et les chunks Vite `/assets/*`; nginx les reserve au frontend CRM.
 - `https://ongdngolu.org/api/*` reste le proxy vers middleware/backend.
 
-Les garde-fous sont dans `nginx/nginx.frontend.conf` et `docker-compose.prod.yml`. Si le routage change, mettre a jour ces deux fichiers et cette section dans le meme commit.
+Les garde-fous sont dans `nginx/nginx.frontend.conf`, `docker-compose.prod.yml`, `PRODUCTION_ROUTING.md` et `marketing-site/README.md`. Si le routage change, mettre a jour ces fichiers dans le meme commit.
+
+Voir aussi `DEVELOPMENT_RULES.md` pour les règles globales, notamment la politique de suppression logique: toute suppression fonctionnelle doit mettre `status=false` sauf validation explicite d'une suppression physique.
 
 ---
 
@@ -28,9 +30,10 @@ Les garde-fous sont dans `nginx/nginx.frontend.conf` et `docker-compose.prod.yml
 Démarre l'application complète sur ta machine pour développer rapidement.
 
 ```bash
-# Stack Docker complète (MySQL + backend + frontend + phpMyAdmin + Mailpit)
+# Stack Docker complete (MySQL + backend + frontend + marketing Vue + phpMyAdmin + Mailpit)
 docker compose up -d
 # Frontend     : http://localhost:3000
+# Marketing    : http://localhost:3002
 # Backend2 API : http://localhost:8001
 # phpMyAdmin   : http://localhost:8080
 # Mailpit      : http://localhost:8025
@@ -44,6 +47,20 @@ npm run dev
 ```
 
 **Note** : Le frontend lit `frontend/.env` (par défaut `VITE_APP_API=http://localhost:8001`). Pour viser un autre backend, crée `frontend/.env.local` qui override.
+
+Pour travailler seulement sur le marketing-site Vue :
+```bash
+cd marketing-site
+npm install
+npm run dev
+```
+
+Avant de deployer dev/prod, generer le build statique attendu par nginx :
+```bash
+cd marketing-site
+npm install
+npm run build
+```
 
 ---
 
