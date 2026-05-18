@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -995,8 +996,7 @@ export class PropertyManagementService {
   }
 
   private onboardingUrl(token: string) {
-    const base = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || "http://localhost:3000";
-    return `${base.replace(/\/$/, "")}/onboarding/tenant?token=${token}`;
+    return `${env.appUrl.replace(/\/$/, "")}/onboarding/tenant?token=${token}`;
   }
 
   private ensureTenantForm(input: CreateTenantDto) {

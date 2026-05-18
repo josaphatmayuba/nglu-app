@@ -8,10 +8,9 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET || "jwt_secret_key",
   refreshSecret: process.env.REFRESH_SECRET || "refresh_secret_key",
-  // Public-facing URL used to build signing links etc. Falls back to
-  // FRONTEND_URL (set in docker-compose.dev.yml / .prod.yml) so APP_URL
-  // doesn't need to be configured separately in every env.
-  appUrl: process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000",
+  // Public-facing URL used to build signing links, email links, etc.
+  // MUST be set explicitly per environment in docker-compose / .env.
+  appUrl: process.env.APP_URL || "http://localhost:3000",
   smtp: {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT || 587),
