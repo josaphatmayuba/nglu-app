@@ -16,10 +16,10 @@ python -m http.server 8000
 # → http://localhost:8000
 ```
 
-## Voir en dev (déployé)
-- URL : https://dev.ongdngolu.org/site/
-- Servi par le nginx prod via un bind mount des fichiers de cette branche
-- Le `develop` push déploie automatiquement les changements
+## Voir en dev / prod
+- Dev : https://dev.ongdngolu.org/
+- Prod : https://ongdngolu.org/
+- Le CRM n'est pas servi à la racine. Son entrée officielle est `/crm`.
 
 ## Structure
 ```
@@ -40,7 +40,7 @@ marketing-site/
 7. **Footer** — Contact, navigation, lien vers l'ERP
 
 ## Liens
-- **Se connecter** → https://ongdngolu.org (ERP existant)
+- **Se connecter** → https://ongdngolu.org/crm (CRM)
 - **Faire un don** → ancre `#don` puis `mailto:don@ongdngolu.org` (à brancher sur une vraie passerelle de paiement plus tard)
 
 ## Couleurs

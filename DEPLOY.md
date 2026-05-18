@@ -10,6 +10,19 @@ Three environments, three configurations.
 
 ---
 
+## Contrat de routage production
+
+Ne pas remettre le CRM a la racine du domaine.
+
+- `https://ongdngolu.org/` sert le dossier `marketing-site/`.
+- `https://ongdngolu.org/crm` est l'entree officielle du CRM.
+- Le CRM React utilise encore les routes internes `/admin/*` et les chunks Vite `/assets/*`; nginx les reserve au frontend CRM.
+- `https://ongdngolu.org/api/*` reste le proxy vers middleware/backend.
+
+Les garde-fous sont dans `nginx/nginx.frontend.conf` et `docker-compose.prod.yml`. Si le routage change, mettre a jour ces deux fichiers et cette section dans le meme commit.
+
+---
+
 ## 1. Workflow Local
 
 Démarre l'application complète sur ta machine pour développer rapidement.
