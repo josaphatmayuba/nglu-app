@@ -11,6 +11,7 @@ import {
   loadPropertyManagement,
   renewLease as renewLeaseThunk,
   saveLease,
+  sendContract,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
@@ -114,6 +115,45 @@ const LeasesPanel = ({
     setContractModal({ lease, contract });
   };
 
+  // Lookup priority : runtime cache (filled after a sendContract call) →
+  // any URL-like field the backend may expose on the contract row.
+  const getContractLink = (contract) =>
+    contractLinks[contract?.id] ||
+    contract?.signingUrl ||
+    contract?.signatureUrl ||
+    contract?.signatureLink ||
+    contract?.publicUrl ||
+    contract?.url ||
+    "";
+
+  // Returns the signing URL for a contract, generating one on the fly if
+  // none exists yet (calls POST /contracts/:id/send which returns the link).
+  const ensureSigningLink = async (contract) => {
+    if (!contract?.id) return "";
+    const existing = getContractLink(contract);
+    if (existing) return existing;
+    const response = await dispatch(sendContract(contract.id));
+    const link = response.payload?.data?.signingUrl || "";
+    if (link) {
+      setContractLinks((prev) => ({ ...prev, [contract.id]: link }));
+      await dispatch(loadContracts());
+    }
+    return link;
+  };
+
+  const copyText = async (value) => {
+    if (!value) {
+      message.warning("Aucun lien disponible pour ce bail.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success("Lien copié");
+    } catch {
+      message.error("Échec de la copie. Copiez manuellement : " + value);
+    }
+  };
+
   const handleLeaseAction = (action, lease, contract) => {
     setOpenLeaseMenu(null);
     if (action === "detail" || action === "edit") {
@@ -142,7 +182,18 @@ const LeasesPanel = ({
       else message.info("Le lien vers le module Maintenance sera branché en Phase F.");
       return;
     }
-    if (["resend", "copyLink", "cancelSend", "archive"].includes(action)) {
+    if (action === "copyLink") {
+      ensureSigningLink(contract).then(copyText);
+      return;
+    }
+    if (action === "resend") {
+      ensureSigningLink(contract).then((link) => {
+        if (link) message.success("Lien de signature renvoyé au locataire.");
+        else message.error("Impossible de récupérer le lien de signature.");
+      });
+      return;
+    }
+    if (["cancelSend", "archive"].includes(action)) {
       message.info("Cette action sera finalisée dans l'assemblage Phase F.");
     }
   };
