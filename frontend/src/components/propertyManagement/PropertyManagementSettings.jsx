@@ -2,15 +2,16 @@
 // société). Pour l'instant : choix du type de signature du bailleur
 // appliqué aux contrats de bail signés.
 //
-// 3 types de signatures (toutes stockées comme PNG data URL dans le
+// 4 types de signatures (toutes stockées comme PNG data URL dans le
 // même champ appSetting.landlord_signature) :
-//   1. eIDAS — cachet électronique visuel auto-généré (canvas)
+//   1. eIDAS    — cachet électronique visuel auto-généré (canvas)
 //   2. Tablette — dessin manuel sur canvas (souris / stylet / doigt)
-//   3. Image — upload d'un PNG/JPG existant
+//   3. Cursif   — texte rendu en police calligraphique (Google Fonts)
+//   4. Image    — upload d'un PNG/JPG existant
 
 import { UploadOutlined } from "@ant-design/icons";
-import { Button, Card, Form, Radio, Upload, message } from "antd";
-import { ArrowLeft, Building2, FileSignature, PenLine, Image as ImageIcon } from "lucide-react";
+import { Button, Card, Form, Input, Radio, Select, Upload, message } from "antd";
+import { ArrowLeft, Building2, FileSignature, PenLine, Image as ImageIcon, Type } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
@@ -103,6 +104,61 @@ const shortHash = (str) => {
   return (h >>> 0).toString(16).padStart(8, "0");
 };
 
+// Polices manuscrites disponibles pour le type "Cursif". Toutes
+// chargées depuis Google Fonts au mount du composant.
+const CURSIVE_FONTS = [
+  { name: "Dancing Script", weight: 700, sample: "Élégante et fluide" },
+  { name: "Great Vibes",    weight: 400, sample: "Classique et raffinée" },
+  { name: "Sacramento",     weight: 400, sample: "Décontractée" },
+  { name: "Allura",         weight: 400, sample: "Formelle" },
+];
+const CURSIVE_FONT_URL =
+  "https://fonts.googleapis.com/css2?" +
+  "family=Dancing+Script:wght@700&" +
+  "family=Great+Vibes&" +
+  "family=Sacramento&" +
+  "family=Allura&display=swap";
+
+// Charge les polices Google Fonts (une fois par session).
+const loadCursiveFonts = () => {
+  if (document.getElementById("immo-cursive-fonts")) return;
+  const link = document.createElement("link");
+  link.id = "immo-cursive-fonts";
+  link.rel = "stylesheet";
+  link.href = CURSIVE_FONT_URL;
+  document.head.appendChild(link);
+};
+
+// Rastérise un texte en police cursive sur un canvas et retourne le data URL.
+// Attend que la police soit prête (FontFace API) sinon le canvas tomberait
+// en fallback sur la police système.
+const generateCursiveSignature = async ({ text, fontName, weight }) => {
+  const W = 600;
+  const H = 160;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // Fond transparent (pour rendu inline dans le PDF / modal)
+  ctx.clearRect(0, 0, W, H);
+
+  // Attendre que la police soit dispo avant draw
+  try {
+    await document.fonts.load(`${weight} 64px "${fontName}"`);
+  } catch {
+    /* fallback silencieux */
+  }
+
+  ctx.fillStyle = "#18181b";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${weight} 64px "${fontName}", cursive`;
+  ctx.fillText(text || "Signature", W / 2, H / 2);
+
+  return canvas.toDataURL("image/png");
+};
+
 // ── Composant ──────────────────────────────────────────────────────
 const PropertyManagementSettings = () => {
   const dispatch = useDispatch();
@@ -120,6 +176,11 @@ const PropertyManagementSettings = () => {
   // Canvas (type=tablette)
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
+
+  // Cursif (type=cursif)
+  const [cursiveText, setCursiveText] = useState("");
+  const [cursiveFont, setCursiveFont] = useState(CURSIVE_FONTS[0].name);
+  useEffect(() => { loadCursiveFonts(); }, []);
 
   useEffect(() => {
     if (data == null) dispatch(getSetting());
@@ -221,10 +282,28 @@ const PropertyManagementSettings = () => {
     }
   };
 
+  // Initialise le texte cursif avec le nom de la société dès qu'il est dispo
+  useEffect(() => {
+    if (!cursiveText && companyName) setCursiveText(companyName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyName]);
+
+  const cursiveFontMeta = CURSIVE_FONTS.find((f) => f.name === cursiveFont) || CURSIVE_FONTS[0];
+
   // ── Submit ────────────────────────────────────────────────────────
   const handleSave = async () => {
-    // Type eIDAS : on prend toujours le cachet généré (eidasDataUrl)
-    const toSend = type === "eidas" ? eidasDataUrl : previewDataUrl;
+    let toSend;
+    if (type === "eidas") {
+      toSend = eidasDataUrl;
+    } else if (type === "cursif") {
+      toSend = await generateCursiveSignature({
+        text: cursiveText?.trim() || companyName,
+        fontName: cursiveFontMeta.name,
+        weight: cursiveFontMeta.weight,
+      });
+    } else {
+      toSend = previewDataUrl;
+    }
     if (!toSend && !clearFlag) {
       message.info("Aucun changement à sauvegarder.");
       return;
@@ -272,6 +351,7 @@ const PropertyManagementSettings = () => {
   const typeOptions = [
     { value: "eidas",    label: "eIDAS",    icon: <FileSignature size={14} /> },
     { value: "tablette", label: "Tablette", icon: <PenLine size={14} /> },
+    { value: "cursif",   label: "Cursif",   icon: <Type size={14} /> },
     { value: "image",    label: "Image",    icon: <ImageIcon size={14} /> },
   ];
 
@@ -377,6 +457,57 @@ const PropertyManagementSettings = () => {
                 </Form.Item>
               )}
 
+              {/* ── Cursif (police calligraphique) ───────────────── */}
+              {type === "cursif" && (
+                <>
+                  <Form.Item label="Texte de la signature">
+                    <Input
+                      value={cursiveText}
+                      onChange={(e) => setCursiveText(e.target.value)}
+                      placeholder={companyName}
+                      maxLength={48}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Style calligraphique">
+                    <Select
+                      value={cursiveFont}
+                      onChange={setCursiveFont}
+                      options={CURSIVE_FONTS.map((f) => ({
+                        value: f.name,
+                        label: (
+                          <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                            <span style={{ fontFamily: `'${f.name}', cursive`, fontWeight: f.weight, fontSize: 22 }}>
+                              {cursiveText || companyName}
+                            </span>
+                            <small style={{ color: "#a1a1aa" }}>{f.name} · {f.sample}</small>
+                          </span>
+                        ),
+                      }))}
+                    />
+                  </Form.Item>
+                  <Form.Item label="Aperçu">
+                    <div style={{ background: "#fafafa", border: "1px solid #e4e4e7", borderRadius: 10, padding: "28px 20px", textAlign: "center" }}>
+                      <div
+                        style={{
+                          fontFamily: `'${cursiveFont}', cursive`,
+                          fontWeight: cursiveFontMeta.weight,
+                          fontSize: 56,
+                          color: "#18181b",
+                          lineHeight: 1.1,
+                          minHeight: 70,
+                        }}
+                      >
+                        {cursiveText || companyName}
+                      </div>
+                    </div>
+                    <p style={{ color: "#a1a1aa", fontSize: 12, marginTop: 8 }}>
+                      Le texte sera rastérisé en PNG au moment de l'enregistrement, donc s'affichera
+                      identiquement sur les contrats même si la police n'est pas disponible côté lecteur.
+                    </p>
+                  </Form.Item>
+                </>
+              )}
+
               {/* ── Image upload ──────────────────────────────────── */}
               {type === "image" && (
                 <Form.Item label="Image PNG/JPG (largeur ≤ 360px, fond transparent recommandé)">
@@ -403,9 +534,19 @@ const PropertyManagementSettings = () => {
                   type="primary"
                   onClick={handleSave}
                   loading={saving}
-                  disabled={type === "eidas" ? !eidasDataUrl : !previewDataUrl && !clearFlag}
+                  disabled={
+                    type === "eidas"
+                      ? !eidasDataUrl
+                      : type === "cursif"
+                        ? !(cursiveText?.trim() || companyName)
+                        : !previewDataUrl && !clearFlag
+                  }
                 >
-                  {type === "eidas" ? "Appliquer ce cachet" : "Enregistrer"}
+                  {type === "eidas"
+                    ? "Appliquer ce cachet"
+                    : type === "cursif"
+                      ? "Appliquer cette signature"
+                      : "Enregistrer"}
                 </Button>
               </div>
             </Form>
