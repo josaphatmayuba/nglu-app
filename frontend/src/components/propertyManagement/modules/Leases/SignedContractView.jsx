@@ -9,6 +9,25 @@ import moment from "moment";
 import { Download, FileText, Printer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+const landlordStampHtml = (contract) => {
+  const company = contract.companyInfo || {};
+  const name = company.companyName || contract.landlordName || "Le Bailleur";
+  const dateRef = contract.sentAt || contract.createdAt;
+  const dateStr = dateRef ? new Date(dateRef).toLocaleString("fr-FR") : "";
+  if (company.landlordSignature) {
+    return `
+      <h3>Signature du bailleur</h3>
+      <div class="signature-img"><img src="${company.landlordSignature}" alt="Signature bailleur" /></div>
+      <div class="signed-on">${name}${dateStr ? ` · ${dateStr}` : ""}</div>`;
+  }
+  return `
+      <h3>Signature du bailleur</h3>
+      <div class="signature-stamp">
+        <strong>Pour ${name}</strong>
+        <span>✓ Signé électroniquement${dateStr ? ` le ${dateStr}` : ""}</span>
+      </div>`;
+};
+
 const printableHtml = (contract) => `<!doctype html>
 <html>
 <head>
@@ -21,11 +40,15 @@ const printableHtml = (contract) => `<!doctype html>
     h1 { font-size: 22px; margin: 6px 0 4px; }
     .meta { color: #52525b; font-size: 13px; }
     .content { white-space: pre-wrap; margin: 18px 0 30px; }
-    .signature-section { border-top: 1px solid #d4d4d8; padding-top: 18px; }
-    .signature-section h3 { font-size: 13px; letter-spacing: .05em; margin: 0 0 8px; text-transform: uppercase; color: #52525b; }
-    .signature-img { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 8px; max-width: 360px; padding: 8px; }
-    .signature-img img { display: block; max-width: 100%; height: auto; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; border-top: 1px solid #d4d4d8; padding-top: 18px; }
+    .signatures > div { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 14px; text-align: center; }
+    .signatures h3 { font-size: 13px; letter-spacing: .05em; margin: 0 0 10px; text-transform: uppercase; color: #52525b; }
+    .signature-img { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; display: inline-block; padding: 8px; }
+    .signature-img img { display: block; max-width: 260px; height: auto; }
     .signed-on { color: #16a34a; font-size: 13px; font-weight: 600; margin-top: 8px; }
+    .signature-stamp { background: #fff; border: 2px dashed #4f46e5; border-radius: 10px; color: #4338ca; padding: 18px; }
+    .signature-stamp strong { display: block; font-size: 14px; margin-bottom: 6px; }
+    .signature-stamp span { color: #16a34a; display: block; font-size: 12px; font-weight: 600; }
     @media print { body { margin: 18mm; } .no-print { display: none; } }
   </style>
 </head>
@@ -41,12 +64,18 @@ const printableHtml = (contract) => `<!doctype html>
     </div>
   </div>
   <div class="content">${(contract.contractContent || "Contenu du contrat indisponible.").replace(/</g, "&lt;")}</div>
-  ${contract.signatureData ? `
-  <div class="signature-section">
-    <h3>Signature du locataire</h3>
-    <div class="signature-img"><img src="${contract.signatureData}" alt="Signature" /></div>
-    ${contract.signedAt ? `<div class="signed-on">✓ Signé le ${new Date(contract.signedAt).toLocaleString("fr-FR")}</div>` : ""}
-  </div>` : ""}
+  <div class="signatures">
+    <div>
+      <h3>Signature du locataire</h3>
+      ${contract.signatureData
+        ? `<div class="signature-img"><img src="${contract.signatureData}" alt="Signature locataire" /></div>
+           ${contract.signedAt ? `<div class="signed-on">✓ Signé le ${new Date(contract.signedAt).toLocaleString("fr-FR")}</div>` : ""}`
+        : `<div style="color:#a1a1aa;font-style:italic">Aucune signature enregistrée.</div>`}
+    </div>
+    <div>
+      ${landlordStampHtml(contract)}
+    </div>
+  </div>
 </body>
 </html>`;
 
@@ -86,32 +115,88 @@ const downloadPdf = (contract) => {
     pdf.text(line, margin, y);
     y += 4.5;
   }
-  // Signature
+  // Signatures (tenant left, landlord right)
+  if (y > pageHeight - margin - 70) { pdf.addPage(); y = margin; }
+  y += 4;
+  pdf.setDrawColor(228, 228, 231);
+  pdf.line(margin, y, pageWidth - margin, y);
+  y += 6;
+
+  const colWidth = (usableWidth - 8) / 2;
+  const colX = [margin, margin + colWidth + 8];
+  const sigStartY = y;
+
+  // Left column — tenant
+  pdf.setFontSize(11);
+  pdf.setTextColor(82, 82, 91);
+  pdf.text("Signature du locataire", colX[0], sigStartY);
+  let leftY = sigStartY + 4;
   if (contract.signatureData) {
-    if (y > pageHeight - margin - 60) { pdf.addPage(); y = margin; }
-    y += 4;
-    pdf.setDrawColor(228, 228, 231);
-    pdf.line(margin, y, pageWidth - margin, y);
-    y += 6;
-    pdf.setFontSize(11);
-    pdf.setTextColor(82, 82, 91);
-    pdf.text("Signature du locataire", margin, y);
-    y += 4;
     try {
-      pdf.addImage(contract.signatureData, "PNG", margin, y, 80, 30);
-      y += 32;
+      pdf.addImage(contract.signatureData, "PNG", colX[0], leftY, 70, 28);
+      leftY += 30;
     } catch (e) {
       pdf.setFontSize(9);
       pdf.setTextColor(220, 38, 38);
-      pdf.text("[Impossible d'inclure l'image de signature]", margin, y);
-      y += 5;
+      pdf.text("[Image signature illisible]", colX[0], leftY);
+      leftY += 6;
     }
     if (contract.signedAt) {
       pdf.setFontSize(10);
       pdf.setTextColor(22, 163, 74);
-      pdf.text(`Signé le ${new Date(contract.signedAt).toLocaleString("fr-FR")}`, margin, y);
+      pdf.text(`✓ Signé le ${new Date(contract.signedAt).toLocaleString("fr-FR")}`, colX[0], leftY);
+      leftY += 5;
     }
+  } else {
+    pdf.setFontSize(9);
+    pdf.setTextColor(161, 161, 170);
+    pdf.text("Aucune signature enregistrée.", colX[0], leftY);
+    leftY += 6;
   }
+
+  // Right column — landlord (image if configured, else text stamp)
+  pdf.setFontSize(11);
+  pdf.setTextColor(82, 82, 91);
+  pdf.text("Signature du bailleur", colX[1], sigStartY);
+  let rightY = sigStartY + 4;
+  const company = contract.companyInfo || {};
+  const landlordName = company.companyName || contract.landlordName || "Le Bailleur";
+  const dateRef = contract.sentAt || contract.createdAt;
+  const dateStr = dateRef ? new Date(dateRef).toLocaleString("fr-FR") : null;
+  if (company.landlordSignature) {
+    try {
+      pdf.addImage(company.landlordSignature, "PNG", colX[1], rightY, 70, 28);
+      rightY += 30;
+    } catch (e) {
+      pdf.setFontSize(9);
+      pdf.setTextColor(220, 38, 38);
+      pdf.text("[Image signature bailleur illisible]", colX[1], rightY);
+      rightY += 6;
+    }
+    pdf.setFontSize(10);
+    pdf.setTextColor(24, 24, 27);
+    pdf.text(landlordName, colX[1], rightY); rightY += 5;
+    if (dateStr) {
+      pdf.setTextColor(22, 163, 74);
+      pdf.text(`✓ ${dateStr}`, colX[1], rightY);
+      rightY += 5;
+    }
+  } else {
+    // Text stamp fallback (dashed box approximation)
+    pdf.setDrawColor(79, 70, 229);
+    pdf.setLineDashPattern([1.5, 1.5], 0);
+    pdf.rect(colX[1], rightY, 70, 28);
+    pdf.setLineDashPattern([], 0);
+    pdf.setFontSize(10);
+    pdf.setTextColor(67, 56, 202);
+    pdf.text(`Pour ${landlordName}`, colX[1] + 3, rightY + 9);
+    pdf.setFontSize(9);
+    pdf.setTextColor(22, 163, 74);
+    pdf.text("✓ Signé électroniquement", colX[1] + 3, rightY + 17);
+    if (dateStr) pdf.text(dateStr, colX[1] + 3, rightY + 23);
+    rightY += 32;
+  }
+  y = Math.max(leftY, rightY);
   const filename = `contrat-${contract.id}${contract.signedAt ? "-signe" : ""}.pdf`;
   pdf.save(filename);
   return filename;
@@ -192,19 +277,46 @@ const SignedContractView = ({ open, contractId, onClose }) => {
             <pre className="immo-signed-contract-body">
               {contract.contractContent || "Contenu du contrat indisponible."}
             </pre>
-            {contract.signatureData ? (
-              <div className="immo-signed-contract-signature">
-                <h3>Signature du locataire</h3>
-                <img src={contract.signatureData} alt="Signature" />
-                {contract.signedAt && (
-                  <small>✓ Signé le {moment(contract.signedAt).format("DD/MM/YYYY HH:mm")}</small>
-                )}
-              </div>
-            ) : (
-              <div className="immo-signed-contract-signature unsigned">
-                Aucune signature enregistrée.
-              </div>
-            )}
+            <div className="immo-signed-contract-signatures">
+              {/* Tenant */}
+              {contract.signatureData ? (
+                <div className="immo-signed-contract-signature">
+                  <h3>Signature du locataire</h3>
+                  <img src={contract.signatureData} alt="Signature locataire" />
+                  {contract.signedAt && (
+                    <small>✓ Signé le {moment(contract.signedAt).format("DD/MM/YYYY HH:mm")}</small>
+                  )}
+                </div>
+              ) : (
+                <div className="immo-signed-contract-signature unsigned">
+                  <h3>Signature du locataire</h3>
+                  Aucune signature enregistrée.
+                </div>
+              )}
+
+              {/* Landlord — real image if configured in app_setting, else text stamp */}
+              {contract.companyInfo?.landlordSignature ? (
+                <div className="immo-signed-contract-signature">
+                  <h3>Signature du bailleur</h3>
+                  <img src={contract.companyInfo.landlordSignature} alt="Signature bailleur" />
+                  <small>
+                    {contract.companyInfo?.companyName || contract.landlordName || "Le Bailleur"}
+                    {contract.sentAt && ` · ${moment(contract.sentAt).format("DD/MM/YYYY HH:mm")}`}
+                  </small>
+                </div>
+              ) : (
+                <div className="immo-signed-contract-signature landlord-stamp">
+                  <h3>Signature du bailleur</h3>
+                  <div className="stamp">
+                    <strong>Pour {contract.companyInfo?.companyName || contract.landlordName || "Le Bailleur"}</strong>
+                    <span>
+                      ✓ Signé électroniquement
+                      {contract.sentAt && ` le ${moment(contract.sentAt).format("DD/MM/YYYY HH:mm")}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="immo-modal-footer" style={{ marginTop: 16 }}>
