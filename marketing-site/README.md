@@ -1,50 +1,90 @@
-# ONGD NGOLU — Site vitrine
+# ONGD NGOLU - Marketing Site
 
-Site statique vitrine pour l'ONGD NGOLU. Présente la mission (souveraineté alimentaire, soutien aux orphelinats, logiciel de gestion).
+Vue/Vite public website for ONGD NGOLU.
+
+## Routing Contract
+
+- `https://ongdngolu.org/` serves this marketing site.
+- `https://ongdngolu.org/crm` is the CRM entry point.
+- The CRM React app keeps its internal routes under `/admin/*`.
+- Do not move the CRM back to `/`.
+
+The production nginx container serves the built output from `marketing-site/dist/`.
+It must not serve the Vue source directory directly.
 
 ## Stack
-- HTML statique (un seul fichier `index.html`)
-- Tailwind CSS via CDN (pas de build)
-- Lucide icons via CDN
-- Google Fonts (Inter + Playfair Display)
 
-## Voir en local
-Ouvrir simplement `index.html` dans un navigateur, ou lancer un serveur statique :
+- Vue 3
+- Vite
+- Plain CSS
+- Static logo in `static/logo.png`
+
+## Local Development
+
 ```bash
 cd marketing-site
-python -m http.server 8000
-# → http://localhost:8000
+npm install
+npm run dev
 ```
 
-## Voir en dev (déployé)
-- URL : https://dev.ongdngolu.org/site/
-- Servi par le nginx prod via un bind mount des fichiers de cette branche
-- Le `develop` push déploie automatiquement les changements
+Default local URL: `http://localhost:5173`.
 
-## Structure
+With the root Docker stack:
+
+```bash
+docker compose up marketing-site
 ```
-marketing-site/
-├── index.html          # Toute la page
-├── assets/
-│   └── logo.png        # Logo ONGD NGOLU (rond bleu/jaune)
-└── README.md
+
+Docker local URL: `http://localhost:3002`.
+
+## Build
+
+```bash
+cd marketing-site
+npm install
+npm run build
+```
+
+Output: `marketing-site/dist/`.
+
+## Dev / Prod Deploy Notes
+
+The shared nginx config expects:
+
+- Prod marketing build: `/opt/nglu-app/marketing-site/dist`
+- Dev marketing build: `/opt/nglu-app-dev/marketing-site/dist`
+
+After updating the marketing site on the server:
+
+```bash
+cd /opt/nglu-app/marketing-site
+npm install
+npm run build
+docker exec nglu_prod_frontend nginx -s reload
+```
+
+For dev:
+
+```bash
+cd /opt/nglu-app-dev/marketing-site
+npm install
+npm run build
+docker exec nglu_prod_frontend nginx -s reload
 ```
 
 ## Sections
-1. **Hero** — Titre fort + CTA (don, mission)
-2. **Mission** — 3 cartes (Alimentaire, Humanitaire, Numérique)
-3. **Agriculture & Élevage** — 4 piliers (Produits locaux, Poulet, Porc, Bœuf)
-4. **Impact Social** — Soutien aux orphelinats (nourriture, soins, éducation)
-5. **Technologie** — Logiciel de gestion + mockup dashboard
-6. **Don** — CTA avec montants suggérés
-7. **Footer** — Contact, navigation, lien vers l'ERP
 
-## Liens
-- **Se connecter** → https://ongdngolu.org (ERP existant)
-- **Faire un don** → ancre `#don` puis `mailto:don@ongdngolu.org` (à brancher sur une vraie passerelle de paiement plus tard)
+1. Hero: public ONGD NGOLU positioning and CTA.
+2. Mission: agriculture, social impact and digital management.
+3. Programs: operational pillars.
+4. Impact: explicit reminder that CRM stays under `/crm`.
 
-## Couleurs
-- Primary blue : `#1e3a8a` (logo)
-- Accent yellow : `#f59e0b` (bétail / dons)
-- Growth green : `#16a34a` (agriculture)
-- Slate neutrals pour le texte
+## Agent Notes
+
+If the marketing/CRM routing changes, update these files together:
+
+- `nginx/nginx.frontend.conf`
+- `docker-compose.prod.yml`
+- `DEPLOY.md`
+- `PRODUCTION_ROUTING.md`
+- `marketing-site/README.md`

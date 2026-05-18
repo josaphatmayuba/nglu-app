@@ -96,6 +96,24 @@ services:
       - nglu_network
     command: npm run dev
 
+  # Marketing site - Vue + Vite public website
+  # Local URL: http://localhost:3002
+  # Production routing remains: ongdngolu.org/ = marketing, ongdngolu.org/crm = CRM.
+  marketing-site:
+    build:
+      context: ./marketing-site
+      dockerfile: Dockerfile
+    container_name: nglu_marketing_site
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./marketing-site:/app
+      - /app/node_modules
+    networks:
+      - nglu_network
+    command: npm run dev -- --host 0.0.0.0 --port 3002
+
   # Mailpit - For testing emails
   mailpit:
     image: axllent/mailpit:latest

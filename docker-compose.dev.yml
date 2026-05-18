@@ -1,8 +1,9 @@
 # Dev environment stack
 # Deployed to /opt/nglu-app-dev/ on the same Lightsail server as prod
 # Launch: docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d
-# NOTE: No frontend nginx here — the prod nginx (nglu_prod_frontend) serves
-#       this stack's frontend/dist via a bind mount and routes /api/ to nglu_dev_middleware.
+# NOTE: No frontend nginx here. The prod nginx (nglu_prod_frontend) serves
+#       this stack's frontend/dist and marketing-site/dist via bind mounts,
+#       then routes /api/ to nglu_dev_middleware.
 
 services:
   mysql:

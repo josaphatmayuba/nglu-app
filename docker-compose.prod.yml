@@ -19,6 +19,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
       APP_URL: ${APP_URL:-https://ongdngolu.org}
+      # Production routing contract: marketing lives at /, CRM entrypoint is /crm.
+      FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org/crm}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
       JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
@@ -58,11 +60,14 @@ services:
       - /var/www/certbot:/var/www/certbot
       # Dual-domain nginx config mounted from host (no rebuild needed for routing changes)
       - ./nginx/nginx.frontend.conf:/etc/nginx/conf.d/default.conf:ro
+      # Production marketing site served at https://ongdngolu.org/
+      # Keep this mount: the CRM frontend image itself is served only under /crm -> /admin.
+      - ./marketing-site/dist:/usr/share/nginx/html-marketing-prod:ro
       # Dev frontend dist (served on dev.ongdngolu.org via the dev server block)
       # Path is on the host: /opt/nglu-app-dev/frontend/dist
       - /opt/nglu-app-dev/frontend/dist:/usr/share/nginx/html-dev:ro
-      # Marketing site (served on dev.ongdngolu.org/site/)
-      - /opt/nglu-app-dev/marketing-site:/usr/share/nginx/html-marketing:ro
+      # Dev marketing site (served at dev.ongdngolu.org/)
+      - /opt/nglu-app-dev/marketing-site/dist:/usr/share/nginx/html-marketing-dev:ro
     depends_on:
       - middleware
     networks:
