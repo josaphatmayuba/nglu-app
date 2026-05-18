@@ -23,6 +23,10 @@ import fileConfig from "../../utils/fileConfig";
 import Loader from "../loader/loader";
 //Update Invoice API REQ
 
+const LOGO_MAX_SIZE_MB = 10;
+const LOGO_MAX_SIZE_BYTES = LOGO_MAX_SIZE_MB * 1024 * 1024;
+const ACCEPTED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+
 const AddDetails = () => {
   const { Title } = Typography;
   const [form] = Form.useForm();
@@ -50,7 +54,6 @@ const AddDetails = () => {
       formData.append("footer", values.footer);
       formData.append("currencyId", values.currencyId);
 
-      // Handle file upload
       if (fileList.length) {
         const file = fileList[0]?.originFileObj;
         if (file) {
@@ -72,7 +75,7 @@ const AddDetails = () => {
         toast.success("Company Updated Successfully");
         dispatch(getSetting());
       } else {
-        toast.error("Failed to update company details");
+        toast.error(resp.payload?.error || "Failed to update company details");
       }
     } catch (error) {
       console.error("Error during update:", error); // Debugging log
@@ -102,8 +105,22 @@ const AddDetails = () => {
     }
   }, [data]);
 
+  const validateLogo = (file) => {
+    if (!ACCEPTED_LOGO_TYPES.includes(file.type)) {
+      toast.error("Logo must be PNG, JPG, WebP, or SVG.");
+      return Upload.LIST_IGNORE;
+    }
+
+    if (file.size > LOGO_MAX_SIZE_BYTES) {
+      toast.error(`Logo must be ${LOGO_MAX_SIZE_MB} MB or smaller.`);
+      return Upload.LIST_IGNORE;
+    }
+
+    return false;
+  };
+
   const handelImageChange = ({ fileList }) => {
-    setFileList(fileList);
+    setFileList(fileList.slice(-1));
   };
 
   const textEditorFormats = [
@@ -296,7 +313,8 @@ const AddDetails = () => {
                 <Form.Item label="Upload Logo" valuePropName="fileList">
                   <Upload
                     listType="picture-card"
-                    beforeUpload={() => false}
+                    accept=".png,.jpg,.jpeg,.webp,.svg,image/png,image/jpeg,image/webp,image/svg+xml"
+                    beforeUpload={validateLogo}
                     name="image"
                     fileList={fileList}
                     maxCount={1}

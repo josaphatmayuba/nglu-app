@@ -6,6 +6,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AppSettingsService } from "./app-settings.service";
 import { UpdateAppSettingDto } from "./dto/update-app-setting.dto";
 
+const APP_SETTING_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
+
 @ApiTags("setting")
 @Controller("setting")
 export class AppSettingsController {
@@ -21,7 +23,7 @@ export class AppSettingsController {
   @ApiOperation({ summary: "Update app settings" })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: APP_SETTING_UPLOAD_LIMIT_BYTES, files: 1 } }))
   @Put()
   update(@Body() body: UpdateAppSettingDto, @UploadedFiles() files: any[], @Req() req: Request) {
     return this.appSettingsService.update(body, files, this.publicApiBase(req));
@@ -30,7 +32,7 @@ export class AppSettingsController {
   @ApiOperation({ summary: "Update app settings (Laravel-compatible form method)" })
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: APP_SETTING_UPLOAD_LIMIT_BYTES, files: 1 } }))
   @Post()
   @HttpCode(200)
   updateFromForm(@Body() body: UpdateAppSettingDto, @UploadedFiles() files: any[], @Req() req: Request) {
