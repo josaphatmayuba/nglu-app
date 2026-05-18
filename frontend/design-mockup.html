@@ -5674,6 +5674,84 @@
     </div>
   </div>
 
+  <!-- ============= TOAST CONTAINER ============= -->
+  <div id="toast-container" class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
+
+  <!-- ============= NOUVELLE ECRITURE MODAL (Comptabilité) ============= -->
+  <div id="ecriture-modal" class="fixed inset-0 z-[55] hidden">
+    <div class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm" onclick="closeEcritureModal()"></div>
+    <div class="relative max-w-2xl mx-3 md:mx-auto mt-8 md:mt-16 bg-white rounded-2xl border border-ink-200 shadow-2xl overflow-hidden max-h-[88vh] flex flex-col">
+      <div class="flex items-center justify-between px-5 md:px-6 py-4 border-b border-ink-100 shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0">
+            <i data-lucide="book-marked" class="w-5 h-5 text-brand-600"></i>
+          </div>
+          <div class="min-w-0">
+            <h2 class="font-semibold text-ink-900 text-base truncate">Nouvelle écriture comptable</h2>
+            <p class="text-xs text-ink-500 mt-0.5">Plan comptable OHADA · double-entrée débit / crédit</p>
+          </div>
+        </div>
+        <button onclick="closeEcritureModal()" class="p-2 hover:bg-ink-100 rounded-lg text-ink-500" aria-label="Fermer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-5 md:px-6 py-5 space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="sm:col-span-1"><label class="block text-sm font-medium text-ink-700 mb-1.5">Date <span class="text-red-500">*</span></label><input type="date" value="2026-05-18" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+          <div class="sm:col-span-2"><label class="block text-sm font-medium text-ink-700 mb-1.5">Journal <span class="text-red-500">*</span></label><select class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"><option>OD — Opérations diverses</option><option>VTE — Ventes</option><option>ACH — Achats</option><option>BNQ — Banque</option><option>CAI — Caisse</option><option>PAY — Paie</option></select></div>
+        </div>
+        <div><label class="block text-sm font-medium text-ink-700 mb-1.5">Libellé <span class="text-red-500">*</span></label><input type="text" placeholder="ex. Loyer mai 2026 — Villa Tombalbaye" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+        <div class="border border-ink-200 rounded-lg overflow-hidden">
+          <div class="grid grid-cols-12 gap-2 bg-ink-50 px-3 py-2 text-xs font-semibold uppercase text-ink-500">
+            <div class="col-span-5">Compte</div><div class="col-span-3 text-right">Débit</div><div class="col-span-3 text-right">Crédit</div><div class="col-span-1"></div>
+          </div>
+          <div class="grid grid-cols-12 gap-2 px-3 py-2 items-center">
+            <input class="col-span-5 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm" placeholder="411 — Clients" />
+            <input class="col-span-3 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm text-right" placeholder="850 000" />
+            <input class="col-span-3 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm text-right" placeholder="0" />
+            <button class="col-span-1 text-ink-400 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+          <div class="grid grid-cols-12 gap-2 px-3 py-2 items-center border-t border-ink-100">
+            <input class="col-span-5 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm" placeholder="706 — Produits accessoires (loyers)" />
+            <input class="col-span-3 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm text-right" placeholder="0" />
+            <input class="col-span-3 px-2 py-1.5 bg-white border border-ink-200 rounded text-sm text-right" placeholder="850 000" />
+            <button class="col-span-1 text-ink-400 hover:text-red-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+          <button onclick="comptaToast('Ligne ajoutée', 'info')" class="w-full px-3 py-2 text-xs text-brand-700 hover:bg-brand-50 border-t border-ink-100 flex items-center justify-center gap-1.5">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter une ligne
+          </button>
+        </div>
+        <div class="flex items-center justify-between text-sm bg-ink-50 rounded-lg px-3 py-2">
+          <span class="text-ink-500">Total débit / crédit</span>
+          <div class="flex items-center gap-4">
+            <span class="font-medium">CDF 850 000</span>
+            <span class="text-ink-300">/</span>
+            <span class="font-medium">CDF 850 000</span>
+            <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">✓ Équilibrée</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between px-5 md:px-6 py-3 border-t border-ink-100 bg-ink-50 shrink-0">
+        <button onclick="closeEcritureModal()" class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg">Annuler</button>
+        <div class="flex items-center gap-2">
+          <button onclick="closeEcritureModal(); comptaToast('Brouillon enregistré', 'info')" class="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-ink-700 border border-ink-200 hover:bg-white rounded-lg transition"><i data-lucide="save" class="w-4 h-4"></i>Brouillon</button>
+          <button onclick="closeEcritureModal(); comptaToast('Écriture #2026-0858 validée et enregistrée', 'success')" class="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm"><i data-lucide="check" class="w-4 h-4"></i>Valider</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ============= /NOUVELLE ECRITURE MODAL ============= -->
+
+  <!-- ============= EXERCICE DROPDOWN ============= -->
+  <div id="exercice-menu" class="hidden fixed z-[60] bg-white border border-ink-200 rounded-lg shadow-lg p-1 min-w-[180px]">
+    <button onclick="comptaSelectExercice('2026')" class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-ink-100 flex items-center gap-2"><i data-lucide="calendar" class="w-3.5 h-3.5 text-brand-600"></i>Exercice 2026 <span class="ml-auto text-xs text-emerald-600">En cours</span></button>
+    <button onclick="comptaSelectExercice('2025')" class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-ink-100">Exercice 2025</button>
+    <button onclick="comptaSelectExercice('2024')" class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-ink-100">Exercice 2024</button>
+    <div class="my-1 border-t border-ink-100"></div>
+    <button onclick="comptaToast('Ouverture du nouvel exercice', 'info'); document.getElementById(&quot;exercice-menu&quot;).classList.add(&quot;hidden&quot;);" class="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-ink-100 text-brand-700 flex items-center gap-2"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Nouvel exercice</button>
+  </div>
+  <!-- ============= /EXERCICE DROPDOWN ============= -->
+
   <!-- ============= TENANT ONBOARDING LINK MODAL (SCRUM-79) ============= -->
   <div id="onboarding-link-modal" class="fixed inset-0 z-[55] hidden">
     <div class="absolute inset-0 bg-ink-900/50 backdrop-blur-sm" onclick="closeOnboardingLinkModal()"></div>
@@ -6602,6 +6680,143 @@
         lucide.createIcons();
       });
     });
+
+    // ============= TOAST HELPER (used by compta + other modules) =============
+    function comptaToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const tones = {
+        info:    { bg: 'bg-brand-600',   icon: 'info' },
+        success: { bg: 'bg-emerald-600', icon: 'check-circle-2' },
+        warning: { bg: 'bg-amber-600',   icon: 'alert-triangle' },
+        error:   { bg: 'bg-red-600',     icon: 'x-circle' },
+      };
+      const tone = tones[type] || tones.info;
+      const toast = document.createElement('div');
+      toast.className = `pointer-events-auto ${tone.bg} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm min-w-[260px] max-w-md transform transition-all duration-200 translate-x-4 opacity-0`;
+      toast.innerHTML = `<i data-lucide="${tone.icon}" class="w-4 h-4 shrink-0"></i><span class="flex-1">${message}</span><button class="text-white/80 hover:text-white" aria-label="Fermer"><i data-lucide="x" class="w-4 h-4"></i></button>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+      requestAnimationFrame(() => { toast.classList.remove('translate-x-4', 'opacity-0'); });
+      const dismiss = () => {
+        toast.classList.add('translate-x-4', 'opacity-0');
+        setTimeout(() => toast.remove(), 200);
+      };
+      toast.querySelector('button').addEventListener('click', dismiss);
+      setTimeout(dismiss, 3500);
+    }
+
+    // ============= NOUVELLE ECRITURE MODAL =============
+    function openEcritureModal() {
+      document.getElementById('ecriture-modal').classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      lucide.createIcons();
+    }
+    function closeEcritureModal() {
+      document.getElementById('ecriture-modal').classList.add('hidden');
+      document.body.style.overflow = '';
+    }
+
+    // ============= EXERCICE DROPDOWN =============
+    function comptaToggleExerciceMenu(triggerBtn) {
+      const menu = document.getElementById('exercice-menu');
+      if (!menu) return;
+      if (!menu.classList.contains('hidden')) {
+        menu.classList.add('hidden');
+        return;
+      }
+      const rect = triggerBtn.getBoundingClientRect();
+      menu.style.top = (rect.bottom + 6) + 'px';
+      menu.style.left = (rect.left) + 'px';
+      menu.classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function comptaSelectExercice(year) {
+      document.getElementById('exercice-menu').classList.add('hidden');
+      document.querySelectorAll('[data-compta-exercice-label]').forEach(el => { el.textContent = `Exercice ${year}`; });
+      comptaToast(`Exercice ${year} sélectionné`, 'info');
+    }
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('exercice-menu');
+      if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !e.target.closest('[data-compta-exercice-trigger]')) {
+        menu.classList.add('hidden');
+      }
+    });
+
+    // ============= COMPTA - AUTO-WIRE ALL INTERACTIONS =============
+    (function wireComptaInteractions() {
+      const comptaPage = document.querySelector('section[data-page="comptabilite"]');
+      if (!comptaPage) return;
+
+      // 1) Header buttons (Exercice, Exporter, Nouvelle écriture)
+      const headerButtons = comptaPage.querySelectorAll(':scope > div:first-child button');
+      headerButtons.forEach((btn) => {
+        const txt = btn.textContent.trim();
+        if (/Exercice/i.test(txt)) {
+          btn.setAttribute('data-compta-exercice-trigger', 'true');
+          // Wrap text in a span we can update
+          const spans = btn.querySelectorAll('span');
+          spans.forEach(s => { if (/Exercice/i.test(s.textContent)) s.setAttribute('data-compta-exercice-label', 'true'); });
+          btn.addEventListener('click', () => comptaToggleExerciceMenu(btn));
+        } else if (btn.getAttribute('title') === 'Exporter') {
+          btn.addEventListener('click', () => comptaToast('Export en cours… le fichier sera téléchargé dans quelques instants', 'info'));
+        } else if (/Nouvelle écriture/i.test(txt)) {
+          btn.addEventListener('click', openEcritureModal);
+        }
+      });
+
+      // 2) Chart range buttons (12M / 6M / 3M) — visual active state
+      comptaPage.querySelectorAll('[data-compta-panel="overview"] .flex.gap-1.p-1.bg-ink-100 button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const group = btn.parentElement;
+          group.querySelectorAll('button').forEach((b) => {
+            const isActive = b === btn;
+            b.classList.toggle('bg-white', isActive);
+            b.classList.toggle('text-ink-900', isActive);
+            b.classList.toggle('shadow-sm', isActive);
+            b.classList.toggle('text-ink-500', !isActive);
+          });
+          comptaToast(`Période : ${btn.textContent.trim()}`, 'info');
+        });
+      });
+
+      // 3) KPI cards — clickable drill-down
+      comptaPage.querySelectorAll(':scope > .grid.grid-cols-2.lg\\:grid-cols-4 > div').forEach((card) => {
+        card.classList.add('cursor-pointer');
+        card.addEventListener('click', () => {
+          const label = card.querySelector('.text-xs.text-ink-500.font-medium')?.textContent?.trim() || 'KPI';
+          // Switch to ecritures tab for drill-down
+          const ecrituresTab = comptaPage.querySelector('[data-compta-tab="ecritures"]');
+          if (ecrituresTab) ecrituresTab.click();
+          comptaToast(`Filtre appliqué : ${label}`, 'info');
+        });
+      });
+
+      // 4) Table rows — open detail toast
+      comptaPage.querySelectorAll('tbody tr').forEach((row) => {
+        row.classList.add('cursor-pointer');
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('button')) return;
+          const firstCell = row.querySelector('td')?.textContent?.trim()?.slice(0, 40) || '';
+          comptaToast(`Détail : ${firstCell}`, 'info');
+        });
+      });
+
+      // 5) Catch-all : every other un-wired button shows a contextual toast
+      comptaPage.querySelectorAll('button').forEach((btn) => {
+        if (btn.dataset.comptaTab) return;                       // tabs handled separately
+        if (btn.dataset.comptaExerciceTrigger) return;           // exercice
+        if (btn.onclick || btn.hasAttribute('data-wired')) return;
+        const handlers = Array.from(btn.attributes).some(a => a.name.startsWith('onclick'));
+        if (handlers) return;
+        btn.setAttribute('data-wired', 'true');
+        btn.addEventListener('click', (e) => {
+          if (e.defaultPrevented) return;
+          const label = (btn.getAttribute('title') || btn.textContent.trim() || 'Action').slice(0, 60);
+          comptaToast(`Action : ${label}`, 'info');
+        });
+      });
+    })();
 
     // ============= APP SWITCHER =============
     const appSwitcher = document.getElementById('app-switcher');
