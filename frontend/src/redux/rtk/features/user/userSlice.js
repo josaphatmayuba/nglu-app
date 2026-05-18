@@ -23,7 +23,7 @@ export const addStaff = createAsyncThunk("user/addStaff", async (values) => {
         Accept: "application/json",
         "Content-Type": "application/json;charset=UTF-8",
       },
-      url: `auth/register`,
+      url: `user/register`,
       data: {
         ...values,
       },
