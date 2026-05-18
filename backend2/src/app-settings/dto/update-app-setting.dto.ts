@@ -17,4 +17,6 @@ export class UpdateAppSettingDto {
   @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isDiscount?: string;
   @ApiPropertyOptional({ example: "false" }) @IsOptional() @IsString() isTax?: string;
   @ApiPropertyOptional({ description: "Set to 'true' to clear the logo" }) @IsOptional() @IsString() clearLogo?: string;
+  @ApiPropertyOptional({ description: "Landlord signature image as data URL (PNG/JPG base64)" }) @IsOptional() @IsString() landlordSignature?: string;
+  @ApiPropertyOptional({ description: "Set to 'true' to clear the landlord signature" }) @IsOptional() @IsString() clearLandlordSignature?: string;
 }
