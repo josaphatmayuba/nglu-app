@@ -3822,3 +3822,16 @@
   border-color: #e4e4e7;
   cursor: not-allowed;
 }
+
+
+/* ── Signed contract preview modal (Leases module) ─── */
+.immo-signed-contract { display: flex; flex-direction: column; gap: 16px; }
+.immo-signed-contract-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 18px; background: #fafafa; border: 1px solid #f1f5f9; border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+.immo-signed-contract-meta strong { display: block; color: #71717a; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px; }
+.immo-signed-contract-meta span { color: #18181b; }
+.immo-signed-contract-body { background: #fff; border: 1px solid #e4e4e7; border-radius: 10px; color: #18181b; font-family: inherit; font-size: 13px; line-height: 1.55; max-height: 320px; overflow-y: auto; padding: 14px 16px; white-space: pre-wrap; }
+.immo-signed-contract-signature { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: 14px; text-align: center; }
+.immo-signed-contract-signature h3 { color: #52525b; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; margin: 0 0 10px; text-transform: uppercase; }
+.immo-signed-contract-signature img { background: #fff; border: 1px solid #e4e4e7; border-radius: 8px; max-width: 360px; padding: 8px; }
+.immo-signed-contract-signature small { color: #16a34a; display: block; font-size: 12px; font-weight: 600; margin-top: 8px; }
+.immo-signed-contract-signature.unsigned { color: #a1a1aa; font-style: italic; padding: 24px; }
