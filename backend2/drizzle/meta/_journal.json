@@ -113,6 +113,13 @@
       "when": 1779206400000,
       "tag": "0016_add_landlord_signature_to_app_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "5",
+      "when": 1779292800000,
+      "tag": "0017_add_created_by_to_contracts",
+      "breakpoints": true
     }
   ]
 }
