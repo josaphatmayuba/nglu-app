@@ -4296,14 +4296,419 @@
       </section>
       <!-- ============= /PAGE: IMMOBILIER ============= -->
 
+      <!-- ============= PAGE: RH ============= -->
       <section data-page="rh" class="hidden">
-        <div class="mb-5"><h1 class="text-xl md:text-2xl font-semibold text-ink-900 tracking-tight">Ressources Humaines</h1><p class="text-xs md:text-sm text-ink-500 mt-1">Employés, paie et présences</p></div>
-        <div class="bg-white rounded-xl border border-ink-200 p-12 flex flex-col items-center justify-center text-center">
-          <div class="w-16 h-16 rounded-full bg-purple-50 flex items-center justify-center mb-4"><i data-lucide="briefcase" class="w-7 h-7 text-purple-600"></i></div>
-          <h3 class="font-semibold text-ink-900 mb-2">Module RH</h3>
-          <p class="text-sm text-ink-500 max-w-sm">Gérez votre personnel, les fiches de paie et les présences.</p>
+        <!-- Page header -->
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5 md:mb-6">
+          <div>
+            <h1 class="text-xl md:text-2xl font-semibold text-ink-900 tracking-tight">Ressources Humaines</h1>
+            <p class="text-xs md:text-sm text-ink-500 mt-1">Employés, paie, présences, congés et performance</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button class="flex items-center gap-2 px-3 py-1.5 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
+              <i data-lucide="filter" class="w-4 h-4"></i>
+              <span class="hidden sm:inline">Filtres</span>
+            </button>
+            <button class="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition" title="Exporter">
+              <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+            <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Nouvel employé</span>
+            </button>
+          </div>
         </div>
+
+        <!-- KPI strip -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5 md:mb-6">
+          <div class="bg-white rounded-xl border border-ink-200 p-4 md:p-5 hover:border-ink-300 transition">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center"><i data-lucide="users" class="w-5 h-5 text-purple-600"></i></div>
+              <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md"><i data-lucide="arrow-up" class="w-3 h-3"></i>3</span>
+            </div>
+            <div class="text-xs text-ink-500 font-medium mb-1">Employés actifs</div>
+            <div class="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight">42</div>
+            <div class="mt-2 text-xs text-ink-400">38 CDI · 3 CDD · 1 stagiaire</div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-4 md:p-5 hover:border-ink-300 transition">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center"><i data-lucide="user-check" class="w-5 h-5 text-emerald-600"></i></div>
+              <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">93%</span>
+            </div>
+            <div class="text-xs text-ink-500 font-medium mb-1">Présents aujourd'hui</div>
+            <div class="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight">39 / 42</div>
+            <div class="mt-3 h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: 93%"></div></div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-4 md:p-5 hover:border-ink-300 transition">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center"><i data-lucide="banknote" class="w-5 h-5 text-brand-600"></i></div>
+              <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">Mai</span>
+            </div>
+            <div class="text-xs text-ink-500 font-medium mb-1">Masse salariale</div>
+            <div class="space-y-0.5">
+              <div class="text-lg md:text-xl font-semibold text-ink-900"><span class="text-xs text-ink-500 mr-1">CDF</span>18,450,000</div>
+              <div class="text-base font-semibold text-ink-700"><span class="text-xs text-ink-500 mr-1">USD</span>2,400</div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-4 md:p-5 hover:border-ink-300 transition">
+            <div class="flex items-start justify-between mb-3">
+              <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center"><i data-lucide="calendar-off" class="w-5 h-5 text-amber-600"></i></div>
+              <span class="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">5 demandes</span>
+            </div>
+            <div class="text-xs text-ink-500 font-medium mb-1">Congés en cours</div>
+            <div class="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight">3 absents</div>
+            <div class="mt-2 text-xs text-ink-400">2 en attente de validation</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex gap-1 p-1 bg-white border border-ink-200 rounded-lg mb-5 overflow-x-auto" id="rh-tabs">
+          <button data-rh-tab="employes" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium bg-brand-50 text-brand-700 rounded whitespace-nowrap">Employés <span class="ml-1 text-ink-400">42</span></button>
+          <button data-rh-tab="presences" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium text-ink-500 hover:text-ink-700 rounded whitespace-nowrap">Présences</button>
+          <button data-rh-tab="paie" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium text-ink-500 hover:text-ink-700 rounded whitespace-nowrap">Paie <span class="ml-1 text-amber-600 font-semibold">8</span></button>
+          <button data-rh-tab="conges" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium text-ink-500 hover:text-ink-700 rounded whitespace-nowrap">Congés <span class="ml-1 text-amber-600 font-semibold">2</span></button>
+          <button data-rh-tab="organigramme" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium text-ink-500 hover:text-ink-700 rounded whitespace-nowrap">Postes &amp; Départements</button>
+          <button data-rh-tab="performance" class="rh-tab px-3 py-1.5 text-xs md:text-sm font-medium text-ink-500 hover:text-ink-700 rounded whitespace-nowrap">Performance</button>
+        </div>
+
+        <!-- ============= PANEL: EMPLOYÉS (default) ============= -->
+        <div data-rh-panel="employes">
+          <!-- Toolbar -->
+          <div class="flex items-center gap-2 mb-4 flex-wrap">
+            <div class="flex-1 min-w-[240px] relative">
+              <i data-lucide="search" class="w-4 h-4 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+              <input type="text" placeholder="Rechercher employé (nom, poste, département)..." class="w-full pl-10 pr-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+            </div>
+            <select class="px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-700">
+              <option>Tous départements</option><option>Direction</option><option>Comptabilité</option><option>Immobilier</option><option>Maintenance</option><option>Commercial</option>
+            </select>
+            <select class="px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm text-ink-700">
+              <option>Tous statuts</option><option>CDI</option><option>CDD</option><option>Stagiaire</option><option>Inactif</option>
+            </select>
+            <div class="inline-flex p-0.5 bg-ink-100 rounded-lg">
+              <button data-rh-view="grid" class="rh-view-btn px-2.5 py-1 bg-white rounded-md shadow-sm text-ink-700 flex items-center gap-1.5 text-xs font-medium" title="Vue grille"><i data-lucide="layout-grid" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Grille</span></button>
+              <button data-rh-view="table" class="rh-view-btn px-2.5 py-1 text-ink-500 hover:text-ink-700 rounded-md flex items-center gap-1.5 text-xs font-medium" title="Vue tableau"><i data-lucide="list" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Tableau</span></button>
+            </div>
+          </div>
+
+          <!-- View: Grid -->
+          <div data-rh-view-panel="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-4 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold">JM</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Josaphat Mayuba</h4>
+                  <p class="text-xs text-ink-500 truncate">Directeur général</p>
+                  <span class="inline-block mt-1 text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-medium">Direction · 7 ans</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">CDI</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Salaire</div><div class="text-xs font-semibold text-ink-900">CDF 3.2M</div></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-4 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-semibold">MK</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Marie Kabongo</h4>
+                  <p class="text-xs text-ink-500 truncate">Gestionnaire immobilier</p>
+                  <span class="inline-block mt-1 text-[10px] bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded font-medium">Immobilier · 3 ans</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">CDI</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Salaire</div><div class="text-xs font-semibold text-ink-900">CDF 1.8M</div></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-4 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-semibold">PL</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Paul Lumumba</h4>
+                  <p class="text-xs text-ink-500 truncate">Comptable senior</p>
+                  <span class="inline-block mt-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Comptabilité · 5 ans</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">CDI</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Salaire</div><div class="text-xs font-semibold text-ink-900">CDF 2.1M</div></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-4 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-semibold">SM</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Sarah Mukendi</h4>
+                  <p class="text-xs text-ink-500 truncate">Assistante commerciale</p>
+                  <span class="inline-block mt-1 text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Commercial · 2 ans</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">CDD</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Salaire</div><div class="text-xs font-semibold text-ink-900">CDF 980K</div></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-amber-200 p-4 hover:border-amber-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center text-white font-semibold">JB</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Jean Bemba</h4>
+                  <p class="text-xs text-ink-500 truncate">Plombier maintenance</p>
+                  <span class="inline-block mt-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">En congé · 3 jours</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">CDI</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Salaire</div><div class="text-xs font-semibold text-ink-900">CDF 720K</div></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-4 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-12 h-12 rounded-full bg-gradient-to-br from-sky-500 to-sky-700 flex items-center justify-center text-white font-semibold">CT</div>
+                <div class="flex-1 min-w-0">
+                  <h4 class="font-semibold text-ink-900 truncate">Christine Tshisekedi</h4>
+                  <p class="text-xs text-ink-500 truncate">Stagiaire RH</p>
+                  <span class="inline-block mt-1 text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded font-medium">Stage · 4 mois</span>
+                </div>
+                <button class="p-1.5 hover:bg-ink-100 rounded-md text-ink-500"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+              </div>
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Contrat</div><div class="text-xs font-medium text-ink-900">Stagiaire</div></div>
+                <div><div class="text-[10px] text-ink-500 uppercase tracking-wider">Indemnité</div><div class="text-xs font-semibold text-ink-900">CDF 350K</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- View: Table -->
+          <div data-rh-view-panel="table" class="hidden bg-white rounded-xl border border-ink-200 overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-ink-50 border-b border-ink-200">
+                  <tr class="text-left text-xs font-medium text-ink-500 uppercase tracking-wider">
+                    <th class="px-4 py-3">Employé</th><th class="px-4 py-3">Poste</th><th class="px-4 py-3">Département</th><th class="px-4 py-3">Contrat</th><th class="px-4 py-3">Embauche</th><th class="px-4 py-3 text-right">Salaire</th><th class="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-ink-100">
+                  <tr class="hover:bg-ink-50 cursor-pointer"><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 text-white text-xs font-semibold flex items-center justify-center">JM</div><div><div class="font-medium text-ink-900">Josaphat Mayuba</div><div class="text-xs text-ink-500">jm@ngolu.cd</div></div></div></td><td class="px-4 py-3">Directeur général</td><td class="px-4 py-3"><span class="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">Direction</span></td><td class="px-4 py-3 text-ink-700">CDI</td><td class="px-4 py-3 text-ink-500">01/2019</td><td class="px-4 py-3 text-right font-medium">CDF 3,200,000</td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td></tr>
+                  <tr class="hover:bg-ink-50 cursor-pointer"><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white text-xs font-semibold flex items-center justify-center">MK</div><div><div class="font-medium text-ink-900">Marie Kabongo</div><div class="text-xs text-ink-500">marie.k@ngolu.cd</div></div></div></td><td class="px-4 py-3">Gestionnaire immobilier</td><td class="px-4 py-3"><span class="text-xs font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md">Immobilier</span></td><td class="px-4 py-3 text-ink-700">CDI</td><td class="px-4 py-3 text-ink-500">03/2023</td><td class="px-4 py-3 text-right font-medium">CDF 1,800,000</td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td></tr>
+                  <tr class="hover:bg-ink-50 cursor-pointer"><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white text-xs font-semibold flex items-center justify-center">PL</div><div><div class="font-medium text-ink-900">Paul Lumumba</div><div class="text-xs text-ink-500">paul.l@ngolu.cd</div></div></div></td><td class="px-4 py-3">Comptable senior</td><td class="px-4 py-3"><span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">Comptabilité</span></td><td class="px-4 py-3 text-ink-700">CDI</td><td class="px-4 py-3 text-ink-500">06/2021</td><td class="px-4 py-3 text-right font-medium">CDF 2,100,000</td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td></tr>
+                  <tr class="hover:bg-ink-50 cursor-pointer"><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-semibold flex items-center justify-center">SM</div><div><div class="font-medium text-ink-900">Sarah Mukendi</div><div class="text-xs text-ink-500">sarah.m@ngolu.cd</div></div></div></td><td class="px-4 py-3">Assistante commerciale</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Commercial</span></td><td class="px-4 py-3 text-ink-700">CDD</td><td class="px-4 py-3 text-ink-500">09/2024</td><td class="px-4 py-3 text-right font-medium">CDF 980,000</td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td></tr>
+                  <tr class="hover:bg-ink-50 cursor-pointer"><td class="px-4 py-3"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full bg-gradient-to-br from-rose-500 to-rose-700 text-white text-xs font-semibold flex items-center justify-center">JB</div><div><div class="font-medium text-ink-900">Jean Bemba</div><div class="text-xs text-ink-500">jean.b@ngolu.cd</div></div></div></td><td class="px-4 py-3">Plombier maintenance</td><td class="px-4 py-3"><span class="text-xs font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md">Maintenance</span></td><td class="px-4 py-3 text-ink-700">CDI</td><td class="px-4 py-3 text-ink-500">11/2022</td><td class="px-4 py-3 text-right font-medium">CDF 720,000</td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- /PANEL: EMPLOYÉS -->
+
+        <!-- ============= PANEL: PRÉSENCES ============= -->
+        <div data-rh-panel="presences" class="hidden space-y-4">
+          <div class="bg-white rounded-xl border border-ink-200 p-5">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <h3 class="font-semibold text-ink-900">Pointage du jour</h3>
+                <p class="text-xs text-ink-500">Lundi 18 mai 2026 · 39 présents / 42 employés</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition shadow-sm"><i data-lucide="log-in" class="w-4 h-4"></i>Pointage manuel</button>
+                <button class="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600" title="Exporter"><i data-lucide="download" class="w-4 h-4"></i></button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-ink-50 border-b border-ink-200">
+                  <tr class="text-left text-xs font-medium text-ink-500 uppercase tracking-wider"><th class="px-4 py-2.5">Employé</th><th class="px-4 py-2.5">Arrivée</th><th class="px-4 py-2.5">Départ</th><th class="px-4 py-2.5">Heures</th><th class="px-4 py-2.5">Statut</th></tr>
+                </thead>
+                <tbody class="divide-y divide-ink-100">
+                  <tr><td class="px-4 py-3 font-medium">Josaphat Mayuba</td><td class="px-4 py-3 text-ink-700">07:42</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-700">8h en cours</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Présent</span></td></tr>
+                  <tr><td class="px-4 py-3 font-medium">Marie Kabongo</td><td class="px-4 py-3 text-ink-700">08:05</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-700">7h45 en cours</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Présent</span></td></tr>
+                  <tr><td class="px-4 py-3 font-medium">Paul Lumumba</td><td class="px-4 py-3 text-ink-700">08:32</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-amber-700">7h18 (retard 32 min)</td><td class="px-4 py-3"><span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">En retard</span></td></tr>
+                  <tr><td class="px-4 py-3 font-medium">Sarah Mukendi</td><td class="px-4 py-3 text-ink-700">07:58</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-700">7h52 en cours</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Présent</span></td></tr>
+                  <tr><td class="px-4 py-3 font-medium">Jean Bemba</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3"><span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">En congé</span></td></tr>
+                  <tr><td class="px-4 py-3 font-medium">Christine Tshisekedi</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3 text-ink-400">—</td><td class="px-4 py-3"><span class="text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md">Absent</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- /PANEL: PRÉSENCES -->
+
+        <!-- ============= PANEL: PAIE ============= -->
+        <div data-rh-panel="paie" class="hidden space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">Total à payer mai</div><div class="text-2xl font-semibold text-ink-900">CDF 18,450,000</div><div class="text-xs text-ink-400 mt-1">42 bulletins · 8 en attente de validation</div></div>
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">Charges sociales</div><div class="text-2xl font-semibold text-amber-600">CDF 2,950,000</div><div class="text-xs text-ink-400 mt-1">CNSS 8% + INPP 2% + ONEM 0.2%</div></div>
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">IPR (Impôt prof.)</div><div class="text-2xl font-semibold text-rose-600">CDF 1,840,000</div><div class="text-xs text-ink-400 mt-1">Retenue à la source</div></div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-ink-100">
+              <div><h3 class="font-semibold text-ink-900">Bulletins de paie · Mai 2026</h3><p class="text-xs text-ink-500">8 à valider · 34 valides · 0 erreurs</p></div>
+              <div class="flex items-center gap-2"><button class="px-3 py-1.5 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700">Recalculer tout</button><button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm"><i data-lucide="check-check" class="w-4 h-4"></i>Valider et payer</button></div>
+            </div>
+            <table class="w-full text-sm">
+              <thead class="bg-ink-50 border-b border-ink-200"><tr class="text-left text-xs font-medium text-ink-500 uppercase tracking-wider"><th class="px-4 py-2.5">Employé</th><th class="px-4 py-2.5 text-right">Brut</th><th class="px-4 py-2.5 text-right">Charges</th><th class="px-4 py-2.5 text-right">IPR</th><th class="px-4 py-2.5 text-right">Net à payer</th><th class="px-4 py-2.5">Statut</th><th class="px-4 py-2.5"></th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="px-4 py-3 font-medium">Josaphat Mayuba</td><td class="px-4 py-3 text-right">CDF 3,200,000</td><td class="px-4 py-3 text-right text-amber-700">- 224,000</td><td class="px-4 py-3 text-right text-rose-700">- 480,000</td><td class="px-4 py-3 text-right font-semibold">CDF 2,496,000</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Validé</span></td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="file-text" class="w-4 h-4"></i></button></td></tr>
+                <tr><td class="px-4 py-3 font-medium">Marie Kabongo</td><td class="px-4 py-3 text-right">CDF 1,800,000</td><td class="px-4 py-3 text-right text-amber-700">- 126,000</td><td class="px-4 py-3 text-right text-rose-700">- 234,000</td><td class="px-4 py-3 text-right font-semibold">CDF 1,440,000</td><td class="px-4 py-3"><span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">À valider</span></td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="file-text" class="w-4 h-4"></i></button></td></tr>
+                <tr><td class="px-4 py-3 font-medium">Paul Lumumba</td><td class="px-4 py-3 text-right">CDF 2,100,000</td><td class="px-4 py-3 text-right text-amber-700">- 147,000</td><td class="px-4 py-3 text-right text-rose-700">- 294,000</td><td class="px-4 py-3 text-right font-semibold">CDF 1,659,000</td><td class="px-4 py-3"><span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">Validé</span></td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="file-text" class="w-4 h-4"></i></button></td></tr>
+                <tr><td class="px-4 py-3 font-medium">Sarah Mukendi</td><td class="px-4 py-3 text-right">CDF 980,000</td><td class="px-4 py-3 text-right text-amber-700">- 68,600</td><td class="px-4 py-3 text-right text-rose-700">- 88,200</td><td class="px-4 py-3 text-right font-semibold">CDF 823,200</td><td class="px-4 py-3"><span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md">À valider</span></td><td class="px-4 py-3 text-right"><button class="text-ink-400 hover:text-ink-700"><i data-lucide="file-text" class="w-4 h-4"></i></button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <!-- /PANEL: PAIE -->
+
+        <!-- ============= PANEL: CONGÉS ============= -->
+        <div data-rh-panel="conges" class="hidden space-y-4">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+            <i data-lucide="alert-circle" class="w-5 h-5 text-amber-700 mt-0.5 shrink-0"></i>
+            <div class="flex-1 text-sm">
+              <strong class="text-amber-900">2 demandes en attente de validation</strong>
+              <div class="text-xs text-amber-700 mt-0.5">Sarah Mukendi (5 jours · congé annuel) · Paul Lumumba (1 jour · congé exceptionnel)</div>
+            </div>
+            <button class="text-xs font-medium text-amber-900 hover:underline whitespace-nowrap">Voir tout →</button>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-ink-900">Planning des congés · Mai 2026</h3>
+              <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm"><i data-lucide="plus" class="w-4 h-4"></i>Demande de congé</button>
+            </div>
+            <div class="space-y-2">
+              <div class="grid grid-cols-[180px_1fr] gap-3 items-center text-xs">
+                <div class="text-ink-500">&nbsp;</div>
+                <div class="grid grid-cols-31 gap-px relative">
+                  <div class="absolute -top-5 left-0 right-0 flex justify-between text-[10px] text-ink-400"><span>1</span><span>8</span><span>15</span><span>22</span><span>31</span></div>
+                </div>
+              </div>
+              <div class="grid grid-cols-[180px_1fr] gap-3 items-center"><div class="text-sm font-medium text-ink-900">Jean Bemba</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-full bg-amber-300 rounded" style="left: 48%; width: 10%"></div><span class="absolute top-1 left-[50%] text-[10px] text-amber-900">3j</span></div></div>
+              <div class="grid grid-cols-[180px_1fr] gap-3 items-center"><div class="text-sm font-medium text-ink-900">Sarah Mukendi</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-full bg-amber-200 border-2 border-dashed border-amber-500 rounded" style="left: 64%; width: 16%"></div><span class="absolute top-1 left-[66%] text-[10px] text-amber-900">5j à valider</span></div></div>
+              <div class="grid grid-cols-[180px_1fr] gap-3 items-center"><div class="text-sm font-medium text-ink-900">Christine Tshisekedi</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-full bg-red-300 rounded" style="left: 56%; width: 4%"></div><span class="absolute top-1 left-[57%] text-[10px] text-red-900">Maladie</span></div></div>
+            </div>
+            <div class="mt-4 flex items-center gap-4 text-xs flex-wrap pt-3 border-t border-ink-100">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-amber-300"></span><span class="text-ink-600">Congé approuvé</span></span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-amber-200 border-2 border-dashed border-amber-500"></span><span class="text-ink-600">En attente</span></span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm bg-red-300"></span><span class="text-ink-600">Congé maladie</span></span>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-5">
+            <h3 class="font-semibold text-ink-900 mb-3">Soldes de congés · 2026</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Josaphat Mayuba</span><span class="text-xs text-emerald-700">18 / 26 j</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width: 69%"></div></div></div>
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Marie Kabongo</span><span class="text-xs text-emerald-700">22 / 26 j</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width: 85%"></div></div></div>
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Paul Lumumba</span><span class="text-xs text-amber-700">8 / 26 j</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-amber-500" style="width: 31%"></div></div></div>
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Sarah Mukendi</span><span class="text-xs text-emerald-700">15 / 22 j</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-emerald-500" style="width: 68%"></div></div></div>
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Jean Bemba</span><span class="text-xs text-rose-700">3 / 26 j</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-rose-500" style="width: 12%"></div></div></div>
+              <div class="border border-ink-200 rounded-lg p-3"><div class="flex items-center justify-between mb-2"><span class="text-sm font-medium">Christine Tshisekedi</span><span class="text-xs text-ink-500">— (stagiaire)</span></div><div class="h-1.5 bg-ink-100 rounded-full overflow-hidden"><div class="h-full bg-ink-200" style="width: 100%"></div></div></div>
+            </div>
+          </div>
+        </div>
+        <!-- /PANEL: CONGÉS -->
+
+        <!-- ============= PANEL: ORGANIGRAMME ============= -->
+        <div data-rh-panel="organigramme" class="hidden space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-5">
+              <div class="flex items-center justify-between mb-4"><h3 class="font-semibold text-ink-900">Départements <span class="ml-1 text-xs text-ink-400 font-normal">6</span></h3><button class="flex items-center gap-1.5 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md text-xs font-medium"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter</button></div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center"><i data-lucide="crown" class="w-4 h-4 text-purple-600"></i></div><div><div class="text-sm font-medium">Direction</div><div class="text-xs text-ink-500">2 employés · Resp. Josaphat M.</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center"><i data-lucide="calculator" class="w-4 h-4 text-amber-600"></i></div><div><div class="text-sm font-medium">Comptabilité</div><div class="text-xs text-ink-500">4 employés · Resp. Paul L.</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4 text-brand-600"></i></div><div><div class="text-sm font-medium">Immobilier</div><div class="text-xs text-ink-500">8 employés · Resp. Marie K.</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-rose-50 flex items-center justify-center"><i data-lucide="wrench" class="w-4 h-4 text-rose-600"></i></div><div><div class="text-sm font-medium">Maintenance</div><div class="text-xs text-ink-500">12 employés · Resp. Jean B.</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center"><i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i></div><div><div class="text-sm font-medium">Commercial</div><div class="text-xs text-ink-500">10 employés · Resp. Sarah M.</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-sky-50 flex items-center justify-center"><i data-lucide="briefcase" class="w-4 h-4 text-sky-600"></i></div><div><div class="text-sm font-medium">RH &amp; Admin</div><div class="text-xs text-ink-500">6 employés · Resp. à pourvoir</div></div></div><button class="text-ink-400 hover:text-ink-700"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-5">
+              <div class="flex items-center justify-between mb-4"><h3 class="font-semibold text-ink-900">Postes <span class="ml-1 text-xs text-ink-400 font-normal">14</span></h3><button class="flex items-center gap-1.5 px-2.5 py-1 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-md text-xs font-medium"><i data-lucide="plus" class="w-3.5 h-3.5"></i>Ajouter</button></div>
+              <div class="space-y-1.5 text-sm">
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Directeur général</span><span class="text-xs text-ink-500">1</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Gestionnaire immobilier</span><span class="text-xs text-ink-500">3</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Comptable senior</span><span class="text-xs text-ink-500">2</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Comptable junior</span><span class="text-xs text-ink-500">2</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Assistant(e) commercial(e)</span><span class="text-xs text-ink-500">4</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Plombier maintenance</span><span class="text-xs text-ink-500">3</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Électricien maintenance</span><span class="text-xs text-ink-500">2</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Agent d'entretien</span><span class="text-xs text-ink-500">4</span></div>
+                <div class="flex items-center justify-between p-2 hover:bg-ink-50 rounded"><span>Stagiaire RH</span><span class="text-xs text-ink-500">1</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-5">
+            <h3 class="font-semibold text-ink-900 mb-4">Organigramme</h3>
+            <div class="overflow-x-auto">
+              <div class="min-w-[700px] flex flex-col items-center gap-6 py-4">
+                <div class="px-4 py-2 border-2 border-purple-500 bg-purple-50 rounded-lg">
+                  <div class="text-sm font-semibold text-purple-900">Josaphat Mayuba</div>
+                  <div class="text-xs text-purple-700">Directeur général</div>
+                </div>
+                <div class="h-6 w-px bg-ink-300"></div>
+                <div class="grid grid-cols-5 gap-4 w-full">
+                  <div class="text-center"><div class="px-3 py-2 border border-amber-300 bg-amber-50 rounded-lg"><div class="text-xs font-semibold text-amber-900">Paul L.</div><div class="text-[10px] text-amber-700">Compta</div></div></div>
+                  <div class="text-center"><div class="px-3 py-2 border border-brand-300 bg-brand-50 rounded-lg"><div class="text-xs font-semibold text-brand-900">Marie K.</div><div class="text-[10px] text-brand-700">Immobilier</div></div></div>
+                  <div class="text-center"><div class="px-3 py-2 border border-rose-300 bg-rose-50 rounded-lg"><div class="text-xs font-semibold text-rose-900">Jean B.</div><div class="text-[10px] text-rose-700">Maintenance</div></div></div>
+                  <div class="text-center"><div class="px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg"><div class="text-xs font-semibold text-emerald-900">Sarah M.</div><div class="text-[10px] text-emerald-700">Commercial</div></div></div>
+                  <div class="text-center"><div class="px-3 py-2 border border-dashed border-sky-300 bg-sky-50 rounded-lg"><div class="text-xs font-semibold text-sky-900">À pourvoir</div><div class="text-[10px] text-sky-700">RH &amp; Admin</div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- /PANEL: ORGANIGRAMME -->
+
+        <!-- ============= PANEL: PERFORMANCE ============= -->
+        <div data-rh-panel="performance" class="hidden space-y-4">
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">Taux ponctualité</div><div class="text-2xl font-semibold text-emerald-600">94.2%</div><div class="text-xs text-ink-400 mt-1">+ 2.1% vs mois dernier</div></div>
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">Heures supp. moyennes</div><div class="text-2xl font-semibold text-amber-600">12.3 h/employé</div><div class="text-xs text-ink-400 mt-1">Mai 2026</div></div>
+            <div class="bg-white rounded-xl border border-ink-200 p-5"><div class="text-xs text-ink-500 font-medium mb-1">Récompenses ce trimestre</div><div class="text-2xl font-semibold text-brand-600">7 attribuées</div><div class="text-xs text-ink-400 mt-1">CDF 1,450,000 distribués</div></div>
+          </div>
+
+          <div class="bg-white rounded-xl border border-ink-200 p-5">
+            <div class="flex items-center justify-between mb-4"><h3 class="font-semibold text-ink-900">Top performers · Mai 2026</h3><button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm"><i data-lucide="award" class="w-4 h-4"></i>Récompenser</button></div>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 p-3 border border-ink-200 rounded-lg">
+                <span class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">🥇</span>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white text-sm font-semibold flex items-center justify-center">MK</div>
+                <div class="flex-1"><div class="font-medium text-ink-900">Marie Kabongo</div><div class="text-xs text-ink-500">Gestionnaire immobilier · 0 retard · 18 tâches finalisées</div></div>
+                <div class="text-right"><div class="text-lg font-bold text-emerald-600">98</div><div class="text-xs text-ink-500">score</div></div>
+              </div>
+              <div class="flex items-center gap-3 p-3 border border-ink-200 rounded-lg">
+                <span class="w-8 h-8 rounded-full bg-ink-200 flex items-center justify-center text-ink-700 text-sm font-bold">🥈</span>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white text-sm font-semibold flex items-center justify-center">PL</div>
+                <div class="flex-1"><div class="font-medium text-ink-900">Paul Lumumba</div><div class="text-xs text-ink-500">Comptable senior · 1 retard · 142 écritures saisies</div></div>
+                <div class="text-right"><div class="text-lg font-bold text-emerald-600">94</div><div class="text-xs text-ink-500">score</div></div>
+              </div>
+              <div class="flex items-center gap-3 p-3 border border-ink-200 rounded-lg">
+                <span class="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-700 text-sm font-bold">🥉</span>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-sm font-semibold flex items-center justify-center">SM</div>
+                <div class="flex-1"><div class="font-medium text-ink-900">Sarah Mukendi</div><div class="text-xs text-ink-500">Assistante commerciale · 0 retard · 28 ventes conclues</div></div>
+                <div class="text-right"><div class="text-lg font-bold text-emerald-600">91</div><div class="text-xs text-ink-500">score</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- /PANEL: PERFORMANCE -->
       </section>
+      <!-- ============= /PAGE: RH ============= -->
 
       <!-- ============= PAGE: COMPTABILITÉ ============= -->
       <section data-page="comptabilite" class="hidden">
@@ -6677,6 +7082,46 @@
           panel.classList.toggle('hidden', panel.dataset.comptaPanel !== target);
         });
 
+        lucide.createIcons();
+      });
+    });
+
+    // ============= RH TABS + VIEW TOGGLE =============
+    const rhTabs = document.querySelectorAll('.rh-tab');
+    const rhPanels = document.querySelectorAll('[data-rh-panel]');
+    rhTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.rhTab;
+        rhTabs.forEach(t => {
+          const isActive = t.dataset.rhTab === target;
+          t.classList.toggle('bg-brand-50', isActive);
+          t.classList.toggle('text-brand-700', isActive);
+          t.classList.toggle('text-ink-500', !isActive);
+          t.classList.toggle('hover:text-ink-700', !isActive);
+        });
+        rhPanels.forEach(panel => {
+          panel.classList.toggle('hidden', panel.dataset.rhPanel !== target);
+        });
+        lucide.createIcons();
+      });
+    });
+
+    const rhViewBtns = document.querySelectorAll('.rh-view-btn');
+    const rhViewPanels = document.querySelectorAll('[data-rh-view-panel]');
+    rhViewBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.rhView;
+        rhViewBtns.forEach(b => {
+          const isActive = b.dataset.rhView === target;
+          b.classList.toggle('bg-white', isActive);
+          b.classList.toggle('shadow-sm', isActive);
+          b.classList.toggle('text-ink-700', isActive);
+          b.classList.toggle('text-ink-500', !isActive);
+          b.classList.toggle('hover:text-ink-700', !isActive);
+        });
+        rhViewPanels.forEach(panel => {
+          panel.classList.toggle('hidden', panel.dataset.rhViewPanel !== target);
+        });
         lucide.createIcons();
       });
     });
