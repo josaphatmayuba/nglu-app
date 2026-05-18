@@ -1439,19 +1439,22 @@
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <!-- Sub-nav -->
           <div class="lg:col-span-1">
-            <div class="bg-white rounded-xl border border-ink-200 p-2 space-y-0.5">
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md bg-brand-50 text-brand-700 text-sm font-medium"><i data-lucide="building" class="w-4 h-4"></i>Entreprise</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="user" class="w-4 h-4"></i>Profil</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="shield" class="w-4 h-4"></i>Sécurité</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="bell" class="w-4 h-4"></i>Notifications</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="palette" class="w-4 h-4"></i>Apparence</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="credit-card" class="w-4 h-4"></i>Facturation</button>
-              <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="plug" class="w-4 h-4"></i>Intégrations</button>
+            <div class="bg-white rounded-xl border border-ink-200 p-2 space-y-0.5" id="settings-tabs">
+              <button data-settings-tab="entreprise" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md bg-brand-50 text-brand-700 text-sm font-medium"><i data-lucide="building" class="w-4 h-4"></i>Entreprise</button>
+              <button data-settings-tab="profil" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="user" class="w-4 h-4"></i>Profil</button>
+              <button data-settings-tab="securite" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="shield" class="w-4 h-4"></i>Sécurité</button>
+              <button data-settings-tab="notifications" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="bell" class="w-4 h-4"></i>Notifications</button>
+              <button data-settings-tab="apparence" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="palette" class="w-4 h-4"></i>Apparence</button>
+              <button data-settings-tab="facturation" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="credit-card" class="w-4 h-4"></i>Facturation</button>
+              <button data-settings-tab="integrations" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="plug" class="w-4 h-4"></i>Intégrations</button>
             </div>
           </div>
 
-          <!-- Form -->
-          <div class="lg:col-span-3 bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+          <!-- Panels -->
+          <div class="lg:col-span-3 space-y-4">
+
+          <!-- ============= PANEL: Entreprise (default) ============= -->
+          <div data-settings-panel="entreprise" class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
             <div class="mb-5">
               <h3 class="font-semibold text-ink-900 text-lg">Informations entreprise</h3>
               <p class="text-xs text-ink-500 mt-1">Ces informations apparaîtront sur vos factures et documents</p>
@@ -1507,6 +1510,353 @@
                 <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Enregistrer</button>
               </div>
             </div>
+          </div>
+          <!-- ============= /PANEL: Entreprise ============= -->
+
+          <!-- ============= PANEL: Profil ============= -->
+          <div data-settings-panel="profil" class="hidden bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+            <div class="mb-5">
+              <h3 class="font-semibold text-ink-900 text-lg">Mon profil</h3>
+              <p class="text-xs text-ink-500 mt-1">Vos informations personnelles et préférences de compte</p>
+            </div>
+            <div class="space-y-4">
+              <div class="flex items-center gap-4">
+                <div class="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-bold text-2xl">JM</div>
+                <div class="flex flex-col gap-1">
+                  <button class="px-3 py-1.5 border border-ink-200 hover:border-ink-300 rounded-lg text-sm">Changer la photo</button>
+                  <button class="text-sm text-red-600 hover:underline text-left">Supprimer</button>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Prénom</label><input type="text" value="Josaphat" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Nom</label><input type="text" value="Mayuba" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Email</label><input type="email" value="josaphatmayuba@gmail.com" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Téléphone</label><input type="tel" value="+243 999 000 111" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Fonction</label><input type="text" value="Administrateur" disabled class="w-full px-3 py-2 bg-ink-50 border border-ink-200 rounded-lg text-sm text-ink-500 cursor-not-allowed" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Langue</label><select class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"><option>Français</option><option>English</option></select></div>
+              </div>
+              <div class="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
+                <button class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg">Annuler</button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+          <!-- ============= /PANEL: Profil ============= -->
+
+          <!-- ============= PANEL: Sécurité ============= -->
+          <div data-settings-panel="securite" class="hidden space-y-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="mb-5">
+                <h3 class="font-semibold text-ink-900 text-lg">Mot de passe</h3>
+                <p class="text-xs text-ink-500 mt-1">Changez votre mot de passe régulièrement (recommandé tous les 90 jours)</p>
+              </div>
+              <div class="space-y-4">
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Mot de passe actuel</label><input type="password" placeholder="••••••••" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Nouveau mot de passe</label><input type="password" placeholder="••••••••" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                  <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Confirmer</label><input type="password" placeholder="••••••••" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                </div>
+                <div class="text-xs text-ink-500 bg-ink-50 rounded-lg p-3">
+                  <strong>Exigences :</strong> 12 caractères minimum, au moins 1 chiffre et 1 lettre.
+                </div>
+                <div class="flex justify-end">
+                  <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Mettre à jour</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 class="font-semibold text-ink-900 text-lg">Authentification à 2 facteurs (MFA)</h3>
+                  <p class="text-xs text-ink-500 mt-1">Sécurisez votre compte avec une application TOTP (Google Authenticator, Authy)</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div>
+                  <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+                </label>
+              </div>
+              <div class="text-xs text-ink-500">MFA désactivé. Activez pour ajouter une couche de sécurité au login.</div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="mb-4">
+                <h3 class="font-semibold text-ink-900 text-lg">Sessions actives</h3>
+                <p class="text-xs text-ink-500 mt-1">Appareils connectés à votre compte</p>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i data-lucide="monitor" class="w-4 h-4 text-ink-500"></i>
+                    <div>
+                      <div class="text-sm font-medium text-ink-900">Chrome · Windows 11</div>
+                      <div class="text-xs text-ink-500">Kinshasa · Cette session</div>
+                    </div>
+                  </div>
+                  <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Actif</span>
+                </div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i data-lucide="smartphone" class="w-4 h-4 text-ink-500"></i>
+                    <div>
+                      <div class="text-sm font-medium text-ink-900">Safari · iPhone</div>
+                      <div class="text-xs text-ink-500">Kinshasa · il y a 2 jours</div>
+                    </div>
+                  </div>
+                  <button class="text-xs text-red-600 hover:underline">Déconnecter</button>
+                </div>
+              </div>
+              <button class="mt-3 text-xs text-red-600 hover:underline">Déconnecter toutes les autres sessions</button>
+            </div>
+          </div>
+          <!-- ============= /PANEL: Sécurité ============= -->
+
+          <!-- ============= PANEL: Notifications ============= -->
+          <div data-settings-panel="notifications" class="hidden bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+            <div class="mb-5">
+              <h3 class="font-semibold text-ink-900 text-lg">Préférences de notification</h3>
+              <p class="text-xs text-ink-500 mt-1">Choisissez quand et comment être averti</p>
+            </div>
+            <div class="space-y-1 divide-y divide-ink-100">
+              <div class="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 pb-2">
+                <div>Événement</div><div class="text-center">Email</div><div class="text-center">In-app</div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 items-center py-3">
+                <div><div class="text-sm font-medium text-ink-900">Nouveau paiement reçu</div><div class="text-xs text-ink-500">Loyer / facture encaissée</div></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 items-center py-3">
+                <div><div class="text-sm font-medium text-ink-900">Loyer en retard</div><div class="text-xs text-ink-500">Locataire ≥ 3 jours en retard</div></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 items-center py-3">
+                <div><div class="text-sm font-medium text-ink-900">Bail à renouveler</div><div class="text-xs text-ink-500">60 jours avant expiration</div></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 items-center py-3">
+                <div><div class="text-sm font-medium text-ink-900">Ticket maintenance urgent</div><div class="text-xs text-ink-500">Priorité haute</div></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+              </div>
+              <div class="grid grid-cols-3 gap-4 items-center py-3">
+                <div><div class="text-sm font-medium text-ink-900">Rapport mensuel</div><div class="text-xs text-ink-500">Synthèse 1er du mois</div></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" checked class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+                <div class="flex justify-center"><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer" /><div class="w-9 h-5 bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition"></div><div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-4"></div></label></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-ink-100">
+              <button class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg">Annuler</button>
+              <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Enregistrer</button>
+            </div>
+          </div>
+          <!-- ============= /PANEL: Notifications ============= -->
+
+          <!-- ============= PANEL: Apparence ============= -->
+          <div data-settings-panel="apparence" class="hidden bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+            <div class="mb-5">
+              <h3 class="font-semibold text-ink-900 text-lg">Apparence</h3>
+              <p class="text-xs text-ink-500 mt-1">Personnalisez l'apparence de l'interface</p>
+            </div>
+            <div class="space-y-5">
+              <div>
+                <label class="text-sm font-medium text-ink-700 mb-2 block">Thème</label>
+                <div class="grid grid-cols-3 gap-3">
+                  <label class="cursor-pointer">
+                    <input type="radio" name="theme" value="light" checked class="sr-only peer" />
+                    <div class="p-3 bg-white border-2 border-brand-500 ring-2 ring-brand-100 rounded-lg flex flex-col items-center gap-2">
+                      <div class="w-full h-12 bg-white border border-ink-200 rounded flex items-center justify-center"><i data-lucide="sun" class="w-5 h-5 text-amber-500"></i></div>
+                      <span class="text-xs font-medium text-ink-900">Clair</span>
+                    </div>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input type="radio" name="theme" value="dark" class="sr-only peer" />
+                    <div class="p-3 bg-white border-2 border-ink-200 hover:border-ink-300 rounded-lg flex flex-col items-center gap-2">
+                      <div class="w-full h-12 bg-ink-900 rounded flex items-center justify-center"><i data-lucide="moon" class="w-5 h-5 text-ink-300"></i></div>
+                      <span class="text-xs font-medium text-ink-700">Sombre</span>
+                    </div>
+                  </label>
+                  <label class="cursor-pointer">
+                    <input type="radio" name="theme" value="system" class="sr-only peer" />
+                    <div class="p-3 bg-white border-2 border-ink-200 hover:border-ink-300 rounded-lg flex flex-col items-center gap-2">
+                      <div class="w-full h-12 bg-gradient-to-r from-white from-50% to-ink-900 to-50% rounded flex items-center justify-center"><i data-lucide="monitor" class="w-5 h-5 text-ink-500"></i></div>
+                      <span class="text-xs font-medium text-ink-700">Système</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label class="text-sm font-medium text-ink-700 mb-2 block">Couleur principale</label>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <button class="w-9 h-9 rounded-full bg-brand-600 ring-2 ring-offset-2 ring-brand-600" title="Indigo (actuel)"></button>
+                  <button class="w-9 h-9 rounded-full bg-emerald-600 hover:ring-2 ring-offset-2 ring-emerald-600" title="Emerald"></button>
+                  <button class="w-9 h-9 rounded-full bg-amber-500 hover:ring-2 ring-offset-2 ring-amber-500" title="Amber"></button>
+                  <button class="w-9 h-9 rounded-full bg-rose-600 hover:ring-2 ring-offset-2 ring-rose-600" title="Rose"></button>
+                  <button class="w-9 h-9 rounded-full bg-sky-600 hover:ring-2 ring-offset-2 ring-sky-600" title="Sky"></button>
+                  <button class="w-9 h-9 rounded-full bg-purple-600 hover:ring-2 ring-offset-2 ring-purple-600" title="Purple"></button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="text-sm font-medium text-ink-700 mb-1.5 block">Densité d'affichage</label>
+                  <select class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"><option>Confortable</option><option>Compacte</option></select>
+                </div>
+                <div>
+                  <label class="text-sm font-medium text-ink-700 mb-1.5 block">Taille de police</label>
+                  <select class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"><option>Moyenne (par défaut)</option><option>Petite</option><option>Grande</option></select>
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
+                <button class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg">Annuler</button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+          <!-- ============= /PANEL: Apparence ============= -->
+
+          <!-- ============= PANEL: Facturation ============= -->
+          <div data-settings-panel="facturation" class="hidden space-y-4">
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="mb-5">
+                <h3 class="font-semibold text-ink-900 text-lg">Devises supportées</h3>
+                <p class="text-xs text-ink-500 mt-1">Devises actives dans l'application (factures, paiements, baux)</p>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <span class="w-9 h-9 rounded-full bg-brand-50 text-brand-700 font-semibold flex items-center justify-center text-sm">FC</span>
+                    <div>
+                      <div class="text-sm font-medium text-ink-900">Franc Congolais (CDF)</div>
+                      <div class="text-xs text-ink-500">Devise par défaut</div>
+                    </div>
+                  </div>
+                  <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <div class="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <span class="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 font-semibold flex items-center justify-center text-sm">$</span>
+                    <div>
+                      <div class="text-sm font-medium text-ink-900">Dollar US (USD)</div>
+                      <div class="text-xs text-ink-500">Devise secondaire</div>
+                    </div>
+                  </div>
+                  <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
+                </div>
+                <button class="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-ink-300 hover:border-brand-300 hover:bg-brand-50 rounded-lg text-sm text-ink-600 hover:text-brand-700 transition">
+                  <i data-lucide="plus" class="w-4 h-4"></i> Ajouter une devise
+                </button>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="mb-5">
+                <h3 class="font-semibold text-ink-900 text-lg">Numérotation</h3>
+                <p class="text-xs text-ink-500 mt-1">Format de numérotation des factures et baux</p>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Préfixe facture</label><input type="text" value="INV-2026-" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Préfixe bail</label><input type="text" value="LEASE-" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">TVA (%)</label><input type="number" value="16" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+                <div><label class="text-sm font-medium text-ink-700 mb-1.5 block">Échéance par défaut (jours)</label><input type="number" value="14" class="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" /></div>
+              </div>
+              <div class="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-ink-100">
+                <button class="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg">Annuler</button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+          <!-- ============= /PANEL: Facturation ============= -->
+
+          <!-- ============= PANEL: Intégrations ============= -->
+          <div data-settings-panel="integrations" class="hidden bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+            <div class="mb-5">
+              <h3 class="font-semibold text-ink-900 text-lg">Intégrations</h3>
+              <p class="text-xs text-ink-500 mt-1">Services externes connectés à NGOLU</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0"><i data-lucide="mail" class="w-5 h-5 text-emerald-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">SMTP / Email</h4>
+                    <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Connecté</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">Envoi de factures, liens d'inscription et signatures</p>
+                  <button class="text-xs text-brand-700 hover:underline">Configurer</button>
+                </div>
+              </div>
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0"><i data-lucide="message-square" class="w-5 h-5 text-amber-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">SMS / WhatsApp</h4>
+                    <span class="text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded">Non configuré</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">Notifications locataires et 2FA par SMS</p>
+                  <button class="text-xs text-brand-700 hover:underline">Connecter</button>
+                </div>
+              </div>
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center shrink-0"><i data-lucide="credit-card" class="w-5 h-5 text-brand-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">Mobile Money</h4>
+                    <span class="text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded">Non configuré</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">M-Pesa, Airtel Money, Orange Money</p>
+                  <button class="text-xs text-brand-700 hover:underline">Connecter</button>
+                </div>
+              </div>
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center shrink-0"><i data-lucide="cloud" class="w-5 h-5 text-purple-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">Stockage cloud</h4>
+                    <span class="text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded">Non configuré</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">Backup automatique des contrats signés</p>
+                  <button class="text-xs text-brand-700 hover:underline">Connecter</button>
+                </div>
+              </div>
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center shrink-0"><i data-lucide="key-round" class="w-5 h-5 text-sky-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">Clés API</h4>
+                    <span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">3 actives</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">Accès programmatique à NGOLU</p>
+                  <button class="text-xs text-brand-700 hover:underline">Gérer</button>
+                </div>
+              </div>
+
+              <div class="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+                <div class="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center shrink-0"><i data-lucide="webhook" class="w-5 h-5 text-rose-600"></i></div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="font-medium text-ink-900 text-sm">Webhooks</h4>
+                    <span class="text-xs font-medium text-ink-600 bg-ink-100 px-2 py-0.5 rounded">0 actifs</span>
+                  </div>
+                  <p class="text-xs text-ink-500 mb-2">Notifier des systèmes tiers en temps réel</p>
+                  <button class="text-xs text-brand-700 hover:underline">Configurer</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <!-- ============= /PANEL: Intégrations ============= -->
+
           </div>
         </div>
       </section>
@@ -5770,6 +6120,31 @@
 
         bauxViewPanels.forEach(panel => {
           panel.classList.toggle('hidden', panel.dataset.bauxViewPanel !== target);
+        });
+
+        lucide.createIcons();
+      });
+    });
+
+    // ============= SETTINGS SUB-NAV =============
+    const settingsTabs = document.querySelectorAll('.settings-tab');
+    const settingsPanels = document.querySelectorAll('[data-settings-panel]');
+
+    settingsTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.settingsTab;
+
+        settingsTabs.forEach(t => {
+          const isActive = t.dataset.settingsTab === target;
+          t.classList.toggle('bg-brand-50', isActive);
+          t.classList.toggle('text-brand-700', isActive);
+          t.classList.toggle('font-medium', isActive);
+          t.classList.toggle('text-ink-600', !isActive);
+          t.classList.toggle('hover:bg-ink-100', !isActive);
+        });
+
+        settingsPanels.forEach(panel => {
+          panel.classList.toggle('hidden', panel.dataset.settingsPanel !== target);
         });
 
         lucide.createIcons();
