@@ -47,6 +47,7 @@ type CompanyInfo = {
   address: string | null;
   phone: string | null;
   email: string | null;
+  landlordSignature: string | null;
 };
 
 @Injectable()
@@ -598,12 +599,13 @@ export class ContractsService {
         address: appSettings.address,
         phone: appSettings.phone,
         email: appSettings.email,
+        landlordSignature: appSettings.landlordSignature,
       })
       .from(appSettings)
       .where(eq(appSettings.id, 1))
       .limit(1);
 
-    return rows[0] ?? { companyName: null, address: null, phone: null, email: null };
+    return rows[0] ?? { companyName: null, address: null, phone: null, email: null, landlordSignature: null };
   }
 
   private formatDate(value: Date | string | null | undefined) {

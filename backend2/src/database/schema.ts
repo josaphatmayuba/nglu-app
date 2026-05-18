@@ -628,6 +628,7 @@ export const appSettings = mysqlTable("appSetting", {
   website: varchar("website", { length: 255 }),
   footer: text("footer"),
   logo: varchar("logo", { length: 255 }),
+  landlordSignature: text("landlord_signature"),
   currencyId: bigint("currencyId", { mode: "number" }),
   isPos: varchar("isPos", { length: 10 }).default("false"),
   isDiscount: varchar("isDiscount", { length: 10 }).default("false"),
