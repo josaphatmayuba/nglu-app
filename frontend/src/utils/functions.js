@@ -18,11 +18,19 @@ export function stringShorter(str, length) {
 }
 
 export function errorHandler(error, toastStatus) {
-  if (error.response?.data?.error) {
-    toastStatus && toast.error(error.response.data.error);
+  const responseError =
+    error.response?.data?.message ||
+    error.response?.data?.error ||
+    error.message;
+
+  if (responseError) {
+    const message = Array.isArray(responseError)
+      ? responseError.join(", ")
+      : responseError;
+    toastStatus && toast.error(message);
     return {
       message: "error",
-      error: error.response.data.error,
+      error: message,
     };
   } else {
     toastStatus && toast.error("Something went wrong, Please try again");
