@@ -49,6 +49,7 @@ const printableHtml = (contract) => `<!doctype html>
     .signature-stamp { background: #fff; border: 2px dashed #4f46e5; border-radius: 10px; color: #4338ca; padding: 18px; }
     .signature-stamp strong { display: block; font-size: 14px; margin-bottom: 6px; }
     .signature-stamp span { color: #16a34a; display: block; font-size: 12px; font-weight: 600; }
+    .generated-by { border-top: 1px solid #e4e4e7; color: #71717a; font-size: 11px; font-style: italic; margin-top: 28px; padding-top: 10px; text-align: center; }
     @media print { body { margin: 18mm; } .no-print { display: none; } }
   </style>
 </head>
@@ -76,6 +77,7 @@ const printableHtml = (contract) => `<!doctype html>
       ${landlordStampHtml(contract)}
     </div>
   </div>
+  ${contract.createdByName ? `<div class="generated-by">Contrat généré par ${contract.createdByName}</div>` : ""}
 </body>
 </html>`;
 
@@ -197,6 +199,16 @@ const downloadPdf = (contract) => {
     rightY += 32;
   }
   y = Math.max(leftY, rightY);
+  if (contract.createdByName) {
+    if (y > pageHeight - margin - 14) { pdf.addPage(); y = margin; }
+    y += 8;
+    pdf.setDrawColor(228, 228, 231);
+    pdf.line(margin, y, pageWidth - margin, y);
+    y += 6;
+    pdf.setFontSize(9);
+    pdf.setTextColor(113, 113, 122);
+    pdf.text(`Contrat généré par ${contract.createdByName}`, pageWidth / 2, y, { align: "center" });
+  }
   const filename = `contrat-${contract.id}${contract.signedAt ? "-signe" : ""}.pdf`;
   pdf.save(filename);
   return filename;
@@ -317,6 +329,21 @@ const SignedContractView = ({ open, contractId, onClose }) => {
                 </div>
               )}
             </div>
+            {contract.createdByName && (
+              <div
+                style={{
+                  borderTop: "1px solid #e4e4e7",
+                  color: "#71717a",
+                  fontSize: 12,
+                  fontStyle: "italic",
+                  marginTop: 18,
+                  paddingTop: 10,
+                  textAlign: "center",
+                }}
+              >
+                Contrat généré par {contract.createdByName}
+              </div>
+            )}
           </div>
 
           <div className="immo-modal-footer" style={{ marginTop: 16 }}>

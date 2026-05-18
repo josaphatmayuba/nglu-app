@@ -12,6 +12,7 @@ import {
   realEstateLeases,
   realEstateProperties,
   realEstateUnits,
+  users,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { ContractTemplatesService } from "./contract-templates.service";
@@ -57,7 +58,7 @@ export class ContractsService {
     private readonly templates: ContractTemplatesService,
   ) {}
 
-  async createContract(dto: CreateContractDto) {
+  async createContract(dto: CreateContractDto, createdBy?: number) {
     const lease = await this.getLeaseDetails(dto.leaseId);
     const company = await this.getCompanyInfo();
     const content = dto.contractContent ?? (await this.renderContent(lease, company, dto.templateId));
@@ -68,6 +69,7 @@ export class ContractsService {
       contractContent: content,
       tenantEmail: lease.tenantEmail ?? null,
       tenantName: lease.tenantName,
+      createdBy: createdBy ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -184,7 +186,21 @@ export class ContractsService {
       .orderBy(desc(realEstateContractAuditLogs.id));
 
     const companyInfo = await this.getCompanyInfo();
-    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName };
+
+    let createdByName: string | null = null;
+    if (rows[0].createdBy) {
+      const [creator] = await this.db
+        .select({ firstName: users.firstName, lastName: users.lastName, username: users.username })
+        .from(users)
+        .where(eq(users.id, rows[0].createdBy))
+        .limit(1);
+      if (creator) {
+        const full = `${creator.firstName ?? ""} ${creator.lastName ?? ""}`.trim();
+        createdByName = full || creator.username || null;
+      }
+    }
+
+    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName, createdByName };
   }
 
   async sendContract(id: number) {
@@ -281,7 +297,7 @@ export class ContractsService {
     return { message: "Contract signed successfully." };
   }
 
-  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }) {
+  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, createdBy?: number) {
     const rows = await this.db
       .select()
       .from(realEstateLeases)
@@ -343,7 +359,7 @@ export class ContractsService {
         .where(eq(realEstateLeases.id, leaseId));
     }
 
-    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId });
+    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, createdBy);
 
     return { lease: { id: newLeaseId, reference }, contract: newContract };
   }
