@@ -18,6 +18,7 @@ import {
   CreditCard,
   FileSignature,
   Search,
+  Settings,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
@@ -156,6 +157,9 @@ const PropertyManagementNew = () => {
             </button>
             <Link to="/admin/property-management/contract-templates" className="immo-filter-button">
               <FileSignature size={17} /> Modèles de contrat
+            </Link>
+            <Link to="/admin/property-management/settings" className="immo-filter-button" title="Paramètres Immobilier">
+              <Settings size={17} /> Paramètres
             </Link>
           </div>
         </div>
