@@ -5,13 +5,13 @@ import { loadAllAccount, loadIncomeStatement, loadTrailBalance, loadBalanceSheet
 import { loadAllTransactionType } from "@/redux/rtk/features/transactionType/transactionTypeSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
-import OverviewPanel      from "./panels/OverviewPanel";
-import JournauxPanel      from "./panels/JournauxPanel";
-import EcrituresPanel     from "./panels/EcrituresPanel";
-import PlanComptablePanel from "./panels/PlanComptablePanel";
+import OverviewPanel        from "./panels/OverviewPanel";
+import JournauxPanel        from "./panels/JournauxPanel";
+import EcrituresPanel       from "./panels/EcrituresPanel";
+import PlanComptablePanel   from "./panels/PlanComptablePanel";
 import EtatsFinanciersPanel from "./panels/EtatsFinanciersPanel";
-import TvaPanel           from "./panels/TvaPanel";
-import EcritureFormModal  from "./EcritureFormModal";
+import TvaPanel             from "./panels/TvaPanel";
+import EcritureFormModal    from "./EcritureFormModal";
 
 const TABS = [
   { key: "overview",  label: "Overview" },
@@ -24,12 +24,65 @@ const TABS = [
 
 const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
-const decodeHTMLEntity = (str) => {
-  if (typeof document === "undefined" || !str) return str;
+const decodeHTML = (str) => {
+  if (typeof document === "undefined" || !str) return str ?? "";
   const el = document.createElement("textarea");
   el.innerHTML = str;
   return el.value;
 };
+
+const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+
+// Group transactions by currency, compute revenue/expense per currency.
+function computeKpisByCurrency(transactions) {
+  const map = {};
+  transactions.forEach((t) => {
+    const rawSym = t.currencySymbol || "$";
+    const sym    = decodeHTML(rawSym) || rawSym;
+    const key    = t.currencyId ?? sym;
+    const amount = Number(t.amount || 0);
+    const creditName = (t.creditAccountName || t.creditAccount || t.credit?.name || "").toLowerCase();
+    const debitName  = (t.debitAccountName  || t.debitAccount  || t.debit?.name  || "").toLowerCase();
+    const isRevenue  = /revenue|sales|rental/i.test(creditName);
+    const isExpense  = /expense|cost|salary|maintenance|utilities/i.test(debitName);
+    if (!map[key]) map[key] = { sym, revenue: 0, expense: 0 };
+    if (isRevenue) map[key].revenue += amount;
+    if (isExpense) map[key].expense += amount;
+  });
+  return Object.entries(map)
+    .filter(([, v]) => v.revenue > 0 || v.expense > 0)
+    .map(([key, v]) => ({ key, sym: v.sym, revenue: v.revenue, expense: v.expense, result: v.revenue - v.expense }));
+}
+
+// KPI card showing one line per currency
+function MultiKpiCard({ icon: Icon, label, colorKey, lines }) {
+  const COLORS = {
+    emerald: ["bg-emerald-50", "text-emerald-600"],
+    rose:    ["bg-rose-50",    "text-rose-600"],
+    brand:   ["bg-brand-50",   "text-brand-600"],
+    red:     ["bg-red-50",     "text-red-600"],
+    amber:   ["bg-amber-50",   "text-amber-600"],
+  };
+  const [bg, ic] = COLORS[colorKey] || COLORS.brand;
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 ${ic}`} />
+        </div>
+        <span className="text-xs text-ink-500 font-medium">{label}</span>
+      </div>
+      <div className="space-y-0.5">
+        {lines.length === 0
+          ? <p className="text-base font-semibold text-ink-400">—</p>
+          : lines.map((line, i) => (
+              <p key={i} className="text-sm font-semibold text-ink-900 tabular-nums leading-tight">{line}</p>
+            ))
+        }
+      </div>
+    </div>
+  );
+}
 
 export default function AccountingPage() {
   const dispatch = useDispatch();
@@ -42,18 +95,15 @@ export default function AccountingPage() {
   const accounts        = useSelector((s) => s.accounts?.list           ?? []);
   const acctLoading     = useSelector((s) => s.accounts?.loading        ?? false);
   const incomeStatement = useSelector((s) => s.accounts?.incomeStatement ?? null);
-  const trailBalance      = useSelector((s) => s.accounts?.trailBalance   ?? null);
-  const balanceSheet      = useSelector((s) => s.accounts?.balanceSheet   ?? null);
-  const transactionTypes  = useSelector((s) => s.transactionTypes?.list  ?? []);
+  const trailBalance    = useSelector((s) => s.accounts?.trailBalance   ?? null);
+  const balanceSheet    = useSelector((s) => s.accounts?.balanceSheet   ?? null);
+  const transactionTypes = useSelector((s) => s.transactionTypes?.list  ?? []);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
   const currencySymbol = useMemo(
-    () => decodeHTMLEntity(appSetting?.currency?.currencySymbol) || "$",
+    () => decodeHTML(appSetting?.currency?.currencySymbol) || "$",
     [appSetting]
   );
-
-  const FMT = useMemo(() => new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }), []);
-  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
 
   useEffect(() => {
     dispatch(loadAllTransaction({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, count: 1000, offset: 0 }));
@@ -64,33 +114,40 @@ export default function AccountingPage() {
     dispatch(loadBalanceSheet());
   }, [dispatch, exercice]);
 
-  // incomeStatement from backend: { totalRevenue, totalExpense, profit, revenue[], expense[] }
+  const kpisByCur = useMemo(() => computeKpisByCurrency(transactions), [transactions]);
+
+  // Tax lines from trial balance — one per matching account
+  const taxLines = useMemo(() => {
+    if (!trailBalance) return [];
+    return [...(trailBalance.debits ?? []), ...(trailBalance.credits ?? [])]
+      .filter((a) => /tax|vat|tva/i.test(a.subAccount || ""))
+      .map((a) => `${currencySymbol} ${FMT.format(Math.abs(Number(a.balance || 0)))}`);
+  }, [trailBalance, currencySymbol]);
+
+  // Build display lines per KPI; fall back to backend totals when no per-currency data
   const income  = Number(incomeStatement?.totalRevenue ?? 0);
   const expense = Number(incomeStatement?.totalExpense ?? 0);
-  const result  = income - expense;
 
-  // Tax balance from trial balance — finds sub-account named "Tax"
-  const taxBalance = useMemo(() => {
-    if (!trailBalance) return null;
-    const all = [...(trailBalance.debits ?? []), ...(trailBalance.credits ?? [])];
-    const taxItem = all.find((a) => a.subAccount?.toLowerCase() === "tax");
-    return taxItem ? taxItem.balance : null;
-  }, [trailBalance]);
+  const revenueLines = kpisByCur.length
+    ? kpisByCur.map((c) => `${c.sym} ${FMT.format(c.revenue)}`)
+    : (income ? [`${currencySymbol} ${FMT.format(income)}`] : []);
+
+  const expenseLines = kpisByCur.length
+    ? kpisByCur.map((c) => `${c.sym} ${FMT.format(c.expense)}`)
+    : (expense ? [`${currencySymbol} ${FMT.format(expense)}`] : []);
+
+  const resultLines = kpisByCur.length
+    ? kpisByCur.map((c) => `${c.sym} ${FMT.format(Math.abs(c.result))}${c.result < 0 ? " (loss)" : ""}`)
+    : [`${currencySymbol} ${FMT.format(Math.abs(income - expense))}${income - expense < 0 ? " (loss)" : ""}`];
+
+  const allProfit = kpisByCur.every((c) => c.result >= 0);
 
   const kpis = [
-    { key: "ca",      icon: TrendingUp,  label: "Revenue",     value: fmt(income),  color: "emerald" },
-    { key: "charges", icon: TrendingDown, label: "Expenses",   value: fmt(expense), color: "rose"    },
-    { key: "result",  icon: Scale,        label: "Net result", value: fmt(Math.abs(result)) + (result < 0 ? " (loss)" : ""), color: result >= 0 ? "brand" : "red" },
-    { key: "tva",     icon: Receipt,      label: "Tax",        value: taxBalance !== null ? fmt(Math.abs(taxBalance)) : "—", color: "amber" },
+    { icon: TrendingUp,   label: "Revenue",    colorKey: "emerald",              lines: revenueLines },
+    { icon: TrendingDown, label: "Expenses",   colorKey: "rose",                 lines: expenseLines },
+    { icon: Scale,        label: "Net result", colorKey: allProfit ? "brand" : "red", lines: resultLines },
+    { icon: Receipt,      label: "Tax",        colorKey: "amber",                lines: taxLines.length ? taxLines : ["—"] },
   ];
-
-  const COLOR = {
-    emerald: "text-emerald-600 bg-emerald-50",
-    rose:    "text-rose-600 bg-rose-50",
-    brand:   "text-brand-600 bg-brand-50",
-    red:     "text-red-600 bg-red-50",
-    amber:   "text-amber-600 bg-amber-50",
-  };
 
   return (
     <div className="min-h-screen bg-ink-50">
@@ -120,30 +177,16 @@ export default function AccountingPage() {
 
       <div className="px-6 py-4 space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {kpis.map((k) => {
-            const Icon = k.icon;
-            const cls  = COLOR[k.color] || COLOR.brand;
-            return (
-              <div key={k.key} className="bg-white rounded-xl border border-ink-200 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-8 h-8 rounded-lg ${cls.split(" ")[1]} flex items-center justify-center`}>
-                    <Icon className={`w-4 h-4 ${cls.split(" ")[0]}`} />
-                  </div>
-                  <span className="text-xs text-ink-500 font-medium">{k.label}</span>
-                </div>
-                <p className="text-base font-semibold text-ink-900 tabular-nums leading-tight">{k.value}</p>
-              </div>
-            );
-          })}
+          {kpis.map((k) => (
+            <MultiKpiCard key={k.label} icon={k.icon} label={k.label} colorKey={k.colorKey} lines={k.lines} />
+          ))}
         </div>
 
         <div className="bg-white rounded-xl border border-ink-200 overflow-hidden">
           <div className="flex overflow-x-auto border-b border-ink-100">
             {TABS.map((t) => (
               <button
-                key={t.key}
-                type="button"
-                onClick={() => setActiveTab(t.key)}
+                key={t.key} type="button" onClick={() => setActiveTab(t.key)}
                 className={`flex-shrink-0 px-5 py-3 text-sm font-medium transition border-b-2 ${
                   activeTab === t.key
                     ? "border-brand-600 text-brand-700 bg-brand-50/50"
@@ -155,12 +198,24 @@ export default function AccountingPage() {
             ))}
           </div>
           <div className="p-4">
-            {activeTab === "overview"  && <OverviewPanel transactions={transactions} trailBalance={trailBalance} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />}
-            {activeTab === "journaux"  && <JournauxPanel transactions={transactions} transactionTypes={transactionTypes} />}
-            {activeTab === "ecritures" && <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />}
-            {activeTab === "plan"      && <PlanComptablePanel trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />}
-            {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} balanceSheet={balanceSheet} currencySymbol={currencySymbol} />}
-            {activeTab === "tva"       && <TvaPanel trailBalance={trailBalance} transactions={transactions} currencySymbol={currencySymbol} />}
+            {activeTab === "overview"  && (
+              <OverviewPanel transactions={transactions} trailBalance={trailBalance} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />
+            )}
+            {activeTab === "journaux"  && (
+              <JournauxPanel transactions={transactions} transactionTypes={transactionTypes} />
+            )}
+            {activeTab === "ecritures" && (
+              <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />
+            )}
+            {activeTab === "plan"      && (
+              <PlanComptablePanel transactions={transactions} trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />
+            )}
+            {activeTab === "etats"     && (
+              <EtatsFinanciersPanel incomeStatement={incomeStatement} balanceSheet={balanceSheet} transactions={transactions} trailBalance={trailBalance} currencySymbol={currencySymbol} />
+            )}
+            {activeTab === "tva"       && (
+              <TvaPanel trailBalance={trailBalance} transactions={transactions} currencySymbol={currencySymbol} />
+            )}
           </div>
         </div>
       </div>
