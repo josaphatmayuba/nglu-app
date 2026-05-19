@@ -7,8 +7,12 @@
 -- Sub-account IDs: 1=Cash 2=Bank 3=Inventory 4=AR 5=AP 8=Sales 10=Salary 12=Utilities
 
 -- ─── 0. Ensure is_active exists on maintenance (guard for older deploys) ──────
-ALTER TABLE `real_estate_maintenance_requests`
-  ADD COLUMN IF NOT EXISTS `is_active` TINYINT(1) NOT NULL DEFAULT 1 AFTER `description`;
+SET @col0 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'real_estate_maintenance_requests' AND COLUMN_NAME = 'is_active');
+SET @sql0 := IF(@col0 = 0,
+  'ALTER TABLE `real_estate_maintenance_requests` ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1 AFTER `description`',
+  'SELECT 1');
+PREPARE s0 FROM @sql0; EXECUTE s0; DEALLOCATE PREPARE s0;
 
 -- ─── 1. Sub-accounts ──────────────────────────────────────────────────────────
 
