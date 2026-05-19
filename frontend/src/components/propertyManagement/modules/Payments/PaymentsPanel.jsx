@@ -17,8 +17,8 @@ const VIEW_KEYS = ["tableau", "locataire", "calendrier"];
 const readStoredView = () => {
   try {
     const v = window.localStorage?.getItem(VIEW_STORAGE_KEY);
-    return VIEW_KEYS.includes(v) ? v : "tableau";
-  } catch { return "tableau"; }
+    return VIEW_KEYS.includes(v) ? v : "locataire";
+  } catch { return "locataire"; }
 };
 
 const PaymentsPanel = ({ searchTerm = "" }) => {
