@@ -149,6 +149,13 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     }
   };
 
+  const handleStatusChange = async ({ id, status }) => {
+    const resp = await dispatch(saveMaintenance({ id, values: { status } }));
+    if (resp.payload?.message === "success" || resp.payload?.id) {
+      dispatch(loadPropertyManagement());
+    }
+  };
+
   const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete };
 
   return (
@@ -218,7 +225,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         </div>
       )}
       {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} {...sharedViewProps} />}
-      {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} {...sharedViewProps} />}
+      {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} {...sharedViewProps} onStatusChange={handleStatusChange} />}
       {maintenanceView === "calendar" && <MaintenanceCalendarView requests={ticketsForView} />}
 
       <MaintenanceFormModal

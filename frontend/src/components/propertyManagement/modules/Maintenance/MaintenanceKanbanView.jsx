@@ -1,9 +1,20 @@
 // SCRUM-72 — Kanban view (default) for the Maintenance panel.
+// SCRUM-88 — Drag-and-drop between columns via @dnd-kit/core.
 // 3 swim lanes: Ouvert / En cours / Résolu.
 
 import moment from "moment";
 import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import { useDroppable, useDraggable } from "@dnd-kit/core";
 
 import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
@@ -21,12 +32,34 @@ const priorityLabel = (p) =>
 const priorityClass = (p) =>
   ["urgent", "high"].includes(p) ? "danger" : p === "low" ? "neutral" : "warning";
 
-const KanbanCard = ({ request, index, colKey, onEdit, onDelete }) => {
+// ── Draggable card ────────────────────────────────────────────────────────────
+
+const KanbanCard = ({ request, index, colKey, onEdit, onDelete, isDragOverlay = false }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: String(request.id),
+    data: { request, colKey },
+    disabled: isDragOverlay,
+  });
+
+  const style = {
+    transform: transform ? CSS.Translate.toString(transform) : undefined,
+    opacity: isDragging ? 0.4 : 1,
+    cursor: isDragging ? "grabbing" : "grab",
+    touchAction: "none",
+  };
+
   const assignee = request.assignee || request.assignedTo || request.technicianName;
   const dateRef = request.scheduledDate || request.createdAt || request.reportedAt;
+
   return (
-    <article className={`immo-kanban-card ${colKey === "done" ? "done" : ""}`}>
+    <article
+      ref={isDragOverlay ? undefined : setNodeRef}
+      style={isDragOverlay ? { opacity: 1, cursor: "grabbing" } : style}
+      className={`immo-kanban-card ${colKey === "done" ? "done" : ""}${isDragging ? " dragging" : ""}`}
+      {...(isDragOverlay ? {} : { ...attributes, ...listeners })}
+    >
       <div className="immo-kanban-card-head">
         <span className={`immo-ticket-icon-sm ${ticketIconTone(request)}`}>
           {ticketIconFor(request, 14)}
@@ -35,7 +68,11 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete }) => {
           {priorityLabel(request.priority)}
         </span>
         {(onEdit || onDelete) && (
-          <span className="immo-menu-anchor" style={{ marginLeft: "auto" }}>
+          <span
+            className="immo-menu-anchor"
+            style={{ marginLeft: "auto" }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               className={`immo-flat-icon${menuOpen ? " active" : ""}`}
@@ -84,39 +121,121 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete }) => {
   );
 };
 
-const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete }) => {
+// ── Droppable column ──────────────────────────────────────────────────────────
+
+const DroppableColumn = ({ col, items, onEdit, onDelete, isOver }) => {
+  const { setNodeRef } = useDroppable({ id: col.key });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`immo-kanban-col col-${col.key}${isOver ? " drop-over" : ""}`}
+    >
+      <header className="immo-kanban-col-head">
+        <span className={`immo-pill-dot ${col.dotClass}`}></span>
+        <h3>{col.label}</h3>
+        <span className="immo-kanban-count">{items.length}</span>
+      </header>
+      <div className="immo-kanban-body">
+        {items.length === 0 && (
+          <div className="immo-kanban-empty">
+            {isOver ? "Déposer ici" : "Aucun ticket"}
+          </div>
+        )}
+        {items.map((request, index) => (
+          <KanbanCard
+            key={request.id}
+            request={request}
+            index={index}
+            colKey={col.key}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ── Main view ─────────────────────────────────────────────────────────────────
+
+const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete, onStatusChange }) => {
+  const [activeItem, setActiveItem] = useState(null);
+  const [overColKey, setOverColKey] = useState(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
   const grouped = COLUMNS.map((col) => ({
     ...col,
     items: requests.filter(col.match),
   }));
 
+  const handleDragStart = ({ active }) => {
+    const data = active.data.current;
+    setActiveItem(data ? { request: data.request, colKey: data.colKey } : null);
+  };
+
+  const handleDragOver = ({ over }) => {
+    setOverColKey(over ? over.id : null);
+  };
+
+  const handleDragEnd = ({ active, over }) => {
+    setActiveItem(null);
+    setOverColKey(null);
+
+    if (!over) return;
+
+    const fromColKey = active.data.current?.colKey;
+    const toColKey = over.id;
+
+    if (!fromColKey || fromColKey === toColKey) return;
+
+    const request = active.data.current?.request;
+    if (!request) return;
+
+    onStatusChange?.({ id: request.id, status: toColKey });
+  };
+
+  const handleDragCancel = () => {
+    setActiveItem(null);
+    setOverColKey(null);
+  };
+
   return (
-    <div className="immo-kanban">
-      {grouped.map((col) => (
-        <div key={col.key} className={`immo-kanban-col col-${col.key}`}>
-          <header className="immo-kanban-col-head">
-            <span className={`immo-pill-dot ${col.dotClass}`}></span>
-            <h3>{col.label}</h3>
-            <span className="immo-kanban-count">{col.items.length}</span>
-          </header>
-          <div className="immo-kanban-body">
-            {col.items.length === 0 && (
-              <div className="immo-kanban-empty">Aucun ticket</div>
-            )}
-            {col.items.map((request, index) => (
-              <KanbanCard
-                key={request.id}
-                request={request}
-                index={index}
-                colKey={col.key}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="immo-kanban">
+        {grouped.map((col) => (
+          <DroppableColumn
+            key={col.key}
+            col={col}
+            items={col.items}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            isOver={overColKey === col.key}
+          />
+        ))}
+      </div>
+
+      <DragOverlay dropAnimation={{ duration: 150, easing: "ease" }}>
+        {activeItem && (
+          <KanbanCard
+            request={activeItem.request}
+            index={0}
+            colKey={activeItem.colKey}
+            isDragOverlay
+          />
+        )}
+      </DragOverlay>
+    </DndContext>
   );
 };
 
