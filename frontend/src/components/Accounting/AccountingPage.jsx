@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
-import { loadAllAccount, loadIncomeStatement, loadTrailBalance } from "@/redux/rtk/features/account/accountSlice";
+import { loadAllAccount, loadIncomeStatement, loadTrailBalance, loadBalanceSheet } from "@/redux/rtk/features/account/accountSlice";
 import { loadAllTransactionType } from "@/redux/rtk/features/transactionType/transactionTypeSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
@@ -43,6 +43,7 @@ export default function AccountingPage() {
   const acctLoading     = useSelector((s) => s.accounts?.loading        ?? false);
   const incomeStatement = useSelector((s) => s.accounts?.incomeStatement ?? null);
   const trailBalance      = useSelector((s) => s.accounts?.trailBalance   ?? null);
+  const balanceSheet      = useSelector((s) => s.accounts?.balanceSheet   ?? null);
   const transactionTypes  = useSelector((s) => s.transactionTypes?.list  ?? []);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
@@ -60,6 +61,7 @@ export default function AccountingPage() {
     dispatch(loadIncomeStatement());
     dispatch(loadTrailBalance());
     dispatch(loadAllTransactionType());
+    dispatch(loadBalanceSheet());
   }, [dispatch, exercice]);
 
   // incomeStatement from backend: { totalRevenue, totalExpense, profit, revenue[], expense[] }
@@ -157,7 +159,7 @@ export default function AccountingPage() {
             {activeTab === "journaux"  && <JournauxPanel transactions={transactions} transactionTypes={transactionTypes} />}
             {activeTab === "ecritures" && <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />}
             {activeTab === "plan"      && <PlanComptablePanel trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />}
-            {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} currencySymbol={currencySymbol} />}
+            {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} balanceSheet={balanceSheet} currencySymbol={currencySymbol} />}
             {activeTab === "tva"       && <TvaPanel trailBalance={trailBalance} transactions={transactions} currencySymbol={currencySymbol} />}
           </div>
         </div>
