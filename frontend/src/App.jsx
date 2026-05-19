@@ -56,10 +56,11 @@ function App() {
     }
   }, [data, dispatch, error, loading]);
 
-  // content render
+  // content render. Order matters: if we already have settings data, render
+  // the app even if a later getSetting refetch failed transiently. Only show
+  // the 500 page when data is truly missing AND an error was reported.
   let content = null;
-  if (loading) content = <LoaderSpinner />;
-  else if (data && !loading) {
+  if (data) {
     content = (
       <Routes>
         <Route path="/sign/:token" element={<SignContractPage />} />
@@ -85,6 +86,8 @@ function App() {
         <Route path="/*" element={<Page404 />} />
       </Routes>
     );
+  } else if (loading) {
+    content = <LoaderSpinner />;
   } else if (error) {
     content = <ServerError/>;
   }

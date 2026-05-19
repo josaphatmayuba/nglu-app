@@ -27,6 +27,12 @@ const LOGO_MAX_SIZE_MB = 10;
 const LOGO_MAX_SIZE_BYTES = LOGO_MAX_SIZE_MB * 1024 * 1024;
 const ACCEPTED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 
+const currencyOptionLabel = (currency) => {
+  const code = currency.currencyCode ? `${currency.currencyCode} — ` : "";
+  const symbol = currency.currencySymbol ? ` (${currency.currencySymbol})` : "";
+  return `${code}${currency.currencyName}${symbol}`;
+};
+
 const AddDetails = () => {
   const { Title } = Typography;
   const [form] = Form.useForm();
@@ -35,7 +41,11 @@ const AddDetails = () => {
   const [footer, setFooter] = useState("");
 
   const data = useSelector((state) => state?.setting?.data) || null;
-  const { list, loading } = useSelector((state) => state?.currency) || null;
+  // Defensive default {}. The previous `|| null` crashed with "Cannot
+  // destructure property 'list' of 'null'" whenever state.currency was
+  // undefined (e.g. first render before the slice mounted), pushing the
+  // whole admin into the ServerError fallback.
+  const { list = [], loading = false } = useSelector((state) => state?.currency) || {};
   const loader = useSelector((state) => state?.setting?.loading) || false;
 
   const onFinish = async (values) => {
@@ -283,17 +293,25 @@ const AddDetails = () => {
                       message: "Please input Currency!",
                     },
                   ]}>
-                  <Select label="Currency" name="currencyId" loading={loading}>
-                    {list?.map((item, index) => (
-                      <Select.Option value={item.id} key={item.id}>
-                        <span
-                          dangerouslySetInnerHTML={{
-                            __html: item.currencySymbol,
-                          }}></span>{" "}
-                        &#160;
-                        <span>{item.currencyName}</span>
-                      </Select.Option>
-                    ))}
+                  <Select
+                    showSearch
+                    optionFilterProp="label"
+                    label="Currency"
+                    name="currencyId"
+                    loading={loading}
+                    placeholder="Search currency by code, name, or symbol"
+                    filterOption={(input, option) =>
+                      (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                    }>
+                    {list?.map((item) => {
+                      const label = currencyOptionLabel(item);
+
+                      return (
+                        <Select.Option value={item.id} key={item.id} label={label}>
+                          {label}
+                        </Select.Option>
+                      );
+                    })}
                   </Select>
                 </Form.Item>
 

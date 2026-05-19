@@ -45,10 +45,24 @@ const settingSlice = createSlice({
 
     builder.addCase(getSetting.fulfilled, (state, action) => {
       state.loading = false;
-      state.data = action.payload?.data;
       if (action.payload?.error) {
-        state.error = action.payload?.error;
+        state.error = action.payload.error;
+        state.errorMassage = action.payload.message || "";
+      } else {
+        // Reset the transient error so a successful refetch unblocks the app.
+        // Without this, a single failed getSetting (e.g. 401 during token
+        // refresh) leaves error=true forever and App.jsx keeps showing the
+        // ServerError page even though the API now returns 200.
+        state.data = action.payload?.data ?? state.data;
+        state.error = false;
+        state.errorMassage = "";
       }
+    });
+
+    builder.addCase(getSetting.rejected, (state, action) => {
+      state.loading = false;
+      state.error = true;
+      state.errorMassage = action.error?.message || "Failed to load settings";
     });
 
     builder.addCase(updateSetting.pending, (state) => {
