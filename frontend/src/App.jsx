@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { ConfigProvider } from "antd";
+import { ConfigProvider, theme } from "antd";
 import "./App.css";
+import { useDarkMode } from "./utils/useDarkMode";
 import "./assets/styles/main.css";
 
 import { Toaster } from "react-hot-toast";
@@ -47,6 +48,7 @@ const antdTheme = {
 };
 
 function App() {
+  const { isDark } = useDarkMode();
   const { data, loading, error } = useSelector((state) => state?.setting) || {};
   const dispatch = useDispatch();
 
@@ -93,7 +95,7 @@ function App() {
   }
 
   return (
-    <ConfigProvider theme={antdTheme}>
+    <ConfigProvider theme={{ ...antdTheme, algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm }}>
       <BrowserRouter>
         <Toaster position='top-center' reverseOrder={false} />
 

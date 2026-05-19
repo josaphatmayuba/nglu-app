@@ -377,3 +377,107 @@ code {
     opacity: 1;
   }
 }
+
+/* ── SCRUM-74: Dark mode global overrides ──────────────────────────────── */
+
+/* Body & page background */
+.dark body {
+  background-color: #09090b !important; /* ink-950 */
+  color: #f4f4f5 !important;            /* ink-100 */
+}
+
+/* Main layout containers */
+.dark main,
+.dark .min-h-screen {
+  background-color: #09090b !important;
+}
+
+/* Content area (AdminLayout inner div) */
+.dark .bg-ink-50 {
+  background-color: #18181b !important; /* ink-900 */
+}
+
+/* White surfaces → dark card */
+.dark .bg-white {
+  background-color: #27272a !important; /* ink-800 */
+}
+
+/* Header */
+.dark header,
+.dark [class*="header"] {
+  background-color: #18181b !important;
+  border-color: #3f3f46 !important;     /* ink-700 */
+}
+
+/* Sidebar */
+.dark aside,
+.dark nav[class*="side"],
+.dark [class*="sidenav"],
+.dark [class*="SideNav"] {
+  background-color: #18181b !important;
+  border-color: #3f3f46 !important;
+}
+
+/* Card borders */
+.dark .border-ink-200,
+.dark .border-ink-100 {
+  border-color: #3f3f46 !important;
+}
+
+/* Text colors */
+.dark .text-ink-900 { color: #fafafa !important; }
+.dark .text-ink-700 { color: #d4d4d8 !important; }
+.dark .text-ink-600 { color: #a1a1aa !important; }
+.dark .text-ink-500 { color: #71717a !important; }
+
+/* Inputs and form controls */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark textarea,
+.dark select {
+  background-color: #3f3f46 !important;
+  border-color: #52525b !important;
+  color: #f4f4f5 !important;
+}
+
+/* Tables */
+.dark table th {
+  background-color: #27272a !important;
+  color: #a1a1aa !important;
+}
+.dark table td {
+  border-color: #3f3f46 !important;
+}
+.dark table tr:hover td {
+  background-color: #3f3f46 !important;
+}
+
+/* Hover states */
+.dark .hover\:bg-ink-100:hover { background-color: #3f3f46 !important; }
+.dark .hover\:bg-ink-50:hover  { background-color: #27272a !important; }
+
+/* Dividers */
+.dark .divide-ink-100 > * + * { border-color: #3f3f46 !important; }
+.dark hr { border-color: #3f3f46 !important; }
+
+/* Immobilier specific panels */
+.dark .immo-page,
+.dark .immo-metric-card,
+.dark .immo-property-card,
+.dark .immo-tenant-card,
+.dark .immo-lease-card,
+.dark .immo-ticket-card,
+.dark .immo-kanban-col,
+.dark .immo-kanban-card {
+  background-color: #27272a !important;
+  border-color: #3f3f46 !important;
+}
+
+.dark .immo-mini-kpis > div,
+.dark .immo-data-table .immo-data-row.head {
+  background-color: #3f3f46 !important;
+}
+
+/* Scrollbar (subtle) */
+.dark ::-webkit-scrollbar-track { background: #18181b; }
+.dark ::-webkit-scrollbar-thumb { background: #52525b; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #71717a; }

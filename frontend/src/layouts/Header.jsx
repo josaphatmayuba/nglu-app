@@ -8,12 +8,14 @@ import {
   Moon,
   Plus,
   Search,
+  Sun,
   User,
   LayoutGrid,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useDarkMode } from "../utils/useDarkMode";
 
 import AppSwitcher from "../components/AppSwitcher/AppSwitcher";
 
@@ -52,6 +54,7 @@ function Header({ onPress, data, loading }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const { isDark, toggle: toggleDark } = useDarkMode();
   const [imageError, setImageError] = useState(false);
   const [appSwitcherOpen, setAppSwitcherOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -164,12 +167,14 @@ function Header({ onPress, data, loading }) {
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
               </button>
 
-              {/* Theme toggle (placeholder) */}
+              {/* Theme toggle */}
               <button
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition hidden sm:block"
-                title="Thème"
+                onClick={toggleDark}
+                className="p-2 hover:bg-ink-100 dark:hover:bg-ink-700 rounded-lg text-ink-600 dark:text-ink-300 transition hidden sm:block"
+                title={isDark ? "Mode clair" : "Mode sombre"}
+                aria-label={isDark ? "Activer le mode clair" : "Activer le mode sombre"}
               >
-                <Moon className="w-5 h-5" />
+                {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
               </button>
 
               <div className="w-px h-6 bg-ink-200 mx-1 hidden sm:block" />
