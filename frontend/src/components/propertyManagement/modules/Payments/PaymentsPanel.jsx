@@ -5,7 +5,7 @@ import { useDispatch } from "react-redux";
 
 import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { compactMoney, normalize, optionalNumber } from "../../shared/format";
-import { tenantName } from "../../shared/tenants";
+import { tenantNameFromLease } from "../../shared/tenants";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import PaymentFormModal from "./PaymentFormModal";
 import PaymentsTable from "./PaymentsTable";
@@ -72,7 +72,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const leaseOptions = safeLeases
     .filter((lease) => lease.status === "active")
     .map((lease) => ({
-      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantName(lease.tenant)}`,
+      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantNameFromLease(lease)}`,
       value: lease.id,
     }));
 
