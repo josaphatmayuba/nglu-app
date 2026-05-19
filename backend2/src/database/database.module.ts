@@ -16,6 +16,7 @@ import * as schema from "./schema";
           database: env.db.database,
           user: env.db.user,
           password: env.db.password,
+          charset: "utf8mb4",
           waitForConnections: true,
           connectionLimit: 10,
           queueLimit: 0,

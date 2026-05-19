@@ -10,6 +10,7 @@ const pool = mysql.createPool({
   database: process.env.DB_DATABASE || "nglu_db",
   user: process.env.DB_USERNAME || "nglu_user",
   password: process.env.DB_PASSWORD || "password",
+  charset: "utf8mb4",
   waitForConnections: true,
 });
 
