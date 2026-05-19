@@ -6,6 +6,10 @@
 -- Account IDs: 1=Asset  2=Liability  3=Equity  4=Withdrawal  5=Revenue  6=Expense
 -- Sub-account IDs: 1=Cash 2=Bank 3=Inventory 4=AR 5=AP 8=Sales 10=Salary 12=Utilities
 
+-- ─── 0. Ensure is_active exists on maintenance (guard for older deploys) ──────
+ALTER TABLE `real_estate_maintenance_requests`
+  ADD COLUMN IF NOT EXISTS `is_active` TINYINT(1) NOT NULL DEFAULT 1 AFTER `description`;
+
 -- ─── 1. Sub-accounts ──────────────────────────────────────────────────────────
 
 INSERT INTO `subAccount` (name, accountId, status, created_at, updated_at)
