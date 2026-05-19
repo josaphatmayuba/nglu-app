@@ -7,6 +7,7 @@ import {
   Menu as MenuIcon,
   Moon,
   Plus,
+  Search,
   Sun,
   User,
   LayoutGrid,
@@ -98,7 +99,7 @@ function Header({ onPress, data, loading }) {
           {isLogged && (
             <button
               onClick={() => onPress && onPress()}
-              className="p-2 hover:bg-ink-100 rounded-lg text-ink-700 md:hidden -ml-1"
+              className="p-2 hover:bg-ink-100 rounded-lg text-ink-700 hidden sm:block md:hidden -ml-1"
               title="Menu"
             >
               <MenuIcon className="w-5 h-5" />
@@ -139,10 +140,18 @@ function Header({ onPress, data, loading }) {
         <div className="flex items-center gap-1 md:gap-2">
           {isLogged && (
             <>
-              {/* App switcher — hidden on xs mobile to keep the topbar clean */}
+              {/* Search — visible on xs only (sm+ uses sidebar/global search) */}
+              <button
+                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition sm:hidden"
+                title="Rechercher"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+
+              {/* App switcher — visible on all breakpoints; G shortcut on desktop */}
               <button
                 onClick={() => setAppSwitcherOpen(true)}
-                className="hidden sm:block p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
+                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
                 title="Toutes les apps (G)"
               >
                 <LayoutGrid className="w-5 h-5" />
