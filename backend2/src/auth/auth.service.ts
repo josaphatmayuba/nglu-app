@@ -35,12 +35,12 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(
       { sub: user.id, roleId: role?.id, role: role?.name },
-      { secret: env.jwtSecret, expiresIn: "6h" },
+      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
     );
 
     const refreshToken = this.jwtService.sign(
       { sub: user.id, role: role?.name },
-      { secret: env.refreshSecret, expiresIn: "30d" },
+      { secret: env.refreshSecret, expiresIn: "7d", algorithm: "HS256" },
     );
 
     await this.db
@@ -66,7 +66,7 @@ export class AuthService {
     let payload: { sub: number; role: string };
 
     try {
-      payload = this.jwtService.verify(refreshToken, { secret: env.refreshSecret });
+      payload = this.jwtService.verify(refreshToken, { secret: env.refreshSecret, algorithms: ["HS256"] });
     } catch {
       throw new UnauthorizedException("Invalid or expired refresh token");
     }
@@ -89,7 +89,7 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(
       { sub: user.id, roleId: role?.id, role: role?.name },
-      { secret: env.jwtSecret, expiresIn: "6h" },
+      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
     );
 
     return { token: accessToken };

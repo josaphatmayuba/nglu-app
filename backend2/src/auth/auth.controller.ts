@@ -20,6 +20,7 @@ import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { LoginDto } from "./dto/login.dto";
+import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 
 @ApiTags("auth")
@@ -30,6 +31,7 @@ export class AuthController {
   @ApiOperation({ summary: "Login" })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiUnauthorizedResponse({ description: "username or password is incorrect" })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("login")
   @HttpCode(200)
   async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
@@ -40,7 +42,7 @@ export class AuthController {
       sameSite: "none",
       secure: true,
       path: "/",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return { ...user, role, token };

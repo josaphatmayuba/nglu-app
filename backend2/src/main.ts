@@ -4,12 +4,14 @@ import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cookieParser = require("cookie-parser") as typeof import("cookie-parser");
+import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { env } from "./config/env";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.use(helmet());
   app.use(cookieParser());
 
   app.enableCors({
