@@ -1,13 +1,72 @@
 <script setup>
-import { onMounted } from "vue";
+import { h, onMounted } from "vue";
+import {
+  ArrowRight,
+  Award,
+  BarChart3,
+  Beef,
+  Bird,
+  Cpu,
+  Globe,
+  GraduationCap,
+  Heart,
+  HeartHandshake,
+  HeartPulse,
+  Leaf,
+  LogIn,
+  Mail,
+  MapPin,
+  Menu,
+  PackageSearch,
+  PiggyBank,
+  Rocket,
+  ShieldCheck,
+  Sprout,
+  Target,
+  TrendingUp,
+  Utensils,
+  Wheat,
+  Zap,
+} from "@lucide/vue";
+
+const iconComponents = {
+  ArrowRight,
+  Award,
+  BarChart3,
+  Beef,
+  Bird,
+  Cpu,
+  Globe,
+  GraduationCap,
+  Heart,
+  HeartHandshake,
+  HeartPulse,
+  Leaf,
+  LogIn,
+  Mail,
+  MapPin,
+  Menu,
+  PackageSearch,
+  PiggyBank,
+  Rocket,
+  ShieldCheck,
+  Sprout,
+  Target,
+  TrendingUp,
+  Utensils,
+  Wheat,
+  Zap,
+};
+
+const Icon = (props, { attrs }) => h(iconComponents[props.name], attrs);
+Icon.props = {
+  name: {
+    type: String,
+    required: true,
+  },
+};
 
 onMounted(() => {
-  // Wait for Tailwind CDN + Lucide CDN (loaded in index.html <head>) and
-  // wire the same interactions as the legacy static landing page.
-  if (typeof window !== "undefined" && window.lucide) {
-    window.lucide.createIcons();
-  }
-
   // Mobile menu toggle
   const toggle = document.getElementById("menu-toggle");
   const menu = document.getElementById("mobile-nav");
@@ -64,13 +123,14 @@ onMounted(() => {
           </nav>
           <div class="flex items-center gap-2 md:gap-3">
             <a href="/crm" class="hidden md:inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary-700 border border-primary-700 rounded-lg hover:bg-primary-50 transition">
-              <i data-lucide="log-in" class="w-4 h-4"></i> Se connecter
+              <Icon name="LogIn" class="w-4 h-4" /> Se connecter
             </a>
-            <a href="#don" class="donate-btn inline-flex items-center gap-1.5 px-4 py-2 md:px-5 md:py-2.5 text-sm font-semibold text-white bg-accent-500 hover:bg-accent-600 rounded-lg transition shadow-md">
-              <i data-lucide="heart" class="w-4 h-4"></i> Faire un don
+            <a href="#don" class="donate-btn hidden sm:inline-flex items-center gap-1.5 px-4 py-2 md:px-5 md:py-2.5 text-sm font-semibold text-white bg-accent-500 hover:bg-accent-600 rounded-lg transition shadow-md">
+              <Icon name="Heart" class="w-4 h-4" />
+              <span>Faire un don</span>
             </a>
             <button id="menu-toggle" class="lg:hidden p-2 text-slate-700 hover:text-primary-700" aria-label="Menu">
-              <i data-lucide="menu" class="w-6 h-6"></i>
+              <Icon name="Menu" class="w-6 h-6" />
             </button>
           </div>
         </div>
@@ -101,12 +161,12 @@ onMounted(() => {
               ONGD NGOLU combat la faim, soutient les orphelinats et bâtit la souveraineté alimentaire de la RDC grâce à une alliance unique entre <strong class="text-white">production locale</strong> et <strong class="text-white">technologie</strong>.
             </p>
             <div class="flex flex-wrap gap-3">
-              <a href="#don" class="inline-flex items-center gap-2 px-6 py-3.5 bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-lg shadow-lg transition">
-                <i data-lucide="heart" class="w-5 h-5"></i> Faire un don
+              <a href="#don" class="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-6 py-3.5 bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-lg shadow-lg transition">
+                <Icon name="Heart" class="w-5 h-5" /> Faire un don
               </a>
-              <a href="#mission" class="inline-flex items-center gap-2 px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg border border-white/30 backdrop-blur-sm transition">
+              <a href="#mission" class="inline-flex w-full sm:w-auto justify-center items-center gap-2 px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg border border-white/30 backdrop-blur-sm transition">
                 Découvrir notre mission
-                <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                <Icon name="ArrowRight" class="w-5 h-5" />
               </a>
             </div>
             <div class="grid grid-cols-3 gap-6 mt-12 pt-8 border-t border-white/20">
@@ -137,21 +197,21 @@ onMounted(() => {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
           <div class="p-6 bg-white rounded-2xl border border-slate-200">
             <div class="w-12 h-12 mx-auto mb-4 flex items-center justify-center bg-growth-500/10 rounded-xl">
-              <i data-lucide="wheat" class="w-6 h-6 text-growth-600"></i>
+              <Icon name="Wheat" class="w-6 h-6 text-growth-600" />
             </div>
             <h3 class="font-bold text-lg mb-2">Souveraineté Alimentaire</h3>
             <p class="text-sm text-slate-600">Cultiver localement pour ne plus dépendre des importations.</p>
           </div>
           <div class="p-6 bg-white rounded-2xl border border-slate-200">
             <div class="w-12 h-12 mx-auto mb-4 flex items-center justify-center bg-accent-500/10 rounded-xl">
-              <i data-lucide="heart-handshake" class="w-6 h-6 text-accent-600"></i>
+              <Icon name="HeartHandshake" class="w-6 h-6 text-accent-600" />
             </div>
             <h3 class="font-bold text-lg mb-2">Impact Humanitaire</h3>
             <p class="text-sm text-slate-600">Soutenir les orphelinats et les plus démunis avec dignité.</p>
           </div>
           <div class="p-6 bg-white rounded-2xl border border-slate-200">
             <div class="w-12 h-12 mx-auto mb-4 flex items-center justify-center bg-primary-700/10 rounded-xl">
-              <i data-lucide="cpu" class="w-6 h-6 text-primary-700"></i>
+              <Icon name="Cpu" class="w-6 h-6 text-primary-700" />
             </div>
             <h3 class="font-bold text-lg mb-2">Innovation Numérique</h3>
             <p class="text-sm text-slate-600">Garantir la traçabilité et la transparence par la technologie.</p>
@@ -174,47 +234,47 @@ onMounted(() => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div class="pillar-card bg-white rounded-2xl p-6 border border-slate-200 fade-in">
             <div class="w-14 h-14 mb-5 flex items-center justify-center bg-growth-500 text-white rounded-xl shadow-md">
-              <i data-lucide="sprout" class="w-7 h-7"></i>
+              <Icon name="Sprout" class="w-7 h-7" />
             </div>
             <h3 class="font-bold text-xl text-slate-900 mb-2">Produits Locaux</h3>
             <p class="text-sm text-slate-600 leading-relaxed mb-4">Manioc, maïs, légumes, fruits — cultivés sur nos terres congolaises pour stabiliser l'accès à la nourriture.</p>
             <div class="flex items-center text-xs font-medium text-growth-600">
-              <i data-lucide="leaf" class="w-4 h-4 mr-1"></i> Culture intensive durable
+              <Icon name="Leaf" class="w-4 h-4 mr-1" /> Culture intensive durable
             </div>
           </div>
           <div class="pillar-card bg-white rounded-2xl p-6 border border-slate-200 fade-in" style="animation-delay: 100ms">
             <div class="w-14 h-14 mb-5 flex items-center justify-center bg-accent-500 text-white rounded-xl shadow-md">
-              <i data-lucide="bird" class="w-7 h-7"></i>
+              <Icon name="Bird" class="w-7 h-7" />
             </div>
             <h3 class="font-bold text-xl text-slate-900 mb-2">Filière Poulet</h3>
             <p class="text-sm text-slate-600 leading-relaxed mb-4">Élevage avicole intensif : production d'œufs et de viande blanche accessibles, riches en protéines essentielles.</p>
             <div class="flex items-center text-xs font-medium text-accent-600">
-              <i data-lucide="zap" class="w-4 h-4 mr-1"></i> Cycle court, haute valeur
+              <Icon name="Zap" class="w-4 h-4 mr-1" /> Cycle court, haute valeur
             </div>
           </div>
           <div class="pillar-card bg-white rounded-2xl p-6 border border-slate-200 fade-in" style="animation-delay: 200ms">
             <div class="w-14 h-14 mb-5 flex items-center justify-center bg-primary-600 text-white rounded-xl shadow-md">
-              <i data-lucide="piggy-bank" class="w-7 h-7"></i>
+              <Icon name="PiggyBank" class="w-7 h-7" />
             </div>
             <h3 class="font-bold text-xl text-slate-900 mb-2">Filière Porc</h3>
             <p class="text-sm text-slate-600 leading-relaxed mb-4">Élevage porcin moderne et hygiénique. Viande de qualité, sources d'emplois et de revenus pour les communautés.</p>
             <div class="flex items-center text-xs font-medium text-primary-700">
-              <i data-lucide="trending-up" class="w-4 h-4 mr-1"></i> Croissance économique
+              <Icon name="TrendingUp" class="w-4 h-4 mr-1" /> Croissance économique
             </div>
           </div>
           <div class="pillar-card bg-white rounded-2xl p-6 border border-slate-200 fade-in" style="animation-delay: 300ms">
             <div class="w-14 h-14 mb-5 flex items-center justify-center bg-amber-700 text-white rounded-xl shadow-md">
-              <i data-lucide="beef" class="w-7 h-7"></i>
+              <Icon name="Beef" class="w-7 h-7" />
             </div>
             <h3 class="font-bold text-xl text-slate-900 mb-2">Filière Bœuf</h3>
             <p class="text-sm text-slate-600 leading-relaxed mb-4">Élevage bovin extensif. Viande rouge, lait et cuir — une filière complète à fort impact social et nutritionnel.</p>
             <div class="flex items-center text-xs font-medium text-amber-700">
-              <i data-lucide="award" class="w-4 h-4 mr-1"></i> Tradition & modernité
+              <Icon name="Award" class="w-4 h-4 mr-1" /> Tradition & modernité
             </div>
           </div>
         </div>
         <div class="mt-14 p-8 md:p-10 bg-gradient-to-r from-primary-700 to-primary-600 rounded-2xl text-white text-center fade-in">
-          <i data-lucide="target" class="w-10 h-10 mx-auto mb-4 text-accent-500"></i>
+          <Icon name="Target" class="w-10 h-10 mx-auto mb-4 text-accent-500" />
           <h3 class="font-display text-2xl md:text-3xl font-bold mb-3">Notre objectif national</h3>
           <p class="text-blue-100 max-w-2xl mx-auto text-lg">
             Une production nationale forte qui permette à la RDC de <strong class="text-white">ne plus dépendre des importations</strong>, et de devenir un acteur agro-pastoral de référence en Afrique centrale.
@@ -237,7 +297,7 @@ onMounted(() => {
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
                 <div class="flex-shrink-0 mt-1 w-6 h-6 flex items-center justify-center bg-accent-500/10 text-accent-600 rounded-full">
-                  <i data-lucide="utensils" class="w-3.5 h-3.5"></i>
+                  <Icon name="Utensils" class="w-3.5 h-3.5" />
                 </div>
                 <div>
                   <strong class="text-slate-900">Dons alimentaires réguliers</strong>
@@ -246,7 +306,7 @@ onMounted(() => {
               </li>
               <li class="flex items-start gap-3">
                 <div class="flex-shrink-0 mt-1 w-6 h-6 flex items-center justify-center bg-accent-500/10 text-accent-600 rounded-full">
-                  <i data-lucide="heart-pulse" class="w-3.5 h-3.5"></i>
+                  <Icon name="HeartPulse" class="w-3.5 h-3.5" />
                 </div>
                 <div>
                   <strong class="text-slate-900">Programmes de soins</strong>
@@ -255,7 +315,7 @@ onMounted(() => {
               </li>
               <li class="flex items-start gap-3">
                 <div class="flex-shrink-0 mt-1 w-6 h-6 flex items-center justify-center bg-accent-500/10 text-accent-600 rounded-full">
-                  <i data-lucide="graduation-cap" class="w-3.5 h-3.5"></i>
+                  <Icon name="GraduationCap" class="w-3.5 h-3.5" />
                 </div>
                 <div>
                   <strong class="text-slate-900">Soutien éducatif</strong>
@@ -264,7 +324,7 @@ onMounted(() => {
               </li>
             </ul>
             <a href="#don" class="inline-flex items-center gap-2 mt-8 px-6 py-3 bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-lg shadow-md transition">
-              <i data-lucide="heart" class="w-5 h-5"></i> Soutenir un orphelinat
+              <Icon name="Heart" class="w-5 h-5" /> Soutenir un orphelinat
             </a>
           </div>
           <div class="fade-in">
@@ -316,7 +376,7 @@ onMounted(() => {
           <div class="space-y-5 fade-in">
             <div class="flex gap-4 p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
               <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-primary-100 text-primary-700 rounded-lg">
-                <i data-lucide="package-search" class="w-6 h-6"></i>
+                <Icon name="PackageSearch" class="w-6 h-6" />
               </div>
               <div>
                 <h3 class="font-bold text-slate-900 mb-1">Traçabilité de la production</h3>
@@ -325,7 +385,7 @@ onMounted(() => {
             </div>
             <div class="flex gap-4 p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
               <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-growth-500/10 text-growth-600 rounded-lg">
-                <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+                <Icon name="BarChart3" class="w-6 h-6" />
               </div>
               <div>
                 <h3 class="font-bold text-slate-900 mb-1">Gestion des ressources</h3>
@@ -334,7 +394,7 @@ onMounted(() => {
             </div>
             <div class="flex gap-4 p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
               <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-accent-500/10 text-accent-600 rounded-lg">
-                <i data-lucide="shield-check" class="w-6 h-6"></i>
+                <Icon name="ShieldCheck" class="w-6 h-6" />
               </div>
               <div>
                 <h3 class="font-bold text-slate-900 mb-1">Transparence des dons</h3>
@@ -343,7 +403,7 @@ onMounted(() => {
             </div>
             <div class="flex gap-4 p-5 bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition">
               <div class="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-purple-100 text-purple-700 rounded-lg">
-                <i data-lucide="rocket" class="w-6 h-6"></i>
+                <Icon name="Rocket" class="w-6 h-6" />
               </div>
               <div>
                 <h3 class="font-bold text-slate-900 mb-1">Au service des startups</h3>
@@ -362,7 +422,7 @@ onMounted(() => {
               <div class="bg-white/10 backdrop-blur rounded-xl p-5 mb-3 border border-white/20">
                 <div class="flex items-center justify-between mb-2">
                   <span class="text-xs text-blue-100 font-medium">PRODUCTION DU MOIS</span>
-                  <i data-lucide="trending-up" class="w-4 h-4 text-accent-500"></i>
+                  <Icon name="TrendingUp" class="w-4 h-4 text-accent-500" />
                 </div>
                 <div class="text-3xl font-bold text-white">+ 12 450 kg</div>
                 <div class="text-xs text-blue-200">↑ 23% vs mois dernier</div>
@@ -379,7 +439,7 @@ onMounted(() => {
                     <div class="text-xs text-blue-100">Dons aux orphelinats ce mois-ci</div>
                     <div class="text-lg font-bold text-white">1 240 kg distribués</div>
                   </div>
-                  <i data-lucide="heart" class="w-8 h-8 text-accent-500"></i>
+                  <Icon name="Heart" class="w-8 h-8 text-accent-500" />
                 </div>
               </div>
             </div>
@@ -391,7 +451,7 @@ onMounted(() => {
     <section id="don" class="py-20 md:py-24 bg-gradient-to-br from-accent-500 to-orange-600 text-white relative overflow-hidden">
       <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle, white 1px, transparent 1px); background-size: 30px 30px;"></div>
       <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10 fade-in">
-        <i data-lucide="heart" class="w-14 h-14 mx-auto mb-6 text-white"></i>
+        <Icon name="Heart" class="w-14 h-14 mx-auto mb-6 text-white" />
         <h2 class="font-display text-3xl md:text-5xl font-bold mb-6 leading-tight">Votre don. Notre action. Leur avenir.</h2>
         <p class="text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto leading-relaxed">
           Chaque contribution est tracée dans notre système, vous voyez exactement comment elle est utilisée. 100% de votre don sert directement nos projets agricoles et humanitaires.
@@ -404,7 +464,7 @@ onMounted(() => {
         </div>
         <a href="mailto:don@ongdngolu.org" class="inline-flex items-center gap-2 px-8 py-4 bg-white text-accent-600 hover:bg-amber-50 font-bold text-lg rounded-xl shadow-xl transition">
           Faire un don maintenant
-          <i data-lucide="arrow-right" class="w-5 h-5"></i>
+          <Icon name="ArrowRight" class="w-5 h-5" />
         </a>
         <p class="mt-6 text-sm text-white/70">
           Vous pouvez aussi nous contacter à <a href="mailto:contact@ongdngolu.org" class="underline">contact@ongdngolu.org</a>
@@ -440,21 +500,21 @@ onMounted(() => {
             <h4 class="font-semibold text-white mb-4">Contact</h4>
             <ul class="space-y-2 text-sm text-slate-400">
               <li class="flex items-start gap-2">
-                <i data-lucide="map-pin" class="w-4 h-4 mt-0.5 flex-shrink-0"></i>
+                <Icon name="MapPin" class="w-4 h-4 mt-0.5 flex-shrink-0" />
                 République Démocratique du Congo
               </li>
               <li class="flex items-center gap-2">
-                <i data-lucide="mail" class="w-4 h-4 flex-shrink-0"></i>
+                <Icon name="Mail" class="w-4 h-4 flex-shrink-0" />
                 <a href="mailto:contact@ongdngolu.org" class="hover:text-accent-500">contact@ongdngolu.org</a>
               </li>
               <li class="flex items-center gap-2">
-                <i data-lucide="globe" class="w-4 h-4 flex-shrink-0"></i>
+                <Icon name="Globe" class="w-4 h-4 flex-shrink-0" />
                 <a href="https://ongdngolu.org" class="hover:text-accent-500">ongdngolu.org</a>
               </li>
             </ul>
             <div class="mt-5">
               <a href="/crm" class="inline-flex items-center gap-2 px-4 py-2 bg-primary-700 hover:bg-primary-600 text-white text-sm font-medium rounded-lg transition">
-                <i data-lucide="log-in" class="w-4 h-4"></i> Espace ERP
+                <Icon name="LogIn" class="w-4 h-4" /> Espace ERP
               </a>
             </div>
           </div>
