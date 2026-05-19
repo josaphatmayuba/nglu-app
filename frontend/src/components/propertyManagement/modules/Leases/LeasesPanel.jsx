@@ -22,7 +22,7 @@ import LeaseRenewModal from "./LeaseRenewModal";
 import LeaseTableView from "./LeaseTableView";
 import LeaseTimelineView from "./LeaseTimelineView";
 import SignedContractView from "./SignedContractView";
-import { leaseContractFor, leaseDisplayInfo } from "./leaseUtils";
+import { isLeaseExpired, leaseContractFor, leaseDisplayInfo } from "./leaseUtils";
 
 const LeasesPanel = ({
   onViewMaintenance,
@@ -76,8 +76,13 @@ const LeasesPanel = ({
     const daysLeft = moment(lease.endDate).diff(moment(), "days");
     return daysLeft >= 0 && daysLeft <= 60;
   });
-  const expiredLeases = searchScope.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
-  const activeLeasesView = searchScope.filter((lease) => lease.status === "active");
+  const expiredLeases = searchScope.filter(isLeaseExpired);
+  // SCRUM-62: a status="active" lease whose endDate is past must NOT count as
+  // active anymore — it belongs in Expirés. Same for any lease explicitly
+  // marked expired/ended in the backend.
+  const activeLeasesView = searchScope.filter(
+    (lease) => lease.status === "active" && !isLeaseExpired(lease),
+  );
   const leasesView =
     leaseStatusFilter === "active" ? activeLeasesView
     : leaseStatusFilter === "renew" ? renewLeases
