@@ -99,6 +99,7 @@ import { Link } from "react-router-dom";
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 import ContractsTab from "./ContractsTab";
 import PropertyMapView from "./PropertyMapView";
+import MaintenancePanel from "./modules/Maintenance/MaintenancePanel";
 
 const propertyTypes = [
   { label: "🏢 Immeuble",         value: "building" },
@@ -3049,7 +3050,7 @@ const PropertyManagement = () => {
       tenants: renderTenantsMockup,
       leases: renderLeasesMockup,
       payments: renderPaymentsMockup,
-      maintenance: renderMaintenanceMockup,
+      maintenance: () => <MaintenancePanel searchTerm={searchTerm} />,
     };
     return (panels[activeSection] || renderProperties)();
   };
