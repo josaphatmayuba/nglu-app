@@ -3843,3 +3843,285 @@
 .immo-signed-contract-signature.landlord-stamp .stamp strong { display: block; font-size: 14px; margin-bottom: 6px; }
 .immo-signed-contract-signature.landlord-stamp .stamp span { color: #16a34a; display: block; font-size: 12px; font-weight: 600; }
 @media (max-width: 640px) { .immo-signed-contract-signatures { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   SCRUM-72 — Maintenance 4 views (Kanban / Liste / Tableau / Calendrier)
+   ============================================================ */
+
+/* Shared atoms */
+.immo-pill-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #a1a1aa;
+}
+.immo-pill-dot.success { background: #10b981; }
+.immo-pill-dot.warning { background: #f59e0b; }
+.immo-pill-dot.danger  { background: #ef4444; }
+
+.immo-pill.neutral { background: #f4f4f5; color: #52525b; }
+
+.immo-ticket-icon-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f4f4f5;
+  color: #52525b;
+  flex-shrink: 0;
+}
+.immo-ticket-icon-sm.red    { background: #fef2f2; color: #dc2626; }
+.immo-ticket-icon-sm.amber  { background: #fffbeb; color: #d97706; }
+.immo-ticket-icon-sm.blue   { background: #eff6ff; color: #2563eb; }
+.immo-ticket-icon-sm.purple { background: #faf5ff; color: #9333ea; }
+.immo-ticket-icon-sm.green  { background: #ecfdf5; color: #059669; }
+
+.immo-table-empty {
+  background: #fff;
+  border: 1px dashed #e4e4e7;
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  color: #71717a;
+  font-size: 14px;
+}
+
+.immo-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #3f3f46;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.immo-secondary-button:hover { border-color: #d4d4d8; background: #fafafa; }
+
+/* Table view */
+.immo-table-wrap {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+.immo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.immo-table thead {
+  background: #fafafa;
+  border-bottom: 1px solid #e4e4e7;
+}
+.immo-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #71717a;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.immo-table td {
+  padding: 12px 14px;
+  border-top: 1px solid #f4f4f5;
+  color: #27272a;
+  vertical-align: middle;
+}
+.immo-table tr.row-done td { opacity: 0.65; }
+.immo-table tr:hover { background: #fafafa; }
+.immo-table-cell-strong {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.immo-table-cell-strong .strong { font-weight: 500; color: #18181b; }
+.immo-table-cell-strong .muted  { font-size: 11px; color: #71717a; }
+.immo-table .muted { color: #71717a; font-size: 12px; }
+.immo-table .muted-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #3f3f46;
+  font-size: 13px;
+}
+
+/* Kanban view */
+.immo-kanban {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.immo-kanban-col {
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 10px;
+  min-height: 220px;
+  border: 1px solid #f4f4f5;
+}
+.immo-kanban-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 10px;
+}
+.immo-kanban-col-head h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #18181b;
+  margin: 0;
+}
+.immo-kanban-count {
+  margin-left: auto;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #71717a;
+}
+.immo-kanban-body { display: flex; flex-direction: column; gap: 8px; }
+.immo-kanban-empty {
+  padding: 18px 6px;
+  text-align: center;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-style: italic;
+}
+.immo-kanban-card {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.immo-kanban-card:hover {
+  border-color: #c7d2fe;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+.immo-kanban-card.done { opacity: 0.75; }
+.immo-kanban-card.done .done-title {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: #71717a;
+}
+.immo-kanban-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.immo-kanban-card h4 {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181b;
+  margin: 0 0 6px;
+  line-height: 1.3;
+}
+.immo-kanban-card .muted { font-size: 11px; color: #71717a; margin: 0 0 8px; }
+.immo-kanban-card .muted-sm { font-size: 11px; color: #71717a; }
+.immo-kanban-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.immo-kanban-col.col-open    { border-top: 3px solid #ef4444; }
+.immo-kanban-col.col-in_progress { border-top: 3px solid #f59e0b; }
+.immo-kanban-col.col-done    { border-top: 3px solid #10b981; }
+
+@media (max-width: 900px) {
+  .immo-kanban { grid-template-columns: 1fr; }
+}
+
+/* Calendar view */
+.immo-calendar {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 14px;
+}
+.immo-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.immo-calendar-nav { display: flex; align-items: center; gap: 6px; }
+.immo-calendar-nav h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18181b;
+  margin: 0 6px;
+  text-transform: capitalize;
+  min-width: 130px;
+  text-align: center;
+}
+.immo-calendar-legend { display: flex; gap: 12px; font-size: 11px; color: #71717a; }
+.immo-calendar-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.immo-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #f4f4f5;
+  border: 1px solid #e4e4e7;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 11px;
+}
+.immo-calendar-dayhead {
+  background: #fafafa;
+  padding: 8px 6px;
+  text-align: center;
+  font-weight: 600;
+  color: #71717a;
+  font-size: 11px;
+}
+.immo-calendar-cell {
+  background: #fff;
+  min-height: 80px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.immo-calendar-cell.out { background: #fafafa; }
+.immo-calendar-cell.out .immo-calendar-cell-day { color: #a1a1aa; }
+.immo-calendar-cell.today {
+  background: #eef2ff;
+  outline: 1px solid #c7d2fe;
+  outline-offset: -1px;
+}
+.immo-calendar-cell.today .immo-calendar-cell-day { color: #4338ca; font-weight: 700; }
+.immo-calendar-cell-day { font-weight: 500; color: #3f3f46; font-size: 12px; }
+.immo-calendar-cell-items { display: flex; flex-direction: column; gap: 2px; }
+.immo-calendar-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f4f4f5;
+  color: #3f3f46;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.immo-calendar-chip.success { background: #ecfdf5; color: #047857; }
+.immo-calendar-chip.warning { background: #fffbeb; color: #b45309; }
+.immo-calendar-chip.danger  { background: #fef2f2; color: #b91c1c; }
+.immo-calendar-chip.more    { background: transparent; color: #6366f1; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .immo-calendar-cell { min-height: 60px; }
+  .immo-calendar-legend { display: none; }
+}
