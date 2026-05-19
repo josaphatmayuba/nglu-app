@@ -24,12 +24,23 @@ function abbreviate(name = "") {
   return name.slice(0, 3).toUpperCase();
 }
 
+// Normalize snake_case/kebab-case/lowercase to "Title Case" for matching
+// e.g. "rent_payment" → "Rent Payment", "SALE INVOICE" → "Sale Invoice"
+function normalizeType(str = "") {
+  return str
+    .replace(/[_-]/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
 export default function JournauxPanel({ transactions = [], transactionTypes = [] }) {
-  // Count transactions per type and find most recent date
+  // Count transactions per type — normalize for matching
   const statsByType = useMemo(() => {
     const map = {};
     transactions.forEach((t) => {
-      const key = t.type || t.transactionType || "Other";
+      const raw = t.type || t.transactionType || "Other";
+      const key = normalizeType(raw);
       if (!map[key]) map[key] = { count: 0, lastDate: null };
       map[key].count += 1;
       if (t.date) {
@@ -76,7 +87,7 @@ export default function JournauxPanel({ transactions = [], transactionTypes = []
         {displayTypes.map((jt) => {
           const style = resolveStyle(jt.name);
           const Icon  = style.icon;
-          const stats = statsByType[jt.name] ?? { count: 0, lastDate: null };
+          const stats = statsByType[normalizeType(jt.name)] ?? { count: 0, lastDate: null };
           const abbr  = abbreviate(jt.name);
 
           return (

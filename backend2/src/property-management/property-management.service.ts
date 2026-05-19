@@ -632,24 +632,25 @@ export class PropertyManagementService {
     const debitId = input.paymentAccountId ?? rentPaymentType.debitAccountId;
     await this.ensureExists(subAccounts, debitId, "Payment account not found.");
 
+    // Currency precedence: explicit input → lease's currency → app default
+    const paymentCurrencyId =
+      (input as any).currencyId
+      ?? (lease as any).currencyId
+      ?? (await this.resolveDefaultCurrency());
+
     const [transactionResult] = await this.db.insert(transactions).values({
       date: new Date(input.paymentDate),
       debitId,
       creditId: rentPaymentType.creditAccountId,
       particulars: input.notes || "Payment for rent",
       amount: input.amount,
-      type: "rent_payment",
+      currencyId: paymentCurrencyId ?? null,
+      type: "Rent Payment",
       relatedId: String(lease.id),
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-
-    // Currency precedence: explicit input → lease's currency → app default
-    const paymentCurrencyId =
-      (input as any).currencyId
-      ?? (lease as any).currencyId
-      ?? (await this.resolveDefaultCurrency());
 
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
       leaseId: lease.id,

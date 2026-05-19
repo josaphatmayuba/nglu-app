@@ -6,8 +6,12 @@ const PAGE_SIZE = 15;
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 
-export default function EcrituresPanel({ transactions = [], loading = false, currencySymbol = "CDF" }) {
-  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
+export default function EcrituresPanel({ transactions = [], loading = false, currencySymbol = "$" }) {
+  // Use per-transaction currency if available, otherwise fall back to app default
+  const fmtTx = (t) => {
+    const sym = t.currencySymbol || currencySymbol;
+    return `${sym} ${FMT.format(Number(t.amount || 0))}`;
+  };
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 
@@ -69,16 +73,16 @@ export default function EcrituresPanel({ transactions = [], loading = false, cur
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-ink-500">#{t.id ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-900 max-w-[200px] truncate">
-                  {t.note || t.description || "—"}
+                  {t.particulars || t.note || t.description || "—"}
                 </td>
                 <td className="px-4 py-3 text-xs text-ink-600 whitespace-nowrap">
-                  {t.debitAccount || t.debitAccountName || "—"}
+                  {t.debit?.name || t.debitAccount || t.debitAccountName || "—"}
                 </td>
                 <td className="px-4 py-3 text-xs text-ink-600 whitespace-nowrap">
-                  {t.creditAccount || t.creditAccountName || "—"}
+                  {t.credit?.name || t.creditAccount || t.creditAccountName || "—"}
                 </td>
                 <td className="px-4 py-3 font-semibold text-ink-900 whitespace-nowrap">
-                  {fmt(t.amount)}
+                  {fmtTx(t)}
                 </td>
               </tr>
             ))}

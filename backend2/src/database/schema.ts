@@ -157,6 +157,7 @@ export const transactions = mysqlTable("transaction", {
   creditId: bigint("creditId", { mode: "number" }).notNull(),
   particulars: varchar("particulars", { length: 255 }).notNull(),
   amount: double("amount").notNull(),
+  currencyId: bigint("currencyId", { mode: "number" }),
   type: varchar("type", { length: 255 }),
   relatedId: varchar("relatedId", { length: 255 }),
   status: varchar("status", { length: 255 }).default("true").notNull(),

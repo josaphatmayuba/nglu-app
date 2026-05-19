@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
-import { subAccounts, transactions } from "../database/schema";
+import { currencies, subAccounts, transactions } from "../database/schema";
 import type { Database } from "../database/types";
 import {
   CreateTransactionDto,
@@ -198,6 +198,9 @@ export class TransactionsService {
         creditId: transactions.creditId,
         particulars: transactions.particulars,
         amount: transactions.amount,
+        currencyId: transactions.currencyId,
+        currencySymbol: currencies.currencySymbol,
+        currencyName: currencies.currencyName,
         type: transactions.type,
         relatedId: transactions.relatedId,
         status: transactions.status,
@@ -214,7 +217,8 @@ export class TransactionsService {
       })
       .from(transactions)
       .leftJoin(debitAccount, eq(debitAccount.id, transactions.debitId))
-      .leftJoin(creditAccount, eq(creditAccount.id, transactions.creditId));
+      .leftJoin(creditAccount, eq(creditAccount.id, transactions.creditId))
+      .leftJoin(currencies, eq(currencies.id, transactions.currencyId));
   }
 
   private async ensureTransactionExists(id: number) {
