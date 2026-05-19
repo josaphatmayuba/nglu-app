@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
 import { loadAllAccount, loadIncomeStatement, loadTrailBalance } from "@/redux/rtk/features/account/accountSlice";
+import { loadAllTransactionType } from "@/redux/rtk/features/transactionType/transactionTypeSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
 import OverviewPanel      from "./panels/OverviewPanel";
@@ -41,7 +42,8 @@ export default function AccountingPage() {
   const accounts        = useSelector((s) => s.account?.list           ?? []);
   const acctLoading     = useSelector((s) => s.account?.loading        ?? false);
   const incomeStatement = useSelector((s) => s.account?.incomeStatement ?? null);
-  const trailBalance    = useSelector((s) => s.account?.trailBalance   ?? null);
+  const trailBalance      = useSelector((s) => s.account?.trailBalance   ?? null);
+  const transactionTypes  = useSelector((s) => s.transactionType?.list  ?? []);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
   const currencySymbol = useMemo(
@@ -57,6 +59,7 @@ export default function AccountingPage() {
     dispatch(loadAllAccount());
     dispatch(loadIncomeStatement());
     dispatch(loadTrailBalance());
+    dispatch(loadAllTransactionType());
   }, [dispatch, exercice]);
 
   // incomeStatement from backend: { totalRevenue, totalExpense, profit, revenue[], expense[] }
@@ -151,7 +154,7 @@ export default function AccountingPage() {
           </div>
           <div className="p-4">
             {activeTab === "overview"  && <OverviewPanel transactions={transactions} trailBalance={trailBalance} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />}
-            {activeTab === "journaux"  && <JournauxPanel transactions={transactions} />}
+            {activeTab === "journaux"  && <JournauxPanel transactions={transactions} transactionTypes={transactionTypes} />}
             {activeTab === "ecritures" && <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />}
             {activeTab === "plan"      && <PlanComptablePanel trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />}
             {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} currencySymbol={currencySymbol} />}
