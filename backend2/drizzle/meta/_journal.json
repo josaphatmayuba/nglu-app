@@ -127,6 +127,13 @@
       "when": 1779379200000,
       "tag": "0018_backfill_currency_id_real_estate",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1747699200000,
+      "tag": "0019_maintenance_soft_delete_and_permissions",
+      "breakpoints": true
     }
   ]
 }

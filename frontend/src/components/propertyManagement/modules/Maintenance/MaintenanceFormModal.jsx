@@ -1,20 +1,23 @@
+// SCRUM-73: support edit mode (mode="edit" pre-fills form, changes title/button label)
+
 import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 
 const priorityOptions = [
-  { label: "Basse", value: "low" },
+  { label: "Basse",   value: "low" },
   { label: "Moyenne", value: "medium" },
-  { label: "Haute", value: "high" },
+  { label: "Haute",   value: "high" },
   { label: "Urgente", value: "urgent" },
 ];
 
 const statusOptions = [
-  { label: "Ouvert", value: "open" },
+  { label: "Ouvert",   value: "open" },
   { label: "En cours", value: "in_progress" },
-  { label: "Terminé", value: "done" },
+  { label: "Terminé",  value: "done" },
 ];
 
 const MaintenanceFormModal = ({
   form,
+  mode = "create",
   onCancel,
   onSubmit,
   open,
@@ -24,7 +27,7 @@ const MaintenanceFormModal = ({
 }) => (
   <Modal
     open={open}
-    title="Créer"
+    title={mode === "edit" ? "Modifier le ticket" : "Créer un ticket"}
     onCancel={onCancel}
     footer={null}
     destroyOnClose
@@ -66,7 +69,7 @@ const MaintenanceFormModal = ({
       <div className="immo-modal-footer">
         <Button onClick={onCancel} className="immo-modal-cancel">Annuler</Button>
         <Button type="primary" htmlType="submit" className="immo-modal-submit" loading={saving}>
-          Créer
+          {mode === "edit" ? "Enregistrer" : "Créer"}
         </Button>
       </div>
     </Form>

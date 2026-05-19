@@ -1,7 +1,9 @@
 // SCRUM-72 — Table view for the Maintenance panel.
+// SCRUM-73 — Added Modifier / Supprimer actions per row.
 
 import moment from "moment";
-import { Building2, MoreHorizontal } from "lucide-react";
+import { Building2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
@@ -20,11 +22,43 @@ const statusLabel = (s) =>
 const statusClass = (s) =>
   s === "done" ? "success" : s === "in_progress" ? "warning" : "danger";
 
-const MaintenanceTableView = ({ requests = [] }) => {
+const RowMenu = ({ request, onEdit, onDelete }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="immo-menu-anchor">
+      <button
+        type="button"
+        className={`immo-icon-button${open ? " active" : ""}`}
+        aria-label="Actions"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open && (
+        <ul className="immo-context-menu" role="menu">
+          {onEdit && (
+            <li role="menuitem">
+              <button type="button" onClick={() => { setOpen(false); onEdit(request); }}>
+                <Pencil size={14} /> Modifier
+              </button>
+            </li>
+          )}
+          {onDelete && (
+            <li role="menuitem" className="danger">
+              <button type="button" onClick={() => { setOpen(false); onDelete(request); }}>
+                <Trash2 size={14} /> Supprimer
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+    </span>
+  );
+};
+
+const MaintenanceTableView = ({ requests = [], onEdit, onDelete }) => {
   if (!requests.length) {
-    return (
-      <div className="immo-table-empty">Aucun ticket à afficher pour ce filtre.</div>
-    );
+    return <div className="immo-table-empty">Aucun ticket à afficher pour ce filtre.</div>;
   }
   return (
     <div className="immo-table-wrap">
@@ -87,12 +121,10 @@ const MaintenanceTableView = ({ requests = [] }) => {
                   {request.tenantName ? ` · ${request.tenantName}` : ""}
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  {request.cost ? compactMoney(request.cost) : <span className="muted">—</span>}
+                  {request.estimatedCost ? compactMoney(request.estimatedCost) : <span className="muted">—</span>}
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  <button type="button" className="immo-icon-button" aria-label="Actions">
-                    <MoreHorizontal size={16} />
-                  </button>
+                  <RowMenu request={request} onEdit={onEdit} onDelete={onDelete} />
                 </td>
               </tr>
             );

@@ -1,9 +1,13 @@
-import { Form, message } from "antd";
+import { Form, Modal, message } from "antd";
 import { CalendarRange, Columns3, List, Plus, Table2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
-import { loadPropertyManagement, saveMaintenance } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import {
+  deleteMaintenance,
+  loadPropertyManagement,
+  saveMaintenance,
+} from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { compactMoney, normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import MaintenanceCalendarView from "./MaintenanceCalendarView";
@@ -29,18 +33,17 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState("create");
+  const [editingRecord, setEditingRecord] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [maintenanceView, setMaintenanceView] = useState(readStoredView);
   const [form] = Form.useForm();
 
-  // Persist the user's view choice across reloads (SCRUM-72 acceptance).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      window.localStorage?.setItem(VIEW_STORAGE_KEY, maintenanceView);
-    } catch {
-      /* ignore quota / privacy mode */
-    }
+    try { window.localStorage?.setItem(VIEW_STORAGE_KEY, maintenanceView); } catch { /* ignore */ }
   }, [maintenanceView]);
 
   const {
@@ -59,16 +62,8 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     if (!q) return safeMaintenance;
     return safeMaintenance.filter((request) => {
       const haystack = normalize(
-        [
-          request.title,
-          request.description,
-          request.propertyName,
-          request.unitName,
-          request.priority,
-          request.status,
-          request.property?.name,
-          request.unit?.name,
-        ].join(" "),
+        [request.title, request.description, request.propertyName, request.unitName,
+         request.priority, request.status, request.property?.name, request.unit?.name].join(" "),
       );
       return haystack.includes(q);
     });
@@ -84,38 +79,53 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
 
   const ticketsForView = filteredMaintenance.filter(maintenanceMatchesStatus);
   const maintenanceFilterChips = [
-    { key: "all", label: "Tous", count: filteredMaintenance.length },
-    { key: "urgent", label: "Urgent", count: urgentMaintenance.length },
+    { key: "all",         label: "Tous",     count: filteredMaintenance.length },
+    { key: "urgent",      label: "Urgent",   count: urgentMaintenance.length },
     { key: "in_progress", label: "En cours", count: inProgressMaintenance.length },
-    { key: "done", label: "Résolus", count: resolvedMaintenance.length },
+    { key: "done",        label: "Résolus",  count: resolvedMaintenance.length },
   ];
 
-  const propertyOptions = safeProperties.map((property) => ({
-    label: property.name,
-    value: property.id,
+  const propertyOptions = safeProperties.map((p) => ({ label: p.name, value: p.id }));
+  const unitOptions = safeUnits.map((u) => ({
+    label: `${u.name} - ${u.propertyAddress || u.propertyName || ""}`,
+    value: u.id,
   }));
 
-  const unitOptions = safeUnits.map((unit) => ({
-    label: `${unit.name} - ${unit.propertyAddress || unit.propertyName || ""}`,
-    value: unit.id,
-  }));
-
-  const openModal = () => {
+  const openCreateModal = () => {
     form.resetFields();
+    setEditingRecord(null);
+    setModalMode("create");
+    setModalOpen(true);
+  };
+
+  const openEditModal = (record) => {
+    setEditingRecord(record);
+    setModalMode("edit");
+    form.setFieldsValue({
+      title: record.title,
+      propertyId: record.propertyId,
+      unitId: record.unitId ?? undefined,
+      priority: record.priority ?? "medium",
+      status: record.status ?? "open",
+      scheduledDate: record.scheduledDate ?? undefined,
+      estimatedCost: record.estimatedCost ? Number(record.estimatedCost) : undefined,
+      description: record.description ?? undefined,
+    });
     setModalOpen(true);
   };
 
   const closeModal = () => {
     setModalOpen(false);
     form.resetFields();
+    setEditingRecord(null);
   };
 
   const submitMaintenance = async (values) => {
     setSaving(true);
     try {
-      const response = await dispatch(saveMaintenance({ values }));
-      if (response.payload?.message === "success") {
-        message.success("Ticket créé");
+      const response = await dispatch(saveMaintenance({ id: editingRecord?.id, values }));
+      if (response.payload?.message === "success" || response.payload?.id) {
+        message.success(editingRecord ? "Ticket modifié" : "Ticket créé");
         dispatch(loadPropertyManagement());
         closeModal();
       }
@@ -123,6 +133,23 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
       setSaving(false);
     }
   };
+
+  const confirmDelete = (record) => setDeleteTarget(record);
+  const cancelDelete = () => setDeleteTarget(null);
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await dispatch(deleteMaintenance(deleteTarget.id));
+      message.success("Ticket supprimé (masqué, non effacé de la base)");
+      dispatch(loadPropertyManagement());
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete };
 
   return (
     <div className="immo-table-flow">
@@ -167,7 +194,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
               </button>
             ))}
           </div>
-          <button type="button" className="immo-primary-button" onClick={openModal}>
+          <button type="button" className="immo-primary-button" onClick={openCreateModal}>
             <Plus size={16} /> Nouveau ticket
           </button>
         </div>
@@ -179,17 +206,24 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
             <div className="immo-table-empty">Aucun ticket à afficher pour ce filtre.</div>
           ) : (
             ticketsForView.map((request, index) => (
-              <MaintenanceTicketCard key={request.id} request={request} index={index} />
+              <MaintenanceTicketCard
+                key={request.id}
+                request={request}
+                index={index}
+                onEdit={openEditModal}
+                onDelete={confirmDelete}
+              />
             ))
           )}
         </div>
       )}
-      {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} />}
-      {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} />}
+      {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} {...sharedViewProps} />}
+      {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} {...sharedViewProps} />}
       {maintenanceView === "calendar" && <MaintenanceCalendarView requests={ticketsForView} />}
 
       <MaintenanceFormModal
         form={form}
+        mode={modalMode}
         onCancel={closeModal}
         onSubmit={submitMaintenance}
         open={modalOpen}
@@ -197,6 +231,22 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         saving={saving}
         unitOptions={unitOptions}
       />
+
+      <Modal
+        open={Boolean(deleteTarget)}
+        title="Supprimer le ticket ?"
+        onCancel={cancelDelete}
+        onOk={executeDelete}
+        okText="Supprimer"
+        okButtonProps={{ danger: true, loading: deleting }}
+        cancelText="Annuler"
+        centered
+      >
+        <p>
+          Le ticket <strong>{deleteTarget?.title}</strong> sera masqué de toutes les vues.
+          Il ne sera <strong>pas supprimé de la base de données</strong> (suppression logique).
+        </p>
+      </Modal>
     </div>
   );
 };

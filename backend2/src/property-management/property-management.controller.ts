@@ -238,38 +238,44 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "List maintenance requests" })
+  @Permissions("readAll-maintenance")
   @Get("maintenance")
   maintenance() {
-    return this.propertyManagementService.maintenance();
+    return this.propertyManagementService.listMaintenance();
   }
 
   @ApiOperation({ summary: "Get single maintenance request by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-maintenance")
   @Get("maintenance/:id")
   findMaintenance(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findMaintenance(id);
   }
 
   @ApiOperation({ summary: "Create a maintenance request" })
+  @Permissions("create-maintenance")
   @Post("maintenance")
   createMaintenance(@Body() body: CreateMaintenanceDto) {
     return this.propertyManagementService.createMaintenance(body);
   }
 
   @ApiOperation({ summary: "Update a maintenance request" })
+  @Permissions("update-maintenance")
   @Put("maintenance/:id")
   updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
     return this.propertyManagementService.updateMaintenance(id, body);
   }
 
+  @Permissions("update-maintenance")
   @Patch("maintenance/:id")
   @Post("maintenance/:id")
   updateMaintenanceAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
     return this.propertyManagementService.updateMaintenance(id, body);
   }
 
-  @ApiOperation({ summary: "Delete a maintenance request" })
+  @ApiOperation({ summary: "Soft-delete a maintenance request (sets is_active=false)" })
   @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-maintenance")
   @Delete("maintenance/:id")
   @HttpCode(200)
   deleteMaintenance(@Param("id", ParseIntPipe) id: number) {

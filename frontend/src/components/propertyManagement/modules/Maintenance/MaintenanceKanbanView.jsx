@@ -2,6 +2,8 @@
 // 3 swim lanes: Ouvert / En cours / Résolu.
 
 import moment from "moment";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
@@ -19,7 +21,70 @@ const priorityLabel = (p) =>
 const priorityClass = (p) =>
   ["urgent", "high"].includes(p) ? "danger" : p === "low" ? "neutral" : "warning";
 
-const MaintenanceKanbanView = ({ requests = [] }) => {
+const KanbanCard = ({ request, index, colKey, onEdit, onDelete }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const assignee = request.assignee || request.assignedTo || request.technicianName;
+  const dateRef = request.scheduledDate || request.createdAt || request.reportedAt;
+  return (
+    <article className={`immo-kanban-card ${colKey === "done" ? "done" : ""}`}>
+      <div className="immo-kanban-card-head">
+        <span className={`immo-ticket-icon-sm ${ticketIconTone(request)}`}>
+          {ticketIconFor(request, 14)}
+        </span>
+        <span className={`immo-pill ${priorityClass(request.priority)}`}>
+          {priorityLabel(request.priority)}
+        </span>
+        {(onEdit || onDelete) && (
+          <span className="immo-menu-anchor" style={{ marginLeft: "auto" }}>
+            <button
+              type="button"
+              className={`immo-flat-icon${menuOpen ? " active" : ""}`}
+              style={{ padding: "2px" }}
+              onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+              aria-label="Actions"
+            >
+              <MoreHorizontal size={13} />
+            </button>
+            {menuOpen && (
+              <ul className="immo-context-menu" role="menu">
+                {onEdit && (
+                  <li role="menuitem">
+                    <button type="button" onClick={() => { setMenuOpen(false); onEdit(request); }}>
+                      <Pencil size={13} /> Modifier
+                    </button>
+                  </li>
+                )}
+                {onDelete && (
+                  <li role="menuitem" className="danger">
+                    <button type="button" onClick={() => { setMenuOpen(false); onDelete(request); }}>
+                      <Trash2 size={13} /> Supprimer
+                    </button>
+                  </li>
+                )}
+              </ul>
+            )}
+          </span>
+        )}
+      </div>
+      <h4 className={colKey === "done" ? "done-title" : ""}>{request.title}</h4>
+      <p className="muted">
+        {request.property?.name || request.propertyName || "-"}
+        {request.unitName ? ` · ${request.unitName}` : ""}
+      </p>
+      <footer>
+        <span className="muted-sm">{dateRef ? moment(dateRef).fromNow() : "-"}</span>
+        <span
+          className={`mini-avatar ${assignee ? avatarColors[index % avatarColors.length] : "slate"}`}
+          title={assignee || "Non assigné"}
+        >
+          {assignee ? initials(assignee) : "?"}
+        </span>
+      </footer>
+    </article>
+  );
+};
+
+const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete }) => {
   const grouped = COLUMNS.map((col) => ({
     ...col,
     items: requests.filter(col.match),
@@ -38,41 +103,16 @@ const MaintenanceKanbanView = ({ requests = [] }) => {
             {col.items.length === 0 && (
               <div className="immo-kanban-empty">Aucun ticket</div>
             )}
-            {col.items.map((request, index) => {
-              const assignee = request.assignee || request.assignedTo || request.technicianName;
-              const dateRef = request.scheduledDate || request.createdAt || request.reportedAt;
-              return (
-                <article
-                  key={request.id}
-                  className={`immo-kanban-card ${col.key === "done" ? "done" : ""}`}
-                >
-                  <div className="immo-kanban-card-head">
-                    <span className={`immo-ticket-icon-sm ${ticketIconTone(request)}`}>
-                      {ticketIconFor(request, 14)}
-                    </span>
-                    <span className={`immo-pill ${priorityClass(request.priority)}`}>
-                      {priorityLabel(request.priority)}
-                    </span>
-                  </div>
-                  <h4 className={col.key === "done" ? "done-title" : ""}>{request.title}</h4>
-                  <p className="muted">
-                    {request.property?.name || request.propertyName || "-"}
-                    {request.unitName ? ` · ${request.unitName}` : ""}
-                  </p>
-                  <footer>
-                    <span className="muted-sm">
-                      {dateRef ? moment(dateRef).fromNow() : "-"}
-                    </span>
-                    <span
-                      className={`mini-avatar ${assignee ? avatarColors[index % avatarColors.length] : "slate"}`}
-                      title={assignee || "Non assigné"}
-                    >
-                      {assignee ? initials(assignee) : "?"}
-                    </span>
-                  </footer>
-                </article>
-              );
-            })}
+            {col.items.map((request, index) => (
+              <KanbanCard
+                key={request.id}
+                request={request}
+                index={index}
+                colKey={col.key}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
           </div>
         </div>
       ))}

@@ -247,6 +247,7 @@ export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance
   scheduledDate: date("scheduled_date", { mode: "string" }),
   estimatedCost: decimal("estimated_cost", { precision: 15, scale: 2 }).default("0").notNull(),
   description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

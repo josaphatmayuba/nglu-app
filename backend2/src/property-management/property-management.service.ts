@@ -74,7 +74,10 @@ export class PropertyManagementService {
     const [openMaintenance] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateMaintenanceRequests)
-      .where(inArray(realEstateMaintenanceRequests.status, ["open", "in_progress"]));
+      .where(and(
+        inArray(realEstateMaintenanceRequests.status, ["open", "in_progress"]),
+        eq(realEstateMaintenanceRequests.isActive, true),
+      ));
 
     return {
       properties: Number(properties.count),
@@ -685,6 +688,10 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateMaintenanceRequests.id));
   }
 
+  listMaintenance() {
+    return this.maintenance().where(eq(realEstateMaintenanceRequests.isActive, true));
+  }
+
   async createMaintenance(input: CreateMaintenanceDto) {
     await this.ensureExists(realEstateProperties, input.propertyId, "Property not found.");
     if (input.unitId) {
@@ -727,7 +734,10 @@ export class PropertyManagementService {
 
   async deleteMaintenance(id: number) {
     await this.ensureExists(realEstateMaintenanceRequests, id, "Maintenance request not found.");
-    await this.db.delete(realEstateMaintenanceRequests).where(eq(realEstateMaintenanceRequests.id, id));
+    await this.db
+      .update(realEstateMaintenanceRequests)
+      .set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateMaintenanceRequests.id, id));
     return { message: "Maintenance request deleted successfully." };
   }
 
