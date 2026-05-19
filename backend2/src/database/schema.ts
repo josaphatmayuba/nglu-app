@@ -132,8 +132,10 @@ export const suppliers = mysqlTable("supplier", {
 
 export const currencies = mysqlTable("currency", {
   id: serial("id").primaryKey(),
+  currencyCode: varchar("currencyCode", { length: 3 }),
   currencyName: varchar("currencyName", { length: 255 }).notNull(),
   currencySymbol: varchar("currencySymbol", { length: 255 }).notNull(),
+  decimalPlaces: int("decimalPlaces").default(2),
   status: varchar("status", { length: 255 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
