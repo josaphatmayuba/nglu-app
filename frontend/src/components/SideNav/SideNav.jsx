@@ -66,6 +66,7 @@ import {
   MdOutlineInvertColors,
 } from "react-icons/md";
 import { TbShoppingCartCog } from "react-icons/tb";
+import axios from "axios";
 import { useSelector } from "react-redux";
 import { NavLink } from "react-router-dom";
 import Menu from "../../UI/Menu";
@@ -155,6 +156,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
   const [isSetting, setIsSetting] = useState(false);
   const { loading } = useSelector((state) => state.auth);
   const [searchQuery, setSearchQuery] = useState("");
+  const [saleInvoiceBadge, setSaleInvoiceBadge] = useState(null);
   const searchInputRef = useRef(null);
 
   // ⌘K / Ctrl+K to focus the sidebar search
@@ -182,6 +184,44 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       .replace(/[̀-ͯ]/g, "");
 
   const { data } = useSelector((state) => state?.setting) || {};
+  const canReadSales = canSee(permissions, {
+    permissions: ["create-saleInvoice", "readAll-saleInvoice"],
+    operator: "or",
+  });
+
+  useEffect(() => {
+    if (!canReadSales) {
+      setSaleInvoiceBadge(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const now = new Date();
+    const startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toISOString()
+      .slice(0, 10);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+      .toISOString()
+      .slice(0, 10);
+
+    axios
+      .get(
+        `sale-invoice?page=1&count=1&status=true&startDate=${startDate}&endDate=${endDate}`
+      )
+      .then(({ data: response }) => {
+        if (cancelled) return;
+        const total = Number(response?.totalSaleInvoice ?? 0);
+        setSaleInvoiceBadge(total > 0 ? String(total) : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSaleInvoiceBadge(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadSales]);
+
   const flatSections = [
     {
       label: "Général",
@@ -218,7 +258,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           label: "Factures",
           to: "/admin/sale",
           icon: FileText,
-          badge: "12",
+          badge: saleInvoiceBadge,
           badgeTone: "amber",
           permit: {
             permissions: ["create-saleInvoice", "readAll-saleInvoice"],
@@ -489,7 +529,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         {
           label: (
             <NavLink to="/admin/purchase">
-              <span>Factures d'achat</span>
+              <span>Factures d&apos;achat</span>
             </NavLink>
           ),
           permit: {
