@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
-import { loadAllAccount, loadIncomeStatement } from "@/redux/rtk/features/account/accountSlice";
+import { loadAllAccount, loadIncomeStatement, loadTrailBalance } from "@/redux/rtk/features/account/accountSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
 import OverviewPanel      from "./panels/OverviewPanel";
@@ -13,12 +13,12 @@ import TvaPanel           from "./panels/TvaPanel";
 import EcritureFormModal  from "./EcritureFormModal";
 
 const TABS = [
-  { key: "overview",  label: "Vue d'ensemble" },
-  { key: "journaux",  label: "Journaux" },
-  { key: "ecritures", label: "Écritures" },
-  { key: "plan",      label: "Plan comptable" },
-  { key: "etats",     label: "États financiers" },
-  { key: "tva",       label: "TVA" },
+  { key: "overview",  label: "Overview" },
+  { key: "journaux",  label: "Journals" },
+  { key: "ecritures", label: "Entries" },
+  { key: "plan",      label: "Chart of Accounts" },
+  { key: "etats",     label: "Financial Statements" },
+  { key: "tva",       label: "Tax" },
 ];
 
 const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -36,50 +36,47 @@ export default function AccountingPage() {
   const [exercice, setExercice]   = useState(new Date().getFullYear());
   const [modalOpen, setModalOpen] = useState(false);
 
-  const transactions    = useSelector((s) => s.transaction?.list ?? []);
-  const txLoading       = useSelector((s) => s.transaction?.loading ?? false);
-  const accounts        = useSelector((s) => s.account?.list ?? []);
-  const acctLoading     = useSelector((s) => s.account?.loading ?? false);
+  const transactions    = useSelector((s) => s.transaction?.list       ?? []);
+  const txLoading       = useSelector((s) => s.transaction?.loading    ?? false);
+  const accounts        = useSelector((s) => s.account?.list           ?? []);
+  const acctLoading     = useSelector((s) => s.account?.loading        ?? false);
   const incomeStatement = useSelector((s) => s.account?.incomeStatement ?? null);
+  const trailBalance    = useSelector((s) => s.account?.trailBalance   ?? null);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
   const currencySymbol = useMemo(
-    () => decodeHTMLEntity(appSetting?.currency?.currencySymbol) || "CDF",
+    () => decodeHTMLEntity(appSetting?.currency?.currencySymbol) || "$",
     [appSetting]
   );
 
-  const FMT = useMemo(
-    () => new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }),
-    []
-  );
+  const FMT = useMemo(() => new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }), []);
   const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
 
   useEffect(() => {
     dispatch(loadAllTransaction({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, count: 1000, offset: 0 }));
     dispatch(loadAllAccount());
     dispatch(loadIncomeStatement());
+    dispatch(loadTrailBalance());
   }, [dispatch, exercice]);
 
-  const income  = Number(incomeStatement?.income  ?? 0);
-  const expense = Number(incomeStatement?.expense ?? 0);
+  // incomeStatement from backend: { totalRevenue, totalExpense, profit, revenue[], expense[] }
+  const income  = Number(incomeStatement?.totalRevenue ?? 0);
+  const expense = Number(incomeStatement?.totalExpense ?? 0);
   const result  = income - expense;
 
-  // TVA nette from real accounts (4453 - 4454)
-  const tvaNette = useMemo(() => {
-    const collectee  = accounts
-      .filter((a) => String(a.accountNumber || a.id || "").startsWith("4453"))
-      .reduce((s, a) => s + Number(a.openingBalance || a.balance || 0), 0);
-    const deductible = accounts
-      .filter((a) => String(a.accountNumber || a.id || "").startsWith("4454"))
-      .reduce((s, a) => s + Number(a.openingBalance || a.balance || 0), 0);
-    return collectee - deductible;
-  }, [accounts]);
+  // Tax balance from trial balance — finds sub-account named "Tax"
+  const taxBalance = useMemo(() => {
+    if (!trailBalance) return null;
+    const all = [...(trailBalance.debits ?? []), ...(trailBalance.credits ?? [])];
+    const taxItem = all.find((a) => a.subAccount?.toLowerCase() === "tax");
+    return taxItem ? taxItem.balance : null;
+  }, [trailBalance]);
 
   const kpis = [
-    { key: "ca",      icon: TrendingUp,   label: "Chiffre d'affaires", value: fmt(income),               color: "emerald" },
-    { key: "charges", icon: TrendingDown,  label: "Charges",            value: fmt(expense),              color: "rose"    },
-    { key: "result",  icon: Scale,         label: "Résultat net",       value: fmt(Math.abs(result)) + (result < 0 ? " (perte)" : ""), color: result >= 0 ? "brand" : "red" },
-    { key: "tva",     icon: Receipt,       label: "TVA nette",          value: accounts.length ? fmt(Math.abs(tvaNette)) + (tvaNette < 0 ? " (crédit)" : "") : "—", color: "amber" },
+    { key: "ca",      icon: TrendingUp,  label: "Revenue",     value: fmt(income),  color: "emerald" },
+    { key: "charges", icon: TrendingDown, label: "Expenses",   value: fmt(expense), color: "rose"    },
+    { key: "result",  icon: Scale,        label: "Net result", value: fmt(Math.abs(result)) + (result < 0 ? " (loss)" : ""), color: result >= 0 ? "brand" : "red" },
+    { key: "tva",     icon: Receipt,      label: "Tax",        value: taxBalance !== null ? fmt(Math.abs(taxBalance)) : "—", color: "amber" },
   ];
 
   const COLOR = {
@@ -92,12 +89,11 @@ export default function AccountingPage() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      {/* Header */}
       <div className="bg-white border-b border-ink-200 px-6 py-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-ink-900">Comptabilité</h1>
-            <p className="text-xs text-ink-500 mt-0.5">Plan OHADA · double entrée</p>
+            <h1 className="text-xl font-bold text-ink-900">Accounting</h1>
+            <p className="text-xs text-ink-500 mt-0.5">Double-entry bookkeeping</p>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -105,20 +101,19 @@ export default function AccountingPage() {
               onChange={(e) => setExercice(Number(e.target.value))}
               className="text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white"
             >
-              {YEARS.map((y) => <option key={y} value={y}>Exercice {y}</option>)}
+              {YEARS.map((y) => <option key={y} value={y}>Fiscal year {y}</option>)}
             </select>
             <button type="button" className="flex items-center gap-1.5 text-sm border border-ink-200 rounded-lg px-3 py-1.5 hover:bg-ink-50 transition text-ink-700">
-              <Download className="w-4 h-4" /> Exporter
+              <Download className="w-4 h-4" /> Export
             </button>
             <button type="button" onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 transition font-medium">
-              <Plus className="w-4 h-4" /> Nouvelle écriture
+              <Plus className="w-4 h-4" /> New entry
             </button>
           </div>
         </div>
       </div>
 
       <div className="px-6 py-4 space-y-4">
-        {/* KPI strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {kpis.map((k) => {
             const Icon = k.icon;
@@ -137,7 +132,6 @@ export default function AccountingPage() {
           })}
         </div>
 
-        {/* Tabs */}
         <div className="bg-white rounded-xl border border-ink-200 overflow-hidden">
           <div className="flex overflow-x-auto border-b border-ink-100">
             {TABS.map((t) => (
@@ -156,12 +150,12 @@ export default function AccountingPage() {
             ))}
           </div>
           <div className="p-4">
-            {activeTab === "overview"  && <OverviewPanel transactions={transactions} accounts={accounts} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />}
+            {activeTab === "overview"  && <OverviewPanel transactions={transactions} trailBalance={trailBalance} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />}
             {activeTab === "journaux"  && <JournauxPanel transactions={transactions} />}
             {activeTab === "ecritures" && <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />}
-            {activeTab === "plan"      && <PlanComptablePanel accounts={accounts} loading={acctLoading} currencySymbol={currencySymbol} />}
+            {activeTab === "plan"      && <PlanComptablePanel trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />}
             {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} currencySymbol={currencySymbol} />}
-            {activeTab === "tva"       && <TvaPanel accounts={accounts} transactions={transactions} currencySymbol={currencySymbol} />}
+            {activeTab === "tva"       && <TvaPanel trailBalance={trailBalance} transactions={transactions} currencySymbol={currencySymbol} />}
           </div>
         </div>
       </div>

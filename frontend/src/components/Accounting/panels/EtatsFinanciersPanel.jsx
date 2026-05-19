@@ -30,9 +30,10 @@ const TONE = {
   amber:   { bg: "bg-amber-50",   icon: "text-amber-600" },
 };
 
-export default function EtatsFinanciersPanel({ incomeStatement, currencySymbol = "CDF" }) {
-  const income = Number(incomeStatement?.income ?? 0);
-  const expense = Number(incomeStatement?.expense ?? 0);
+export default function EtatsFinanciersPanel({ incomeStatement, currencySymbol = "$" }) {
+  // Backend returns { totalRevenue, totalExpense, profit, revenue[], expense[] }
+  const income = Number(incomeStatement?.totalRevenue ?? 0);
+  const expense = Number(incomeStatement?.totalExpense ?? 0);
   const result = income - expense;
   const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
   const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
