@@ -255,6 +255,27 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 
 ---
 
+## SCRUM-72 — Maintenance 4 vues ✅ TERMINÉE
+
+**Objectif** : L'onglet Maintenance doit avoir un toggle de vue Kanban/Liste/Tableau/Calendrier, comme dans le mockup (lignes 3813-3830).
+
+- [x] `MaintenancePanel.jsx` avec toggle 4 vues (Kanban par défaut, persisté localStorage)
+- [x] `MaintenanceKanbanView.jsx` — 3 swim lanes Ouvert/En cours/Résolu
+- [x] `MaintenanceTableView.jsx` — tableau dense Ticket/Propriété/Priorité/Assigné/Statut/Coût
+- [x] `MaintenanceCalendarView.jsx` — grille mensuelle, navigation prev/today/next
+- [x] `MaintenanceTicketCard.jsx` — vue liste (cartes tickets existantes)
+- [x] CSS ajouté en fin de `PropertyManagement.css` (banner SCRUM-72 : `.immo-kanban*`, `.immo-calendar*`, `.immo-table-row*`)
+- [x] Wired dans `PropertyManagementNew.jsx` (composant actif de production)
+- [x] Wired dans `PropertyManagement.jsx` (legacy — cohérence)
+
+**Notes de travail** :
+
+- **2026-05-19** (commit `ef1b7f7`) — Implémenté par josaphatmayuba. Fichiers créés : `modules/Maintenance/MaintenancePanel.jsx`, `MaintenanceKanbanView.jsx`, `MaintenanceTableView.jsx`, `MaintenanceCalendarView.jsx`. CSS ajouté à `PropertyManagement.css`. `PropertyManagementNew.jsx` déjà wired au moment du commit.
+- **2026-05-19** (commit `2aff904`) — Audit mockup vs implémentation complet. Vérifié que toutes les phases 1-4 + SCRUM-72 sont conformes. Wired `MaintenancePanel` dans le legacy `PropertyManagement.jsx` pour cohérence (no-op en prod). Pas de Jira disponible dans la session — ticket SCRUM-72 à déplacer en `Done` manuellement.
+- **Validation** : build/typecheck non exécutés dans cette session — à faire avant déploiement AWS dev.
+
+---
+
 ## Convention de mise à jour
 
 Pour chaque tâche entamée :
