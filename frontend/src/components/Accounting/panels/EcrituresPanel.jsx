@@ -5,9 +5,9 @@ import moment from "moment";
 const PAGE_SIZE = 15;
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
-const fmt = (v) => `CDF ${FMT.format(Number(v || 0))}`;
 
-export default function EcrituresPanel({ transactions = [], loading = false }) {
+export default function EcrituresPanel({ transactions = [], loading = false, currencySymbol = "CDF" }) {
+  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 

@@ -30,10 +30,12 @@ const TONE = {
   amber:   { bg: "bg-amber-50",   icon: "text-amber-600" },
 };
 
-export default function EtatsFinanciersPanel({ incomeStatement }) {
+export default function EtatsFinanciersPanel({ incomeStatement, currencySymbol = "CDF" }) {
   const income = Number(incomeStatement?.income ?? 0);
   const expense = Number(incomeStatement?.expense ?? 0);
   const result = income - expense;
+  const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
+  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
 
   return (
     <div className="space-y-4">
@@ -66,19 +68,19 @@ export default function EtatsFinanciersPanel({ incomeStatement }) {
           <div className="flex items-center justify-between py-2 border-b border-ink-100">
             <span className="text-sm text-ink-700">Produits (classe 7)</span>
             <span className="text-sm font-semibold text-emerald-600">
-              CDF {new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }).format(income)}
+              {fmt(income)}
             </span>
           </div>
           <div className="flex items-center justify-between py-2 border-b border-ink-100">
             <span className="text-sm text-ink-700">Charges (classe 6)</span>
             <span className="text-sm font-semibold text-rose-600">
-              CDF {new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }).format(expense)}
+              {fmt(expense)}
             </span>
           </div>
           <div className="flex items-center justify-between py-2">
             <span className="text-sm font-semibold text-ink-900">Résultat net</span>
             <span className={`text-base font-bold ${result >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-              CDF {new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }).format(Math.abs(result))}
+              {fmt(Math.abs(result))}
               {result < 0 ? " (perte)" : ""}
             </span>
           </div>

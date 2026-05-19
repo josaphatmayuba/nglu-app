@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { AlertTriangle, CheckSquare, Clock, Landmark, Banknote, Smartphone, ArrowRight } from "lucide-react";
+import { AlertTriangle, CheckSquare, Clock, Landmark, ArrowRight } from "lucide-react";
 import moment from "moment";
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
-const fmt = (v) => `CDF ${FMT.format(Number(v || 0))}`;
 const fmtShort = (v) => {
   const n = Number(v || 0);
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -20,7 +19,89 @@ const RANGES = [
 
 const CHARGE_COLORS = ["#6366f1","#10b981","#f59e0b","#a855f7","#71717a"];
 
-export default function OverviewPanel({ transactions = [], accounts = [], incomeStatement, onNavigateEcritures }) {
+function DynamicAlerts({ accounts = [], transactions = [] }) {
+  const alerts = useMemo(() => {
+    const list = [];
+
+    // 1. TVA collectée non nulle ce mois = à déclarer
+    const tvaCollectee = accounts
+      .filter((a) => String(a.accountNumber || a.id || "").startsWith("4453"))
+      .reduce((s, a) => s + Number(a.openingBalance || a.balance || 0), 0);
+    if (tvaCollectee > 0) {
+      list.push({
+        icon: AlertTriangle,
+        bg: "bg-amber-50",
+        iconColor: "text-amber-600",
+        title: "TVA à déclarer",
+        desc: `Solde compte 4453 : ${new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }).format(tvaCollectee)}`,
+      });
+    }
+
+    // 2. Transactions sans compte débit ou crédit assigné
+    const unmatched = transactions.filter(
+      (t) => !t.debitAccount && !t.debitAccountName && !t.creditAccount && !t.creditAccountName
+    ).length;
+    if (unmatched > 0) {
+      list.push({
+        icon: Clock,
+        bg: "bg-red-50",
+        iconColor: "text-red-600",
+        title: `${unmatched} écriture${unmatched > 1 ? "s" : ""} sans compte`,
+        desc: "Transactions à vérifier et imputer",
+      });
+    }
+
+    // 3. Comptes classe 5 (trésorerie) avec solde négatif
+    const negTreso = accounts.filter(
+      (a) => String(a.accountNumber || a.id || "").startsWith("5") &&
+             Number(a.openingBalance || a.balance || 0) < 0
+    );
+    if (negTreso.length > 0) {
+      list.push({
+        icon: AlertTriangle,
+        bg: "bg-rose-50",
+        iconColor: "text-rose-600",
+        title: "Trésorerie négative",
+        desc: `${negTreso.map((a) => a.name || a.accountNumber).join(", ")}`,
+      });
+    }
+
+    // 4. Tout est à jour
+    if (list.length === 0) {
+      list.push({
+        icon: CheckSquare,
+        bg: "bg-emerald-50",
+        iconColor: "text-emerald-600",
+        title: "Tout est à jour",
+        desc: "Aucune anomalie détectée sur cet exercice",
+      });
+    }
+
+    return list;
+  }, [accounts, transactions]);
+
+  return (
+    <div className="space-y-2.5">
+      {alerts.map((alert, i) => {
+        const Icon = alert.icon;
+        return (
+          <div key={i} className="flex items-start gap-2.5 text-xs">
+            <div className={`w-7 h-7 rounded-md ${alert.bg} flex items-center justify-center shrink-0`}>
+              <Icon className={`w-3.5 h-3.5 ${alert.iconColor}`} />
+            </div>
+            <div>
+              <div className="text-ink-900 font-medium">{alert.title}</div>
+              <div className="text-ink-500">{alert.desc}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function OverviewPanel({ transactions = [], accounts = [], incomeStatement, currencySymbol = "CDF", onNavigateEcritures }) {
+  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
   const [range, setRange] = useState("12M");
 
   const months = RANGES.find((r) => r.key === range)?.months ?? 12;
@@ -135,7 +216,7 @@ export default function OverviewPanel({ transactions = [], accounts = [], income
             <h3 className="font-semibold text-ink-900 text-sm mb-1">Trésorerie disponible</h3>
             <p className="text-xs text-ink-500 mb-3">{moment().format("DD MMMM YYYY")}</p>
             <div className="text-2xl font-semibold text-ink-900 tracking-tight">
-              <span className="text-sm text-ink-500 mr-1">CDF</span>
+              <span className="text-sm text-ink-500 mr-1">{currencySymbol}</span>
               {FMT.format(accounts.reduce((s, a) => s + Number(a.openingBalance || 0), 0))}
             </div>
             <div className="space-y-2 mt-4 pt-4 border-t border-ink-100">
@@ -145,7 +226,7 @@ export default function OverviewPanel({ transactions = [], accounts = [], income
                     <Landmark className="w-3.5 h-3.5 text-ink-400" />
                     <span className="text-ink-700">{a.name}</span>
                   </span>
-                  <span className="font-medium text-ink-900">CDF {fmtShort(a.openingBalance || 0)}</span>
+                  <span className="font-medium text-ink-900">{currencySymbol} {fmtShort(a.openingBalance || 0)}</span>
                 </div>
               ))}
               {accounts.length === 0 && (
@@ -154,38 +235,10 @@ export default function OverviewPanel({ transactions = [], accounts = [], income
             </div>
           </div>
 
-          {/* Alertes */}
+          {/* Alertes dynamiques */}
           <div className="bg-white rounded-xl border border-ink-200 p-4 md:p-5">
             <h3 className="font-semibold text-ink-900 text-sm mb-3">À surveiller</h3>
-            <div className="space-y-2.5">
-              <div className="flex items-start gap-2.5 text-xs">
-                <div className="w-7 h-7 rounded-md bg-amber-50 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                </div>
-                <div>
-                  <div className="text-ink-900 font-medium">TVA à déclarer</div>
-                  <div className="text-ink-500">Vérifier le compte 4453</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5 text-xs">
-                <div className="w-7 h-7 rounded-md bg-red-50 flex items-center justify-center shrink-0">
-                  <Clock className="w-3.5 h-3.5 text-red-600" />
-                </div>
-                <div>
-                  <div className="text-ink-900 font-medium">Rapprochement en attente</div>
-                  <div className="text-ink-500">Comptes 411 · Clients</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2.5 text-xs">
-                <div className="w-7 h-7 rounded-md bg-blue-50 flex items-center justify-center shrink-0">
-                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-                </div>
-                <div>
-                  <div className="text-ink-900 font-medium">Rapprochement banque</div>
-                  <div className="text-ink-500">Vérifier relevés du mois</div>
-                </div>
-              </div>
-            </div>
+            <DynamicAlerts accounts={accounts} transactions={transactions} />
           </div>
         </div>
       </div>
@@ -220,7 +273,7 @@ export default function OverviewPanel({ transactions = [], accounts = [], income
                     <span className="w-2 h-2 rounded-full inline-block" style={{ background: CHARGE_COLORS[i % CHARGE_COLORS.length] }} />
                     <span className="text-ink-700 font-medium">{c.name}</span>
                   </span>
-                  <span className="font-semibold text-ink-900">CDF {fmtShort(c.amount)} · {pct}%</span>
+                  <span className="font-semibold text-ink-900">{currencySymbol} {fmtShort(c.amount)} · {pct}%</span>
                 </div>
                 <div className="h-1.5 bg-ink-100 rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: CHARGE_COLORS[i % CHARGE_COLORS.length] }} />

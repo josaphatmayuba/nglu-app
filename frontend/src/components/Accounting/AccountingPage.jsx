@@ -1,19 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
 import { loadAllAccount, loadIncomeStatement } from "@/redux/rtk/features/account/accountSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
-import OverviewPanel     from "./panels/OverviewPanel";
-import JournauxPanel     from "./panels/JournauxPanel";
-import EcrituresPanel    from "./panels/EcrituresPanel";
+import OverviewPanel      from "./panels/OverviewPanel";
+import JournauxPanel      from "./panels/JournauxPanel";
+import EcrituresPanel     from "./panels/EcrituresPanel";
 import PlanComptablePanel from "./panels/PlanComptablePanel";
 import EtatsFinanciersPanel from "./panels/EtatsFinanciersPanel";
-import TvaPanel          from "./panels/TvaPanel";
-import EcritureFormModal from "./EcritureFormModal";
-
-const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
-const fmt = (v) => `CDF ${FMT.format(Number(v || 0))}`;
+import TvaPanel           from "./panels/TvaPanel";
+import EcritureFormModal  from "./EcritureFormModal";
 
 const TABS = [
   { key: "overview",  label: "Vue d'ensemble" },
@@ -26,17 +23,36 @@ const TABS = [
 
 const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
+const decodeHTMLEntity = (str) => {
+  if (typeof document === "undefined" || !str) return str;
+  const el = document.createElement("textarea");
+  el.innerHTML = str;
+  return el.value;
+};
+
 export default function AccountingPage() {
   const dispatch = useDispatch();
-  const [activeTab, setActiveTab]   = useState("overview");
-  const [exercice, setExercice]     = useState(new Date().getFullYear());
-  const [modalOpen, setModalOpen]   = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [exercice, setExercice]   = useState(new Date().getFullYear());
+  const [modalOpen, setModalOpen] = useState(false);
 
-  const transactions   = useSelector((s) => s.transaction?.list ?? []);
-  const txLoading      = useSelector((s) => s.transaction?.loading ?? false);
-  const accounts       = useSelector((s) => s.account?.list ?? []);
-  const acctLoading    = useSelector((s) => s.account?.loading ?? false);
+  const transactions    = useSelector((s) => s.transaction?.list ?? []);
+  const txLoading       = useSelector((s) => s.transaction?.loading ?? false);
+  const accounts        = useSelector((s) => s.account?.list ?? []);
+  const acctLoading     = useSelector((s) => s.account?.loading ?? false);
   const incomeStatement = useSelector((s) => s.account?.incomeStatement ?? null);
+  const { data: appSetting } = useSelector((s) => s.setting) || {};
+
+  const currencySymbol = useMemo(
+    () => decodeHTMLEntity(appSetting?.currency?.currencySymbol) || "CDF",
+    [appSetting]
+  );
+
+  const FMT = useMemo(
+    () => new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 }),
+    []
+  );
+  const fmt = (v) => `${currencySymbol} ${FMT.format(Number(v || 0))}`;
 
   useEffect(() => {
     dispatch(loadAllTransaction({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, count: 1000, offset: 0 }));
@@ -48,35 +64,22 @@ export default function AccountingPage() {
   const expense = Number(incomeStatement?.expense ?? 0);
   const result  = income - expense;
 
+  // TVA nette from real accounts (4453 - 4454)
+  const tvaNette = useMemo(() => {
+    const collectee  = accounts
+      .filter((a) => String(a.accountNumber || a.id || "").startsWith("4453"))
+      .reduce((s, a) => s + Number(a.openingBalance || a.balance || 0), 0);
+    const deductible = accounts
+      .filter((a) => String(a.accountNumber || a.id || "").startsWith("4454"))
+      .reduce((s, a) => s + Number(a.openingBalance || a.balance || 0), 0);
+    return collectee - deductible;
+  }, [accounts]);
+
   const kpis = [
-    {
-      key: "ca",
-      icon: TrendingUp,
-      label: "Chiffre d'affaires",
-      value: fmt(income),
-      color: "emerald",
-    },
-    {
-      key: "charges",
-      icon: TrendingDown,
-      label: "Charges",
-      value: fmt(expense),
-      color: "rose",
-    },
-    {
-      key: "result",
-      icon: Scale,
-      label: "Résultat net",
-      value: fmt(Math.abs(result)) + (result < 0 ? " (perte)" : ""),
-      color: result >= 0 ? "brand" : "red",
-    },
-    {
-      key: "tva",
-      icon: Receipt,
-      label: "TVA nette",
-      value: "CDF —",
-      color: "amber",
-    },
+    { key: "ca",      icon: TrendingUp,   label: "Chiffre d'affaires", value: fmt(income),               color: "emerald" },
+    { key: "charges", icon: TrendingDown,  label: "Charges",            value: fmt(expense),              color: "rose"    },
+    { key: "result",  icon: Scale,         label: "Résultat net",       value: fmt(Math.abs(result)) + (result < 0 ? " (perte)" : ""), color: result >= 0 ? "brand" : "red" },
+    { key: "tva",     icon: Receipt,       label: "TVA nette",          value: accounts.length ? fmt(Math.abs(tvaNette)) + (tvaNette < 0 ? " (crédit)" : "") : "—", color: "amber" },
   ];
 
   const COLOR = {
@@ -102,21 +105,12 @@ export default function AccountingPage() {
               onChange={(e) => setExercice(Number(e.target.value))}
               className="text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white"
             >
-              {YEARS.map((y) => (
-                <option key={y} value={y}>Exercice {y}</option>
-              ))}
+              {YEARS.map((y) => <option key={y} value={y}>Exercice {y}</option>)}
             </select>
-            <button
-              type="button"
-              className="flex items-center gap-1.5 text-sm border border-ink-200 rounded-lg px-3 py-1.5 hover:bg-ink-50 transition text-ink-700"
-            >
+            <button type="button" className="flex items-center gap-1.5 text-sm border border-ink-200 rounded-lg px-3 py-1.5 hover:bg-ink-50 transition text-ink-700">
               <Download className="w-4 h-4" /> Exporter
             </button>
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
-              className="flex items-center gap-1.5 text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 transition font-medium"
-            >
+            <button type="button" onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 transition font-medium">
               <Plus className="w-4 h-4" /> Nouvelle écriture
             </button>
           </div>
@@ -162,38 +156,17 @@ export default function AccountingPage() {
             ))}
           </div>
           <div className="p-4">
-            {activeTab === "overview" && (
-              <OverviewPanel
-                transactions={transactions}
-                accounts={accounts}
-                incomeStatement={incomeStatement}
-                onNavigateEcritures={() => setActiveTab("ecritures")}
-              />
-            )}
-            {activeTab === "journaux" && (
-              <JournauxPanel transactions={transactions} />
-            )}
-            {activeTab === "ecritures" && (
-              <EcrituresPanel transactions={transactions} loading={txLoading} />
-            )}
-            {activeTab === "plan" && (
-              <PlanComptablePanel accounts={accounts} loading={acctLoading} />
-            )}
-            {activeTab === "etats" && (
-              <EtatsFinanciersPanel incomeStatement={incomeStatement} />
-            )}
-            {activeTab === "tva" && (
-              <TvaPanel />
-            )}
+            {activeTab === "overview"  && <OverviewPanel transactions={transactions} accounts={accounts} incomeStatement={incomeStatement} currencySymbol={currencySymbol} onNavigateEcritures={() => setActiveTab("ecritures")} />}
+            {activeTab === "journaux"  && <JournauxPanel transactions={transactions} />}
+            {activeTab === "ecritures" && <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />}
+            {activeTab === "plan"      && <PlanComptablePanel accounts={accounts} loading={acctLoading} currencySymbol={currencySymbol} />}
+            {activeTab === "etats"     && <EtatsFinanciersPanel incomeStatement={incomeStatement} currencySymbol={currencySymbol} />}
+            {activeTab === "tva"       && <TvaPanel accounts={accounts} transactions={transactions} currencySymbol={currencySymbol} />}
           </div>
         </div>
       </div>
 
-      <EcritureFormModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        accounts={accounts}
-      />
+      <EcritureFormModal open={modalOpen} onClose={() => setModalOpen(false)} accounts={accounts} />
     </div>
   );
 }

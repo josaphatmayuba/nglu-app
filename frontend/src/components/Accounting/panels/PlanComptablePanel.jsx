@@ -14,7 +14,7 @@ const CLASSES = [
   { num: "8", label: "Comptes de résultats" },
 ];
 
-function AccountRow({ account, depth = 0 }) {
+function AccountRow({ account, depth = 0, currencySymbol }) {
   const [open, setOpen] = useState(depth === 0);
   const children = account.children || [];
   const hasChildren = children.length > 0;
@@ -35,18 +35,17 @@ function AccountRow({ account, depth = 0 }) {
         <span className="font-mono text-xs text-ink-500 w-14 shrink-0">{account.accountNumber || account.id}</span>
         <span className={`text-sm flex-1 ${depth === 0 ? "font-semibold text-ink-900" : "text-ink-700"}`}>{account.name}</span>
         <span className={`text-sm font-medium tabular-nums ${balance >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-          {balance !== 0 ? `CDF ${FMT.format(Math.abs(balance))}` : "—"}
+          {balance !== 0 ? `${currencySymbol} ${FMT.format(Math.abs(balance))}` : "—"}
         </span>
       </div>
       {open && hasChildren && children.map((child) => (
-        <AccountRow key={child.id} account={child} depth={depth + 1} />
+        <AccountRow key={child.id} account={child} depth={depth + 1} currencySymbol={currencySymbol} />
       ))}
     </div>
   );
 }
 
-export default function PlanComptablePanel({ accounts = [], loading = false }) {
-  // Group accounts by OHADA class (first digit of name or accountNumber)
+export default function PlanComptablePanel({ accounts = [], loading = false, currencySymbol = "CDF" }) {
   const byClass = {};
   CLASSES.forEach((c) => { byClass[c.num] = []; });
 
@@ -68,9 +67,7 @@ export default function PlanComptablePanel({ accounts = [], loading = false }) {
         <span className="text-xs text-ink-500">{accounts.length} compte{accounts.length !== 1 ? "s" : ""}</span>
       </div>
 
-      {loading && (
-        <div className="py-12 text-center text-ink-400 text-sm">Chargement…</div>
-      )}
+      {loading && <div className="py-12 text-center text-ink-400 text-sm">Chargement…</div>}
 
       {!loading && accounts.length === 0 && (
         <div className="py-12 text-center text-ink-400 text-sm">Aucun compte trouvé</div>
@@ -92,6 +89,7 @@ export default function PlanComptablePanel({ accounts = [], loading = false }) {
                     children: items,
                   }}
                   depth={0}
+                  currencySymbol={currencySymbol}
                 />
               </div>
             );
