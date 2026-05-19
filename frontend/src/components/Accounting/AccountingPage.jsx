@@ -37,13 +37,13 @@ export default function AccountingPage() {
   const [exercice, setExercice]   = useState(new Date().getFullYear());
   const [modalOpen, setModalOpen] = useState(false);
 
-  const transactions    = useSelector((s) => s.transaction?.list       ?? []);
-  const txLoading       = useSelector((s) => s.transaction?.loading    ?? false);
-  const accounts        = useSelector((s) => s.account?.list           ?? []);
-  const acctLoading     = useSelector((s) => s.account?.loading        ?? false);
-  const incomeStatement = useSelector((s) => s.account?.incomeStatement ?? null);
-  const trailBalance      = useSelector((s) => s.account?.trailBalance   ?? null);
-  const transactionTypes  = useSelector((s) => s.transactionType?.list  ?? []);
+  const transactions    = useSelector((s) => s.transactions?.list       ?? []);
+  const txLoading       = useSelector((s) => s.transactions?.loading    ?? false);
+  const accounts        = useSelector((s) => s.accounts?.list           ?? []);
+  const acctLoading     = useSelector((s) => s.accounts?.loading        ?? false);
+  const incomeStatement = useSelector((s) => s.accounts?.incomeStatement ?? null);
+  const trailBalance      = useSelector((s) => s.accounts?.trailBalance   ?? null);
+  const transactionTypes  = useSelector((s) => s.transactionTypes?.list  ?? []);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
   const currencySymbol = useMemo(
