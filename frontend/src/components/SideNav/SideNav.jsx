@@ -308,7 +308,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "Comptabilité",
-          to: "/admin/account",
+          to: "/admin/accounting",
           icon: WalletCards,
           permit: {
             permissions: ["create-account", "readAll-account"],
