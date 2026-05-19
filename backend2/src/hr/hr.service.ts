@@ -8,6 +8,7 @@ import {
   designations,
   salaryHistories,
   shifts,
+  transactions,
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -178,7 +179,27 @@ export class HrService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findSalaryHistory(Number(result.insertId));
+
+    const salaryHistoryId = Number((result as any).insertId);
+
+    // Create accounting transaction: debit Salary expense, credit Cash or Bank
+    const creditAccountId = input.paymentAccountId ?? 2; // 2=Bank default, 1=Cash
+    const txType = creditAccountId === 1 ? "SAL - Payroll Cash" : "SAL - Payroll Journal";
+
+    await this.db.insert(transactions).values({
+      date: input.salaryStartDate ? new Date(input.salaryStartDate) : sql`CURRENT_TIMESTAMP` as any,
+      debitId: 10, // Salary expense sub-account
+      creditId: creditAccountId,
+      particulars: input.salaryComment || `Salary payment${input.salaryStartDate ? ` — ${input.salaryStartDate}` : ""}`,
+      amount: input.salary,
+      type: txType,
+      relatedId: String(salaryHistoryId),
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    return this.findSalaryHistory(salaryHistoryId);
   }
 
   findSalaryHistory(id: number) {

@@ -96,6 +96,12 @@ export class CreateSalaryHistoryDto {
   @IsOptional()
   @IsString()
   salaryComment?: string | null;
+
+  /** Sub-account used to credit the payment: 1=Cash, 2=Bank (default) */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  paymentAccountId?: number;
 }
 
 export class UpdateSalaryHistoryDto extends PartialType(CreateSalaryHistoryDto) {}
