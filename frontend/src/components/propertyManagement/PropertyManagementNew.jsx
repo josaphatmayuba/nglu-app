@@ -25,7 +25,7 @@ import {
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 
 import { compactMoney } from "./shared/format";
-import { MetricCard } from "./shared/ui";
+import { MetricCard, MultiCurrencyValue } from "./shared/ui";
 import { usePropertyManagementData } from "./shared/usePropertyManagementData";
 
 import PropertiesPanel from "./modules/Properties/PropertiesPanel";
@@ -59,6 +59,7 @@ const PropertyManagementNew = () => {
     currencyOptions,
     occupancyRate,
     monthlyRent,
+    monthlyRentByCurrency,
     overduePayments,
   } = usePropertyManagementData();
 
@@ -256,7 +257,7 @@ const PropertyManagementNew = () => {
           <MetricCard
             icon={<CreditCard size={20} />}
             label="Loyers du mois"
-            value={compactMoney(monthlyRent)}
+            value={<MultiCurrencyValue byCurrency={monthlyRentByCurrency} fallback={compactMoney(monthlyRent)} />}
             helper={`${safePayments.length} reçus · ${Math.max(activeLeases.length - safePayments.length, 0)} en attente`}
             tone="amber"
             trend={{ label: "↑ 8.2%" }}

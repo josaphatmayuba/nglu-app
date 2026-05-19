@@ -3437,6 +3437,21 @@
 .immo-mini-kpis .amber { background: transparent; color: #d97706; }
 .immo-mini-kpis .red { background: transparent; color: #dc2626; }
 
+/* Multi-currency stacked display */
+.immo-multicurrency {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.immo-multicurrency-line {
+  display: block;
+  font-size: 0.78em;
+  line-height: 1.35;
+}
+.immo-metric-value .immo-multicurrency-line {
+  font-size: 0.82em;
+}
+
 .immo-ticket-list {
   display: grid;
   gap: 12px;
