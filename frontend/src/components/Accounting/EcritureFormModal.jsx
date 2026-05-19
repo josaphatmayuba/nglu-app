@@ -1,31 +1,31 @@
 import { useState, useMemo } from "react";
 import { X, Plus, Trash2, AlertCircle, CheckCircle } from "lucide-react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { addTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
 
-const JOURNALS = [
-  { code: "VTE", label: "Ventes" },
-  { code: "ACH", label: "Achats" },
-  { code: "BNQ", label: "Banque" },
-  { code: "CAI", label: "Caisse" },
-  { code: "SAL", label: "Paie" },
-  { code: "OD",  label: "Opérations diverses" },
-];
-
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
-
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
 
 export default function EcritureFormModal({ open, onClose, accounts = [] }) {
   const dispatch = useDispatch();
-  const [journal, setJournal] = useState("OD");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [note, setNote] = useState("");
+
+  // Real transaction types from DB
+  const transactionTypes = useSelector((s) => s.transactionTypes?.list ?? []);
+
+  const [type, setType]   = useState("");
+  const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
+  const [note, setNote]   = useState("");
   const [lines, setLines] = useState([emptyLine(), emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
 
+  // When a transaction type is selected, auto-fill the debit/credit accounts from its definition
+  const selectedType = useMemo(
+    () => transactionTypes.find((t) => t.name === type),
+    [type, transactionTypes]
+  );
+
   const totalDebit  = useMemo(() => lines.reduce((s, l) => s + (Number(l.debit)  || 0), 0), [lines]);
-  const totalCredit = useMemo(() => lines.reduce((s, l) => s + (Number(l.credit) || 0), 0), 0);
+  const totalCredit = useMemo(() => lines.reduce((s, l) => s + (Number(l.credit) || 0), 0), [lines]);
   const balanced = totalDebit > 0 && totalDebit === totalCredit;
 
   const updateLine = (id, field, value) =>
@@ -34,8 +34,22 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
   const removeLine = (id) => setLines((prev) => prev.filter((l) => l.id !== id));
 
+  const handleTypeChange = (name) => {
+    setType(name);
+    const tt = transactionTypes.find((t) => t.name === name);
+    if (tt) {
+      // Auto-fill first two lines with the debit/credit accounts from the type definition
+      setLines((prev) => {
+        const updated = [...prev];
+        if (updated[0]) updated[0] = { ...updated[0], account: String(tt.debitAccountId ?? "") };
+        if (updated[1]) updated[1] = { ...updated[1], account: String(tt.creditAccountId ?? "") };
+        return updated;
+      });
+    }
+  };
+
   const reset = () => {
-    setJournal("OD");
+    setType("");
     setDate(new Date().toISOString().slice(0, 10));
     setNote("");
     setLines([emptyLine(), emptyLine()]);
@@ -49,10 +63,10 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
     const creditLine = lines.find((l) => Number(l.credit) > 0);
     await dispatch(addTransaction({
       date,
-      type: journal,
-      note: note || undefined,
-      debitAccount:  debitLine?.account  || undefined,
-      creditAccount: creditLine?.account || undefined,
+      type: type || "Other",
+      particulars: note || type || "Manual entry",
+      debitId:  Number(debitLine?.account)  || selectedType?.debitAccountId  || undefined,
+      creditId: Number(creditLine?.account) || selectedType?.creditAccountId || undefined,
       amount: totalDebit,
     }));
     setSubmitting(false);
@@ -67,7 +81,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-ink-100">
-          <h2 className="text-base font-semibold text-ink-900">Nouvelle écriture comptable</h2>
+          <h2 className="text-base font-semibold text-ink-900">New journal entry</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-ink-100 transition">
             <X className="w-4 h-4 text-ink-500" />
           </button>
@@ -87,24 +101,27 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-ink-600 mb-1">Journal</label>
+              <label className="block text-xs font-medium text-ink-600 mb-1">
+                Transaction type
+              </label>
               <select
-                value={journal}
-                onChange={(e) => setJournal(e.target.value)}
+                value={type}
+                onChange={(e) => handleTypeChange(e.target.value)}
                 className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white"
               >
-                {JOURNALS.map((j) => (
-                  <option key={j.code} value={j.code}>{j.code} — {j.label}</option>
+                <option value="">— select type —</option>
+                {transactionTypes.map((tt) => (
+                  <option key={tt.id} value={tt.name}>{tt.name}</option>
                 ))}
               </select>
             </div>
-            <div className="sm:col-span-1">
-              <label className="block text-xs font-medium text-ink-600 mb-1">Libellé</label>
+            <div>
+              <label className="block text-xs font-medium text-ink-600 mb-1">Description</label>
               <input
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Description de l'écriture"
+                placeholder="Entry description"
                 className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400"
               />
             </div>
@@ -115,10 +132,10 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-ink-100">
-                  <th className="text-left text-xs font-semibold text-ink-500 uppercase pb-2 pr-2">Compte</th>
-                  <th className="text-left text-xs font-semibold text-ink-500 uppercase pb-2 pr-2">Libellé ligne</th>
-                  <th className="text-right text-xs font-semibold text-ink-500 uppercase pb-2 pr-2 w-28">Débit</th>
-                  <th className="text-right text-xs font-semibold text-ink-500 uppercase pb-2 pr-2 w-28">Crédit</th>
+                  <th className="text-left text-xs font-semibold text-ink-500 uppercase pb-2 pr-2">Account</th>
+                  <th className="text-left text-xs font-semibold text-ink-500 uppercase pb-2 pr-2">Label</th>
+                  <th className="text-right text-xs font-semibold text-ink-500 uppercase pb-2 pr-2 w-28">Debit</th>
+                  <th className="text-right text-xs font-semibold text-ink-500 uppercase pb-2 pr-2 w-28">Credit</th>
                   <th className="w-6" />
                 </tr>
               </thead>
@@ -132,10 +149,10 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
                           onChange={(e) => updateLine(line.id, "account", e.target.value)}
                           className="w-full text-xs border border-ink-200 rounded-md px-2 py-1 focus:outline-none focus:border-brand-400 bg-white"
                         >
-                          <option value="">— compte —</option>
+                          <option value="">— account —</option>
                           {accounts.map((a) => (
-                            <option key={a.id} value={a.accountNumber || a.id}>
-                              {a.accountNumber || a.id} {a.name}
+                            <option key={a.id} value={a.id}>
+                              {a.name}
                             </option>
                           ))}
                         </select>
@@ -144,7 +161,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
                           type="text"
                           value={line.account}
                           onChange={(e) => updateLine(line.id, "account", e.target.value)}
-                          placeholder="N° compte"
+                          placeholder="Account ID"
                           className="w-full text-xs border border-ink-200 rounded-md px-2 py-1 focus:outline-none focus:border-brand-400"
                         />
                       )}
@@ -154,7 +171,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
                         type="text"
                         value={line.label}
                         onChange={(e) => updateLine(line.id, "label", e.target.value)}
-                        placeholder="Libellé"
+                        placeholder="Label"
                         className="w-full text-xs border border-ink-200 rounded-md px-2 py-1 focus:outline-none focus:border-brand-400"
                       />
                     </td>
@@ -180,7 +197,8 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
                     </td>
                     <td className="py-1.5">
                       {lines.length > 2 && (
-                        <button type="button" onClick={() => removeLine(line.id)} className="p-1 rounded hover:bg-rose-50 text-ink-400 hover:text-rose-500 transition">
+                        <button type="button" onClick={() => removeLine(line.id)}
+                          className="p-1 rounded hover:bg-rose-50 text-ink-400 hover:text-rose-500 transition">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -191,23 +209,16 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
               <tfoot>
                 <tr className="border-t border-ink-200">
                   <td colSpan={2} className="pt-2 text-xs text-ink-500 font-semibold uppercase">Total</td>
-                  <td className="pt-2 pr-2 text-right text-xs font-semibold text-ink-900 tabular-nums">
-                    {FMT.format(totalDebit)}
-                  </td>
-                  <td className="pt-2 pr-2 text-right text-xs font-semibold text-ink-900 tabular-nums">
-                    {FMT.format(totalCredit)}
-                  </td>
+                  <td className="pt-2 pr-2 text-right text-xs font-semibold text-ink-900 tabular-nums">{FMT.format(totalDebit)}</td>
+                  <td className="pt-2 pr-2 text-right text-xs font-semibold text-ink-900 tabular-nums">{FMT.format(totalCredit)}</td>
                   <td />
                 </tr>
               </tfoot>
             </table>
 
-            <button
-              type="button"
-              onClick={addLine}
-              className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium transition"
-            >
-              <Plus className="w-3.5 h-3.5" /> Ajouter une ligne
+            <button type="button" onClick={addLine}
+              className="mt-2 flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-medium transition">
+              <Plus className="w-3.5 h-3.5" /> Add line
             </button>
           </div>
 
@@ -216,12 +227,12 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
             {totalDebit === 0 ? null : balanced ? (
               <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
                 <CheckCircle className="w-4 h-4 shrink-0" />
-                Écriture équilibrée — débit = crédit = CDF {FMT.format(totalDebit)}
+                Balanced — debit = credit = {FMT.format(totalDebit)}
               </div>
             ) : (
               <div className="flex items-center gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                Déséquilibre : débit {FMT.format(totalDebit)} ≠ crédit {FMT.format(totalCredit)} (diff. {FMT.format(Math.abs(totalDebit - totalCredit))})
+                Unbalanced: debit {FMT.format(totalDebit)} ≠ credit {FMT.format(totalCredit)} (diff. {FMT.format(Math.abs(totalDebit - totalCredit))})
               </div>
             )}
           </div>
@@ -229,21 +240,17 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-ink-100 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => { reset(); onClose?.(); }}
-            className="px-4 py-2 text-sm font-medium text-ink-700 border border-ink-200 rounded-lg hover:bg-ink-50 transition"
-          >
-            Annuler
+          <button type="button" onClick={() => { reset(); onClose?.(); }}
+            className="px-4 py-2 text-sm font-medium text-ink-700 border border-ink-200 rounded-lg hover:bg-ink-50 transition">
+            Cancel
           </button>
           <button
-            type="submit"
-            form="ecriture-form"
+            type="button"
             disabled={!balanced || submitting}
             onClick={handleSubmit}
             className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
-            {submitting ? "Enregistrement…" : "Valider l'écriture"}
+            {submitting ? "Saving…" : "Validate entry"}
           </button>
         </div>
       </div>
