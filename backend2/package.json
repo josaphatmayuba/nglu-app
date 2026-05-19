@@ -20,7 +20,7 @@
     "db:migrate:run": "ts-node -r tsconfig-paths/register src/database/migrate.ts",
     "docker:dev": "npm run db:wait && npm run db:migrate:run && npm run db:seed && npm run db:seed:demo && npm run dev",
     "docker:prod": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && node dist/src/main.js",
-    "docker:dev-deployed": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && node dist/src/database/seed.js && node dist/src/database/seed-demo.js && node dist/src/main.js"
+    "docker:dev-deployed": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && (node dist/src/database/seed.js || true) && (node dist/src/database/seed-demo.js || true) && node dist/src/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
