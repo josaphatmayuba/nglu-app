@@ -69,6 +69,7 @@ const Dashboard = () => {
             endDate={pageConfig.endDate}
             onDateChange={handleDateChange}
             kpis={dash?.kpis}
+            revenue={dash?.revenue}
             sales={dash?.sales}
             purchases={dash?.purchases}
             monthly={dash?.monthly}
@@ -77,7 +78,7 @@ const Dashboard = () => {
             topProduct={dash?.topProduct}
             loading={dashLoading}
             error={error}
-            currencySymbol={currencySymbol} // Decoded symbol pass hocche
+            currencySymbol={currencySymbol}
           />
         ) : (
           <Content pageConfig={pageConfig} />

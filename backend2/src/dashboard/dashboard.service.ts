@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, between, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  currencies,
   customers,
   products,
   purchaseInvoices,
@@ -22,7 +23,7 @@ export class DashboardService {
   async getDashboardData(query: DashboardQueryDto) {
     const { start, end } = this.resolveDates(query);
 
-    const [salesAgg, purchaseAgg, salesReturn, purchaseReturn, monthly, accounts, topCustomers, topProducts, kpis] =
+    const [salesAgg, purchaseAgg, salesReturn, purchaseReturn, monthly, accounts, topCustomers, topProducts, kpis, revenueByCurrency] =
       await Promise.all([
         this.salesAggregates(start, end),
         this.purchaseAggregates(start, end),
@@ -33,10 +34,15 @@ export class DashboardService {
         this.topCustomers(start, end),
         this.topProducts(start, end),
         this.kpiTrends(end),
+        this.salesByCurrency(start, end),
       ]);
 
     return {
       kpis,
+      revenue: {
+        total: Math.round(salesAgg.total),
+        byCurrency: revenueByCurrency,
+      },
       sales: {
         totalSale: Math.round(salesAgg.total),
         breakdown: [
@@ -282,6 +288,27 @@ export class DashboardService {
     const curr = trend[trend.length - 1];
     if (prev === 0) return curr > 0 ? 100 : 0;
     return Math.round(((curr - prev) / prev) * 100 * 10) / 10;
+  }
+
+  private async salesByCurrency(start: Date, end: Date) {
+    const rows = await this.db
+      .select({
+        currencyId: saleInvoices.currencyId,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+        total: sql<number>`COALESCE(SUM(${saleInvoices.totalAmount}), 0)`,
+      })
+      .from(saleInvoices)
+      .leftJoin(currencies, eq(currencies.id, saleInvoices.currencyId))
+      .where(between(saleInvoices.date, start, end))
+      .groupBy(saleInvoices.currencyId, currencies.currencyName, currencies.currencySymbol);
+
+    return rows.map((r) => ({
+      currencyId: r.currencyId,
+      currencyName: r.currencyName ?? "CDF",
+      currencySymbol: r.currencySymbol ?? "CDF",
+      amount: Math.round(Number(r.total)),
+    }));
   }
 
   private resolveDates(query: DashboardQueryDto) {

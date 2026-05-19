@@ -88,13 +88,13 @@ const SafeChartContainer = ({ data, children, emptyTitle, emptySubtitle }) => {
     return <div className="h-56 sm:h-64">{children}</div>;
 };
 
-const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol, iconBgColor = 'brand' }) => {
+const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor, currencySymbol, iconBgColor = 'brand', byCurrency }) => {
     const isPositive = (change ?? 0) >= 0;
     const sparklineData = (trend || []).map((val, idx) => ({ idx, val }));
     const strokeColor = lineColor || (isPositive ? '#10b981' : '#ef4444');
     const hasChange = change !== null && change !== undefined && !Number.isNaN(change);
+    const multiCurrency = Array.isArray(byCurrency) && byCurrency.length > 1;
 
-    // Define icon background colors based on type
     const bgColors = {
         brand: { bg: 'bg-brand-50', icon: 'text-brand-600' },
         emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600' },
@@ -123,9 +123,19 @@ const KpiCard = ({ icon: Icon, title, value, trend, change, formatter, lineColor
             </div>
             <div className="text-start">
                 <p className="text-xs text-ink-500 font-medium mb-1">{title}</p>
-                <p className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
-                    {typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0}
-                </p>
+                {multiCurrency ? (
+                    <div className="flex flex-col gap-0.5">
+                        {byCurrency.map((entry, i) => (
+                            <span key={entry.currencyId ?? i} className="text-base md:text-xl font-semibold text-ink-900 leading-tight">
+                                {formatCurrency(entry.amount, entry.currencySymbol)}
+                            </span>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
+                        {typeof formatter === 'function' ? formatter(value || 0, currencySymbol) : value || 0}
+                    </p>
+                )}
             </div>
             {!isEmptyArray(sparklineData) && (
                 <div className="mt-3">
@@ -525,6 +535,7 @@ const defaultEnd = dayjs();
 
 export default function ChartDashboard({
     kpis,
+    revenue,
     sales,
     purchases,
     monthly,
@@ -625,6 +636,7 @@ export default function ChartDashboard({
                             lineColor="#6366f1"
                             currencySymbol={currencySymbol}
                             iconBgColor="brand"
+                            byCurrency={revenue?.byCurrency}
                         />
                         <KpiCard
                             icon={TrendingDown}
