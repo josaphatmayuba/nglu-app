@@ -2,7 +2,7 @@ import { cn } from "@/utils/functions";
 import usePermissions from "@/utils/usePermissions";
 import { EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Drawer, Tooltip } from "antd";
-import { useState } from "react";
+import { isValidElement, cloneElement, useState } from "react";
 
 export default function CreateDrawer({
   title,
@@ -55,7 +55,11 @@ export default function CreateDrawer({
             onClose={onClose}
             open={open}
           >
-            <div className="px-5 pt-5">{children}</div>
+            <div className="px-5 pt-5">
+              {isValidElement(children)
+                ? cloneElement(children, { onSuccess: onClose })
+                : children}
+            </div>
           </Drawer>
         </>
       ) : (

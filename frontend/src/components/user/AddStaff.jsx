@@ -8,10 +8,10 @@ import { loadAllDesignation } from "../../redux/rtk/features/designation/designa
 import { loadAllEmployeeStatus } from "../../redux/rtk/features/employeeStatus/employeeStatusSlice";
 import { loadAllRole } from "../../redux/rtk/features/hr/role/roleSlice";
 import { loadAllShift } from "../../redux/rtk/features/shift/shiftSlice";
-import { addStaff, loadAllStaff } from "../../redux/rtk/features/user/userSlice";
+import { addStaff, loadAllStaffPaginated } from "../../redux/rtk/features/user/userSlice";
 import EmployeeEducationForm from "./EmployeeEducationForm";
 
-const AddStaff = () => {
+const AddStaff = ({ onSuccess }) => {
   const { Option } = Select;
   const dispatch = useDispatch();
   const [loader, setLoader] = useState(false);
@@ -46,10 +46,10 @@ const AddStaff = () => {
 
       if (resp.payload?.message === "success" || resp.payload?.id) {
         form.resetFields();
-        dispatch(loadAllStaff({ status: "true", count: 10, page: 1 }));
+        dispatch(loadAllStaffPaginated({ status: "true", count: 10, page: 1 }));
+        onSuccess?.();
       }
-      setLoader(false);
-    } catch (error) {
+    } finally {
       setLoader(false);
     }
   };
