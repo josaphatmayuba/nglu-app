@@ -1,20 +1,47 @@
 import { Form, message } from "antd";
-import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CalendarRange, Columns3, List, Plus, Table2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
 import { loadPropertyManagement, saveMaintenance } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { compactMoney, normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
+import MaintenanceCalendarView from "./MaintenanceCalendarView";
 import MaintenanceFormModal from "./MaintenanceFormModal";
+import MaintenanceKanbanView from "./MaintenanceKanbanView";
+import MaintenanceTableView from "./MaintenanceTableView";
 import MaintenanceTicketCard from "./MaintenanceTicketCard";
+
+const VIEW_STORAGE_KEY = "immo.maintenance.view";
+const VIEW_KEYS = ["kanban", "list", "table", "calendar"];
+
+const readStoredView = () => {
+  if (typeof window === "undefined") return "kanban";
+  try {
+    const stored = window.localStorage?.getItem(VIEW_STORAGE_KEY);
+    return VIEW_KEYS.includes(stored) ? stored : "kanban";
+  } catch {
+    return "kanban";
+  }
+};
 
 const MaintenancePanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [maintenanceStatusFilter, setMaintenanceStatusFilter] = useState("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [maintenanceView, setMaintenanceView] = useState(readStoredView);
   const [form] = Form.useForm();
+
+  // Persist the user's view choice across reloads (SCRUM-72 acceptance).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage?.setItem(VIEW_STORAGE_KEY, maintenanceView);
+    } catch {
+      /* ignore quota / privacy mode */
+    }
+  }, [maintenanceView]);
 
   const {
     inProgressMaintenance,
@@ -55,7 +82,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     return true;
   };
 
-  const maintenanceView = filteredMaintenance.filter(maintenanceMatchesStatus);
+  const ticketsForView = filteredMaintenance.filter(maintenanceMatchesStatus);
   const maintenanceFilterChips = [
     { key: "all", label: "Tous", count: filteredMaintenance.length },
     { key: "urgent", label: "Urgent", count: urgentMaintenance.length },
@@ -118,16 +145,48 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
             </button>
           ))}
         </div>
-        <button type="button" className="immo-primary-button" onClick={openModal}>
-          <Plus size={16} /> Nouveau ticket
-        </button>
+        <div className="immo-lease-actions">
+          <div className="immo-view-toggle" aria-label="Vue de la maintenance" role="tablist">
+            {[
+              { key: "kanban",   label: "Kanban",     icon: <Columns3 size={15} /> },
+              { key: "list",     label: "Liste",      icon: <List size={15} /> },
+              { key: "table",    label: "Tableau",    icon: <Table2 size={15} /> },
+              { key: "calendar", label: "Calendrier", icon: <CalendarRange size={15} /> },
+            ].map((view) => (
+              <button
+                key={view.key}
+                type="button"
+                role="tab"
+                aria-selected={maintenanceView === view.key}
+                className={maintenanceView === view.key ? "active" : ""}
+                onClick={() => setMaintenanceView(view.key)}
+                title={`Vue ${view.label.toLowerCase()}`}
+              >
+                {view.icon}
+                <span>{view.label}</span>
+              </button>
+            ))}
+          </div>
+          <button type="button" className="immo-primary-button" onClick={openModal}>
+            <Plus size={16} /> Nouveau ticket
+          </button>
+        </div>
       </div>
 
-      <div className="immo-ticket-list">
-        {maintenanceView.map((request, index) => (
-          <MaintenanceTicketCard key={request.id} request={request} index={index} />
-        ))}
-      </div>
+      {maintenanceView === "list" && (
+        <div className="immo-ticket-list">
+          {ticketsForView.length === 0 ? (
+            <div className="immo-table-empty">Aucun ticket à afficher pour ce filtre.</div>
+          ) : (
+            ticketsForView.map((request, index) => (
+              <MaintenanceTicketCard key={request.id} request={request} index={index} />
+            ))
+          )}
+        </div>
+      )}
+      {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} />}
+      {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} />}
+      {maintenanceView === "calendar" && <MaintenanceCalendarView requests={ticketsForView} />}
 
       <MaintenanceFormModal
         form={form}
