@@ -1,5 +1,5 @@
 <script setup>
-import { h, onMounted } from "vue";
+import { h, onMounted, ref } from "vue";
 import {
   ArrowRight,
   Award,
@@ -66,7 +66,30 @@ Icon.props = {
   },
 };
 
+const FALLBACK_LOGO = "/static/logo.png";
+const logoSrc = ref(FALLBACK_LOGO);
+const companyName = ref("ONGD NGOLU");
+
+// SCRUM-86: fetch logo + companyName from CRM settings (public endpoint).
+// Falls back to /static/logo.png if unreachable or logo absent.
+async function loadCrmSettings() {
+  try {
+    const res = await fetch("/api/setting", { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data?.logo) logoSrc.value = data.logo;
+    if (data?.companyName) companyName.value = data.companyName;
+  } catch {
+    // keep fallback
+  }
+}
+
+function onLogoError(e) {
+  e.target.src = FALLBACK_LOGO;
+}
+
 onMounted(() => {
+  loadCrmSettings();
   // Mobile menu toggle
   const toggle = document.getElementById("menu-toggle");
   const menu = document.getElementById("mobile-nav");
@@ -108,9 +131,9 @@ onMounted(() => {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16 md:h-20">
           <a href="#" class="flex items-center gap-3">
-            <img src="/static/logo.png" alt="ONGD NGOLU" class="h-12 w-12 md:h-14 md:w-14">
+            <img :src="logoSrc" :alt="companyName" class="h-12 w-12 md:h-14 md:w-14" @error="onLogoError">
             <div class="hidden sm:block">
-              <div class="font-bold text-primary-700 text-lg md:text-xl leading-none">ONGD NGOLU</div>
+              <div class="font-bold text-primary-700 text-lg md:text-xl leading-none">{{ companyName }}</div>
               <div class="text-[10px] md:text-xs text-slate-500 uppercase tracking-wider">Aide au Développement Durable</div>
             </div>
           </a>
@@ -178,7 +201,7 @@ onMounted(() => {
           <div class="hidden lg:flex justify-center fade-in">
             <div class="relative">
               <div class="absolute inset-0 bg-accent-500/20 blur-3xl rounded-full"></div>
-              <img src="/static/logo.png" alt="ONGD NGOLU" class="relative w-96 h-96 drop-shadow-2xl">
+              <img :src="logoSrc" :alt="companyName" class="relative w-96 h-96 drop-shadow-2xl" @error="onLogoError">
             </div>
           </div>
         </div>
@@ -477,9 +500,9 @@ onMounted(() => {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-10">
           <div class="md:col-span-2">
             <div class="flex items-center gap-3 mb-4">
-              <img src="/static/logo.png" alt="ONGD NGOLU" class="h-14 w-14">
+              <img :src="logoSrc" :alt="companyName" class="h-14 w-14" @error="onLogoError">
               <div>
-                <div class="font-bold text-white text-lg">ONGD NGOLU</div>
+                <div class="font-bold text-white text-lg">{{ companyName }}</div>
                 <div class="text-xs text-slate-400 uppercase tracking-wider">Aide au Développement Durable</div>
               </div>
             </div>
