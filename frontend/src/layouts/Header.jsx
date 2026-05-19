@@ -7,11 +7,9 @@ import {
   Menu as MenuIcon,
   Moon,
   Plus,
-  Search,
   Sun,
   User,
   LayoutGrid,
-  ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -141,18 +139,10 @@ function Header({ onPress, data, loading }) {
         <div className="flex items-center gap-1 md:gap-2">
           {isLogged && (
             <>
-              {/* Search (mobile only — desktop should use sidebar/global search) */}
-              <button
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition md:hidden"
-                title="Rechercher"
-              >
-                <Search className="w-5 h-5" />
-              </button>
-
-              {/* App switcher */}
+              {/* App switcher — hidden on xs mobile to keep the topbar clean */}
               <button
                 onClick={() => setAppSwitcherOpen(true)}
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
+                className="hidden sm:block p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
                 title="Toutes les apps (G)"
               >
                 <LayoutGrid className="w-5 h-5" />
