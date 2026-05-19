@@ -1,0 +1,375 @@
+// SCRUM-79 — Onboarding link generation modal.
+//
+// Two-step flow:
+//   step 1 ("form")  → user types phone (required) + optional firstName /
+//                      lastName / email used by the delivery shortcuts.
+//                      Submit -> POST /property-management/onboarding
+//                      and receive { url }.
+//   step 2 ("share") → readonly link + Copy + Open + Email + SMS/WhatsApp.
+//
+// Replaces the placeholder toast that lived in PropertyManagementNew.jsx
+// ("La génération du lien d'inscription n'est pas encore migrée…").
+
+import { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import { Button, Form, Input, Modal, message } from "antd";
+import {
+  Copy,
+  ExternalLink,
+  Link as LinkIcon,
+  Mail,
+  MessageSquare,
+} from "lucide-react";
+
+import { generateTenantOnboarding } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+
+const TenantOnboardingLinkModal = ({ open, onClose }) => {
+  const dispatch = useDispatch();
+  const [form] = Form.useForm();
+  const [step, setStep] = useState("form");
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState("");
+  const [contact, setContact] = useState({ email: "", phone: "" });
+
+  useEffect(() => {
+    if (!open) {
+      form.resetFields();
+      setStep("form");
+      setBusy(false);
+      setLink("");
+      setContact({ email: "", phone: "" });
+    }
+  }, [open, form]);
+
+  const generate = async (values) => {
+    setBusy(true);
+    try {
+      const response = await dispatch(generateTenantOnboarding({ phone: values.phone }));
+      const data = response.payload?.data;
+      const url = data?.url || data?.onboardingUrl;
+      if (response.payload?.message === "success" && url) {
+        setLink(url);
+        setContact({ email: values.email || "", phone: values.phone });
+        setStep("share");
+      } else {
+        message.error(response.payload?.message || "Échec de la génération du lien.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        // Fallback for non-https / older browsers.
+        const tmp = document.createElement("textarea");
+        tmp.value = link;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand("copy");
+        document.body.removeChild(tmp);
+      }
+      message.success("Lien copié");
+    } catch {
+      message.error("Impossible de copier — sélectionnez le lien manuellement.");
+    }
+  };
+
+  const openLink = () => {
+    window.open(link, "_blank", "noopener,noreferrer");
+  };
+
+  const sendEmail = () => {
+    if (!contact.email) {
+      message.warning("Aucune adresse email saisie à l'étape 1.");
+      return;
+    }
+    const subject = encodeURIComponent("Votre lien d'inscription NGOLU");
+    const body = encodeURIComponent(
+      `Bonjour,\n\nVeuillez compléter votre dossier locataire via ce lien sécurisé :\n${link}\n\nCe lien est valide 7 jours.\n\nCordialement,`,
+    );
+    window.location.href = `mailto:${contact.email}?subject=${subject}&body=${body}`;
+  };
+
+  const sendSms = () => {
+    if (!contact.phone) {
+      message.warning("Aucun numéro saisi à l'étape 1.");
+      return;
+    }
+    // wa.me strips the leading "+", expects digits only.
+    const digits = contact.phone.replace(/[^\d]/g, "");
+    const text = encodeURIComponent(
+      `Bonjour, voici votre lien d'inscription NGOLU (valide 7 jours) : ${link}`,
+    );
+    window.open(`https://wa.me/${digits}?text=${text}`, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <Modal
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      destroyOnClose
+      width={560}
+      title={
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: "#eef2ff",
+              color: "#4f46e5",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <LinkIcon size={20} />
+          </span>
+          <div>
+            <div style={{ fontWeight: 600 }}>Générer un lien d'inscription</div>
+            <div style={{ fontSize: 12, color: "#71717a", fontWeight: 400 }}>
+              Le futur locataire complétera son dossier via ce lien sécurisé
+            </div>
+          </div>
+        </div>
+      }
+    >
+      {step === "form" && (
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={generate}
+          initialValues={{ phone: "" }}
+        >
+          <Form.Item label="Prénom" name="firstName">
+            <Input placeholder="ex. Marie" />
+          </Form.Item>
+          <Form.Item label="Nom" name="lastName">
+            <Input placeholder="ex. Kabongo" />
+          </Form.Item>
+          <Form.Item label="Email" name="email" rules={[{ type: "email" }]}>
+            <Input placeholder="marie.kabongo@email.cd" />
+          </Form.Item>
+          <Form.Item
+            label="Téléphone"
+            name="phone"
+            rules={[{ required: true, message: "Numéro requis" }]}
+            extra="Ce numéro identifie le dossier d'inscription côté backend."
+          >
+            <Input placeholder="+243 999 123 456" />
+          </Form.Item>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button onClick={onClose}>Annuler</Button>
+            <Button type="primary" htmlType="submit" loading={busy} icon={<LinkIcon size={14} />}>
+              Générer le lien
+            </Button>
+          </div>
+        </Form>
+      )}
+
+      {step === "share" && (
+        <div>
+          <div
+            style={{
+              background: "#ecfdf5",
+              border: "1px solid #a7f3d0",
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 16,
+              display: "flex",
+              gap: 12,
+              alignItems: "flex-start",
+            }}
+          >
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 999,
+                background: "#d1fae5",
+                color: "#047857",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 600,
+                fontSize: 18,
+              }}
+            >
+              ✓
+            </div>
+            <div>
+              <div style={{ fontWeight: 500, color: "#065f46" }}>
+                Lien généré avec succès
+              </div>
+              <div style={{ fontSize: 12, color: "#047857", marginTop: 2 }}>
+                Valide 7 jours · usage unique
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "#71717a",
+                marginBottom: 6,
+              }}
+            >
+              Lien d'inscription
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <Input
+                readOnly
+                value={link}
+                style={{ flex: 1, fontFamily: "monospace", fontSize: 12 }}
+              />
+              <Button onClick={copyLink} icon={<Copy size={14} />} title="Copier">
+                Copier
+              </Button>
+              <Button onClick={openLink} icon={<ExternalLink size={14} />} title="Ouvrir">
+                Ouvrir
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                color: "#71717a",
+                marginBottom: 8,
+              }}
+            >
+              Envoyer le lien
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button
+                type="button"
+                onClick={sendEmail}
+                disabled={!contact.email}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #e4e4e7",
+                  background: contact.email ? "#fff" : "#f4f4f5",
+                  cursor: contact.email ? "pointer" : "not-allowed",
+                  textAlign: "left",
+                  opacity: contact.email ? 1 : 0.55,
+                }}
+              >
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "#eef2ff",
+                    color: "#4f46e5",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Mail size={16} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14 }}>Envoyer par email</div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#71717a",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {contact.email || "Email non saisi"}
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={sendSms}
+                disabled={!contact.phone}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid #e4e4e7",
+                  background: contact.phone ? "#fff" : "#f4f4f5",
+                  cursor: contact.phone ? "pointer" : "not-allowed",
+                  textAlign: "left",
+                  opacity: contact.phone ? 1 : 0.55,
+                }}
+              >
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: "#ecfdf5",
+                    color: "#047857",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MessageSquare size={16} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14 }}>SMS / WhatsApp</div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#71717a",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {contact.phone || "Numéro non saisi"}
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 18,
+              paddingTop: 14,
+              borderTop: "1px solid #f4f4f5",
+            }}
+          >
+            <Button type="link" onClick={() => setStep("form")} style={{ padding: 0 }}>
+              ← Retour
+            </Button>
+            <Button type="primary" onClick={onClose}>
+              Terminé
+            </Button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+};
+
+export default TenantOnboardingLinkModal;

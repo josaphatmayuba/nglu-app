@@ -11,7 +11,6 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { message } from "antd";
 import {
   AlertTriangle,
   Building2,
@@ -32,6 +31,7 @@ import { usePropertyManagementData } from "./shared/usePropertyManagementData";
 import PropertiesPanel from "./modules/Properties/PropertiesPanel";
 import UnitFormModal from "./modules/Properties/UnitFormModal";
 import TenantsPanel from "./modules/Tenants/TenantsPanel";
+import TenantOnboardingLinkModal from "./modules/Tenants/TenantOnboardingLinkModal";
 import LeasesPanel from "./modules/Leases/LeasesPanel";
 import PaymentsPanel from "./modules/Payments/PaymentsPanel";
 import MaintenancePanel from "./modules/Maintenance/MaintenancePanel";
@@ -72,6 +72,10 @@ const PropertyManagementNew = () => {
   const [unitModalRecord, setUnitModalRecord] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
 
+  // Onboarding-link modal (SCRUM-79): triggered from the Tenants panel
+  // header ("Lien d'inscription" button).
+  const [onboardingLinkOpen, setOnboardingLinkOpen] = useState(false);
+
   const activeFilterCount = Object.values(advancedFilters).filter(
     (v) => v !== "" && v != null,
   ).length;
@@ -93,9 +97,7 @@ const PropertyManagementNew = () => {
             onSearchTermChange={setSearchTerm}
             onNavigateToLeases={() => setActiveSection("leases")}
             onNavigateToPayments={() => setActiveSection("payments")}
-            onGenerateOnboardingLink={() =>
-              message.info("La génération du lien d'inscription n'est pas encore migrée dans le module — utilisez la page legacy en attendant.")
-            }
+            onGenerateOnboardingLink={() => setOnboardingLinkOpen(true)}
           />
         );
       case "leases":
@@ -293,6 +295,11 @@ const PropertyManagementNew = () => {
         currencyOptions={currencyOptions}
         onClose={() => setUnitModalOpen(false)}
         onSaved={() => setUnitModalOpen(false)}
+      />
+
+      <TenantOnboardingLinkModal
+        open={onboardingLinkOpen}
+        onClose={() => setOnboardingLinkOpen(false)}
       />
     </div>
   );
