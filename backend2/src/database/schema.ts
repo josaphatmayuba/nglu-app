@@ -255,6 +255,21 @@ export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance
   updatedAt: timestamp("updated_at"),
 });
 
+export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_costs", {
+  id: serial("id").primaryKey(),
+  ticketId: bigint("ticket_id", { mode: "number" }).notNull(),
+  type: varchar("type", { length: 50 }).default("service").notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  vendorName: varchar("vendor_name", { length: 255 }),
+  paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
+  paymentDate: date("payment_date", { mode: "string" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateContracts = mysqlTable("real_estate_contracts", {
   id: serial("id").primaryKey(),
   leaseId: bigint("lease_id", { mode: "number" }).notNull(),

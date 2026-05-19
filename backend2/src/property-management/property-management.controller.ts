@@ -29,6 +29,7 @@ import { ContractsService } from "./contracts.service";
 import {
   CreateContractDto,
   CreateLeaseDto,
+  CreateMaintenanceCostDto,
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
@@ -280,6 +281,30 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteMaintenance(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.deleteMaintenance(id);
+  }
+
+  // ── Maintenance Costs ──────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List costs for a maintenance ticket" })
+  @Permissions("readAll-maintenance-cost")
+  @Get("maintenance/:id/costs")
+  listMaintenanceCosts(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.listMaintenanceCosts(id);
+  }
+
+  @ApiOperation({ summary: "Record a cost on a maintenance ticket" })
+  @Permissions("create-maintenance-cost")
+  @Post("maintenance/:id/costs")
+  createMaintenanceCost(@Param("id", ParseIntPipe) id: number, @Body() body: CreateMaintenanceCostDto) {
+    return this.propertyManagementService.createMaintenanceCost(id, body);
+  }
+
+  @ApiOperation({ summary: "Delete a maintenance cost entry" })
+  @Permissions("delete-maintenance-cost")
+  @Delete("maintenance/costs/:costId")
+  @HttpCode(200)
+  deleteMaintenanceCost(@Param("costId", ParseIntPipe) costId: number) {
+    return this.propertyManagementService.deleteMaintenanceCost(costId);
   }
 
   // ── Contracts ──────────────────────────────────────────────────────────────

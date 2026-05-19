@@ -10,6 +10,7 @@ import {
   currencies,
   customers,
   realEstateLeases,
+  realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
   realEstateProperties,
   realEstateRentPayments,
@@ -24,6 +25,7 @@ import {
 import type { Database } from "../database/types";
 import {
   CreateLeaseDto,
+  CreateMaintenanceCostDto,
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
@@ -781,6 +783,74 @@ export class PropertyManagementService {
     const rows = await this.maintenance().where(eq(realEstateMaintenanceRequests.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance request not found.");
     return rows[0];
+  }
+
+  async listMaintenanceCosts(ticketId: number) {
+    await this.findMaintenance(ticketId);
+    return this.db
+      .select()
+      .from(realEstateMaintenanceCosts)
+      .where(eq(realEstateMaintenanceCosts.ticketId, ticketId))
+      .orderBy(desc(realEstateMaintenanceCosts.id));
+  }
+
+  async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto) {
+    await this.findMaintenance(ticketId);
+
+    const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
+      ticketId,
+      type: input.type,
+      description: input.description,
+      amount: String(input.amount),
+      currencyId: input.currencyId ?? null,
+      vendorName: input.vendorName ?? null,
+      paymentMethod: input.paymentMethod ?? "cash",
+      paymentDate: input.paymentDate ?? null,
+      notes: input.notes ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    // Auto-create accounting transaction
+    const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    const maintenanceSubAccount = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(eq(subAccounts.name, "Maintenance"))
+      .limit(1);
+    const debitId = maintenanceSubAccount[0]?.id ?? 12;
+
+    await this.db.insert(transactions).values({
+      date: input.paymentDate ? new Date(input.paymentDate) : sql`CURRENT_TIMESTAMP` as any,
+      debitId,
+      creditId,
+      particulars: `${input.type === "labour" ? "Labour" : "Service"}: ${input.description}${input.vendorName ? ` — ${input.vendorName}` : ""}`,
+      amount: input.amount,
+      type: "BNQM - Maintenance Journal",
+      relatedId: String(Number((result as any).insertId)),
+      status: "true",
+      currencyId: input.currencyId ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    return this.db
+      .select()
+      .from(realEstateMaintenanceCosts)
+      .where(eq(realEstateMaintenanceCosts.id, Number((result as any).insertId)))
+      .limit(1)
+      .then((rows) => rows[0]);
+  }
+
+  async deleteMaintenanceCost(costId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateMaintenanceCosts)
+      .where(eq(realEstateMaintenanceCosts.id, costId))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
+    await this.db.delete(realEstateMaintenanceCosts).where(eq(realEstateMaintenanceCosts.id, costId));
+    return { message: "Deleted successfully." };
   }
 
   private async findTenant(id: number) {

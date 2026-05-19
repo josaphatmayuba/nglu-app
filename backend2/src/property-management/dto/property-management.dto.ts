@@ -724,3 +724,38 @@ export class SignContractDto {
   @IsNotEmpty()
   signatureData: string;
 }
+
+export class CreateMaintenanceCostDto {
+  @IsIn(["service", "labour"])
+  type: "service" | "labour";
+
+  @IsString()
+  @IsNotEmpty()
+  description: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number;
+
+  @IsOptional()
+  @IsString()
+  vendorName?: string;
+
+  @IsOptional()
+  @IsIn(["cash", "bank", "mobile_money", "cheque"])
+  paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
+
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}

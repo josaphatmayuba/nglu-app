@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, Check, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react";
+import { Building2, CalendarDays, Check, CircleDollarSign, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import moment from "moment";
 
@@ -6,7 +6,7 @@ import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
 import { ticketIconFor, ticketIconTone } from "../../shared/units";
 
-const MaintenanceTicketCard = ({ request, index, onEdit, onDelete }) => {
+const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const urgent = ["urgent", "high"].includes(request.priority);
@@ -22,6 +22,7 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete }) => {
     setMenuOpen(false);
     if (action === "edit") onEdit?.(request);
     if (action === "delete") onDelete?.(request);
+    if (action === "cost") onAddCost?.(request);
   };
 
   return (
@@ -54,7 +55,7 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete }) => {
           {assignee || "Non assigné"}
         </span>
         <span className={`immo-pill ${statusKey}`}>{statusText}</span>
-        {(onEdit || onDelete) && (
+        {(onEdit || onDelete || onAddCost) && (
           <span className="immo-menu-anchor" ref={menuRef}>
             <button
               type="button"
@@ -66,6 +67,13 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete }) => {
             </button>
             {menuOpen && (
               <ul className="immo-context-menu" role="menu">
+                {onAddCost && (
+                  <li role="menuitem">
+                    <button type="button" onClick={() => handleAction("cost")}>
+                      <CircleDollarSign size={14} /> Enregistrer un coût
+                    </button>
+                  </li>
+                )}
                 {onEdit && (
                   <li role="menuitem">
                     <button type="button" onClick={() => handleAction("edit")}>

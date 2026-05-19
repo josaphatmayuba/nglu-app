@@ -11,6 +11,7 @@ import {
 import { compactMoney, normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import MaintenanceCalendarView from "./MaintenanceCalendarView";
+import MaintenanceCostModal from "./MaintenanceCostModal";
 import MaintenanceFormModal from "./MaintenanceFormModal";
 import MaintenanceKanbanView from "./MaintenanceKanbanView";
 import MaintenanceTableView from "./MaintenanceTableView";
@@ -39,6 +40,8 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [maintenanceView, setMaintenanceView] = useState(readStoredView);
+  const [costModalOpen, setCostModalOpen] = useState(false);
+  const [costTicket, setCostTicket] = useState(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -156,7 +159,8 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     }
   };
 
-  const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete };
+  const openCostModal = (record) => { setCostTicket(record); setCostModalOpen(true); };
+  const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete, onAddCost: openCostModal };
 
   return (
     <div className="immo-table-flow">
@@ -237,6 +241,14 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         propertyOptions={propertyOptions}
         saving={saving}
         unitOptions={unitOptions}
+      />
+
+      <MaintenanceCostModal
+        open={costModalOpen}
+        ticketId={costTicket?.id}
+        ticketTitle={costTicket?.title}
+        onClose={() => { setCostModalOpen(false); setCostTicket(null); }}
+        onSaved={() => dispatch(loadPropertyManagement())}
       />
 
       <Modal
