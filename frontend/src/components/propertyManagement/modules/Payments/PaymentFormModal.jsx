@@ -46,17 +46,6 @@ const PaymentFormModal = ({
           <Form.Item label="Méthode" name="method" initialValue="cash">
             <Select {...modalSelectProps} options={paymentMethods} />
           </Form.Item>
-          <Form.Item label="Compte paiement" name="paymentAccountId">
-            <Select
-              allowClear
-              placeholder="Par défaut: compte du type Rent Payment"
-              {...modalSelectProps}
-              options={cashBankAccounts.map((account) => ({
-                label: account.name,
-                value: account.id,
-              }))}
-            />
-          </Form.Item>
           <Form.Item label="Devise" name="currencyId">
             <Select
               allowClear
