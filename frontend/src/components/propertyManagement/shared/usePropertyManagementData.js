@@ -19,9 +19,46 @@ import {
   loadPropertyManagement,
 } from "../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 
-import { buildCurrencyOptions } from "./format";
+import { buildCurrencyOptions, cleanCurrencySymbol } from "./format";
 import { getUnitKind } from "./units";
 import { typeLabel } from "./constants";
+
+const groupLeasesByCurrency = (leases, currencyById) => {
+  const grouped = new Map();
+
+  leases.forEach((lease) => {
+    const currencyId = lease.currencyId ?? "default";
+    const currency = currencyById.get(currencyId);
+    const current = grouped.get(currencyId) || {
+      currencyId,
+      currencySymbol: lease.currencySymbol || (currency ? cleanCurrencySymbol(currency) : null) || "CDF",
+      amount: 0,
+    };
+
+    current.amount += Number(lease.rentAmount || lease.monthlyRent || 0);
+    grouped.set(currencyId, current);
+  });
+
+  return Array.from(grouped.values());
+};
+
+const groupPaymentsByCurrency = (payments) => {
+  const grouped = new Map();
+
+  payments.forEach((payment) => {
+    const currencyId = payment.currencyId ?? "default";
+    const current = grouped.get(currencyId) || {
+      currencyId,
+      currencySymbol: payment.currencySymbol || payment.currencyName || "CDF",
+      amount: 0,
+    };
+
+    current.amount += Number(payment.amount || 0);
+    grouped.set(currencyId, current);
+  });
+
+  return Array.from(grouped.values());
+};
 
 export const usePropertyManagementData = () => {
   const dispatch = useDispatch();
@@ -40,7 +77,8 @@ export const usePropertyManagementData = () => {
     loading,
   } = useSelector((state) => state.propertyManagement);
   const accounts = useSelector((state) => state.accounts?.list) || [];
-  const currencyList = useSelector((state) => state.currency?.list) || [];
+  const rawCurrencyList = useSelector((state) => state.currency?.list);
+  const currencyList = useMemo(() => rawCurrencyList || [], [rawCurrencyList]);
 
   useEffect(() => {
     dispatch(loadPropertyManagement());
@@ -66,6 +104,14 @@ export const usePropertyManagementData = () => {
     [currencyList],
   );
   const currencyOptions = useMemo(() => buildCurrencyOptions(activeCurrencies), [activeCurrencies]);
+  const currencyById = useMemo(() => {
+    const map = new Map();
+    currencyList.forEach((currency) => {
+      if (currency?.id != null) map.set(currency.id, currency);
+      if (currency?.currencyId != null) map.set(currency.currencyId, currency);
+    });
+    return map;
+  }, [currencyList]);
 
   // ─── Cross-collection enrichments ────────────────────────────────────
   const availabilityRows = useMemo(
@@ -141,6 +187,10 @@ export const usePropertyManagementData = () => {
   const monthlyRent =
     dashboard?.monthlyRent ??
     activeLeases.reduce((sum, lease) => sum + Number(lease.rentAmount || 0), 0);
+  const monthlyRentByCurrency = useMemo(
+    () => groupLeasesByCurrency(activeLeases, currencyById),
+    [activeLeases, currencyById],
+  );
   const collectedRent =
     dashboard?.collectedRent ??
     safePayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -176,13 +226,12 @@ export const usePropertyManagementData = () => {
     });
     const currentMonthStart = today.clone().startOf("month");
     const currentMonthEnd = today.clone().endOf("month");
-    const paidAmount = safePayments
-      .filter(
-        (p) =>
-          p.paymentDate &&
-          moment(p.paymentDate).isBetween(currentMonthStart, currentMonthEnd, "day", "[]"),
-      )
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const paidPaymentsThisMonth = safePayments.filter(
+      (p) =>
+        p.paymentDate &&
+        moment(p.paymentDate).isBetween(currentMonthStart, currentMonthEnd, "day", "[]"),
+    );
+    const paidAmount = paidPaymentsThisMonth.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const pendingAmount = upcomingLeases.reduce(
       (sum, item) => sum + Number(item.rentAmount || 0),
       0,
@@ -198,8 +247,12 @@ export const usePropertyManagementData = () => {
       pendingAmount,
       lateAmount,
       plannedAmount: monthlyRent,
+      paidAmountByCurrency: groupPaymentsByCurrency(paidPaymentsThisMonth),
+      pendingAmountByCurrency: groupLeasesByCurrency(upcomingLeases, currencyById),
+      lateAmountByCurrency: groupLeasesByCurrency(overdueLeases, currencyById),
+      plannedAmountByCurrency: groupLeasesByCurrency(activeLeases, currencyById),
     };
-  }, [activeLeases, safePayments, monthlyRent]);
+  }, [activeLeases, safePayments, monthlyRent, currencyById]);
 
   return {
     // raw slice
@@ -236,6 +289,7 @@ export const usePropertyManagementData = () => {
     resolvedMaintenance,
     maintenanceCost,
     monthlyRent,
+    monthlyRentByCurrency,
     collectedRent,
     occupancyRate,
 

@@ -3,6 +3,8 @@
 
 import { Building2 } from "lucide-react";
 
+import { compactMoney } from "./format";
+
 export const Kpi = ({ icon, label, value, tone = "slate" }) => (
   <div className={`pm-kpi pm-kpi-${tone}`}>
     <div className="pm-kpi-icon">{icon}</div>
@@ -24,6 +26,26 @@ export const MetricCard = ({ icon, label, value, helper, tone = "brand", trend }
     {helper && <div className="immo-metric-helper">{helper}</div>}
   </div>
 );
+
+export const MultiCurrencyValue = ({ byCurrency = [], fallback = "CDF 0" }) => {
+  const rows = byCurrency.filter((entry) => Number(entry?.amount || 0) !== 0);
+
+  if (!rows.length) return <span>{fallback}</span>;
+  if (rows.length === 1) {
+    const { amount, currencySymbol } = rows[0];
+    return <span>{compactMoney(amount, currencySymbol)}</span>;
+  }
+
+  return (
+    <span className="immo-multicurrency">
+      {rows.map((entry, index) => (
+        <span key={entry.currencyId ?? index} className="immo-multicurrency-line">
+          {compactMoney(entry.amount, entry.currencySymbol)}
+        </span>
+      ))}
+    </span>
+  );
+};
 
 export const EmptyState = ({ title, text }) => (
   <div className="immo-empty">

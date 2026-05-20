@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
 import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
-import { compactMoney, normalize, optionalNumber } from "../../shared/format";
+import { normalize, optionalNumber } from "../../shared/format";
+import { MultiCurrencyValue } from "../../shared/ui";
 import { tenantNameFromLease } from "../../shared/tenants";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import PaymentFormModal from "./PaymentFormModal";
@@ -61,11 +62,11 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const {
     accounts,
     currencyOptions,
-    lateAmount,
+    lateAmountByCurrency,
     overduePayments,
-    paidAmount,
-    pendingAmount,
-    plannedAmount,
+    paidAmountByCurrency,
+    pendingAmountByCurrency,
+    plannedAmountByCurrency,
     safeLeases,
     safePayments,
     upcomingPayments,
@@ -160,10 +161,10 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   return (
     <div className="immo-table-flow">
       <div className="immo-mini-kpis">
-        <div><span>Encaissé ce mois</span><strong className="green">{compactMoney(paidAmount)}</strong></div>
-        <div><span>En attente</span><strong className="amber">{compactMoney(pendingAmount)}</strong></div>
-        <div><span>En retard</span><strong className="red">{compactMoney(lateAmount)}</strong></div>
-        <div><span>Total prévu</span><strong>{compactMoney(plannedAmount)}</strong></div>
+        <div><span>Encaissé ce mois</span><strong className="green"><MultiCurrencyValue byCurrency={paidAmountByCurrency} fallback="CDF 0" /></strong></div>
+        <div><span>En attente</span><strong className="amber"><MultiCurrencyValue byCurrency={pendingAmountByCurrency} fallback="CDF 0" /></strong></div>
+        <div><span>En retard</span><strong className="red"><MultiCurrencyValue byCurrency={lateAmountByCurrency} fallback="CDF 0" /></strong></div>
+        <div><span>Total prévu</span><strong><MultiCurrencyValue byCurrency={plannedAmountByCurrency} fallback="CDF 0" /></strong></div>
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
