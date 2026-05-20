@@ -17,7 +17,7 @@ export const MetricCard = ({ icon, label, value, helper, tone = "brand", trend }
   <div className="immo-metric-card">
     <div className="immo-metric-head">
       <div className={`immo-metric-icon immo-tone-${tone}`}>{icon}</div>
-      {trend && <span className={`immo-trend ${trend.tone || "up"}`}>{trend.label}</span>}
+      {trend?.label && <span className={`immo-trend ${trend.tone || "up"}`}>{trend.label}</span>}
     </div>
     <div className="immo-metric-label">{label}</div>
     <div className="immo-metric-value">{value}</div>
