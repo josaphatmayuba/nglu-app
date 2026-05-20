@@ -266,6 +266,7 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
   paymentDate: date("payment_date", { mode: "string" }),
   notes: text("notes"),
+  receiptUrl: varchar("receipt_url", { length: 500 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

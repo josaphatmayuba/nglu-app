@@ -10,8 +10,11 @@ import {
   Post,
   Put,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
 import {
   ApiBearerAuth,
@@ -294,9 +297,15 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Record a cost on a maintenance ticket" })
   @Permissions("create-maintenance-cost")
+  @UseInterceptors(FileInterceptor("receipt", { limits: { fileSize: 10 * 1024 * 1024 } }))
   @Post("maintenance/:id/costs")
-  createMaintenanceCost(@Param("id", ParseIntPipe) id: number, @Body() body: CreateMaintenanceCostDto) {
-    return this.propertyManagementService.createMaintenanceCost(id, body);
+  createMaintenanceCost(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CreateMaintenanceCostDto,
+    @UploadedFile() receipt: any,
+    @Req() req: Request,
+  ) {
+    return this.propertyManagementService.createMaintenanceCost(id, body, receipt, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Delete a maintenance cost entry" })
@@ -353,5 +362,13 @@ export class PropertyManagementController {
   renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto, @Req() req: Request) {
     const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
     return this.contractsService.renewLease(id, body, userId);
+  }
+
+  private publicApiBase(req: Request): string {
+    const pickFirst = (v?: string | string[]) => (Array.isArray(v) ? v[0] : v);
+    const proto = pickFirst(req.headers["x-forwarded-proto"]);
+    const host = pickFirst(req.headers["x-forwarded-host"]) ?? req.headers.host;
+    if (proto && host) return `${proto}://${host}/api`;
+    return `${req.protocol}://${req.headers.host}`;
   }
 }

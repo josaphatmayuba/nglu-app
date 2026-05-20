@@ -1,5 +1,5 @@
 import { Button, message } from "antd";
-import { Grid3X3, Layers, List, Plus, RefreshCw } from "lucide-react";
+import { Download, Grid3X3, Layers, List, Plus, RefreshCw } from "lucide-react";
 import moment from "moment";
 import { useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
@@ -237,6 +237,38 @@ const LeasesPanel = ({
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="immo-secondary-button"
+            onClick={() => {
+              if (!leasesView.length) { message.warning("Aucun bail à exporter"); return; }
+              const headers = ["Référence", "Locataire", "Propriété", "Unité", "Début", "Fin", "Loyer", "Statut"];
+              const rows = leasesView.map((l) => [
+                l.reference || "",
+                [l.tenant?.firstName, l.tenant?.lastName].filter(Boolean).join(" ") || l.tenantName || "-",
+                l.property?.name || l.propertyName || "-",
+                l.unit?.name || l.unitName || "-",
+                l.startDate ? moment(l.startDate).format("DD/MM/YYYY") : "-",
+                l.endDate ? moment(l.endDate).format("DD/MM/YYYY") : "-",
+                l.rentAmount ?? l.monthlyRent ?? 0,
+                l.status || "-",
+              ]);
+              const csv = [headers, ...rows]
+                .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+                .join("\n");
+              const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `baux-${moment().format("YYYY-MM-DD")}.csv`;
+              link.click();
+              URL.revokeObjectURL(url);
+              message.success(`${leasesView.length} bail(s) exporté(s)`);
+            }}
+            title="Exporter CSV"
+          >
+            <Download size={15} /> CSV
+          </button>
           <button type="button" className="immo-primary-button" onClick={() => setLeaseModal({})}>
             <Plus size={16} /> Nouveau bail
           </button>

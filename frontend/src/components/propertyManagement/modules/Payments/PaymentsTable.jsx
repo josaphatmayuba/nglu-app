@@ -21,7 +21,7 @@ const buildPageNumbers = (currentPage, totalPages) => {
   return pages;
 };
 
-const PaymentsTable = ({ payments, pendingPayments, latePayments }) => {
+const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll }) => {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(payments.length / pageSize));
@@ -33,10 +33,25 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments }) => {
   );
   const pageNumbers = buildPageNumbers(currentPage, totalPages);
 
+  const selectable = typeof onSelect === "function";
+  const allSelected = selectable && pageItems.length > 0 && pageItems.every((p) => selectedIds.includes(p.id));
+  const someSelected = selectable && pageItems.some((p) => selectedIds.includes(p.id));
+
   return (
     <div className="immo-table-scroll">
       <div className="immo-data-table payments">
         <div className="immo-data-row head">
+          {selectable && (
+            <span style={{ width: 32, flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                onChange={() => onSelectAll?.(pageItems.map((p) => p.id), !allSelected)}
+                aria-label="Tout sélectionner"
+              />
+            </span>
+          )}
           <span>N° Quittance</span>
           <span>Locataire</span>
           <span>Propriété</span>
@@ -55,9 +70,25 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments }) => {
           const isPaid = paymentStatus === "success";
           const tenantLabel =
             [payment.tenantFirstName, payment.tenantLastName].filter(Boolean).join(" ") || "-";
+          const isSelected = selectable && selectedIds.includes(payment.id);
 
           return (
-            <div key={payment.id} className="immo-data-row">
+            <div
+              key={payment.id}
+              className={`immo-data-row${isSelected ? " selected" : ""}`}
+              onClick={selectable ? () => onSelect(payment.id) : undefined}
+              style={selectable ? { cursor: "pointer" } : undefined}
+            >
+              {selectable && (
+                <span style={{ width: 32, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => onSelect(payment.id)}
+                    aria-label={`Sélectionner paiement #${payment.id}`}
+                  />
+                </span>
+              )}
               <span className="mono">#QUIT-{payment.id}</span>
               <span className="person-cell">
                 <span className={`mini-avatar ${avatarColors[(pageStart + index) % avatarColors.length]}`}>

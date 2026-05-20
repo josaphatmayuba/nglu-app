@@ -758,4 +758,8 @@ export class CreateMaintenanceCostDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
 }

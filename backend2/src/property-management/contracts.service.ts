@@ -140,6 +140,7 @@ export class ContractsService {
       "UNITÉ": lease.unitName ?? "",
       "RÉFÉRENCE BAIL": lease.reference ?? "",
       "NUMÉRO DE MOIS": numberOfMonths,
+      "DURÉE DE BAIL EN MOIS": numberOfMonths,
       "DATE DE DÉBUT DE BAIL": startDate,
       "DATE DE DÉBUT DE BAIL JJ/MM/AAAA": startDate,
       "DATE DE FIN DE BAIL": endDate,

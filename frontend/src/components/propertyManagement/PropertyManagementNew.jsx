@@ -133,7 +133,6 @@ const PropertyManagementNew = () => {
             label="Propriétés"
             value={enrichedUnits.length || safeProperties.length}
             helper={`${occupiedUnits.length} louées · ${vacantUnits.length} vacantes · ${maintenanceUnits.length} maintenance`}
-            trend={{ label: "+2" }}
           />
           <MetricCard
             icon={<Users size={20} />}
@@ -141,7 +140,7 @@ const PropertyManagementNew = () => {
             value={`${occupiedUnits.length}/${enrichedUnits.length || 0}`}
             helper={<span className="immo-progress"><span style={{ width: `${occupancyRate}%` }} /></span>}
             tone="green"
-            trend={{ label: `${occupancyRate}%` }}
+            trend={occupancyRate > 0 ? { label: `${occupancyRate}%` } : undefined}
           />
           <MetricCard
             icon={<CreditCard size={20} />}
@@ -149,7 +148,6 @@ const PropertyManagementNew = () => {
             value={compactMoney(monthlyRent)}
             helper={`${safePayments.length} reçus · ${Math.max(activeLeases.length - safePayments.length, 0)} en attente`}
             tone="amber"
-            trend={{ label: "+8.2%" }}
           />
           <MetricCard
             icon={<AlertTriangle size={20} />}
@@ -157,7 +155,7 @@ const PropertyManagementNew = () => {
             value={overduePayments.length}
             helper={`${compactMoney(overduePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0))} à recouvrer`}
             tone="red"
-            trend={{ label: `+${overduePayments.length}`, tone: "danger" }}
+            trend={overduePayments.length > 0 ? { label: `+${overduePayments.length}`, tone: "danger" } : undefined}
           />
         </div>
 

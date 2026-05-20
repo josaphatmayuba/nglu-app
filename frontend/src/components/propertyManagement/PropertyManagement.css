@@ -3919,6 +3919,49 @@
 }
 .immo-secondary-button:hover { border-color: #d4d4d8; background: #fafafa; }
 
+/* Bulk selection bar */
+.immo-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1e40af;
+  margin-bottom: 8px;
+}
+.immo-bulk-bar span:first-child { font-weight: 600; margin-right: auto; }
+.immo-bulk-actions { display: flex; gap: 8px; }
+.immo-bulk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #fff;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1e40af;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.immo-bulk-btn:hover { background: #dbeafe; }
+.immo-bulk-clear {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px;
+}
+.immo-bulk-clear:hover { color: #1f2937; }
+
+/* Row selected highlight */
+.immo-data-row.selected { background: #eff6ff; }
+
 /* Table view */
 .immo-table-wrap {
   background: #fff;

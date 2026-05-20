@@ -1,5 +1,5 @@
-import { Button, Form, Input, InputNumber, Modal, Select, message } from "antd";
-import { Trash2 } from "lucide-react";
+import { Button, Form, Input, InputNumber, Modal, Select, Upload, message } from "antd";
+import { Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
@@ -23,6 +23,7 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
   const [saving, setSaving] = useState(false);
   const [costs, setCosts] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
+  const [receiptFile, setReceiptFile] = useState(null);
 
   const currencies = useSelector((s) => s.currencies?.list ?? []);
   const currencyOptions = buildCurrencyOptions(currencies);
@@ -50,9 +51,19 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
   const handleSubmit = async (values) => {
     setSaving(true);
     try {
-      await axios.post(`property-management/maintenance/${ticketId}/costs`, values);
+      if (receiptFile) {
+        const fd = new FormData();
+        Object.entries(values).forEach(([k, v]) => { if (v != null) fd.append(k, String(v)); });
+        fd.append("receipt", receiptFile);
+        await axios.post(`property-management/maintenance/${ticketId}/costs`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await axios.post(`property-management/maintenance/${ticketId}/costs`, values);
+      }
       message.success("Coût enregistré");
       form.resetFields();
+      setReceiptFile(null);
       loadCosts();
       onSaved?.();
     } catch (e) {
@@ -106,6 +117,11 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
                 </div>
                 <div className="flex items-center gap-2 ml-2 shrink-0">
                   <span className="font-semibold tabular-nums">{Number(c.amount).toLocaleString()} {c.currency_id ? "" : ""}</span>
+                  {c.receipt_url && (
+                    <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700" title="Voir la facture">
+                      <Paperclip size={14} />
+                    </a>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDelete(c.id)}
@@ -157,6 +173,20 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
         </div>
         <Form.Item label="Notes" name="notes">
           <Input.TextArea rows={2} />
+        </Form.Item>
+
+        <Form.Item label="Facture / Justificatif">
+          <Upload
+            accept="image/*,.pdf"
+            maxCount={1}
+            beforeUpload={(file) => { setReceiptFile(file); return false; }}
+            onRemove={() => setReceiptFile(null)}
+            fileList={receiptFile ? [{ uid: "-1", name: receiptFile.name, status: "done" }] : []}
+          >
+            <Button icon={<Paperclip size={14} />}>
+              Joindre une facture ou photo
+            </Button>
+          </Upload>
         </Form.Item>
 
         <div className="flex items-center justify-between">

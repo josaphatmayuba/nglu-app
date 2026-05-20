@@ -1,6 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
@@ -794,8 +796,22 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
 
-  async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto) {
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+
+  private saveReceiptFile(file: any, publicApiBase?: string): string | null {
+    if (!file?.buffer) return null;
+    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
+    const ext = (file.originalname?.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "") || "bin";
+    const name = `receipt-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    writeFileSync(join(this.uploadDir, name), file.buffer);
+    const base = publicApiBase ?? "";
+    return `${base}/uploads/${name}`;
+  }
+
+  async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, receipt?: any, publicApiBase?: string) {
     await this.findMaintenance(ticketId);
+
+    const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
 
     const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
       ticketId,
@@ -807,6 +823,7 @@ export class PropertyManagementService {
       paymentMethod: input.paymentMethod ?? "cash",
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,
+      receiptUrl,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
