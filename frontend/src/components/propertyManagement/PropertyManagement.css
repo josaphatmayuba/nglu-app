@@ -2205,7 +2205,7 @@
 .immo-lease-actions {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
   justify-content: flex-end;
 }
@@ -3993,6 +3993,8 @@
   font-weight: 600;
   color: #18181b;
   margin: 0;
+  min-width: 0;
+  flex-shrink: 1;
 }
 .immo-kanban-count {
   margin-left: auto;
