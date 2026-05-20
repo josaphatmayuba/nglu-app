@@ -34,17 +34,6 @@ export default function PropertyManagementRoutes() {
           </PermissionChecker>
         }
       />
-      <Route
-        path="/property-management/settings"
-        exact
-        element={
-          <PermissionChecker
-            permission={["readAll-propertyManagement", "create-propertyManagement"]}
-          >
-            <PropertyManagementSettings />
-          </PermissionChecker>
-        }
-      />
       {/* Phase A demo route (modular Properties panel in isolation) — */}
       {/* remove once Phase F has merged everything into the main page. */}
       <Route

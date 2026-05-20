@@ -115,7 +115,7 @@ const CustomerLogin = () => {
 						</Form>
 
 						<Title className='mt-5 mb-5 text-center text-base'>
-							Don't have an account?{" "}
+							Don&apos;t have an account?{" "}
 							<Link to='/customer/register'>Register Now</Link>
 						</Title>
 					</Card>

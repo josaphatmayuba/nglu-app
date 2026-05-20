@@ -12,6 +12,7 @@ import BigDrawer from "../Drawer/BigDrawer";
 import AddAccount from "../account/AddAccount";
 import toast from "react-hot-toast";
 import { loadSingleSale } from "@/redux/rtk/features/sale/saleSlice";
+import { loadSinglePurchase } from "@/redux/rtk/features/purchase/purchaseSlice";
 import { loadAllTransactionType } from "../../redux/rtk/features/transactionType/transactionTypeSlice";
 
 //Date functionalities

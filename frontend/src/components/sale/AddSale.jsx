@@ -777,12 +777,12 @@ const AddSale = () => {
               </div>
               <div className="text-xs text-emerald-900">
                 <p className="font-semibold mb-1">
-                  Paiement attendu d'ici{" "}
+                  Paiement attendu d&apos;ici{" "}
                   {paymentTerm > 0 ? `${paymentTerm}j` : "réception"}
                 </p>
                 <p className="text-emerald-700/80">
                   Un rappel automatique sera envoyé au client à J-3 si la
-                  facture n'est pas réglée.
+                  facture n&apos;est pas réglée.
                 </p>
               </div>
             </div>

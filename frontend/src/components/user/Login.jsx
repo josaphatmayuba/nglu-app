@@ -106,7 +106,7 @@ export default function Login() {
                 htmlFor="username"
                 className="block text-sm font-medium text-ink-700 mb-1.5"
               >
-                Nom d'utilisateur
+                Nom d&apos;utilisateur
               </label>
               <input
                 id="username"
