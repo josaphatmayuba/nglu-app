@@ -11,6 +11,7 @@ export class CurrenciesService {
 
   async create(input: CreateCurrencyDto) {
     const [result] = await this.db.insert(currencies).values({
+      ...(input.currencyCode ? { currencyCode: input.currencyCode } : {}),
       currencyName: input.currencyName,
       currencySymbol: input.currencySymbol,
       status: "true",
@@ -50,6 +51,7 @@ export class CurrenciesService {
     await this.db
       .update(currencies)
       .set({
+        ...(input.currencyCode !== undefined ? { currencyCode: input.currencyCode } : {}),
         ...(input.currencyName !== undefined ? { currencyName: input.currencyName } : {}),
         ...(input.currencySymbol !== undefined ? { currencySymbol: input.currencySymbol } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
