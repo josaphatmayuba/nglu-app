@@ -269,7 +269,7 @@ export default function Login() {
                 <div>
                   <h3 className="font-medium">Sécurité et permissions</h3>
                   <p className="text-brand-100 text-sm mt-0.5">
-                    Gestion fine des rôles pour chaque membre de l'équipe
+                    Gestion fine des rôles pour chaque membre de l&apos;équipe
                   </p>
                 </div>
               </div>
