@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   Row,
-  Select,
   Typography,
   Upload,
 } from "antd";
@@ -21,17 +20,12 @@ import {
 } from "../../redux/rtk/features/setting/settingSlice";
 import fileConfig from "../../utils/fileConfig";
 import Loader from "../loader/loader";
+import CurrencyCombobox from "../Shared/CurrencyCombobox";
 //Update Invoice API REQ
 
 const LOGO_MAX_SIZE_MB = 10;
 const LOGO_MAX_SIZE_BYTES = LOGO_MAX_SIZE_MB * 1024 * 1024;
 const ACCEPTED_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
-
-const currencyOptionLabel = (currency) => {
-  const code = currency.currencyCode ? `${currency.currencyCode} — ` : "";
-  const symbol = currency.currencySymbol ? ` (${currency.currencySymbol})` : "";
-  return `${code}${currency.currencyName}${symbol}`;
-};
 
 const AddDetails = () => {
   const { Title } = Typography;
@@ -293,26 +287,11 @@ const AddDetails = () => {
                       message: "Please input Currency!",
                     },
                   ]}>
-                  <Select
-                    showSearch
-                    optionFilterProp="label"
-                    label="Currency"
-                    name="currencyId"
+                  <CurrencyCombobox
+                    currencies={list}
                     loading={loading}
                     placeholder="Search currency by code, name, or symbol"
-                    filterOption={(input, option) =>
-                      (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-                    }>
-                    {list?.map((item) => {
-                      const label = currencyOptionLabel(item);
-
-                      return (
-                        <Select.Option value={item.id} key={item.id} label={label}>
-                          {label}
-                        </Select.Option>
-                      );
-                    })}
-                  </Select>
+                  />
                 </Form.Item>
 
                 <Form.Item

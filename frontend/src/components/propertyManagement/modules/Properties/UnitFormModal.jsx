@@ -10,6 +10,7 @@ import {
   loadPropertyManagement,
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import { modalSelectProps, unitTypes } from "../../shared/constants";
 import { optionalNumber } from "../../shared/format";
 
@@ -106,7 +107,7 @@ const UnitFormModal = ({
           <Form.Item label="Surface" name="area"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Loyer mensuel" name="monthlyRent"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Devise loyer / dépôt" name="currencyId">
-            <Select allowClear placeholder="Devise par défaut" options={currencyOptions} {...modalSelectProps} />
+            <CurrencyCombobox allowClear placeholder="Devise par défaut" options={currencyOptions} {...modalSelectProps} />
           </Form.Item>
         </div>
         <Form.Item label="Dépôt de garantie" name="securityDeposit">

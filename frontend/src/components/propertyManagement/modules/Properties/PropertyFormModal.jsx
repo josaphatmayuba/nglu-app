@@ -29,7 +29,9 @@ import {
   saveProperty,
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import { propertyTypes, unitTypes } from "../../shared/constants";
+import { optionalNumber } from "../../shared/format";
 
 const toPropertyFormRecord = (record) => {
   if (!record) return {};
@@ -114,7 +116,12 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
         for (const unit of validUnits) {
           const unitResp = await dispatch(
             saveUnit({
-              values: { ...unit, propertyId: createdPropertyId, status: "vacant" },
+              values: {
+                ...unit,
+                currencyId: optionalNumber(unit.currencyId) ?? optionalNumber(propertyValues.currencyId),
+                propertyId: createdPropertyId,
+                status: "vacant",
+              },
             }),
           );
           if (unitResp.payload?.message !== "success") failed++;
@@ -207,13 +214,11 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
               extra="Appliquée à la valeur marchande, au loyer par défaut et héritée par les unités créées"
               rules={[{ required: true, message: "La devise est requise" }]}
             >
-              <Select
+              <CurrencyCombobox
                 options={currencyOptions}
                 placeholder="Sélectionnez une devise"
                 popupClassName="immo-select-popup"
                 getPopupContainer={() => document.body}
-                showSearch
-                optionFilterProp="label"
               />
             </Form.Item>
             <div className="pm-form-grid">
@@ -277,10 +282,10 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
                       </div>
                       <div className="immo-unit-card-grid">
                         <Form.Item label="Loyer mensuel" name={[field.name, "monthlyRent"]}>
-                          <InputNumber className="w-full immo-cdf-field" min={0} placeholder="850 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                          <InputNumber className="w-full immo-cdf-field" min={0} placeholder="850 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
                         </Form.Item>
                         <Form.Item label="Devise" name={[field.name, "currencyId"]}>
-                          <Select
+                          <CurrencyCombobox
                             allowClear
                             placeholder="Devise par défaut"
                             size="small"
@@ -290,7 +295,7 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
                           />
                         </Form.Item>
                         <Form.Item label="Caution (2× loyer suggéré)" name={[field.name, "securityDeposit"]}>
-                          <InputNumber className="w-full immo-cdf-field" min={0} placeholder="1 700 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">CDF</span>} />
+                          <InputNumber className="w-full immo-cdf-field" min={0} placeholder="1 700 000" size="small" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
                         </Form.Item>
                       </div>
                     </div>

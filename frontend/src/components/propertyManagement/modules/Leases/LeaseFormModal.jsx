@@ -2,6 +2,7 @@ import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 import moment from "moment";
 import { useEffect } from "react";
 
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import { modalSelectProps } from "../../shared/constants";
 import { optionalNumber } from "../../shared/format";
 import { tenantName } from "../../shared/tenants";
@@ -127,7 +128,7 @@ const LeaseFormModal = ({
             <InputNumber className="w-full" min={0} />
           </Form.Item>
           <Form.Item label="Devise" name="currencyId">
-            <Select allowClear placeholder="Devise par défaut" {...modalSelectProps} options={currencyOptions} />
+            <CurrencyCombobox allowClear placeholder="Devise par défaut" {...modalSelectProps} options={currencyOptions} />
           </Form.Item>
           <Form.Item label="Dépôt" name="securityDeposit">
             <InputNumber className="w-full" min={0} />

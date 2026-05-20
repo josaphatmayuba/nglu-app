@@ -27,6 +27,7 @@ import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
 import { loadAllVatTax } from "../../redux/rtk/features/vatTax/vatTaxSlice";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import getStaffId from "../../utils/getStaffId";
+import CurrencyCombobox from "../Shared/CurrencyCombobox";
 
 const round2 = (v) => Math.round((parseFloat(v) || 0) * 100) / 100;
 
@@ -69,9 +70,9 @@ const AddSale = () => {
   const { list: termsList = [] } = useSelector(
     (state) => state.termsAndConditions
   );
-  const currencyList = useSelector((state) => state.currency?.list) || [];
+  const currencyList = useSelector((state) => state.currency?.list);
   const activeCurrencies = useMemo(
-    () => currencyList.filter((c) => c?.status === true || c?.status === "true"),
+    () => (currencyList || []).filter((c) => c?.status === true || c?.status === "true"),
     [currencyList]
   );
 
@@ -640,20 +641,11 @@ const AddSale = () => {
                       Devise
                     </label>
                     <Form.Item name="currencyId" className="mb-0">
-                      <Select
+                      <CurrencyCombobox
                         allowClear
                         placeholder="Devise par défaut"
-                        optionFilterProp="children"
-                      >
-                        {activeCurrencies.map((c) => (
-                          <Select.Option
-                            key={c.currencyId}
-                            value={c.currencyId}
-                          >
-                            {c.currencyName} ({c.currencySymbol})
-                          </Select.Option>
-                        ))}
-                      </Select>
+                        currencies={activeCurrencies}
+                      />
                     </Form.Item>
                   </div>
                 </div>

@@ -71,6 +71,7 @@ import moment from "moment";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import "./PropertyManagement.css";
+import CurrencyCombobox from "../Shared/CurrencyCombobox";
 import { loadAllAccount } from "../../redux/rtk/features/account/accountSlice";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import { deleteCustomer } from "../../redux/rtk/features/customer/customerSlice";
@@ -210,10 +211,13 @@ const buildCurrencyOptions = (currencies) =>
       const value = getCurrencyValue(currency);
       if (value === undefined || value === null) return null;
       const name = decodeCurrencyText(currency?.currencyName).trim();
+      const code = decodeCurrencyText(currency?.currencyCode).trim();
       const symbol = cleanCurrencySymbol(currency);
+      const main = code ? `${code} - ${name}` : name;
       return {
-        label: symbol ? `${name} (${symbol})` : name,
+        label: symbol ? `${main} (${symbol})` : main,
         value,
+        searchText: [code, name, symbol].filter(Boolean).join(" "),
       };
     })
     .filter(Boolean);
@@ -381,7 +385,7 @@ const MetricCard = ({ icon, label, value, helper, tone = "brand", trend }) => (
   <div className="immo-metric-card">
     <div className="immo-metric-head">
       <div className={`immo-metric-icon immo-tone-${tone}`}>{icon}</div>
-      {trend && <span className={`immo-trend ${trend.tone || "up"}`}>{trend.label}</span>}
+      {trend?.label && <span className={`immo-trend ${trend.tone || "up"}`}>{trend.label}</span>}
     </div>
     <div className="immo-metric-label">{label}</div>
     <div className="immo-metric-value">{value}</div>
@@ -639,9 +643,9 @@ const PropertyManagement = () => {
     loading,
   } = useSelector((state) => state.propertyManagement);
   const accounts = useSelector((state) => state.accounts?.list) || [];
-  const currencyList = useSelector((state) => state.currency?.list) || [];
+  const currencyList = useSelector((state) => state.currency?.list);
   const activeCurrencies = useMemo(
-    () => currencyList.filter((c) => c?.status === true || c?.status === "true"),
+    () => (currencyList || []).filter((c) => c?.status === true || c?.status === "true"),
     [currencyList]
   );
   const currencyOptions = useMemo(
@@ -1876,7 +1880,7 @@ const PropertyManagement = () => {
               Nouveau Locataire
             </Button>
             <Button onClick={() => openModal("onboardingGenerate")}>
-              Générer un lien d'inscription
+              Générer un lien d&apos;inscription
             </Button>
           </div>
           <Table
@@ -1896,7 +1900,7 @@ const PropertyManagement = () => {
               },
             ]}
           />
-          <div className="pm-section-title">Liens d'inscription</div>
+          <div className="pm-section-title">Liens d&apos;inscription</div>
           <Table
             size="small"
             rowKey="id"
@@ -2276,7 +2280,7 @@ const PropertyManagement = () => {
         </div>
         <div className="immo-actions">
           <button type="button" onClick={() => openModal("onboardingGenerate")}>
-            Lien d'inscription
+            Lien d&apos;inscription
           </button>
           <button type="button" className="primary" onClick={() => openModal("tenant")}>
             <Plus size={16} /> Nouveau locataire
@@ -2741,7 +2745,7 @@ const PropertyManagement = () => {
                 <span>2027 →</span>
               </div>
               <div className="immo-today-marker">
-                <span>Aujourd'hui</span>
+                <span>Aujourd&apos;hui</span>
               </div>
               <div className="immo-timeline-rows">
                 {leasesView.map((lease, index) => {
@@ -3049,7 +3053,7 @@ const PropertyManagement = () => {
       tenants: renderTenantsMockup,
       leases: renderLeasesMockup,
       payments: renderPaymentsMockup,
-      maintenance: () => <MaintenancePanel searchTerm={searchTerm} />,
+      maintenance: renderMaintenanceMockup,
     };
     return (panels[activeSection] || renderProperties)();
   };
@@ -3226,7 +3230,7 @@ const PropertyManagement = () => {
       tenants: (
         <>
           <button type="button" className="immo-filter-button" onClick={() => openModal("onboardingGenerate")}>
-            <UserRound size={17} /> Lien d'inscription
+            <UserRound size={17} /> Lien d&apos;inscription
           </button>
           <button type="button" className="immo-primary-button" onClick={() => openModal("tenant")}>
             <Plus size={18} /> Nouveau locataire
@@ -3373,7 +3377,6 @@ const PropertyManagement = () => {
             label="Propriétés"
             value={enrichedUnits.length || safeProperties.length}
             helper={`${occupiedUnits.length} louées · ${vacantUnits.length} vacantes · ${maintenanceUnits.length} maintenance`}
-            trend={{ label: "↑ 2" }}
           />
           <MetricCard
             icon={<Users size={20} />}
@@ -3381,7 +3384,6 @@ const PropertyManagement = () => {
             value={`${occupiedUnits.length}/${enrichedUnits.length || 0}`}
             helper={<span className="immo-progress"><span style={{ width: `${occupancyRate}%` }} /></span>}
             tone="green"
-            trend={{ label: `${occupancyRate}%` }}
           />
           <MetricCard
             icon={<CreditCard size={20} />}
@@ -3389,7 +3391,6 @@ const PropertyManagement = () => {
             value={compactMoney(monthlyRent)}
             helper={`${safePayments.length} reçus · ${Math.max(activeLeases.length - safePayments.length, 0)} en attente`}
             tone="amber"
-            trend={{ label: "↑ 8.2%" }}
           />
           <MetricCard
             icon={<AlertTriangle size={20} />}
@@ -3397,7 +3398,6 @@ const PropertyManagement = () => {
             value={overduePayments.length}
             helper={`${compactMoney(overduePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0))} à recouvrer`}
             tone="red"
-            trend={{ label: `↑ ${overduePayments.length}`, tone: "danger" }}
           />
         </div>
 
@@ -3681,7 +3681,7 @@ const PropertyManagement = () => {
                   <InputNumber className="w-full" min={0} />
                 </Form.Item>
                 <Form.Item label="Devise" name="currencyId">
-                  <Select
+                  <CurrencyCombobox
                     allowClear
                     placeholder="Devise par défaut"
                     {...modalSelectProps}
@@ -3752,7 +3752,7 @@ const PropertyManagement = () => {
                 </div>
               )}
 
-              <div className="pm-section-title">Contact d'Urgence</div>
+              <div className="pm-section-title">Contact d&apos;Urgence</div>
               <div className="pm-form-grid">
                 <Form.Item label="Téléphone secondaire" name="phone2">
                   <Input />
@@ -3861,7 +3861,7 @@ const PropertyManagement = () => {
                   />
                 </Form.Item>
                 <Form.Item label="Devise" name="currencyId">
-                  <Select
+                  <CurrencyCombobox
                     allowClear
                     placeholder="Devise du bail ou par défaut"
                     {...modalSelectProps}
@@ -3955,7 +3955,7 @@ const PropertyManagement = () => {
           <>
             <p style={{ color: "#52525b", marginTop: -8 }}>
               Un nouveau bail est créé en reprenant les informations du bail courant.
-              Un nouveau contrat sera généré avec le modèle sélectionné — l'ancien contrat reste figé.
+              Un nouveau contrat sera généré avec le modèle sélectionné — l&apos;ancien contrat reste figé.
             </p>
             <Form form={renewForm} layout="vertical" onFinish={submitRenewLease}>
               <div className="pm-form-grid">
@@ -3986,7 +3986,7 @@ const PropertyManagement = () => {
                     defaultChecked
                     onChange={(e) => renewForm.setFieldValue("endCurrentLease", e.target.checked)}
                   />
-                  Marquer l'ancien bail comme terminé
+                  Marquer l&apos;ancien bail comme terminé
                 </label>
               </Form.Item>
               <div className="flex justify-end gap-2">

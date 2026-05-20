@@ -1,5 +1,6 @@
 import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import { modalSelectProps } from "../../shared/constants";
 
 const paymentMethods = [
@@ -58,7 +59,7 @@ const PaymentFormModal = ({
             />
           </Form.Item>
           <Form.Item label="Devise" name="currencyId">
-            <Select
+            <CurrencyCombobox
               allowClear
               placeholder="Devise du bail ou par défaut"
               {...modalSelectProps}

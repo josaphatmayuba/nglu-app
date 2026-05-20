@@ -51,10 +51,13 @@ export const buildCurrencyOptions = (currencies) =>
       const value = getCurrencyValue(currency);
       if (value === undefined || value === null) return null;
       const name = decodeCurrencyText(currency?.currencyName).trim();
+      const code = decodeCurrencyText(currency?.currencyCode).trim();
       const symbol = cleanCurrencySymbol(currency);
+      const main = code ? `${code} - ${name}` : name;
       return {
-        label: symbol ? `${name} (${symbol})` : name,
+        label: symbol ? `${main} (${symbol})` : main,
         value,
+        searchText: [code, name, symbol].filter(Boolean).join(" "),
       };
     })
     .filter(Boolean);
