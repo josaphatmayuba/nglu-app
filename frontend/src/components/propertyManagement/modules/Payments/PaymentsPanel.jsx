@@ -1,15 +1,26 @@
 import { Form, message } from "antd";
-import { Download, Plus, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useDispatch } from "react-redux";
+import { CalendarRange, Download, Plus, Table2, Users, X } from "lucide-react";
 import moment from "moment";
+import { useEffect, useMemo, useState } from "react";
+import { useDispatch } from "react-redux";
 
 import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { compactMoney, normalize, optionalNumber } from "../../shared/format";
-import { tenantName } from "../../shared/tenants";
+import { tenantNameFromLease } from "../../shared/tenants";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import PaymentFormModal from "./PaymentFormModal";
+import PaymentsCalendarView from "./PaymentsCalendarView";
+import PaymentsTenantView from "./PaymentsTenantView";
 import PaymentsTable from "./PaymentsTable";
+
+const VIEW_STORAGE_KEY = "immo.payments.view";
+const VIEW_KEYS = ["tableau", "locataire", "calendrier"];
+const readStoredView = () => {
+  try {
+    const v = window.localStorage?.getItem(VIEW_STORAGE_KEY);
+    return VIEW_KEYS.includes(v) ? v : "locataire";
+  } catch { return "locataire"; }
+};
 
 const exportPaymentsToCsv = (payments) => {
   const headers = ["N° Quittance", "Locataire", "Propriété", "Période", "Méthode", "Statut", "Montant"];
@@ -23,7 +34,7 @@ const exportPaymentsToCsv = (payments) => {
     p.amount ?? 0,
   ]);
   const csv = [headers, ...rows]
-    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
     .join("\n");
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -39,8 +50,13 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm();
+  const [paymentView, setPaymentView] = useState(readStoredView);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    try { window.localStorage?.setItem(VIEW_STORAGE_KEY, paymentView); } catch { /* ignore */ }
+  }, [paymentView]);
 
   const {
     accounts,
@@ -97,7 +113,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const leaseOptions = safeLeases
     .filter((lease) => lease.status === "active")
     .map((lease) => ({
-      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantName(lease.tenant)}`,
+      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantNameFromLease(lease)}`,
       value: lease.id,
     }));
 
@@ -109,6 +125,17 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const closeModal = () => {
     setPaymentModalOpen(false);
     form.resetFields();
+  };
+
+  const handleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const handleSelectAll = (ids, all) => setSelectedIds((prev) => all ? [...new Set([...prev, ...ids])] : prev.filter((id) => !ids.includes(id)));
+  const clearSelection = () => setSelectedIds([]);
+  const selectedPayments = paymentsView.filter((p) => selectedIds.includes(p.id));
+  const handleExportCsv = () => {
+    const toExport = selectedIds.length > 0 ? selectedPayments : paymentsView;
+    if (!toExport.length) { message.warning("Aucun paiement à exporter"); return; }
+    exportPaymentsToCsv(toExport);
+    message.success(`${toExport.length} paiement(s) exporté(s)`);
   };
 
   const submitPayment = async (values) => {
@@ -130,30 +157,6 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     }
   };
 
-  const handleSelect = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
-
-  const handleSelectAll = (ids, selectAll) => {
-    setSelectedIds((prev) => {
-      if (selectAll) return [...new Set([...prev, ...ids])];
-      return prev.filter((id) => !ids.includes(id));
-    });
-  };
-
-  const clearSelection = () => setSelectedIds([]);
-
-  const selectedPayments = paymentsView.filter((p) => selectedIds.includes(p.id));
-
-  const handleExportCsv = () => {
-    const toExport = selectedIds.length > 0 ? selectedPayments : paymentsView;
-    if (!toExport.length) { message.warning("Aucun paiement à exporter"); return; }
-    exportPaymentsToCsv(toExport);
-    message.success(`${toExport.length} paiement(s) exporté(s)`);
-  };
-
   return (
     <div className="immo-table-flow">
       <div className="immo-mini-kpis">
@@ -161,6 +164,50 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
         <div><span>En attente</span><strong className="amber">{compactMoney(pendingAmount)}</strong></div>
         <div><span>En retard</span><strong className="red">{compactMoney(lateAmount)}</strong></div>
         <div><span>Total prévu</span><strong>{compactMoney(plannedAmount)}</strong></div>
+      </div>
+      <div className="immo-table-toolbar">
+        <div className="immo-filter-group">
+          {paymentFilterChips.map((chip) => (
+            <button
+              key={chip.key}
+              type="button"
+              className={paymentStatusFilter === chip.key ? "active" : ""}
+              onClick={() => setPaymentStatusFilter(chip.key)}
+            >
+              {chip.label} <span>{chip.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="immo-lease-actions">
+          <div className="immo-view-toggle" aria-label="Vue des paiements" role="tablist">
+            {[
+              { key: "tableau",   label: "Tableau",      icon: <Table2 size={15} /> },
+              { key: "locataire", label: "Par locataire", icon: <Users size={15} /> },
+              { key: "calendrier",label: "Calendrier",    icon: <CalendarRange size={15} /> },
+            ].map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                role="tab"
+                aria-selected={paymentView === v.key}
+                className={paymentView === v.key ? "active" : ""}
+                onClick={() => setPaymentView(v.key)}
+                title={`Vue ${v.label.toLowerCase()}`}
+              >
+                {v.icon}
+                <span>{v.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="immo-secondary-button" onClick={handleExportCsv} title="Exporter CSV">
+              <Download size={15} /> CSV
+            </button>
+            <button type="button" className="immo-primary-button" onClick={openModal}>
+              <Plus size={16} /> Enregistrer paiement
+            </button>
+          </div>
+        </div>
       </div>
 
       {selectedIds.length > 0 && (
@@ -177,37 +224,30 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
         </div>
       )}
 
-      <div className="immo-table-toolbar">
-        <div className="immo-filter-group">
-          {paymentFilterChips.map((chip) => (
-            <button
-              key={chip.key}
-              type="button"
-              className={paymentStatusFilter === chip.key ? "active" : ""}
-              onClick={() => setPaymentStatusFilter(chip.key)}
-            >
-              {chip.label} <span>{chip.count}</span>
-            </button>
-          ))}
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button type="button" className="immo-secondary-button" onClick={handleExportCsv} title="Exporter CSV">
-            <Download size={15} /> CSV
-          </button>
-          <button type="button" className="immo-primary-button" onClick={openModal}>
-            <Plus size={16} /> Enregistrer paiement
-          </button>
-        </div>
-      </div>
-
-      <PaymentsTable
-        payments={paymentsView}
-        pendingPayments={upcomingPayments}
-        latePayments={overduePayments}
-        selectedIds={selectedIds}
-        onSelect={handleSelect}
-        onSelectAll={handleSelectAll}
-      />
+      {paymentView === "tableau" && (
+        <PaymentsTable
+          payments={paymentsView}
+          pendingPayments={upcomingPayments}
+          latePayments={overduePayments}
+          selectedIds={selectedIds}
+          onSelect={handleSelect}
+          onSelectAll={handleSelectAll}
+        />
+      )}
+      {paymentView === "locataire" && (
+        <PaymentsTenantView
+          payments={paymentsView}
+          overduePayments={overduePayments}
+          upcomingPayments={upcomingPayments}
+        />
+      )}
+      {paymentView === "calendrier" && (
+        <PaymentsCalendarView
+          payments={paymentsView}
+          overduePayments={overduePayments}
+          upcomingPayments={upcomingPayments}
+        />
+      )}
 
       <PaymentFormModal
         accounts={accounts}
