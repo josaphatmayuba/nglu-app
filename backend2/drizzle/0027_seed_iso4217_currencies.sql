@@ -2,7 +2,7 @@
 -- Seed all major ISO 4217 currencies into the currencies table.
 -- Uses INSERT IGNORE to be idempotent — existing currencies are preserved.
 
-INSERT IGNORE INTO `currencies` (`currencyName`, `currencyCode`, `currencySymbol`, `status`, `createdAt`, `updatedAt`) VALUES
+INSERT IGNORE INTO `currency` (`currencyName`, `currencyCode`, `currencySymbol`, `status`, `created_at`, `updated_at`) VALUES
 ('Afghan Afghani', 'AFN', '؋', 'true', NOW(), NOW()),
 ('Albanian Lek', 'ALL', 'L', 'true', NOW(), NOW()),
 ('Algerian Dinar', 'DZD', 'د.ج', 'true', NOW(), NOW()),
@@ -147,3 +147,4 @@ INSERT IGNORE INTO `currencies` (`currencyName`, `currencyCode`, `currencySymbol
 ('Yemeni Rial', 'YER', '﷼', 'true', NOW(), NOW()),
 ('Zambian Kwacha', 'ZMW', 'ZK', 'true', NOW(), NOW()),
 ('Zimbabwean Dollar', 'ZWL', '$', 'true', NOW(), NOW());
+
