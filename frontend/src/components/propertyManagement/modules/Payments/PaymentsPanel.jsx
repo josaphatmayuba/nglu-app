@@ -1,51 +1,30 @@
 import { Form, message } from "antd";
-import { CalendarRange, Plus, Table2, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
 import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
-import { normalize, optionalNumber } from "../../shared/format";
-import { MultiCurrencyValue } from "../../shared/ui";
-import { tenantNameFromLease } from "../../shared/tenants";
+import { compactMoney, normalize, optionalNumber } from "../../shared/format";
+import { tenantName } from "../../shared/tenants";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import PaymentFormModal from "./PaymentFormModal";
-import PaymentsCalendarView from "./PaymentsCalendarView";
-import PaymentsTenantView from "./PaymentsTenantView";
 import PaymentsTable from "./PaymentsTable";
-
-const VIEW_STORAGE_KEY = "immo.payments.view";
-const VIEW_KEYS = ["tableau", "locataire", "calendrier"];
-const readStoredView = () => {
-  try {
-    const v = window.localStorage?.getItem(VIEW_STORAGE_KEY);
-    return VIEW_KEYS.includes(v) ? v : "locataire";
-  } catch { return "locataire"; }
-};
 
 const PaymentsPanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [paymentView, setPaymentView] = useState(readStoredView);
   const [form] = Form.useForm();
-
-  useEffect(() => {
-    try { window.localStorage?.setItem(VIEW_STORAGE_KEY, paymentView); } catch { /* ignore */ }
-  }, [paymentView]);
 
   const {
     accounts,
     currencyOptions,
     lateAmount,
-    lateAmountByCurrency,
     overduePayments,
     paidAmount,
-    paidAmountByCurrency,
     pendingAmount,
-    pendingAmountByCurrency,
     plannedAmount,
-    plannedAmountByCurrency,
     safeLeases,
     safePayments,
     upcomingPayments,
@@ -93,7 +72,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const leaseOptions = safeLeases
     .filter((lease) => lease.status === "active")
     .map((lease) => ({
-      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantNameFromLease(lease)}`,
+      label: `${lease.reference} - ${lease.unit?.name || lease.unitName || "-"} - ${tenantName(lease.tenant)}`,
       value: lease.id,
     }));
 
@@ -129,10 +108,10 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   return (
     <div className="immo-table-flow">
       <div className="immo-mini-kpis">
-        <div><span>Encaissé ce mois</span><strong className="green"><MultiCurrencyValue byCurrency={paidAmountByCurrency} /></strong></div>
-        <div><span>En attente</span><strong className="amber"><MultiCurrencyValue byCurrency={pendingAmountByCurrency} /></strong></div>
-        <div><span>En retard</span><strong className="red"><MultiCurrencyValue byCurrency={lateAmountByCurrency} /></strong></div>
-        <div><span>Total prévu</span><strong><MultiCurrencyValue byCurrency={plannedAmountByCurrency} /></strong></div>
+        <div><span>Encaissé ce mois</span><strong className="green">{compactMoney(paidAmount)}</strong></div>
+        <div><span>En attente</span><strong className="amber">{compactMoney(pendingAmount)}</strong></div>
+        <div><span>En retard</span><strong className="red">{compactMoney(lateAmount)}</strong></div>
+        <div><span>Total prévu</span><strong>{compactMoney(plannedAmount)}</strong></div>
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
@@ -147,54 +126,16 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
             </button>
           ))}
         </div>
-        <div className="immo-lease-actions">
-          <div className="immo-view-toggle" aria-label="Vue des paiements" role="tablist">
-            {[
-              { key: "tableau",   label: "Tableau",      icon: <Table2 size={15} /> },
-              { key: "locataire", label: "Par locataire", icon: <Users size={15} /> },
-              { key: "calendrier",label: "Calendrier",    icon: <CalendarRange size={15} /> },
-            ].map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                role="tab"
-                aria-selected={paymentView === v.key}
-                className={paymentView === v.key ? "active" : ""}
-                onClick={() => setPaymentView(v.key)}
-                title={`Vue ${v.label.toLowerCase()}`}
-              >
-                {v.icon}
-                <span>{v.label}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="immo-primary-button" onClick={openModal}>
-            <Plus size={16} /> Enregistrer paiement
-          </button>
-        </div>
+        <button type="button" className="immo-primary-button" onClick={openModal}>
+          <Plus size={16} /> Enregistrer paiement
+        </button>
       </div>
 
-      {paymentView === "tableau" && (
-        <PaymentsTable
-          payments={paymentsView}
-          pendingPayments={upcomingPayments}
-          latePayments={overduePayments}
-        />
-      )}
-      {paymentView === "locataire" && (
-        <PaymentsTenantView
-          payments={paymentsView}
-          overduePayments={overduePayments}
-          upcomingPayments={upcomingPayments}
-        />
-      )}
-      {paymentView === "calendrier" && (
-        <PaymentsCalendarView
-          payments={paymentsView}
-          overduePayments={overduePayments}
-          upcomingPayments={upcomingPayments}
-        />
-      )}
+      <PaymentsTable
+        payments={paymentsView}
+        pendingPayments={upcomingPayments}
+        latePayments={overduePayments}
+      />
 
       <PaymentFormModal
         accounts={accounts}

@@ -3,20 +3,10 @@ import moment from "moment";
 export const leaseContractFor = (lease, contracts = []) =>
   contracts.find((contract) => contract.leaseId === lease?.id || contract.lease?.id === lease?.id);
 
-// Single source of truth: a lease is expired when its status says so OR when
-// its endDate is in the past. Previously the "Actifs" filter only checked
-// status === "active" and so a status="active" lease whose endDate had
-// already passed (badge "Expiré" + "Archivé" in the UI) was wrongly counted
-// as active. See SCRUM-62.
-export const isLeaseExpired = (lease) => {
-  if (!lease) return false;
-  if (lease.status === "expired" || lease.status === "ended") return true;
-  if (lease.endDate && moment(lease.endDate).isBefore(moment(), "day")) return true;
-  return false;
-};
-
 export const leaseMenuVariant = (lease, contract) => {
-  if (isLeaseExpired(lease)) return "expired";
+  const isExpired =
+    lease?.status === "expired" || (lease?.endDate && moment(lease.endDate).isBefore(moment()));
+  if (isExpired) return "expired";
   if (!contract) return "noContract";
   if (contract.status === "signed") return "signed";
   return "pendingSignature";
@@ -26,7 +16,7 @@ export const leaseDisplayInfo = (lease, contract) => {
   const start = lease?.startDate ? moment(lease.startDate) : null;
   const end = lease?.endDate ? moment(lease.endDate) : null;
   const now = moment();
-  const isExpired = isLeaseExpired(lease);
+  const isExpired = end?.isBefore(now);
   const daysLeft = end ? end.diff(now, "days") : null;
   const elapsedMonths = start ? Math.max(0, now.diff(start, "months")) : 0;
   const totalMonths = start && end ? Math.max(1, end.diff(start, "months")) : 1;

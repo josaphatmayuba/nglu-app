@@ -79,7 +79,7 @@ const TenantsPanel = ({
       if (lease) {
         if (onNavigateToLeases) onNavigateToLeases(lease);
         else if (onOpenLeaseMenu) onOpenLeaseMenu(`card-${lease.id}`);
-        else message.info(`Bail ${lease.reference || `#${lease.id}`} — navigation à câbler en Phase F.`);
+        else message.info(`Bail ${lease.reference || `#${lease.id}`} disponible dans l'onglet Baux.`);
       } else {
         message.info("Ce locataire n'a pas encore de bail.");
       }
@@ -87,7 +87,7 @@ const TenantsPanel = ({
     }
     if (action === "viewPayments") {
       if (onNavigateToPayments) onNavigateToPayments(tenant);
-      else message.info("Navigation vers Paiements à câbler en Phase F.");
+      else message.info("Ouvrez l'onglet Paiements pour consulter les paiements.");
       return;
     }
     if (action === "copyEmail") {
@@ -140,7 +140,7 @@ const TenantsPanel = ({
           className="immo-filter-button"
           onClick={() => {
             if (onGenerateOnboardingLink) onGenerateOnboardingLink();
-            else message.info("Génération du lien d'inscription à câbler en Phase F.");
+            else message.info("La génération du lien d'inscription sera ajoutée dans le module Locataires.");
           }}
         >
           <UserRound size={17} /> Lien d'inscription

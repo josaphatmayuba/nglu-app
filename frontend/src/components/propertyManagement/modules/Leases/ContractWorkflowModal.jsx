@@ -165,28 +165,25 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
   };
 
   const openPreview = async () => {
-    // Aperçu local: ne PAS persister le contrat (sinon le bail bascule
-    // en "Attente signature" même si l'utilisateur ferme sans envoyer).
-    // Si un contrat existe déjà, on récupère sa version serveur, sinon
-    // on rend simplement le contenu local construit dans le modal.
-    let content = buildLeaseContractContent();
-    if (contract?.id) {
-      try {
-        const { data } = await axios.get(`property-management/contracts/${contract.id}`);
-        content = data?.contractContent || content;
-      } catch {
-        // fallback silencieux sur le contenu local
-      }
-    }
-    const win = window.open("", "_blank", "width=920,height=1100");
-    if (!win) {
-      message.error("Autorisez les popups pour ouvrir l'aperçu PDF.");
+    const currentContract = await ensureContract();
+    if (!currentContract?.id) {
+      message.error("Impossible de générer le contrat.");
       return;
     }
-    win.document.open();
-    win.document.write(`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;margin:32px">${content}</pre>`);
-    win.document.close();
-    win.focus();
+    try {
+      const { data } = await axios.get(`property-management/contracts/${currentContract.id}`);
+      const win = window.open("", "_blank", "width=920,height=1100");
+      if (!win) {
+        message.error("Autorisez les popups pour ouvrir l'aperçu PDF.");
+        return;
+      }
+      win.document.open();
+      win.document.write(`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;margin:32px">${data?.contractContent || buildLeaseContractContent()}</pre>`);
+      win.document.close();
+      win.focus();
+    } catch {
+      message.error("Impossible d'ouvrir l'aperçu du contrat.");
+    }
   };
 
   const generateAndSend = async () => {

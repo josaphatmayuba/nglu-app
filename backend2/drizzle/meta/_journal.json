@@ -2,30 +2,110 @@
   "version": "7",
   "dialect": "mysql",
   "entries": [
-    { "idx": 0,  "version": "5", "when": 1778344498351, "tag": "0000_nervous_rumiko_fujikawa",               "breakpoints": true },
-    { "idx": 1,  "version": "5", "when": 1778371200000, "tag": "0001_add_tenant_details",                    "breakpoints": true },
-    { "idx": 2,  "version": "5", "when": 1778457600000, "tag": "0002_add_tenant_onboardings",                "breakpoints": true },
-    { "idx": 3,  "version": "5", "when": 1778459400000, "tag": "0003_add_tenant_onboarding_token",           "breakpoints": true },
-    { "idx": 4,  "version": "5", "when": 1778547600000, "tag": "0004_add_hr_modules",                        "breakpoints": true },
-    { "idx": 5,  "version": "5", "when": 1778549400000, "tag": "0005_grant_hr_module_permissions",           "breakpoints": true },
-    { "idx": 6,  "version": "5", "when": 1778551200000, "tag": "0006_add_remaining_front_modules",           "breakpoints": true },
-    { "idx": 7,  "version": "5", "when": 1778553000000, "tag": "0007_grant_remaining_module_permissions",    "breakpoints": true },
-    { "idx": 8,  "version": "5", "when": 1778554800000, "tag": "0008_add_legacy_crud_tables",                "breakpoints": true },
-    { "idx": 9,  "version": "5", "when": 1778556600000, "tag": "0009_grant_legacy_module_permissions",       "breakpoints": true },
-    { "idx": 10, "version": "5", "when": 1778558400000, "tag": "0010_add_customer_google_id",                "breakpoints": true },
-    { "idx": 11, "version": "5", "when": 1778560200000, "tag": "0011_add_contract_templates",                "breakpoints": true },
-    { "idx": 12, "version": "5", "when": 1778562000000, "tag": "0012_add_contract_template_permissions",     "breakpoints": true },
-    { "idx": 13, "version": "5", "when": 1779038400000, "tag": "0014_add_currency_id_to_property_units",     "breakpoints": true },
-    { "idx": 14, "version": "5", "when": 1779120000000, "tag": "0015_add_currency_id_to_property",           "breakpoints": true },
-    { "idx": 15, "version": "5", "when": 1779206400000, "tag": "0016_add_landlord_signature_to_app_setting", "breakpoints": true },
-    { "idx": 16, "version": "5", "when": 1779292800000, "tag": "0017_add_created_by_to_contracts",           "breakpoints": true },
-    { "idx": 17, "version": "5", "when": 1779379200000, "tag": "0018_backfill_currency_id_real_estate",      "breakpoints": true },
-    { "idx": 18, "version": "5", "when": 1747699200000, "tag": "0019_maintenance_soft_delete_and_permissions", "breakpoints": true },
-    { "idx": 19, "version": "5", "when": 1747785600000, "tag": "0020_add_currency_metadata",                  "breakpoints": true },
-    { "idx": 20, "version": "5", "when": 1747958400000, "tag": "0021_add_currency_to_transactions_and_realestate_types", "breakpoints": true },
-    { "idx": 21, "version": "5", "when": 1748044800000, "tag": "0022_add_property_accounting_setup",         "breakpoints": true },
-    { "idx": 22, "version": "5", "when": 1748131200000, "tag": "0023_cleanup_transaction_types",              "breakpoints": true },
-    { "idx": 23, "version": "5", "when": 1748217600000, "tag": "0024_add_missing_currency_columns",           "breakpoints": true },
-    { "idx": 24, "version": "5", "when": 1748304000000, "tag": "0025_add_maintenance_costs",                   "breakpoints": true }
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1778344498351,
+      "tag": "0000_nervous_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1778371200000,
+      "tag": "0001_add_tenant_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1778457600000,
+      "tag": "0002_add_tenant_onboardings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1778459400000,
+      "tag": "0003_add_tenant_onboarding_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1778547600000,
+      "tag": "0004_add_hr_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778549400000,
+      "tag": "0005_grant_hr_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1778551200000,
+      "tag": "0006_add_remaining_front_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1778553000000,
+      "tag": "0007_grant_remaining_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1778554800000,
+      "tag": "0008_add_legacy_crud_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1778556600000,
+      "tag": "0009_grant_legacy_module_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1778558400000,
+      "tag": "0010_add_customer_google_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1778560200000,
+      "tag": "0011_add_contract_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1778562000000,
+      "tag": "0012_add_contract_template_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1779038400000,
+      "tag": "0014_add_currency_id_to_property_units",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1779120000000,
+      "tag": "0015_add_currency_id_to_property",
+      "breakpoints": true
+    }
   ]
 }

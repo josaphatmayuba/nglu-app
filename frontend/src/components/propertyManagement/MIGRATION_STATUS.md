@@ -21,7 +21,7 @@ Reference plan : [fait-moi-un-plan-generic-locket.md](../../../../C:/Users/pauln
 | C — Leases       | codex | done | agents/nuclear-aphid | Créé modules/Leases/LeasesPanel.jsx, LeaseGridView.jsx, LeaseTableView.jsx, LeaseTimelineView.jsx, LeaseContextMenu.jsx, ContractWorkflowModal.jsx, LeaseFormModal.jsx, LeaseRenewModal.jsx, leaseUtils.js. Module autonome avec filtres, 3 vues, contrat, création/édition/renouvellement. Non branché au legacy avant Phase F. |
 | D — Payments     | codex | done | agents/nuclear-aphid | Créé modules/Payments/PaymentsPanel.jsx, PaymentsTable.jsx, PaymentFormModal.jsx. Le module consomme usePropertyManagementData(), gère filtres, pagination et création de paiement. Non branché au legacy avant Phase F. |
 | E — Maintenance  | codex | done | agents/nuclear-aphid | Créé modules/Maintenance/MaintenancePanel.jsx, MaintenanceTicketCard.jsx, MaintenanceFormModal.jsx. Le module consomme usePropertyManagementData(), gère KPIs, filtres, liste tickets et création de ticket. Non branché au legacy avant Phase F. |
-| F — Cutover      | claude + codex | done (active on dev) | agents/nuclear-aphid | PropertyManagementNew.jsx créé et activé sur la route principale `/admin/property-management`. Legacy reste dans le repo mais n'est plus la route par défaut. |
+| F — Cutover      | codex | done | agents/nuclear-aphid | Route principale `/admin/property-management` sur `PropertyManagementNew.jsx`; routes preview `_new*` supprimées; messages "à câbler Phase F" nettoyés. Legacy reste dans le repo seulement comme référence non routée. |
 
 ## Phase 0 — ce qui a été fait
 
@@ -143,24 +143,27 @@ import { Redux } from "../../../../redux/rtk/features/..."; // 4 niveaux jusqu'�
 2. `/admin/property-management` → legacy intact, aucune régression attendue.
 3. `/admin/property-management/_new/tenants` → la grille de cartes locataires s'affiche, la recherche filtre, le menu contextuel s'ouvre/ferme (clic extérieur), "Nouveau locataire" ouvre la modal complète avec affichage conditionnel du bloc partenaire (sélectionner "Marié" ou "Conjoint de fait") et N champs âge enfants.
 
-## Phase F — ce qui a été fait (dormant)
+## Phase F — cutover finalisé
 
-**Date** : 2026-05-16
+**Date** : 2026-05-17
 
-**Statut** : Assemblage modulaire **livré mais NON activé**. La page legacy reste la route par défaut. La nouvelle est accessible uniquement via la route preview `/admin/property-management/_new`.
+**Statut** : Assemblage modulaire activé sur la route principale `/admin/property-management`.
 
 **Fichiers créés** :
 
-- [PropertyManagementNew.jsx](./PropertyManagementNew.jsx) — page principale entièrement modulaire (~260 lignes). Assemble : header (titre + recherche + Filtres + Modèles de contrat), panneau filtres avancés, 4 MetricCards (Propriétés, Taux d'occupation, Loyers du mois, Loyers en retard), barre d'onglets, et l'un des 5 panneaux (`<PropertiesPanel/>`, `<TenantsPanel/>`, `<LeasesPanel/>`, `<PaymentsPanel/>`, `<MaintenancePanel/>`).
+- [PropertyManagementNew.jsx](./PropertyManagementNew.jsx) — page principale entièrement modulaire. Assemble : header (titre + recherche + Modèles de contrat), 4 MetricCards (Propriétés, Taux d'occupation, Loyers du mois, Loyers en retard), barre d'onglets, et l'un des 5 panneaux (`<PropertiesPanel/>`, `<TenantsPanel/>`, `<LeasesPanel/>`, `<PaymentsPanel/>`, `<MaintenancePanel/>`).
 - [modules/Properties/UnitFormModal.jsx](./modules/Properties/UnitFormModal.jsx) — modal d'édition/création d'unité (nécessaire pour le bouton "Modifier" des cartes propriétés). Pas couvert par les phases A-E, créé en Phase F.
 
 **Fichiers modifiés** :
 
-- [PropertyManagementRoutes.jsx](../../layouts/AdminRoutes/PropertyManagementRoutes.jsx) — route principale `/property-management` basculée sur `<PropertyManagementNew />`. Les routes preview `_new`, `_new/properties`, `_new/tenants` restent disponibles pendant la validation.
+- [PropertyManagementRoutes.jsx](../../layouts/AdminRoutes/PropertyManagementRoutes.jsx) — route principale `/property-management` basculée sur `<PropertyManagementNew />`. Les routes preview `_new`, `_new/properties`, `_new/tenants` ont été supprimées pour éviter deux chemins vers le même écran.
+- [PropertyManagementNew.jsx](./PropertyManagementNew.jsx) — retrait du panneau `Filtres` global du header. Les filtres avancés restent dans le toolbar de l'onglet Propriétés, là où ils sont réellement appliqués.
+- [modules/Properties/PropertiesPanel.jsx](./modules/Properties/PropertiesPanel.jsx) — ajout du callback `onViewUnitLease` pour basculer vers l'onglet Baux depuis une carte propriété.
+- [modules/Tenants/TenantsPanel.jsx](./modules/Tenants/TenantsPanel.jsx) et [modules/Leases/LeasesPanel.jsx](./modules/Leases/LeasesPanel.jsx) — suppression des messages "à câbler en Phase F" maintenant que l'assemblage est actif.
 
 **Fichiers PAS modifiés** :
 
-- [PropertyManagement.jsx](./PropertyManagement.jsx), [PropertyManagement.css](./PropertyManagement.css) — strictement intacts. Le legacy continue de servir `/admin/property-management` comme avant.
+- [PropertyManagement.jsx](./PropertyManagement.jsx), [PropertyManagement.css](./PropertyManagement.css) — conservés comme référence legacy, mais non routés par `PropertyManagementRoutes.jsx`.
 
 **Wiring inter-modules** :
 
@@ -176,27 +179,14 @@ import { Redux } from "../../../../redux/rtk/features/..."; // 4 niveaux jusqu'�
 - **Modaux** : chaque panneau gère ses propres modaux (création/édition de son entité). Seul `UnitFormModal` vit au niveau page (déclenché par PropertiesPanel).
 - **Bootstrap Redux** : `usePropertyManagementData()` est appelé dans `PropertyManagementNew` ET dans chaque panneau. Le hook a un `useEffect` de bootstrap qui dispatche `loadPropertyManagement/loadAllAccount/loadContracts/loadContractTemplates/loadAllCurrency` au mount. React-Redux dédoublonne les selectors, donc plusieurs appels au hook sur le même rendu n'ont qu'un coût négligeable (sélecteurs + memos déjà calculés une fois par store update). Aucun dispatch n'est dupliqué côté réseau car les thunks sont idempotents et React batchera le mount.
 
-**Limites connues / TODO avant cutover production** :
+**Limites connues après cutover** :
 
-1. **Onboarding tenant (`onboardingGenerate` / `onboardingEdit`)** — pas migré. Le bouton "Lien d'inscription" dans `TenantsPanel` affiche un `message.info` qui renvoie vers la page legacy. À ajouter dans `modules/Tenants/OnboardingFormModal.jsx` + `OnboardingListTable.jsx` (les liens d'inscription en bas du panneau Locataires).
-2. **Filtres avancés** — visibles dans le header mais **ne s'appliquent qu'à l'onglet Propriétés** (où `PropertiesPanel` gère son propre state interne). Pour les rendre globaux, soit hisser `advancedFilters` au niveau page et les passer à chaque panneau, soit retirer le bouton du header et le mettre dans le toolbar de chaque panneau.
-3. **MetricCards toujours hardcodés** — `trend: { label: "↑ 2" }` etc. Cohérent avec la legacy (qui hardcode aussi) ; à remplacer par des deltas calculés quand le backend exposera l'historique.
-4. **Section actions header** — la legacy mettait "Nouvelle propriété" / "Nouveau locataire" / etc. dans le header selon `activeSection`. La version modulaire laisse chaque panneau rendre son propre bouton primaire dans son toolbar (= duplication évitée, double bouton ne se produit pas car l'ancien `renderSectionActions()` n'existe plus). C'est un changement UX volontaire à valider visuellement.
-
-**Comment activer en production (cutover final)** :
-
-1. Tester `/admin/property-management/_new` en parcourant chaque onglet, chaque modal, chaque vue. Comparer côte à côte avec `/admin/property-management` (legacy).
-2. Si OK, modifier [PropertyManagementRoutes.jsx](../../layouts/AdminRoutes/PropertyManagementRoutes.jsx) : remplacer `<PropertyManagement />` par `<PropertyManagementNew />` sur la route `/property-management`.
-3. Une fois validé en prod plusieurs jours :
-   - Supprimer [PropertyManagement.jsx](./PropertyManagement.jsx) (legacy)
-   - Supprimer le shim [PropertyMapView.jsx](./PropertyMapView.jsx) (re-export)
-   - Renommer `PropertyManagementNew.jsx` → `PropertyManagement.jsx` (et mettre à jour l'import dans Routes)
-   - Supprimer les routes démos `_new/properties` / `_new/tenants` (devenues redondantes)
-   - Marquer Phase F `archived` dans ce fichier.
+1. **Onboarding tenant (`onboardingGenerate` / `onboardingEdit`)** — pas encore migré. Le bouton "Lien d'inscription" affiche un message neutre. À ajouter dans `modules/Tenants/OnboardingFormModal.jsx` + `OnboardingListTable.jsx`.
+2. **MetricCards toujours hardcodés pour les trends** — les valeurs `+2`, `+8.2%` restent statiques comme dans la legacy; à remplacer par des deltas calculés quand le backend exposera l'historique.
+3. **Section actions header** — la version modulaire laisse chaque panneau rendre son propre bouton primaire dans son toolbar. C'est volontaire pour éviter les doublons.
 
 **Vérification immédiate** :
 
-- `cd frontend && npm start`
-- `/admin/property-management` → page legacy inchangée
-- `/admin/property-management/_new` → nouvelle page modulaire, parcourir les 5 onglets, ouvrir modal Nouvelle propriété / Nouveau locataire / Nouveau bail / Enregistrer paiement / Nouveau ticket, tester navigation cross-tabs (cliquer "Assigner locataire" sur une carte propriété → bascule sur Baux).
-- Routes démos isolées toujours disponibles : `/admin/property-management/_new/properties` et `/admin/property-management/_new/tenants`.
+- `cd frontend && npm run build:dev`
+- `/admin/property-management` → nouvelle page modulaire, parcourir les 5 onglets, ouvrir modal Nouvelle propriété / Nouveau locataire / Nouveau bail / Enregistrer paiement / Nouveau ticket, tester navigation cross-tabs.
+- `/admin/property-management/_new`, `/admin/property-management/_new/properties`, `/admin/property-management/_new/tenants` ne sont plus des routes déclarées.

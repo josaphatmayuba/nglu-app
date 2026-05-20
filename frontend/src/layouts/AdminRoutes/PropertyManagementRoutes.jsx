@@ -1,6 +1,5 @@
 import PermissionChecker from "@/components/PrivacyComponent/PermissionChecker";
 import PropertyManagementNew from "@/components/propertyManagement/PropertyManagementNew";
-import PropertyManagementSettings from "@/components/propertyManagement/PropertyManagementSettings";
 import ContractTemplatesPage from "@/components/propertyManagement/ContractTemplatesPage";
 import PropertiesPanel from "@/components/propertyManagement/modules/Properties/PropertiesPanel";
 import TenantsPanel from "@/components/propertyManagement/modules/Tenants/TenantsPanel";

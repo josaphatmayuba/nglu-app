@@ -255,24 +255,21 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 
 ---
 
-## SCRUM-72 — Maintenance 4 vues ✅ TERMINÉE
+## Phase F - Cutover PropertyManagement
 
-**Objectif** : L'onglet Maintenance doit avoir un toggle de vue Kanban/Liste/Tableau/Calendrier, comme dans le mockup (lignes 3813-3830).
+**Objectif** : La page modulaire doit être la seule route active de `/admin/property-management` et ne plus afficher de restes de wiring Phase F dans l'interface.
 
-- [x] `MaintenancePanel.jsx` avec toggle 4 vues (Kanban par défaut, persisté localStorage)
-- [x] `MaintenanceKanbanView.jsx` — 3 swim lanes Ouvert/En cours/Résolu
-- [x] `MaintenanceTableView.jsx` — tableau dense Ticket/Propriété/Priorité/Assigné/Statut/Coût
-- [x] `MaintenanceCalendarView.jsx` — grille mensuelle, navigation prev/today/next
-- [x] `MaintenanceTicketCard.jsx` — vue liste (cartes tickets existantes)
-- [x] CSS ajouté en fin de `PropertyManagement.css` (banner SCRUM-72 : `.immo-kanban*`, `.immo-calendar*`, `.immo-table-row*`)
-- [x] Wired dans `PropertyManagementNew.jsx` (composant actif de production)
-- [x] Wired dans `PropertyManagement.jsx` (legacy — cohérence)
+- [x] Garder `PropertyManagementNew` comme composant de la route principale
+- [x] Supprimer les routes preview `_new`, `_new/properties`, `_new/tenants`
+- [x] Retirer le bouton de filtres avancés global du header, car les filtres s'appliquent dans l'onglet Propriétés
+- [x] Brancher l'action `Voir bail` des cartes Propriétés vers l'onglet Baux
+- [x] Nettoyer les messages utilisateur qui mentionnaient encore "Phase F"
 
 **Notes de travail** :
 
-- **2026-05-19** (commit `ef1b7f7`) — Implémenté par josaphatmayuba. Fichiers créés : `modules/Maintenance/MaintenancePanel.jsx`, `MaintenanceKanbanView.jsx`, `MaintenanceTableView.jsx`, `MaintenanceCalendarView.jsx`. CSS ajouté à `PropertyManagement.css`. `PropertyManagementNew.jsx` déjà wired au moment du commit.
-- **2026-05-19** (commit `2aff904`) — Audit mockup vs implémentation complet. Vérifié que toutes les phases 1-4 + SCRUM-72 sont conformes. Wired `MaintenancePanel` dans le legacy `PropertyManagement.jsx` pour cohérence (no-op en prod). Pas de Jira disponible dans la session — ticket SCRUM-72 à déplacer en `Done` manuellement.
-- **Validation** : build/typecheck non exécutés dans cette session — à faire avant déploiement AWS dev.
+- **2026-05-17** - Corrigé dans [PropertyManagementRoutes.jsx](../../layouts/AdminRoutes/PropertyManagementRoutes.jsx), [PropertyManagementNew.jsx](./PropertyManagementNew.jsx), [modules/Properties/PropertiesPanel.jsx](./modules/Properties/PropertiesPanel.jsx), [modules/Tenants/TenantsPanel.jsx](./modules/Tenants/TenantsPanel.jsx), [modules/Leases/LeasesPanel.jsx](./modules/Leases/LeasesPanel.jsx) et [MIGRATION_STATUS.md](./MIGRATION_STATUS.md).
+- Le legacy [PropertyManagement.jsx](./PropertyManagement.jsx) reste dans le repo comme référence non routée. Ne pas le supprimer tant que l'équipe n'a pas validé plusieurs jours en dev/prod.
+- Limite restante : onboarding locataire encore à migrer dans un vrai sous-module Locataires.
 
 ---
 

@@ -11,7 +11,6 @@ import {
   loadPropertyManagement,
   renewLease as renewLeaseThunk,
   saveLease,
-  sendContract,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
@@ -21,8 +20,7 @@ import LeaseGridView from "./LeaseGridView";
 import LeaseRenewModal from "./LeaseRenewModal";
 import LeaseTableView from "./LeaseTableView";
 import LeaseTimelineView from "./LeaseTimelineView";
-import SignedContractView from "./SignedContractView";
-import { isLeaseExpired, leaseContractFor, leaseDisplayInfo } from "./leaseUtils";
+import { leaseContractFor, leaseDisplayInfo } from "./leaseUtils";
 
 const LeasesPanel = ({
   onViewMaintenance,
@@ -35,7 +33,6 @@ const LeasesPanel = ({
   const [openLeaseMenu, setOpenLeaseMenu] = useState(null);
   const [leaseModal, setLeaseModal] = useState(null);
   const [contractModal, setContractModal] = useState(null);
-  const [signedContractId, setSignedContractId] = useState(null);
   const [renewModal, setRenewModal] = useState(null);
   const [contractLinks, setContractLinks] = useState({});
   const [savingLease, setSavingLease] = useState(false);
@@ -76,13 +73,8 @@ const LeasesPanel = ({
     const daysLeft = moment(lease.endDate).diff(moment(), "days");
     return daysLeft >= 0 && daysLeft <= 60;
   });
-  const expiredLeases = searchScope.filter(isLeaseExpired);
-  // SCRUM-62: a status="active" lease whose endDate is past must NOT count as
-  // active anymore — it belongs in Expirés. Same for any lease explicitly
-  // marked expired/ended in the backend.
-  const activeLeasesView = searchScope.filter(
-    (lease) => lease.status === "active" && !isLeaseExpired(lease),
-  );
+  const expiredLeases = searchScope.filter((lease) => lease.endDate && moment(lease.endDate).isBefore(moment()));
+  const activeLeasesView = searchScope.filter((lease) => lease.status === "active");
   const leasesView =
     leaseStatusFilter === "active" ? activeLeasesView
     : leaseStatusFilter === "renew" ? renewLeases
@@ -122,45 +114,6 @@ const LeasesPanel = ({
     setContractModal({ lease, contract });
   };
 
-  // Lookup priority : runtime cache (filled after a sendContract call) →
-  // any URL-like field the backend may expose on the contract row.
-  const getContractLink = (contract) =>
-    contractLinks[contract?.id] ||
-    contract?.signingUrl ||
-    contract?.signatureUrl ||
-    contract?.signatureLink ||
-    contract?.publicUrl ||
-    contract?.url ||
-    "";
-
-  // Returns the signing URL for a contract, generating one on the fly if
-  // none exists yet (calls POST /contracts/:id/send which returns the link).
-  const ensureSigningLink = async (contract) => {
-    if (!contract?.id) return "";
-    const existing = getContractLink(contract);
-    if (existing) return existing;
-    const response = await dispatch(sendContract(contract.id));
-    const link = response.payload?.data?.signingUrl || "";
-    if (link) {
-      setContractLinks((prev) => ({ ...prev, [contract.id]: link }));
-      await dispatch(loadContracts());
-    }
-    return link;
-  };
-
-  const copyText = async (value) => {
-    if (!value) {
-      message.warning("Aucun lien disponible pour ce bail.");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(value);
-      message.success("Lien copié");
-    } catch {
-      message.error("Échec de la copie. Copiez manuellement : " + value);
-    }
-  };
-
   const handleLeaseAction = (action, lease, contract) => {
     setOpenLeaseMenu(null);
     if (action === "detail" || action === "edit") {
@@ -168,14 +121,7 @@ const LeasesPanel = ({
       return;
     }
     if (action === "contract" || action === "pdf") {
-      // Pour un contrat déjà signé : on ouvre la vue read-only (avec
-      // signature visible et bouton Télécharger PDF). Sinon, on garde
-      // l'ancien workflow de génération/envoi.
-      if (contract?.id && contract.status === "signed") {
-        setSignedContractId(contract.id);
-      } else {
-        openContractWorkflow(lease, contract);
-      }
+      openContractWorkflow(lease, contract);
       return;
     }
     if (action === "renew") {
@@ -188,27 +134,16 @@ const LeasesPanel = ({
     }
     if (action === "payments") {
       if (onViewPayments) onViewPayments(lease);
-      else message.info("Le lien vers le module Paiements sera branché en Phase F.");
+      else message.info("Ouvrez l'onglet Paiements pour consulter les paiements de ce bail.");
       return;
     }
     if (action === "maintenance") {
       if (onViewMaintenance) onViewMaintenance(lease);
-      else message.info("Le lien vers le module Maintenance sera branché en Phase F.");
+      else message.info("Ouvrez l'onglet Maintenance pour consulter les tickets de ce bail.");
       return;
     }
-    if (action === "copyLink") {
-      ensureSigningLink(contract).then(copyText);
-      return;
-    }
-    if (action === "resend") {
-      ensureSigningLink(contract).then((link) => {
-        if (link) message.success("Lien de signature renvoyé au locataire.");
-        else message.error("Impossible de récupérer le lien de signature.");
-      });
-      return;
-    }
-    if (["cancelSend", "archive"].includes(action)) {
-      message.info("Cette action sera finalisée dans l'assemblage Phase F.");
+    if (["resend", "copyLink", "cancelSend", "archive"].includes(action)) {
+      message.info("Cette action sera ajoutée dans le workflow contrat.");
     }
   };
 
@@ -344,11 +279,6 @@ const LeasesPanel = ({
           units={safeUnits}
         />
       )}
-      <SignedContractView
-        open={Boolean(signedContractId)}
-        contractId={signedContractId}
-        onClose={() => setSignedContractId(null)}
-      />
     </div>
   );
 };
