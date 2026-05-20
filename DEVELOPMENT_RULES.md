@@ -63,6 +63,12 @@ Rules:
 - After deploying dev frontend, verify the bundle target with `npm run assert:api:dev` locally or by grepping the deployed dist for `https://dev.ongdngolu.org/api`.
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
 
+Manual AWS deployment SSH key note for agents:
+
+- AWS frontend/backend server key filename: `LightsailDefaultKey-ca-central-1 (3).pem`
+- AWS database server key filename: `LightsailDefaultKey-us-east-1-database.pem`
+- Do not commit PEM key contents. This note is only to identify which local key file an agent should use when manual deployment is required.
+
 Safe AWS dev frontend deployment pattern:
 
 ```bash
