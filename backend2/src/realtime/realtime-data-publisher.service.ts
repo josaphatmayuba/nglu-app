@@ -6,6 +6,7 @@ import {
   DATA_UPDATE_CHANNEL,
   type BuildDataUpdatedEventInput,
 } from "./data-update-event";
+import { EventBusService } from "./event-bus.service";
 
 @Injectable()
 export class RealtimeDataPublisher implements OnModuleDestroy {
@@ -13,8 +14,14 @@ export class RealtimeDataPublisher implements OnModuleDestroy {
   private redis: Redis | null = null;
   private disabledWarningLogged = false;
 
+  constructor(private readonly bus: EventBusService) {}
+
   async publishDataUpdated(input: BuildDataUpdatedEventInput) {
     const event = buildDataUpdatedEvent(input);
+
+    // Always emit in-process so SSE connections on this instance receive it immediately
+    this.bus.publish(event);
+
     const client = this.client();
 
     if (!client) {
@@ -45,6 +52,7 @@ export class RealtimeDataPublisher implements OnModuleDestroy {
 
   private client() {
     if (this.redis) return this.redis;
+    if (!env.redis.enabled) return null;
     if (!env.redis.url && !env.redis.host) return null;
 
     this.redis = env.redis.url
@@ -74,7 +82,7 @@ export class RealtimeDataPublisher implements OnModuleDestroy {
   private warnDisabled() {
     if (this.disabledWarningLogged) return;
     this.disabledWarningLogged = true;
-    this.logger.warn("Redis data publisher disabled: configure REDIS_HOST or REDIS_URL to enable Pub/Sub.");
+    this.logger.warn("Redis data publisher disabled: set REDIS_ENABLED=true and configure REDIS_HOST or REDIS_URL to enable Pub/Sub.");
   }
 
   private errorMessage(error: unknown) {

@@ -19,6 +19,7 @@ export const env = {
     from: process.env.SMTP_FROM || "noreply@nglu.app",
   },
   redis: {
+    enabled: process.env.REDIS_ENABLED !== "false",
     url: process.env.REDIS_URL || "",
     host: process.env.REDIS_HOST || "",
     port: Number(process.env.REDIS_PORT || 6379),

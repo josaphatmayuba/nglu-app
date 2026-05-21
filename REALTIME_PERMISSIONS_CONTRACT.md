@@ -83,6 +83,7 @@ The publisher is optional at runtime. If Redis is not configured or unavailable,
 Environment variables:
 
 - `REDIS_URL`
+- `REDIS_ENABLED` defaults to `true`; set `false` to disable Redis Pub/Sub without blocking business writes.
 - `REDIS_HOST`
 - `REDIS_PORT`
 - `REDIS_PASSWORD`

@@ -6,6 +6,7 @@ import {
   PERMISSIONS_UPDATE_CHANNEL,
   type BuildPermissionsUpdatedEventInput,
 } from "./permissions-update-event";
+import { EventBusService } from "./event-bus.service";
 
 @Injectable()
 export class RealtimePermissionsPublisher implements OnModuleDestroy {
@@ -13,8 +14,13 @@ export class RealtimePermissionsPublisher implements OnModuleDestroy {
   private redis: Redis | null = null;
   private disabledWarningLogged = false;
 
+  constructor(private readonly bus: EventBusService) {}
+
   async publishPermissionsUpdated(input: BuildPermissionsUpdatedEventInput) {
     const event = buildPermissionsUpdatedEvent(input);
+
+    // Always emit in-process so SSE connections on this instance receive it immediately
+    this.bus.publish(event);
     const client = this.client();
 
     if (!client) {
@@ -45,6 +51,7 @@ export class RealtimePermissionsPublisher implements OnModuleDestroy {
 
   private client() {
     if (this.redis) return this.redis;
+    if (!env.redis.enabled) return null;
     if (!env.redis.url && !env.redis.host) return null;
 
     this.redis = env.redis.url
@@ -74,7 +81,7 @@ export class RealtimePermissionsPublisher implements OnModuleDestroy {
   private warnDisabled() {
     if (this.disabledWarningLogged) return;
     this.disabledWarningLogged = true;
-    this.logger.warn("Redis permissions publisher disabled: configure REDIS_HOST or REDIS_URL to enable Pub/Sub.");
+    this.logger.warn("Redis permissions publisher disabled: set REDIS_ENABLED=true and configure REDIS_HOST or REDIS_URL to enable Pub/Sub.");
   }
 
   private errorMessage(error: unknown) {

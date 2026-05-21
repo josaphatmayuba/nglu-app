@@ -10,6 +10,10 @@ import SideNav from "../components/SideNav/SideNav";
 import { loadPermissionById } from "../redux/rtk/features/auth/authSlice";
 import { cn } from "../utils/functions";
 import { Link } from "react-router-dom";
+import { startRealtimeClient, stopRealtimeClient, onRealtimeEvent } from "../realtime/realtimeClient";
+import { createDataUpdateHandler } from "../realtime/dataUpdateHandlers";
+
+const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
 
 function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -37,6 +41,26 @@ function AdminLayout() {
       dispatch(loadPermissionById(roleId));
     }
   }, [dispatch, error, permissionLoad, permissions, roleId]);
+
+  useEffect(() => {
+    startRealtimeClient();
+    const handler = createDataUpdateHandler(dispatch);
+    const unsub = onRealtimeEvent("data.updated", handler);
+    return () => { unsub(); stopRealtimeClient(); };
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!roleId || localStorage.getItem("isLogged") !== "true") return undefined;
+
+    const refreshPermissions = () => {
+      if (localStorage.getItem("isLogged") === "true") {
+        dispatch(loadPermissionById(roleId));
+      }
+    };
+
+    const timer = window.setInterval(refreshPermissions, PERMISSIONS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [dispatch, roleId]);
 
   useEffect(() => {
     setImageError(false);

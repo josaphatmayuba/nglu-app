@@ -20,6 +20,9 @@ module.exports = [
   { method: 'POST', prefix: '/customer/login',                auth: false },
   { method: 'POST', prefix: '/googlelogin/login',             auth: false },
 
+  // ── Server-Sent Events (JWT requis) ───────────
+  { method: 'GET',  prefix: '/events/me',                      auth: true  },
+
   // ── Health & config (public) ───────────────────
   { method: 'GET',  prefix: '/health',                        auth: false },
   { method: 'GET',  prefix: '/setting',                       auth: false },
