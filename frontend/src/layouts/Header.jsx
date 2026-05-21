@@ -4,10 +4,8 @@ import { Skeleton } from "antd";
 import {
   Bell,
   LogOut,
-  Menu as MenuIcon,
   Moon,
   Plus,
-  Search,
   Sun,
   User,
   LayoutGrid,
@@ -93,21 +91,11 @@ function Header({ onPress, data, loading }) {
 
   return (
     <>
-      <div className="sticky top-0 z-10 w-full h-16 bg-white border-b border-ink-200 px-3 md:px-6 flex items-center justify-between gap-2">
-        {/* Left: hamburger (mobile) + logo + breadcrumb */}
+      <div className="sticky top-0 z-10 w-full h-16 bg-white border-b border-ink-200 px-3 md:px-6 flex items-center justify-between gap-2 overflow-hidden">
+        {/* Left: mobile logo + desktop breadcrumb */}
         <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {isLogged && (
-            <button
-              onClick={() => onPress && onPress()}
-              className="p-2 hover:bg-ink-100 rounded-lg text-ink-700 hidden sm:block md:hidden -ml-1"
-              title="Menu"
-            >
-              <MenuIcon className="w-5 h-5" />
-            </button>
-          )}
-
           {/* Mobile logo */}
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-2 md:hidden min-w-0">
             <Skeleton loading={loading} active paragraph={false}>
               {data?.logo && !imageError ? (
                 <img
@@ -117,7 +105,7 @@ function Header({ onPress, data, loading }) {
                   onError={() => setImageError(true)}
                 />
               ) : (
-                <span className="font-semibold text-ink-900 text-sm">
+                <span className="font-semibold text-ink-900 text-sm truncate max-w-[120px]">
                   {data?.companyName || "NGOLU"}
                 </span>
               )}
@@ -137,22 +125,25 @@ function Header({ onPress, data, loading }) {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
           {isLogged && (
             <>
-              {/* Search — visible on xs only (sm+ uses sidebar/global search) */}
+              {/* Mobile navigation entry point */}
               <button
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition sm:hidden"
-                title="Rechercher"
+                onClick={() => onPress && onPress()}
+                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition md:hidden"
+                title="Menu CRM"
+                aria-label="Ouvrir le menu CRM"
               >
-                <Search className="w-5 h-5" />
+                <LayoutGrid className="w-5 h-5" />
               </button>
 
-              {/* App switcher — visible on all breakpoints; G shortcut on desktop */}
+              {/* App switcher desktop shortcut */}
               <button
                 onClick={() => setAppSwitcherOpen(true)}
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
+                className="hidden md:block p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
                 title="Toutes les apps (G)"
+                aria-label="Ouvrir toutes les apps"
               >
                 <LayoutGrid className="w-5 h-5" />
               </button>

@@ -281,3 +281,24 @@ Pour chaque tâche entamée :
 1. Cocher la case `[ ]` -> `[x]`
 2. Ajouter une ligne dans **Notes de travail** de la phase avec : date, ce qui a été fait, fichiers touchés, problèmes rencontrés
 3. Si un choix d'architecture est fait (ex. lib carte), le documenter ici avant de coder
+
+## Correctif mobile CRM Header - SCRUM-71
+
+**Objectif** : En mobile, le header CRM ne doit pas empiler hamburger, logo, recherche, grille/apps, cloche, bouton plus et avatar sur la meme ligne.
+
+- [x] Supprimer le bouton hamburger mobile du header.
+- [x] Utiliser l'icone grille comme point d'entree unique de navigation mobile.
+- [x] Conserver l'App Switcher sur desktop uniquement.
+- [x] Limiter le logo/nom entreprise pour eviter les debordements.
+
+**Decision UX** :
+
+- Sur mobile, l'icone grille ouvre le drawer de navigation CRM via `onPress`.
+- Sur desktop, la meme icone reste l'App Switcher, avec le raccourci clavier `G`.
+- Le bouton recherche mobile du header est retire pour reduire la surcharge; les recherches restent gerees dans les pages metier.
+
+**Fichiers** :
+
+- [Header.jsx](../../layouts/Header.jsx)
+
+---
