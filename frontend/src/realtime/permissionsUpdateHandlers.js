@@ -29,13 +29,25 @@ export function createPermissionsUpdateHandler(dispatch, navigate, toast) {
 
     if (!isForThisUser) return;
 
+    const nextRoleId =
+      event?.reason === "user-role-updated" &&
+      currentUserId > 0 &&
+      userIds.includes(currentUserId) &&
+      eventRoleId > 0
+        ? eventRoleId
+        : currentRoleId;
+
+    if (nextRoleId !== currentRoleId) {
+      localStorage.setItem("roleId", String(nextRoleId));
+    }
+
     // Deduplicate rapid bursts — skip if version is older than last handled
     const version = Number(event?.version ?? 0);
     if (version > 0 && version <= lastHandledVersion) return;
     lastHandledVersion = version;
 
     // Reload permissions from the API
-    const result = await dispatch(loadPermissionById(currentRoleId));
+    const result = await dispatch(loadPermissionById(nextRoleId));
     const newPermissions = result?.payload?.data?.permissions ?? null;
 
     // Notify the user

@@ -45,6 +45,8 @@ const refreshAccessToken = async () => {
     const data = await response.json();
     if (data?.token) {
       localStorage.setItem("access-token", data.token);
+      if (data.roleId) localStorage.setItem("roleId", data.roleId);
+      if (data.role) localStorage.setItem("role", data.role);
       return data.token;
     } else {
       // localStorage.clear();

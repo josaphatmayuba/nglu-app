@@ -142,7 +142,7 @@ export class AuthService {
   }
 
   async refreshAccessToken(refreshToken: string, ctx: AuditContext = {}) {
-    let payload: { sub: number; role: string };
+    let payload: { sub: number; role?: string; roleId?: number };
 
     try {
       payload = this.jwtService.verify(refreshToken, { secret: env.refreshSecret, algorithms: ["HS256"] });
@@ -177,6 +177,6 @@ export class AuthService {
       { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
     );
 
-    return { token: accessToken };
+    return { token: accessToken, roleId: role?.id, role: role?.name ?? null };
   }
 }

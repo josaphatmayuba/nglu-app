@@ -1,12 +1,19 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { eq } from "drizzle-orm";
 import { env } from "../../config/env";
+import { DRIZZLE } from "../../database/database.constants";
+import { users } from "../../database/schema";
+import type { Database } from "../../database/types";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @Inject(DRIZZLE) private readonly db: Database,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const authHeader: string | undefined = request.headers["authorization"];
 
@@ -22,12 +29,40 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing or invalid Authorization header");
     }
 
+    let payload: { sub?: number; roleId?: number; role?: string };
     try {
-      const payload = this.jwtService.verify(token, { secret: env.jwtSecret, algorithms: ["HS256"] });
-      request.user = payload;
-      return true;
+      payload = this.jwtService.verify(token, { secret: env.jwtSecret, algorithms: ["HS256"] }) as typeof payload;
     } catch {
       throw new UnauthorizedException("Invalid or expired token");
+    }
+
+    await this.assertCurrentAuthContext(payload);
+    request.user = payload;
+    return true;
+  }
+
+  private async assertCurrentAuthContext(payload: { sub?: number; roleId?: number }) {
+    if (!payload.sub || !payload.roleId) {
+      throw new UnauthorizedException("Invalid token payload");
+    }
+
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        roleId: users.roleId,
+        isLogin: users.isLogin,
+        status: users.status,
+      })
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1);
+
+    if (!user || user.status !== "true" || user.isLogin !== "true") {
+      throw new UnauthorizedException("Invalid auth context");
+    }
+
+    if (user.roleId !== payload.roleId) {
+      throw new UnauthorizedException("AUTH_CONTEXT_STALE");
     }
   }
 }
