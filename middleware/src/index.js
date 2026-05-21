@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 3001;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://backend2:8001';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme_in_prod';
 
+// Trust the nginx reverse proxy (so express-rate-limit reads the real client IP
+// from X-Forwarded-For instead of the proxy's internal IP)
+app.set('trust proxy', 1);
+
 // ── Logging ───────────────────────────────────────────────
 app.use(morgan(':method :url :status :response-time ms - :remote-addr'));
 

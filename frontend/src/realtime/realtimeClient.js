@@ -4,7 +4,7 @@
  * Listeners registered before connection are queued and replayed on connect.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || "";
+const BASE_URL = import.meta.env.VITE_APP_API || "";
 const SSE_PATH = `${BASE_URL}/events/me`;
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 2_000;
