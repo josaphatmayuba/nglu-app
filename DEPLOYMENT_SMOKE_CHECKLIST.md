@@ -76,6 +76,12 @@ curl -I https://ongdngolu.org/admin/auth/login
 curl -I https://ongdngolu.org/api/health
 ```
 
+Automated equivalent:
+
+```bash
+node scripts/smoke-routing-contract.mjs
+```
+
 Expected API body:
 
 ```bash
@@ -83,6 +89,12 @@ curl https://ongdngolu.org/api/health
 ```
 
 The response should include `"status":"ok"`.
+
+For dev, run the same contract against the dev domain:
+
+```bash
+node scripts/smoke-routing-contract.mjs --base https://dev.ongdngolu.org
+```
 
 ## 4. AWS Dev Server Smoke
 

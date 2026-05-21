@@ -44,4 +44,11 @@ curl -I https://ongdngolu.org/admin/auth/login
 curl -I https://ongdngolu.org/api/health
 ```
 
+Or run the automated HTTP smoke:
+
+```bash
+node scripts/smoke-routing-contract.mjs
+node scripts/smoke-routing-contract.mjs --base https://dev.ongdngolu.org
+```
+
 For the complete post-deploy smoke checklist, use `DEPLOYMENT_SMOKE_CHECKLIST.md`.

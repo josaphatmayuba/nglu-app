@@ -26,6 +26,7 @@ Verifier le contrat avant de merger tout changement de routing :
 
 ```bash
 node scripts/check-routing-contract.mjs
+node scripts/smoke-routing-contract.mjs
 ```
 
 Voir aussi `DEVELOPMENT_RULES.md` pour les règles globales, notamment la politique de suppression logique: toute suppression fonctionnelle doit mettre `status=false` sauf validation explicite d'une suppression physique.
