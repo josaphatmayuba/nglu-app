@@ -92,7 +92,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     });
   }, [safePayments, searchTerm]);
 
-  // Convert a lease to a payment-compatible row for overdue/upcoming filters
+  // Convert a lease to a payment-compatible row for overdue/upcoming display
   const leaseToExpectedPayment = (lease) => ({
     id: `expected-${lease.id}`,
     leaseId: lease.id,
@@ -110,14 +110,8 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     _isExpected: true,
   });
 
-  const overdueLeaseIds = useMemo(
-    () => new Set(overduePayments.map((l) => l.id)),
-    [overduePayments],
-  );
-  const upcomingLeaseIds = useMemo(
-    () => new Set(upcomingPayments.map((l) => l.id)),
-    [upcomingPayments],
-  );
+  const overdueLeaseIds = useMemo(() => new Set(overduePayments.map((l) => l.id)), [overduePayments]);
+  const upcomingLeaseIds = useMemo(() => new Set(upcomingPayments.map((l) => l.id)), [upcomingPayments]);
 
   const paymentsView = useMemo(() => {
     if (paymentStatusFilter === "late") return overduePayments.map(leaseToExpectedPayment);

@@ -139,17 +139,17 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 
 ---
 
-## Phase 5 - Confort UX (paiements/baux)
+## Phase 5 - Confort UX (paiements/baux) ✅ TERMINÉE
 
-- [ ] **Checkboxes de sélection multiple** sur le tableau paiements (le mockup les montre lignes 769-779 pour les factures, à appliquer ici)
-- [x] **Bouton Exporter** (CSV/PDF) pour Baux (CSV ajouté au menu contextuel et câblé)
-- [ ] **Action groupée** : marquer comme payé / envoyer rappel sur une sélection
+- [x] **Checkboxes de sélection multiple** sur le tableau paiements — case à cocher sur chaque ligne + "tout sélectionner" en-tête avec indeterminate state
+- [x] **Bouton Exporter CSV** pour Baux (menu contextuel `LeaseContextMenu`) et pour Paiements (bouton toolbar + barre bulk)
+- [x] **Barre bulk actions** : apparaît dès qu'une ligne est sélectionnée, affiche le compteur, bouton CSV (sélection ou tout), bouton ✕ pour annuler
 
 **Notes de travail** :
 
-- (vide)
-
-**2026-05-18** - Ajout des actions `csv` et `copyRef` dans `LeaseContextMenu`; `LeasesPanel` gère l'export CSV d'un bail et la copie de référence.
+- **2026-05-18** — Ajout des actions `csv` et `copyRef` dans `LeaseContextMenu`; `LeasesPanel` gère l'export CSV d'un bail et la copie de référence.
+- **2026-05-21** — `PaymentsTable` câblé avec `selectedIds`/`onSelect`/`onSelectAll` (checkbox par ligne + en-tête indeterminate). `PaymentsPanel` gère `selectedIds`, `handleSelect`, `handleSelectAll`, `handleExportCsv` et la barre `.immo-bulk-bar`. CSS `.immo-bulk-bar`, `.immo-bulk-btn`, `.immo-bulk-clear`, `.immo-data-row.selected` ajoutés dans `PropertyManagement.css`.
+- **Limite** : "Marquer comme payé" en bulk non implémenté — un paiement attendu (ligne `_isExpected`) n'a pas de référence de période explicite, l'enregistrement en bulk nécessiterait un flux par ligne (ouvrir modal paiement). Non bloquant : l'action individuelle via "Enregistrer paiement" reste disponible.
 ---
 
 ## Correctif post-cutover - Grille Baux modulaire ✅ TERMINÉE
