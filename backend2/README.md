@@ -1,6 +1,6 @@
 # NgluERP Backend2
 
-Second backend for progressive migration from Laravel to NestJS.
+Active backend API for NgluERP. The Laravel backend in `../backend/` is deprecated and kept for historical migration reference only.
 
 Stack:
 
@@ -69,6 +69,8 @@ Stack:
 - `PUT|PATCH|DELETE /property-management/maintenance/:id`
 
 These read the same MySQL tables used by the Laravel backend.
+
+New API work must be implemented here, not in the deprecated Laravel backend.
 
 ## Development
 

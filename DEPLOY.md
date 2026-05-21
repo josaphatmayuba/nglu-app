@@ -32,6 +32,24 @@ Voir aussi `DEVELOPMENT_RULES.md` pour les règles globales, notamment la politi
 
 ---
 
+## Statut backend actif et deprecation Laravel
+
+`backend2/` (NestJS, port local `8001`) est l'API active pour le local, le dev et la production. Toute nouvelle API, regle metier, correction de comportement serveur ou migration applicative doit etre faite dans `backend2/`, avec le schema Drizzle dans `backend2/src/database/schema.ts`.
+
+`backend/` (Laravel, port local `8000`) est deprecie. Il reste dans le depot pour l'historique de migration, la reference des anciennes migrations et les verifications de compatibilite. Ne pas y ajouter de nouveaux endpoints ni de nouvelles fonctionnalites, sauf ticket explicite de nettoyage/documentation Laravel.
+
+La base MySQL reste partagee: le schema initial cree pendant la phase Laravel est encore consomme par NestJS. Les changements de schema courants doivent etre portes cote backend2/migrations actuelles, sans modifier Laravel par habitude.
+
+En local, le service Laravel peut etre arrete quand il n'est pas necessaire:
+
+```bash
+docker compose stop backend
+```
+
+Garder `mysql`, `backend2`, `middleware` et `frontend` actifs pour tester l'application courante.
+
+---
+
 ## 1. Workflow Local
 
 Démarre l'application complète sur ta machine pour développer rapidement.

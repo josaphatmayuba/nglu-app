@@ -191,6 +191,12 @@ docker-compose exec mysql mysqldump -u nglu_user -ppassword nglu_db > backup.sql
 - **Backend NestJS (port 8001)**: Est l'API active pour toutes les nouvelles fonctionnalités
 - **Base de données**: Le schéma Laravel (67 tables) est toujours utilisé par NestJS via Drizzle ORM
 
+### Plan de deprecation Laravel
+- **Historique seulement**: `backend/` reste dans le depot pour comprendre les anciennes migrations, les anciennes routes et les decisions de migration.
+- **Arret possible**: le container Laravel `backend` peut etre arrete en local/dev quand aucune verification historique n'est requise. Garder `mysql`, `backend2`, `middleware` et `frontend` actifs pour l'application courante.
+- **Schema partage**: la base MySQL conserve les tables creees pendant la phase Laravel. NestJS les consomme via `backend2/src/database/schema.ts`.
+- **Regle de developpement**: ne pas ajouter de nouvelles APIs, corrections metier ou fonctionnalites dans `backend/`. Tout nouveau travail backend doit aller dans `backend2/`, sauf ticket explicite de nettoyage Laravel.
+
 ### 📋 Étapes Suggérées
 1. **Vérifier l'API NestJS**: Accéder à `http://localhost:8001/api-docs` (Swagger)
 2. **Accéder au Frontend**: Accéder à `http://localhost:3000`
