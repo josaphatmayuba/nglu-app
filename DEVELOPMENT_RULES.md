@@ -77,6 +77,8 @@ Rules:
 - Announce before starting an AWS deploy and say which environment, commit, and services are being updated.
 - After deployment, comment in Jira with the commit, environment, commands/validation, and any blockers.
 - Do not interrupt, rebuild, restart, or overwrite a running deployment started by another agent unless the user explicitly asks you to take over.
+- After deploying to AWS dev, validate the deployed app in a real browser at `https://dev.ongdngolu.org`: open the UI, log in with the demo account `demo` / `5555`, navigate to the relevant screen, and confirm the implemented work is present and functional.
+- During AWS dev browser validation, inspect failed network requests and visible UI errors. If a bug appears, determine whether it was caused by the agent's change/deploy. If it was caused by the agent, fix it before handoff. If it is unrelated, create a Jira bug with environment, steps to reproduce, actual result, expected result, and evidence from the browser/API/logs.
 
 Manual AWS deployment SSH key note for agents:
 
