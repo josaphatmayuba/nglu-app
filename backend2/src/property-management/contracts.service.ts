@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import { GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, ne, sql } from "drizzle-orm";
 import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -168,6 +168,7 @@ export class ContractsService {
         createdAt: realEstateContracts.createdAt,
       })
       .from(realEstateContracts)
+      .where(ne(realEstateContracts.status, "deleted"))
       .orderBy(desc(realEstateContracts.id));
   }
 
@@ -374,8 +375,10 @@ export class ContractsService {
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
 
-    await this.db.delete(realEstateContractAuditLogs).where(eq(realEstateContractAuditLogs.contractId, id));
-    await this.db.delete(realEstateContracts).where(eq(realEstateContracts.id, id));
+    await this.db
+      .update(realEstateContracts)
+      .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateContracts.id, id));
     return { message: "Contract deleted." };
   }
 

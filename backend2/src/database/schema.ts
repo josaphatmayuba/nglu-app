@@ -271,6 +271,7 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   paymentDate: date("payment_date", { mode: "string" }),
   notes: text("notes"),
   receiptUrl: varchar("receipt_url", { length: 500 }),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -301,6 +302,7 @@ export const realEstateContractTemplates = mysqlTable("real_estate_contract_temp
   body: text("body").notNull(),
   description: varchar("description", { length: 500 }),
   isActive: boolean("is_active").default(false).notNull(),
+  isDeleted: tinyint("is_deleted").default(0).notNull(),
   version: int("version").default(1).notNull(),
   createdBy: bigint("created_by", { mode: "number" }),
   updatedBy: bigint("updated_by", { mode: "number" }),

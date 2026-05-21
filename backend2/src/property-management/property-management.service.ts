@@ -578,7 +578,7 @@ export class PropertyManagementService {
   }
 
   leases() {
-    return this.leaseQuery().orderBy(desc(realEstateLeases.id));
+    return this.leaseQuery().where(ne(realEstateLeases.status, "cancelled")).orderBy(desc(realEstateLeases.id));
   }
 
   async createLease(input: CreateLeaseDto) {
@@ -673,7 +673,10 @@ export class PropertyManagementService {
   async deleteLease(id: number) {
     const lease = await this.getLeaseOrThrow(id);
     await this.setUnitStatus(lease.unitId, "vacant");
-    await this.db.delete(realEstateLeases).where(eq(realEstateLeases.id, id));
+    await this.db
+      .update(realEstateLeases)
+      .set({ status: "cancelled", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateLeases.id, id));
     await this.publishLeaseUpdate("deleted", id, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
@@ -888,7 +891,9 @@ export class PropertyManagementService {
   }
 
   async findLease(id: number) {
-    const rows = await this.leaseQuery().where(eq(realEstateLeases.id, id)).limit(1);
+    const rows = await this.leaseQuery()
+      .where(and(ne(realEstateLeases.status, "cancelled"), eq(realEstateLeases.id, id)))
+      .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
   }
@@ -910,7 +915,7 @@ export class PropertyManagementService {
     return this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(eq(realEstateMaintenanceCosts.ticketId, ticketId))
+      .where(and(eq(realEstateMaintenanceCosts.ticketId, ticketId), eq(realEstateMaintenanceCosts.isActive, 1)))
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
 
@@ -981,10 +986,13 @@ export class PropertyManagementService {
     const rows = await this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(eq(realEstateMaintenanceCosts.id, costId))
+      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.isActive, 1)))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
-    await this.db.delete(realEstateMaintenanceCosts).where(eq(realEstateMaintenanceCosts.id, costId));
+    await this.db
+      .update(realEstateMaintenanceCosts)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateMaintenanceCosts.id, costId));
     return { message: "Deleted successfully." };
   }
 

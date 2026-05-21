@@ -18,6 +18,7 @@ export class ContractTemplatesService {
     return this.db
       .select()
       .from(realEstateContractTemplates)
+      .where(eq(realEstateContractTemplates.isDeleted, 0))
       .orderBy(asc(realEstateContractTemplates.type), desc(realEstateContractTemplates.isActive), desc(realEstateContractTemplates.id));
   }
 
@@ -148,7 +149,10 @@ export class ContractTemplatesService {
       );
     }
 
-    await this.db.delete(realEstateContractTemplates).where(eq(realEstateContractTemplates.id, id));
+    await this.db
+      .update(realEstateContractTemplates)
+      .set({ isDeleted: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateContractTemplates.id, id));
     return { message: "Modèle supprimé." };
   }
 
