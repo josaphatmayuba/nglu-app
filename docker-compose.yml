@@ -16,8 +16,12 @@ services:
     networks:
       - nglu_network
 
-  # Backend - Laravel API
+  # Backend - Laravel API (deprecated, historical only).
+  # Not started by default. Use:
+  # docker compose --profile legacy-laravel up -d backend
   backend:
+    profiles:
+      - legacy-laravel
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -90,7 +94,7 @@ services:
       - /app/node_modules
     environment:
       VITE_APP_API: ${VITE_APP_API:-http://localhost:8001}
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
       VITE_APP_API_NODE: ${VITE_APP_API_NODE:-http://localhost:8001}
     networks:
       - nglu_network

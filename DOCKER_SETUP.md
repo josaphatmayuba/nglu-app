@@ -1,164 +1,186 @@
 # NgluERP - Docker Setup Guide
 
 ## Prerequisites
+
 - Docker Desktop installed
 - Docker Compose installed
 
+## Current Backend Rule
+
+`backend2/` is the active NestJS API. Local frontend calls must target `http://localhost:8001`.
+
+`backend/` is the deprecated Laravel backend. It is kept for historical reference and legacy checks only. Do not add new APIs, business rules, or schema work in Laravel unless a Jira ticket explicitly asks for legacy cleanup.
+
 ## Quick Start
 
-### 1. Copy the docker environment files (or use automatic setup via docker-compose)
+### 1. Copy the Docker environment files
+
 ```bash
-# Backend
-cp backend/.env.docker backend/.env
+# Active backend
+cp backend2/.env.example backend2/.env
 
 # Frontend
 cp frontend/.env.docker frontend/.env
 ```
 
-### 2. Start all services
+If `backend2/.env.example` is not present in your checkout, use the Docker Compose defaults and keep the frontend API variables on port `8001`.
+
+### 2. Start the current local stack
+
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-This will start:
-- **Backend API**: http://localhost:8000
-- **Frontend App**: http://localhost:3000
-- **Database**: MySQL on port 3306
-- **Mailpit** (email testing): http://localhost:8025
+This starts:
+
+- Backend2 API (NestJS, active): `http://localhost:8001`
+- Frontend app: `http://localhost:3000`
+- Database: MySQL on `localhost:3306`
+- Marketing site: `http://localhost:3002`
+- Mailpit: `http://localhost:8025`
+- phpMyAdmin: `http://localhost:8080`
+
+The Laravel service does not start by default. Start it only for historical checks:
+
+```bash
+docker compose --profile legacy-laravel up -d backend
+```
 
 ### 3. Wait for services to be ready
-The first startup takes a few minutes as it:
-- Installs composer dependencies
-- Generates Laravel app key
-- Runs database migrations
-- Installs npm dependencies
+
+The first startup takes a few minutes as it builds containers, installs dependencies, runs backend2 Drizzle migrations/seeders, and starts Vite.
 
 Check logs:
+
 ```bash
-docker-compose logs -f backend
-docker-compose logs -f backend2
-docker-compose logs -f frontend
+docker compose logs -f backend2
+docker compose logs -f frontend
+docker compose logs -f mysql
 ```
 
 ## Useful Docker Commands
 
 ### View logs
-```bash
-# All services
-docker-compose logs -f
 
-# Specific service
-docker-compose logs -f backend
-docker-compose logs -f backend2
-docker-compose logs -f frontend
+```bash
+docker compose logs -f
+docker compose logs -f backend2
+docker compose logs -f frontend
 ```
 
 ### Stop services
+
 ```bash
-docker-compose stop
+docker compose stop
 ```
 
 ### Restart services
+
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
-### Down (remove containers)
+### Down
+
 ```bash
-docker-compose down
+docker compose down
 ```
 
-### Execute commands in container
+### Execute commands in containers
+
 ```bash
-# Run Laravel artisan commands
-docker-compose exec backend php artisan migrate:refresh --seed
+# Backend2 Drizzle migrations and seeders
+docker compose exec backend2 npm run db:migrate:run
+docker compose exec backend2 npm run db:seed
 
-# Run backend2 Drizzle migrations and seeders
-docker-compose exec backend2 npm run db:migrate:run
-docker-compose exec backend2 npm run db:seed
+# Shells
+docker compose exec backend2 sh
+docker compose exec frontend sh
 
-# Access backend shell
-docker-compose exec backend bash
-
-# Access backend2 shell
-docker-compose exec backend2 sh
-
-# Access frontend shell
-docker-compose exec frontend sh
-
-# Run npm commands
-docker-compose exec frontend npm install
+# Frontend packages
+docker compose exec frontend npm install
 ```
 
-### View database
-The MySQL container is exposed on `localhost:3306`
+Laravel commands are historical only. Avoid `docker compose exec backend php artisan ...` for new development.
+
+## Database
+
+The MySQL container is exposed on `localhost:3306`.
+
 - Database: `nglu_db`
 - User: `nglu_user`
 - Password: `password`
 
-Connect with any MySQL client (Workbench, TablePlus, etc.)
+Connect with MySQL Workbench, TablePlus, DBeaver, or phpMyAdmin.
 
-### Reset database
+### Reset backend2-managed data
+
 ```bash
-docker-compose exec backend php artisan migrate:fresh --seed
-docker-compose exec backend2 npm run db:migrate:run
-docker-compose exec backend2 npm run db:seed
+docker compose exec backend2 npm run db:migrate:run
+docker compose exec backend2 npm run db:seed
 ```
 
+Do not use Laravel migrations for new schema work. The shared MySQL schema is mapped in `backend2/src/database/schema.ts`.
+
 ## Database Backup
+
 ```bash
 # Backup
-docker-compose exec mysql mysqldump -u nglu_user -ppassword nglu_db > backup.sql
+docker compose exec mysql mysqldump -u nglu_user -ppassword nglu_db > backup.sql
 
 # Restore
-docker-compose exec -T mysql mysql -u nglu_user -ppassword nglu_db < backup.sql
+docker compose exec -T mysql mysql -u nglu_user -ppassword nglu_db < backup.sql
 ```
 
 ## Troubleshooting
 
 ### Port already in use
-If ports are already in use, edit `docker-compose.yml`:
+
+If a host port is already in use, edit `docker-compose.yml` and change only the host side:
+
 ```yaml
 ports:
-  - "8001:8000"  # Change 8000 to another port like 8001
+  - "8002:8001" # host:container for backend2
 ```
 
 ### Database connection issues
-Make sure the `mysql` service is running:
+
+Make sure MySQL is running:
+
 ```bash
-docker-compose ps
+docker compose ps
+docker compose logs -f mysql
 ```
 
 ### Clean rebuild
+
 ```bash
-docker-compose down -v  # Remove volumes too
-docker-compose up -d --build
+docker compose down -v
+docker compose up -d --build
 ```
 
-### View container details
+### Container details
+
 ```bash
-docker-compose ps
+docker compose ps
 docker stats
 ```
 
 ## Environment Variables
+
 Edit these files to customize:
-- `backend/.env` - Laravel configuration
-- `frontend/.env` - React/Vite configuration
+
+- `backend2/.env`: active NestJS API configuration
+- `frontend/.env`: React/Vite configuration, local API variables should target `http://localhost:8001`
+- `backend/.env`: deprecated Laravel configuration, only when using the `legacy-laravel` profile
 
 ## Development Workflow
 
-1. **Backend code changes** → Automatically reloaded (volume mounted)
-2. **Frontend code changes** → Automatically reloaded by Vite HMR
-3. **Laravel database changes** → Update migrations and run `docker-compose exec backend php artisan migrate`
-4. **Backend2 database changes** → Update Drizzle schema/migrations and run `docker-compose exec backend2 npm run db:migrate:run`
+1. Backend2 code changes reload through the mounted volume.
+2. Frontend code changes reload through Vite HMR.
+3. Backend2 database changes go through Drizzle schema/migrations and `docker compose exec backend2 npm run db:migrate:run`.
+4. Laravel changes are avoided for new work. `backend/` is deprecated and should only be edited for explicit legacy cleanup tasks.
 
 ## Production Deployment
-For production, you'll want to:
-1. Create separate optimized Dockerfiles
-2. Use environment-specific configurations
-3. Set up proper health checks
-4. Configure resource limits
-5. Use managed database services
 
-Consult the Docker documentation for best practices.
+Production uses `docker-compose.prod.yml` and serves the active API through backend2/middleware. See `DEPLOY.md` and `DEVELOPMENT_RULES.md` before deploying.
