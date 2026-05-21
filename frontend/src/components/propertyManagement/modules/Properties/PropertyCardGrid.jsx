@@ -6,8 +6,10 @@ import {
   FileText,
   MoreHorizontal,
   Pencil,
+  Trash2,
   UserPlus,
 } from "lucide-react";
+import UserPrivateComponent from "../../../PrivacyComponent/UserPrivateComponent";
 
 import { avatarColors, statusLabel } from "../../shared/constants";
 import { shortMoney } from "../../shared/format";
@@ -52,11 +54,21 @@ const PropertyMenu = ({ unit, status, hasTenant, onAction }) => {
           {item("lease", <FileText size={16} />, "Voir bail")}
         </>
       )}
+      <UserPrivateComponent permission="delete-propertyManagement">
+        <div className="immo-menu-separator" />
+        <button
+          type="button"
+          className="danger"
+          onClick={(event) => { event.stopPropagation(); onAction("delete", unit); }}
+        >
+          <Trash2 size={16} /> Supprimer
+        </button>
+      </UserPrivateComponent>
     </div>
   );
 };
 
-const PropertyCardGrid = ({ units, onAssignTenant, onEditUnit, onViewPayments, onViewLease }) => {
+const PropertyCardGrid = ({ units, onAssignTenant, onEditUnit, onViewPayments, onViewLease, onDeleteUnit }) => {
   const [openMenuId, setOpenMenuId] = useState(null);
 
   useEffect(() => {
@@ -82,6 +94,10 @@ const PropertyCardGrid = ({ units, onAssignTenant, onEditUnit, onViewPayments, o
     }
     if (action === "lease") {
       onViewLease?.(unit);
+      return;
+    }
+    if (action === "delete") {
+      onDeleteUnit?.(unit);
     }
   };
 

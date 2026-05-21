@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import moment from "moment";
 import { Grid3X3, LayoutList, Map, Plus, SlidersHorizontal } from "lucide-react";
+import { useDispatch } from "react-redux";
+import toast from "react-hot-toast";
+import { deleteUnit, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 
 import { typeFilters } from "../../shared/constants";
 import { normalize } from "../../shared/format";
@@ -48,6 +51,9 @@ const PropertiesPanel = ({
   const [advancedFilters, setAdvancedFilters] = useState(EMPTY_ADVANCED);
   const [propertyModalRecord, setPropertyModalRecord] = useState(null);
   const [propertyModalOpen, setPropertyModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const dispatch = useDispatch();
 
   const filteredUnits = useMemo(() => {
     const q = normalize(searchTerm);
@@ -113,6 +119,22 @@ const PropertiesPanel = ({
     if (onViewAllPayments) onViewAllPayments(unit);
     else window.alert(`(demo) Voir paiements pour ${unit.displayName || unit.name}`);
   };
+  const handleDeleteUnit = (unit) => setDeleteTarget(unit);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const resp = await dispatch(deleteUnit(deleteTarget.id));
+    setDeleting(false);
+    setDeleteTarget(null);
+    if (resp?.payload?.message === "success") {
+      toast.success("Unité supprimée");
+      dispatch(loadPropertyManagement());
+    } else {
+      toast.error(resp?.payload?.message || "Échec de la suppression");
+    }
+  };
+
   const handleViewUnitLease = (unit) => {
     if (onViewUnitLease) {
       onViewUnitLease(unit);
@@ -269,6 +291,7 @@ const PropertiesPanel = ({
             units={filteredUnits}
             onAssignTenant={handleAssignTenant}
             onEditUnit={handleEditUnit}
+            onDeleteUnit={handleDeleteUnit}
           />
         ) : (
           <PropertyCardGrid
@@ -277,6 +300,7 @@ const PropertiesPanel = ({
             onEditUnit={handleEditUnit}
             onViewPayments={handleViewUnitPayments}
             onViewLease={handleViewUnitLease}
+            onDeleteUnit={handleDeleteUnit}
           />
         )
       ) : (
@@ -300,6 +324,26 @@ const PropertiesPanel = ({
         onClose={() => setPropertyModalOpen(false)}
         onSaved={() => setPropertyModalOpen(false)}
       />
+
+      {deleteTarget && (
+        <div className="immo-confirm-overlay" role="dialog" aria-modal="true">
+          <div className="immo-confirm-dialog">
+            <h3>Supprimer l&apos;unité</h3>
+            <p>
+              Êtes-vous sûr de vouloir supprimer <strong>{deleteTarget.displayName || deleteTarget.name}</strong> ?
+              Cette action est irréversible.
+            </p>
+            <div className="immo-confirm-actions">
+              <button type="button" className="immo-secondary-button" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Annuler
+              </button>
+              <button type="button" className="immo-danger-button" onClick={confirmDelete} disabled={deleting}>
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

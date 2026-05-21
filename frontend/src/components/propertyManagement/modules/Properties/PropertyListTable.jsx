@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Pencil, UserPlus } from "lucide-react";
+import { Pencil, Trash2, UserPlus } from "lucide-react";
+import UserPrivateComponent from "../../../PrivacyComponent/UserPrivateComponent";
 
 import { avatarColors as defaultAvatarColors, propertyListColumns, statusLabel } from "../../shared/constants";
 import { shortMoney } from "../../shared/format";
@@ -37,6 +38,7 @@ const PropertyListTable = ({
   initials = defaultInitials,
   onAssignTenant,
   onEditUnit,
+  onDeleteUnit,
 }) => {
   const [sortState, setSortState] = useState({ key: "code", direction: "asc" });
 
@@ -152,6 +154,16 @@ const PropertyListTable = ({
                     >
                       <Pencil size={15} />
                     </button>
+                    <UserPrivateComponent permission="delete-propertyManagement">
+                      <button
+                        type="button"
+                        className="immo-flat-icon danger"
+                        title="Supprimer l'unité"
+                        onClick={() => onDeleteUnit?.(unit)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </UserPrivateComponent>
                   </td>
                 </tr>
               );

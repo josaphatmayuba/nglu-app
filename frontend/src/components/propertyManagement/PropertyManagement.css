@@ -4224,3 +4224,27 @@
   .immo-calendar-cell { min-height: 60px; }
   .immo-calendar-legend { display: none; }
 }
+
+/* Delete confirmation dialog */
+.immo-confirm-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+}
+.immo-confirm-dialog {
+  background: #fff; border-radius: 12px; padding: 28px 32px;
+  max-width: 420px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.immo-confirm-dialog h3 { font-size: 1.1rem; font-weight: 600; color: #111; margin: 0 0 10px; }
+.immo-confirm-dialog p  { font-size: 0.9rem; color: #4b5563; margin: 0 0 24px; }
+.immo-confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
+.immo-danger-button {
+  padding: 8px 18px; border-radius: 7px; font-size: 0.875rem; font-weight: 500;
+  background: #dc2626; color: #fff; border: none; cursor: pointer; transition: background 0.15s;
+}
+.immo-danger-button:hover:not(:disabled) { background: #b91c1c; }
+.immo-danger-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.immo-flat-icon.danger { color: #dc2626; }
+.immo-flat-icon.danger:hover { background: #fee2e2; color: #b91c1c; }
+.immo-context-menu button.danger { color: #dc2626; }
+.immo-context-menu button.danger:hover { background: #fef2f2; }

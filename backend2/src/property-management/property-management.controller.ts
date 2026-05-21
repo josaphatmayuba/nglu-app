@@ -144,6 +144,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Delete a property" })
   @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
   @Delete("properties/:id")
   @HttpCode(200)
   deleteProperty(@Param("id", ParseIntPipe) id: number) {
@@ -183,6 +184,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Delete a rental unit" })
   @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
   @Delete("units/:id")
   @HttpCode(200)
   deleteUnit(@Param("id", ParseIntPipe) id: number) {

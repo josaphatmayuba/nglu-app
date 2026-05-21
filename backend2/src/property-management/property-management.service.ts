@@ -414,6 +414,27 @@ export class PropertyManagementService {
 
   async deleteProperty(id: number) {
     await this.ensureExists(realEstateProperties, id, "Property not found.");
+
+    // Block if any unit in this property has an active lease
+    const units = await this.db
+      .select({ id: realEstateUnits.id })
+      .from(realEstateUnits)
+      .where(eq(realEstateUnits.propertyId, id));
+
+    if (units.length > 0) {
+      const unitIds = units.map((u) => u.id);
+      const [activeLeaseRow] = await this.db
+        .select({ id: realEstateLeases.id })
+        .from(realEstateLeases)
+        .where(and(inArray(realEstateLeases.unitId, unitIds), eq(realEstateLeases.status, "active")))
+        .limit(1);
+      if (activeLeaseRow) {
+        throw new BadRequestException(
+          "Impossible de supprimer : cette propriété contient des unités avec des baux actifs.",
+        );
+      }
+    }
+
     await this.db.delete(realEstateProperties).where(eq(realEstateProperties.id, id));
     return { message: "Property deleted successfully." };
   }
@@ -506,6 +527,19 @@ export class PropertyManagementService {
 
   async deleteUnit(id: number) {
     await this.ensureExists(realEstateUnits, id, "Unit not found.");
+
+    // Block if this unit has an active lease
+    const [activeLease] = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.unitId, id), eq(realEstateLeases.status, "active")))
+      .limit(1);
+    if (activeLease) {
+      throw new BadRequestException(
+        "Impossible de supprimer : cette unité a un bail actif. Résiliez le bail d'abord.",
+      );
+    }
+
     await this.db.delete(realEstateUnits).where(eq(realEstateUnits.id, id));
     return { message: "Unit deleted successfully." };
   }
