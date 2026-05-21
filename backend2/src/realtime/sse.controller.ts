@@ -1,6 +1,7 @@
 import {
   Controller,
   Inject,
+  Logger,
   MessageEvent,
   Req,
   Res,
@@ -27,6 +28,9 @@ const HEARTBEAT_MS = 25_000;
 @UseGuards(JwtAuthGuard)
 @Controller("events")
 export class SseController {
+  private readonly logger = new Logger(SseController.name);
+  private activeClients = 0;
+
   constructor(
     private readonly bus: EventBusService,
     @Inject(DRIZZLE) private readonly db: Database,
@@ -41,6 +45,8 @@ export class SseController {
     const user = (req as unknown as { user: { sub: number; roleId: number } }).user;
     const userId = user?.sub;
     const roleId = user?.roleId;
+    this.activeClients += 1;
+    this.logger.log(`SSE client connected userId=${userId ?? "unknown"} roleId=${roleId ?? "unknown"} activeClients=${this.activeClients}`);
 
     // Disable proxy buffering for SSE
     res.setHeader("X-Accel-Buffering", "no");
@@ -48,9 +54,18 @@ export class SseController {
 
     const userPerms = await this.loadPermissions(roleId);
     const destroyed$ = new Subject<void>();
+    let closed = false;
 
-    // Clean up on client disconnect
-    req.on("close", () => destroyed$.next());
+    const closeClient = () => {
+      if (closed) return;
+      closed = true;
+      this.activeClients = Math.max(0, this.activeClients - 1);
+      this.logger.log(`SSE client disconnected userId=${userId ?? "unknown"} roleId=${roleId ?? "unknown"} activeClients=${this.activeClients}`);
+      destroyed$.next();
+      destroyed$.complete();
+    };
+
+    req.on("close", closeClient);
 
     // Heartbeat — keeps connection alive through proxies
     const heartbeat$ = interval(HEARTBEAT_MS).pipe(

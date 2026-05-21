@@ -36,7 +36,7 @@ export function createPermissionsUpdateHandler(dispatch, navigate, toast) {
 
     // Reload permissions from the API
     const result = await dispatch(loadPermissionById(currentRoleId));
-    const newPermissions = result?.payload?.data?.map?.((p) => p.name) ?? null;
+    const newPermissions = result?.payload?.data?.permissions ?? null;
 
     // Notify the user
     if (toast) {
