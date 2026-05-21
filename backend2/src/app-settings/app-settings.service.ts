@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { eq, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { DRIZZLE } from "../database/database.constants";
 import { appSettings, currencies } from "../database/schema";
 import type { Database } from "../database/types";
@@ -44,8 +44,11 @@ export class AppSettingsService {
     if (!rows.length) throw new NotFoundException("App setting not found");
 
     const row = rows[0];
+    const logo = this.logoIfAvailable(row.logo);
+
     return {
       ...row,
+      logo,
       currency: row.currencyId
         ? { id: row.currencyId, currencyName: row.currencyName, currencySymbol: row.currencySymbol }
         : null,
@@ -101,5 +104,25 @@ export class AppSettingsService {
 
     const base = publicApiBase?.replace(/\/$/, "");
     return base ? `${base}/files/${name}` : `/files/${name}`;
+  }
+
+  private logoIfAvailable(logo?: string | null) {
+    if (!logo) return logo ?? null;
+
+    const localFileName = this.localFileNameFromLogo(logo);
+    if (!localFileName) return logo;
+
+    return existsSync(join(this.uploadDir, localFileName)) ? logo : null;
+  }
+
+  private localFileNameFromLogo(logo: string) {
+    if (logo.startsWith("/files/")) return basename(logo);
+
+    try {
+      const url = new URL(logo);
+      return url.pathname.includes("/files/") ? basename(url.pathname) : null;
+    } catch {
+      return null;
+    }
   }
 }
