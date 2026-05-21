@@ -875,3 +875,13 @@ export const auditLog = mysqlTable("audit_log", {
   metadata: json("metadata"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const passwordResetTokens = mysqlTable("password_reset_tokens", {
+  id: bigint("id", { mode: "number" }).primaryKey().autoincrement(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  identityId: int("identity_id").notNull(),
+  identityType: varchar("identity_type", { length: 20 }).default("user").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+});

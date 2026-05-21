@@ -5,13 +5,14 @@ import { DatabaseModule } from "../database/database.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { PasswordResetService } from "./password-reset.service";
 import { PermissionsGuard } from "./guards/permissions.guard";
 
 @Global()
 @Module({
   imports: [DatabaseModule, JwtModule.register({}), AuditModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, PermissionsGuard],
+  providers: [AuthService, JwtAuthGuard, PermissionsGuard, PasswordResetService],
   exports: [JwtModule, JwtAuthGuard, PermissionsGuard],
 })
 export class AuthModule {}
