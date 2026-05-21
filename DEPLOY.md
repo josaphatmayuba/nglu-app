@@ -18,8 +18,15 @@ Ne pas remettre le CRM a la racine du domaine.
 - `https://ongdngolu.org/crm` est l'entree officielle du CRM.
 - Le CRM React utilise encore les routes internes `/admin/*` et les chunks Vite `/assets/*`; nginx les reserve au frontend CRM.
 - `https://ongdngolu.org/api/*` reste le proxy vers middleware/backend.
+- Do not move the CRM back to the production domain root.
 
 Les garde-fous sont dans `nginx/nginx.frontend.conf`, `docker-compose.prod.yml`, `PRODUCTION_ROUTING.md` et `marketing-site/README.md`. Si le routage change, mettre a jour ces fichiers dans le meme commit.
+
+Verifier le contrat avant de merger tout changement de routing :
+
+```bash
+node scripts/check-routing-contract.mjs
+```
 
 Voir aussi `DEVELOPMENT_RULES.md` pour les règles globales, notamment la politique de suppression logique: toute suppression fonctionnelle doit mettre `status=false` sauf validation explicite d'une suppression physique.
 

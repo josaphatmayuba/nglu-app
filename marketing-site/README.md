@@ -88,3 +88,9 @@ If the marketing/CRM routing changes, update these files together:
 - `DEPLOY.md`
 - `PRODUCTION_ROUTING.md`
 - `marketing-site/README.md`
+
+Then run:
+
+```bash
+node ../scripts/check-routing-contract.mjs
+```

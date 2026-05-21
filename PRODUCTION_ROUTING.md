@@ -19,6 +19,12 @@ For project-wide implementation rules, read `DEVELOPMENT_RULES.md`. In particula
 - `DEPLOY.md`
 - `marketing-site/README.md`
 
+Any routing-related PR must reference this contract. If this contract changes, update all four files above in the same commit and run:
+
+```bash
+node scripts/check-routing-contract.mjs
+```
+
 ## Marketing Build Rule
 
 `marketing-site/` is a Vue/Vite app. Nginx must serve `marketing-site/dist/`, not the Vue source directory.

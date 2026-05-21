@@ -20,6 +20,7 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
       APP_URL: ${APP_URL:-https://ongdngolu.org}
       # Production routing contract: marketing lives at /, CRM entrypoint is /crm.
+      # Keep PRODUCTION_ROUTING.md, DEPLOY.md, nginx config and marketing README in sync.
       FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org/crm}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
