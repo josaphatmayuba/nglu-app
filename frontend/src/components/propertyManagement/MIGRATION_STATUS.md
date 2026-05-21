@@ -22,6 +22,7 @@ Reference plan : [fait-moi-un-plan-generic-locket.md](../../../../C:/Users/pauln
 | D — Payments     | codex | done | agents/nuclear-aphid | Créé modules/Payments/PaymentsPanel.jsx, PaymentsTable.jsx, PaymentFormModal.jsx. Le module consomme usePropertyManagementData(), gère filtres, pagination et création de paiement. Non branché au legacy avant Phase F. |
 | E — Maintenance  | codex | done | agents/nuclear-aphid | Créé modules/Maintenance/MaintenancePanel.jsx, MaintenanceTicketCard.jsx, MaintenanceFormModal.jsx. Le module consomme usePropertyManagementData(), gère KPIs, filtres, liste tickets et création de ticket. Non branché au legacy avant Phase F. |
 | F — Cutover      | codex | done | agents/nuclear-aphid | Route principale `/admin/property-management` sur `PropertyManagementNew.jsx`; routes preview `_new*` supprimées; messages "à câbler Phase F" nettoyés. Legacy reste dans le repo seulement comme référence non routée. |
+| G — Archive      | Claude Sonnet | done | develop | SCRUM-41: `PropertyManagementNew.jsx` → `PropertyManagement.jsx` (renommé + legacy supprimé). Shim `PropertyMapView.jsx` supprimé. Routes `_new/*` supprimées de `PropertyManagementRoutes.jsx`. `PropertyManagementSettings` dérouté (import retiré). Migration terminée, aucun fichier legacy actif. |
 
 ## Phase 0 — ce qui a été fait
 
