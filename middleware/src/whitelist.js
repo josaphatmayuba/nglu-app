@@ -9,6 +9,8 @@ module.exports = [
   { method: 'POST', prefix: '/auth/register',                 auth: false },
   { method: 'GET',  prefix: '/auth/refresh-token',            auth: false },
   { method: 'POST', prefix: '/auth/logout',                   auth: true  },
+  { method: 'POST', prefix: '/auth/forgot-password',          auth: false },
+  { method: 'POST', prefix: '/auth/reset-password',           auth: false },
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
