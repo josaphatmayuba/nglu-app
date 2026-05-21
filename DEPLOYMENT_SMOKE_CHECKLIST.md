@@ -4,6 +4,9 @@ Use this checklist after every manual or pipeline deployment. It covers dev and 
 
 Rules to keep in mind:
 
+- Before any manual AWS deploy, check the current conversation/Jira handoff to confirm no other agent is already deploying.
+- If another agent is deploying, do not deploy in parallel; commit and push your code, then wait or ask the user before touching AWS.
+- Announce the environment, commit, and services before starting a manual AWS deploy.
 - Dev frontend builds must use `npm run build:dev`.
 - Prod frontend builds must use `npm run build:prod`.
 - Bitbucket pipeline may be unavailable; manual AWS deploy is then mandatory.

@@ -64,6 +64,18 @@ Rules:
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
 - Do not build the full CRM frontend directly on the small Lightsail instance when memory is constrained. Build `frontend/dist` locally or in CI and deploy the artifact with `scripts/deploy-dev-frontend-artifact.ps1`.
 
+## AWS Deployment Coordination
+
+Before any manual AWS deploy, an agent must check whether another agent is already deploying or has just announced a deploy in the current conversation/Jira handoff.
+
+Rules:
+
+- If another agent is already deploying to AWS dev/prod, do not start a second deployment.
+- Commit and push your code first, then wait for the active deployment to finish or ask the user before deploying.
+- Announce before starting an AWS deploy and say which environment, commit, and services are being updated.
+- After deployment, comment in Jira with the commit, environment, commands/validation, and any blockers.
+- Do not interrupt, rebuild, restart, or overwrite a running deployment started by another agent unless the user explicitly asks you to take over.
+
 Manual AWS deployment SSH key note for agents:
 
 - AWS frontend/backend server key filename: `LightsailDefaultKey-ca-central-1 (3).pem`
