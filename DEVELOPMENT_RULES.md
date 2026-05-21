@@ -33,8 +33,10 @@ Every agent working with Jira must keep the issue status aligned with the real s
 - At the end of each task, update the AWS dev environment (`dev.ongdngolu.org`) so the user can test the latest work. If deployment is blocked, document the blocker in Jira and in the final handoff.
 - After a task is implemented and validated, push the code to the `develop` branch so the remote branch matches the AWS dev environment. If pushing is blocked, document the blocker in Jira and in the final handoff.
 - Frontend deployments to AWS dev must be built with `npm run build:dev`, not plain `npm run build`, so the compiled bundle points to `https://dev.ongdngolu.org/api`. Production deployments must use `npm run build:prod`.
+- After every code or configuration change, run an appropriate verification before changing the Jira status. Verification must prove the changed behavior still works, not only that files were edited.
 - When code is implemented but still needs QA, user confirmation, staging verification, or deployment validation, move the issue to `Test`.
 - Move the issue to `Done` only after final validation is completed. Final validation means the agent has verified the feature/bug fix end-to-end in the relevant UI or runtime environment, or has clearly documented why that validation could not be performed.
+- Before moving a task to `Done`, re-check the latest deployed/runtime state after the final change. If anything remains unverified, blocked, or only validated locally, keep the task in `Test` and document what still needs validation.
 - Do not mark an issue `Done` just because code was written. If the user still needs to test it, the correct status is `Test`.
 - Jira comments must explicitly say what was tested, where it was tested, and what remains unverified.
 
