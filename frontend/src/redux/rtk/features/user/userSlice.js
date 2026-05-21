@@ -131,6 +131,36 @@ export const addUser = createAsyncThunk("user/addUser", async (values) => {
       data: values,
     });
 
+    // MFA required — don't store anything yet, return special shape
+    if (data.requireMfa) {
+      return { message: "mfa_required", requireMfa: true, mfaToken: data.mfaToken };
+    }
+
+    localStorage.setItem("access-token", data.token);
+    localStorage.setItem("role", data.role);
+    localStorage.setItem("roleId", data.roleId);
+    localStorage.setItem("user", nameRender(data));
+    localStorage.setItem("id", data.id);
+    localStorage.setItem("isLogged", true);
+
+    return successHandler(data, "Login Successfully Done");
+  } catch (error) {
+    return errorHandler(error, true);
+  }
+});
+
+export const completeMfaLogin = createAsyncThunk("user/completeMfaLogin", async ({ mfaToken, code, useRecovery }) => {
+  try {
+    const { data } = await axios({
+      method: "post",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json;charset=UTF-8",
+      },
+      url: `auth/mfa/login`,
+      data: { mfaToken, code, useRecovery: useRecovery || false },
+    });
+
     localStorage.setItem("access-token", data.token);
     localStorage.setItem("role", data.role);
     localStorage.setItem("roleId", data.roleId);

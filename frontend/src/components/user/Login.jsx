@@ -11,7 +11,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
-import { addUser } from "../../redux/rtk/features/user/userSlice";
+import { addUser, completeMfaLogin } from "../../redux/rtk/features/user/userSlice";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
 import { loadPermissionById } from "../../redux/rtk/features/auth/authSlice";
 import LoginTable from "../Card/LoginTable";
@@ -26,23 +26,48 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [defaultValue, setDefaultValue] = useState("");
+  const [mfaState, setMfaState] = useState(null); // { mfaToken, useRecovery }
+  const [mfaCode, setMfaCode] = useState("");
 
   const handleChange = (field, value) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const finishLogin = (resp) => {
+    dispatch(getSetting());
+    dispatch(loadPermissionById(resp.payload?.data?.roleId));
+    localStorage.setItem("isLogged", true);
+    navigate("/admin");
+  };
 
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     setSubmitting(true);
     const resp = await dispatch(addUser(formData));
-    if (resp?.payload?.message === "success") {
-      dispatch(getSetting());
-      dispatch(loadPermissionById(resp.payload?.data?.roleId));
-      localStorage.setItem("isLogged", true);
-      setSubmitting(false);
-      navigate("/admin");
+    setSubmitting(false);
+    if (resp?.payload?.requireMfa) {
+      setMfaState({ mfaToken: resp.payload.mfaToken, useRecovery: false });
+      setMfaCode("");
+    } else if (resp?.payload?.message === "success") {
+      finishLogin(resp);
     } else {
-      setSubmitting(false);
       toast.error(resp?.payload?.message || "Échec de la connexion");
+    }
+  };
+
+  const handleMfaSubmit = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!mfaCode.trim()) return;
+    setSubmitting(true);
+    const resp = await dispatch(completeMfaLogin({
+      mfaToken: mfaState.mfaToken,
+      code: mfaCode.trim(),
+      useRecovery: mfaState.useRecovery,
+    }));
+    setSubmitting(false);
+    if (resp?.payload?.message === "success") {
+      finishLogin(resp);
+    } else {
+      toast.error(resp?.payload?.message || "Code invalide");
     }
   };
 
@@ -91,16 +116,72 @@ export default function Login() {
 
           {/* Title */}
           <div className="mb-8">
-            <h1 className="text-2xl sm:text-3xl font-semibold text-ink-900 tracking-tight">
-              Bon retour 👋
-            </h1>
-            <p className="text-ink-500 text-sm mt-2">
-              Connectez-vous pour accéder à votre tableau de bord
-            </p>
+            {mfaState ? (
+              <>
+                <h1 className="text-2xl sm:text-3xl font-semibold text-ink-900 tracking-tight">
+                  Vérification en 2 étapes
+                </h1>
+                <p className="text-ink-500 text-sm mt-2">
+                  {mfaState.useRecovery
+                    ? "Entrez l'un de vos codes de récupération."
+                    : "Entrez le code à 6 chiffres de votre application d'authentification."}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl sm:text-3xl font-semibold text-ink-900 tracking-tight">
+                  Bon retour 👋
+                </h1>
+                <p className="text-ink-500 text-sm mt-2">
+                  Connectez-vous pour accéder à votre tableau de bord
+                </p>
+              </>
+            )}
           </div>
 
+          {/* MFA step */}
+          {mfaState && (
+            <form onSubmit={handleMfaSubmit} className="space-y-4">
+              <div>
+                <label htmlFor="mfa-code" className="block text-sm font-medium text-ink-700 mb-1.5">
+                  {mfaState.useRecovery ? "Code de récupération" : "Code d'authentification"}
+                </label>
+                <input
+                  id="mfa-code"
+                  type="text"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder={mfaState.useRecovery ? "XXXX-XXXX" : "000000"}
+                  className="w-full px-3.5 py-2.5 bg-white border border-ink-200 rounded-lg text-ink-900 placeholder-ink-400 focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 transition tracking-widest text-center text-lg font-mono"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={submitting || !mfaCode.trim()}
+                className="w-full mt-2 py-2.5 rounded-lg font-medium text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-70 disabled:cursor-not-allowed transition shadow-sm flex items-center justify-center gap-2"
+              >
+                {submitting ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : "Vérifier"}
+              </button>
+              <div className="flex items-center justify-between text-xs">
+                <button type="button" className="text-ink-500 hover:text-ink-700" onClick={() => setMfaState(null)}>
+                  ← Retour
+                </button>
+                <button
+                  type="button"
+                  className="text-brand-600 hover:text-brand-700 font-medium"
+                  onClick={() => { setMfaState((s) => ({ ...s, useRecovery: !s.useRecovery })); setMfaCode(""); }}
+                >
+                  {mfaState.useRecovery ? "Utiliser l'appli auth" : "Utiliser un code de récupération"}
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {!mfaState && <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
                 htmlFor="username"
@@ -202,7 +283,7 @@ export default function Login() {
                 </div>
               </>
             )}
-          </form>
+          </form>}
 
           <p className="text-xs text-ink-400 text-center mt-8">
             © {new Date().getFullYear()} {companyName} · Tous droits réservés

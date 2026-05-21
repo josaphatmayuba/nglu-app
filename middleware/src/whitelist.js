@@ -11,6 +11,10 @@ module.exports = [
   { method: 'POST', prefix: '/auth/logout',                   auth: true  },
   { method: 'POST', prefix: '/auth/forgot-password',          auth: false },
   { method: 'POST', prefix: '/auth/reset-password',           auth: false },
+  { method: 'POST', prefix: '/auth/mfa/login',                auth: false },
+  { method: 'POST', prefix: '/auth/mfa/setup',                auth: true  },
+  { method: 'POST', prefix: '/auth/mfa/verify',               auth: true  },
+  { method: 'POST', prefix: '/auth/mfa/disable',              auth: true  },
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
