@@ -10,6 +10,21 @@ const PORT = process.env.PORT || 3001;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://backend2:8001';
 const JWT_SECRET = process.env.JWT_SECRET || 'changeme_in_prod';
 
+function bearerTokenFromRequest(req) {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+
+  // EventSource cannot send custom headers. Accept ?token= only after the
+  // route has been matched as auth-protected, then forward it as Authorization.
+  if (typeof req.query?.token === 'string' && req.query.token) {
+    return req.query.token;
+  }
+
+  return null;
+}
+
 // Trust the nginx reverse proxy (so express-rate-limit reads the real client IP
 // from X-Forwarded-For instead of the proxy's internal IP)
 app.set('trust proxy', 1);
@@ -59,8 +74,8 @@ app.use((req, res, next) => {
 
   // JWT requis → vérification
   if (allowed.auth) {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = bearerTokenFromRequest(req);
+    if (!token) {
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Token manquant',
@@ -68,7 +83,8 @@ app.use((req, res, next) => {
     }
 
     try {
-      jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      jwt.verify(token, JWT_SECRET);
+      req.headers.authorization = `Bearer ${token}`;
     } catch (err) {
       return res.status(401).json({
         error: 'Unauthorized',
