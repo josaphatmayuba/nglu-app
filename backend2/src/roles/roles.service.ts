@@ -125,18 +125,24 @@ export class RolesService {
   }
 
   async update(id: number, dto: UpdateRoleDto) {
-    const [role] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.id, id)).limit(1);
+    const [role] = await this.db.select({ id: roles.id, isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
     if (!role) throw new NotFoundException("Role not found");
+    if (role.isSystem) throw new BadRequestException("System roles cannot be modified.");
 
+    // Strip isSystem from dto — never allow API callers to set it
+    const { name } = dto as { name?: string };
     await this.db
       .update(roles)
-      .set({ ...dto, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ ...(name ? { name } : {}), updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(roles.id, id));
 
     return { message: "Role Updated Successfully" };
   }
 
   async remove(id: number, status: string) {
+    const [role] = await this.db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
+    if (role?.isSystem) throw new BadRequestException("System roles cannot be deleted.");
+
     await this.db
       .update(roles)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })

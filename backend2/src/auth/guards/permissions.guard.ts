@@ -9,21 +9,21 @@ import {
 import { Reflector } from "@nestjs/core";
 import { eq } from "drizzle-orm";
 import { DRIZZLE } from "../../database/database.constants";
-import { permissions, rolePermissions } from "../../database/schema";
+import { permissions, rolePermissions, roles } from "../../database/schema";
 import type { Database } from "../../database/types";
 import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 
-const SUPER_ADMIN_ROLE = "super-admin";
 const CACHE_TTL_MS = 30_000; // 30s — short enough to pick up grant changes quickly, long enough to dampen DB load
 
 type AuthedUser = { sub?: number; roleId?: number; role?: string };
 
+type RoleCache = { perms: Set<string>; isSystem: boolean; expiresAt: number };
+
 /**
- * Caches the set of permission names granted to each role. Invalidated by TTL.
- * Process-local (no shared cache between instances). For multi-instance setups,
- * swap for Redis.
+ * Caches the set of permission names and isSystem flag for each role.
+ * Invalidated by TTL. Process-local (no shared cache between instances).
  */
-const cache = new Map<number, { perms: Set<string>; expiresAt: number }>();
+const cache = new Map<number, RoleCache>();
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -47,10 +47,11 @@ export class PermissionsGuard implements CanActivate {
       throw new UnauthorizedException("Authenticated user missing on request.");
     }
 
-    // Super-admin always passes.
-    if (user.role === SUPER_ADMIN_ROLE) return true;
+    const { isSystem, perms: granted } = await this.roleData(user.roleId);
 
-    const granted = await this.permissionsForRole(user.roleId);
+    // System roles (super-admin seeded via DB) bypass permission checks.
+    if (isSystem) return true;
+
     const hasOne = required.some((perm) => granted.has(perm));
     if (!hasOne) {
       throw new ForbiddenException(
@@ -61,19 +62,29 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 
-  private async permissionsForRole(roleId: number): Promise<Set<string>> {
+  private async roleData(roleId: number): Promise<{ isSystem: boolean; perms: Set<string> }> {
     const cached = cache.get(roleId);
-    if (cached && cached.expiresAt > Date.now()) return cached.perms;
+    if (cached && cached.expiresAt > Date.now()) {
+      return { isSystem: cached.isSystem, perms: cached.perms };
+    }
 
-    const rows = await this.db
-      .select({ name: permissions.name })
-      .from(rolePermissions)
-      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
-      .where(eq(rolePermissions.roleId, roleId));
+    const [roleRow, permRows] = await Promise.all([
+      this.db
+        .select({ isSystem: roles.isSystem })
+        .from(roles)
+        .where(eq(roles.id, roleId))
+        .then((rows) => rows[0] ?? null),
+      this.db
+        .select({ name: permissions.name })
+        .from(rolePermissions)
+        .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+        .where(eq(rolePermissions.roleId, roleId)),
+    ]);
 
-    const perms = new Set(rows.map((r) => r.name));
-    cache.set(roleId, { perms, expiresAt: Date.now() + CACHE_TTL_MS });
-    return perms;
+    const isSystem = roleRow?.isSystem === 1;
+    const perms = new Set(permRows.map((r) => r.name));
+    cache.set(roleId, { isSystem, perms, expiresAt: Date.now() + CACHE_TTL_MS });
+    return { isSystem, perms };
   }
 
   /** Test helper — clears the in-memory cache. */
