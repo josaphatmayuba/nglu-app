@@ -13,6 +13,7 @@ import {
   saveLease,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
+import { tenantNameFromLease } from "../../shared/tenants";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import ContractWorkflowModal from "./ContractWorkflowModal";
 import LeaseFormModal from "./LeaseFormModal";
@@ -114,6 +115,63 @@ const LeasesPanel = ({
     setContractModal({ lease, contract });
   };
 
+  const copyLeaseReference = async (lease) => {
+    const reference = String(lease?.reference || "").trim();
+    if (!reference) {
+      message.warning("Aucune référence disponible pour ce bail.");
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(reference);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = reference;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      message.success("Référence du bail copiée");
+    } catch {
+      message.error("Impossible de copier la référence");
+    }
+  };
+
+  const exportLeaseToCsv = (lease) => {
+    if (!lease) {
+      message.warning("Aucun bail à exporter");
+      return;
+    }
+
+    const headers = ["Référence", "Locataire", "Propriété", "Unité", "Début", "Fin", "Loyer", "Statut"];
+    const row = [
+      lease.reference || "",
+      tenantNameFromLease(lease),
+      lease.property?.name || lease.propertyName || "-",
+      lease.unit?.name || lease.unitName || "-",
+      lease.startDate ? moment(lease.startDate).format("DD/MM/YYYY") : "-",
+      lease.endDate ? moment(lease.endDate).format("DD/MM/YYYY") : "-",
+      lease.rentAmount ?? lease.monthlyRent ?? 0,
+      lease.status || "-",
+    ];
+    const csv = [headers, row]
+      .map((items) => items.map((item) => `"${String(item).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `bail-${lease.reference || lease.id || moment().format("YYYY-MM-DD")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    message.success("Bail exporté en CSV");
+  };
+
   const handleLeaseAction = (action, lease, contract) => {
     setOpenLeaseMenu(null);
     if (action === "detail" || action === "edit") {
@@ -140,6 +198,14 @@ const LeasesPanel = ({
     if (action === "maintenance") {
       if (onViewMaintenance) onViewMaintenance(lease);
       else message.info("Ouvrez l'onglet Maintenance pour consulter les tickets de ce bail.");
+      return;
+    }
+    if (action === "copyRef") {
+      copyLeaseReference(lease);
+      return;
+    }
+    if (action === "csv") {
+      exportLeaseToCsv(lease);
       return;
     }
     if (["resend", "copyLink", "cancelSend", "archive"].includes(action)) {
@@ -199,7 +265,7 @@ const LeasesPanel = ({
         <div className="immo-alert-strip">
           <div>
             <strong>{missingContractLeases.length} bail{missingContractLeases.length > 1 ? "s" : ""} sans contrat</strong>
-            <span>Générez les contrats pour sécuriser la signature et l'archivage.</span>
+            <span>Générez les contrats pour sécuriser la signature et l&apos;archivage.</span>
           </div>
           <Button type="primary" size="small" onClick={generateMissingContracts}>
             Générer les contrats

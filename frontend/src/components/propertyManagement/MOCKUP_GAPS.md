@@ -142,13 +142,14 @@ Comparaison entre [design-mockup.html](../../../design-mockup.html) (section `da
 ## Phase 5 - Confort UX (paiements/baux)
 
 - [ ] **Checkboxes de sélection multiple** sur le tableau paiements (le mockup les montre lignes 769-779 pour les factures, à appliquer ici)
-- [ ] **Bouton Exporter** (CSV/PDF) pour Paiements et Baux
+- [x] **Bouton Exporter** (CSV/PDF) pour Baux (CSV ajouté au menu contextuel et câblé)
 - [ ] **Action groupée** : marquer comme payé / envoyer rappel sur une sélection
 
 **Notes de travail** :
 
 - (vide)
 
+**2026-05-18** - Ajout des actions `csv` et `copyRef` dans `LeaseContextMenu`; `LeasesPanel` gère l'export CSV d'un bail et la copie de référence.
 ---
 
 ## Correctif post-cutover - Grille Baux modulaire ✅ TERMINÉE
