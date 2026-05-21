@@ -184,6 +184,7 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
   defaultRent: decimal("default_rent", { precision: 15, scale: 2 }).default("0").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
   description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -203,6 +204,7 @@ export const realEstateUnits = mysqlTable("real_estate_units", {
   securityDeposit: decimal("security_deposit", { precision: 15, scale: 2 }).default("0").notNull(),
   amenities: text("amenities"),
   description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

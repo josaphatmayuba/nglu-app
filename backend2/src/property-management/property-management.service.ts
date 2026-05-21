@@ -68,7 +68,7 @@ export class PropertyManagementService {
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(ne(realEstateUnits.status, "false"), eq(realEstateProperties.isActive, 1)));
+      .where(and(eq(realEstateUnits.isActive, 1), eq(realEstateProperties.isActive, 1)));
     const [vacantUnits] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
@@ -364,7 +364,7 @@ export class PropertyManagementService {
       .from(realEstateProperties)
       .leftJoin(
         realEstateUnits,
-        and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
+        and(eq(realEstateUnits.propertyId, realEstateProperties.id), eq(realEstateUnits.isActive, 1)),
       )
       .where(eq(realEstateProperties.isActive, 1))
       .groupBy(realEstateProperties.id)
@@ -456,9 +456,10 @@ export class PropertyManagementService {
       }
     }
 
+    // Soft-delete: set isActive=0. No physical DELETE (DEVELOPMENT_RULES.md).
     await this.db
       .update(realEstateProperties)
-      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateProperties.id, id));
     await this.publishPropertyUpdate("deleted", id, { propertyId: id });
     return { message: "Property deleted successfully." };
@@ -489,7 +490,7 @@ export class PropertyManagementService {
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
       .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
-      .where(and(ne(realEstateUnits.status, "false"), eq(realEstateProperties.isActive, 1)))
+      .where(and(eq(realEstateUnits.isActive, 1), eq(realEstateProperties.isActive, 1)))
       .orderBy(desc(realEstateUnits.id));
   }
 
@@ -569,9 +570,10 @@ export class PropertyManagementService {
       );
     }
 
+    // Soft-delete: set isActive=0. No physical DELETE (DEVELOPMENT_RULES.md).
     await this.db
       .update(realEstateUnits)
-      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateUnits.id, id));
     await this.publishUnitUpdate("deleted", id, { unitId: id });
     return { message: "Unit deleted successfully." };
@@ -879,7 +881,7 @@ export class PropertyManagementService {
       .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
       .where(and(
         eq(realEstateUnits.id, id),
-        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
         eq(realEstateProperties.isActive, 1),
       ))
       .limit(1);
@@ -1071,7 +1073,7 @@ export class PropertyManagementService {
     const units = await this.db
       .select({ id: realEstateUnits.id, propertyId: realEstateUnits.propertyId })
       .from(realEstateUnits)
-      .where(and(eq(realEstateUnits.id, unitId), ne(realEstateUnits.status, "false")))
+      .where(and(eq(realEstateUnits.id, unitId), eq(realEstateUnits.isActive, 1)))
       .limit(1);
     if (!units.length) {
       throw new NotFoundException("Unit not found.");
@@ -1260,7 +1262,7 @@ export class PropertyManagementService {
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
       .where(and(
         eq(realEstateUnits.id, id),
-        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
         eq(realEstateProperties.isActive, 1),
       ))
       .limit(1);
