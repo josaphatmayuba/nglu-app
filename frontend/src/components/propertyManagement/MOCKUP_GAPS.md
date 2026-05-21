@@ -302,3 +302,24 @@ Pour chaque tâche entamée :
 - [Header.jsx](../../layouts/Header.jsx)
 
 ---
+
+## Alertes header CRM - SCRUM-70
+
+**Objectif** : L'icone cloche du header ne doit plus etre decorative; elle doit ouvrir une liste d'alertes actives.
+
+- [x] Ouvrir un dropdown depuis la cloche.
+- [x] Remplacer le point rouge statique par un compteur calcule.
+- [x] Deriver les alertes depuis les endpoints existants: factures du mois, loyers en retard, maintenance urgente, stock faible.
+- [x] Naviguer vers le module concerne au clic.
+- [x] Masquer les alertes selon les permissions du module.
+- [x] Ajouter une action locale "Marquer lues".
+
+**Limitation documentee** :
+
+- Aucun endpoint backend `/notifications` ou `/alerts` n'a ete trouve. Le statut lu/non lu est donc persiste localement dans `localStorage`; les alertes restent derivees des donnees metier actives.
+
+**Fichiers** :
+
+- [Header.jsx](../../layouts/Header.jsx)
+
+---
