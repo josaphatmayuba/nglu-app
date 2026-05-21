@@ -4,8 +4,9 @@
  * Listeners registered before connection are queued and replayed on connect.
  */
 
-const BASE_URL = import.meta.env.VITE_APP_API || "";
-const SSE_PATH = `${BASE_URL}/events/me`;
+// Use a relative path so nginx routes to the correct environment's middleware.
+// VITE_APP_API bakes in the prod URL at build time; SSE must use the same host.
+const SSE_PATH = "/api/events/me";
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 2_000;
 
