@@ -5,6 +5,7 @@ import { DatabaseModule } from "../database/database.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { MfaService } from "./mfa.service";
 import { PasswordResetService } from "./password-reset.service";
 import { PermissionsGuard } from "./guards/permissions.guard";
 
@@ -12,7 +13,7 @@ import { PermissionsGuard } from "./guards/permissions.guard";
 @Module({
   imports: [DatabaseModule, JwtModule.register({}), AuditModule],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, PermissionsGuard, PasswordResetService],
+  providers: [AuthService, JwtAuthGuard, PermissionsGuard, PasswordResetService, MfaService],
   exports: [JwtModule, JwtAuthGuard, PermissionsGuard],
 })
 export class AuthModule {}

@@ -342,8 +342,18 @@ export const users = mysqlTable("users", {
   refreshToken: varchar("refreshToken", { length: 512 }),
   isLogin: varchar("isLogin", { length: 10 }).default("false").notNull(),
   status: varchar("status", { length: 10 }).default("true").notNull(),
+  totpSecret: varchar("totp_secret", { length: 128 }),
+  totpEnabled: tinyint("totp_enabled").default(0).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+export const mfaRecoveryCodes = mysqlTable("mfa_recovery_codes", {
+  id: serial("id").primaryKey(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  codeHash: varchar("code_hash", { length: 128 }).notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at"),
 });
 
 export const departments = mysqlTable("department", {

@@ -20,10 +20,26 @@ import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { LoginDto } from "./dto/login.dto";
+import { MfaService } from "./mfa.service";
 import { PasswordResetService } from "./password-reset.service";
 import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { IsEmail, IsNotEmpty, IsString, MaxLength, MinLength, Matches } from "class-validator";
+
+class MfaLoginDto {
+  @IsString() @IsNotEmpty() mfaToken: string;
+  @IsString() @IsNotEmpty() code: string;
+  useRecovery?: boolean;
+}
+
+class MfaVerifyDto {
+  @IsString() @IsNotEmpty() code: string;
+}
+
+class MfaDisableDto {
+  @IsString() @IsNotEmpty() password: string;
+  @IsString() @IsNotEmpty() code: string;
+}
 
 class ForgotPasswordDto {
   @IsEmail() email: string;
@@ -43,6 +59,7 @@ class ResetPasswordDto {
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly mfaService: MfaService,
     private readonly passwordResetService: PasswordResetService,
   ) {}
 
@@ -57,7 +74,12 @@ export class AuthController {
       ip: (req as unknown as { ip: string }).ip,
       userAgent: (req.headers as Record<string, string>)["user-agent"],
     };
-    const { refreshToken, user, role, token } = await this.authService.login(body, ctx);
+    const loginResult = await this.authService.login(body, ctx);
+    if ("requireMfa" in loginResult) {
+      return loginResult;
+    }
+
+    const { refreshToken, user, role, token } = loginResult;
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -125,5 +147,79 @@ export class AuthController {
     };
     await this.passwordResetService.resetPassword(body.token, body.newPassword, ctx);
     return { message: "Mot de passe réinitialisé. Veuillez vous reconnecter." };
+  }
+
+  // ── MFA endpoints ─────────────────────────────────────────
+
+  @ApiOperation({ summary: "Start MFA setup: returns QR code and recovery codes" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("mfa/setup")
+  @HttpCode(200)
+  async mfaSetup(@Req() req: Request) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    return this.mfaService.setupMfa(userId, ctx);
+  }
+
+  @ApiOperation({ summary: "Verify TOTP code to activate MFA" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("mfa/verify")
+  @HttpCode(200)
+  async mfaVerify(@Body() body: MfaVerifyDto, @Req() req: Request) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    return this.mfaService.verifyAndEnable(userId, body.code, ctx);
+  }
+
+  @ApiOperation({ summary: "Disable MFA (requires password + TOTP or recovery code)" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Post("mfa/disable")
+  @HttpCode(200)
+  async mfaDisable(@Body() body: MfaDisableDto, @Req() req: Request) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    return this.mfaService.disableMfa(userId, body.password, body.code, ctx);
+  }
+
+  @ApiOperation({ summary: "Complete login with MFA code or recovery code" })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @Post("mfa/login")
+  @HttpCode(200)
+  async mfaLogin(@Body() body: MfaLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+
+    const { sub } = this.authService.verifyMfaToken(body.mfaToken);
+    if (body.useRecovery) {
+      await this.mfaService.verifyRecoveryCode(sub, body.code, ctx);
+    } else {
+      await this.mfaService.verifyTotpCode(sub, body.code, ctx);
+    }
+
+    const { refreshToken, user, role, token } = await this.authService.completeMfaLogin(body.mfaToken, ctx);
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      sameSite: "none",
+      secure: true,
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return { ...user, role, token };
   }
 }
