@@ -92,20 +92,47 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     });
   }, [safePayments, searchTerm]);
 
-  const paymentMatchesStatus = (payment) => {
-    if (paymentStatusFilter === "all") return true;
-    if (paymentStatusFilter === "late") return overduePayments.includes(payment);
-    if (paymentStatusFilter === "pending") return upcomingPayments.includes(payment);
-    return !overduePayments.includes(payment) && !upcomingPayments.includes(payment);
-  };
+  // Convert a lease to a payment-compatible row for overdue/upcoming filters
+  const leaseToExpectedPayment = (lease) => ({
+    id: `expected-${lease.id}`,
+    leaseId: lease.id,
+    leaseReference: lease.reference,
+    tenantFirstName: lease.tenantFirstName || lease.tenant?.firstName,
+    tenantLastName: lease.tenantLastName || lease.tenant?.lastName,
+    propertyName: lease.propertyName || lease.unit?.property?.name,
+    unitName: lease.unitName || lease.unit?.name,
+    amount: lease.rentAmount,
+    currencySymbol: lease.currencySymbol || lease.currency?.symbol,
+    paymentDate: lease.nextInvoiceDate,
+    status: null,
+    method: null,
+    reference: null,
+    _isExpected: true,
+  });
 
-  const paymentsView = filteredPayments.filter(paymentMatchesStatus);
+  const overdueLeaseIds = useMemo(
+    () => new Set(overduePayments.map((l) => l.id)),
+    [overduePayments],
+  );
+  const upcomingLeaseIds = useMemo(
+    () => new Set(upcomingPayments.map((l) => l.id)),
+    [upcomingPayments],
+  );
+
+  const paymentsView = useMemo(() => {
+    if (paymentStatusFilter === "late") return overduePayments.map(leaseToExpectedPayment);
+    if (paymentStatusFilter === "pending") return upcomingPayments.map(leaseToExpectedPayment);
+    if (paymentStatusFilter === "paid")
+      return filteredPayments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId));
+    return filteredPayments;
+  }, [paymentStatusFilter, filteredPayments, overduePayments, upcomingPayments, overdueLeaseIds, upcomingLeaseIds]);
+
   const paymentFilterChips = [
     { key: "all", label: "Tous", count: filteredPayments.length },
     {
       key: "paid",
       label: "Payés",
-      count: filteredPayments.filter((payment) => !overduePayments.includes(payment) && !upcomingPayments.includes(payment)).length,
+      count: filteredPayments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId)).length,
     },
     { key: "pending", label: "En attente", count: upcomingPayments.length },
     { key: "late", label: "En retard", count: overduePayments.length },
