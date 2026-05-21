@@ -12,12 +12,16 @@ import { cn } from "../utils/functions";
 import { Link } from "react-router-dom";
 import { startRealtimeClient, stopRealtimeClient, onRealtimeEvent } from "../realtime/realtimeClient";
 import { createDataUpdateHandler } from "../realtime/dataUpdateHandlers";
+import { createPermissionsUpdateHandler } from "../realtime/permissionsUpdateHandlers";
+import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 
 const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
 
 function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { data, loading } = useSelector((state) => state?.setting) || {};
   const dispatch = useDispatch();
   const roleId = localStorage.getItem("roleId");
@@ -44,10 +48,12 @@ function AdminLayout() {
 
   useEffect(() => {
     startRealtimeClient();
-    const handler = createDataUpdateHandler(dispatch);
-    const unsub = onRealtimeEvent("data.updated", handler);
-    return () => { unsub(); stopRealtimeClient(); };
-  }, [dispatch]);
+    const dataHandler = createDataUpdateHandler(dispatch);
+    const permsHandler = createPermissionsUpdateHandler(dispatch, navigate, toast);
+    const unsubData = onRealtimeEvent("data.updated", dataHandler);
+    const unsubPerms = onRealtimeEvent("permissions.updated", permsHandler);
+    return () => { unsubData(); unsubPerms(); stopRealtimeClient(); };
+  }, [dispatch, navigate]);
 
   useEffect(() => {
     if (!roleId || localStorage.getItem("isLogged") !== "true") return undefined;
