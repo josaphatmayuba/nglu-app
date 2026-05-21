@@ -34,8 +34,12 @@ export class AuthController {
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("login")
   @HttpCode(200)
-  async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
-    const { refreshToken, user, role, token } = await this.authService.login(body);
+  async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const { refreshToken, user, role, token } = await this.authService.login(body, ctx);
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -54,9 +58,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(200)
-  async logout(@Body("id") id: number, @Res({ passthrough: true }) res: Response) {
+  async logout(@Body("id") id: number, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      userId: id,
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
     res.clearCookie("refreshToken", { path: "/" });
-    return this.authService.logout(id);
+    return this.authService.logout(id, ctx);
   }
 
   @ApiOperation({ summary: "Refresh access token using httpOnly cookie" })
@@ -66,6 +75,10 @@ export class AuthController {
   refreshToken(@Req() req: Request) {
     const token: string | undefined = (req.cookies as Record<string, string>)["refreshToken"];
     if (!token) throw new Error("No refresh token");
-    return this.authService.refreshAccessToken(token);
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    return this.authService.refreshAccessToken(token, ctx);
   }
 }

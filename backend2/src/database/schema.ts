@@ -5,6 +5,7 @@ import {
   datetime,
   decimal,
   double,
+  json,
   mysqlEnum,
   int,
   mysqlTable,
@@ -862,4 +863,15 @@ export const rolePermissions = mysqlTable("rolePermission", {
   permissionId: bigint("permissionId", { mode: "number" }).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+export const auditLog = mysqlTable("audit_log", {
+  id: bigint("id", { mode: "number" }).primaryKey().autoincrement(),
+  userId: int("user_id"),
+  action: varchar("action", { length: 100 }).notNull(),
+  target: varchar("target", { length: 255 }),
+  ip: varchar("ip", { length: 45 }),
+  userAgent: varchar("user_agent", { length: 512 }),
+  metadata: json("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
