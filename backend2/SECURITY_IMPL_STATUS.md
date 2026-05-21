@@ -20,9 +20,37 @@ Mis à jour : 2026-05-21. Source : SECURITY_NOTES.md + sessions de travail.
 | **Phase B** — Password policy | SCRUM-33 | Claude Sonnet | ✅ done | develop | MinLength 12, MaxLength 64, lettre+chiffre. CI `npm audit --audit-level=high`. |
 | **Phase C** — Audit log | SCRUM-30 | Claude Sonnet | ✅ done | develop | `audit_log` table, AuditService avec redaction auto password/token/secret. |
 | **Phase D** — Password reset | SCRUM-31 | Claude Sonnet | ✅ done | develop | Token UUID→SHA-256, one-shot, 15min expiry, revoke sessions, anti-enum. |
-| **Phase E** — Anti-IDOR | SCRUM-29 | — | ❌ pending | — | Bloqué: requiert audit schema org_id. Voir SCRUM-29. |
+| **Phase E** — Anti-IDOR | SCRUM-29 | Claude Sonnet | 🚫 blocked | — | Audit 2026-05-21: aucun `organization_id` dans le schéma. Système mono-org. Décision métier requise avant tout code. Voir note ci-dessous. |
 | **Phase F** — MFA TOTP | SCRUM-32 | — | ❌ pending | — | Requiert Phase 0+A. Complexe: TOTP, backup codes, enforced pour super-admin. |
 | **Phase G** — Prod hardening | SCRUM-34 | — | ⏸ deferred | — | Redis session cache, secrets manager. Optionnel. |
+
+---
+
+## Audit SCRUM-29 — Résultat schema (2026-05-21)
+
+Tables PM auditées pour `organization_id` / `agency_id` / `owner_id` / `created_by` :
+
+| Table | org_id | owner_id | created_by | Verdict |
+|-------|--------|----------|------------|---------|
+| `real_estate_properties` | ❌ | ❌ | ❌ | Aucune appartenance |
+| `real_estate_units` | ❌ | ❌ | ❌ | Aucune appartenance |
+| `real_estate_leases` | ❌ | ❌ | ❌ | tenantId = customer, pas d'org |
+| `real_estate_rent_payments` | ❌ | ❌ | ❌ | Via lease uniquement |
+| `real_estate_maintenance_requests` | ❌ | ❌ | ❌ | Aucune appartenance |
+| `real_estate_contracts` | ❌ | ❌ | ✅ `created_by` (user) | Pas d'org |
+| `real_estate_contract_templates` | ❌ | ❌ | ✅ `created_by` (user) | Pas d'org |
+| `users` | ❌ | — | — | Pas d'org |
+| `customers` | ❌ | — | — | Pas d'org |
+
+**Conclusion** : Le système est **mono-tenant** — une seule organisation partage toutes les données. Il n'y a pas de risque IDOR cross-org car il n'y a qu'une org.
+
+**Décision métier requise** (blocker) :
+
+1. **Option A — Rester mono-tenant** : fermer Phase E comme N/A. La protection IDOR existante est le système de permissions (rôles). Acceptable si l'app n'est déployée que pour une seule société.
+2. **Option B — Multi-tenancy minimaliste** : ajouter `organizations` table + `organization_id` FK sur toutes les tables PM + seeder un org par défaut + filtrer toutes les listes par org. Effort : 1-2 jours. Prérequis pour SaaS multi-clients.
+3. **Option C — Row-level security par utilisateur** : ajouter `created_by_user_id` sur properties/units, les gestionnaires ne voient que ce qu'ils ont créé. Plus léger qu'Option B mais plus opinionné.
+
+**Recommandation** : Option A si mono-client. Option B seulement si l'app doit supporter plusieurs sociétés distinctes sur la même instance.
 
 ---
 
