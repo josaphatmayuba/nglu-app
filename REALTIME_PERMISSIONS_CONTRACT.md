@@ -68,9 +68,22 @@ permissions.updated
 The backend contract lives in:
 
 - `backend2/src/realtime/permissions-update-event.ts`
+- `backend2/src/realtime/realtime-permissions-publisher.service.ts`
 
 Validate the contract with:
 
 ```bash
 node scripts/check-permissions-update-event-contract.mjs
 ```
+
+## Redis Configuration
+
+The publisher is optional at runtime. If Redis is not configured or unavailable, permission mutations must continue to succeed and the backend logs a warning.
+
+Environment variables:
+
+- `REDIS_URL`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_PASSWORD`
+- `REDIS_CHANNEL_USER_UPDATES` defaults to `user-updates`

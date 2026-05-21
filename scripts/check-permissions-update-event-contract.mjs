@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const eventSource = readFileSync(resolve("backend2/src/realtime/permissions-update-event.ts"), "utf8");
+const publisherSource = readFileSync(resolve("backend2/src/realtime/realtime-permissions-publisher.service.ts"), "utf8");
 const docSource = readFileSync(resolve("REALTIME_PERMISSIONS_CONTRACT.md"), "utf8");
 
 const eventRequirements = [
@@ -24,6 +25,7 @@ const docRequirements = [
   "loadPermissionById(roleId)",
   "GET /role-permission/permission?roleId=...",
   "Do not send the full permission list",
+  "REDIS_CHANNEL_USER_UPDATES",
 ];
 
 const failures = [
@@ -33,6 +35,14 @@ const failures = [
   ...docRequirements
     .filter((pattern) => !docSource.includes(pattern))
     .map((pattern) => `doc missing: ${pattern}`),
+  ...[
+    "RealtimePermissionsPublisher",
+    "publishPermissionsUpdated",
+    "Redis permissions publisher disabled",
+    "Redis publish failed",
+  ]
+    .filter((pattern) => !publisherSource.includes(pattern))
+    .map((pattern) => `publisher missing: ${pattern}`),
 ];
 
 if (failures.length > 0) {

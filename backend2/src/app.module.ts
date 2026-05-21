@@ -25,6 +25,7 @@ import { ProductVatsModule } from "./product-vats/product-vats.module";
 import { ProductsModule } from "./products/products.module";
 import { PropertyManagementModule } from "./property-management/property-management.module";
 import { PurchaseInvoicesModule } from "./purchase-invoices/purchase-invoices.module";
+import { RealtimeModule } from "./realtime/realtime.module";
 import { RolePermissionsModule } from "./role-permissions/role-permissions.module";
 import { RolesModule } from "./roles/roles.module";
 import { SaleInvoicesModule } from "./sale-invoices/sale-invoices.module";
@@ -61,6 +62,7 @@ import { UsersModule } from "./users/users.module";
     ProductsModule,
     PropertyManagementModule,
     PurchaseInvoicesModule,
+    RealtimeModule,
     RolePermissionsModule,
     RolesModule,
     SaleInvoicesModule,

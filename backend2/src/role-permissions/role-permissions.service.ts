@@ -3,11 +3,15 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions } from "../database/schema";
 import type { Database } from "../database/types";
+import { RealtimePermissionsPublisher } from "../realtime/realtime-permissions-publisher.service";
 import { CreateRolePermissionDto } from "./dto/role-permission.dto";
 
 @Injectable()
 export class RolePermissionsService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly realtimePermissions: RealtimePermissionsPublisher,
+  ) {}
 
   async upsert(dto: CreateRolePermissionDto) {
     const { roleId, permissionId: incoming } = dto;
@@ -42,6 +46,11 @@ export class RolePermissionsService {
       }
     }
 
+    await this.realtimePermissions.publishPermissionsUpdated({
+      roleId,
+      reason: "role-permission-updated",
+    });
+
     return { count: incoming.length };
   }
 
@@ -58,9 +67,24 @@ export class RolePermissionsService {
   }
 
   async deleteMany(ids: number[]) {
+    const affectedRoles = ids.length
+      ? await this.db
+          .select({ roleId: rolePermissions.roleId })
+          .from(rolePermissions)
+          .where(inArray(rolePermissions.id, ids))
+      : [];
+
     if (ids.length) {
       await this.db.delete(rolePermissions).where(inArray(rolePermissions.id, ids));
     }
+
+    for (const roleId of Array.from(new Set(affectedRoles.map((row) => row.roleId)))) {
+      await this.realtimePermissions.publishPermissionsUpdated({
+        roleId,
+        reason: "role-permission-updated",
+      });
+    }
+
     return { count: ids.length };
   }
 
@@ -73,7 +97,20 @@ export class RolePermissionsService {
 
     if (!row) throw new NotFoundException("RolePermission not found");
 
+    const [rolePermission] = await this.db
+      .select({ roleId: rolePermissions.roleId })
+      .from(rolePermissions)
+      .where(eq(rolePermissions.id, id))
+      .limit(1);
+
     await this.db.delete(rolePermissions).where(eq(rolePermissions.id, id));
+
+    if (rolePermission?.roleId) {
+      await this.realtimePermissions.publishPermissionsUpdated({
+        roleId: rolePermission.roleId,
+        reason: "role-permission-updated",
+      });
+    }
 
     return { message: "RolePermission Deleted Successfully" };
   }

@@ -69,6 +69,10 @@ services:
       APP_URL: http://localhost:3000
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
+      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
     ports:
       - "8001:8001"
     volumes:

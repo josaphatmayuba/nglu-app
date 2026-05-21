@@ -22,12 +22,16 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { RealtimePermissionsPublisher } from "../realtime/realtime-permissions-publisher.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Injectable()
 export class UsersService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly realtimePermissions: RealtimePermissionsPublisher,
+  ) {}
 
   async findAll(query: Record<string, string>) {
     if (query["query"] === "all") {
@@ -160,7 +164,7 @@ export class UsersService {
 
   async update(id: number, dto: UpdateUserDto) {
     const [user] = await this.db
-      .select({ id: users.id })
+      .select({ id: users.id, roleId: users.roleId })
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
@@ -180,6 +184,14 @@ export class UsersService {
     updateData["updatedAt"] = sql`CURRENT_TIMESTAMP`;
 
     await this.db.update(users).set(updateData).where(eq(users.id, id));
+
+    if (dto.roleId && dto.roleId !== user.roleId) {
+      await this.realtimePermissions.publishPermissionsUpdated({
+        roleId: dto.roleId,
+        userIds: [id],
+        reason: "user-role-updated",
+      });
+    }
 
     return this.findOne(id);
   }

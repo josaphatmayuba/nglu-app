@@ -18,6 +18,13 @@ export const env = {
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || "noreply@nglu.app",
   },
+  redis: {
+    url: process.env.REDIS_URL || "",
+    host: process.env.REDIS_HOST || "",
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD || "",
+    userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "user-updates",
+  },
   db: {
     host: process.env.DB_HOST || "mysql",
     port: Number(process.env.DB_PORT || 3306),
