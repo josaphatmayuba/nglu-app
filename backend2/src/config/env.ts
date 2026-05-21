@@ -24,6 +24,7 @@ export const env = {
     port: Number(process.env.REDIS_PORT || 6379),
     password: process.env.REDIS_PASSWORD || "",
     userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "user-updates",
+    dataUpdatesChannel: process.env.REDIS_CHANNEL_DATA_UPDATES || "data-updates",
   },
   db: {
     host: process.env.DB_HOST || "mysql",

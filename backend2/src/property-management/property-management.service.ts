@@ -25,6 +25,8 @@ import {
   transactionTypes,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
+import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -52,7 +54,10 @@ const unitCurrency = alias(currencies, "unitCurrency");
 
 @Injectable()
 export class PropertyManagementService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly realtimeData: RealtimeDataPublisher,
+  ) {}
 
   async dashboard() {
     const [properties] = await this.db.select({ count: sql<number>`count(*)` }).from(realEstateProperties);
@@ -379,7 +384,9 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findProperty(Number(result.insertId));
+    const propertyId = Number(result.insertId);
+    await this.publishPropertyUpdate("created", propertyId, { propertyId });
+    return this.findProperty(propertyId);
   }
 
   async updateProperty(id: number, input: UpdatePropertyDto) {
@@ -409,6 +416,7 @@ export class PropertyManagementService {
       })
       .where(eq(realEstateProperties.id, id));
 
+    await this.publishPropertyUpdate("updated", id, { propertyId: id });
     return this.findProperty(id);
   }
 
@@ -436,6 +444,7 @@ export class PropertyManagementService {
     }
 
     await this.db.delete(realEstateProperties).where(eq(realEstateProperties.id, id));
+    await this.publishPropertyUpdate("deleted", id, { propertyId: id });
     return { message: "Property deleted successfully." };
   }
 
@@ -490,7 +499,9 @@ export class PropertyManagementService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findUnit(Number(result.insertId));
+    const unitId = Number(result.insertId);
+    await this.publishUnitUpdate("created", unitId, { propertyId: input.propertyId, unitId });
+    return this.findUnit(unitId);
   }
 
   async updateUnit(id: number, input: UpdateUnitDto) {
@@ -522,6 +533,7 @@ export class PropertyManagementService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(realEstateUnits.id, id));
+    await this.publishUnitUpdate("updated", id, { propertyId: input.propertyId ?? null, unitId: id });
     return this.findUnit(id);
   }
 
@@ -541,6 +553,7 @@ export class PropertyManagementService {
     }
 
     await this.db.delete(realEstateUnits).where(eq(realEstateUnits.id, id));
+    await this.publishUnitUpdate("deleted", id, { unitId: id });
     return { message: "Unit deleted successfully." };
   }
 
@@ -578,7 +591,12 @@ export class PropertyManagementService {
       await this.setUnitStatus(input.unitId, "occupied");
     }
 
-    return this.findLease(Number(result.insertId));
+    const leaseId = Number(result.insertId);
+    await this.publishLeaseUpdate("created", leaseId, {
+      propertyId: input.propertyId,
+      unitId: input.unitId,
+    });
+    return this.findLease(leaseId);
   }
 
   async updateLease(id: number, input: UpdateLeaseDto) {
@@ -625,6 +643,10 @@ export class PropertyManagementService {
       await this.setUnitStatus(nextUnitId, "vacant");
     }
 
+    await this.publishLeaseUpdate("updated", id, {
+      propertyId: input.propertyId ?? current.propertyId,
+      unitId: input.unitId ?? current.unitId,
+    });
     return this.findLease(id);
   }
 
@@ -632,6 +654,10 @@ export class PropertyManagementService {
     const lease = await this.getLeaseOrThrow(id);
     await this.setUnitStatus(lease.unitId, "vacant");
     await this.db.delete(realEstateLeases).where(eq(realEstateLeases.id, id));
+    await this.publishLeaseUpdate("deleted", id, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
     return { message: "Lease deleted successfully." };
   }
 
@@ -703,7 +729,12 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findPayment(Number(paymentResult.insertId));
+    const paymentId = Number(paymentResult.insertId);
+    await this.publishPaymentUpdate("created", paymentId, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    return this.findPayment(paymentId);
   }
 
   maintenance() {
@@ -1196,5 +1227,41 @@ export class PropertyManagementService {
       }
       return result;
     }, {});
+  }
+
+  private publishPropertyUpdate(action: DataUpdateAction, entityId: number, scope: Partial<DataUpdateScope>) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "property",
+      action,
+      entityId,
+      scope,
+    });
+  }
+
+  private publishUnitUpdate(action: DataUpdateAction, entityId: number, scope: Partial<DataUpdateScope>) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "unit",
+      action,
+      entityId,
+      scope,
+    });
+  }
+
+  private publishLeaseUpdate(action: DataUpdateAction, entityId: number, scope: Partial<DataUpdateScope>) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "lease",
+      action,
+      entityId,
+      scope,
+    });
+  }
+
+  private publishPaymentUpdate(action: DataUpdateAction, entityId: number, scope: Partial<DataUpdateScope>) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "payment",
+      action,
+      entityId,
+      scope,
+    });
   }
 }

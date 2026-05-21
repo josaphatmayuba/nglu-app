@@ -60,6 +60,7 @@ The backend contract lives in:
 
 - `backend2/src/realtime/data-update-event.ts`
 - `backend2/src/realtime/data-update-rules.ts`
+- `backend2/src/realtime/realtime-data-publisher.service.ts`
 
 Validate the contract with:
 
@@ -67,3 +68,15 @@ Validate the contract with:
 node scripts/check-data-update-event-contract.mjs
 node scripts/check-data-update-rules.mjs
 ```
+
+## Redis Configuration
+
+The publisher is optional at runtime. If Redis is not configured or unavailable, business mutations must continue to succeed and the backend logs a warning.
+
+Environment variables:
+
+- `REDIS_URL`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_PASSWORD`
+- `REDIS_CHANNEL_DATA_UPDATES` defaults to `data-updates`

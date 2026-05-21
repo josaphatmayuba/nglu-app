@@ -58,6 +58,7 @@ services:
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
+      REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
     depends_on:
       mysql:
         condition: service_healthy
