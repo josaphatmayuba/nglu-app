@@ -43,9 +43,10 @@ export class AuthService {
       { secret: env.refreshSecret, expiresIn: "7d", algorithm: "HS256" },
     );
 
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
     await this.db
       .update(users)
-      .set({ refreshToken, isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ refreshToken: refreshTokenHash, isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, user.id));
 
     const { password: _, refreshToken: __, isLogin: ___, ...safe } = user;
@@ -56,7 +57,7 @@ export class AuthService {
   async logout(userId: number) {
     await this.db
       .update(users)
-      .set({ isLogin: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ isLogin: "false", refreshToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, userId));
 
     return { message: "Logout successfully" };
@@ -77,7 +78,10 @@ export class AuthService {
       .where(eq(users.id, payload.sub))
       .limit(1);
 
-    if (!user || user.refreshToken !== refreshToken) {
+    const tokenValid = user.refreshToken
+      ? await bcrypt.compare(refreshToken, user.refreshToken)
+      : false;
+    if (!user || !tokenValid) {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
