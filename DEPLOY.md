@@ -252,6 +252,38 @@ Elle couvre les routes frontend, l'entree CRM, la racine marketing, l'API health
 
 ---
 
+## 7c. Deploiement CRM dev sans build sur Lightsail
+
+La petite instance Lightsail peut echouer pendant le build React/Vite du CRM avec `JavaScript heap out of memory`. Pour le dev, ne pas builder le CRM complet dans `/opt/nglu-app-dev/frontend` quand la memoire est limitee.
+
+Procedure recommandee: builder l'artifact `frontend/dist` localement ou en CI, puis copier uniquement le dist vers AWS dev.
+
+Depuis Windows PowerShell:
+
+```powershell
+.\scripts\deploy-dev-frontend-artifact.ps1
+```
+
+Le script:
+
+- execute `npm run build:dev` dans `frontend/`;
+- verifie la cible API dev via `assert-api-target.mjs`;
+- compresse `frontend/dist`;
+- met a jour `/opt/nglu-app-dev` par `git pull --ff-only`;
+- remplace seulement le contenu de `/opt/nglu-app-dev/frontend/dist`;
+- verifie que le dist deploye contient `https://dev.ongdngolu.org/api`;
+- verifie que `/crm` et `/admin/dashboard` repondent.
+
+Si le build a deja ete produit ailleurs:
+
+```powershell
+.\scripts\deploy-dev-frontend-artifact.ps1 -SkipBuild
+```
+
+Le marketing-site Vue reste separe et continue d'etre servi depuis `marketing-site/dist`. Le routage ne change pas: racine = marketing, `/crm` = CRM.
+
+---
+
 ## 8. Architecture mémo
 
 ```

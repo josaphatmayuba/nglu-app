@@ -62,6 +62,7 @@ Rules:
 - Prefer replacing the contents inside the existing `frontend/dist` directory, or recreate `nglu_prod_frontend` immediately after replacing the directory.
 - After deploying dev frontend, verify the bundle target with `npm run assert:api:dev` locally or by grepping the deployed dist for `https://dev.ongdngolu.org/api`.
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
+- Do not build the full CRM frontend directly on the small Lightsail instance when memory is constrained. Build `frontend/dist` locally or in CI and deploy the artifact with `scripts/deploy-dev-frontend-artifact.ps1`.
 
 Manual AWS deployment SSH key note for agents:
 
