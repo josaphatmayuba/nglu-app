@@ -3437,6 +3437,16 @@
 .immo-mini-kpis .amber { background: transparent; color: #d97706; }
 .immo-mini-kpis .red { background: transparent; color: #dc2626; }
 
+.immo-maintenance-kpis {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.immo-maintenance-kpis > div,
+.immo-maintenance-kpis strong {
+  min-width: 0;
+}
+
 /* Multi-currency stacked display */
 .immo-multicurrency {
   display: flex;
@@ -3586,6 +3596,28 @@
   .immo-lease-grid,
   .immo-mini-kpis {
     grid-template-columns: 1fr;
+  }
+
+  .immo-table-flow,
+  .immo-maintenance-kpis {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .immo-maintenance-kpis {
+    gap: 12px;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .immo-maintenance-kpis > div {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .immo-maintenance-kpis strong {
+    overflow-wrap: anywhere;
   }
 
   .immo-row-card {

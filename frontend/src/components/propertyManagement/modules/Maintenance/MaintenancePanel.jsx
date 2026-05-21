@@ -164,7 +164,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
 
   return (
     <div className="immo-table-flow">
-      <div className="immo-mini-kpis">
+      <div className="immo-mini-kpis immo-maintenance-kpis">
         <div><span>Tickets ouverts</span><strong className="red">{openMaintenance.length}</strong></div>
         <div><span>En cours</span><strong className="amber">{inProgressMaintenance.length}</strong></div>
         <div><span>Résolus ce mois</span><strong className="green">{resolvedMaintenance.length}</strong></div>
