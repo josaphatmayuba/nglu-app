@@ -21,7 +21,7 @@ Mis à jour : 2026-05-21. Source : SECURITY_NOTES.md + sessions de travail.
 | **Phase C** — Audit log | SCRUM-30 | Claude Sonnet | ✅ done | develop | `audit_log` table, AuditService avec redaction auto password/token/secret. |
 | **Phase D** — Password reset | SCRUM-31 | Claude Sonnet | ✅ done | develop | Token UUID→SHA-256, one-shot, 15min expiry, revoke sessions, anti-enum. |
 | **Phase E** — Anti-IDOR | SCRUM-29 | Claude Sonnet | 🚫 blocked | — | Audit 2026-05-21: aucun `organization_id` dans le schéma. Système mono-org. Décision métier requise avant tout code. Voir note ci-dessous. |
-| **Phase F** — MFA TOTP | SCRUM-32 | — | ❌ pending | — | Requiert Phase 0+A. Complexe: TOTP, backup codes, enforced pour super-admin. |
+| **Phase F** — MFA TOTP | SCRUM-32 | Claude Sonnet | ✅ done | develop | `otplib`+`qrcode`. `users.totp_secret/enabled`, `mfa_recovery_codes`. Setup QR+10 codes, verify activate, disable password+code, login returns `requireMfa`+`mfaToken` (5min), `/auth/mfa/login` échange TOTP ou code récup contre vrais tokens. Frontend Login.jsx: step 2 MFA. |
 | **Phase G** — Prod hardening | SCRUM-34 | — | ⏸ deferred | — | Redis session cache, secrets manager. Optionnel. |
 
 ---
