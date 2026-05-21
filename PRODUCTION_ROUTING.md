@@ -37,3 +37,5 @@ curl -I https://ongdngolu.org/crm
 curl -I https://ongdngolu.org/admin/auth/login
 curl -I https://ongdngolu.org/api/health
 ```
+
+For the complete post-deploy smoke checklist, use `DEPLOYMENT_SMOKE_CHECKLIST.md`.

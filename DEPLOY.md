@@ -217,6 +217,16 @@ make nginx-reload     # test + reload si OK
 
 ---
 
+## 7b. Smoke test apres deploiement
+
+Apres chaque deploiement dev/prod, utiliser la checklist centralisee :
+
+- [`DEPLOYMENT_SMOKE_CHECKLIST.md`](./DEPLOYMENT_SMOKE_CHECKLIST.md)
+
+Elle couvre les routes frontend, l'entree CRM, la racine marketing, l'API health, Docker Compose, les migrations backend et les assets frontend.
+
+---
+
 ## 8. Architecture mémo
 
 ```
