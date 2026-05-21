@@ -1,11 +1,17 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString } from "class-validator";
+import { IsInt, IsOptional, IsString, MaxLength, MinLength, Matches } from "class-validator";
 
 export class UpdateUserDto {
   @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() username?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() password?: string;
+  @ApiPropertyOptional({ description: "Min 12 chars, max 64, au moins une lettre et un chiffre" })
+  @IsOptional()
+  @IsString()
+  @MinLength(12, { message: "Le mot de passe doit contenir au moins 12 caractères." })
+  @MaxLength(64, { message: "Le mot de passe ne peut pas dépasser 64 caractères." })
+  @Matches(/^(?=.*[a-zA-Z])(?=.*\d).+$/, { message: "Le mot de passe doit contenir au moins une lettre et un chiffre." })
+  password?: string;
   @ApiPropertyOptional() @IsOptional() @IsInt() roleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;

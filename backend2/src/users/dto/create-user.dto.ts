@@ -1,12 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, MinLength, Matches } from "class-validator";
 
 export class CreateUserDto {
   @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string;
 
   @ApiProperty() @IsString() @IsNotEmpty() username: string;
-  @ApiProperty() @IsString() @IsNotEmpty() password: string;
+  @ApiProperty({ description: "Min 12 chars, max 64, au moins une lettre et un chiffre" })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(12, { message: "Le mot de passe doit contenir au moins 12 caractères." })
+  @MaxLength(64, { message: "Le mot de passe ne peut pas dépasser 64 caractères." })
+  @Matches(/^(?=.*[a-zA-Z])(?=.*\d).+$/, { message: "Le mot de passe doit contenir au moins une lettre et un chiffre." })
+  password: string;
 
   @ApiProperty() @IsInt() roleId: number;
 

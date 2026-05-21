@@ -6,6 +6,16 @@ definitions:
     node-backend2: backend2/node_modules
 
   steps:
+    - step: &audit-security
+        name: Security Audit (npm audit high/critical)
+        image: node:20-alpine
+        script:
+          - echo "=== Backend2 audit ==="
+          - cd backend2 && npm ci --ignore-scripts && npm audit --audit-level=high
+          - cd ..
+          - echo "=== Frontend audit ==="
+          - cd frontend && npm install --legacy-peer-deps --ignore-scripts && npm audit --audit-level=high
+
     - step: &build-backend2
         name: Build Backend2
         image: node:20-alpine
@@ -71,11 +81,13 @@ definitions:
 pipelines:
   branches:
     master:
+      - step: *audit-security
       - step: *build-backend2
       - step: *build-frontend-prod
       - step: *deploy-prod
 
     develop:
+      - step: *audit-security
       - step: *build-backend2
       - step: *build-frontend-dev
       - step: *deploy-dev
