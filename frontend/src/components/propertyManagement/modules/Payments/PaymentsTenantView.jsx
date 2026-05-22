@@ -2,6 +2,7 @@
 // Groups payments by tenant and shows a card with 6-month bar histogram.
 
 import moment from "moment";
+import { useMemo } from "react";
 import { avatarColors } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
 import { initials } from "../../shared/tenants";
@@ -13,21 +14,24 @@ const tenantKey = (p) =>
   p.leaseReference ||
   String(p.id);
 
-const statusOf = (payment, overduePayments, upcomingPayments) => {
-  if (overduePayments.includes(payment)) return "late";
-  if (upcomingPayments.includes(payment)) return "pending";
+// Use leaseId-based lookup — reference equality on synthetic objects would
+// always fail because leaseToExpectedPayment() creates new objects each render.
+const statusOf = (payment, overdueLeaseIds, upcomingLeaseIds) => {
+  if (payment.leaseId != null) {
+    if (overdueLeaseIds.has(payment.leaseId)) return "late";
+    if (upcomingLeaseIds.has(payment.leaseId)) return "pending";
+  }
+  // _isExpected without a matching leaseId still came from an overdue/upcoming
+  // filter — keep as late so the card renders meaningful detail.
+  if (payment._isExpected) return "late";
   return "paid";
 };
 
 const StatusBadge = ({ status }) => {
   if (status === "late")
-    return (
-      <span className="immo-pill danger">En retard</span>
-    );
+    return <span className="immo-pill danger">En retard</span>;
   if (status === "pending")
-    return (
-      <span className="immo-pill warning">En attente</span>
-    );
+    return <span className="immo-pill warning">En attente</span>;
   return <span className="immo-pill success">À jour</span>;
 };
 
@@ -48,28 +52,49 @@ const HistogramBar = ({ status }) => {
   );
 };
 
-const TenantCard = ({ name, payments, overduePayments, upcomingPayments, colorIdx }) => {
+const TenantCard = ({ name, payments, overdueLeaseIds, upcomingLeaseIds, colorIdx }) => {
   const sorted = [...payments].sort(
     (a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0),
   );
   const latest = sorted[0];
-  const latestStatus = latest ? statusOf(latest, overduePayments, upcomingPayments) : "paid";
+  const latestStatus = latest ? statusOf(latest, overdueLeaseIds, upcomingLeaseIds) : "paid";
   const unit = latest?.unitName || latest?.leaseReference || "-";
   const amount = latest?.amount;
   const currency = latest?.currencySymbol;
+
+  // Days overdue for late payments
+  const daysLate = latestStatus === "late" && latest?.paymentDate
+    ? Math.max(0, moment().diff(moment(latest.paymentDate), "days"))
+    : null;
 
   // Build 6-month slot history (most recent on the right)
   const history = sorted.slice(0, BAR_MONTHS).reverse();
   const slots = Array.from({ length: BAR_MONTHS }, (_, i) => {
     const p = history[history.length - BAR_MONTHS + i] ?? null;
     if (!p) return "empty";
-    return statusOf(p, overduePayments, upcomingPayments);
+    return statusOf(p, overdueLeaseIds, upcomingLeaseIds);
   });
 
   const oldestDate = sorted.length >= BAR_MONTHS
     ? moment(sorted[BAR_MONTHS - 1]?.paymentDate).format("MMM")
     : "—";
   const newestDate = latest?.paymentDate ? moment(latest.paymentDate).format("MMM") : "—";
+
+  // Row 1 label / value
+  const dateLabel =
+    latestStatus === "late" ? "Échéance dépassée"
+    : latestStatus === "pending" ? "Échéance"
+    : "Dernier paiement";
+
+  const dateValue = latest?.paymentDate
+    ? `${moment(latest.paymentDate).format("DD MMM YYYY")}${daysLate != null && daysLate > 0 ? ` (${daysLate}j)` : ""}`
+    : "—";
+
+  // Row 2 label / value
+  const amountLabel =
+    latestStatus === "late" ? "Montant dû"
+    : latestStatus === "pending" ? "Montant attendu"
+    : "Montant mensuel";
 
   return (
     <div
@@ -95,13 +120,7 @@ const TenantCard = ({ name, payments, overduePayments, upcomingPayments, colorId
       </div>
 
       <div className="flex justify-between text-xs text-ink-500 mb-1.5">
-        <span>
-          {latestStatus === "late"
-            ? "Échéance dépassée"
-            : latestStatus === "pending"
-              ? "Échéance"
-              : "Dernier paiement"}
-        </span>
+        <span>{dateLabel}</span>
         <span
           className={`font-medium ${
             latestStatus === "late"
@@ -111,14 +130,20 @@ const TenantCard = ({ name, payments, overduePayments, upcomingPayments, colorId
                 : "text-ink-900"
           }`}
         >
-          {latest?.paymentDate ? moment(latest.paymentDate).format("DD MMM YYYY") : "—"}
+          {dateValue}
         </span>
       </div>
 
       <div className="flex justify-between text-xs text-ink-500 mb-3">
-        <span>Montant</span>
+        <span>{amountLabel}</span>
         <span
-          className={`font-semibold ${latestStatus === "late" ? "text-red-600" : "text-ink-900"}`}
+          className={`font-semibold ${
+            latestStatus === "late"
+              ? "text-red-600"
+              : latestStatus === "pending"
+                ? "text-ink-700"
+                : "text-ink-900"
+          }`}
         >
           {amount != null ? compactMoney(amount, currency) : "—"}
         </span>
@@ -143,6 +168,17 @@ const TenantCard = ({ name, payments, overduePayments, upcomingPayments, colorId
 };
 
 const PaymentsTenantView = ({ payments, overduePayments, upcomingPayments }) => {
+  // Build Sets once for O(1) lookup — avoids the reference-equality trap of
+  // Array.includes() when payments are synthetic objects from leaseToExpectedPayment().
+  const overdueLeaseIds = useMemo(
+    () => new Set(overduePayments.map((l) => l.id)),
+    [overduePayments],
+  );
+  const upcomingLeaseIds = useMemo(
+    () => new Set(upcomingPayments.map((l) => l.id)),
+    [upcomingPayments],
+  );
+
   // Group by tenant name
   const groups = [];
   const seen = new Map();
@@ -168,8 +204,8 @@ const PaymentsTenantView = ({ payments, overduePayments, upcomingPayments }) => 
           key={g.key}
           name={g.name}
           payments={g.list}
-          overduePayments={overduePayments}
-          upcomingPayments={upcomingPayments}
+          overdueLeaseIds={overdueLeaseIds}
+          upcomingLeaseIds={upcomingLeaseIds}
           colorIdx={idx}
         />
       ))}
