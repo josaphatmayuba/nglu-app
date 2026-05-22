@@ -1452,6 +1452,7 @@
               <button data-settings-tab="modeles" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="file-text" class="w-4 h-4"></i>Modèles</button>
               <button data-settings-tab="audit" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="history" class="w-4 h-4"></i>Audit &amp; Journaux</button>
               <button data-settings-tab="sauvegarde" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="database-backup" class="w-4 h-4"></i>Sauvegarde &amp; Export</button>
+              <button data-settings-tab="apropos" class="settings-tab w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-ink-100 text-ink-600 text-sm"><i data-lucide="info" class="w-4 h-4"></i>À propos</button>
             </div>
           </div>
 
@@ -2259,6 +2260,76 @@
             </div>
           </div>
           <!-- ============= /PANEL: Sauvegarde & Export ============= -->
+
+          <!-- ============= PANEL: À propos ============= -->
+          <div data-settings-panel="apropos" class="hidden space-y-4">
+
+            <!-- Version card -->
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <div class="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 class="font-semibold text-ink-900 text-lg">Version de l'application</h3>
+                  <p class="text-xs text-ink-500 mt-1">Informations sur le build actuellement déployé</p>
+                </div>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-brand-50 text-brand-700 rounded-full text-sm font-semibold border border-brand-200">
+                  <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+                  v3.0.0
+                </span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="bg-ink-50 rounded-lg p-3">
+                  <div class="text-xs text-ink-500 font-medium mb-1">Version de base</div>
+                  <div class="text-sm font-mono font-semibold text-ink-900">3.0.0</div>
+                </div>
+                <div class="bg-ink-50 rounded-lg p-3">
+                  <div class="text-xs text-ink-500 font-medium mb-1">Build complet</div>
+                  <div class="text-sm font-mono font-semibold text-ink-900">3.0.0+ac49603</div>
+                </div>
+                <div class="bg-ink-50 rounded-lg p-3">
+                  <div class="text-xs text-ink-500 font-medium mb-1">Commit</div>
+                  <div class="text-sm font-mono font-semibold text-ink-900">ac49603</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Changelog -->
+            <div class="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+              <h3 class="font-semibold text-ink-900 text-lg mb-4">Journal des modifications</h3>
+
+              <!-- Unreleased -->
+              <div class="mb-5">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">En cours</span>
+                  <span class="text-xs text-ink-400 font-mono">[Unreleased]</span>
+                </div>
+                <ul class="space-y-2 pl-1">
+                  <li class="flex items-start gap-2 text-sm text-ink-700">
+                    <span class="inline-block mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0"></span>
+                    Politique de versionnage et outillage pour les changements futurs
+                  </li>
+                  <li class="flex items-start gap-2 text-sm text-ink-700">
+                    <span class="inline-block mt-1.5 w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0"></span>
+                    <span><span class="font-mono text-xs bg-ink-100 px-1 py-0.5 rounded">SCRUM-125</span> Affichage de la version dans les paramètres</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="border-t border-ink-100 pt-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">v3.0.0</span>
+                  <span class="text-xs text-ink-400">22 mai 2026</span>
+                </div>
+                <ul class="space-y-2 pl-1">
+                  <li class="flex items-start gap-2 text-sm text-ink-600">
+                    <span class="inline-block mt-1.5 w-1.5 h-1.5 rounded-full bg-ink-400 shrink-0"></span>
+                    Baseline NGLU — socle avant enforcement du versionnage par commit
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+          </div>
+          <!-- ============= /PANEL: À propos ============= -->
 
           </div>
         </div>

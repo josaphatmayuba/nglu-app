@@ -1,4 +1,5 @@
 import Tabs, { Tab } from "@/UI/Tabs";
+import AboutPanel from "./AboutPanel";
 import EmailConfig from "./EmailConfig";
 import GeneralSetting from "./GeneralSetting";
 import SecurityPanel from "./SecurityPanel";
@@ -26,6 +27,9 @@ export default function AppSettings() {
           </Tab>
           <Tab label="Sécurité">
             <SecurityPanel />
+          </Tab>
+          <Tab label="À propos">
+            <AboutPanel />
           </Tab>
         </Tabs>
       </div>

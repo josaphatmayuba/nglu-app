@@ -18,6 +18,7 @@ function git(command, fallback) {
 const commit = git("git rev-parse --short HEAD", "unknown");
 const isDirty = Boolean(git("git status --short --untracked-files=no", ""));
 const buildVersion = `${baseVersion}+${commit}${isDirty ? ".dirty" : ""}`;
+const changelog = readFileSync(path.resolve(rootDir, "CHANGELOG.md"), "utf8");
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -27,6 +28,7 @@ export default defineConfig({
     "import.meta.env.VITE_APP_BASE_VERSION": JSON.stringify(baseVersion),
     "import.meta.env.VITE_APP_BUILD_VERSION": JSON.stringify(buildVersion),
     "import.meta.env.VITE_APP_COMMIT": JSON.stringify(commit),
+    "import.meta.env.VITE_APP_CHANGELOG": JSON.stringify(changelog),
   },
   resolve: {
     alias: {
