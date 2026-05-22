@@ -11,16 +11,45 @@ import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
 
 const ACCESS_TTL_MS = 15 * 60 * 1000; // 15 min — must match expiresIn
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 min lockout after MAX_ATTEMPTS failures
 
 export const MFA_TOKEN_SECRET_SUFFIX = "_mfa";
 
 @Injectable()
 export class AuthService {
+  // In-memory tracker — resets on restart, acceptable for single-instance deployment.
+  // Use Redis (INCR + EXPIRE) if multi-instance is needed in the future.
+  private readonly loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
   ) {}
+
+  private checkLockout(username: string): void {
+    const entry = this.loginFailures.get(username);
+    if (entry && Date.now() < entry.lockedUntil) {
+      const remaining = Math.ceil((entry.lockedUntil - Date.now()) / 60_000);
+      throw new UnauthorizedException(
+        `Compte temporairement verrouillé après ${LOGIN_MAX_ATTEMPTS} tentatives. Réessayez dans ${remaining} min.`,
+      );
+    }
+  }
+
+  private recordFailure(username: string): void {
+    const entry = this.loginFailures.get(username) ?? { count: 0, lockedUntil: 0 };
+    entry.count += 1;
+    if (entry.count >= LOGIN_MAX_ATTEMPTS) {
+      entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
+    }
+    this.loginFailures.set(username, entry);
+  }
+
+  private resetFailures(username: string): void {
+    this.loginFailures.delete(username);
+  }
 
   // ── Private helper: sign access token + persist session ─────────────────
   private async issueAccessToken(
@@ -53,6 +82,9 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, ctx: AuditContext = {}) {
+    // SCRUM-112: block locked-out usernames before hitting the DB
+    this.checkLockout(dto.username);
+
     const [user] = await this.db
       .select()
       .from(users)
@@ -60,15 +92,27 @@ export class AuthService {
       .limit(1);
 
     if (!user) {
+      this.recordFailure(dto.username);
       await this.audit.log("auth.login.fail", dto.username, ctx, { reason: "user_not_found" });
       throw new UnauthorizedException("username or password is incorrect");
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.password);
     if (!passwordMatch) {
+      this.recordFailure(dto.username);
+      const entry = this.loginFailures.get(dto.username);
+      if (entry && entry.lockedUntil > 0) {
+        await this.audit.log("auth.login.locked", dto.username, { ...ctx, userId: user.id }, {
+          attempts: entry.count,
+          lockedUntilIso: new Date(entry.lockedUntil).toISOString(),
+        });
+      }
       await this.audit.log("auth.login.fail", dto.username, { ...ctx, userId: user.id }, { reason: "wrong_password" });
       throw new UnauthorizedException("username or password is incorrect");
     }
+
+    // Successful auth — clear failure counter
+    this.resetFailures(dto.username);
 
     // If MFA is enabled, return a short-lived mfaToken instead of full tokens
     if (user.totpEnabled) {

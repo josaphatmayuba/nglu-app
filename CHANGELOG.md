@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Security
+
+- SCRUM-112: lockout username après 5 échecs de connexion — compte verrouillé 15 min, audit log `auth.login.locked`, compteur réinitialisé sur succès.
+
 ## [3.1.0] - 2026-05-22
 
 ### Added
