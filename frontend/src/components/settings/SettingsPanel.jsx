@@ -834,35 +834,43 @@ function AdminAuditPanel() {
   );
 }
 
+const TYPE_LABELS = { residential: "Résidentiel", commercial: "Commercial", short_term: "Court terme" };
+
 // ─── Modèles panel ────────────────────────────────────────────────────────────
 function AdminModelsPanel() {
-  const dispatch = useDispatch();
-  const { list: rawList, loading } = useSelector((s) => s?.termsAndConditions) || {};
-  const templates = rawList ?? [];
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { dispatch(loadAllTermsAndConditions()); }, [dispatch]);
+  useEffect(() => {
+    setLoading(true);
+    import("axios").then(({ default: axios }) =>
+      axios.get("property-management/contract-templates?query=all")
+    ).then((r) => {
+      setTemplates(Array.isArray(r.data) ? r.data : []);
+    }).catch(() => toast.error("Impossible de charger les modèles")).finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-ink-900 text-lg">Modèles</h3>
-          <p className="text-xs text-ink-500 mt-1">Modèles de documents (conditions, factures, contrats)</p>
+          <p className="text-xs text-ink-500 mt-1">Modèles de contrats et documents</p>
         </div>
       </div>
       {loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
       {!loading && (
         <div className="space-y-1">
           <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
-            <div className="col-span-2">Titre</div><div>Statut</div>
+            <div className="col-span-2">Nom du modèle</div><div>Type</div>
           </div>
           {templates.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle</p>}
           {templates.map((t) => (
             <div key={t.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
-              <div className="col-span-2 text-sm font-medium text-ink-900 truncate">{t.title || t.name || `Modèle #${t.id}`}</div>
+              <div className="col-span-2 text-sm font-medium text-ink-900 truncate">{t.name || `Modèle #${t.id}`}</div>
               <div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded ${t.status !== false && t.status !== "false" ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50"}`}>
-                  {t.status !== false && t.status !== "false" ? "Actif" : "Inactif"}
+                <span className="text-xs font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">
+                  {TYPE_LABELS[t.type] || t.type || "—"}
                 </span>
               </div>
             </div>
