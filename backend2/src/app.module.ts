@@ -14,6 +14,8 @@ import { DiscountsModule } from "./discounts/discounts.module";
 import { FrontModulesModule } from "./front-modules/front-modules.module";
 import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
+import { EmailTemplatesModule } from "./email-templates/email-templates.module";
+import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
@@ -52,6 +54,8 @@ import { UsersModule } from "./users/users.module";
     FrontModulesModule,
     HealthModule,
     HrModule,
+    EmailTemplatesModule,
+    InvoiceTemplatesModule,
     LegacyModulesModule,
     ManufacturersModule,
     NotificationPreferencesModule,

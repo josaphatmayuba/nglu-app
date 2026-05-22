@@ -125,6 +125,9 @@ module.exports = [
   { method: '*',    prefix: '/notification-preferences',   auth: true  },
   // Audit logs (admin read-only)
   { method: 'GET',  prefix: '/audit-log',                  auth: true  },
+  // Templates (SCRUM-146)
+  { method: '*',    prefix: '/email-templates',             auth: true  },
+  { method: '*',    prefix: '/invoice-templates',           auth: true  },
 
   // HR
   { method: '*',    prefix: '/award',                         auth: true  },

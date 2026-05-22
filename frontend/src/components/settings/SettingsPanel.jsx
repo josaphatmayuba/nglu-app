@@ -835,47 +835,250 @@ function AdminAuditPanel() {
 }
 
 const TYPE_LABELS = { residential: "Résidentiel", commercial: "Commercial", short_term: "Court terme" };
+const EVENT_LABELS = { invoice_sent: "Facture envoyée", payment_reminder: "Rappel paiement", lease_renewal: "Renouvellement bail", welcome: "Bienvenue", custom: "Personnalisé" };
+
+const canSee = (permissions, permit) => {
+  if (!permit) return true;
+  if (!Array.isArray(permissions)) return false;
+  const required = Array.isArray(permit.permissions) ? permit.permissions : [permit.permissions];
+  return permit.operator === "and" ? required.every((p) => permissions.includes(p)) : required.some((p) => permissions.includes(p));
+};
+
+function useTemplates(url) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(() => {
+    setLoading(true);
+    import("axios").then(({ default: axios }) => axios.get(url))
+      .then((r) => setItems(Array.isArray(r.data) ? r.data : []))
+      .catch(() => toast.error("Impossible de charger les modèles"))
+      .finally(() => setLoading(false));
+  }, [url]);
+  useEffect(() => { load(); }, [load]);
+  return { items, loading, reload: load };
+}
+
+function TemplateDrawer({ title, fields, initial, onSave, onClose }) {
+  const [form, setForm] = useState(initial || {});
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try { await onSave(form); onClose(); }
+    catch { toast.error("Erreur lors de l'enregistrement"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-semibold text-ink-900 text-lg">{title}</h3>
+        <div className="space-y-3 max-h-96 overflow-y-auto">
+          {fields.map(({ key, label, type = "text", options }) => (
+            <div key={key}>
+              <label className="text-sm font-medium text-ink-700 mb-1 block">{label}</label>
+              {type === "textarea" ? (
+                <textarea rows={4} value={form[key] || ""} onChange={(e) => set(key, e.target.value)}
+                  className="w-full px-3 py-2 border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              ) : type === "select" ? (
+                <select value={form[key] || ""} onChange={(e) => set(key, e.target.value)}
+                  className="w-full px-3 py-2 border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500">
+                  <option value="">— Sélectionner —</option>
+                  {options.map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
+                </select>
+              ) : (
+                <input type="text" value={form[key] || ""} onChange={(e) => set(key, e.target.value)}
+                  className="w-full px-3 py-2 border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 pt-2 border-t border-ink-100">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+          <button type="button" onClick={handleSave} disabled={saving}
+            className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg shadow-sm transition">
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Modèles panel ────────────────────────────────────────────────────────────
 function AdminModelsPanel() {
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const permissions = useSelector((s) => s?.auth?.list ?? []);
+  const [tab, setTab] = useState("contrats");
+  const [drawer, setDrawer] = useState(null); // { mode: "create"|"edit", type, item? }
 
-  useEffect(() => {
-    setLoading(true);
-    import("axios").then(({ default: axios }) =>
-      axios.get("property-management/contract-templates?query=all")
-    ).then((r) => {
-      setTemplates(Array.isArray(r.data) ? r.data : []);
-    }).catch(() => toast.error("Impossible de charger les modèles")).finally(() => setLoading(false));
-  }, []);
+  const contracts = useTemplates("property-management/contract-templates?query=all");
+  const emailTpls = useTemplates("email-templates");
+  const invoiceTpls = useTemplates("invoice-templates");
+
+  const canCreateEmail = canSee(permissions, { permissions: ["create-emailTemplate", "readAll-emailTemplate"], operator: "or" });
+  const canEditEmail = canSee(permissions, { permissions: ["update-emailTemplate"] });
+  const canDeleteEmail = canSee(permissions, { permissions: ["delete-emailTemplate"] });
+  const canCreateInvoice = canSee(permissions, { permissions: ["create-invoiceTemplate", "readAll-invoiceTemplate"], operator: "or" });
+  const canEditInvoice = canSee(permissions, { permissions: ["update-invoiceTemplate"] });
+  const canDeleteInvoice = canSee(permissions, { permissions: ["delete-invoiceTemplate"] });
+
+  const EMAIL_FIELDS = [
+    { key: "name", label: "Nom du modèle" },
+    { key: "subject", label: "Sujet de l'email" },
+    { key: "eventType", label: "Événement déclencheur", type: "select", options: Object.entries(EVENT_LABELS) },
+    { key: "body", label: "Corps de l'email", type: "textarea" },
+  ];
+
+  const INVOICE_FIELDS = [
+    { key: "name", label: "Nom du modèle" },
+    { key: "description", label: "Description", type: "textarea" },
+    { key: "headerText", label: "Texte en-tête" },
+    { key: "footerText", label: "Texte pied de page" },
+    { key: "colorScheme", label: "Couleur", type: "select", options: [["brand", "Indigo (défaut)"], ["emerald", "Vert"], ["amber", "Ambre"], ["rose", "Rose"]] },
+  ];
+
+  const handleSaveEmail = async (form) => {
+    const { default: axios } = await import("axios");
+    if (drawer.mode === "create") await axios.post("email-templates", form);
+    else await axios.put(`email-templates/${drawer.item.id}`, form);
+    emailTpls.reload();
+    toast.success("Modèle email enregistré");
+  };
+
+  const handleDeleteEmail = async (id) => {
+    if (!window.confirm("Supprimer ce modèle email ?")) return;
+    const { default: axios } = await import("axios");
+    await axios.delete(`email-templates/${id}`);
+    emailTpls.reload();
+    toast.success("Modèle supprimé");
+  };
+
+  const handleSaveInvoice = async (form) => {
+    const { default: axios } = await import("axios");
+    if (drawer.mode === "create") await axios.post("invoice-templates", form);
+    else await axios.put(`invoice-templates/${drawer.item.id}`, form);
+    invoiceTpls.reload();
+    toast.success("Modèle facture enregistré");
+  };
+
+  const handleDeleteInvoice = async (id) => {
+    if (!window.confirm("Supprimer ce modèle facture ?")) return;
+    const { default: axios } = await import("axios");
+    await axios.delete(`invoice-templates/${id}`);
+    invoiceTpls.reload();
+    toast.success("Modèle supprimé");
+  };
 
   return (
     <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-ink-900 text-lg">Modèles</h3>
-          <p className="text-xs text-ink-500 mt-1">Modèles de contrats et documents</p>
+          <p className="text-xs text-ink-500 mt-1">Modèles de contrats, d&apos;email et de factures</p>
         </div>
+        {tab === "email" && canCreateEmail && (
+          <button onClick={() => setDrawer({ mode: "create", type: "email" })}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition">
+            + Nouveau
+          </button>
+        )}
+        {tab === "factures" && canCreateInvoice && (
+          <button onClick={() => setDrawer({ mode: "create", type: "invoice" })}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition">
+            + Nouveau
+          </button>
+        )}
       </div>
-      {loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
-      {!loading && (
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 p-1 bg-ink-100 rounded-lg mb-4 w-fit">
+        {[["contrats", "Contrats"], ["email", "Email"], ["factures", "Factures"]].map(([key, lbl]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === key ? "bg-white shadow-sm text-ink-900" : "text-ink-500 hover:text-ink-700"}`}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {/* Contrats tab */}
+      {tab === "contrats" && (
         <div className="space-y-1">
           <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
             <div className="col-span-2">Nom du modèle</div><div>Type</div>
           </div>
-          {templates.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle</p>}
-          {templates.map((t) => (
+          {contracts.loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+          {!contracts.loading && contracts.items.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle de contrat</p>}
+          {contracts.items.map((t) => (
             <div key={t.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
               <div className="col-span-2 text-sm font-medium text-ink-900 truncate">{t.name || `Modèle #${t.id}`}</div>
-              <div>
-                <span className="text-xs font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">
-                  {TYPE_LABELS[t.type] || t.type || "—"}
-                </span>
+              <span className="text-xs font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded w-fit">{TYPE_LABELS[t.type] || t.type || "—"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Email tab */}
+      {tab === "email" && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+            <div>Nom</div><div>Événement</div><div>Actions</div>
+          </div>
+          {emailTpls.loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+          {!emailTpls.loading && emailTpls.items.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle email — créez le premier</p>}
+          {emailTpls.items.map((t) => (
+            <div key={t.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
+              <div className="text-sm font-medium text-ink-900 truncate">{t.name}</div>
+              <span className="text-xs text-ink-500">{EVENT_LABELS[t.eventType] || t.eventType || "—"}</span>
+              <div className="flex gap-2">
+                {canEditEmail && <button onClick={() => setDrawer({ mode: "edit", type: "email", item: t })} className="text-xs text-brand-700 hover:underline">Modifier</button>}
+                {canDeleteEmail && <button onClick={() => handleDeleteEmail(t.id)} className="text-xs text-red-600 hover:underline">Supprimer</button>}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Factures tab */}
+      {tab === "factures" && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+            <div>Nom</div><div>Couleur</div><div>Actions</div>
+          </div>
+          {invoiceTpls.loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+          {!invoiceTpls.loading && invoiceTpls.items.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle facture — créez le premier</p>}
+          {invoiceTpls.items.map((t) => (
+            <div key={t.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
+              <div className="text-sm font-medium text-ink-900 truncate">{t.name}</div>
+              <span className="text-xs text-ink-500 capitalize">{t.colorScheme || "brand"}</span>
+              <div className="flex gap-2">
+                {canEditInvoice && <button onClick={() => setDrawer({ mode: "edit", type: "invoice", item: t })} className="text-xs text-brand-700 hover:underline">Modifier</button>}
+                {canDeleteInvoice && <button onClick={() => handleDeleteInvoice(t.id)} className="text-xs text-red-600 hover:underline">Supprimer</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Drawers */}
+      {drawer?.type === "email" && (
+        <TemplateDrawer
+          title={drawer.mode === "create" ? "Nouveau modèle email" : "Modifier le modèle email"}
+          fields={EMAIL_FIELDS}
+          initial={drawer.item}
+          onSave={handleSaveEmail}
+          onClose={() => setDrawer(null)}
+        />
+      )}
+      {drawer?.type === "invoice" && (
+        <TemplateDrawer
+          title={drawer.mode === "create" ? "Nouveau modèle facture" : "Modifier le modèle facture"}
+          fields={INVOICE_FIELDS}
+          initial={drawer.item}
+          onSave={handleSaveInvoice}
+          onClose={() => setDrawer(null)}
+        />
       )}
     </div>
   );

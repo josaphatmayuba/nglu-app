@@ -690,6 +690,33 @@ export const appSettings = mysqlTable("appSetting", {
   updatedAt: timestamp("updated_at"),
 });
 
+// SCRUM-146: email templates
+export const emailTemplates = mysqlTable("email_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  body: text("body").notNull(),
+  eventType: varchar("eventType", { length: 100 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// SCRUM-146: invoice templates
+export const invoiceTemplates = mysqlTable("invoice_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  headerText: text("headerText"),
+  footerText: text("footerText"),
+  showLogo: tinyint("showLogo").default(1),
+  showSignature: tinyint("showSignature").default(0),
+  colorScheme: varchar("colorScheme", { length: 50 }).default("brand"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // SCRUM-143: notification preferences per user
 export const notificationPreferences = mysqlTable("notification_preferences", {
   id: serial("id").primaryKey(),
