@@ -17,6 +17,9 @@ import TenantOnboardingPage from "./components/propertyManagement/TenantOnboardi
 const CustomerLayout = lazy(() => import("@/layouts/CustomerLayout"));
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
 
+const shouldShowVersionBadge = import.meta.env.MODE !== "production";
+const appBuildVersion = import.meta.env.VITE_APP_BUILD_VERSION || import.meta.env.VITE_APP_BASE_VERSION;
+
 const antdTheme = {
   token: {
     colorPrimary: "#4f46e5",
@@ -100,6 +103,11 @@ function App() {
         <Toaster position='top-center' reverseOrder={false} />
 
         {content}
+        {shouldShowVersionBadge && appBuildVersion ? (
+          <div className="app-version-badge" aria-label={`Version application ${appBuildVersion}`}>
+            v{appBuildVersion}
+          </div>
+        ) : null}
       </BrowserRouter>
     </ConfigProvider>
   );

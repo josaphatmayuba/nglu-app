@@ -13,6 +13,7 @@ This project follows:
 ### Added
 
 - Versioning policy and tooling for future changes.
+- SCRUM-125: display the application build version at the bottom of local/dev screens, hidden in production.
 
 ## [3.0.0] - 2026-05-22
 
