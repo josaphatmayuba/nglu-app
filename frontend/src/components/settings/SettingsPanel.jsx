@@ -43,7 +43,8 @@ function EntreprisePanel() {
   const dispatch = useDispatch();
   const data = useSelector((s) => s?.setting?.data);
   const saving = useSelector((s) => s?.setting?.loading) || false;
-  const { list: currencies = [], loading: currLoading } = useSelector((s) => s?.currency) || {};
+  const { list: currenciesRaw, loading: currLoading } = useSelector((s) => s?.currency) || {};
+  const currencies = currenciesRaw ?? [];
 
   const [form, setForm] = useState({ companyName: "", tagLine: "", email: "", phone: "", address: "", currencyId: "", timezone: TIMEZONES[0] });
   const [logoPreview, setLogoPreview] = useState(null);
