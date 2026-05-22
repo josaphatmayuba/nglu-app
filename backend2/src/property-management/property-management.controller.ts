@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -299,7 +300,17 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Record a cost on a maintenance ticket" })
   @Permissions("create-maintenance-cost")
-  @UseInterceptors(FileInterceptor("receipt", { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor("receipt", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
   @Post("maintenance/:id/costs")
   createMaintenanceCost(
     @Param("id", ParseIntPipe) id: number,
