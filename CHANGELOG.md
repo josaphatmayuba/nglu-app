@@ -17,6 +17,10 @@ This project follows:
 - SCRUM-138: add the standard AWS dev deployment tool with server-side lock, smoke checks, and deployment documentation.
 - SCRUM-139: add the standard AWS production deployment tool with confirmation guard, server-side lock, routing smoke checks, and deployment documentation.
 
+### Changed
+
+- deploy-dev-aws.ps1: rename `$RemoteProdDir`/`$ComposeProject` params to `$RemoteNginxDir`/`$NginxComposeProject` with comment explaining nginx lives in prod compose; add `/admin/dashboard` and `/api/health` to remote and local smoke checks; add `smoke-routing-contract.mjs --base https://dev.ongdngolu.org` to local smoke (mirrors prod script); update DEPLOY.md section 7c and DEPLOYMENT_DEV_AWS.md to reference `deploy-dev-aws.ps1` as the canonical dev tool.
+
 ## [3.0.0] - 2026-05-22
 
 ### Baseline

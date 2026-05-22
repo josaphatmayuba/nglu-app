@@ -273,33 +273,38 @@ Elle couvre les routes frontend, l'entree CRM, la racine marketing, l'API health
 
 ## 7c. Deploiement CRM dev sans build sur Lightsail
 
-La petite instance Lightsail peut echouer pendant le build React/Vite du CRM avec `JavaScript heap out of memory`. Pour le dev, ne pas builder le CRM complet dans `/opt/nglu-app-dev/frontend` quand la memoire est limitee.
+La petite instance Lightsail peut echouer pendant le build React/Vite du CRM avec `JavaScript heap out of memory`. Ne pas builder le CRM complet sur le serveur quand la memoire est limitee.
 
-Procedure recommandee: builder l'artifact `frontend/dist` localement ou en CI, puis copier uniquement le dist vers AWS dev.
-
-Depuis Windows PowerShell:
+Procedure officielle: builder `frontend/dist` localement, puis deployer via le script canonique:
 
 ```powershell
-.\scripts\deploy-dev-frontend-artifact.ps1
+.\scripts\deploy-dev-aws.ps1
 ```
 
 Le script:
 
-- execute `npm run build:dev` dans `frontend/`;
-- verifie la cible API dev via `assert-api-target.mjs`;
+- execute `npm run build:dev` dans `frontend/` (cible `https://dev.ongdngolu.org/api`);
 - compresse `frontend/dist`;
-- met a jour `/opt/nglu-app-dev` par `git pull --ff-only`;
+- acquiert le verrou `/tmp/nglu-dev-deploy.lock` sur le serveur;
 - remplace seulement le contenu de `/opt/nglu-app-dev/frontend/dist`;
 - verifie que le dist deploye contient `https://dev.ongdngolu.org/api`;
-- verifie que `/crm` et `/admin/dashboard` repondent.
+- verifie que `/`, `/admin/dashboard`, `/admin/company-setting` et `/api/health` repondent.
 
-Si le build a deja ete produit ailleurs:
+Pour ignorer la phase de build (si `frontend/dist` est deja frais):
 
 ```powershell
-.\scripts\deploy-dev-frontend-artifact.ps1 -SkipBuild
+.\scripts\deploy-dev-aws.ps1 -SkipLocalBuild
+```
+
+Pour rafraichir le bind mount nginx apres un remplacement complet du dossier `dist`:
+
+```powershell
+.\scripts\deploy-dev-aws.ps1 -RestartFrontendContainer
 ```
 
 Le marketing-site Vue reste separe et continue d'etre servi depuis `marketing-site/dist`. Le routage ne change pas: racine = marketing, `/crm` = CRM.
+
+> `scripts/deploy-dev-frontend-artifact.ps1` est garde pour reference historique mais est remplace par `deploy-dev-aws.ps1` qui inclut le verrou de deploiement et les smoke checks complets.
 
 ---
 

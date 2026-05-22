@@ -2,6 +2,7 @@ import Loader from "@/components/loader/loader";
 import PermissionChecker from "@/components/PrivacyComponent/PermissionChecker";
 import AppSettings from "@/components/settings/AppSettings/AppSettings";
 import AdminSettings from "@/components/settings/AdminSettings/AdminSettings";
+import SettingsPanel from "@/components/settings/SettingsPanel";
 import { Suspense, lazy } from "react";
 import { Route, Routes } from "react-router-dom";
 
@@ -9,6 +10,16 @@ const AddDetails = lazy(() => import("@/components/settings/addDetails"));
 export default function SettingRoutes() {
   return (
     <Routes>
+      <Route
+        path="/settings"
+        exact
+        element={
+          <PermissionChecker permission={["readAll-setting", "create-setting"]}>
+            <SettingsPanel />
+          </PermissionChecker>
+        }
+        key="settings-unified"
+      />
       <Route
         path="/app-settings"
         exact

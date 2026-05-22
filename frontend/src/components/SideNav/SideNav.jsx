@@ -299,7 +299,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "RH",
-          to: "/admin/hr/staffs",
+          to: "/admin/hr",
           icon: BriefcaseBusiness,
           permit: {
             permissions: ["create-user", "readAll-user"],
@@ -331,7 +331,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       items: [
         {
           label: "Paramètres",
-          to: "/admin/app-settings",
+          to: "/admin/settings",
           icon: Settings,
           permit: {
             permissions: ["create-setting", "readAll-setting"],
@@ -952,8 +952,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
     },
     {
       label: (
-        <NavLink to="/admin/app-settings">
-          <span>Application</span>
+        <NavLink to="/admin/settings">
+          <span>Paramètres</span>
         </NavLink>
       ),
       permit: {
@@ -998,8 +998,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       children: [
         {
           label: (
-            <NavLink to="/admin/hr/staffs">
-              <span>Personnel</span>
+            <NavLink to="/admin/hr">
+              <span>Ressources humaines</span>
             </NavLink>
           ),
           permit: {

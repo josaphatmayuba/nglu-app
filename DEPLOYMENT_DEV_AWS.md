@@ -16,8 +16,11 @@ This is the official dev deployment path for agents. It keeps deployments repeat
 - Optionally pulls `develop` on the server.
 - Optionally recreates the frontend container.
 - Runs smoke checks for:
+  - routing contract via `node scripts/smoke-routing-contract.mjs --base https://dev.ongdngolu.org`
   - `https://dev.ongdngolu.org/`
+  - `https://dev.ongdngolu.org/admin/dashboard`
   - `https://dev.ongdngolu.org/admin/company-setting`
+  - `https://dev.ongdngolu.org/api/health`
   - bundled API target `https://dev.ongdngolu.org/api`
 
 ## PEM Keys

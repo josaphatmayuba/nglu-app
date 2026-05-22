@@ -3,10 +3,12 @@ param(
   [string]$HostName = "16.54.167.125",
   [string]$User = "admin",
   [string]$RemoteDevDir = "/opt/nglu-app-dev",
-  [string]$RemoteProdDir = "/opt/nglu-app",
-  [string]$ComposeProject = "nglu_prod",
-  [string]$ComposeFile = "docker-compose.prod.yml",
-  [string]$EnvFile = ".env.prod",
+  # nginx runs inside the prod compose stack and serves both prod and dev
+  # via bind mounts — so restarting the frontend container always targets prod.
+  [string]$RemoteNginxDir = "/opt/nglu-app",
+  [string]$NginxComposeProject = "nglu_prod",
+  [string]$NginxComposeFile = "docker-compose.prod.yml",
+  [string]$NginxEnvFile = ".env.prod",
   [switch]$PullServerCode,
   [switch]$RestartFrontendContainer,
   [switch]$SkipLocalBuild,
@@ -131,9 +133,9 @@ tar -xzf "$remoteArchive" -C "$RemoteDevDir"
 rm -f "$remoteArchive"
 
 if [ "$restartFrontend" = "true" ]; then
-  echo "[remote] recreating frontend container"
-  cd "$RemoteProdDir"
-  docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
+  echo "[remote] recreating frontend container (nginx lives in prod compose stack)"
+  cd "$RemoteNginxDir"
+  docker compose -p "$NginxComposeProject" -f "$NginxComposeFile" --env-file "$NginxEnvFile" up -d --force-recreate --no-deps frontend
 fi
 
 echo "[remote] deployed files:"
@@ -141,10 +143,12 @@ ls -la "$RemoteDevDir/frontend/dist" | head
 
 echo "[remote] smoke checks"
 curl -fsSIL https://dev.ongdngolu.org/ >/tmp/nglu-dev-smoke-root.txt
-curl -fsSIL https://dev.ongdngolu.org/admin/company-setting >/tmp/nglu-dev-smoke-admin.txt
+curl -fsSIL https://dev.ongdngolu.org/admin/dashboard >/tmp/nglu-dev-smoke-admin.txt
+curl -fsSIL https://dev.ongdngolu.org/admin/company-setting >/tmp/nglu-dev-smoke-settings.txt
+curl -fsS  https://dev.ongdngolu.org/api/health >/tmp/nglu-dev-smoke-api-health.txt
 grep -R "https://dev.ongdngolu.org/api" "$RemoteDevDir/frontend/dist" >/dev/null
 
-echo "[remote] smoke ok: root, admin route, dev API target"
+echo "[remote] smoke ok: root, admin/dashboard, admin/company-setting, API health, dev API target"
 "@
 
 if ($DryRun) {
@@ -161,11 +165,24 @@ Write-Step "Deploying on AWS dev with lock"
 $remoteScript | & ssh @sshArgs "bash -s"
 
 if (-not $SkipSmoke) {
+  Write-Step "Local routing smoke (smoke-routing-contract.mjs)"
+  Push-Location $repoRoot
+  try {
+    node scripts/smoke-routing-contract.mjs --base https://dev.ongdngolu.org
+  }
+  finally {
+    Pop-Location
+  }
+
   Write-Step "Local HTTP smoke checks"
-  $root = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/" -Method Head -UseBasicParsing
-  $admin = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/admin/company-setting" -Method Head -UseBasicParsing
-  Write-Host "Root status: $($root.StatusCode)"
-  Write-Host "Admin route status: $($admin.StatusCode)"
+  $root     = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/"                       -Method Head -UseBasicParsing
+  $admin    = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/admin/dashboard"         -Method Head -UseBasicParsing
+  $settings = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/admin/company-setting"  -Method Head -UseBasicParsing
+  $health   = Invoke-WebRequest -Uri "https://dev.ongdngolu.org/api/health"             -Method Get  -UseBasicParsing
+  Write-Host "Root:             $($root.StatusCode)"
+  Write-Host "Admin dashboard:  $($admin.StatusCode)"
+  Write-Host "Company setting:  $($settings.StatusCode)"
+  Write-Host "API health:       $($health.StatusCode)  $($health.Content)"
 }
 
 Write-Step "Done"
