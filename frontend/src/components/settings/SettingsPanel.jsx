@@ -22,14 +22,169 @@ import {
   UsersRound,
   Webhook,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import { useDispatch, useSelector } from "react-redux";
+import { loadAllCurrency } from "@/redux/rtk/features/eCommerce/currency/currencySlice";
+import { getSetting, updateSetting } from "@/redux/rtk/features/setting/settingSlice";
 import AboutPanel from "./AppSettings/AboutPanel";
-import AddDetails from "./addDetails";
 import SecurityPanel from "./AppSettings/SecurityPanel";
 import AdminAudit from "./AdminSettings/tabs/AdminAudit";
 import AdminBackup from "./AdminSettings/tabs/AdminBackup";
 import AdminModels from "./AdminSettings/tabs/AdminModels";
 import AdminUsers from "./AdminSettings/tabs/AdminUsers";
+
+// ─── Entreprise panel ─────────────────────────────────────────────────────────
+const LOGO_MAX_BYTES = 10 * 1024 * 1024;
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const TIMEZONES = ["Africa/Kinshasa (UTC+1)", "Africa/Lubumbashi (UTC+2)"];
+
+function EntreprisePanel() {
+  const dispatch = useDispatch();
+  const data = useSelector((s) => s?.setting?.data);
+  const saving = useSelector((s) => s?.setting?.loading) || false;
+  const { list: currencies = [], loading: currLoading } = useSelector((s) => s?.currency) || {};
+
+  const [form, setForm] = useState({ companyName: "", tagLine: "", email: "", phone: "", address: "", currencyId: "", timezone: TIMEZONES[0] });
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!data) dispatch(getSetting());
+    dispatch(loadAllCurrency());
+  }, [dispatch, data]);
+
+  useEffect(() => {
+    if (data) {
+      setForm({
+        companyName: data.companyName || "",
+        tagLine: data.tagLine || "",
+        email: data.email || "",
+        phone: data.phone || "",
+        address: data.address || "",
+        currencyId: data.currencyId ?? "",
+        timezone: TIMEZONES[0],
+      });
+      if (data.logo) setLogoPreview(data.logo);
+    }
+  }, [data]);
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!LOGO_TYPES.includes(file.type)) { toast.error("Format accepté : PNG, JPG, WebP, SVG"); return; }
+    if (file.size > LOGO_MAX_BYTES) { toast.error("Logo trop volumineux (max 10 MB)"); return; }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveLogo = () => { setLogoFile(null); setLogoPreview(null); };
+
+  const handleSave = async () => {
+    const fd = new FormData();
+    Object.entries(form).forEach(([k, v]) => { if (k !== "timezone" && v !== "") fd.append(k, v); });
+    if (logoFile) fd.append("images", logoFile);
+    else if (!logoPreview) fd.append("clearLogo", "true");
+    fd.append("_method", "PUT");
+    const resp = await dispatch(updateSetting(fd));
+    if (resp.payload?.message === "success") { toast.success("Paramètres enregistrés"); dispatch(getSetting()); }
+    else toast.error(resp.payload?.error || "Échec de la mise à jour");
+  };
+
+  const initial = (form.companyName || "N")[0].toUpperCase();
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-ink-900 text-lg">Informations entreprise</h3>
+        <p className="text-xs text-ink-500 mt-1">Ces informations apparaîtront sur vos factures et documents</p>
+      </div>
+      <div className="space-y-4">
+        {/* Logo */}
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Logo</label>
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-2xl overflow-hidden shrink-0">
+              {logoPreview ? <img src={logoPreview} alt="logo" className="w-full h-full object-cover" /> : initial}
+            </div>
+            <button type="button" onClick={() => fileRef.current?.click()} className="px-3 py-1.5 border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
+              Changer
+            </button>
+            {logoPreview && (
+              <button type="button" onClick={handleRemoveLogo} className="text-sm text-red-600 hover:underline">
+                Supprimer
+              </button>
+            )}
+            <input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.webp,.svg" className="hidden" onChange={handleLogoChange} />
+          </div>
+        </div>
+
+        {/* Fields grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: "Nom de l'entreprise", key: "companyName", type: "text" },
+            { label: "RCCM", key: "tagLine", type: "text" },
+            { label: "Email", key: "email", type: "email" },
+            { label: "Téléphone", key: "phone", type: "tel" },
+          ].map(({ label, key, type }) => (
+            <div key={key}>
+              <label className="text-sm font-medium text-ink-700 mb-1.5 block">{label}</label>
+              <input
+                type={type}
+                value={form[key]}
+                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </div>
+          ))}
+          <div className="md:col-span-2">
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Adresse</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+              className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Devise</label>
+            <select
+              value={form.currencyId}
+              onChange={(e) => setForm((f) => ({ ...f, currencyId: e.target.value }))}
+              disabled={currLoading}
+              className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"
+            >
+              <option value="">— Sélectionner —</option>
+              {currencies.map((c) => (
+                <option key={c.id} value={c.id}>{c.currencyCode} — {c.currencyName}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Fuseau horaire</label>
+            <select
+              value={form.timezone}
+              onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+              className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"
+            >
+              {TIMEZONES.map((tz) => <option key={tz}>{tz}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
+          <button type="button" onClick={() => { setForm({ companyName: data?.companyName || "", tagLine: data?.tagLine || "", email: data?.email || "", phone: data?.phone || "", address: data?.address || "", currencyId: data?.currencyId ?? "", timezone: TIMEZONES[0] }); setLogoPreview(data?.logo || null); setLogoFile(null); }} className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">
+            Annuler
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving} className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg shadow-sm transition">
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Toggle helper ────────────────────────────────────────────────────────────
 function Toggle({ checked, onChange, small }) {
@@ -381,7 +536,7 @@ const SELF_WRAPPED = new Set(["profil", "notifications", "apparence", "facturati
 
 function renderPanel(key) {
   switch (key) {
-    case "entreprise":    return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AddDetails /></div>;
+    case "entreprise":    return <EntreprisePanel />;
     case "profil":       return <ProfilePanel />;
     case "securite":     return <SecuriteWrapper />;
     case "notifications":return <NotificationsPanel />;
