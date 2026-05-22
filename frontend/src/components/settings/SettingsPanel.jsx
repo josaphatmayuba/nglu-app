@@ -22,12 +22,14 @@ import {
   UsersRound,
   Webhook,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllCurrency } from "@/redux/rtk/features/eCommerce/currency/currencySlice";
 import { getSetting, updateSetting } from "@/redux/rtk/features/setting/settingSlice";
-import { loadSingleStaff, updateStaff } from "@/redux/rtk/features/user/userSlice";
+import { loadAllStaff, loadSingleStaff, updateStaff } from "@/redux/rtk/features/user/userSlice";
+import { loadAllRole } from "@/redux/rtk/features/hr/role/roleSlice";
+import { loadAllTermsAndConditions } from "@/redux/rtk/features/termsAndCondition/termsAndConditionSlice";
 import { loadAllEmailConfig } from "@/redux/rtk/features/EmailConfigAppSettings/emailConfigAppSettingSlice";
 import { loadNotificationPreferences as loadNotifPrefs, saveNotificationPreferences as saveNotifPrefs } from "@/redux/rtk/features/notificationPreferences/notificationPreferencesSlice";
 import AboutPanel from "./AppSettings/AboutPanel";
@@ -674,21 +676,221 @@ function SecuriteWrapper() {
   return <SecurityPanel />;
 }
 
-// ─── Utilisateurs wrapper (needs full-width, no extra card wrapper) ────────────
+// ─── Utilisateurs & Rôles panel ───────────────────────────────────────────────
 function UtilisateursPanel() {
+  const dispatch = useDispatch();
+  const [tab, setTab] = useState("users");
+  const usersRaw = useSelector((s) => s?.user?.list);
+  const users = usersRaw ?? [];
+  const rolesRaw = useSelector((s) => s?.role?.list);
+  const roles = rolesRaw ?? [];
+  const loading = useSelector((s) => s?.user?.loading || s?.role?.loading);
+
+  useEffect(() => {
+    dispatch(loadAllStaff());
+    dispatch(loadAllRole());
+  }, [dispatch]);
+
   return (
     <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-ink-900 text-lg">Utilisateurs &amp; Rôles</h3>
-          <p className="text-xs text-ink-500 mt-1">Comptes ayant accès à l&apos;application et leurs permissions</p>
+          <p className="text-xs text-ink-500 mt-1">Comptes et permissions de l&apos;application</p>
         </div>
         <button className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
-          <UserPlus className="w-4 h-4" />
-          Inviter un utilisateur
+          <UserPlus className="w-4 h-4" /> Inviter
         </button>
       </div>
-      <AdminUsers />
+      <div className="flex gap-1 p-1 bg-ink-100 rounded-lg mb-4 w-fit">
+        {["users", "roles"].map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition ${tab === t ? "bg-white shadow-sm text-ink-900" : "text-ink-500 hover:text-ink-700"}`}>
+            {t === "users" ? `Utilisateurs (${users.length})` : `Rôles (${roles.length})`}
+          </button>
+        ))}
+      </div>
+      {loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+      {!loading && tab === "users" && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-4 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+            <div>Nom</div><div>Email</div><div>Rôle</div><div>Statut</div>
+          </div>
+          {users.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun utilisateur</p>}
+          {users.map((u) => (
+            <div key={u.id} className="grid grid-cols-4 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
+              <div className="text-sm font-medium text-ink-900 truncate">{u.firstName || u.username} {u.lastName || ""}</div>
+              <div className="text-xs text-ink-500 truncate">{u.email || "—"}</div>
+              <div className="text-xs text-ink-600">{u.role?.name || u.roleName || "—"}</div>
+              <div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded ${u.status === "true" || u.status === true ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50"}`}>
+                  {u.status === "true" || u.status === true ? "Actif" : "Inactif"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!loading && tab === "roles" && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+            <div>Nom du rôle</div><div>Permissions</div><div>Statut</div>
+          </div>
+          {roles.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun rôle</p>}
+          {roles.map((r) => (
+            <div key={r.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
+              <div className="text-sm font-medium text-ink-900">{r.name}</div>
+              <div className="text-xs text-ink-500">{r.rolePermission?.length ?? r.permissionCount ?? "—"} permissions</div>
+              <div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded ${r.status === "true" || r.status === true ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50"}`}>
+                  {r.status === "true" || r.status === true ? "Actif" : "Inactif"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Audit & Journaux panel ───────────────────────────────────────────────────
+function AdminAuditPanel() {
+  const dispatch = useDispatch();
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [actionFilter, setActionFilter] = useState("");
+  const LIMIT = 20;
+
+  const fetchLogs = useCallback(async (p, action) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: p, limit: LIMIT });
+      if (action) params.append("action", action);
+      const resp = await import("axios").then(({ default: axios }) =>
+        axios.get(`audit-log?${params}`)
+      );
+      setLogs(resp.data?.data ?? []);
+      setTotal(resp.data?.total ?? 0);
+    } catch (e) {
+      toast.error("Impossible de charger les journaux");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchLogs(page, actionFilter); }, [page, actionFilter, fetchLogs]);
+
+  const ACTION_COLORS = { create: "text-emerald-700 bg-emerald-50", update: "text-brand-700 bg-brand-50", delete: "text-red-700 bg-red-50", login: "text-amber-700 bg-amber-50" };
+  const actionColor = (a) => ACTION_COLORS[Object.keys(ACTION_COLORS).find((k) => a?.includes(k))] || "text-ink-600 bg-ink-100";
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-ink-900 text-lg">Audit &amp; Journaux</h3>
+          <p className="text-xs text-ink-500 mt-1">Historique des actions sensibles dans l&apos;application</p>
+        </div>
+        <div className="flex gap-2">
+          <input value={actionFilter} onChange={(e) => { setPage(1); setActionFilter(e.target.value); }}
+            placeholder="Filtrer par action…" className="px-3 py-1.5 border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 w-44" />
+        </div>
+      </div>
+      {loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+      {!loading && (
+        <>
+          <div className="space-y-1">
+            <div className="grid grid-cols-5 gap-3 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+              <div className="col-span-2">Action</div><div>Cible</div><div>IP</div><div>Date</div>
+            </div>
+            {logs.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun journal</p>}
+            {logs.map((l) => (
+              <div key={l.id} className="grid grid-cols-5 gap-3 items-center px-3 py-2 hover:bg-ink-50 rounded-lg text-xs">
+                <div className="col-span-2">
+                  <span className={`font-medium px-2 py-0.5 rounded ${actionColor(l.action)}`}>{l.action}</span>
+                  {l.userId && <span className="ml-2 text-ink-400">user:{l.userId}</span>}
+                </div>
+                <div className="text-ink-600 truncate">{l.target || "—"}</div>
+                <div className="text-ink-400">{l.ip || "—"}</div>
+                <div className="text-ink-400">{l.createdAt ? new Date(l.createdAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "—"}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-ink-100">
+            <p className="text-xs text-ink-500">{total} entrée{total > 1 ? "s" : ""}</p>
+            <div className="flex gap-2">
+              <button type="button" disabled={page === 1} onClick={() => setPage((p) => p - 1)}
+                className="px-3 py-1 text-xs border border-ink-200 rounded-lg disabled:opacity-40 hover:bg-ink-50 transition">← Précédent</button>
+              <span className="px-3 py-1 text-xs text-ink-600">Page {page} / {Math.max(1, Math.ceil(total / LIMIT))}</span>
+              <button type="button" disabled={page * LIMIT >= total} onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1 text-xs border border-ink-200 rounded-lg disabled:opacity-40 hover:bg-ink-50 transition">Suivant →</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Modèles panel ────────────────────────────────────────────────────────────
+function AdminModelsPanel() {
+  const dispatch = useDispatch();
+  const { list: rawList, loading } = useSelector((s) => s?.termsAndConditions) || {};
+  const templates = rawList ?? [];
+
+  useEffect(() => { dispatch(loadAllTermsAndConditions()); }, [dispatch]);
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="font-semibold text-ink-900 text-lg">Modèles</h3>
+          <p className="text-xs text-ink-500 mt-1">Modèles de documents (conditions, factures, contrats)</p>
+        </div>
+      </div>
+      {loading && <p className="text-xs text-ink-400 py-4 text-center">Chargement…</p>}
+      {!loading && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 px-3 pb-2 border-b border-ink-100">
+            <div className="col-span-2">Titre</div><div>Statut</div>
+          </div>
+          {templates.length === 0 && <p className="text-xs text-ink-400 py-4 text-center">Aucun modèle</p>}
+          {templates.map((t) => (
+            <div key={t.id} className="grid grid-cols-3 gap-4 items-center px-3 py-2.5 hover:bg-ink-50 rounded-lg">
+              <div className="col-span-2 text-sm font-medium text-ink-900 truncate">{t.title || t.name || `Modèle #${t.id}`}</div>
+              <div>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded ${t.status !== false && t.status !== "false" ? "text-emerald-700 bg-emerald-50" : "text-red-700 bg-red-50"}`}>
+                  {t.status !== false && t.status !== "false" ? "Actif" : "Inactif"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sauvegarde panel ─────────────────────────────────────────────────────────
+function AdminBackupPanel() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-ink-900 text-lg">Sauvegarde &amp; Export</h3>
+        <p className="text-xs text-ink-500 mt-1">Gestion des sauvegardes de la base de données</p>
+      </div>
+      <div className="flex flex-col items-center justify-center py-12 text-ink-400">
+        <div className="w-14 h-14 rounded-xl bg-ink-100 flex items-center justify-center mb-4">
+          <DatabaseBackup className="w-7 h-7 text-ink-400" />
+        </div>
+        <p className="font-medium text-ink-600 mb-1">Fonctionnalité en cours de développement</p>
+        <p className="text-sm text-center max-w-sm">
+          L&apos;API de sauvegarde automatique sera disponible dans une prochaine version.
+          Pour exporter vos données manuellement, contactez votre administrateur système.
+        </p>
+      </div>
     </div>
   );
 }
@@ -723,9 +925,9 @@ function renderPanel(key) {
     case "facturation":  return <FacturationPanel />;
     case "integrations": return <IntegrationsPanel />;
     case "utilisateurs": return <UtilisateursPanel />;
-    case "modeles":      return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminModels /></div>;
-    case "audit":        return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminAudit /></div>;
-    case "sauvegarde":   return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminBackup /></div>;
+    case "modeles":      return <AdminModelsPanel />;
+    case "audit":        return <AdminAuditPanel />;
+    case "sauvegarde":   return <AdminBackupPanel />;
     case "apropos":      return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AboutPanel /></div>;
     default:             return null;
   }

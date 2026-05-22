@@ -123,6 +123,8 @@ module.exports = [
   { method: '*',    prefix: '/files',                         auth: true  },
   // Notification preferences
   { method: '*',    prefix: '/notification-preferences',   auth: true  },
+  // Audit logs (admin read-only)
+  { method: 'GET',  prefix: '/audit-log',                  auth: true  },
 
   // HR
   { method: '*',    prefix: '/award',                         auth: true  },
