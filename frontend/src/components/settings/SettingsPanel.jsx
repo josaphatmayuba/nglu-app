@@ -1,16 +1,26 @@
 import {
   Bell,
   Building,
+  Cloud,
   CreditCard,
   DatabaseBackup,
   FileText,
   History,
   Info,
+  KeyRound,
+  Mail,
+  MessageSquare,
+  Monitor,
+  Moon,
   Palette,
   Plug,
   Shield,
+  Smartphone,
+  Sun,
   User,
+  UserPlus,
   UsersRound,
+  Webhook,
 } from "lucide-react";
 import { useState } from "react";
 import AboutPanel from "./AppSettings/AboutPanel";
@@ -21,125 +31,303 @@ import AdminBackup from "./AdminSettings/tabs/AdminBackup";
 import AdminModels from "./AdminSettings/tabs/AdminModels";
 import AdminUsers from "./AdminSettings/tabs/AdminUsers";
 
-// ─── Simple placeholder panels ───────────────────────────────────────────────
-
-function ProfilePanel() {
+// ─── Toggle helper ────────────────────────────────────────────────────────────
+function Toggle({ checked, onChange, small }) {
+  const w = small ? "w-9 h-5" : "w-11 h-6";
+  const dot = small ? "w-4 h-4" : "w-5 h-5";
+  const tx = small ? "peer-checked:translate-x-4" : "peer-checked:translate-x-5";
   return (
-    <div className="space-y-4">
-      <div>
+    <label className="relative inline-flex items-center cursor-pointer">
+      <input type="checkbox" className="sr-only peer" checked={checked} onChange={onChange} />
+      <div className={`${w} bg-ink-200 peer-checked:bg-brand-600 rounded-full peer transition`} />
+      <div className={`absolute left-0.5 top-0.5 ${dot} bg-white rounded-full transition ${tx}`} />
+    </label>
+  );
+}
+
+// ─── Profile panel ────────────────────────────────────────────────────────────
+function ProfilePanel() {
+  const initial = (localStorage.getItem("username") || "U")[0].toUpperCase();
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
         <h3 className="font-semibold text-ink-900 text-lg">Mon profil</h3>
-        <p className="text-xs text-ink-500 mt-1">
-          Vos informations personnelles et préférences de compte
-        </p>
+        <p className="text-xs text-ink-500 mt-1">Vos informations personnelles et préférences de compte</p>
       </div>
-      <div className="flex items-center gap-4">
-        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-2xl select-none">
-          {(localStorage.getItem("user") || "U")[0].toUpperCase()}
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-bold text-2xl select-none">
+            {initial}
+          </div>
+          <div className="flex flex-col gap-1">
+            <button className="px-3 py-1.5 border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
+              Changer la photo
+            </button>
+            <button className="text-sm text-red-600 hover:underline text-left">Supprimer</button>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <button className="px-3 py-1.5 border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
-            Changer la photo
-          </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: "Prénom", type: "text", placeholder: "Prénom" },
+            { label: "Nom", type: "text", placeholder: "Nom" },
+            { label: "Email", type: "email", placeholder: "email@exemple.com" },
+            { label: "Téléphone", type: "tel", placeholder: "+243 999 000 000" },
+          ].map(({ label, type, placeholder }) => (
+            <div key={label}>
+              <label className="text-sm font-medium text-ink-700 mb-1.5 block">{label}</label>
+              <input type={type} placeholder={placeholder} className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+            </div>
+          ))}
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Fonction</label>
+            <input type="text" value="Administrateur" disabled className="w-full px-3 py-2 bg-ink-50 border border-ink-200 rounded-lg text-sm text-ink-500 cursor-not-allowed" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Langue</label>
+            <select className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500">
+              <option>Français</option>
+              <option>English</option>
+            </select>
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Prénom</label>
-          <input
-            type="text"
-            defaultValue=""
-            placeholder="Prénom"
-            className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
+          <button className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+          <button className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">Enregistrer</button>
         </div>
-        <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Nom</label>
-          <input
-            type="text"
-            defaultValue=""
-            placeholder="Nom"
-            className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Email</label>
-          <input
-            type="email"
-            defaultValue=""
-            placeholder="email@exemple.com"
-            className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Téléphone</label>
-          <input
-            type="tel"
-            defaultValue=""
-            placeholder="+243 999 000 000"
-            className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-ink-700 mb-1.5 block">Langue</label>
-          <select className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500">
-            <option>Français</option>
-            <option>English</option>
-          </select>
-        </div>
-      </div>
-      <div className="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
-        <button className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">
-          Annuler
-        </button>
-        <button className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">
-          Enregistrer
-        </button>
       </div>
     </div>
   );
 }
 
-function NotificationsPanel() {
-  const [prefs, setPrefs] = useState({
-    email: true,
-    sms: false,
-    push: true,
-    newsletter: false,
-  });
-  const toggle = (key) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
+// ─── Notifications panel ──────────────────────────────────────────────────────
+const NOTIF_EVENTS = [
+  { key: "payment", label: "Nouveau paiement reçu", desc: "Loyer / facture encaissée", email: true, inapp: true },
+  { key: "overdue", label: "Loyer en retard", desc: "Locataire ≥ 3 jours en retard", email: true, inapp: true },
+  { key: "renewal", label: "Bail à renouveler", desc: "60 jours avant expiration", email: false, inapp: true },
+  { key: "maintenance", label: "Ticket maintenance urgent", desc: "Priorité haute", email: true, inapp: true },
+  { key: "report", label: "Rapport mensuel", desc: "Synthèse 1er du mois", email: true, inapp: false },
+];
 
-  const items = [
-    { key: "email", label: "Notifications par email", desc: "Recevoir les alertes importantes par email" },
-    { key: "sms", label: "Notifications SMS", desc: "Recevoir les alertes urgentes par SMS" },
-    { key: "push", label: "Notifications push", desc: "Notifications dans le navigateur" },
-    { key: "newsletter", label: "Newsletter", desc: "Actualités et nouveautés de l'application" },
+function NotificationsPanel() {
+  const [prefs, setPrefs] = useState(() =>
+    Object.fromEntries(NOTIF_EVENTS.flatMap((e) => [[`${e.key}_email`, e.email], [`${e.key}_inapp`, e.inapp]]))
+  );
+  const toggle = (k) => setPrefs((p) => ({ ...p, [k]: !p[k] }));
+
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-ink-900 text-lg">Préférences de notification</h3>
+        <p className="text-xs text-ink-500 mt-1">Choisissez quand et comment être averti</p>
+      </div>
+      <div className="space-y-1 divide-y divide-ink-100">
+        <div className="grid grid-cols-3 gap-4 text-xs font-semibold uppercase text-ink-500 pb-2">
+          <div>Événement</div>
+          <div className="text-center">Email</div>
+          <div className="text-center">In-app</div>
+        </div>
+        {NOTIF_EVENTS.map((ev) => (
+          <div key={ev.key} className="grid grid-cols-3 gap-4 items-center py-3">
+            <div>
+              <div className="text-sm font-medium text-ink-900">{ev.label}</div>
+              <div className="text-xs text-ink-500">{ev.desc}</div>
+            </div>
+            <div className="flex justify-center">
+              <Toggle small checked={prefs[`${ev.key}_email`]} onChange={() => toggle(`${ev.key}_email`)} />
+            </div>
+            <div className="flex justify-center">
+              <Toggle small checked={prefs[`${ev.key}_inapp`]} onChange={() => toggle(`${ev.key}_inapp`)} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-ink-100">
+        <button className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+        <button className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">Enregistrer</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Apparence panel ──────────────────────────────────────────────────────────
+const ACCENT_COLORS = [
+  { bg: "bg-brand-600", ring: "ring-brand-600", label: "Indigo (actuel)" },
+  { bg: "bg-emerald-600", ring: "ring-emerald-600", label: "Emerald" },
+  { bg: "bg-amber-500", ring: "ring-amber-500", label: "Amber" },
+  { bg: "bg-rose-600", ring: "ring-rose-600", label: "Rose" },
+  { bg: "bg-sky-600", ring: "ring-sky-600", label: "Sky" },
+  { bg: "bg-purple-600", ring: "ring-purple-600", label: "Purple" },
+];
+
+function AppearancePanel() {
+  const [theme, setTheme] = useState("light");
+  const [accent, setAccent] = useState(0);
+
+  const themes = [
+    { val: "light", label: "Clair", Icon: Sun, preview: "bg-white border border-ink-200", iconColor: "text-amber-500" },
+    { val: "dark", label: "Sombre", Icon: Moon, preview: "bg-ink-900", iconColor: "text-ink-300" },
+    { val: "system", label: "Système", Icon: Monitor, preview: "bg-gradient-to-r from-white from-50% to-ink-900 to-50%", iconColor: "text-ink-500" },
   ];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold text-ink-900 text-lg">Notifications</h3>
-        <p className="text-xs text-ink-500 mt-1">Gérez vos préférences de notification</p>
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-ink-900 text-lg">Apparence</h3>
+        <p className="text-xs text-ink-500 mt-1">Personnalisez l&apos;apparence de l&apos;interface</p>
       </div>
-      <div className="divide-y divide-ink-100">
-        {items.map((item) => (
-          <div key={item.key} className="flex items-center justify-between py-4">
-            <div>
-              <p className="text-sm font-medium text-ink-800">{item.label}</p>
-              <p className="text-xs text-ink-500 mt-0.5">{item.desc}</p>
-            </div>
-            <button
-              onClick={() => toggle(item.key)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                prefs[item.key] ? "bg-brand-600" : "bg-ink-200"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  prefs[item.key] ? "translate-x-6" : "translate-x-1"
-                }`}
+      <div className="space-y-5">
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-2 block">Thème</label>
+          <div className="grid grid-cols-3 gap-3">
+            {themes.map(({ val, label, Icon, preview, iconColor }) => (
+              <label key={val} className="cursor-pointer">
+                <input type="radio" name="theme" value={val} checked={theme === val} onChange={() => setTheme(val)} className="sr-only" />
+                <div className={`p-3 bg-white border-2 rounded-lg flex flex-col items-center gap-2 transition ${theme === val ? "border-brand-500 ring-2 ring-brand-100" : "border-ink-200 hover:border-ink-300"}`}>
+                  <div className={`w-full h-12 ${preview} rounded flex items-center justify-center`}>
+                    <Icon className={`w-5 h-5 ${iconColor}`} />
+                  </div>
+                  <span className="text-xs font-medium text-ink-900">{label}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium text-ink-700 mb-2 block">Couleur principale</label>
+          <div className="flex items-center gap-2 flex-wrap">
+            {ACCENT_COLORS.map(({ bg, ring, label }, i) => (
+              <button key={i} onClick={() => setAccent(i)} title={label}
+                className={`w-9 h-9 rounded-full ${bg} transition ${accent === i ? `ring-2 ring-offset-2 ${ring}` : `hover:ring-2 ring-offset-2 ${ring}`}`}
               />
-            </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Densité d&apos;affichage</label>
+            <select className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500">
+              <option>Confortable</option>
+              <option>Compacte</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Taille de police</label>
+            <select className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500">
+              <option>Moyenne (par défaut)</option>
+              <option>Petite</option>
+              <option>Grande</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-4 border-t border-ink-100">
+          <button className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+          <button className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Facturation panel ────────────────────────────────────────────────────────
+const CURRENCIES = [
+  { symbol: "FC", name: "Franc Congolais (CDF)", sub: "Devise par défaut", color: "bg-brand-50 text-brand-700" },
+  { symbol: "$", name: "Dollar US (USD)", sub: "Devise secondaire", color: "bg-emerald-50 text-emerald-700" },
+];
+
+function FacturationPanel() {
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+        <div className="mb-5">
+          <h3 className="font-semibold text-ink-900 text-lg">Devises supportées</h3>
+          <p className="text-xs text-ink-500 mt-1">Devises actives dans l&apos;application (factures, paiements, baux)</p>
+        </div>
+        <div className="space-y-2">
+          {CURRENCIES.map(({ symbol, name, sub, color }) => (
+            <div key={name} className="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
+              <div className="flex items-center gap-3">
+                <span className={`w-9 h-9 rounded-full ${color} font-semibold flex items-center justify-center text-sm`}>{symbol}</span>
+                <div>
+                  <div className="text-sm font-medium text-ink-900">{name}</div>
+                  <div className="text-xs text-ink-500">{sub}</div>
+                </div>
+              </div>
+              <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
+            </div>
+          ))}
+          <button className="w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-ink-300 hover:border-brand-300 hover:bg-brand-50 rounded-lg text-sm text-ink-600 hover:text-brand-700 transition">
+            + Ajouter une devise
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+        <div className="mb-5">
+          <h3 className="font-semibold text-ink-900 text-lg">Numérotation</h3>
+          <p className="text-xs text-ink-500 mt-1">Format de numérotation des factures et baux</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[
+            { label: "Préfixe facture", defaultValue: "INV-2026-" },
+            { label: "Préfixe bail", defaultValue: "LEASE-" },
+          ].map(({ label, defaultValue }) => (
+            <div key={label}>
+              <label className="text-sm font-medium text-ink-700 mb-1.5 block">{label}</label>
+              <input type="text" defaultValue={defaultValue} className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+            </div>
+          ))}
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">TVA (%)</label>
+            <input type="number" defaultValue={16} className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-ink-700 mb-1.5 block">Échéance par défaut (jours)</label>
+            <input type="number" defaultValue={14} className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-ink-100">
+          <button className="px-4 py-2 text-sm text-ink-700 hover:bg-ink-100 rounded-lg transition">Annuler</button>
+          <button className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg shadow-sm transition">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Intégrations panel ───────────────────────────────────────────────────────
+const INTEGRATIONS = [
+  { Icon: Mail, bg: "bg-emerald-50", iconColor: "text-emerald-600", name: "SMTP / Email", desc: "Envoi de factures, liens d'inscription et signatures", badge: "Connecté", badgeClass: "text-emerald-700 bg-emerald-50", action: "Configurer" },
+  { Icon: MessageSquare, bg: "bg-amber-50", iconColor: "text-amber-600", name: "SMS / WhatsApp", desc: "Notifications locataires et 2FA par SMS", badge: "Non configuré", badgeClass: "text-ink-600 bg-ink-100", action: "Connecter" },
+  { Icon: CreditCard, bg: "bg-brand-50", iconColor: "text-brand-600", name: "Mobile Money", desc: "M-Pesa, Airtel Money, Orange Money", badge: "Non configuré", badgeClass: "text-ink-600 bg-ink-100", action: "Connecter" },
+  { Icon: Cloud, bg: "bg-purple-50", iconColor: "text-purple-600", name: "Stockage cloud", desc: "Backup automatique des contrats signés", badge: "Non configuré", badgeClass: "text-ink-600 bg-ink-100", action: "Connecter" },
+  { Icon: KeyRound, bg: "bg-sky-50", iconColor: "text-sky-600", name: "Clés API", desc: "Accès programmatique à NGOLU", badge: "3 actives", badgeClass: "text-emerald-700 bg-emerald-50", action: "Gérer" },
+  { Icon: Webhook, bg: "bg-rose-50", iconColor: "text-rose-600", name: "Webhooks", desc: "Notifier des systèmes tiers en temps réel", badge: "0 actifs", badgeClass: "text-ink-600 bg-ink-100", action: "Configurer" },
+];
+
+function IntegrationsPanel() {
+  return (
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="mb-5">
+        <h3 className="font-semibold text-ink-900 text-lg">Intégrations</h3>
+        <p className="text-xs text-ink-500 mt-1">Services externes connectés à NGOLU</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {INTEGRATIONS.map(({ Icon, bg, iconColor, name, desc, badge, badgeClass, action }) => (
+          <div key={name} className="border border-ink-200 rounded-xl p-4 flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+              <Icon className={`w-5 h-5 ${iconColor}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <h4 className="font-medium text-ink-900 text-sm">{name}</h4>
+                <span className={`text-xs font-medium ${badgeClass} px-2 py-0.5 rounded`}>{badge}</span>
+              </div>
+              <p className="text-xs text-ink-500 mb-2">{desc}</p>
+              <button className="text-xs text-brand-700 hover:underline">{action}</button>
+            </div>
           </div>
         ))}
       </div>
@@ -147,54 +335,31 @@ function NotificationsPanel() {
   );
 }
 
-function AppearancePanel() {
-  const [dark, setDark] = useState(false);
+// ─── Sécurité wrapper (existing SecurityPanel has its own cards) ───────────────
+function SecuriteWrapper() {
+  return <SecurityPanel />;
+}
+
+// ─── Utilisateurs wrapper (needs full-width, no extra card wrapper) ────────────
+function UtilisateursPanel() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold text-ink-900 text-lg">Apparence</h3>
-        <p className="text-xs text-ink-500 mt-1">Personnalisez l&apos;interface de l&apos;application</p>
-      </div>
-      <div className="flex items-center justify-between py-4 border-b border-ink-100">
+    <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-sm font-medium text-ink-800">Mode sombre</p>
-          <p className="text-xs text-ink-500 mt-0.5">Activer le thème sombre (bientôt disponible)</p>
+          <h3 className="font-semibold text-ink-900 text-lg">Utilisateurs &amp; Rôles</h3>
+          <p className="text-xs text-ink-500 mt-1">Comptes ayant accès à l&apos;application et leurs permissions</p>
         </div>
-        <button
-          onClick={() => setDark((d) => !d)}
-          disabled
-          className="relative inline-flex h-6 w-11 items-center rounded-full bg-ink-200 opacity-50 cursor-not-allowed"
-        >
-          <span className="inline-block h-4 w-4 transform rounded-full bg-white shadow translate-x-1" />
+        <button className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+          <UserPlus className="w-4 h-4" />
+          Inviter un utilisateur
         </button>
       </div>
-      <p className="text-sm text-ink-400 italic">
-        La personnalisation avancée de l&apos;apparence sera disponible dans une prochaine version.
-      </p>
+      <AdminUsers />
     </div>
   );
 }
 
-function PlaceholderSettingsPanel({ title, desc }) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="font-semibold text-ink-900 text-lg">{title}</h3>
-        <p className="text-xs text-ink-500 mt-1">{desc}</p>
-      </div>
-      <div className="flex flex-col items-center justify-center py-12 text-ink-400">
-        <div className="w-12 h-12 rounded-xl bg-ink-100 flex items-center justify-center mb-4">
-          <Info className="w-6 h-6 text-ink-400" />
-        </div>
-        <p className="font-medium text-ink-600">Fonctionnalité à venir</p>
-        <p className="text-sm mt-1">Cette section sera disponible dans une prochaine version.</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Navigation config ────────────────────────────────────────────────────────
-
+// ─── Nav config ───────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { key: "entreprise", label: "Entreprise", icon: Building },
   { key: "profil", label: "Profil", icon: User },
@@ -203,7 +368,7 @@ const NAV_ITEMS = [
   { key: "apparence", label: "Apparence", icon: Palette },
   { key: "facturation", label: "Facturation", icon: CreditCard },
   { key: "integrations", label: "Intégrations", icon: Plug },
-  null, // separator
+  null,
   { key: "utilisateurs", label: "Utilisateurs & Rôles", icon: UsersRound },
   { key: "modeles", label: "Modèles", icon: FileText },
   { key: "audit", label: "Audit & Journaux", icon: History },
@@ -211,71 +376,44 @@ const NAV_ITEMS = [
   { key: "apropos", label: "À propos", icon: Info },
 ];
 
-function renderPanel(activeKey) {
-  switch (activeKey) {
-    case "entreprise":
-      return <GeneralSetting />;
-    case "profil":
-      return <ProfilePanel />;
-    case "securite":
-      return <SecurityPanel />;
-    case "notifications":
-      return <NotificationsPanel />;
-    case "apparence":
-      return <AppearancePanel />;
-    case "facturation":
-      return (
-        <PlaceholderSettingsPanel
-          title="Facturation"
-          desc="Gérez votre abonnement et vos informations de paiement"
-        />
-      );
-    case "integrations":
-      return (
-        <PlaceholderSettingsPanel
-          title="Intégrations"
-          desc="Connectez des services et API tiers à votre application"
-        />
-      );
-    case "utilisateurs":
-      return <AdminUsers />;
-    case "modeles":
-      return <AdminModels />;
-    case "audit":
-      return <AdminAudit />;
-    case "sauvegarde":
-      return <AdminBackup />;
-    case "apropos":
-      return <AboutPanel />;
-    default:
-      return null;
+// Panels that manage their own card wrapper(s)
+const SELF_WRAPPED = new Set(["profil", "notifications", "apparence", "facturation", "integrations", "securite", "utilisateurs"]);
+
+function renderPanel(key) {
+  switch (key) {
+    case "entreprise":    return <GeneralSetting />;
+    case "profil":       return <ProfilePanel />;
+    case "securite":     return <SecuriteWrapper />;
+    case "notifications":return <NotificationsPanel />;
+    case "apparence":    return <AppearancePanel />;
+    case "facturation":  return <FacturationPanel />;
+    case "integrations": return <IntegrationsPanel />;
+    case "utilisateurs": return <UtilisateursPanel />;
+    case "modeles":      return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminModels /></div>;
+    case "audit":        return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminAudit /></div>;
+    case "sauvegarde":   return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AdminBackup /></div>;
+    case "apropos":      return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AboutPanel /></div>;
+    default:             return null;
   }
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function SettingsPanel() {
   const [active, setActive] = useState("entreprise");
 
   return (
     <div>
       <div className="mb-5 md:mb-6">
-        <h1 className="text-xl md:text-2xl font-semibold text-ink-900 tracking-tight">
-          Paramètres
-        </h1>
-        <p className="text-xs md:text-sm text-ink-500 mt-1">
-          Configuration générale de votre application
-        </p>
+        <h1 className="text-xl md:text-2xl font-semibold text-ink-900 tracking-tight">Paramètres</h1>
+        <p className="text-xs md:text-sm text-ink-500 mt-1">Configuration générale de votre application</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        {/* Left sidebar nav */}
+        {/* Left sidebar */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl border border-ink-200 p-2 space-y-0.5">
+          <div className="bg-white rounded-xl border border-ink-200 p-2 space-y-0.5" id="settings-tabs">
             {NAV_ITEMS.map((item, idx) => {
-              if (item === null) {
-                return <div key={`sep-${idx}`} className="my-1 border-t border-ink-100" />;
-              }
+              if (item === null) return <div key={`sep-${idx}`} className="my-1 border-t border-ink-100" />;
               const Icon = item.icon;
               const isActive = active === item.key;
               return (
@@ -283,9 +421,7 @@ export default function SettingsPanel() {
                   key={item.key}
                   onClick={() => setActive(item.key)}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition ${
-                    isActive
-                      ? "bg-brand-50 text-brand-700 font-medium"
-                      : "hover:bg-ink-100 text-ink-600"
+                    isActive ? "bg-brand-50 text-brand-700 font-medium" : "hover:bg-ink-100 text-ink-600"
                   }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
@@ -296,11 +432,9 @@ export default function SettingsPanel() {
           </div>
         </div>
 
-        {/* Panel content */}
+        {/* Panel */}
         <div className="lg:col-span-3">
-          <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6">
-            {renderPanel(active)}
-          </div>
+          {renderPanel(active)}
         </div>
       </div>
     </div>
