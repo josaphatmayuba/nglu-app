@@ -184,6 +184,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       .replace(/[̀-ͯ]/g, "");
 
   const { data } = useSelector((state) => state?.setting) || {};
+  // SCRUM-142: read badge from Redux startup data when Dashboard has already loaded it
+  const startupBadge = useSelector((state) => state.dashboard?.startup?.sidenavBadge);
   const canReadSales = canSee(permissions, {
     permissions: ["create-saleInvoice", "readAll-saleInvoice"],
     operator: "or",
@@ -192,6 +194,13 @@ const SideNav = ({ collapsed, setCollapsed }) => {
   useEffect(() => {
     if (!canReadSales) {
       setSaleInvoiceBadge(null);
+      return undefined;
+    }
+
+    // If startup data already loaded by Dashboard, use it — no HTTP call needed
+    if (startupBadge) {
+      const total = startupBadge.unpaidInvoicesCount ?? 0;
+      setSaleInvoiceBadge(total > 0 ? String(total) : null);
       return undefined;
     }
 
@@ -220,7 +229,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
     return () => {
       cancelled = true;
     };
-  }, [canReadSales]);
+  }, [canReadSales, startupBadge]);
 
   const flatSections = [
     {

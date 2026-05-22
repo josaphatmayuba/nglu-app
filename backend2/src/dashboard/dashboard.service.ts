@@ -1,11 +1,13 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, between, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   currencies,
   customers,
   products,
   purchaseInvoices,
+  realEstateLeases,
+  realEstateMaintenanceRequests,
   returnPurchaseInvoices,
   returnSaleInvoices,
   saleInvoiceProducts,
@@ -309,6 +311,115 @@ export class DashboardService {
       currencySymbol: r.currencySymbol ?? "CDF",
       amount: Math.round(Number(r.total)),
     }));
+  }
+
+  // ── SCRUM-142: aggregated startup endpoint ──────────────────────────────
+  async getStartupData(query: DashboardQueryDto) {
+    const { start, end } = this.resolveDates(query);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().slice(0, 10);
+
+    const [dashboardData, overdueLeases, pendingMaintenance, lowStock, invoiceCount] =
+      await Promise.all([
+        this.getDashboardData(query),
+
+        // Active leases where nextInvoiceDate is past today
+        this.db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(realEstateLeases)
+          .where(
+            and(
+              eq(realEstateLeases.status, "active"),
+              lt(realEstateLeases.nextInvoiceDate, todayStr),
+            ),
+          ),
+
+        // Open or in-progress maintenance requests
+        this.db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(realEstateMaintenanceRequests)
+          .where(
+            and(
+              inArray(realEstateMaintenanceRequests.status, ["open", "in_progress"]),
+              eq(realEstateMaintenanceRequests.isActive, true),
+            ),
+          ),
+
+        // Products below reorder threshold
+        this.db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(products)
+          .where(
+            and(
+              eq(products.status, "true"),
+              sql`${products.reorderQuantity} > 0`,
+              sql`${products.productQuantity} <= ${products.reorderQuantity}`,
+            ),
+          ),
+
+        // Sale invoices this period (for Header alert + SideNav badge)
+        this.db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(saleInvoices)
+          .where(between(saleInvoices.date, start, end)),
+      ]);
+
+    return {
+      ...dashboardData,
+      alerts: {
+        overdueLeases: Number(overdueLeases[0]?.count ?? 0),
+        pendingMaintenance: Number(pendingMaintenance[0]?.count ?? 0),
+        lowStockItems: Number(lowStock[0]?.count ?? 0),
+        monthlyInvoices: Number(invoiceCount[0]?.count ?? 0),
+      },
+      sidenavBadge: {
+        unpaidInvoicesCount: Number(invoiceCount[0]?.count ?? 0),
+      },
+    };
+  }
+
+  // ── SCRUM-142: aggregated recent-activity endpoint ───────────────────────
+  async getRecentActivity(query: DashboardQueryDto) {
+    const { start, end } = this.resolveDates(query);
+
+    const [recentSales, pendingOrders, receivedOrders, deliveredOrders] = await Promise.all([
+      this.db
+        .select()
+        .from(saleInvoices)
+        .where(between(saleInvoices.date, start, end))
+        .orderBy(desc(saleInvoices.date))
+        .limit(5),
+
+      this.cartOrdersByStatus("PENDING"),
+      this.cartOrdersByStatus("RECEIVED"),
+      this.cartOrdersByStatus("DELIVERED"),
+    ]);
+
+    return {
+      recentSales,
+      cartOrders: {
+        pending: pendingOrders,
+        received: receivedOrders,
+        delivered: deliveredOrders,
+      },
+    };
+  }
+
+  private async cartOrdersByStatus(status: string) {
+    const [countRow] = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(saleInvoices)
+      .where(eq(saleInvoices.orderStatus, status));
+
+    const items = await this.db
+      .select()
+      .from(saleInvoices)
+      .where(eq(saleInvoices.orderStatus, status))
+      .orderBy(desc(saleInvoices.date))
+      .limit(5);
+
+    return { count: Number(countRow?.count ?? 0), items };
   }
 
   private resolveDates(query: DashboardQueryDto) {

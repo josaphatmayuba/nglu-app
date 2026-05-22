@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 
 import { Skeleton } from "antd";
 import axios from "axios";
@@ -148,6 +149,9 @@ function Header({ onPress, data, loading }) {
   const alertsRef = useRef(null);
   const userMenuRef = useRef(null);
 
+  // SCRUM-142: read startup alerts from Redux when Dashboard has already loaded them
+  const startupAlerts = useSelector((state) => state.dashboard?.startup?.alerts);
+
   const currentTitle = titleFromPath(location.pathname);
   const unreadAlerts = useMemo(
     () => alerts.filter((alert) => !dismissedAlertIds.includes(alert.id)),
@@ -163,6 +167,29 @@ function Header({ onPress, data, loading }) {
   useEffect(() => {
     if (!isLogged) {
       setAlerts([]);
+      return undefined;
+    }
+
+    // SCRUM-142: if startup data already loaded by Dashboard, build alerts from Redux — no HTTP call
+    if (startupAlerts) {
+      const nextAlerts = [];
+      if (startupAlerts.monthlyInvoices > 0 && canSee(permissions, { permissions: ["create-saleInvoice", "readAll-saleInvoice"], operator: "or" })) {
+        const total = startupAlerts.monthlyInvoices;
+        nextAlerts.push({ id: `sale-invoice-startup-${total}`, title: "Factures du mois", description: `${total} facture${total > 1 ? "s" : ""} à suivre ce mois-ci`, tone: "brand", to: "/admin/sale", icon: Receipt });
+      }
+      if (startupAlerts.overdueLeases > 0 && canSee(permissions, { permissions: ["create-propertyManagement", "readAll-propertyManagement"], operator: "or" })) {
+        const n = startupAlerts.overdueLeases;
+        nextAlerts.push({ id: `leases-overdue-${n}`, title: "Baux en retard", description: `${n} bail${n > 1 ? "x" : ""} avec loyer en retard`, tone: "danger", to: "/admin/property-management", icon: AlertTriangle });
+      }
+      if (startupAlerts.pendingMaintenance > 0 && canSee(permissions, { permissions: ["create-propertyManagement", "readAll-propertyManagement"], operator: "or" })) {
+        const n = startupAlerts.pendingMaintenance;
+        nextAlerts.push({ id: `maintenance-pending-${n}`, title: "Maintenance en attente", description: `${n} ticket${n > 1 ? "s" : ""} de maintenance ouverts`, tone: "amber", to: "/admin/property-management", icon: Wrench });
+      }
+      if (startupAlerts.lowStockItems > 0 && canSee(permissions, { permissions: ["readAll-product", "create-product"], operator: "or" })) {
+        const total = startupAlerts.lowStockItems;
+        nextAlerts.push({ id: `low-stock-${total}`, title: "Stock faible", description: `${total} produit${total > 1 ? "s" : ""} sous le seuil de réapprovisionnement`, tone: "amber", to: "/admin/product-sort-list", icon: Package });
+      }
+      setAlerts(nextAlerts);
       return undefined;
     }
 
@@ -253,7 +280,7 @@ function Header({ onPress, data, loading }) {
     return () => {
       cancelled = true;
     };
-  }, [isLogged, permissions]);
+  }, [isLogged, permissions, startupAlerts]);
 
   // Close user dropdown on outside click
   useEffect(() => {
