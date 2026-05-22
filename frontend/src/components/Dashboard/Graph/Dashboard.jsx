@@ -19,7 +19,7 @@ const decodeHTMLEntity = (htmlStr) => {
 const Dashboard = () => {
   const dispatch = useDispatch();
   const { data: appSetting } = useSelector((state) => state?.setting) || {};
-  const { info: dash, loading: dashLoading, error } = useSelector((s) => s?.dashboard) || {};
+  const { info: dash, startupLoading: dashLoading, startupError: error } = useSelector((s) => s?.dashboard) || {};
 
   // API theke asha symbol ke decode kore nichi
   const rawSymbol = appSetting?.currency?.currencySymbol || '$';
