@@ -37,11 +37,15 @@ async function bootstrap() {
     helmet({
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
       strictTransportSecurity: servesPublicHttps
-        ? {
-            maxAge: 15552000,
-            includeSubDomains: true,
-          }
+        ? { maxAge: 15552000, includeSubDomains: true }
         : false,
+      // CSP pour les réponses API : aucune ressource externe autorisée (SCRUM-110)
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+        },
+      },
     }),
   );
   app.use(advancedSecurityHeaders);
