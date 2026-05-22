@@ -1,9 +1,9 @@
 import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { env } from "../../config/env";
 import { DRIZZLE } from "../../database/database.constants";
-import { users } from "../../database/schema";
+import { sessions, users } from "../../database/schema";
 import type { Database } from "../../database/types";
 
 @Injectable()
@@ -29,11 +29,29 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing or invalid Authorization header");
     }
 
-    let payload: { sub?: number; roleId?: number; role?: string };
+    let payload: { sub?: number; roleId?: number; role?: string; jti?: string };
     try {
       payload = this.jwtService.verify(token, { secret: env.jwtSecret, algorithms: ["HS256"] }) as typeof payload;
     } catch {
       throw new UnauthorizedException("Invalid or expired token");
+    }
+
+    // SCRUM-109: validate JTI session — blocks forged tokens even if JWT_SECRET leaks
+    if (payload.jti) {
+      const [session] = await this.db
+        .select({ jti: sessions.jti })
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.jti, payload.jti),
+            eq(sessions.revoked, 0),
+            gt(sessions.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (!session) {
+        throw new UnauthorizedException("Session invalide ou révoquée");
+      }
     }
 
     await this.assertCurrentAuthContext(payload);

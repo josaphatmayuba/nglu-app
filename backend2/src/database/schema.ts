@@ -16,6 +16,18 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 
+// SCRUM-109: sessions table for JTI validation
+export const sessions = mysqlTable("sessions", {
+  jti:       varchar("jti", { length: 36 }).primaryKey(),
+  userId:    bigint("user_id", { mode: "number" }).notNull(),
+  roleId:    bigint("role_id", { mode: "number" }).notNull(),
+  ip:        varchar("ip", { length: 100 }),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revoked:   tinyint("revoked").default(0).notNull(),
+});
+
 export const subAccounts = mysqlTable("subAccount", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

@@ -1,13 +1,16 @@
+import { randomUUID } from "crypto";
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { roles, users } from "../database/schema";
+import { roles, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
+
+const ACCESS_TTL_MS = 15 * 60 * 1000; // 15 min — must match expiresIn
 
 export const MFA_TOKEN_SECRET_SUFFIX = "_mfa";
 
@@ -18,6 +21,36 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly audit: AuditService,
   ) {}
+
+  // ── Private helper: sign access token + persist session ─────────────────
+  private async issueAccessToken(
+    userId: number,
+    roleId: number | undefined,
+    roleName: string | undefined,
+    ctx: AuditContext,
+  ): Promise<{ accessToken: string; jti: string }> {
+    const jti = randomUUID();
+    const accessToken = this.jwtService.sign(
+      { sub: userId, roleId, role: roleName, jti },
+      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
+    );
+    const expiresAt = new Date(Date.now() + ACCESS_TTL_MS);
+    await this.db.insert(sessions).values({
+      jti,
+      userId,
+      roleId: roleId ?? 0,
+      ip: ctx.ip ?? null,
+      userAgent: ctx.userAgent ?? null,
+      expiresAt,
+    });
+    return { accessToken, jti };
+  }
+
+  // ── Periodic cleanup: remove old revoked/expired sessions ─────────────────
+  async cleanupSessions() {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await this.db.delete(sessions).where(lt(sessions.expiresAt, cutoff));
+  }
 
   async login(dto: LoginDto, ctx: AuditContext = {}) {
     const [user] = await this.db
@@ -53,10 +86,7 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const accessToken = this.jwtService.sign(
-      { sub: user.id, roleId: role?.id, role: role?.name },
-      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
-    );
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
 
     const refreshToken = this.jwtService.sign(
       { sub: user.id, role: role?.name },
@@ -108,10 +138,7 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const accessToken = this.jwtService.sign(
-      { sub: user.id, roleId: role?.id, role: role?.name },
-      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
-    );
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
 
     const refreshToken = this.jwtService.sign(
       { sub: user.id, role: role?.name },
@@ -135,6 +162,12 @@ export class AuthService {
       .update(users)
       .set({ isLogin: "false", refreshToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, userId));
+
+    // Revoke all active sessions for this user
+    await this.db
+      .update(sessions)
+      .set({ revoked: 1 })
+      .where(and(eq(sessions.userId, userId), eq(sessions.revoked, 0)));
 
     await this.audit.log("auth.logout", `user:${userId}`, { ...ctx, userId });
 
@@ -172,10 +205,7 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const accessToken = this.jwtService.sign(
-      { sub: user.id, roleId: role?.id, role: role?.name },
-      { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
-    );
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
 
     return { token: accessToken, roleId: role?.id, role: role?.name ?? null };
   }
