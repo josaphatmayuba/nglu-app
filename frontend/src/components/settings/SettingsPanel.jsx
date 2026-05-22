@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import AboutPanel from "./AppSettings/AboutPanel";
-import GeneralSetting from "./AppSettings/GeneralSetting";
+import AddDetails from "./addDetails";
 import SecurityPanel from "./AppSettings/SecurityPanel";
 import AdminAudit from "./AdminSettings/tabs/AdminAudit";
 import AdminBackup from "./AdminSettings/tabs/AdminBackup";
@@ -381,7 +381,7 @@ const SELF_WRAPPED = new Set(["profil", "notifications", "apparence", "facturati
 
 function renderPanel(key) {
   switch (key) {
-    case "entreprise":    return <GeneralSetting />;
+    case "entreprise":    return <div className="bg-white rounded-xl border border-ink-200 p-5 md:p-6"><AddDetails /></div>;
     case "profil":       return <ProfilePanel />;
     case "securite":     return <SecuriteWrapper />;
     case "notifications":return <NotificationsPanel />;
