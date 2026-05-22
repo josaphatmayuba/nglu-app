@@ -121,6 +121,9 @@ module.exports = [
   { method: '*',    prefix: '/page-size',                     auth: true  },
   { method: '*',    prefix: '/reorder-quantity',              auth: true  },
   { method: '*',    prefix: '/files',                         auth: true  },
+  // Notification preferences
+  { method: '*',    prefix: '/notification-preferences',   auth: true  },
+
   // HR
   { method: '*',    prefix: '/award',                         auth: true  },
   { method: '*',    prefix: '/award-history',                 auth: true  },

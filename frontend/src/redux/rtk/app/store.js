@@ -62,6 +62,7 @@ import transactionTypeReducer from "../features/transactionType/transactionTypeS
 import uomSlice from "../features/uom/uomSlice";
 import userReducer from "../features/user/userSlice";
 import vatTaxSlice from "../features/vatTax/vatTaxSlice";
+import notificationPreferencesReducer from "../features/notificationPreferences/notificationPreferencesSlice";
 
 const store = configureStore({
   reducer: {
@@ -128,6 +129,7 @@ const store = configureStore({
     paymentMethod: paymentMethodSlice,
     returnOrder: returnOrderSlice,
     deliveryFee: deliveryFeeSlice,
+    notificationPreferences: notificationPreferencesReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

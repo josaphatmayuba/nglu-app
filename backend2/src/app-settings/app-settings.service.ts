@@ -31,6 +31,10 @@ export class AppSettingsService {
         isPos: appSettings.isPos,
         isDiscount: appSettings.isDiscount,
         isTax: appSettings.isTax,
+        invoicePrefix: appSettings.invoicePrefix,
+        leasePrefix: appSettings.leasePrefix,
+        defaultVatRate: appSettings.defaultVatRate,
+        defaultPaymentTermDays: appSettings.defaultPaymentTermDays,
         createdAt: appSettings.createdAt,
         updatedAt: appSettings.updatedAt,
         currencyName: currencies.currencyName,
@@ -84,6 +88,10 @@ export class AppSettingsService {
         isTax: dto.isTax ?? current.isTax,
         logo,
         landlordSignature,
+        invoicePrefix: dto.invoicePrefix ?? current.invoicePrefix,
+        leasePrefix: dto.leasePrefix ?? current.leasePrefix,
+        defaultVatRate: dto.defaultVatRate ?? current.defaultVatRate,
+        defaultPaymentTermDays: dto.defaultPaymentTermDays ?? current.defaultPaymentTermDays,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(appSettings.id, 1));

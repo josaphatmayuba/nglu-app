@@ -16,6 +16,7 @@ import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
+import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
 import { ProductBrandsModule } from "./product-brands/product-brands.module";
@@ -53,6 +54,7 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     LegacyModulesModule,
     ManufacturersModule,
+    NotificationPreferencesModule,
     PaymentMethodsModule,
     PermissionsModule,
     ProductBrandsModule,

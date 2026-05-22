@@ -682,8 +682,21 @@ export const appSettings = mysqlTable("appSetting", {
   isPos: varchar("isPos", { length: 10 }).default("false"),
   isDiscount: varchar("isDiscount", { length: 10 }).default("false"),
   isTax: varchar("isTax", { length: 10 }).default("false"),
+  invoicePrefix: varchar("invoicePrefix", { length: 50 }).default("INV-"),
+  leasePrefix: varchar("leasePrefix", { length: 50 }).default("LEASE-"),
+  defaultVatRate: int("defaultVatRate").default(16),
+  defaultPaymentTermDays: int("defaultPaymentTermDays").default(14),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+// SCRUM-143: notification preferences per user
+export const notificationPreferences = mysqlTable("notification_preferences", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  eventKey: varchar("eventKey", { length: 50 }).notNull(),
+  emailEnabled: tinyint("emailEnabled").default(1),
+  inappEnabled: tinyint("inappEnabled").default(1),
 });
 
 export const products = mysqlTable("product", {
