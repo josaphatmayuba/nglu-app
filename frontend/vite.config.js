@@ -18,7 +18,8 @@ function git(command, fallback) {
 const commit = git("git rev-parse --short HEAD", "unknown");
 const isDirty = Boolean(git("git status --short --untracked-files=no", ""));
 const buildVersion = `${baseVersion}+${commit}${isDirty ? ".dirty" : ""}`;
-const changelog = readFileSync(path.resolve(rootDir, "CHANGELOG.md"), "utf8");
+const changelog = readFileSync(path.resolve(rootDir, "CHANGELOG.md"), "utf8")
+  .replace(/https?:\/\/[\w.-]+\.ongdngolu\.org\/api/g, "[api-url]");
 
 // https://vitejs.dev/config/
 export default defineConfig({
