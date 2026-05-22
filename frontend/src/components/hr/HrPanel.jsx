@@ -56,8 +56,19 @@ const staffTableColumns = [
     ),
   },
   {
-    title: "Rôle",
-    render: (_, u) => u.role?.name || "—",
+    title: "Poste",
+    render: (_, u) => u.designation?.name || u.role?.name || "—",
+  },
+  {
+    title: "Département",
+    render: (_, u) => u.department?.name || "—",
+  },
+  {
+    title: "Salaire",
+    render: (_, u) =>
+      u.currentSalary != null
+        ? new Intl.NumberFormat("fr-FR").format(u.currentSalary)
+        : "—",
   },
   {
     title: "Username",
@@ -105,6 +116,8 @@ export default function HrPanel() {
     return (
       getDisplayName(u).toLowerCase().includes(q) ||
       (u.role?.name || "").toLowerCase().includes(q) ||
+      (u.designation?.name || "").toLowerCase().includes(q) ||
+      (u.department?.name || "").toLowerCase().includes(q) ||
       (u.username || "").toLowerCase().includes(q)
     );
   });
@@ -274,24 +287,43 @@ export default function HrPanel() {
                           {getDisplayName(user)}
                         </h4>
                         <p className="text-xs text-ink-500 truncate">
-                          {user.role?.name || "Sans rôle"}
+                          {user.designation?.name || user.role?.name || "Sans poste"}
                         </p>
-                        <span
-                          className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                            user.status === "true"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-ink-100 text-ink-500"
-                          }`}
-                        >
-                          {user.status === "true" ? "Actif" : "Inactif"}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          {user.department?.name && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 font-medium">
+                              {user.department.name}
+                            </span>
+                          )}
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              user.status === "true"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : "bg-ink-100 text-ink-500"
+                            }`}
+                          >
+                            {user.status === "true" ? "Actif" : "Inactif"}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                    <div className="pt-3 border-t border-ink-100">
-                      <div className="text-[10px] text-ink-500 uppercase tracking-wider mb-0.5">
-                        Username
+                    <div className="pt-3 border-t border-ink-100 flex gap-4">
+                      <div>
+                        <div className="text-[10px] text-ink-500 uppercase tracking-wider mb-0.5">
+                          Username
+                        </div>
+                        <div className="text-xs font-medium text-ink-900">{user.username}</div>
                       </div>
-                      <div className="text-xs font-medium text-ink-900">{user.username}</div>
+                      {user.currentSalary != null && (
+                        <div>
+                          <div className="text-[10px] text-ink-500 uppercase tracking-wider mb-0.5">
+                            Salaire
+                          </div>
+                          <div className="text-xs font-medium text-ink-900">
+                            {new Intl.NumberFormat("fr-FR").format(user.currentSalary)}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

@@ -166,6 +166,7 @@ export class ContractsService {
         sentAt: realEstateContracts.sentAt,
         signedAt: realEstateContracts.signedAt,
         createdAt: realEstateContracts.createdAt,
+        signerToken: realEstateContracts.signerToken,
       })
       .from(realEstateContracts)
       .where(ne(realEstateContracts.status, "deleted"))

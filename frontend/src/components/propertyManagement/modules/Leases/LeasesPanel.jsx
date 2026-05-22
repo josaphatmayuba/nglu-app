@@ -11,6 +11,7 @@ import {
   loadPropertyManagement,
   renewLease as renewLeaseThunk,
   saveLease,
+  sendContract,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
 import { tenantNameFromLease } from "../../shared/tenants";
@@ -172,7 +173,7 @@ const LeasesPanel = ({
     message.success("Bail exporté en CSV");
   };
 
-  const handleLeaseAction = (action, lease, contract) => {
+  const handleLeaseAction = async (action, lease, contract) => {
     setOpenLeaseMenu(null);
     if (action === "detail" || action === "edit") {
       setLeaseModal(lease);
@@ -208,7 +209,43 @@ const LeasesPanel = ({
       exportLeaseToCsv(lease);
       return;
     }
-    if (["resend", "copyLink", "cancelSend", "archive"].includes(action)) {
+    if (action === "resend") {
+      if (!contract?.id) { message.warning("Aucun contrat trouvé pour ce bail."); return; }
+      const result = await dispatch(sendContract(contract.id));
+      if (result.payload?.data?.signingUrl) {
+        setContractLinks((prev) => ({ ...prev, [contract.id]: result.payload.data.signingUrl }));
+        message.success("Lien de signature renvoyé au locataire");
+      }
+      return;
+    }
+    if (action === "copyLink") {
+      const signingUrl =
+        contractLinks[contract?.id] ||
+        (contract?.signerToken ? `${window.location.origin}/sign/${contract.signerToken}` : null);
+      if (!signingUrl) {
+        message.warning("Aucun lien de signature disponible. Utilisez « Renvoyer le lien » d'abord.");
+        return;
+      }
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(signingUrl);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = signingUrl;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand("copy");
+          document.body.removeChild(textarea);
+        }
+        message.success("Lien de signature copié");
+      } catch {
+        message.error("Impossible de copier le lien");
+      }
+      return;
+    }
+    if (["cancelSend", "archive"].includes(action)) {
       message.info("Cette action sera ajoutée dans le workflow contrat.");
     }
   };

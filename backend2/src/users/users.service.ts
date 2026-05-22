@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -38,13 +38,40 @@ export class UsersService {
   async findAll(query: Record<string, string>) {
     if (query["query"] === "all") {
       const rows = await this.db
-        .select()
+        .select({
+          user: users,
+          role: { id: roles.id, name: roles.name },
+          designation: { id: designations.id, name: designations.name },
+          department: { id: departments.id, name: departments.name },
+        })
         .from(users)
+        .leftJoin(roles, eq(roles.id, users.roleId))
+        .leftJoin(designations, eq(designations.id, users.designationId))
+        .leftJoin(departments, eq(departments.id, users.departmentId))
         .where(eq(users.status, "true"))
         .orderBy(desc(users.id));
 
+      const userIds = rows.map((r) => r.user.id);
+      const salaryMap: Record<number, number | null> = {};
+      if (userIds.length) {
+        const allSalaries = await this.db
+          .select({ userId: salaryHistories.userId, salary: salaryHistories.salary })
+          .from(salaryHistories)
+          .where(inArray(salaryHistories.userId, userIds))
+          .orderBy(desc(salaryHistories.id));
+        for (const s of allSalaries) {
+          if (!(s.userId in salaryMap)) salaryMap[s.userId] = s.salary;
+        }
+      }
+
       return {
-        getAllUser: rows.map(this.safeUser),
+        getAllUser: rows.map((r) => ({
+          ...this.safeUser(r.user),
+          role: r.role,
+          designation: r.designation,
+          department: r.department,
+          currentSalary: salaryMap[r.user.id] ?? null,
+        })),
         totalUser: rows.length,
       };
     }
