@@ -78,7 +78,9 @@ This section exists because of two past deployment incidents:
 
 Rules:
 
-- Manual AWS dev deployments must use `scripts/deploy-dev-aws.ps1` from the repo root unless a ticket explicitly documents why a different path is required.
+- Manual AWS dev **frontend** deployments must use `scripts/deploy-dev-aws.ps1` from the repo root unless a ticket explicitly documents why a different path is required.
+- Manual AWS dev **backend2** deployments must use `scripts/deploy-dev-backend-aws.ps1` from the repo root. Never SCP the dist manually or restart the container by hand — the script ensures the correct compose project, env file, and health check.
+- Manual AWS dev **middleware** deployments must use `scripts/deploy-dev-middleware-aws.ps1` from the repo root. The middleware has no build step; the script packs `middleware/src/`, uploads it, and rebuilds the container image on the server.
 - Manual AWS production deployments must use `scripts/deploy-prod-aws.ps1` from the repo root unless a release ticket explicitly documents why a different path is required.
 - The deployment script lock at `/tmp/nglu-dev-deploy.lock` must be respected. Do not deploy if another agent is already deploying.
 - The production deployment script lock at `/tmp/nglu-prod-deploy.lock` must be respected. Do not deploy production if another agent is already deploying.

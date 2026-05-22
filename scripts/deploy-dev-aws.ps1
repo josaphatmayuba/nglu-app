@@ -79,7 +79,7 @@ Push-Location $frontendDir
 try {
   node scripts/assert-api-target.mjs development
   if ($LASTEXITCODE -ne 0) {
-    throw "API target assertion failed — dist contient la mauvaise URL. Lancez 'npm run build:dev' puis relancez ce script."
+    throw "API target assertion failed - dist contient la mauvaise URL. Lancez 'npm run build:dev' puis relancez ce script."
   }
 }
 finally {

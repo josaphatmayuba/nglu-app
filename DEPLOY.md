@@ -94,10 +94,20 @@ npm run build
 
 Bitbucket Pipelines is currently not the source of truth for dev deployment. Manual AWS dev deployment is required until the pipeline is restored and validated.
 
-Use the standard deployment tool:
+Use the standard deployment tools:
 
 ```powershell
+# Frontend (build:dev + assert API target + upload + smoke)
 .\scripts\deploy-dev-aws.ps1
+
+# Backend2 (NestJS build + upload dist + restart container + health check)
+.\scripts\deploy-dev-backend-aws.ps1
+
+# Middleware (pack src/ + rebuild container image + health check)
+.\scripts\deploy-dev-middleware-aws.ps1
+
+# All three in sequence
+.\scripts\deploy-dev-aws.ps1; .\scripts\deploy-dev-backend-aws.ps1; .\scripts\deploy-dev-middleware-aws.ps1
 ```
 
 See `DEPLOYMENT_DEV_AWS.md` for PEM keys, lock behavior, smoke checks, and browser validation rules.
