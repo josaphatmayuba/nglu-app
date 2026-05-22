@@ -101,9 +101,9 @@ tar -xzf "$remoteArchive" -C "$RemoteDevDir/backend2"
 rm -f "$remoteArchive"
 echo "[remote] restarting nglu_dev_backend2"
 cd "$RemoteDevDir"
-docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate backend2
+docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate --build backend2
 echo "[remote] waiting for backend2 to be ready"
-sleep 8
+sleep 20
 echo "[remote] health check"
 curl -fsS https://dev.ongdngolu.org/api/health
 echo ""
