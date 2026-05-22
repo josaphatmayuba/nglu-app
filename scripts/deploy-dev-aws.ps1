@@ -74,6 +74,18 @@ if (-not (Test-Path $distDir)) {
   throw "frontend/dist not found. Run without -SkipLocalBuild or build the frontend first."
 }
 
+Write-Step "Asserting dev API target in local frontend/dist"
+Push-Location $frontendDir
+try {
+  node scripts/assert-api-target.mjs development
+  if ($LASTEXITCODE -ne 0) {
+    throw "API target assertion failed — dist contient la mauvaise URL. Lancez 'npm run build:dev' puis relancez ce script."
+  }
+}
+finally {
+  Pop-Location
+}
+
 Write-Step "Packing frontend/dist"
 if (Test-Path $localArchive) {
   Remove-Item -LiteralPath $localArchive -Force

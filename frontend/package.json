@@ -72,7 +72,7 @@
 	},
 	"scripts": {
 		"dev": "vite --port 3000 --host",
-		"build": "vite build",
+		"build": "node -e \"console.error('\\n[ERREUR] Utilisez npm run build:dev (dev) ou npm run build:prod (prod).\\nPlain build interdit — le bundle n\\'aurait aucune cible API garantie.\\n'); process.exit(1)\"",
 		"build:prod": "vite build --mode production && node scripts/assert-api-target.mjs production",
 		"build:dev": "vite build --mode development && node scripts/assert-api-target.mjs development",
 		"assert:api:prod": "node scripts/assert-api-target.mjs production",
