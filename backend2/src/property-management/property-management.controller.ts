@@ -25,6 +25,7 @@ import {
   ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -49,6 +50,7 @@ import {
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
 
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("property-management")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)

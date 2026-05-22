@@ -1,4 +1,5 @@
 import { Controller, Get } from "@nestjs/common";
+import { SkipThrottle } from "@nestjs/throttler";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import {
   DatabaseHealthResponseDto,
@@ -7,6 +8,7 @@ import {
 } from "./dto/health-response.dto";
 import { HealthService } from "./health.service";
 
+@SkipThrottle()
 @ApiTags("health")
 @Controller()
 export class HealthController {

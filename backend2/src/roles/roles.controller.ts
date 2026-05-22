@@ -12,11 +12,13 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RolesService } from "./roles.service";
 
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("role")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)

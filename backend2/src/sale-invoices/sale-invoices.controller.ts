@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
   CreatePaymentSaleInvoiceDto,
@@ -21,6 +22,7 @@ import {
 } from "./dto/sale-invoice.dto";
 import { SaleInvoicesService } from "./sale-invoices.service";
 
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("sale-invoice")
 @Controller("sale-invoice")
 export class SaleInvoicesController {

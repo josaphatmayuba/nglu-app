@@ -18,11 +18,13 @@ import {
   ApiQuery,
   ApiTags,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UsersService } from "./users.service";
 
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("user")
 @Controller("user")
 export class UsersController {

@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { awardHistories, awards, designationHistories, designations, salaryHistories, shifts } from "../database/schema";
@@ -20,6 +21,7 @@ import { HrService } from "./hr.service";
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("designation")
 @Controller("designation")
 export class DesignationController {
@@ -38,6 +40,7 @@ export class DesignationController {
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("shift")
 @Controller("shift")
 export class ShiftController {
@@ -53,6 +56,7 @@ export class ShiftController {
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("award")
 @Controller("award")
 export class AwardController {
@@ -68,6 +72,7 @@ export class AwardController {
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("designation-history")
 @Controller("designation-history")
 export class DesignationHistoryController {
@@ -82,6 +87,7 @@ export class DesignationHistoryController {
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("salary-history")
 @Controller("salary-history")
 export class SalaryHistoryController {
@@ -96,6 +102,7 @@ export class SalaryHistoryController {
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("award-history")
 @Controller("award-history")
 export class AwardHistoryController {

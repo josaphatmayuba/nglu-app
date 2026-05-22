@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { SkipThrottle } from "@nestjs/throttler";
 import { eq } from "drizzle-orm";
 import type { Request, Response } from "express";
 import { Observable, Subject, interval, merge } from "rxjs";
@@ -23,6 +24,7 @@ import { PERMISSIONS_UPDATED_EVENT_TYPE } from "./permissions-update-event";
 
 const HEARTBEAT_MS = 25_000;
 
+@SkipThrottle()
 @ApiTags("events")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
