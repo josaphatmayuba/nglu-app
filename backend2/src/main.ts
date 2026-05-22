@@ -2,16 +2,49 @@ import "reflect-metadata";
 import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import type { NextFunction, Request, Response } from "express";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cookieParser = require("cookie-parser") as typeof import("cookie-parser");
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { env } from "./config/env";
 
+const isHttpsUrl = (value: string) => value.toLowerCase().startsWith("https://");
+const servesPublicHttps = isHttpsUrl(env.appUrl) || isHttpsUrl(env.corsOrigin);
+
+const permissionsPolicy = [
+  "camera=(self)",
+  "microphone=()",
+  "geolocation=()",
+  "payment=(self)",
+  "fullscreen=(self)",
+].join(", ");
+
+function advancedSecurityHeaders(_req: Request, res: Response, next: NextFunction) {
+  res.setHeader("Permissions-Policy", permissionsPolicy);
+  next();
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.use(helmet());
+  if (servesPublicHttps) {
+    const expressApp = app.getHttpAdapter().getInstance() as { set(name: string, value: unknown): void };
+    expressApp.set("trust proxy", 1);
+  }
+
+  app.use(
+    helmet({
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+      strictTransportSecurity: servesPublicHttps
+        ? {
+            maxAge: 15552000,
+            includeSubDomains: true,
+          }
+        : false,
+    }),
+  );
+  app.use(advancedSecurityHeaders);
   app.use(cookieParser());
 
   app.enableCors({
