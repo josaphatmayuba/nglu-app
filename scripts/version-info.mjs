@@ -15,7 +15,7 @@ function git(command, fallback) {
 
 const commit = git("git rev-parse --short HEAD", "unknown");
 const branch = git("git branch --show-current", "unknown");
-const dirty = git("git status --short", "") ? true : false;
+const dirty = git("git status --short --untracked-files=no", "") ? true : false;
 const buildVersion = `${baseVersion}+${commit}${dirty ? ".dirty" : ""}`;
 
 const payload = {
