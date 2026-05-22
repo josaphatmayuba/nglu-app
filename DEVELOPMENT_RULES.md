@@ -68,10 +68,13 @@ The public marketing site and CRM must stay separated:
 
 ## Frontend Dev Deployment Policy
 
-This section exists because SCRUM-84 was caused by two deployment mistakes:
+This section exists because of two past deployment incidents:
 
+**SCRUM-84** — Two mistakes combined:
 - A dev frontend bundle was deployed with the wrong API target.
 - The bind-mounted `frontend/dist` directory was deleted and recreated while nginx was running, leaving the container mounted to an empty/deleted inode.
+
+**2026-05-22 incident** — An agent ran `npm run build` (no mode) during a TypeScript verification step, which silently overwrote `frontend/dist` with a bundle pointing to `ongdngolu.org/api` (prod). The subsequent deploy used `-SkipLocalBuild` and shipped that broken dist to dev. Result: `dev.ongdngolu.org` was calling the prod backend.
 
 Rules:
 
@@ -81,13 +84,28 @@ Rules:
 - The production deployment script lock at `/tmp/nglu-prod-deploy.lock` must be respected. Do not deploy production if another agent is already deploying.
 - For `dev.ongdngolu.org`, always build from `frontend/` with `npm run build:dev`.
 - For production, always build from `frontend/` with `npm run build:prod`.
+- **Never run `npm run build` (no mode suffix) anywhere in this project.** It is blocked (exits 1) and produces a bundle with no guaranteed API target. To verify that frontend code compiles without building a deployable artifact, use `npx tsc --noEmit` instead.
 - Never deploy dev frontend with plain `npm run build`.
 - Never `rm -rf frontend/dist` on AWS while `nglu_prod_frontend` is serving it as a bind mount.
 - Prefer replacing the contents inside the existing `frontend/dist` directory, or recreate `nglu_prod_frontend` immediately after replacing the directory.
-- After deploying dev frontend, verify the bundle target with `npm run assert:api:dev` locally or by grepping the deployed dist for `https://dev.ongdngolu.org/api`.
+- After deploying dev frontend, verify the bundle target with `npm run assert:api:dev` locally or by grepping the deployed dist for `https://dev.ongdngolu.org/api`. The deploy script does this automatically — do not bypass it.
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
 - After deploying production frontend, run `node scripts/smoke-routing-contract.mjs --base https://ongdngolu.org` and verify the CRM stays under `/crm`.
 - Do not build the full CRM frontend directly on the small Lightsail instance when memory is constrained. Build `frontend/dist` locally or in CI and deploy the artifact with `scripts/deploy-dev-aws.ps1`.
+
+Standard dev deployment command (covers build + assert + upload + smoke):
+
+```powershell
+.\scripts\deploy-dev-aws.ps1
+```
+
+If `npm run build:dev` was already run in the current session and `frontend/dist` is fresh:
+
+```powershell
+.\scripts\deploy-dev-aws.ps1 -SkipLocalBuild
+```
+
+The script asserts the API target locally before uploading even with `-SkipLocalBuild`. There is no way to bypass this check.
 
 ## AWS Deployment Coordination
 
