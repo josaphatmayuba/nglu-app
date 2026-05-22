@@ -15,6 +15,7 @@ This project follows:
 - Versioning policy and tooling for future changes.
 - SCRUM-125: display the application build version at the bottom of local/dev screens, hidden in production.
 - SCRUM-138: add the standard AWS dev deployment tool with server-side lock, smoke checks, and deployment documentation.
+- SCRUM-139: add the standard AWS production deployment tool with confirmation guard, server-side lock, routing smoke checks, and deployment documentation.
 
 ## [3.0.0] - 2026-05-22
 

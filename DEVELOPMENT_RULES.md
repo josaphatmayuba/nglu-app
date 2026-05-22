@@ -76,7 +76,9 @@ This section exists because SCRUM-84 was caused by two deployment mistakes:
 Rules:
 
 - Manual AWS dev deployments must use `scripts/deploy-dev-aws.ps1` from the repo root unless a ticket explicitly documents why a different path is required.
+- Manual AWS production deployments must use `scripts/deploy-prod-aws.ps1` from the repo root unless a release ticket explicitly documents why a different path is required.
 - The deployment script lock at `/tmp/nglu-dev-deploy.lock` must be respected. Do not deploy if another agent is already deploying.
+- The production deployment script lock at `/tmp/nglu-prod-deploy.lock` must be respected. Do not deploy production if another agent is already deploying.
 - For `dev.ongdngolu.org`, always build from `frontend/` with `npm run build:dev`.
 - For production, always build from `frontend/` with `npm run build:prod`.
 - Never deploy dev frontend with plain `npm run build`.
@@ -84,6 +86,7 @@ Rules:
 - Prefer replacing the contents inside the existing `frontend/dist` directory, or recreate `nglu_prod_frontend` immediately after replacing the directory.
 - After deploying dev frontend, verify the bundle target with `npm run assert:api:dev` locally or by grepping the deployed dist for `https://dev.ongdngolu.org/api`.
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
+- After deploying production frontend, run `node scripts/smoke-routing-contract.mjs --base https://ongdngolu.org` and verify the CRM stays under `/crm`.
 - Do not build the full CRM frontend directly on the small Lightsail instance when memory is constrained. Build `frontend/dist` locally or in CI and deploy the artifact with `scripts/deploy-dev-aws.ps1`.
 
 ## AWS Deployment Coordination

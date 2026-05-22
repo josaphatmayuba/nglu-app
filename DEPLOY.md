@@ -130,6 +130,15 @@ git push origin master
 
 Ou via Pull Request dans Bitbucket : `develop → master`, puis merge.
 
+
+Bitbucket Pipelines is currently not the source of truth for production deployment either. After release approval and after `master` is updated, use the standard production deployment tool:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy-prod-aws.ps1 -ConfirmProduction DEPLOY_PROD
+```
+
+See `DEPLOYMENT_PROD_AWS.md` for production lock behavior, PEM keys, routing smoke checks, and final browser validation rules.
+
 ---
 
 ## 4. Setup serveur initial (UNE seule fois)
