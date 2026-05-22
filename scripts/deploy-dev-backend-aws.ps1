@@ -112,7 +112,12 @@ docker logs nglu_dev_backend2 --tail 10
 "@
 
 Write-Step "Deploying backend2 on AWS dev"
+$prevEA = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $remoteScript | & ssh @sshArgs "bash -s"
+$sshExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEA
+if ($sshExit -ne 0) { throw "Remote deploy script failed (exit $sshExit)" }
 
 if (-not $SkipSmoke) {
   Write-Step "Local smoke checks"
