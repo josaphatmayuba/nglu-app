@@ -6,7 +6,7 @@ import QuickLink from "../../../layouts/QuickLink";
 import Content from "../RecentContent/Content";
 import Footer from "../../../layouts/Footer";
 import ChartDashboard from "./ChartDashboard";
-import { loadDashboardData, clearDashboard } from "@/redux/rtk/features/dashboard/dashboardSlice";
+import { loadDashboardStartup, clearDashboard } from "@/redux/rtk/features/dashboard/dashboardSlice";
 
 // HTML Entity Decode korar jonno Helper Function
 const decodeHTMLEntity = (htmlStr) => {
@@ -38,7 +38,7 @@ const Dashboard = () => {
   const fetchDashboard = useCallback((s, e) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      dispatch(loadDashboardData({ startDate: s, endDate: e }));
+      dispatch(loadDashboardStartup({ startDate: s, endDate: e }));
     }, 250);
   }, [dispatch]);
 

@@ -3,8 +3,7 @@ import { useEffect } from "react";
 import { MdPayments } from "react-icons/md";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { loadAlleCommerceSalePaginatedForDashboard } from "../../../redux/rtk/features/eCommerce/cartOrder/cartOrderSlice";
-import { loadAllSale } from "../../../redux/rtk/features/sale/saleSlice";
+import { loadDashboardRecentActivity } from "../../../redux/rtk/features/dashboard/dashboardSlice";
 import ViewBtn from "../../Buttons/ViewBtn";
 import DashboardTable from "./DashboardTable";
 
@@ -136,59 +135,33 @@ const pendingColumns = [
 export default function Content({ pageConfig }) {
   const dispatch = useDispatch();
 
+  // SCRUM-142: read from aggregated recent-activity state (1 request instead of 4)
   const {
-    list: saleList,
-    loading: saleLoading,
-    total: totalSell,
-  } = useSelector((state) => state.sales);
-  const {
-    PENDING,
-    loading: pendingLoading,
-    total: totalPending,
-  } = useSelector((state) => state.ESale);
+    recentActivity,
+    recentActivityLoading,
+  } = useSelector((state) => state.dashboard);
 
-  const {
-    RECEIVED,
-    loading: receivedLoading,
-    total: totalReceived,
-  } = useSelector((state) => state.ESale);
+  const saleList = recentActivity?.recentSales ?? [];
+  const saleLoading = recentActivityLoading;
+  const totalSell = recentActivity?.recentSales?.length ?? 0;
 
-  const {
-    DELIVERED,
-    loading: deliveryLoading,
-    total: totalDelivery,
-  } = useSelector((state) => state.ESale);
+  const PENDING = recentActivity?.cartOrders?.pending?.items ?? [];
+  const pendingLoading = recentActivityLoading;
+  const totalPending = recentActivity?.cartOrders?.pending?.count ?? 0;
 
-  // const information = useSelector((state) => state.vatTax.statement);
+  const RECEIVED = recentActivity?.cartOrders?.received?.items ?? [];
+  const receivedLoading = recentActivityLoading;
+  const totalReceived = recentActivity?.cartOrders?.received?.count ?? 0;
+
+  const DELIVERED = recentActivity?.cartOrders?.delivered?.items ?? [];
+  const deliveryLoading = recentActivityLoading;
+  const totalDelivery = recentActivity?.cartOrders?.delivered?.count ?? 0;
+
   useEffect(() => {
-    dispatch(
-      loadAllSale({
-        ...pageConfig,
-        count: 5,
-        user: "",
-      })
-    );
-    dispatch(
-      loadAlleCommerceSalePaginatedForDashboard({
-        page: 1,
-        count: 5,
-        orderStatus: "PENDING",
-      })
-    );
-    dispatch(
-      loadAlleCommerceSalePaginatedForDashboard({
-        page: 1,
-        count: 5,
-        orderStatus: "RECEIVED",
-      })
-    );
-    dispatch(
-      loadAlleCommerceSalePaginatedForDashboard({
-        page: 1,
-        count: 5,
-        orderStatus: "DELIVERED",
-      })
-    );
+    dispatch(loadDashboardRecentActivity({
+      startDate: pageConfig.startDate,
+      endDate: pageConfig.endDate,
+    }));
   }, [dispatch, pageConfig]);
 
   return (
