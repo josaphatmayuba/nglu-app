@@ -1,6 +1,7 @@
 import Tabs, { Tab } from "@/UI/Tabs";
 import EmailConfig from "./EmailConfig";
 import GeneralSetting from "./GeneralSetting";
+import SecurityPanel from "./SecurityPanel";
 // import QuickLinkSettings from "./QuickLinkSettings";
 
 export default function AppSettings() {
@@ -22,6 +23,9 @@ export default function AppSettings() {
           </Tab> */}
           <Tab label="Email Config">
             <EmailConfig />
+          </Tab>
+          <Tab label="Sécurité">
+            <SecurityPanel />
           </Tab>
         </Tabs>
       </div>
