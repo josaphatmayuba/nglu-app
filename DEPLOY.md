@@ -92,7 +92,17 @@ npm run build
 
 ## 2. Workflow Development
 
-Push sur `develop` → la pipeline Bitbucket déploie automatiquement sur dev.ongdngolu.org.
+Bitbucket Pipelines is currently not the source of truth for dev deployment. Manual AWS dev deployment is required until the pipeline is restored and validated.
+
+Use the standard deployment tool:
+
+```powershell
+.\scripts\deploy-dev-aws.ps1
+```
+
+See `DEPLOYMENT_DEV_AWS.md` for PEM keys, lock behavior, smoke checks, and browser validation rules.
+
+Push sur `develop` garde le remote a jour, puis le deploiement manuel publie sur dev.ongdngolu.org.
 
 ```bash
 git checkout develop
@@ -102,7 +112,6 @@ git push origin develop
 ```
 
 Surveiller le déploiement :
-- Pipeline : https://bitbucket.org/ngolu-ong-gestion/nglu-app/addon/pipelines/home
 - Site : https://dev.ongdngolu.org
 - Logs serveur : `ssh admin@16.54.167.125 'docker logs -f nglu_dev_backend2'`
 
