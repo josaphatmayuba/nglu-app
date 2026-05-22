@@ -40,6 +40,24 @@ Every agent working with Jira must keep the issue status aligned with the real s
 - Do not mark an issue `Done` just because code was written. If the user still needs to test it, the correct status is `Test`.
 - Jira comments must explicitly say what was tested, where it was tested, and what remains unverified.
 
+## Versioning Policy
+
+Every future code or configuration change must be traceable to an application version.
+
+Rules:
+
+- The root `VERSION` file is the single base application version.
+- The deployed/build version is `VERSION` plus the short Git commit, for example `3.0.0+a422077`.
+- Run `node scripts/version-info.mjs` before Jira handoff or deployment comments.
+- Update `CHANGELOG.md` under `[Unreleased]` for every code/config change before committing.
+- Include the Jira key in the changelog entry when one exists.
+- Do not bump `VERSION` for every small commit. Bump it only for approved release/version increments:
+  - `PATCH` for bug fixes, security hardening and small corrections.
+  - `MINOR` for backward-compatible features.
+  - `MAJOR` for breaking changes.
+- Jira comments after validation must include the base version, build version, commit hash and validation summary.
+- See `VERSIONING.md` for the complete workflow.
+
 ## Routing Policy
 
 The public marketing site and CRM must stay separated:
