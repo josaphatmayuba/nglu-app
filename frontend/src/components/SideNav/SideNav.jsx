@@ -317,7 +317,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "Rapports",
-          to: "/admin/sale-report",
+          to: "/admin/reports",
           icon: BarChart3,
           permit: {
             permissions: ["create-saleInvoice", "readAll-saleInvoice", "readAll-productReports"],

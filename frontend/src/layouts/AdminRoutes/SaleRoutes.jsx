@@ -7,6 +7,7 @@ import SaleReport from "@/components/sale/SaleReport";
 import AddReturnSale from "@/components/sale/addReturnSale";
 import DetailSale from "@/components/sale/detailSale";
 import GetAllSale from "@/components/sale/getAllSale";
+import ReportsHub from "@/components/reports/ReportsHub";
 // import InvoiceSetting from "@/components/settings/invoiceSetting";s
 import { Route, Routes } from "react-router-dom";
 
@@ -39,6 +40,10 @@ export default function SaleRoutes() {
             <DetailSale />
           </PermissionChecker>
         }
+      />
+      <Route
+        path="/reports"
+        element={<ReportsHub />}
       />
       <Route
         path="/sale-report"
