@@ -9,14 +9,23 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
+import { Request } from "express";
+import type { AuditContext } from "../audit/audit.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { CreateRoleDto } from "./dto/create-role.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { RolesService } from "./roles.service";
+
+function auditCtx(req: Request): AuditContext {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const user = (req as any).user as { sub?: number } | undefined;
+  return { userId: user?.sub, ip: req.ip, userAgent: req.headers["user-agent"] };
+}
 
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("role")
@@ -47,22 +56,22 @@ export class RolesController {
   @ApiQuery({ name: "query", required: false, enum: ["createmany", "deletemany"] })
   @Post()
   @HttpCode(201)
-  create(@Body() body: unknown, @Query("query") query?: string) {
-    if (query === "deletemany") return this.rolesService.deleteMany(body as number[]);
+  create(@Body() body: unknown, @Query("query") query: string | undefined, @Req() req: Request) {
+    if (query === "deletemany") return this.rolesService.deleteMany(body as number[], auditCtx(req));
     if (query === "createmany") return this.rolesService.createMany(body as CreateRoleDto[]);
-    return this.rolesService.create(body as CreateRoleDto);
+    return this.rolesService.create(body as CreateRoleDto, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Update role" })
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto) {
-    return this.rolesService.update(id, body);
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto, @Req() req: Request) {
+    return this.rolesService.update(id, body, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Soft delete role (update status)" })
   @Patch(":id")
   @HttpCode(200)
-  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string) {
-    return this.rolesService.remove(id, status);
+  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request) {
+    return this.rolesService.remove(id, status, auditCtx(req));
   }
 }

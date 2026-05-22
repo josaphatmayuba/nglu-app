@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { desc, eq, inArray, like, sql } from "drizzle-orm";
+import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions, roles } from "../database/schema";
 import type { Database } from "../database/types";
@@ -8,7 +9,10 @@ import { UpdateRoleDto } from "./dto/update-role.dto";
 
 @Injectable()
 export class RolesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly audit: AuditService,
+  ) {}
 
   async findAll(query: Record<string, string>) {
     if (query["query"] === "all") {
@@ -84,7 +88,7 @@ export class RolesService {
     return this.attachPermissions(role);
   }
 
-  async create(dto: CreateRoleDto) {
+  async create(dto: CreateRoleDto, ctx: AuditContext = {}) {
     const [result] = await this.db.insert(roles).values({
       name: dto.name,
       status: "true",
@@ -92,7 +96,10 @@ export class RolesService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    const newId = Number(result.insertId);
+    await this.audit.log("admin.role.created", `role:${newId}`, ctx, { name: dto.name });
+
+    return this.findOne(newId);
   }
 
   async createMany(data: CreateRoleDto[]) {
@@ -117,14 +124,15 @@ export class RolesService {
     return { count: created };
   }
 
-  async deleteMany(ids: number[]) {
+  async deleteMany(ids: number[], ctx: AuditContext = {}) {
     for (const id of ids) {
       await this.db.delete(roles).where(eq(roles.id, id));
     }
+    await this.audit.log("admin.role.deleted", `roles:[${ids.join(",")}]`, ctx, { count: ids.length, ids });
     return { count: ids.length };
   }
 
-  async update(id: number, dto: UpdateRoleDto) {
+  async update(id: number, dto: UpdateRoleDto, ctx: AuditContext = {}) {
     const [role] = await this.db.select({ id: roles.id, isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
     if (!role) throw new NotFoundException("Role not found");
     if (role.isSystem) throw new BadRequestException("System roles cannot be modified.");
@@ -136,17 +144,21 @@ export class RolesService {
       .set({ ...(name ? { name } : {}), updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(roles.id, id));
 
+    await this.audit.log("admin.role.updated", `role:${id}`, ctx, { name });
+
     return { message: "Role Updated Successfully" };
   }
 
-  async remove(id: number, status: string) {
-    const [role] = await this.db.select({ isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
+  async remove(id: number, status: string, ctx: AuditContext = {}) {
+    const [role] = await this.db.select({ isSystem: roles.isSystem, name: roles.name }).from(roles).where(eq(roles.id, id)).limit(1);
     if (role?.isSystem) throw new BadRequestException("System roles cannot be deleted.");
 
     await this.db
       .update(roles)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(roles.id, id));
+
+    await this.audit.log("admin.role.status_changed", `role:${id}`, ctx, { status, name: role?.name });
 
     return { message: "Role Deleted Successfully" };
   }

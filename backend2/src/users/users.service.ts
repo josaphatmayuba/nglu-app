@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import {
   awardHistories,
@@ -31,6 +32,7 @@ export class UsersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtimePermissions: RealtimePermissionsPublisher,
+    private readonly audit: AuditService,
   ) {}
 
   async findAll(query: Record<string, string>) {
@@ -139,7 +141,7 @@ export class UsersService {
     };
   }
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, ctx: AuditContext = {}) {
     const existing = await this.db
       .select({ id: users.id })
       .from(users)
@@ -159,10 +161,16 @@ export class UsersService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    const newId = Number(result.insertId);
+    await this.audit.log("admin.user.created", `user:${newId}`, ctx, {
+      username: dto.username,
+      roleId: dto.roleId,
+    });
+
+    return this.findOne(newId);
   }
 
-  async update(id: number, dto: UpdateUserDto) {
+  async update(id: number, dto: UpdateUserDto, ctx: AuditContext = {}) {
     const [user] = await this.db
       .select({ id: users.id, roleId: users.roleId })
       .from(users)
@@ -185,18 +193,26 @@ export class UsersService {
 
     await this.db.update(users).set(updateData).where(eq(users.id, id));
 
-    if (dto.roleId && dto.roleId !== user.roleId) {
+    const roleChanged = Boolean(dto.roleId && dto.roleId !== user.roleId);
+    if (roleChanged) {
       await this.realtimePermissions.publishPermissionsUpdated({
-        roleId: dto.roleId,
+        roleId: dto.roleId!,
         userIds: [id],
         reason: "user-role-updated",
       });
     }
 
+    await this.audit.log("admin.user.updated", `user:${id}`, ctx, {
+      fields: Object.keys(dto).filter((k) => k !== "password"),
+      passwordChanged: Boolean(dto.password),
+      roleChanged,
+      newRoleId: dto.roleId,
+    });
+
     return this.findOne(id);
   }
 
-  async remove(id: number, status: string) {
+  async remove(id: number, status: string, ctx: AuditContext = {}) {
     if (!status) throw new BadRequestException("status is required");
 
     const [user] = await this.db
@@ -211,6 +227,8 @@ export class UsersService {
       .update(users)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, id));
+
+    await this.audit.log("admin.user.status_changed", `user:${id}`, ctx, { status });
 
     return { message: "User deleted successfully" };
   }
