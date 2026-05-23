@@ -3648,8 +3648,22 @@
     width: 100%;
   }
 
+  .immo-lease-actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
   .immo-view-toggle button {
     flex: 1;
+  }
+
+  .immo-lease-card {
+    min-height: unset;
+    padding: 20px;
+  }
+
+  .immo-lease-card-foot strong {
+    font-size: 20px;
   }
 
   .immo-contract-dialog {
