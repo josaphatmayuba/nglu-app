@@ -191,7 +191,7 @@ Write-Step "Uploading production artifacts"
 Write-Step "Deploying on AWS production with lock"
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$remoteScript | & ssh @sshArgs "bash -s"
+($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
 if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }
