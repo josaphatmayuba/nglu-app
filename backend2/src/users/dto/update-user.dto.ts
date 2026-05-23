@@ -30,4 +30,5 @@ export class UpdateUserDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() departmentId?: number;
   @ApiPropertyOptional() @IsOptional() @IsInt() shiftId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() leaveReason?: string;
 }

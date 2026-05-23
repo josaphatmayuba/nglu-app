@@ -1,7 +1,9 @@
-import { Modal, Select, Spin, Table } from "antd";
+import { Drawer, Dropdown, Input, Modal, Select, Spin, Table } from "antd";
 import axios from "axios";
-import { BriefcaseBusiness, Download, Filter, LayoutGrid, List, Pencil, UserPlus } from "lucide-react";
+import { BriefcaseBusiness, Download, Eye, Filter, LayoutGrid, List, Lock, MoreHorizontal, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
+import EditStaffModal from "./EditStaffModal";
+import RolesTab from "./RolesTab";
 import SalariesPage from "./SalariesPage";
 
 const AVATAR_COLORS = [
@@ -20,6 +22,7 @@ const TABS = [
   { key: "conges", label: "Congés" },
   { key: "organigramme", label: "Postes & Départements" },
   { key: "performance", label: "Performance" },
+  { key: "roles", label: "Rôles & Permissions" },
 ];
 
 function getInitials(user) {
@@ -45,7 +48,147 @@ function PlaceholderPanel({ label }) {
   );
 }
 
-function buildTableColumns(onEdit) {
+function InfoRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between py-2 border-b border-ink-100 last:border-0">
+      <span className="text-xs text-ink-500">{label}</span>
+      <span className="text-xs font-medium text-ink-800 text-right max-w-[60%]">{value}</span>
+    </div>
+  );
+}
+
+function ViewStaffDrawer({ user, onClose }) {
+  if (!user) return null;
+  const idx = 0;
+  const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+  return (
+    <Drawer
+      open={!!user}
+      onClose={onClose}
+      title="Profil employé"
+      width={400}
+    >
+      <div className="flex items-center gap-4 mb-6">
+        <div
+          className={`w-14 h-14 rounded-full bg-gradient-to-br ${color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0`}
+        >
+          {getInitials(user)}
+        </div>
+        <div>
+          <h3 className="font-semibold text-ink-900 text-base">{getDisplayName(user)}</h3>
+          <p className="text-sm text-ink-500">{user.designation?.name || user.role?.name || "Sans poste"}</p>
+          <span
+            className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+              user.status === "true"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-ink-100 text-ink-500"
+            }`}
+          >
+            {user.status === "true" ? "Actif" : "Inactif"}
+          </span>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-2">Identité</p>
+        <InfoRow label="Username" value={user.username} />
+        <InfoRow label="Email" value={user.email} />
+        <InfoRow label="Téléphone" value={user.phone} />
+        <InfoRow label="Groupe sanguin" value={user.bloodGroup} />
+        <InfoRow label="ID employé" value={user.employeeId} />
+      </div>
+
+      <div className="mb-4">
+        <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-2">RH</p>
+        <InfoRow label="Rôle" value={user.role?.name} />
+        <InfoRow label="Poste" value={user.designation?.name} />
+        <InfoRow label="Département" value={user.department?.name} />
+        <InfoRow label="Salaire actuel" value={user.currentSalary != null ? new Intl.NumberFormat("fr-FR").format(user.currentSalary) : null} />
+        <InfoRow label="Date d'embauche" value={user.joinDate ? new Date(user.joinDate).toLocaleDateString("fr-FR") : null} />
+        <InfoRow label="Date de départ" value={user.leaveDate ? new Date(user.leaveDate).toLocaleDateString("fr-FR") : null} />
+        <InfoRow label="Motif de départ" value={user.leaveReason} />
+      </div>
+
+      {(user.street || user.city || user.country) && (
+        <div>
+          <p className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-2">Adresse</p>
+          <InfoRow label="Rue" value={user.street} />
+          <InfoRow label="Ville" value={user.city} />
+          <InfoRow label="Province" value={user.state} />
+          <InfoRow label="Code postal" value={user.zipCode} />
+          <InfoRow label="Pays" value={user.country} />
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+function CloseAccountModal({ user, onClose, onClosed }) {
+  const [reason, setReason] = useState("Démission");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) { setReason("Démission"); setNote(""); }
+  }, [user]);
+
+  function handleClose() {
+    setSaving(true);
+    const leaveReason = note.trim() ? `${reason} — ${note.trim()}` : reason;
+    const today = new Date().toISOString().split("T")[0];
+    axios
+      .patch(`/user/${user.id}`, { status: "false", leaveDate: today, leaveReason })
+      .then(() => onClosed())
+      .catch(() => setSaving(false));
+  }
+
+  return (
+    <Modal
+      open={!!user}
+      onCancel={onClose}
+      onOk={handleClose}
+      okText="Confirmer la fermeture"
+      okButtonProps={{ danger: true }}
+      cancelText="Annuler"
+      confirmLoading={saving}
+      title={`Fermer le compte — ${user ? getDisplayName(user) : ""}`}
+      destroyOnClose
+    >
+      <div className="space-y-4 pt-2">
+        <div>
+          <label className="block text-xs font-medium text-ink-600 mb-1">Motif</label>
+          <Select
+            className="w-full"
+            value={reason}
+            options={[
+              { value: "Démission", label: "Démission" },
+              { value: "Licenciement", label: "Licenciement" },
+              { value: "Fin de contrat", label: "Fin de contrat" },
+              { value: "Retraite", label: "Retraite" },
+              { value: "Autre", label: "Autre" },
+            ]}
+            onChange={setReason}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-ink-600 mb-1">Note (optionnel)</label>
+          <Input.TextArea
+            rows={3}
+            placeholder="Détails supplémentaires..."
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+        <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          Le compte sera désactivé et la date de départ sera définie à aujourd&apos;hui. Le motif sera enregistré dans le dossier de l&apos;employé.
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function buildTableColumns(onView, onEdit, onClose) {
   return [
     {
       title: "Nom",
@@ -53,25 +196,14 @@ function buildTableColumns(onEdit) {
         <span className="font-medium text-ink-800">{getDisplayName(u)}</span>
       ),
     },
-    {
-      title: "Poste",
-      render: (_, u) => u.designation?.name || u.role?.name || "—",
-    },
-    {
-      title: "Département",
-      render: (_, u) => u.department?.name || "—",
-    },
+    { title: "Poste", render: (_, u) => u.designation?.name || u.role?.name || "—" },
+    { title: "Département", render: (_, u) => u.department?.name || "—" },
     {
       title: "Salaire",
       render: (_, u) =>
-        u.currentSalary != null
-          ? new Intl.NumberFormat("fr-FR").format(u.currentSalary)
-          : "—",
+        u.currentSalary != null ? new Intl.NumberFormat("fr-FR").format(u.currentSalary) : "—",
     },
-    {
-      title: "Username",
-      dataIndex: "username",
-    },
+    { title: "Username", dataIndex: "username" },
     {
       title: "Statut",
       dataIndex: "status",
@@ -91,82 +223,24 @@ function buildTableColumns(onEdit) {
       key: "actions",
       width: 48,
       render: (_, u) => (
-        <button
-          onClick={() => onEdit(u)}
-          className="p-1.5 rounded-lg text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition"
-          title="Modifier"
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [
+              { key: "view", label: "Visualiser", icon: <Eye className="w-3.5 h-3.5" />, onClick: () => onView(u) },
+              { key: "edit", label: "Modifier", icon: <Filter className="w-3.5 h-3.5" />, onClick: () => onEdit(u) },
+              { type: "divider" },
+              { key: "close", label: "Fermer le compte", icon: <Lock className="w-3.5 h-3.5" />, danger: true, onClick: () => onClose(u) },
+            ],
+          }}
         >
-          <Pencil className="w-3.5 h-3.5" />
-        </button>
+          <button className="p-1.5 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-50 transition">
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </Dropdown>
       ),
     },
   ];
-}
-
-function EditStaffModal({ user, designations, departments, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    designationId: user?.designationId ?? null,
-    departmentId: user?.departmentId ?? null,
-    status: user?.status ?? "true",
-  });
-  const [saving, setSaving] = useState(false);
-
-  function handleSave() {
-    setSaving(true);
-    axios.patch(`/user/${user.id}`, form)
-      .then(() => onSaved())
-      .catch(() => setSaving(false));
-  }
-
-  return (
-    <Modal
-      open={!!user}
-      onCancel={onClose}
-      onOk={handleSave}
-      okText="Enregistrer"
-      cancelText="Annuler"
-      confirmLoading={saving}
-      title={`Modifier — ${getDisplayName(user ?? {})}`}
-      destroyOnClose
-    >
-      <div className="space-y-4 pt-2">
-        <div>
-          <label className="block text-xs font-medium text-ink-600 mb-1">Poste</label>
-          <Select
-            className="w-full"
-            value={form.designationId}
-            allowClear
-            placeholder="Aucun poste"
-            options={designations.map((d) => ({ value: d.id, label: d.name }))}
-            onChange={(v) => setForm((f) => ({ ...f, designationId: v ?? null }))}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-ink-600 mb-1">Département</label>
-          <Select
-            className="w-full"
-            value={form.departmentId}
-            allowClear
-            placeholder="Aucun département"
-            options={departments.map((d) => ({ value: d.id, label: d.name }))}
-            onChange={(v) => setForm((f) => ({ ...f, departmentId: v ?? null }))}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-ink-600 mb-1">Statut</label>
-          <Select
-            className="w-full"
-            value={form.status}
-            options={[
-              { value: "true", label: "Actif" },
-              { value: "false", label: "Inactif" },
-            ]}
-            onChange={(v) => setForm((f) => ({ ...f, status: v }))}
-          />
-        </div>
-      </div>
-    </Modal>
-  );
 }
 
 export default function HrPanel() {
@@ -178,11 +252,14 @@ export default function HrPanel() {
   const [designations, setDesignations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [staffLoading, setStaffLoading] = useState(true);
+  const [viewingUser, setViewingUser] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [closingUser, setClosingUser] = useState(null);
 
   function loadStaff() {
     setStaffLoading(true);
-    axios.get("/hr/staff-overview")
+    axios
+      .get("/hr/staff-overview")
       .then(({ data }) => {
         setStaffList(data.staff ?? []);
         setStaffTotal(data.total ?? 0);
@@ -207,6 +284,17 @@ export default function HrPanel() {
       (u.username || "").toLowerCase().includes(q)
     );
   });
+
+  function cardMenu(user) {
+    return {
+      items: [
+        { key: "view", label: "Visualiser", icon: <Eye className="w-3.5 h-3.5" />, onClick: () => setViewingUser(user) },
+        { key: "edit", label: "Modifier", icon: <Filter className="w-3.5 h-3.5" />, onClick: () => setEditingUser(user) },
+        { type: "divider" },
+        { key: "close", label: "Fermer le compte", icon: <Lock className="w-3.5 h-3.5" />, danger: true, onClick: () => setClosingUser(user) },
+      ],
+    };
+  }
 
   return (
     <div>
@@ -310,7 +398,8 @@ export default function HrPanel() {
         })}
       </div>
 
-      {/* Tab content */}
+      {/* ── Tab content ── */}
+
       {activeTab === "employes" && (
         <div>
           <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -392,13 +481,11 @@ export default function HrPanel() {
                           </span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="p-1.5 rounded-lg text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition flex-shrink-0"
-                        title="Modifier"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      <Dropdown trigger={["click"]} menu={cardMenu(user)}>
+                        <button className="p-1.5 rounded-lg text-ink-400 hover:text-ink-700 hover:bg-ink-50 transition flex-shrink-0">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </Dropdown>
                     </div>
                     <div className="pt-3 border-t border-ink-100 flex gap-4">
                       <div>
@@ -432,7 +519,7 @@ export default function HrPanel() {
               <Table
                 rowKey="id"
                 dataSource={filteredStaff}
-                columns={buildTableColumns(setEditingUser)}
+                columns={buildTableColumns(setViewingUser, setEditingUser, setClosingUser)}
                 loading={staffLoading}
                 pagination={{ pageSize: 20 }}
                 size="middle"
@@ -453,18 +540,14 @@ export default function HrPanel() {
           <div className="bg-white rounded-xl border border-ink-200 p-5">
             <h3 className="font-semibold text-ink-800 mb-4">
               Postes{" "}
-              <span className="text-ink-400 font-normal text-sm">
-                ({designations.length})
-              </span>
+              <span className="text-ink-400 font-normal text-sm">({designations.length})</span>
             </h3>
             {designations.length === 0 ? (
               <p className="text-sm text-ink-400">Aucun poste enregistré</p>
             ) : (
               <ul className="divide-y divide-ink-100">
                 {designations.map((d) => (
-                  <li key={d.id} className="py-2.5 text-sm text-ink-700">
-                    {d.name}
-                  </li>
+                  <li key={d.id} className="py-2.5 text-sm text-ink-700">{d.name}</li>
                 ))}
               </ul>
             )}
@@ -472,18 +555,14 @@ export default function HrPanel() {
           <div className="bg-white rounded-xl border border-ink-200 p-5">
             <h3 className="font-semibold text-ink-800 mb-4">
               Départements{" "}
-              <span className="text-ink-400 font-normal text-sm">
-                ({departments.length})
-              </span>
+              <span className="text-ink-400 font-normal text-sm">({departments.length})</span>
             </h3>
             {departments.length === 0 ? (
               <p className="text-sm text-ink-400">Aucun département enregistré</p>
             ) : (
               <ul className="divide-y divide-ink-100">
                 {departments.map((d) => (
-                  <li key={d.id} className="py-2.5 text-sm text-ink-700">
-                    {d.name}
-                  </li>
+                  <li key={d.id} className="py-2.5 text-sm text-ink-700">{d.name}</li>
                 ))}
               </ul>
             )}
@@ -493,12 +572,23 @@ export default function HrPanel() {
 
       {activeTab === "performance" && <PlaceholderPanel label="Évaluation des performances" />}
 
+      {activeTab === "roles" && <RolesTab />}
+
+      {/* ── Modals & Drawers ── */}
+      <ViewStaffDrawer user={viewingUser} onClose={() => setViewingUser(null)} />
+
       <EditStaffModal
         user={editingUser}
         designations={designations}
         departments={departments}
         onClose={() => setEditingUser(null)}
         onSaved={() => { setEditingUser(null); loadStaff(); }}
+      />
+
+      <CloseAccountModal
+        user={closingUser}
+        onClose={() => setClosingUser(null)}
+        onClosed={() => { setClosingUser(null); loadStaff(); }}
       />
     </div>
   );
