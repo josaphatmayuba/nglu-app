@@ -1,10 +1,7 @@
 import { Spin, Table } from "antd";
+import axios from "axios";
 import { BriefcaseBusiness, Download, Filter, LayoutGrid, List, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { loadAllDepartmentPaginated } from "../../redux/rtk/features/department/departmentSlice";
-import { loadAllDesignationPaginated } from "../../redux/rtk/features/designation/designationSlice";
-import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
 import SalariesPage from "./SalariesPage";
 
 const AVATAR_COLORS = [
@@ -91,22 +88,26 @@ const staffTableColumns = [
 ];
 
 export default function HrPanel() {
-  const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState("employes");
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
-
-  const { list: staffList = [], total: staffTotal = 0, loading: staffLoading } = useSelector(
-    (state) => state.users,
-  );
-  const { list: designations = [] } = useSelector((state) => state.designations);
-  const { list: departments = [] } = useSelector((state) => state.departments);
+  const [staffList, setStaffList] = useState([]);
+  const [staffTotal, setStaffTotal] = useState(0);
+  const [designations, setDesignations] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(true);
 
   useEffect(() => {
-    dispatch(loadAllStaff({ query: "all" }));
-    dispatch(loadAllDesignationPaginated({ page: 1, count: 100 }));
-    dispatch(loadAllDepartmentPaginated({ page: 1, count: 100 }));
-  }, [dispatch]);
+    setStaffLoading(true);
+    axios.get("/hr/staff-overview")
+      .then(({ data }) => {
+        setStaffList(data.staff ?? []);
+        setStaffTotal(data.total ?? 0);
+        setDesignations(data.designations ?? []);
+        setDepartments(data.departments ?? []);
+      })
+      .finally(() => setStaffLoading(false));
+  }, []);
 
   const activeCount = staffList.filter((u) => u.status === "true").length;
 

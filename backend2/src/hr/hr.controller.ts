@@ -21,6 +21,20 @@ import { HrService } from "./hr.service";
 
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 60 } })
+@ApiTags("hr")
+@Controller("hr")
+export class HrController {
+  constructor(private readonly service: HrService) {}
+
+  @Get("staff-overview")
+  staffOverview() {
+    return this.service.staffOverview();
+  }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("designation")
 @Controller("designation")
