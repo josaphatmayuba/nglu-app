@@ -14,7 +14,7 @@ import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 
 import { compactMoney } from "./shared/format";
 import { MetricCard, MultiCurrencyValue } from "./shared/ui";
-import { usePropertyManagementData } from "./shared/usePropertyManagementData";
+import { usePropertyManagementBootstrap, usePropertyManagementData } from "./shared/usePropertyManagementData";
 
 import PropertiesPanel from "./modules/Properties/PropertiesPanel";
 import UnitFormModal from "./modules/Properties/UnitFormModal";
@@ -24,6 +24,7 @@ import PaymentsPanel from "./modules/Payments/PaymentsPanel";
 import MaintenancePanel from "./modules/Maintenance/MaintenancePanel";
 
 const PropertyManagement = () => {
+  usePropertyManagementBootstrap();
   const {
     safeProperties,
     safePayments,

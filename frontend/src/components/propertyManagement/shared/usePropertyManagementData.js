@@ -1,11 +1,12 @@
 // Central Redux + memo hook for the Property Management screens.
 //
-// This is the single entry point every module (Properties, Tenants, Leases,
-// Payments, Maintenance) consumes to access slice data, derived collections
-// (enrichedUnits, KPIs, payment buckets…) and the bootstrap dispatchers.
+// usePropertyManagementData — read-only selector/memo hook consumed by every
+//   sub-panel (Properties, Tenants, Leases, Payments, Maintenance).
+//   Does NOT dispatch — panels call this to access already-loaded data.
 //
-// The legacy PropertyManagement.jsx duplicates this logic inline; both stay
-// in sync until the cutover (Phase F) removes the legacy file.
+// usePropertyManagementBootstrap — dispatches the initial API fetches.
+//   Call this ONCE, in PropertyManagement.jsx, so tab-switching never
+//   re-fetches data that is already in the Redux store.
 
 import moment from "moment";
 import { useEffect, useMemo } from "react";
@@ -60,9 +61,19 @@ const groupPaymentsByCurrency = (payments) => {
   return Array.from(grouped.values());
 };
 
-export const usePropertyManagementData = () => {
+// Bootstrap hook — call once in the top-level page component only.
+export const usePropertyManagementBootstrap = () => {
   const dispatch = useDispatch();
+  useEffect(() => {
+    dispatch(loadPropertyManagement());
+    dispatch(loadAllAccount());
+    dispatch(loadContracts());
+    dispatch(loadContractTemplates());
+    dispatch(loadAllCurrency());
+  }, [dispatch]);
+};
 
+export const usePropertyManagementData = () => {
   const {
     dashboard,
     properties,
@@ -79,14 +90,6 @@ export const usePropertyManagementData = () => {
   const accounts = useSelector((state) => state.accounts?.list) || [];
   const rawCurrencyList = useSelector((state) => state.currency?.list);
   const currencyList = useMemo(() => rawCurrencyList || [], [rawCurrencyList]);
-
-  useEffect(() => {
-    dispatch(loadPropertyManagement());
-    dispatch(loadAllAccount());
-    dispatch(loadContracts());
-    dispatch(loadContractTemplates());
-    dispatch(loadAllCurrency());
-  }, [dispatch]);
 
   // ─── Safe collections (filter out nulls coming from the API) ─────────
   const safeProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
