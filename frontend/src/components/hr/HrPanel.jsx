@@ -1,6 +1,6 @@
-import { Spin, Table } from "antd";
+import { Modal, Select, Spin, Table } from "antd";
 import axios from "axios";
-import { BriefcaseBusiness, Download, Filter, LayoutGrid, List, UserPlus } from "lucide-react";
+import { BriefcaseBusiness, Download, Filter, LayoutGrid, List, Pencil, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import SalariesPage from "./SalariesPage";
 
@@ -45,47 +45,129 @@ function PlaceholderPanel({ label }) {
   );
 }
 
-const staffTableColumns = [
-  {
-    title: "Nom",
-    render: (_, u) => (
-      <span className="font-medium text-ink-800">{getDisplayName(u)}</span>
-    ),
-  },
-  {
-    title: "Poste",
-    render: (_, u) => u.designation?.name || u.role?.name || "—",
-  },
-  {
-    title: "Département",
-    render: (_, u) => u.department?.name || "—",
-  },
-  {
-    title: "Salaire",
-    render: (_, u) =>
-      u.currentSalary != null
-        ? new Intl.NumberFormat("fr-FR").format(u.currentSalary)
-        : "—",
-  },
-  {
-    title: "Username",
-    dataIndex: "username",
-  },
-  {
-    title: "Statut",
-    dataIndex: "status",
-    render: (s) =>
-      s === "true" ? (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
-          Actif
-        </span>
-      ) : (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ink-100 text-ink-500">
-          Inactif
-        </span>
+function buildTableColumns(onEdit) {
+  return [
+    {
+      title: "Nom",
+      render: (_, u) => (
+        <span className="font-medium text-ink-800">{getDisplayName(u)}</span>
       ),
-  },
-];
+    },
+    {
+      title: "Poste",
+      render: (_, u) => u.designation?.name || u.role?.name || "—",
+    },
+    {
+      title: "Département",
+      render: (_, u) => u.department?.name || "—",
+    },
+    {
+      title: "Salaire",
+      render: (_, u) =>
+        u.currentSalary != null
+          ? new Intl.NumberFormat("fr-FR").format(u.currentSalary)
+          : "—",
+    },
+    {
+      title: "Username",
+      dataIndex: "username",
+    },
+    {
+      title: "Statut",
+      dataIndex: "status",
+      render: (s) =>
+        s === "true" ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
+            Actif
+          </span>
+        ) : (
+          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ink-100 text-ink-500">
+            Inactif
+          </span>
+        ),
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 48,
+      render: (_, u) => (
+        <button
+          onClick={() => onEdit(u)}
+          className="p-1.5 rounded-lg text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition"
+          title="Modifier"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      ),
+    },
+  ];
+}
+
+function EditStaffModal({ user, designations, departments, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    designationId: user?.designationId ?? null,
+    departmentId: user?.departmentId ?? null,
+    status: user?.status ?? "true",
+  });
+  const [saving, setSaving] = useState(false);
+
+  function handleSave() {
+    setSaving(true);
+    axios.patch(`/user/${user.id}`, form)
+      .then(() => onSaved())
+      .catch(() => setSaving(false));
+  }
+
+  return (
+    <Modal
+      open={!!user}
+      onCancel={onClose}
+      onOk={handleSave}
+      okText="Enregistrer"
+      cancelText="Annuler"
+      confirmLoading={saving}
+      title={`Modifier — ${getDisplayName(user ?? {})}`}
+      destroyOnClose
+    >
+      <div className="space-y-4 pt-2">
+        <div>
+          <label className="block text-xs font-medium text-ink-600 mb-1">Poste</label>
+          <Select
+            className="w-full"
+            value={form.designationId}
+            allowClear
+            placeholder="Aucun poste"
+            options={designations.map((d) => ({ value: d.id, label: d.name }))}
+            onChange={(v) => setForm((f) => ({ ...f, designationId: v ?? null }))}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-ink-600 mb-1">Département</label>
+          <Select
+            className="w-full"
+            value={form.departmentId}
+            allowClear
+            placeholder="Aucun département"
+            options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            onChange={(v) => setForm((f) => ({ ...f, departmentId: v ?? null }))}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-ink-600 mb-1">Statut</label>
+          <Select
+            className="w-full"
+            value={form.status}
+            options={[
+              { value: "true", label: "Actif" },
+              { value: "false", label: "Inactif" },
+            ]}
+            onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+          />
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 export default function HrPanel() {
   const [activeTab, setActiveTab] = useState("employes");
@@ -96,8 +178,9 @@ export default function HrPanel() {
   const [designations, setDesignations] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [staffLoading, setStaffLoading] = useState(true);
+  const [editingUser, setEditingUser] = useState(null);
 
-  useEffect(() => {
+  function loadStaff() {
     setStaffLoading(true);
     axios.get("/hr/staff-overview")
       .then(({ data }) => {
@@ -107,7 +190,9 @@ export default function HrPanel() {
         setDepartments(data.departments ?? []);
       })
       .finally(() => setStaffLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { loadStaff(); }, []);
 
   const activeCount = staffList.filter((u) => u.status === "true").length;
 
@@ -307,6 +392,13 @@ export default function HrPanel() {
                           </span>
                         </div>
                       </div>
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="p-1.5 rounded-lg text-ink-400 hover:text-brand-600 hover:bg-brand-50 transition flex-shrink-0"
+                        title="Modifier"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                     <div className="pt-3 border-t border-ink-100 flex gap-4">
                       <div>
@@ -340,7 +432,7 @@ export default function HrPanel() {
               <Table
                 rowKey="id"
                 dataSource={filteredStaff}
-                columns={staffTableColumns}
+                columns={buildTableColumns(setEditingUser)}
                 loading={staffLoading}
                 pagination={{ pageSize: 20 }}
                 size="middle"
@@ -400,6 +492,14 @@ export default function HrPanel() {
       )}
 
       {activeTab === "performance" && <PlaceholderPanel label="Évaluation des performances" />}
+
+      <EditStaffModal
+        user={editingUser}
+        designations={designations}
+        departments={departments}
+        onClose={() => setEditingUser(null)}
+        onSaved={() => { setEditingUser(null); loadStaff(); }}
+      />
     </div>
   );
 }
