@@ -5,6 +5,7 @@ import {
   AwardHistoryController,
   DesignationController,
   DesignationHistoryController,
+  HrController,
   SalaryHistoryController,
   ShiftController,
 } from "./hr.controller";
@@ -13,6 +14,7 @@ import { HrService } from "./hr.service";
 @Module({
   imports: [DatabaseModule],
   controllers: [
+    HrController,
     DesignationController,
     ShiftController,
     AwardController,

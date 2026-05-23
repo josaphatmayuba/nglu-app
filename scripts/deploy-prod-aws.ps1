@@ -116,7 +116,6 @@ finally {
 Write-Host "Archive: $localArchive"
 
 $pullServer = if ($PullServerCode) { "true" } else { "false" }
-$restartFrontend = if ($RestartFrontendContainer) { "true" } else { "false" }
 
 $remoteScript = @"
 set -euo pipefail
@@ -161,11 +160,11 @@ find "$RemoteProdDir/marketing-site/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {
 tar -xzf "$remoteArchive" -C "$RemoteProdDir"
 rm -f "$remoteArchive"
 
-if [ "$restartFrontend" = "true" ]; then
-  echo "[remote] recreating production frontend container"
-  cd "$RemoteProdDir"
-  docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
-fi
+echo "[remote] rebuilding prod frontend image from updated dist files..."
+cd "$RemoteProdDir"
+docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build frontend
+echo "[remote] restarting prod frontend container..."
+docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
 
 echo "[remote] smoke checks"
 curl -fsSIL https://ongdngolu.org/ >/tmp/nglu-prod-smoke-root.txt
@@ -191,7 +190,7 @@ Write-Step "Uploading production artifacts"
 Write-Step "Deploying on AWS production with lock"
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$remoteScript | & ssh @sshArgs "bash -s"
+($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
 if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }

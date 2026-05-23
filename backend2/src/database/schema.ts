@@ -355,6 +355,7 @@ export const users = mysqlTable("users", {
   employmentStatusId: bigint("employmentStatusId", { mode: "number" }),
   departmentId: bigint("departmentId", { mode: "number" }),
   shiftId: bigint("shiftId", { mode: "number" }),
+  leaveReason: varchar("leaveReason", { length: 500 }),
   refreshToken: varchar("refreshToken", { length: 512 }),
   isLogin: varchar("isLogin", { length: 10 }).default("false").notNull(),
   status: varchar("status", { length: 10 }).default("true").notNull(),

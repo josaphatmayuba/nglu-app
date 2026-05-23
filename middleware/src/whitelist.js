@@ -130,6 +130,7 @@ module.exports = [
   { method: '*',    prefix: '/invoice-templates',           auth: true  },
 
   // HR
+  { method: '*',    prefix: '/hr',                            auth: true  },
   { method: '*',    prefix: '/award',                         auth: true  },
   { method: '*',    prefix: '/award-history',                 auth: true  },
   { method: '*',    prefix: '/department',                    auth: true  },

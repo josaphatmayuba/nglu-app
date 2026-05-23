@@ -22,6 +22,7 @@ import LeaseGridView from "./LeaseGridView";
 import LeaseRenewModal from "./LeaseRenewModal";
 import LeaseTableView from "./LeaseTableView";
 import LeaseTimelineView from "./LeaseTimelineView";
+import SignedContractView from "./SignedContractView";
 import { leaseContractFor, leaseDisplayInfo } from "./leaseUtils";
 
 const LeasesPanel = ({
@@ -35,6 +36,7 @@ const LeasesPanel = ({
   const [openLeaseMenu, setOpenLeaseMenu] = useState(null);
   const [leaseModal, setLeaseModal] = useState(null);
   const [contractModal, setContractModal] = useState(null);
+  const [signedContractId, setSignedContractId] = useState(null);
   const [renewModal, setRenewModal] = useState(null);
   const [contractLinks, setContractLinks] = useState({});
   const [savingLease, setSavingLease] = useState(false);
@@ -180,7 +182,11 @@ const LeasesPanel = ({
       return;
     }
     if (action === "contract" || action === "pdf") {
-      openContractWorkflow(lease, contract);
+      if (contract?.id && contract.status === "signed") {
+        setSignedContractId(contract.id);
+      } else {
+        openContractWorkflow(lease, contract);
+      }
       return;
     }
     if (action === "renew") {
@@ -414,6 +420,11 @@ const LeasesPanel = ({
           units={safeUnits}
         />
       )}
+      <SignedContractView
+        open={Boolean(signedContractId)}
+        contractId={signedContractId}
+        onClose={() => setSignedContractId(null)}
+      />
     </div>
   );
 };

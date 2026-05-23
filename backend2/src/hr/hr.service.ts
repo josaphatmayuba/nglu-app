@@ -1,11 +1,13 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { count, desc, eq, like, sql } from "drizzle-orm";
+import { count, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   awardHistories,
   awards,
+  departments,
   designationHistories,
   designations,
+  roles,
   salaryHistories,
   shifts,
   transactions,
@@ -249,6 +251,52 @@ export class HrService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(eq(awardHistories.id, id));
     return this.findAwardHistory(id);
+  }
+
+  async staffOverview() {
+    const rows = await this.db
+      .select({
+        user: users,
+        role: { id: roles.id, name: roles.name },
+        designation: { id: designations.id, name: designations.name },
+        department: { id: departments.id, name: departments.name },
+      })
+      .from(users)
+      .leftJoin(roles, eq(roles.id, users.roleId))
+      .leftJoin(designations, eq(designations.id, users.designationId))
+      .leftJoin(departments, eq(departments.id, users.departmentId))
+      .orderBy(desc(users.id));
+
+    const userIds = rows.map((r) => r.user.id);
+    const salaryMap: Record<number, number | null> = {};
+    if (userIds.length) {
+      const allSalaries = await this.db
+        .select({ userId: salaryHistories.userId, salary: salaryHistories.salary })
+        .from(salaryHistories)
+        .where(inArray(salaryHistories.userId, userIds))
+        .orderBy(desc(salaryHistories.id));
+      for (const s of allSalaries) {
+        if (!(s.userId in salaryMap)) salaryMap[s.userId] = s.salary;
+      }
+    }
+
+    const [allDesignations, allDepartments] = await Promise.all([
+      this.db.select({ id: designations.id, name: designations.name })
+        .from(designations).where(eq(designations.status, "true")).orderBy(designations.name),
+      this.db.select({ id: departments.id, name: departments.name })
+        .from(departments).where(eq(departments.status, "true")).orderBy(departments.name),
+    ]);
+
+    return {
+      staff: rows.map((r) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, refreshToken, isLogin, ...safe } = r.user;
+        return { ...safe, role: r.role, designation: r.designation, department: r.department, currentSalary: salaryMap[r.user.id] ?? null };
+      }),
+      total: rows.length,
+      designations: allDesignations,
+      departments: allDepartments,
+    };
   }
 
   async deleteRow(table: any, id: number) {
