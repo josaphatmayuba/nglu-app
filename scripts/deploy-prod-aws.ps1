@@ -189,7 +189,12 @@ Write-Step "Uploading production artifacts"
 & scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $localArchive "${sshTarget}:$remoteArchive"
 
 Write-Step "Deploying on AWS production with lock"
+$prevEA = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 $remoteScript | & ssh @sshArgs "bash -s"
+$sshExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEA
+if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }
 
 if (-not $SkipSmoke) {
   Write-Step "Local production routing smoke"
