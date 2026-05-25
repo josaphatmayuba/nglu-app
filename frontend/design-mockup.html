@@ -1218,23 +1218,90 @@
         <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-5 md:mb-6">
           <div>
             <h1 class="text-xl md:text-2xl font-semibold text-ink-900 tracking-tight">Clients</h1>
-            <p class="text-xs md:text-sm text-ink-500 mt-1">Base clients et historique</p>
+            <p class="text-xs md:text-sm text-ink-500 mt-1">Base clients, segmentation et historique commercial</p>
           </div>
           <div class="flex items-center gap-2">
-            <button class="flex items-center gap-2 px-3 py-1.5 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
+            <button data-client-import class="flex items-center gap-2 px-3 py-1.5 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
               <i data-lucide="upload" class="w-4 h-4"></i>
               <span class="hidden sm:inline">Importer</span>
             </button>
-            <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+            <button data-client-new class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
               <i data-lucide="user-plus" class="w-4 h-4"></i>
               <span>Nouveau client</span>
             </button>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4">
+          <div class="bg-white rounded-xl border border-ink-200 p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-ink-500 font-medium">Clients actifs</div>
+              <i data-lucide="users" class="w-4 h-4 text-brand-600"></i>
+            </div>
+            <div class="mt-2 text-2xl font-semibold text-ink-900">6</div>
+            <div class="text-xs text-emerald-700 mt-1">+2 ce mois</div>
+          </div>
+          <div class="bg-white rounded-xl border border-ink-200 p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-ink-500 font-medium">VIP</div>
+              <i data-lucide="star" class="w-4 h-4 text-amber-600"></i>
+            </div>
+            <div class="mt-2 text-2xl font-semibold text-ink-900">2</div>
+            <div class="text-xs text-ink-500 mt-1">33% du portefeuille</div>
+          </div>
+          <div class="bg-white rounded-xl border border-ink-200 p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-ink-500 font-medium">Total achats</div>
+              <i data-lucide="wallet" class="w-4 h-4 text-emerald-600"></i>
+            </div>
+            <div class="mt-2 text-2xl font-semibold text-ink-900">CDF 22.8M</div>
+            <div class="text-xs text-ink-500 mt-1">136 commandes</div>
+          </div>
+          <div class="bg-white rounded-xl border border-ink-200 p-4">
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-ink-500 font-medium">Relances</div>
+              <i data-lucide="bell-ring" class="w-4 h-4 text-red-600"></i>
+            </div>
+            <div class="mt-2 text-2xl font-semibold text-ink-900">3</div>
+            <div class="text-xs text-red-600 mt-1">a contacter</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-ink-200 p-3 md:p-4 mb-4">
+          <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div class="relative flex-1 min-w-0">
+              <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400"></i>
+              <input id="client-search" type="search" placeholder="Rechercher nom, email, telephone..." class="w-full pl-9 pr-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+            </div>
+            <div class="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+              <button data-client-segment="all" class="client-segment shrink-0 px-3 py-1.5 bg-brand-50 text-brand-700 rounded-lg text-sm font-medium">Tous <span data-client-count="all" class="ml-1 text-brand-500">6</span></button>
+              <button data-client-segment="vip" class="client-segment shrink-0 px-3 py-1.5 text-ink-600 hover:bg-ink-100 rounded-lg text-sm">VIP <span data-client-count="vip" class="ml-1 text-ink-400">2</span></button>
+              <button data-client-segment="pro" class="client-segment shrink-0 px-3 py-1.5 text-ink-600 hover:bg-ink-100 rounded-lg text-sm">Pro <span data-client-count="pro" class="ml-1 text-ink-400">2</span></button>
+              <button data-client-segment="standard" class="client-segment shrink-0 px-3 py-1.5 text-ink-600 hover:bg-ink-100 rounded-lg text-sm">Standard <span data-client-count="standard" class="ml-1 text-ink-400">2</span></button>
+            </div>
+          </div>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3 pt-3 border-t border-ink-100">
+            <div class="flex items-center gap-2">
+              <select id="client-sort" class="px-3 py-1.5 bg-white border border-ink-200 rounded-lg text-sm text-ink-700 focus:outline-none focus:border-brand-500">
+                <option value="name">Trier par nom</option>
+                <option value="spend">Plus gros achats</option>
+                <option value="orders">Plus de commandes</option>
+                <option value="recent">Activite recente</option>
+              </select>
+              <button data-client-export class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-ink-200 hover:border-brand-300 rounded-lg text-sm text-ink-700 hover:text-brand-700">
+                <i data-lucide="download" class="w-4 h-4"></i> Exporter
+              </button>
+            </div>
+            <div class="flex gap-1 p-1 bg-ink-100 rounded-lg w-fit">
+              <button data-client-view="grid" class="client-view-btn px-3 py-1 text-xs font-medium bg-white text-ink-900 rounded shadow-sm flex items-center gap-1.5"><i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>Cartes</button>
+              <button data-client-view="table" class="client-view-btn px-3 py-1 text-xs font-medium text-ink-500 hover:text-ink-700 flex items-center gap-1.5"><i data-lucide="list" class="w-3.5 h-3.5"></i>Liste</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="clients-grid" data-client-view-panel="grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           <!-- Card client -->
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Marie Kabongo" data-client-email="marie.kabongo@email.com" data-client-phone="+243 999 114 200" data-client-segment="vip" data-client-spend="4200000" data-client-orders="23" data-client-last="2026-05-21" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-semibold">MK</div>
               <div class="flex-1 min-w-0">
@@ -1242,13 +1309,19 @@
                 <p class="text-xs text-ink-500 truncate">marie.kabongo@email.com</p>
                 <span class="inline-block mt-1 text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">VIP</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 4.2M</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">23</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Paul Lumumba" data-client-email="paul.l@gmail.com" data-client-phone="+243 811 904 111" data-client-segment="pro" data-client-spend="8900000" data-client-orders="47" data-client-last="2026-05-20" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-semibold">PL</div>
               <div class="flex-1 min-w-0">
@@ -1256,13 +1329,19 @@
                 <p class="text-xs text-ink-500 truncate">paul.l@gmail.com</p>
                 <span class="inline-block mt-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Pro</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 8.9M</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">47</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Sarah Mukendi" data-client-email="sarah.m@outlook.com" data-client-phone="+243 820 410 008" data-client-segment="standard" data-client-spend="580000" data-client-orders="8" data-client-last="2026-05-12" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold">SM</div>
               <div class="flex-1 min-w-0">
@@ -1270,13 +1349,19 @@
                 <p class="text-xs text-ink-500 truncate">sarah.m@outlook.com</p>
                 <span class="inline-block mt-1 text-[10px] bg-ink-100 text-ink-600 px-1.5 py-0.5 rounded font-medium">Standard</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 580K</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">8</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Jean Bemba" data-client-email="jean.bemba@yahoo.fr" data-client-phone="+243 970 510 304" data-client-segment="standard" data-client-spend="320000" data-client-orders="5" data-client-last="2026-05-02" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white font-semibold">JB</div>
               <div class="flex-1 min-w-0">
@@ -1284,13 +1369,19 @@
                 <p class="text-xs text-ink-500 truncate">jean.bemba@yahoo.fr</p>
                 <span class="inline-block mt-1 text-[10px] bg-ink-100 text-ink-600 px-1.5 py-0.5 rounded font-medium">Standard</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 320K</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">5</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Christine Tshisekedi" data-client-email="c.tshisekedi@email.com" data-client-phone="+243 999 332 118" data-client-segment="vip" data-client-spend="6100000" data-client-orders="34" data-client-last="2026-05-22" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-rose-500 to-rose-700 flex items-center justify-center text-white font-semibold">CT</div>
               <div class="flex-1 min-w-0">
@@ -1298,13 +1389,19 @@
                 <p class="text-xs text-ink-500 truncate">c.tshisekedi@email.com</p>
                 <span class="inline-block mt-1 text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">VIP</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 6.1M</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">34</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
-          <div class="bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
+          <div data-client-card data-client-name="Antoine Kalala" data-client-email="antoine.k@email.com" data-client-phone="+243 815 780 450" data-client-segment="pro" data-client-spend="2700000" data-client-orders="19" data-client-last="2026-05-18" class="client-card bg-white rounded-xl border border-ink-200 p-5 hover:border-brand-300 hover:shadow-sm transition cursor-pointer">
             <div class="flex items-start gap-3 mb-4">
               <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-semibold">AK</div>
               <div class="flex-1 min-w-0">
@@ -1312,12 +1409,43 @@
                 <p class="text-xs text-ink-500 truncate">antoine.k@email.com</p>
                 <span class="inline-block mt-1 text-[10px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Pro</span>
               </div>
+              <button data-client-action="menu" class="p-1.5 hover:bg-ink-100 rounded text-ink-400" title="Actions"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
             </div>
             <div class="grid grid-cols-2 gap-3 pt-3 border-t border-ink-100">
               <div><div class="text-xs text-ink-500">Total achats</div><div class="font-semibold text-ink-900">CDF 2.7M</div></div>
               <div><div class="text-xs text-ink-500">Commandes</div><div class="font-semibold text-ink-900">19</div></div>
             </div>
+            <div class="flex items-center gap-2 mt-4 pt-3 border-t border-ink-100">
+              <button data-client-action="call" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Appeler</button>
+              <button data-client-action="email" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Email</button>
+              <button data-client-action="history" class="flex-1 px-2 py-1.5 text-xs bg-ink-50 hover:bg-brand-50 text-ink-600 hover:text-brand-700 rounded-lg">Historique</button>
+            </div>
           </div>
+        </div>
+
+        <div id="clients-table" data-client-view-panel="table" class="hidden bg-white rounded-xl border border-ink-200 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-ink-50 border-b border-ink-200">
+                <tr class="text-left text-xs font-medium text-ink-500 uppercase tracking-wider">
+                  <th class="px-4 py-3">Client</th>
+                  <th class="px-4 py-3">Segment</th>
+                  <th class="px-4 py-3 text-right">Achats</th>
+                  <th class="px-4 py-3 text-right">Commandes</th>
+                  <th class="px-4 py-3">Derniere activite</th>
+                  <th class="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="clients-table-body" class="divide-y divide-ink-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="clients-empty" class="hidden bg-white rounded-xl border border-dashed border-ink-300 p-10 text-center">
+          <div class="w-12 h-12 mx-auto rounded-full bg-ink-100 flex items-center justify-center mb-3"><i data-lucide="search-x" class="w-5 h-5 text-ink-500"></i></div>
+          <h3 class="font-semibold text-ink-900">Aucun client trouve</h3>
+          <p class="text-sm text-ink-500 mt-1">Essayez un autre mot-cle ou reinitialisez les filtres.</p>
+          <button data-client-reset class="mt-4 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Reinitialiser</button>
         </div>
       </section>
 
