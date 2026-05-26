@@ -10,6 +10,7 @@ import {
   Query,
 } from "@nestjs/common";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { Permissions } from "../auth/decorators/permissions.decorator";
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -46,6 +47,7 @@ export class TransactionsController {
 
   @ApiOperation({ summary: "Update a transaction" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-transaction")
   @Put(":id")
   update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTransactionDto) {
     return this.transactionsService.update(id, body);
@@ -53,6 +55,7 @@ export class TransactionsController {
 
   @ApiOperation({ summary: "Update transaction status, compatible with Laravel delete route" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("delete-transaction")
   @Patch(":id")
   updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTransactionStatusDto) {
     return this.transactionsService.updateStatus(id, body.status);

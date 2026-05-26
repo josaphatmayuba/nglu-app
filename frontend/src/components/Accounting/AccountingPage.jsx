@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
+import { message } from "antd";
+import { deleteTransaction, loadAllTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
 import { loadAllAccount, loadIncomeStatement, loadTrailBalance, loadBalanceSheet } from "@/redux/rtk/features/account/accountSlice";
 import { loadAllTransactionType } from "@/redux/rtk/features/transactionType/transactionTypeSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
@@ -89,6 +90,7 @@ export default function AccountingPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [exercice, setExercice]   = useState(new Date().getFullYear());
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
 
   const transactions    = useSelector((s) => s.transactions?.list       ?? []);
   const txLoading       = useSelector((s) => s.transactions?.loading    ?? false);
@@ -105,14 +107,49 @@ export default function AccountingPage() {
     [appSetting]
   );
 
+  const transactionQuery = useMemo(
+    () => ({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, status: "true", count: 1000, offset: 0 }),
+    [exercice]
+  );
+
+  const reloadTransactions = () => dispatch(loadAllTransaction(transactionQuery));
+
   useEffect(() => {
-    dispatch(loadAllTransaction({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, count: 1000, offset: 0 }));
+    dispatch(loadAllTransaction(transactionQuery));
     dispatch(loadAllAccount());
     dispatch(loadIncomeStatement());
     dispatch(loadTrailBalance());
     dispatch(loadAllTransactionType());
     dispatch(loadBalanceSheet());
-  }, [dispatch, exercice]);
+  }, [dispatch, transactionQuery]);
+
+  const openCreateModal = () => {
+    setEditingTransaction(null);
+    setModalOpen(true);
+  };
+
+  const closeEntryModal = () => {
+    setModalOpen(false);
+    setEditingTransaction(null);
+  };
+
+  const handleEditTransaction = (transaction) => {
+    setEditingTransaction(transaction);
+    setModalOpen(true);
+  };
+
+  const handleDeleteTransaction = async (transaction) => {
+    if (!window.confirm(`Supprimer la transaction #${transaction.id} ?`)) return;
+
+    const response = await dispatch(deleteTransaction({ id: transaction.id }));
+    if (response?.payload?.message === "success") {
+      message.success("Transaction supprimee");
+      reloadTransactions();
+      return;
+    }
+
+    message.error(response?.payload?.message || "Suppression impossible");
+  };
 
   const kpisByCur = useMemo(() => computeKpisByCurrency(transactions), [transactions]);
 
@@ -168,7 +205,7 @@ export default function AccountingPage() {
             <button type="button" className="flex items-center gap-1.5 text-sm border border-ink-200 rounded-lg px-3 py-1.5 hover:bg-ink-50 transition text-ink-700">
               <Download className="w-4 h-4" /> Export
             </button>
-            <button type="button" onClick={() => setModalOpen(true)} className="flex items-center gap-1.5 text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 transition font-medium">
+            <button type="button" onClick={openCreateModal} className="flex items-center gap-1.5 text-sm bg-brand-600 text-white rounded-lg px-4 py-1.5 hover:bg-brand-700 transition font-medium">
               <Plus className="w-4 h-4" /> New entry
             </button>
           </div>
@@ -205,7 +242,13 @@ export default function AccountingPage() {
               <JournauxPanel transactions={transactions} transactionTypes={transactionTypes} />
             )}
             {activeTab === "ecritures" && (
-              <EcrituresPanel transactions={transactions} loading={txLoading} currencySymbol={currencySymbol} />
+              <EcrituresPanel
+                transactions={transactions}
+                loading={txLoading}
+                currencySymbol={currencySymbol}
+                onEdit={handleEditTransaction}
+                onDelete={handleDeleteTransaction}
+              />
             )}
             {activeTab === "plan"      && (
               <PlanComptablePanel transactions={transactions} trailBalance={trailBalance} loading={acctLoading} currencySymbol={currencySymbol} />
@@ -220,7 +263,13 @@ export default function AccountingPage() {
         </div>
       </div>
 
-      <EcritureFormModal open={modalOpen} onClose={() => setModalOpen(false)} accounts={accounts} />
+      <EcritureFormModal
+        open={modalOpen}
+        onClose={closeEntryModal}
+        accounts={accounts}
+        record={editingTransaction}
+        onSaved={reloadTransactions}
+      />
     </div>
   );
 }

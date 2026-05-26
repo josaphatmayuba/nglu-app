@@ -50,8 +50,8 @@ export const loadTransaction = createAsyncThunk(
   }
 );
 // TRANSACTION UPDATE
-export const updateSupplier = createAsyncThunk(
-  "supplier/update",
+export const updateTransaction = createAsyncThunk(
+  "transaction/updateTransaction",
   async ({ id, values }) => {
     try {
       const { data } = await axios({
@@ -60,15 +60,37 @@ export const updateSupplier = createAsyncThunk(
           Accept: "application/json",
           "Content-Type": "application/json;charset=UTF-8",
         },
-        url: `supplier/${id}`,
+        url: `transaction/${id}`,
         data: {
           ...values,
         },
       });
-      return successHandler(data, data.message);
-      // return data;
+      return successHandler(data, "Transaction Updated Successfully");
     } catch (error) {
-      return errorHandler(error);
+      return errorHandler(error, true);
+    }
+  }
+);
+
+export const updateSupplier = updateTransaction;
+
+// TRANSACTION DELETE (soft delete via status=false)
+export const deleteTransaction = createAsyncThunk(
+  "transaction/deleteTransaction",
+  async ({ id, status = "false" }) => {
+    try {
+      const { data } = await axios({
+        method: "patch",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json;charset=UTF-8",
+        },
+        url: `transaction/${id}`,
+        data: { status },
+      });
+      return successHandler({ ...data, id, status }, "Transaction Deleted Successfully");
+    } catch (error) {
+      return errorHandler(error, true);
     }
   }
 );
@@ -153,27 +175,35 @@ const transactionSlice = createSlice({
       state.error = action.payload.message;
     });
 
-    // 4) ====== builders for deleteTransaction ======
-
-    // builder.addCase(deleteTransaction.pending, (state) => {
-    //   state.loading = true;
-    // });
-
-    // builder.addCase(deleteTransaction.fulfilled, (state, action) => {
-    //   state.loading = false;
-    //   state.user = action.payload.data;
-
-    //   const filtertransaction = state.list.filter(
-    //     (sup) => sup.id !== parseInt(action.payload) && sup
-    //   );
-
-    //   state.list = filtertransaction
-    // });
-
-    // builder.addCase(deleteTransaction.rejected, (state, action) => {
-    //   state.loading = false;
-    //   state.error = action.payload.message;
-    // });
+    // 4) ====== builders for update/delete transaction ======
+    builder.addCase(updateTransaction.pending, (state) => {
+      state.loading = true;
+    });
+    builder.addCase(updateTransaction.fulfilled, (state, action) => {
+      state.loading = false;
+      const updated = action.payload?.data;
+      if (updated?.id && Array.isArray(state.list)) {
+        state.list = state.list.map((item) => (item.id === updated.id ? updated : item));
+      }
+    });
+    builder.addCase(updateTransaction.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload?.message;
+    });
+    builder.addCase(deleteTransaction.pending, (state) => {
+      state.loading = true;
+    });
+    builder.addCase(deleteTransaction.fulfilled, (state, action) => {
+      state.loading = false;
+      const deletedId = action.payload?.data?.id;
+      if (deletedId && Array.isArray(state.list)) {
+        state.list = state.list.filter((item) => item.id !== deletedId);
+      }
+    });
+    builder.addCase(deleteTransaction.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload?.message;
+    });
   },
 });
 

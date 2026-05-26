@@ -1,12 +1,25 @@
 import { useState } from "react";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import moment from "moment";
+import usePermissions from "@/utils/usePermissions";
 
 const PAGE_SIZE = 15;
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 
-export default function EcrituresPanel({ transactions = [], loading = false, currencySymbol = "$" }) {
+export default function EcrituresPanel({
+  transactions = [],
+  loading = false,
+  currencySymbol = "$",
+  onEdit,
+  onDelete,
+}) {
+  const { hasPermission } = usePermissions();
+  const canEdit = hasPermission?.("update-transaction");
+  const canDelete = hasPermission?.("delete-transaction");
+  const showActions = canEdit || canDelete;
+  const colSpan = showActions ? 7 : 6;
+
   // Use per-transaction currency if available, otherwise fall back to app default
   const fmtTx = (t) => {
     const sym = t.currencySymbol || currencySymbol;
@@ -57,14 +70,19 @@ export default function EcrituresPanel({ transactions = [], loading = false, cur
                   {h}
                 </th>
               ))}
+              {showActions && (
+                <th className="px-4 py-3 text-right text-xs font-semibold text-ink-500 uppercase tracking-wider whitespace-nowrap">
+                  Actions
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} className="py-8 text-center text-ink-400 text-sm">Chargement…</td></tr>
+              <tr><td colSpan={colSpan} className="py-8 text-center text-ink-400 text-sm">Chargement…</td></tr>
             )}
             {!loading && slice.length === 0 && (
-              <tr><td colSpan={6} className="py-8 text-center text-ink-400 text-sm">Aucune écriture trouvée</td></tr>
+              <tr><td colSpan={colSpan} className="py-8 text-center text-ink-400 text-sm">Aucune écriture trouvée</td></tr>
             )}
             {slice.map((t, i) => (
               <tr key={t.id ?? i} className="border-b border-ink-50 hover:bg-ink-50 transition-colors">
@@ -84,6 +102,32 @@ export default function EcrituresPanel({ transactions = [], loading = false, cur
                 <td className="px-4 py-3 font-semibold text-ink-900 whitespace-nowrap">
                   {fmtTx(t)}
                 </td>
+                {showActions && (
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit?.(t)}
+                          title="Modifier la transaction"
+                          className="p-1.5 rounded-lg border border-ink-200 text-ink-600 hover:text-brand-700 hover:bg-brand-50 hover:border-brand-200 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => onDelete?.(t)}
+                          title="Supprimer la transaction"
+                          className="p-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
