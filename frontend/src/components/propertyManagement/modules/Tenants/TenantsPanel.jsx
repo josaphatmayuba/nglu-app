@@ -23,7 +23,7 @@ const TenantsPanel = ({
   onOpenLeaseMenu,
 }) => {
   const dispatch = useDispatch();
-  const { safeTenants, safeLeases, enrichedUnits } = usePropertyManagementData();
+  const { visibleTenants, safeLeases, enrichedUnits } = usePropertyManagementData();
 
   const [internalSearch, setInternalSearch] = useState("");
   const searchTerm = searchTermProp != null ? searchTermProp : internalSearch;
@@ -46,8 +46,8 @@ const TenantsPanel = ({
 
   const filteredTenants = useMemo(() => {
     const q = normalize(searchTerm);
-    if (!q) return safeTenants;
-    return safeTenants.filter((tenant) => {
+    if (!q) return visibleTenants;
+    return visibleTenants.filter((tenant) => {
       const haystack = normalize(
         [
           tenant.firstName,
@@ -61,7 +61,7 @@ const TenantsPanel = ({
       );
       return haystack.includes(q);
     });
-  }, [safeTenants, searchTerm]);
+  }, [visibleTenants, searchTerm]);
 
   const tenantActiveLease = (tenant) =>
     safeLeases.find((lease) => lease.tenantId === tenant.id && lease.status === "active") ||
@@ -115,7 +115,7 @@ const TenantsPanel = ({
         return;
       }
       if (!window.confirm(`Supprimer définitivement le locataire « ${tenantName(tenant)} » ?`)) return;
-      const result = await dispatch(deleteCustomer(tenant.id));
+      const result = await dispatch(deleteCustomer({ id: tenant.id }));
       if (result?.payload?.message === "success" || result?.meta?.requestStatus === "fulfilled") {
         message.success("Locataire supprimé");
         dispatch(loadPropertyManagement());

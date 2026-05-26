@@ -23,6 +23,12 @@ This project follows:
 
 ### Fixed
 
+- SCRUM-164: les compteurs Immobilier et les onglets Propriétés/Locataires excluent maintenant les propriétés, unités et rattachements supprimés/inactifs afin de rester alignés avec les listes visibles.
+
+- SCRUM-165: suppression de locataire en Immobilier > Locataires : corrigé l'erreur "Validation failed (numeric string is expected)". Cause : `deleteCustomer(tenant.id)` passait un scalaire au lieu d'un objet `{ id, status }`. Fix : `deleteCustomer({ id: tenant.id })`. Suppression logique : `status=false`.
+
+- SCRUM-166: le filtre `Tous` dans Immobilier > Paiements inclut maintenant les paiements en retard/en attente calcules depuis les baux, avec statuts coherents dans les vues Tableau, Par locataire et Calendrier.
+
 - SCRUM-159: propriétés/unités immobilier rechargent désormais uniquement `/property-management/properties` et `/property-management/units` après création, modification ou suppression logique, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
 
 - SCRUM-156: baux immobilier recharge désormais uniquement `/property-management/leases` et `/property-management/dashboard` après création, modification, suppression logique ou renouvellement, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
