@@ -12,6 +12,12 @@ This project follows:
 
 ### Added
 
+- SCRUM-85: **HR Hub — Fonctionnalités manquantes complétées**
+  - **Nouvel employé** : Bouton wiring + modal `EditStaffModal` en mode create (`mode="create"`). Champ password obligatoire (min 12 chars, lettre + chiffre). Appel `POST /user/register` au lieu de `PATCH /user/:id`.
+  - **Filtres** : Dropdowns Select Ant Design pour département et statut dans l'onglet Employés. Filtre appliqué sur `filteredStaff` combinant recherche texte + département + statut.
+  - **Export CSV** : Bouton Download exporte employés filtrés en CSV (Nom, Username, Email, Poste, Département, Statut, Salaire, Date d'embauche) avec BOM UTF-8 pour Excel.
+  - Backend : `/user/register` déjà fonctionnel. Frontend : wiring et UI React uniquement. Modes edit et create coexistent via prop `mode`.
+
 - SCRUM-142: `GET /dashboard/startup` — agrège KPIs + alertes (baux en retard, maintenance, stock faible, factures du mois) + badge SideNav en une seule requête (remplace 6 appels individuels). Backend: Promise.all sur DashboardService + counts DB directs. Frontend: `loadDashboardStartup` thunk, Dashboard.jsx migré, Header lit depuis Redux, SideNav lit depuis Redux avec fallback axios.
 - SCRUM-142: `GET /dashboard/recent-activity` — agrège ventes récentes + cart orders PENDING/RECEIVED/DELIVERED en une seule requête (remplace 4 dispatches). Frontend: `loadDashboardRecentActivity` thunk, Content.jsx migré. Endpoints existants inchangés.
 

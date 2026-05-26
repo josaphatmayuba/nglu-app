@@ -13,15 +13,17 @@ function Section({ label }) {
   );
 }
 
-export default function EditStaffModal({ user, designations, departments, onClose, onSaved }) {
+export default function EditStaffModal({ user, designations, departments, onClose, onSaved, mode = "edit", open = true }) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const isCreate = mode === "create";
+  const isOpen = isCreate ? open : !!user;
 
   useEffect(() => {
-    if (!user) return;
+    if (!isOpen) return;
     setLoading(true);
     Promise.all([
       axios.get("/role?query=all"),
@@ -33,28 +35,32 @@ export default function EditStaffModal({ user, designations, departments, onClos
       setShifts(Array.isArray(sd) ? sd : []);
     }).finally(() => setLoading(false));
 
-    form.setFieldsValue({
-      firstName: user.firstName ?? "",
-      lastName: user.lastName ?? "",
-      username: user.username ?? "",
-      email: user.email ?? "",
-      phone: user.phone ?? "",
-      roleId: user.roleId ?? undefined,
-      designationId: user.designationId ?? undefined,
-      departmentId: user.departmentId ?? undefined,
-      shiftId: user.shiftId ?? undefined,
-      employeeId: user.employeeId ?? "",
-      bloodGroup: user.bloodGroup ?? "",
-      street: user.street ?? "",
-      city: user.city ?? "",
-      state: user.state ?? "",
-      zipCode: user.zipCode ?? "",
-      country: user.country ?? "",
-      status: user.status ?? "true",
-      joinDate: user.joinDate ? dayjs(user.joinDate) : null,
-      leaveDate: user.leaveDate ? dayjs(user.leaveDate) : null,
-    });
-  }, [user, form]);
+    if (isCreate) {
+      form.resetFields();
+    } else if (user) {
+      form.setFieldsValue({
+        firstName: user.firstName ?? "",
+        lastName: user.lastName ?? "",
+        username: user.username ?? "",
+        email: user.email ?? "",
+        phone: user.phone ?? "",
+        roleId: user.roleId ?? undefined,
+        designationId: user.designationId ?? undefined,
+        departmentId: user.departmentId ?? undefined,
+        shiftId: user.shiftId ?? undefined,
+        employeeId: user.employeeId ?? "",
+        bloodGroup: user.bloodGroup ?? "",
+        street: user.street ?? "",
+        city: user.city ?? "",
+        state: user.state ?? "",
+        zipCode: user.zipCode ?? "",
+        country: user.country ?? "",
+        status: user.status ?? "true",
+        joinDate: user.joinDate ? dayjs(user.joinDate) : null,
+        leaveDate: user.leaveDate ? dayjs(user.leaveDate) : null,
+      });
+    }
+  }, [isOpen, user, form, isCreate]);
 
   async function handleSave() {
     let values;
@@ -69,7 +75,12 @@ export default function EditStaffModal({ user, designations, departments, onClos
       joinDate: values.joinDate ? values.joinDate.format("YYYY-MM-DD") : undefined,
       leaveDate: values.leaveDate ? values.leaveDate.format("YYYY-MM-DD") : undefined,
     };
-    axios.patch(`/user/${user.id}`, payload)
+
+    const request = isCreate
+      ? axios.post("/user/register", payload)
+      : axios.patch(`/user/${user.id}`, payload);
+
+    request
       .then(() => onSaved())
       .catch(() => setSaving(false))
       .finally(() => setSaving(false));
@@ -79,15 +90,17 @@ export default function EditStaffModal({ user, designations, departments, onClos
     ? [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || ""
     : "";
 
+  const modalTitle = isCreate ? "Nouvel employé" : `Modifier — ${name}`;
+
   return (
     <Modal
-      open={!!user}
+      open={isOpen}
       onCancel={onClose}
       onOk={handleSave}
-      okText="Enregistrer"
+      okText={isCreate ? "Créer" : "Enregistrer"}
       cancelText="Annuler"
       confirmLoading={saving}
-      title={`Modifier — ${name}`}
+      title={modalTitle}
       width={680}
       destroyOnClose
     >
@@ -107,16 +120,46 @@ export default function EditStaffModal({ user, designations, departments, onClos
             </Form.Item>
           </div>
           <div className="grid grid-cols-2 gap-x-4">
-            <Form.Item name="username" label="Username">
-              <Input />
+            <Form.Item
+              name="username"
+              label="Username"
+              rules={isCreate ? [{ required: true, message: "Requis" }] : []}
+            >
+              <Input disabled={!isCreate} />
             </Form.Item>
+            {isCreate && (
+              <Form.Item
+                name="password"
+                label="Mot de passe"
+                rules={[
+                  { required: true, message: "Requis" },
+                  { min: 12, message: "Min 12 caractères" },
+                  { max: 64, message: "Max 64 caractères" },
+                  {
+                    pattern: /^(?=.*[a-zA-Z])(?=.*\d).+$/,
+                    message: "Au moins 1 lettre et 1 chiffre",
+                  },
+                ]}
+              >
+                <Input.Password placeholder="Min 12 chars, lettre + chiffre" />
+              </Form.Item>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-x-4">
             <Form.Item name="email" label="Email">
               <Input type="email" />
             </Form.Item>
+            {!isCreate && (
+              <Form.Item name="phone" label="Téléphone">
+                <Input />
+              </Form.Item>
+            )}
           </div>
-          <Form.Item name="phone" label="Téléphone">
-            <Input />
-          </Form.Item>
+          {isCreate && (
+            <Form.Item name="phone" label="Téléphone">
+              <Input />
+            </Form.Item>
+          )}
 
           <Section label="Informations RH" />
           <div className="grid grid-cols-2 gap-x-4">

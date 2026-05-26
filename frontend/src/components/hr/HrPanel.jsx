@@ -255,6 +255,9 @@ export default function HrPanel() {
   const [viewingUser, setViewingUser] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [closingUser, setClosingUser] = useState(null);
+  const [newStaff, setNewStaff] = useState(false);
+  const [deptFilter, setDeptFilter] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   function loadStaff() {
     setStaffLoading(true);
@@ -274,15 +277,25 @@ export default function HrPanel() {
   const activeCount = staffList.filter((u) => u.status === "true").length;
 
   const filteredStaff = staffList.filter((u) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      getDisplayName(u).toLowerCase().includes(q) ||
-      (u.role?.name || "").toLowerCase().includes(q) ||
-      (u.designation?.name || "").toLowerCase().includes(q) ||
-      (u.department?.name || "").toLowerCase().includes(q) ||
-      (u.username || "").toLowerCase().includes(q)
-    );
+    // Text search
+    if (search) {
+      const q = search.toLowerCase();
+      const matches =
+        getDisplayName(u).toLowerCase().includes(q) ||
+        (u.role?.name || "").toLowerCase().includes(q) ||
+        (u.designation?.name || "").toLowerCase().includes(q) ||
+        (u.department?.name || "").toLowerCase().includes(q) ||
+        (u.username || "").toLowerCase().includes(q);
+      if (!matches) return false;
+    }
+
+    // Department filter
+    if (deptFilter && u.department?.id !== deptFilter) return false;
+
+    // Status filter
+    if (statusFilter !== "all" && u.status !== statusFilter) return false;
+
+    return true;
   });
 
   function cardMenu(user) {
@@ -294,6 +307,37 @@ export default function HrPanel() {
         { key: "close", label: "Fermer le compte", icon: <Lock className="w-3.5 h-3.5" />, danger: true, onClick: () => setClosingUser(user) },
       ],
     };
+  }
+
+  function exportCsv() {
+    if (filteredStaff.length === 0) {
+      alert("Aucun employé à exporter");
+      return;
+    }
+
+    const headers = ["Nom", "Username", "Email", "Poste", "Département", "Statut", "Salaire", "Date d'embauche"];
+    const rows = filteredStaff.map((u) => [
+      getDisplayName(u),
+      u.username,
+      u.email || "",
+      u.designation?.name || u.role?.name || "—",
+      u.department?.name || "—",
+      u.status === "true" ? "Actif" : "Inactif",
+      u.currentSalary != null ? new Intl.NumberFormat("fr-FR").format(u.currentSalary) : "—",
+      u.joinDate ? new Date(u.joinDate).toLocaleDateString("fr-FR") : "—",
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `employes-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -309,17 +353,17 @@ export default function HrPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-sm text-ink-700 transition">
-            <Filter className="w-4 h-4" />
-            <span className="hidden sm:inline">Filtres</span>
-          </button>
           <button
+            onClick={exportCsv}
             className="p-2 bg-white border border-ink-200 hover:border-ink-300 rounded-lg text-ink-600 transition"
-            title="Exporter"
+            title="Exporter en CSV"
           >
             <Download className="w-4 h-4" />
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+          <button
+            onClick={() => setNewStaff(true)}
+            className="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm"
+          >
             <UserPlus className="w-4 h-4" />
             <span>Nouvel employé</span>
           </button>
@@ -412,6 +456,28 @@ export default function HrPanel() {
                 className="w-full px-4 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
               />
             </div>
+            <Select
+              className="w-32"
+              placeholder="Département"
+              value={deptFilter}
+              onChange={setDeptFilter}
+              allowClear
+              options={[
+                { value: null, label: "Tous les depts" },
+                ...departments.map((d) => ({ value: d.id, label: d.name })),
+              ]}
+            />
+            <Select
+              className="w-32"
+              placeholder="Statut"
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: "all", label: "Tous les statuts" },
+                { value: "true", label: "Actifs" },
+                { value: "false", label: "Inactifs" },
+              ]}
+            />
             <div className="inline-flex p-0.5 bg-ink-100 rounded-lg">
               <button
                 onClick={() => setViewMode("grid")}
@@ -578,6 +644,17 @@ export default function HrPanel() {
       <ViewStaffDrawer user={viewingUser} onClose={() => setViewingUser(null)} />
 
       <EditStaffModal
+        mode="create"
+        open={newStaff}
+        user={null}
+        designations={designations}
+        departments={departments}
+        onClose={() => setNewStaff(false)}
+        onSaved={() => { setNewStaff(false); loadStaff(); }}
+      />
+
+      <EditStaffModal
+        mode="edit"
         user={editingUser}
         designations={designations}
         departments={departments}
