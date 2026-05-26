@@ -61,6 +61,20 @@ const groupPaymentsByCurrency = (payments) => {
   return Array.from(grouped.values());
 };
 
+const isActiveFlag = (value) =>
+  value === undefined ||
+  value === null ||
+  value === true ||
+  value === 1 ||
+  value === "1" ||
+  String(value).toLowerCase() === "true";
+
+const isVisibleRecord = (record) =>
+  Boolean(record) &&
+  record.status !== "false" &&
+  record.status !== false &&
+  isActiveFlag(record.isActive);
+
 // Bootstrap hook — call once in the top-level page component only.
 export const usePropertyManagementBootstrap = () => {
   const dispatch = useDispatch();
@@ -92,12 +106,51 @@ export const usePropertyManagementData = () => {
   const currencyList = useMemo(() => rawCurrencyList || [], [rawCurrencyList]);
 
   // ─── Safe collections (filter out nulls coming from the API) ─────────
-  const safeProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
-  const safeUnits = useMemo(() => (units ?? []).filter(Boolean), [units]);
-  const safeTenants = useMemo(() => (tenants ?? []).filter(Boolean), [tenants]);
+  const rawProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
+  const rawUnits = useMemo(() => (units ?? []).filter(Boolean), [units]);
+  const rawTenants = useMemo(() => (tenants ?? []).filter(Boolean), [tenants]);
+  const rawLeases = useMemo(() => (leases ?? []).filter(Boolean), [leases]);
+
+  const safeProperties = useMemo(() => rawProperties.filter(isVisibleRecord), [rawProperties]);
+  const activePropertyIds = useMemo(
+    () => new Set(safeProperties.map((property) => property.id)),
+    [safeProperties],
+  );
+  const safeUnits = useMemo(
+    () => rawUnits.filter((unit) => isVisibleRecord(unit) && activePropertyIds.has(unit.propertyId)),
+    [rawUnits, activePropertyIds],
+  );
+  const activeUnitIds = useMemo(
+    () => new Set(safeUnits.map((unit) => unit.id)),
+    [safeUnits],
+  );
+  const safeTenants = useMemo(() => rawTenants.filter(isVisibleRecord), [rawTenants]);
+  const safeLeases = useMemo(
+    () =>
+      rawLeases.filter(
+        (lease) =>
+          lease.status !== "cancelled" &&
+          activePropertyIds.has(lease.propertyId) &&
+          activeUnitIds.has(lease.unitId),
+      ),
+    [rawLeases, activePropertyIds, activeUnitIds],
+  );
+  const safeLeaseIds = useMemo(
+    () => new Set(safeLeases.map((lease) => lease.id)),
+    [safeLeases],
+  );
+  const visibleTenants = useMemo(() => {
+    return safeTenants.filter((tenant) => {
+      const tenantLeases = rawLeases.filter((lease) => lease.tenantId === tenant.id);
+      if (!tenantLeases.length) return true;
+      return tenantLeases.some((lease) => safeLeaseIds.has(lease.id));
+    });
+  }, [rawLeases, safeLeaseIds, safeTenants]);
   const safeOnboarding = useMemo(() => (onboarding ?? []).filter(Boolean), [onboarding]);
-  const safeLeases = useMemo(() => (leases ?? []).filter(Boolean), [leases]);
-  const safePayments = useMemo(() => (payments ?? []).filter(Boolean), [payments]);
+  const safePayments = useMemo(
+    () => (payments ?? []).filter((payment) => payment && safeLeaseIds.has(payment.leaseId)),
+    [payments, safeLeaseIds],
+  );
   const safeMaintenance = useMemo(() => (maintenance ?? []).filter(Boolean), [maintenance]);
   const safeContracts = useMemo(() => (contracts ?? []).filter(Boolean), [contracts]);
 
@@ -271,6 +324,7 @@ export const usePropertyManagementData = () => {
     safeProperties,
     safeUnits,
     safeTenants,
+    visibleTenants,
     safeOnboarding,
     safeLeases,
     safePayments,

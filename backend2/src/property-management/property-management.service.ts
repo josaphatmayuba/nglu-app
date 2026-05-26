@@ -63,22 +63,37 @@ export class PropertyManagementService {
     const [properties] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateProperties)
-      .where(ne(realEstateProperties.status, "false"));
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1)));
     const [units] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(ne(realEstateUnits.status, "false"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ));
     const [vacantUnits] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(eq(realEstateUnits.status, "vacant"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        eq(realEstateUnits.status, "vacant"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ));
     const [occupiedUnits] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(eq(realEstateUnits.status, "occupied"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        eq(realEstateUnits.status, "occupied"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ));
     const [activeLeases] = await this.db
       .select({
         count: sql<number>`count(*)`,
@@ -127,6 +142,7 @@ export class PropertyManagementService {
         phone: customers.phone,
         address: customers.address,
         roleId: customers.roleId,
+        status: customers.status,
         birthDate: tenantDetails.birthDate,
         sex: tenantDetails.sex,
         nationality: tenantDetails.nationality,
@@ -348,6 +364,7 @@ export class PropertyManagementService {
         code: realEstateProperties.code,
         propertyType: realEstateProperties.propertyType,
         status: realEstateProperties.status,
+        isActive: realEstateProperties.isActive,
         address: realEstateProperties.address,
         city: realEstateProperties.city,
         country: realEstateProperties.country,
@@ -366,7 +383,7 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
-      .where(ne(realEstateProperties.status, "false"))
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1)))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
@@ -472,6 +489,7 @@ export class PropertyManagementService {
         name: realEstateUnits.name,
         unitType: realEstateUnits.unitType,
         status: realEstateUnits.status,
+        isActive: realEstateUnits.isActive,
         floor: realEstateUnits.floor,
         bedrooms: realEstateUnits.bedrooms,
         bathrooms: realEstateUnits.bathrooms,
@@ -485,11 +503,17 @@ export class PropertyManagementService {
         description: realEstateUnits.description,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
+        propertyIsActive: realEstateProperties.isActive,
       })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
       .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
-      .where(and(ne(realEstateUnits.status, "false"), ne(realEstateProperties.status, "false")))
+      .where(and(
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ))
       .orderBy(desc(realEstateUnits.id));
   }
 
@@ -578,7 +602,15 @@ export class PropertyManagementService {
   }
 
   leases() {
-    return this.leaseQuery().where(ne(realEstateLeases.status, "cancelled")).orderBy(desc(realEstateLeases.id));
+    return this.leaseQuery()
+      .where(and(
+        ne(realEstateLeases.status, "cancelled"),
+        ne(leaseProperty.status, "false"),
+        eq(leaseProperty.isActive, 1),
+        ne(leaseUnit.status, "false"),
+        eq(leaseUnit.isActive, 1),
+      ))
+      .orderBy(desc(realEstateLeases.id));
   }
 
   async createLease(input: CreateLeaseDto) {
@@ -685,6 +717,10 @@ export class PropertyManagementService {
   }
 
   payments() {
+    return this.paymentQuery().orderBy(desc(realEstateRentPayments.id));
+  }
+
+  private paymentQuery(id?: number) {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -710,7 +746,14 @@ export class PropertyManagementService {
       .leftJoin(paymentUnit, eq(paymentUnit.id, paymentLease.unitId))
       .leftJoin(customers, eq(customers.id, paymentLease.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateRentPayments.currencyId))
-      .orderBy(desc(realEstateRentPayments.id));
+      .where(and(
+        ne(paymentLease.status, "cancelled"),
+        ne(paymentProperty.status, "false"),
+        eq(paymentProperty.isActive, 1),
+        ne(paymentUnit.status, "false"),
+        eq(paymentUnit.isActive, 1),
+        ...(id ? [eq(realEstateRentPayments.id, id)] : []),
+      ));
   }
 
   async createPayment(input: CreateRentPaymentDto) {
@@ -883,7 +926,9 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstateUnits.id, id),
         ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
         ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Unit not found.");
@@ -892,14 +937,21 @@ export class PropertyManagementService {
 
   async findLease(id: number) {
     const rows = await this.leaseQuery()
-      .where(and(ne(realEstateLeases.status, "cancelled"), eq(realEstateLeases.id, id)))
+      .where(and(
+        ne(realEstateLeases.status, "cancelled"),
+        eq(realEstateLeases.id, id),
+        ne(leaseProperty.status, "false"),
+        eq(leaseProperty.isActive, 1),
+        ne(leaseUnit.status, "false"),
+        eq(leaseUnit.isActive, 1),
+      ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
   }
 
   async findPayment(id: number) {
-    const rows = await this.payments().where(eq(realEstateRentPayments.id, id)).limit(1);
+    const rows = await this.paymentQuery(id).limit(1);
     if (!rows.length) throw new NotFoundException("Payment not found.");
     return rows[0];
   }
@@ -1254,7 +1306,11 @@ export class PropertyManagementService {
     const rows = await this.db
       .select({ id: realEstateProperties.id })
       .from(realEstateProperties)
-      .where(and(eq(realEstateProperties.id, id), ne(realEstateProperties.status, "false")))
+      .where(and(
+        eq(realEstateProperties.id, id),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ))
       .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Property not found.");

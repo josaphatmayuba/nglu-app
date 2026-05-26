@@ -34,7 +34,7 @@ const PropertyManagement = () => {
     maintenanceUnits,
     activeLeases,
     openMaintenance,
-    safeTenants,
+    visibleTenants,
     safeLeases,
     currencyOptions,
     occupancyRate,
@@ -52,8 +52,8 @@ const PropertyManagement = () => {
   const [unitModalOpen, setUnitModalOpen] = useState(false);
 
   const tabItems = [
-    { key: "properties", label: "Propriétés", count: enrichedUnits.length || safeProperties.length },
-    { key: "tenants", label: "Locataires", count: safeTenants.length },
+    { key: "properties", label: "Propriétés", count: enrichedUnits.length },
+    { key: "tenants", label: "Locataires", count: visibleTenants.length },
     { key: "leases", label: "Baux", count: safeLeases.length },
     { key: "payments", label: "Paiements", count: safePayments.length },
     { key: "maintenance", label: "Maintenance", count: openMaintenance.length, danger: true },
@@ -130,7 +130,7 @@ const PropertyManagement = () => {
           <MetricCard
             icon={<Building2 size={20} />}
             label="Propriétés"
-            value={enrichedUnits.length || safeProperties.length}
+            value={enrichedUnits.length}
             helper={`${occupiedUnits.length} louées · ${vacantUnits.length} vacantes · ${maintenanceUnits.length} maintenance`}
           />
           <MetricCard

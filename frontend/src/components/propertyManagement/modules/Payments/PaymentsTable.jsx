@@ -24,6 +24,8 @@ const buildPageNumbers = (currentPage, totalPages) => {
 const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll }) => {
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const lateLeaseIds = useMemo(() => new Set(latePayments.map((p) => p.leaseId)), [latePayments]);
+  const pendingLeaseIds = useMemo(() => new Set(pendingPayments.map((p) => p.leaseId)), [pendingPayments]);
   const totalPages = Math.max(1, Math.ceil(payments.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * pageSize;
@@ -62,9 +64,9 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
           <span>Montant</span>
         </div>
         {pageItems.map((payment, index) => {
-          const paymentStatus = latePayments.includes(payment)
+          const paymentStatus = lateLeaseIds.has(payment.leaseId)
             ? "danger"
-            : pendingPayments.includes(payment)
+            : pendingLeaseIds.has(payment.leaseId)
               ? "warning"
               : "success";
           const isPaid = paymentStatus === "success";
