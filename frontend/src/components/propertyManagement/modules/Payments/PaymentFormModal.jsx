@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 
 import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
@@ -14,12 +15,18 @@ const PaymentFormModal = ({
   accounts,
   currencyOptions,
   form,
+  initialLeaseId,
   leaseOptions,
   onCancel,
   onSubmit,
   open,
   saving,
 }) => {
+  useEffect(() => {
+    if (open && initialLeaseId) {
+      form.setFieldsValue({ leaseId: initialLeaseId });
+    }
+  }, [open, initialLeaseId, form]);
   const cashBankAccounts = (accounts ?? []).filter((account) =>
     ["cash", "bank"].includes(account.name?.toLowerCase()),
   );

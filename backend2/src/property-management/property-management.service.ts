@@ -3,6 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import * as nodemailer from "nodemailer";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
@@ -801,6 +802,51 @@ export class PropertyManagementService {
       unitId: lease.unitId,
     });
     return this.findPayment(paymentId);
+  }
+
+  async sendPaymentReminder(leaseId: number) {
+    if (!env.smtp.user) {
+      return { message: "success", note: "SMTP not configured, email not sent" };
+    }
+
+    const rows = await this.db
+      .select({
+        leaseId: realEstateLeases.id,
+        reference: realEstateLeases.reference,
+        rentAmount: realEstateLeases.rentAmount,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantEmail: customers.email,
+      })
+      .from(realEstateLeases)
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .where(eq(realEstateLeases.id, leaseId))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Bail introuvable.");
+
+    const lease = rows[0];
+    if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
+
+    const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
+    const html = `
+      <p>Bonjour ${tenantName},</p>
+      <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
+      <p><strong>Montant du:</strong> ${lease.rentAmount}</p>
+      <p>Merci de régulariser ce paiement au plus tôt possible.</p>
+      <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
+      <p>Cordialement,<br>L'équipe de gestion immobilière</p>
+    `;
+
+    const transporter = nodemailer.createTransport({
+      host: env.smtp.host,
+      port: env.smtp.port,
+      auth: { user: env.smtp.user, pass: env.smtp.pass },
+    });
+
+    await transporter.sendMail({ from: env.smtp.from, to: lease.tenantEmail, subject, html });
+    return { message: "success" };
   }
 
   maintenance() {

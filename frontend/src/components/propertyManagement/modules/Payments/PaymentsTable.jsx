@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, PlusCircle } from "lucide-react";
 import moment from "moment";
 import { useMemo, useState } from "react";
+import { Button, Tooltip } from "antd";
 
 import { avatarColors, paymentMethodLabels } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
@@ -21,7 +22,7 @@ const buildPageNumbers = (currentPage, totalPages) => {
   return pages;
 };
 
-const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll }) => {
+const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll, onQuickPay, onReminder }) => {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const lateLeaseIds = useMemo(() => new Set(latePayments.map((p) => p.leaseId)), [latePayments]);
@@ -118,6 +119,30 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
               <strong className={paymentStatus === "danger" ? "red-text" : ""}>
                 {compactMoney(payment.amount, payment.currencySymbol)}
               </strong>
+              {paymentStatus === "danger" && (onQuickPay || onReminder) && (
+                <span style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  {onQuickPay && (
+                    <Tooltip title="Enregistrer paiement">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<PlusCircle size={14} />}
+                        onClick={() => onQuickPay(payment)}
+                      />
+                    </Tooltip>
+                  )}
+                  {onReminder && (
+                    <Tooltip title="Envoyer rappel">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<Bell size={14} />}
+                        onClick={() => onReminder(payment)}
+                      />
+                    </Tooltip>
+                  )}
+                </span>
+              )}
             </div>
           );
         })}

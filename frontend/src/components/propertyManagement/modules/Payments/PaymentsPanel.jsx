@@ -1,3 +1,4 @@
+import axios from "axios";
 import { Form, message } from "antd";
 import { CalendarRange, Download, Plus, Table2, Users, X } from "lucide-react";
 import moment from "moment";
@@ -84,6 +85,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [quickPayLeaseId, setQuickPayLeaseId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [paymentView, setPaymentView] = useState(readStoredView);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -170,7 +172,22 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
 
   const closeModal = () => {
     setPaymentModalOpen(false);
+    setQuickPayLeaseId(null);
     form.resetFields();
+  };
+
+  const handleQuickPay = (payment) => {
+    setQuickPayLeaseId(payment.leaseId);
+    openModal();
+  };
+
+  const handleSendReminder = async (payment) => {
+    try {
+      await axios.post("/property-management/payments/reminder", { leaseId: payment.leaseId });
+      message.success("Rappel envoyé au locataire");
+    } catch (error) {
+      message.error(error.response?.data?.message || "Erreur lors de l'envoi du rappel");
+    }
   };
 
   const handleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -278,6 +295,8 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
           selectedIds={selectedIds}
           onSelect={handleSelect}
           onSelectAll={handleSelectAll}
+          onQuickPay={handleQuickPay}
+          onReminder={handleSendReminder}
         />
       )}
       {paymentView === "locataire" && (
@@ -299,6 +318,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
         accounts={accounts}
         currencyOptions={currencyOptions}
         form={form}
+        initialLeaseId={quickPayLeaseId}
         leaseOptions={leaseOptions}
         onCancel={closeModal}
         onSubmit={submitPayment}

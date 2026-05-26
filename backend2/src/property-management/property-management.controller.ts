@@ -246,6 +246,13 @@ export class PropertyManagementController {
     return this.propertyManagementService.createPayment(body);
   }
 
+  @ApiOperation({ summary: "Send payment reminder email to tenant" })
+  @Post("payments/reminder")
+  @HttpCode(200)
+  sendPaymentReminder(@Body() body: { leaseId: number }) {
+    return this.propertyManagementService.sendPaymentReminder(body.leaseId);
+  }
+
   @ApiOperation({ summary: "List maintenance requests" })
   @Permissions("readAll-maintenance")
   @Get("maintenance")
