@@ -3,7 +3,7 @@ import moment from "moment";
 import { Grid3X3, LayoutList, Map, Plus, SlidersHorizontal } from "lucide-react";
 import { useDispatch } from "react-redux";
 import toast from "react-hot-toast";
-import { deleteUnit, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { deleteUnit, loadPropertiesUnits } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 
 import { typeFilters } from "../../shared/constants";
 import { normalize } from "../../shared/format";
@@ -129,7 +129,7 @@ const PropertiesPanel = ({
     setDeleteTarget(null);
     if (resp?.payload?.message === "success") {
       toast.success("Unité supprimée");
-      dispatch(loadPropertyManagement());
+      dispatch(loadPropertiesUnits());
     } else {
       toast.error(resp?.payload?.message || "Échec de la suppression");
     }

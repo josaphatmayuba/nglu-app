@@ -17,10 +17,23 @@ This project follows:
 
 ### Fixed
 
+- SCRUM-159: propriétés/unités immobilier rechargent désormais uniquement `/property-management/properties` et `/property-management/units` après création, modification ou suppression logique, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
+
+- SCRUM-156: baux immobilier recharge désormais uniquement `/property-management/leases` et `/property-management/dashboard` après création, modification, suppression logique ou renouvellement, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
+
+- SCRUM-157: paiements immobilier recharge désormais uniquement `/property-management/payments` et `/property-management/dashboard` après création d'un paiement, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
+
+- SCRUM-158: maintenance immobilier recharge désormais uniquement `/property-management/maintenance` après création, modification, suppression logique ou changement de statut, au lieu de relancer `loadPropertyManagement()` et ses 8 endpoints.
+
+- Contrats immobilier: ajout d'une confirmation Ant Design avant suppression logique d'un contrat, avec rappel que l'historique reste conservé.
+
+- Baux immobilier: remplacement de la confirmation navigateur par une confirmation Ant Design avant suppression/résiliation logique, avec rappel que les historiques sont conservés et que l'unité sera marquée vacante.
+
 - SCRUM-141: cartes "Par locataire" affichaient toujours "À jour" même pour les locataires en retard. Cause : `statusOf()` utilisait `Array.includes()` par égalité de référence sur des objets synthétiques créés à chaque render. Fix : lookup par `leaseId` via `Set`. Labels corrigés : "Montant dû" (retard), "Montant attendu" (attente), "Montant mensuel" (payé). Jours de retard affichés `(Xj)`. Commit : 697b192.
 
 ### Changed
 
+- DEVELOPMENT_RULES.md: ajout d'une politique de périmètre Jira; les agents doivent préserver les fonctionnalités existantes et signaler le risque avant toute suppression ou réduction fonctionnelle.
 - frontend/package.json: `npm run build` bloqué avec exit 1 — oblige à utiliser `build:dev` ou `build:prod` pour garantir la cible API.
 - deploy-dev-aws.ps1: assertion locale `assert-api-target.mjs development` ajoutée avant le pack/upload, même avec `-SkipLocalBuild` — le script échoue si le dist ne contient pas `https://dev.ongdngolu.org/api`.
 - scripts/deploy-dev-middleware-aws.ps1: nouveau script de déploiement middleware (pack src/ + rebuild image Docker + health check). DEVELOPMENT_RULES.md et DEPLOY.md mis à jour.

@@ -4,7 +4,7 @@ import moment from "moment";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
-import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { createRentPayment, loadPaymentsDashboard } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize, optionalNumber } from "../../shared/format";
 import { MultiCurrencyValue } from "../../shared/ui";
 import { tenantNameFromLease } from "../../shared/tenants";
@@ -171,7 +171,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
       }));
       if (response.payload?.message === "success") {
         message.success("Paiement enregistré");
-        dispatch(loadPropertyManagement());
+        dispatch(loadPaymentsDashboard());
         closeModal();
       }
     } finally {

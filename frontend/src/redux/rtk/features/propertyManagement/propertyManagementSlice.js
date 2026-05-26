@@ -141,6 +141,75 @@ export const loadPropertyManagement = createAsyncThunk(
   },
 );
 
+export const loadMaintenance = createAsyncThunk(
+  "propertyManagement/loadMaintenance",
+  async () => {
+    try {
+      const { data } = await axios.get("property-management/maintenance");
+      return successHandler(data);
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const loadPaymentsDashboard = createAsyncThunk(
+  "propertyManagement/loadPaymentsDashboard",
+  async () => {
+    try {
+      const [payments, dashboard] = await Promise.all([
+        axios.get("property-management/payments"),
+        axios.get("property-management/dashboard"),
+      ]);
+
+      return successHandler({
+        payments: payments.data,
+        dashboard: dashboard.data,
+      });
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const loadLeasesDashboard = createAsyncThunk(
+  "propertyManagement/loadLeasesDashboard",
+  async () => {
+    try {
+      const [leases, dashboard] = await Promise.all([
+        axios.get("property-management/leases"),
+        axios.get("property-management/dashboard"),
+      ]);
+
+      return successHandler({
+        leases: leases.data,
+        dashboard: dashboard.data,
+      });
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
+export const loadPropertiesUnits = createAsyncThunk(
+  "propertyManagement/loadPropertiesUnits",
+  async () => {
+    try {
+      const [properties, units] = await Promise.all([
+        axios.get("property-management/properties"),
+        axios.get("property-management/units"),
+      ]);
+
+      return successHandler({
+        properties: properties.data,
+        units: units.data,
+      });
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
 export const saveProperty = createAsyncThunk(
   "propertyManagement/saveProperty",
   async ({ id, values }) => {
@@ -540,6 +609,21 @@ const propertyManagementSlice = createSlice({
       })
       .addCase(loadPropertyManagement.rejected, (state) => {
         state.loading = false;
+      })
+      .addCase(loadMaintenance.fulfilled, (state, action) => {
+        state.maintenance = action.payload.data ?? [];
+      })
+      .addCase(loadPaymentsDashboard.fulfilled, (state, action) => {
+        state.payments = action.payload.data.payments ?? [];
+        state.dashboard = action.payload.data.dashboard;
+      })
+      .addCase(loadLeasesDashboard.fulfilled, (state, action) => {
+        state.leases = action.payload.data.leases ?? [];
+        state.dashboard = action.payload.data.dashboard;
+      })
+      .addCase(loadPropertiesUnits.fulfilled, (state, action) => {
+        state.properties = action.payload.data.properties ?? [];
+        state.units = action.payload.data.units ?? [];
       })
       .addCase(saveProperty.fulfilled, (state, action) => {
         state.properties = upsert(state.properties, action.payload.data);

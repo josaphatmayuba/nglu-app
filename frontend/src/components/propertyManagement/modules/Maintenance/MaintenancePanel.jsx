@@ -5,6 +5,7 @@ import { useDispatch } from "react-redux";
 
 import {
   deleteMaintenance,
+  loadMaintenance,
   loadPropertyManagement,
   saveMaintenance,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
@@ -129,7 +130,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
       const response = await dispatch(saveMaintenance({ id: editingRecord?.id, values }));
       if (response.payload?.message === "success" || response.payload?.id) {
         message.success(editingRecord ? "Ticket modifié" : "Ticket créé");
-        dispatch(loadPropertyManagement());
+        dispatch(loadMaintenance());
         closeModal();
       }
     } finally {
@@ -145,7 +146,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     try {
       await dispatch(deleteMaintenance(deleteTarget.id));
       message.success("Ticket supprimé (masqué, non effacé de la base)");
-      dispatch(loadPropertyManagement());
+      dispatch(loadMaintenance());
       setDeleteTarget(null);
     } finally {
       setDeleting(false);
@@ -155,7 +156,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
   const handleStatusChange = async ({ id, status }) => {
     const resp = await dispatch(saveMaintenance({ id, values: { status } }));
     if (resp.payload?.message === "success" || resp.payload?.id) {
-      dispatch(loadPropertyManagement());
+      dispatch(loadMaintenance());
     }
   };
 

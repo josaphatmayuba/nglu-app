@@ -25,7 +25,7 @@ import {
 } from "antd";
 
 import {
-  loadPropertyManagement,
+  loadPropertiesUnits,
   saveProperty,
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
@@ -136,7 +136,7 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
       }
     }
 
-    dispatch(loadPropertyManagement());
+    dispatch(loadPropertiesUnits());
     onSaved?.();
     onClose?.();
   };
