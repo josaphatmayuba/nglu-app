@@ -12,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { CreateProductDto, UpdateProductDto } from "./dto/product.dto";
 import { ProductsService } from "./products.service";
 
@@ -36,46 +37,46 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "List products" })
   @Get()
-  findAll(@Query() query: Record<string, string>) {
-    return this.productsService.findAll(query);
+  findAll(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.productsService.findAll(query, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get one product with relations" })
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.productsService.findOne(id);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.productsService.findOne(id, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Create product / create-many / delete-many" })
   @Post()
-  create(@Body() body: CreateProductDto, @Query() query: Record<string, string>) {
+  create(@Body() body: CreateProductDto, @Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
     if (query["query"] === "createmany") {
-      return this.productsService.createMany([body]);
+      return this.productsService.createMany([body], orgId);
     }
     if (query["query"] === "deletemany") {
       const ids = (query["ids"] ?? "").split(",").map(Number).filter(Boolean);
-      return this.productsService.deleteMany(ids);
+      return this.productsService.deleteMany(ids, orgId);
     }
-    return this.productsService.create(body);
+    return this.productsService.create(body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Update product" })
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateProductDto) {
-    return this.productsService.update(id, body);
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateProductDto, @CurrentOrg() orgId: number) {
+    return this.productsService.update(id, body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Soft delete product (update status)" })
   @Patch(":id")
-  updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateProductDto) {
-    return this.productsService.updateStatus(id, body.status ?? "false");
+  updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateProductDto, @CurrentOrg() orgId: number) {
+    return this.productsService.updateStatus(id, body.status ?? "false", orgId);
   }
 }

@@ -4,6 +4,10 @@
 
 set -e
 
+echo "─── Installing Doppler CLI ───"
+(curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh || wget -t 3 -qO- https://cli.doppler.com/install.sh) | sudo sh
+echo "  ✓ Doppler CLI installed"
+
 echo "─── Creating shared Docker network ───"
 docker network create nglu_shared 2>/dev/null && echo "  ✓ nglu_shared created" || echo "  ✓ nglu_shared already exists"
 

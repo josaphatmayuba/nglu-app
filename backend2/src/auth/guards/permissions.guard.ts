@@ -4,10 +4,13 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  OnModuleDestroy,
   UnauthorizedException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { eq } from "drizzle-orm";
+import Redis from "ioredis";
+import { env } from "../../config/env";
 import { DRIZZLE } from "../../database/database.constants";
 import { permissions, rolePermissions, roles } from "../../database/schema";
 import type { Database } from "../../database/types";
@@ -16,19 +19,18 @@ import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 const CACHE_TTL_MS = Number(process.env.PERMISSIONS_GUARD_CACHE_TTL_MS || 0);
 
 type AuthedUser = { sub?: number; roleId?: number; role?: string };
-
 type RoleCache = { perms: Set<string>; isSystem: boolean; expiresAt: number };
 
 /**
- * Loads the current role permission set from the database by default.
- * A short process-local cache can be enabled with PERMISSIONS_GUARD_CACHE_TTL_MS,
- * but production keeps this at 0 so permission revocations are enforced
- * immediately, even when the caller keeps using the same JWT.
+ * Fallback in-memory cache used when Redis is unavailable and TTL > 0.
+ * Single-instance only — not coherent across pods. Use Redis for multi-instance.
  */
-const cache = new Map<number, RoleCache>();
+const localCache = new Map<number, RoleCache>();
 
 @Injectable()
-export class PermissionsGuard implements CanActivate {
+export class PermissionsGuard implements CanActivate, OnModuleDestroy {
+  private redis: Redis | null = null;
+
   constructor(
     private readonly reflector: Reflector,
     @Inject(DRIZZLE) private readonly db: Database,
@@ -64,10 +66,50 @@ export class PermissionsGuard implements CanActivate {
     return true;
   }
 
+  async onModuleDestroy() {
+    if (this.redis) {
+      await this.redis.quit().catch(() => undefined);
+      this.redis = null;
+    }
+  }
+
+  private redisClient(): Redis | null {
+    const r = env.redis;
+    if (!r.enabled || (!r.url && !r.host)) return null;
+    if (this.redis) return this.redis;
+
+    this.redis = r.url
+      ? new Redis(r.url, { enableOfflineQueue: false, lazyConnect: true, maxRetriesPerRequest: 1 })
+      : new Redis({
+          host: r.host,
+          port: r.port,
+          password: r.password || undefined,
+          enableOfflineQueue: false,
+          lazyConnect: true,
+          maxRetriesPerRequest: 1,
+        });
+
+    // Suppress unhandled errors; callers handle null returns.
+    this.redis.on("error", () => undefined);
+    return this.redis;
+  }
+
   private async roleData(roleId: number): Promise<{ isSystem: boolean; perms: Set<string> }> {
-    const cached = cache.get(roleId);
-    if (CACHE_TTL_MS > 0 && cached && cached.expiresAt > Date.now()) {
-      return { isSystem: cached.isSystem, perms: cached.perms };
+    if (CACHE_TTL_MS > 0) {
+      const redis = this.redisClient();
+
+      if (redis) {
+        const hit = await redis.get(`perm:role:${roleId}`).catch(() => null);
+        if (hit) {
+          const { isSystem, perms } = JSON.parse(hit) as { isSystem: boolean; perms: string[] };
+          return { isSystem, perms: new Set(perms) };
+        }
+      } else {
+        const cached = localCache.get(roleId);
+        if (cached && cached.expiresAt > Date.now()) {
+          return { isSystem: cached.isSystem, perms: cached.perms };
+        }
+      }
     }
 
     const [roleRow, permRows] = await Promise.all([
@@ -85,14 +127,23 @@ export class PermissionsGuard implements CanActivate {
 
     const isSystem = roleRow?.isSystem === 1;
     const perms = new Set(permRows.map((r) => r.name));
+
     if (CACHE_TTL_MS > 0) {
-      cache.set(roleId, { isSystem, perms, expiresAt: Date.now() + CACHE_TTL_MS });
+      const redis = this.redisClient();
+      if (redis) {
+        await redis
+          .set(`perm:role:${roleId}`, JSON.stringify({ isSystem, perms: [...perms] }), "PX", CACHE_TTL_MS)
+          .catch(() => undefined);
+      } else {
+        localCache.set(roleId, { isSystem, perms, expiresAt: Date.now() + CACHE_TTL_MS });
+      }
     }
+
     return { isSystem, perms };
   }
 
-  /** Test helper — clears the in-memory cache. */
+  /** Test helper — clears the local fallback cache. */
   static clearCache() {
-    cache.clear();
+    localCache.clear();
   }
 }

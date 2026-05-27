@@ -28,7 +28,7 @@ function generateInvoiceId(prefix: string, length = 13): string {
 export class PurchaseInvoicesService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreatePurchaseInvoiceDto) {
+  async create(input: CreatePurchaseInvoiceDto, orgId: number) {
     // 1. Validate supplier
     const [supplier] = await this.db
       .select({ id: suppliers.id })
@@ -61,6 +61,7 @@ export class PurchaseInvoicesService {
 
     await this.db.insert(purchaseInvoices).values({
       id: invoiceId,
+      organizationId: orgId,
       date: new Date(input.date),
       invoiceMemoNo: input.invoiceMemoNo ?? null,
       supplierMemoNo: input.supplierMemoNo ?? null,
@@ -103,6 +104,7 @@ export class PurchaseInvoicesService {
         amount: totalPurchasePrice,
         type: "purchase",
         relatedId: invoiceId,
+        organizationId: orgId,
         status: "true",
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -118,6 +120,7 @@ export class PurchaseInvoicesService {
         amount: totalTax,
         type: "purchase",
         relatedId: invoiceId,
+        organizationId: orgId,
         status: "true",
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -134,6 +137,7 @@ export class PurchaseInvoicesService {
           amount: payment.amount,
           type: "purchase",
           relatedId: invoiceId,
+          organizationId: orgId,
           status: "true",
           createdAt: sql`CURRENT_TIMESTAMP`,
           updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -177,10 +181,10 @@ export class PurchaseInvoicesService {
       }
     }
 
-    return this.findOne(invoiceId);
+    return this.findOne(invoiceId, orgId);
   }
 
-  async findAll(query: Record<string, string>) {
+  async findAll(query: Record<string, string>, orgId: number) {
     if (query["query"] === "info") {
       const [row] = await this.db
         .select({
@@ -189,7 +193,8 @@ export class PurchaseInvoicesService {
           totalPaidAmount: sum(purchaseInvoices.paidAmount),
           totalDueAmount: sum(purchaseInvoices.dueAmount),
         })
-        .from(purchaseInvoices);
+        .from(purchaseInvoices)
+        .where(eq(purchaseInvoices.organizationId, orgId));
 
       return {
         _count: { id: Number(row.totalCount ?? 0) },
@@ -202,7 +207,7 @@ export class PurchaseInvoicesService {
     }
 
     const { skip, limit } = this.pagination(query);
-    const conditions = this.filterConditions(query);
+    const conditions = this.filterConditions(query, orgId);
     const where = conditions.length ? and(...conditions) : undefined;
 
     const rows = await this.db
@@ -237,11 +242,15 @@ export class PurchaseInvoicesService {
     return { getAllPurchaseInvoice: rows, totalPurchaseInvoice: Number(total ?? 0) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, orgId?: number) {
+    const where = orgId !== undefined
+      ? and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.organizationId, orgId))
+      : eq(purchaseInvoices.id, id);
+
     const rows = await this.db
       .select()
       .from(purchaseInvoices)
-      .where(eq(purchaseInvoices.id, id))
+      .where(where)
       .limit(1);
 
     if (!rows.length) {
@@ -352,8 +361,8 @@ export class PurchaseInvoicesService {
     return { getAllPayment: rows, totalPayment: Number(total ?? 0) };
   }
 
-  private filterConditions(query: Record<string, string>) {
-    const conditions = [];
+  private filterConditions(query: Record<string, string>, orgId: number) {
+    const conditions = [eq(purchaseInvoices.organizationId, orgId)];
 
     if (query["startDate"]) {
       conditions.push(gte(purchaseInvoices.date, new Date(query["startDate"])));

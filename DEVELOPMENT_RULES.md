@@ -11,6 +11,7 @@ Default behavior:
 - Do not remove, disable, hide, rename, or rewrite existing functionality unless the Jira task explicitly asks for it.
 - Preserve existing user workflows, routes, API contracts, permissions, validations, realtime behavior, and deployment behavior unless the task clearly requires a targeted change.
 - Prefer the smallest safe change that satisfies the task and fits the existing code patterns.
+- **Never destroy or revert code/features that were implemented by previous Jira tickets** unless the current task explicitly requires it. This includes: database migrations, API endpoints, UI components, permissions, validations, business logic, and configuration. If a previous ticket's work appears to conflict with the current task, document the conflict and ask the user for clarification before removing it.
 - If a task appears to require removing or materially reducing an existing feature, stop first and inform the user of the risk, affected functionality, and safer alternatives before making that change.
 - If a task mentions deletion or removal, apply the Deletion Policy below and document the risk before implementation.
 - When creating Jira comments or handoff notes, explicitly mention any existing behavior that was intentionally preserved when there is a risk of regression.

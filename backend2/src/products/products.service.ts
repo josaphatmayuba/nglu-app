@@ -29,16 +29,18 @@ export class ProductsService {
     return rows[0];
   }
 
-  async findAll(query: Record<string, string>) {
+  async findAll(query: Record<string, string>, orgId: number) {
+    const orgFilter = eq(products.organizationId, orgId);
+
     if (query["query"] === "all") {
-      return this.baseQuery().orderBy(desc(products.id));
+      return this.baseQuery().where(orgFilter).orderBy(desc(products.id));
     }
 
     if (query["query"] === "sku") {
       const [product] = await this.db
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.sku, query["key"] ?? ""))
+        .where(and(orgFilter, eq(products.sku, query["key"] ?? "")))
         .limit(1);
 
       return { status: product ? "true" : "false" };
@@ -48,7 +50,7 @@ export class ProductsService {
       const [product] = await this.db
         .select({ id: products.id })
         .from(products)
-        .where(eq(products.name, query["key"] ?? ""))
+        .where(and(orgFilter, eq(products.name, query["key"] ?? "")))
         .limit(1);
 
       return { status: product ? "true" : "false" };
@@ -58,7 +60,7 @@ export class ProductsService {
       const [{ total }] = await this.db
         .select({ total: count(products.id) })
         .from(products)
-        .where(eq(products.status, "true"));
+        .where(and(orgFilter, eq(products.status, "true")));
 
       return { _count: { id: Number(total ?? 0) } };
     }
@@ -73,7 +75,7 @@ export class ProductsService {
           shortProductCount: sql<number>`SUM(CASE WHEN ${products.productQuantity} <= ${products.reorderQuantity} THEN 1 ELSE 0 END)`,
         })
         .from(products)
-        .where(eq(products.status, "true"));
+        .where(and(orgFilter, eq(products.status, "true")));
 
       return {
         uniqueProduct: Number(card?.uniqueProduct ?? 0),
@@ -87,7 +89,7 @@ export class ProductsService {
     if (query["query"] === "search") {
       const key = `%${query["key"] ?? ""}%`;
       const { skip, limit } = this.pagination(query);
-      const where = or(like(products.name, key), like(products.sku, key));
+      const where = and(orgFilter, or(like(products.name, key), like(products.sku, key)));
 
       const rows = await this.baseQuery()
         .where(where)
@@ -105,7 +107,7 @@ export class ProductsService {
 
     if (query["query"] === "report") {
       const rows = await this.baseQuery()
-        .where(eq(products.status, "true"))
+        .where(and(orgFilter, eq(products.status, "true")))
         .orderBy(desc(products.id));
 
       const getAllProduct = rows.map((product) => ({
@@ -138,7 +140,8 @@ export class ProductsService {
     }
 
     const { skip, limit } = this.pagination(query);
-    const where = this.listWhere(query);
+    const listFilter = this.listWhere(query);
+    const where = listFilter ? and(orgFilter, listFilter) : orgFilter;
 
     const rows = await this.baseQuery()
       .where(where)
@@ -154,8 +157,10 @@ export class ProductsService {
     return { getAllProduct: rows, totalProduct: Number(total ?? 0) };
   }
 
-  async findOne(id: number) {
-    const rows = await this.baseQuery().where(eq(products.id, id)).limit(1);
+  async findOne(id: number, orgId: number) {
+    const rows = await this.baseQuery()
+      .where(and(eq(products.id, id), eq(products.organizationId, orgId)))
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Product not found.");
@@ -164,8 +169,9 @@ export class ProductsService {
     return rows[0];
   }
 
-  async create(input: CreateProductDto) {
+  async create(input: CreateProductDto, orgId: number) {
     const [result] = await this.db.insert(products).values({
+      organizationId: orgId,
       name: input.name,
       productSubCategoryId: input.productSubCategoryId ?? null,
       productBrandId: input.productBrandId ?? null,
@@ -185,12 +191,13 @@ export class ProductsService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    return this.findOne(Number(result.insertId), orgId);
   }
 
-  async createMany(items: CreateProductDto[]) {
+  async createMany(items: CreateProductDto[], orgId: number) {
     await this.db.insert(products).values(
       items.map((item) => ({
+        organizationId: orgId,
         name: item.name,
         productSubCategoryId: item.productSubCategoryId ?? null,
         productBrandId: item.productBrandId ?? null,
@@ -213,16 +220,16 @@ export class ProductsService {
     return { message: "Products created successfully." };
   }
 
-  async deleteMany(ids: number[]) {
+  async deleteMany(ids: number[], orgId: number) {
     await this.db
       .update(products)
       .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(inArray(products.id, ids));
+      .where(and(inArray(products.id, ids), eq(products.organizationId, orgId)));
     return { message: "Products deleted successfully." };
   }
 
-  async update(id: number, input: UpdateProductDto) {
-    await this.ensureExists(id);
+  async update(id: number, input: UpdateProductDto, orgId: number) {
+    await this.ensureExists(id, orgId);
 
     const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) updateData.name = input.name;
@@ -241,18 +248,18 @@ export class ProductsService {
     if (input.productThumbnailImage !== undefined) updateData.productThumbnailImage = input.productThumbnailImage;
     updateData.updatedAt = sql`CURRENT_TIMESTAMP`;
 
-    await this.db.update(products).set(updateData).where(eq(products.id, id));
+    await this.db.update(products).set(updateData).where(and(eq(products.id, id), eq(products.organizationId, orgId)));
 
-    return this.findOne(id);
+    return this.findOne(id, orgId);
   }
 
-  async updateStatus(id: number, status: string) {
-    await this.ensureExists(id);
+  async updateStatus(id: number, status: string, orgId: number) {
+    await this.ensureExists(id, orgId);
 
     await this.db
       .update(products)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(products.id, id));
+      .where(and(eq(products.id, id), eq(products.organizationId, orgId)));
 
     return { message: "Product status updated." };
   }
@@ -381,11 +388,11 @@ export class ProductsService {
       .leftJoin(uoms, eq(uoms.id, products.uomId));
   }
 
-  private async ensureExists(id: number) {
+  private async ensureExists(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.id, id))
+      .where(and(eq(products.id, id), eq(products.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {

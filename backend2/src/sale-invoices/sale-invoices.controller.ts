@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import {
   CreatePaymentSaleInvoiceDto,
   CreateSaleInvoiceDto,
@@ -32,16 +33,16 @@ export class SaleInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Create sale invoice" })
   @Post()
-  create(@Body() body: CreateSaleInvoiceDto) {
-    return this.saleInvoicesService.create(body);
+  create(@Body() body: CreateSaleInvoiceDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.create(body, orgId);
   }
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "List sale invoices (query=info for aggregates)" })
   @Get()
-  findAll(@Query() query: Record<string, string>) {
-    return this.saleInvoicesService.findAll(query);
+  findAll(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findAll(query, orgId);
   }
 
   @ApiBearerAuth()
@@ -88,8 +89,8 @@ export class SaleInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get one sale invoice" })
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.saleInvoicesService.findOne(id);
+  findOne(@Param("id") id: string, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.findOne(id, orgId);
   }
 
   @ApiBearerAuth()

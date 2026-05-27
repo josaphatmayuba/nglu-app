@@ -83,6 +83,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password}
       CORS_ORIGIN: http://localhost:3000
       APP_URL: http://localhost:3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-local_jwt_secret_change_me}
+      REFRESH_SECRET: ${REFRESH_SECRET:-local_refresh_secret_change_me}
+      PERMISSIONS_GUARD_CACHE_TTL_MS: ${PERMISSIONS_GUARD_CACHE_TTL_MS:-0}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
       REDIS_HOST: ${REDIS_HOST:-redis}
