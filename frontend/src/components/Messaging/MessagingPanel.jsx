@@ -1,17 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Mail, Plus, RefreshCw, Search } from 'lucide-react';
-import { Button, Empty, Input, Spin, Tabs, message as antMessage } from 'antd';
+import { Button, Empty, Form, Input, Modal, Spin, Tabs, message as antMessage } from 'antd';
 import axios from 'axios';
+import usePermissions from '../../utils/usePermissions';
 import MessageList from './MessageList';
 import MessageDetail from './MessageDetail';
 import ComposeMessage from './ComposeMessage';
 import './messaging.css';
 
 export default function MessagingPanel() {
+  const { permissions } = usePermissions();
   const [messages, setMessages] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showCompose, setShowCompose] = useState(false);
+  const [showMailboxModal, setShowMailboxModal] = useState(false);
+  const [mailboxForm] = Form.useForm();
+  const [creatingMailbox, setCreatingMailbox] = useState(false);
   const [composeInitialValues, setComposeInitialValues] = useState(null);
   const [composeTitle, setComposeTitle] = useState('Composer un nouveau message');
   const [loading, setLoading] = useState(false);
@@ -27,6 +32,8 @@ export default function MessagingPanel() {
     { key: 'unread', label: 'Non lus' },
     { key: 'trash', label: 'Corbeille' },
   ];
+
+  const canCreateMailbox = Array.isArray(permissions) && permissions.includes('create-mailAccount');
 
   const fetchMessages = async (pageNum = 1, statusVal = status, searchVal = searchTerm) => {
     setLoading(true);
@@ -193,6 +200,21 @@ export default function MessagingPanel() {
     }
   };
 
+  const handleCreateMailbox = async (values) => {
+    setCreatingMailbox(true);
+    try {
+      const response = await axios.post('/mail-accounts', values);
+      antMessage.success(`Courriel cree: ${response.data.email}`);
+      mailboxForm.resetFields();
+      setShowMailboxModal(false);
+      fetchAccounts();
+    } catch (error) {
+      antMessage.error(error.response?.data?.message || 'Creation du courriel impossible');
+    } finally {
+      setCreatingMailbox(false);
+    }
+  };
+
   return (
     <div className="messaging-panel">
       <div className="messaging-header">
@@ -208,6 +230,11 @@ export default function MessagingPanel() {
           >
             Synchroniser
           </Button>
+          {canCreateMailbox && (
+            <Button onClick={() => setShowMailboxModal(true)}>
+              Creer courriel
+            </Button>
+          )}
           <Button
             type="primary"
             icon={<Plus size={16} />}
@@ -229,6 +256,59 @@ export default function MessagingPanel() {
           />
         </div>
       )}
+
+      <Modal
+        title="Creer un courriel"
+        open={showMailboxModal}
+        onCancel={() => setShowMailboxModal(false)}
+        onOk={() => mailboxForm.submit()}
+        okText="Creer"
+        confirmLoading={creatingMailbox}
+        destroyOnClose
+      >
+        <Form
+          form={mailboxForm}
+          layout="vertical"
+          requiredMark={false}
+          onFinish={handleCreateMailbox}
+        >
+          <Form.Item
+            label="Adresse courriel"
+            name="localPart"
+            extra="Entrez seulement le nom ou l'adresse complete @ongdngolu.org."
+            rules={[
+              { required: true, message: "L'adresse est requise" },
+              {
+                validator: (_, value) => {
+                  if (!value) return Promise.resolve();
+                  const text = String(value).trim().toLowerCase();
+                  const localPart = text.includes('@') ? text.split('@')[0] : text;
+                  const domain = text.includes('@') ? text.split('@').slice(1).join('@') : 'ongdngolu.org';
+                  if (domain !== 'ongdngolu.org') {
+                    return Promise.reject(new Error('Seul le domaine ongdngolu.org est autorise'));
+                  }
+                  if (!/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(localPart) || localPart.includes('..')) {
+                    return Promise.reject(new Error('Nom invalide'));
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Input addonAfter="@ongdngolu.org" placeholder="support" />
+          </Form.Item>
+          <Form.Item
+            label="Mot de passe temporaire"
+            name="password"
+            rules={[
+              { required: true, message: 'Le mot de passe est requis' },
+              { min: 8, message: 'Minimum 8 caracteres' },
+            ]}
+          >
+            <Input.Password autoComplete="new-password" />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <div className="messaging-search">
         <Input

@@ -34,6 +34,26 @@ export class MailAccountsService {
     return { email, accountId };
   }
 
+  async createManualMailbox(input: {
+    localPart: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<CreateMailboxResult> {
+    if (!env.stalwart.adminUser || !env.stalwart.adminPass) {
+      throw new BadRequestException("Stalwart is not configured for mailbox creation.");
+    }
+
+    const accountName = this.manualAccountName(input.localPart);
+    if (await this.accountExists(accountName)) {
+      throw new BadRequestException("This mailbox already exists.");
+    }
+
+    const domainId = await this.domainId();
+    const accountId = await this.createAccount(domainId, accountName, input.password);
+    return { email: `${accountName}@${env.stalwart.domain}`, accountId };
+  }
+
   async deleteMailbox(accountId: string) {
     if (!accountId) return;
     try {
@@ -51,6 +71,26 @@ export class MailAccountsService {
       .replace(/[^a-z0-9]+/g, ".")
       .replace(/^\.+|\.+$/g, "")
       .replace(/\.+/g, ".");
+  }
+
+  private manualAccountName(value: string) {
+    const trimmed = String(value ?? "").trim().toLowerCase();
+    const localPart = trimmed.includes("@") ? trimmed.split("@")[0] : trimmed;
+    const domain = trimmed.includes("@") ? trimmed.split("@").slice(1).join("@") : env.stalwart.domain;
+
+    if (domain !== env.stalwart.domain) {
+      throw new BadRequestException(`Only ${env.stalwart.domain} mailboxes can be created from the CRM.`);
+    }
+
+    if (!/^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/.test(localPart)) {
+      throw new BadRequestException("Mailbox name must use letters, numbers, dots, underscores or hyphens.");
+    }
+
+    if (localPart.includes("..")) {
+      throw new BadRequestException("Mailbox name cannot contain consecutive dots.");
+    }
+
+    return localPart;
   }
 
   private mailboxName(firstName: string, lastName: string) {

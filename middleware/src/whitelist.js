@@ -118,6 +118,7 @@ module.exports = [
   { method: '*',    prefix: '/email-config',                  auth: true  },
   { method: '*',    prefix: '/email-invoice',                 auth: true  },
   { method: '*',    prefix: '/messages',                      auth: true  },
+  { method: '*',    prefix: '/mail-accounts',                 auth: true  },
   { method: '*',    prefix: '/system-email',                  auth: true  },
   { method: '*',    prefix: '/send-sms',                      auth: true  },
   { method: '*',    prefix: '/page-size',                     auth: true  },

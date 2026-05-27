@@ -176,6 +176,13 @@
       "when": 1780102800000,
       "tag": "0040_add_system_email_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1780106400000,
+      "tag": "0041_add_mail_account_permissions",
+      "breakpoints": true
     }
   ]
 }

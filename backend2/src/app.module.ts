@@ -17,6 +17,7 @@ import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
+import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { MessagesModule } from "./messages/messages.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
@@ -59,6 +60,7 @@ import { UsersModule } from "./users/users.module";
     EmailTemplatesModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
+    MailAccountsModule,
     ManufacturersModule,
     MessagesModule,
     NotificationPreferencesModule,
