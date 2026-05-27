@@ -18,7 +18,7 @@
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "db:seed:demo": "ts-node -r tsconfig-paths/register src/database/seed-demo.ts",
     "db:migrate:run": "ts-node -r tsconfig-paths/register src/database/migrate.ts",
-    "docker:dev": "npm run db:wait && npm run db:migrate:run && npm run db:seed && npm run db:seed:demo && npm run dev",
+    "docker:dev": "npm run db:wait && npm run db:migrate:run && (npm run db:seed || true) && (npm run db:seed:demo || true) && npm run dev",
     "docker:prod": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && node dist/src/main.js",
     "docker:dev-deployed": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && (node dist/src/database/seed.js || true) && (node dist/src/database/seed-demo.js || true) && node dist/src/main.js"
   },
@@ -50,7 +50,8 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.8",
-    "@types/node": "^22.10.2",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.19.19",
     "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.30.1",
     "ts-node": "^10.9.2",
