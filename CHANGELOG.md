@@ -54,6 +54,8 @@ This project follows:
 
 ### Changed
 
+- Scripts prod: `deploy-prod-backend-aws.ps1` remplace maintenant aussi `backend2/drizzle` avant extraction afin d'eviter les erreurs `tar: Cannot open: File exists` pendant le deploiement backend.
+
 - Scripts dev: `deploy-dev-backend-aws.ps1` normalise maintenant les fins de ligne avant d'envoyer le script distant a `bash`, comme le script frontend, pour eviter l'erreur `set: pipefail\r` sur Windows.
 
 - DEVELOPMENT_RULES.md: ajout d'une politique de périmètre Jira; les agents doivent préserver les fonctionnalités existantes et signaler le risque avant toute suppression ou réduction fonctionnelle.

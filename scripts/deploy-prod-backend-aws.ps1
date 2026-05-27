@@ -101,6 +101,7 @@ $remoteScript = @"
 set -euo pipefail
 echo "[remote] replacing backend2/dist and drizzle"
 rm -rf "$RemoteProdDir/backend2/dist"
+rm -rf "$RemoteProdDir/backend2/drizzle"
 mkdir -p "$RemoteProdDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteProdDir/backend2"
 rm -f "$remoteArchive"
