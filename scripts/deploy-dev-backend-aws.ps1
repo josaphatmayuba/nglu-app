@@ -30,7 +30,7 @@ $repoRoot    = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backendDir  = Join-Path $repoRoot "backend2"
 $distDir     = Join-Path $backendDir "dist"
 $stamp       = Get-Date -Format "yyyyMMdd-HHmmss"
-$archiveName = "nglu-dev-backend-$stamp.tgz"
+$archiveName = "nglu-dev-backend-$stamp.tar.gz"
 $localArchive  = Join-Path ([System.IO.Path]::GetTempPath()) $archiveName
 $remoteArchive = "/tmp/$archiveName"
 $sshTarget   = "$User@$HostName"
@@ -73,9 +73,14 @@ Write-Step "Packing backend2/dist"
 if (Test-Path $localArchive) {
   Remove-Item -LiteralPath $localArchive -Force
 }
+# Create .tar.gz in the backend2 directory first, then move to temp
+# This avoids Windows path issues with tar
 Push-Location $backendDir
 try {
-  tar -czf $localArchive dist
+  & tar -czf $archiveName dist
+  if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+  # Move archive to final location
+  Move-Item -Path $archiveName -Destination $localArchive -Force
 }
 finally {
   Pop-Location
@@ -103,7 +108,14 @@ echo "[remote] restarting nglu_dev_backend2"
 cd "$RemoteDevDir"
 docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate --build backend2
 echo "[remote] waiting for backend2 to be ready"
-sleep 20
+for i in {1..60}; do
+  if curl -fsS https://dev.ongdngolu.org/api/health 2>/dev/null; then
+    echo "[remote] backend2 is ready"
+    break
+  fi
+  echo "[remote] waiting... ($i/60)"
+  sleep 2
+done
 echo "[remote] health check"
 curl -fsS https://dev.ongdngolu.org/api/health
 echo ""
