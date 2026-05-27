@@ -18,6 +18,7 @@ import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
+import { MessagesModule } from "./messages/messages.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
@@ -58,6 +59,7 @@ import { UsersModule } from "./users/users.module";
     InvoiceTemplatesModule,
     LegacyModulesModule,
     ManufacturersModule,
+    MessagesModule,
     NotificationPreferencesModule,
     PaymentMethodsModule,
     PermissionsModule,

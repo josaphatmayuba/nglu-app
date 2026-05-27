@@ -952,3 +952,22 @@ export const passwordResetTokens = mysqlTable("password_reset_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
 });
+
+// SCRUM-75: Messaging application for ongdngolu.org emails
+export const messages = mysqlTable("messages", {
+  id: serial("id").primaryKey(),
+  userId: int("user_id").notNull(),
+  fromEmail: varchar("from_email", { length: 255 }).notNull(),
+  toEmail: varchar("to_email", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  body: text("body"),
+  htmlBody: text("html_body"),
+  status: mysqlEnum("status", ["draft", "sent", "received", "read", "unread", "archived", "trash"]).default("received").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  messageType: mysqlEnum("message_type", ["email", "internal", "system"]).default("email").notNull(),
+  relatedType: varchar("related_type", { length: 50 }),
+  relatedId: int("related_id"),
+  attachmentCount: int("attachment_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
