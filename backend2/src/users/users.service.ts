@@ -23,6 +23,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { MailAccountsService } from "../mail-accounts/mail-accounts.service";
 import { RealtimePermissionsPublisher } from "../realtime/realtime-permissions-publisher.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -33,6 +34,7 @@ export class UsersService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtimePermissions: RealtimePermissionsPublisher,
     private readonly audit: AuditService,
+    private readonly mailAccounts: MailAccountsService,
   ) {}
 
   async findAll(query: Record<string, string>) {
@@ -177,21 +179,43 @@ export class UsersService {
 
     if (existing.length) throw new ConflictException("Username already exists");
 
+    const reservedEmailRows = await this.db
+      .select({ email: users.email })
+      .from(users)
+      .where(like(users.email, `%@ongdngolu.org`));
+
+    const mailbox = await this.mailAccounts.createEmployeeMailbox({
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      password: dto.password,
+      reservedEmails: reservedEmailRows.map((row) => row.email).filter((email): email is string => Boolean(email)),
+    });
+
     const hash = await bcrypt.hash(dto.password, 10);
 
-    const [result] = await this.db.insert(users).values({
-      ...dto,
-      password: hash,
-      joinDate: dto.joinDate ? new Date(dto.joinDate) : null,
-      leaveDate: dto.leaveDate ? new Date(dto.leaveDate) : null,
-      createdAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    });
+    let result: { insertId?: number | bigint };
+    try {
+      [result] = await this.db.insert(users).values({
+        ...dto,
+        email: mailbox?.email ?? dto.email,
+        password: hash,
+        joinDate: dto.joinDate ? new Date(dto.joinDate) : null,
+        leaveDate: dto.leaveDate ? new Date(dto.leaveDate) : null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+    } catch (error) {
+      if (mailbox?.accountId) {
+        await this.mailAccounts.deleteMailbox(mailbox.accountId);
+      }
+      throw error;
+    }
 
     const newId = Number(result.insertId);
     await this.audit.log("admin.user.created", `user:${newId}`, ctx, {
       username: dto.username,
       roleId: dto.roleId,
+      generatedEmail: mailbox?.email,
     });
 
     return this.findOne(newId);

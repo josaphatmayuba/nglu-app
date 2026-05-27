@@ -27,6 +27,12 @@ export const env = {
     mailbox: process.env.IMAP_MAILBOX || "INBOX",
     tlsRejectUnauthorized: process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
+  stalwart: {
+    jmapUrl: process.env.STALWART_JMAP_URL || "http://mail.ongdngolu.org:8088/jmap",
+    adminUser: process.env.STALWART_ADMIN_USER || process.env.SMTP_USER || "",
+    adminPass: process.env.STALWART_ADMIN_PASS || process.env.SMTP_PASS || "",
+    domain: process.env.STALWART_DOMAIN || "ongdngolu.org",
+  },
   redis: {
     enabled: process.env.REDIS_ENABLED !== "false",
     url: process.env.REDIS_URL || "",

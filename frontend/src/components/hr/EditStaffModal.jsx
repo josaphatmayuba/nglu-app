@@ -146,8 +146,12 @@ export default function EditStaffModal({ user, designations, departments, onClos
             )}
           </div>
           <div className="grid grid-cols-2 gap-x-4">
-            <Form.Item name="email" label="Email">
-              <Input type="email" />
+            <Form.Item
+              name="email"
+              label="Email"
+              extra={isCreate ? "Généré automatiquement avec le prénom et le nom." : undefined}
+            >
+              <Input type="email" disabled={isCreate} placeholder={isCreate ? "prenom.nom@ongdngolu.org" : undefined} />
             </Form.Item>
             {!isCreate && (
               <Form.Item name="phone" label="Téléphone">
