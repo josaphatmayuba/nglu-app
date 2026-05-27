@@ -42,6 +42,11 @@ try {
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  test: {
+    environment: "jsdom",
+    globals: true,
+    include: ["src/**/*.{spec,test}.{js,jsx,ts,tsx}"],
+  },
   plugins: [react()],
   base: "/",
   define: {

@@ -20,6 +20,11 @@ This project follows:
   - Added `scripts/check-realtime-deploy-contract.mjs` to validate Redis in local/dev/prod compose files, `/api/events/me` frontend SSE path, nginx `/api/events/` buffering rules, and the production marketing/CRM/API routing contract.
   - Documented shared-data Docker and nginx validation in `REALTIME_SHARED_DATA_CONTRACT.md`.
 
+- SCRUM-25: Realtime shared-data test coverage.
+  - Added backend Jest coverage for `data.updated` event building/validation, data publisher Redis fallback behavior, EventBus delivery, and scope filtering.
+  - Added frontend Vitest coverage for `data.updated` handlers, debounce, BroadcastChannel propagation, stale marking, and realtime connection status.
+  - Added backend/frontend test scripts and dev test dependencies required to run the suites.
+
 - SCRUM-165: **Fix — Immobilier: erreur "Validation failed (numeric string is expected)" lors de la suppression d'un locataire**
   - `TenantsPanel.jsx`: conversion explicite de `tenant.id` en entier via `parseInt(String(tenant.id), 10)` avant l'appel `deleteCustomer`
   - Garde ajoutée: si l'ID n'est pas un entier positif valide, affiche un message d'erreur sans appeler l'API
