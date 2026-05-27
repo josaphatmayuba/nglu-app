@@ -2,8 +2,16 @@
 
 **Date**: 2026-05-26  
 **Status**: Ready to Start  
-**Total Duration**: 13-14 semaines (Scénario optimisé)  
-**Jira Epics**: SCRUM-192 (FarmOS), SCRUM-191 (Mobile)
+**Total Duration**: 12 weeks optimized (3-4 developers)  
+**Jira Epics**: SCRUM-192 (Backend), SCRUM-191 (Frontend SPA), SCRUM-200 (CRM Integration), SCRUM-199 (Mobile Flutter)
+
+### **Architecture Summary**
+
+- **FarmOS**: Completely separate from CRM (new repository, new PostgreSQL database)
+- **Authentication**: Shared JWT token (same secret) — login via CRM, valid on FarmOS
+- **Integration**: Sidebar menu link in CRM → opens FarmOS SPA in new tab/window
+- **Mobile**: Native Flutter app (iOS/Android), not web wrapper, same auth & sync logic
+- **Databases**: CRM uses MySQL (backend2), FarmOS uses PostgreSQL (farmos-backend)
 
 ---
 
@@ -38,90 +46,131 @@
 
 ### **SEMAINES 1-3: FarmOS Backend (SCRUM-192)**
 
-#### Semaine 1: Database Schema
-- **Jira**: SCRUM-193
-- **Fichiers à créer**:
+#### Week 1: Database Schema (SCRUM-193)
+- **New Service**: `farmos-backend` (NestJS, separate repository)
+- **Database**: PostgreSQL (separate from CRM's MySQL)
+- **Files to Create**:
   ```
-  backend2/
-    ├─ migrations/
-    │   ├─ create_animals_table.sql
-    │   ├─ create_treatments_table.sql
-    │   ├─ create_medicines_table.sql
-    │   ├─ create_sales_table.sql
-    │   └─ create_reproduction_events_table.sql
-    └─ src/
-        └─ farmos/
-            └─ schemas/
-                ├─ animal.schema.ts
-                ├─ treatment.schema.ts
-                └─ ...
+  farmos-app/
+    └─ backend/
+        ├─ src/
+        │   ├─ database/
+        │   │   ├─ schema.ts          (Drizzle ORM schema)
+        │   │   └─ migrations/
+        │   │       ├─ 0001_animals.sql
+        │   │       ├─ 0002_treatments.sql
+        │   │       ├─ 0003_medicines.sql
+        │   │       ├─ 0004_sales.sql
+        │   │       └─ 0005_farm_expenses.sql
+        │   └─ app.module.ts
+        ├─ docker-compose.yml        (PostgreSQL 15+)
+        └─ migrations/
   ```
-- **Tâches**:
-  - [ ] Drizzle migrations (animals, treatments, medicines, sales, reproductionEvents)
-  - [ ] Create tables: `farmos_animals`, `farmos_treatments`, `farmos_medicines`, `farmos_sales`, `farmos_farm_expenses`
-  - [ ] Add foreign keys to `farms` table (multi-tenancy)
-  - [ ] Run migrations on dev DB
-  - [ ] Verify schema with `SHOW TABLES;`
+- **Tasks**:
+  - [ ] Create `farmos-app` repository (separate from nglu-app)
+  - [ ] Setup PostgreSQL locally with Docker Compose
+  - [ ] Create Drizzle schema: animals, treatments, medicines, sales, farm_expenses
+  - [ ] Add foreign keys: animals.farm_id, treatments.animal_id, sales.animal_id, etc.
+  - [ ] Run migrations: `drizzle-kit generate` → apply to PostgreSQL
+  - [ ] Verify schema: `\dt` in psql shows all tables
+  - [ ] Document schema in FARMOS_JIRA_STORIES.md (already done ✅)
 
-#### Weeks 2-3: Backend API Module
-- **Jira**: SCRUM-194
-- **Architecture**:
+#### Weeks 2-3: Backend API Module (SCRUM-194)
+- **Service**: `farmos-backend` (NestJS, PostgreSQL)
+- **Structure**:
   ```
-  backend2/src/farmos/
-    ├─ farmos.module.ts         (imports, exports)
-    ├─ farmos.service.ts        (CRUD logic)
-    ├─ farmos.controller.ts      (routes: /farmos/*)
-    ├─ dto/
-    │   ├─ create-animal.dto.ts
-    │   ├─ create-treatment.dto.ts
-    │   └─ ...
-    └─ entities/
-        ├─ animal.entity.ts
-        ├─ treatment.entity.ts
-        └─ ...
+  farmos-app/
+    └─ backend/src/
+        ├─ farmos/                   (main module)
+        │   ├─ animals/
+        │   │   ├─ animals.module.ts
+        │   │   ├─ animals.service.ts
+        │   │   ├─ animals.controller.ts
+        │   │   └─ dto/
+        │   ├─ treatments/
+        │   ├─ medicines/
+        │   ├─ sales/
+        │   └─ farm-expenses/
+        ├─ auth/
+        │   ├─ jwt.guard.ts           (verify JWT from CRM)
+        │   └─ jwt.strategy.ts
+        ├─ database/
+        │   └─ database.module.ts     (Drizzle + PostgreSQL)
+        ├─ app.module.ts
+        └─ main.ts
   ```
-- **Endpoints to Implement**:
+- **API Endpoints** (see FARMOS_JIRA_STORIES.md for full specs):
   ```
-  POST   /farmos/animals           → Create animal
-  GET    /farmos/animals           → List all
-  GET    /farmos/animals/:id       → Get single
-  PATCH  /farmos/animals/:id       → Update
-  DELETE /farmos/animals/:id       → Delete
+  POST   /animals                 → Create animal
+  GET    /animals                 → List (paginated)
+  GET    /animals/:id             → Get single + related data
+  PATCH  /animals/:id             → Update
+  DELETE /animals/:id             → Soft-delete
   
-  POST   /farmos/treatments        → Record treatment
-  GET    /farmos/treatments?animalId=X → Filter by animal
+  POST   /treatments              → Record treatment/vaccine
+  GET    /treatments?animalId=X   → Filter by animal
   
-  POST   /farmos/medicines         → Add medicine stock
-  PATCH  /farmos/medicines/:id     → Update stock
+  POST   /medicines               → Add medicine batch
+  PATCH  /medicines/:id           → Update stock
+  GET    /medicines               → List inventory
   
-  POST   /farmos/sales             → Record sale
-  GET    /farmos/sales             → List sales
+  POST   /sales                   → Record animal sale
+  GET    /sales                   → List with filters
   
-  POST   /farmos/farm-expenses     → Record expense
-  GET    /farmos/farm-expenses     → List expenses (for auto-sync)
+  POST   /farm-expenses           → Record expense (triggers sync)
+  GET    /farm-expenses           → List (for CRM visibility)
   ```
-- **Tâches**:
-  - [ ] Create `FarmosModule` in `app.module.ts`
-  - [ ] Implement `FarmosService` with Drizzle ORM
-  - [ ] Implement `FarmosController` with `@UseGuards(JwtAuthGuard)`
-  - [ ] Add DTOs with validation (@IsNumber, @IsString, etc.)
-  - [ ] Test endpoints with Postman (local)
-  - [ ] Add error handling (404 if animal not found, etc.)
+- **Authentication**:
+  - `JwtAuthGuard` on all routes (verify token from CRM)
+  - Token claims: `{ sub, email, farmId, role }`
+  - Same JWT secret as CRM backend2
+- **Tasks**:
+  - [ ] Create `FarmosModule` with all sub-modules
+  - [ ] Implement all Services with Drizzle ORM + PostgreSQL
+  - [ ] Implement all Controllers with `@UseGuards(JwtAuthGuard)`
+  - [ ] Create DTOs with validation (class-validator)
+  - [ ] Error handling: proper HTTP status codes + messages
+  - [ ] Add JWT strategy (validate token from Authorization header)
+  - [ ] Test with Postman: all endpoints (with valid JWT token)
+  - [ ] Document endpoints in OpenAPI/Swagger
 
-#### Semaine 3: Auto-Sync to CRM
-- **Task**: `FarmOS: Auto-sync to CRM Comptabilité`
-- **Logic**:
+#### Week 3: Auto-Sync to CRM (SCRUM-195, part 1)
+- **Integration**: FarmOS expenses → CRM transactions
+- **Flow**:
   ```
-  POST /farmos/farm-expenses { amount: 500, currency: 'MAD', description: 'Medication' }
-    ↓ (auto-trigger)
-    ├─ Create CRM Transaction: { leaseId: null, amount: -500, type: 'farmos-expense' }
-    ├─ Insert into `transactions` table
-    └─ Return { success: true, transactionId: 123 }
+  User records animal treatment in FarmOS:
+    POST /treatments
+    └─ { animalId, type: 'vaccine', cost: 500 }
+  
+  farmos-backend (PostgreSQL):
+    ├─ Insert treatment record
+    └─ If cost > 0: call backend2 integration endpoint
+    
+  Backend2 Integration Endpoint (MySQL):
+    POST /property-management/farmos/sync-expense
+    └─ Auth: JWT token (same secret as farmos-backend)
+    ├─ Create CRM Transaction: { type: 'farmos-expense', amount: -500 }
+    ├─ Insert into MySQL transactions table
+    └─ Return { success: true, transactionId }
+  
+  farmos-backend:
+    ├─ Store response transactionId
+    ├─ Update treatment record: `transaction_id = 123`
+    └─ Return to frontend
+  
+  Result:
+    ✅ Expense visible in farmos-backend (PostgreSQL)
+    ✅ Transaction visible in CRM (MySQL)
   ```
-- **Tâches**:
-  - [ ] In `FarmosService.createExpense()`: call `TransactionsService.createTransaction()`
-  - [ ] Create relationship: `farmos_farm_expenses.transaction_id` → `transactions.id`
-  - [ ] Test: Create expense → verify transaction appears in CRM
+- **Tasks**:
+  - [ ] In `farmos-backend` TreatmentsService: detect when cost > 0
+  - [ ] Call backend2 REST endpoint: `POST http://backend2-url/property-management/farmos/sync-expense`
+  - [ ] Include JWT token in Authorization header
+  - [ ] Store returned transactionId in farmos_treatments.transaction_id
+  - [ ] In `farmos-backend`: create new endpoint `POST /farmos/sync-expense` (called by farmos-backend)
+  - [ ] In `backend2`: verify JWT token origin (farmos-backend service account)
+  - [ ] Add error handling: retry if backend2 unreachable, queue for later sync
+  - [ ] Test: Create treatment with cost → verify in both databases
 
 ### **WEEKS 4-6: CRM Mobile Phase 1 + FarmOS Frontend Start**
 
@@ -150,20 +199,46 @@
   - [ ] Verify buttons ≥ 48px × 48px touch target
   - [ ] Verify spacing ≥ 44px between clickable elements
 
-#### Phase 1 + FarmOS Frontend (Weeks 5-6)
-- **Parallel**: Start converting mockup to React
+#### Weeks 5-6: FarmOS Frontend Start (SCRUM-191)
+- **New Repository**: `farmos-app` (separate from `nglu-app`)
+- **Setup**:
   ```
-  frontend/src/components/farmos/
-    ├─ FarmosLayout.jsx
-    ├─ Animals/
-    │   ├─ AnimalList.jsx
-    │   ├─ AnimalDetail.jsx
-    │   └─ AnimalModal.jsx
-    ├─ Treatments/
-    ├─ Medicines/
-    ├─ Sales/
-    └─ ...
+  farmos-app/
+    ├─ frontend/                 (React SPA)
+    │   ├─ src/
+    │   │   ├─ components/
+    │   │   │   ├─ Identification/
+    │   │   │   ├─ QuickEntry/
+    │   │   │   ├─ Animals/
+    │   │   │   ├─ History/
+    │   │   │   └─ Layout.jsx
+    │   │   ├─ services/
+    │   │   │   ├─ farmos-api.js    (calls farmos-backend /farmos/*)
+    │   │   │   ├─ crm-api.js       (calls backend2 /property-management for integration)
+    │   │   │   └─ auth.js          (JWT from localStorage, shared with CRM)
+    │   │   └─ App.jsx
+    │   └─ package.json
+    │
+    └─ backend/                  (NestJS, separate service)
+        ├─ src/
+        │   ├─ farmos/
+        │   │   ├─ animals/
+        │   │   ├─ treatments/
+        │   │   ├─ sales/
+        │   │   └─ ...
+        │   ├─ auth/             (verify JWT)
+        │   ├─ database/         (Drizzle + PostgreSQL)
+        │   └─ app.module.ts
+        ├─ docker-compose.yml    (PostgreSQL)
+        └─ package.json
   ```
+- **Tasks**:
+  - [ ] Initialize `farmos-app` repo (separate from nglu-app)
+  - [ ] Create frontend React structure (copy from mockup)
+  - [ ] Create backend NestJS structure (use schema from SCRUM-193)
+  - [ ] Setup Docker PostgreSQL locally
+  - [ ] Configure JWT verification in farmos-backend (share secret with CRM)
+  - [ ] Test: Auth token from CRM login works on FarmOS endpoints
 
 ### **WEEKS 7-11: CRM Mobile Phase 2-3 + FarmOS Frontend Complete**
 
@@ -265,47 +340,139 @@
 
 ---
 
-## 🏗️ Architecture: FarmOS Backend
+## 🏗️ Architecture: Separate FarmOS Stack
+
+### **Deployment Model**
+
+Three **independent apps** with shared authentication:
 
 ```
-FarmOS (Nuevo Proyecto, Separado)
-    ↓ (API REST)
-    ├─ POST /farmos/animals
-    ├─ POST /farmos/treatments
-    ├─ POST /farmos/farm-expenses
-    └─ GET /farmos/sales
-          ↓
-    backend2 (NestJS)
-          ↓
-    ├─ Farmos Service (CRUD, auto-accounting)
-    ├─ Transactions Service (auto-create from expenses)
-    └─ MySQL Database (shared)
-          ↓
-    CRM Comptabilité Module
-    └─ Transactions visible in CRM
-
-Frontend FarmOS (React)
-    ↓ (Calls)
-    └─ Backend2 /farmos/* endpoints
-          ↓
-    CRM Layout + Auth
+┌─────────────────────────────────────────────────────────┐
+│                   FRONTEND LAYER                        │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  1. CRM SPA (React)                                     │
+│     ├─ Dashboard, Comptabilité, Immobilier, Clients    │
+│     ├─ Sidebar menu: Lien "→ FarmOS"                   │
+│     └─ API: backend2 (MySQL/NestJS)                    │
+│                                                         │
+│  2. FarmOS SPA (React, Separate)                        │
+│     ├─ Identification, QuickEntry, Animals, History    │
+│     ├─ API: farmos-backend (PostgreSQL/NestJS)         │
+│     └─ JWT: Shared token from CRM auth                 │
+│                                                         │
+│  3. Mobile Apps (Flutter, iOS/Android)                 │
+│     ├─ Same features as FarmOS SPA                     │
+│     ├─ Native integrations: Camera, GPS, offline       │
+│     └─ JWT: Same auth token as web                     │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│                  BACKEND LAYER                          │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  CRM Backend (backend2)                                 │
+│  ├─ NestJS + Drizzle ORM                               │
+│  ├─ MySQL (legacy CRM data)                            │
+│  ├─ Routes: /property-management, /transaction, etc.   │
+│  └─ Auth: JWT sign/verify                              │
+│                                                         │
+│  FarmOS Backend (New Service)                           │
+│  ├─ NestJS + Drizzle ORM                               │
+│  ├─ PostgreSQL (animals, treatments, sales, etc.)      │
+│  ├─ Routes: /animals, /treatments, /sales, etc.        │
+│  └─ Auth: JWT verify (same secret as CRM)              │
+│                                                         │
+│  **Integration Endpoint** (in backend2)                 │
+│  ├─ `POST /property-management/payments/reminder`      │
+│  ├─ Auto-sync: FarmOS expenses → CRM transactions      │
+│  └─ Cross-service calls (REST or internal)             │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
 ```
+
+### **Authentication Flow**
+
+```
+User logs in via CRM SPA
+    ↓
+CRM Backend (backend2) generates JWT token
+    └─ Claims: { sub, email, farmId, role }
+    └─ Secret: SHARED_JWT_SECRET (env var)
+
+Token stored in browser localStorage
+    ↓
+User navigates to FarmOS SPA
+    ↓
+FarmOS SPA sends request with Authorization header
+    ↓
+FarmOS Backend validates JWT (same secret)
+    └─ If valid: process request
+    └─ If invalid: return 401
+```
+
+### **Data Integration**
+
+Farm expenses → Auto-sync to CRM transactions:
+
+```
+User records expense in FarmOS:
+    POST /animals/treatments
+    └─ { animalId, description, cost: 500 }
+
+FarmOS Backend:
+    ├─ Insert into farmos_animals_treatments (PostgreSQL)
+    └─ If expense type: POST to backend2 integration endpoint
+              ↓
+Backend2 Integration Endpoint:
+    ├─ Verify FarmOS token validity
+    ├─ Create CRM Transaction: { amount: -500, type: 'farmos-expense' }
+    ├─ Insert into MySQL transactions table
+    └─ Return { success: true, transactionId }
+
+Result:
+    └─ Expense visible in both FarmOS and CRM Comptabilité
+```
+
+### **Database Separation**
+
+| Data | Database | Service | Tables |
+|------|----------|---------|--------|
+| CRM Core | MySQL | backend2 | customers, transactions, properties, leases, etc. |
+| FarmOS | PostgreSQL | farmos-backend | animals, treatments, medicines, sales, farm_expenses, etc. |
+| Auth | Shared Secret | Both Services | JWT secret in environment variables |
 
 ---
 
 ## 📊 Jira Tickets Reference
 
-| ID | Titre | Durée | Status |
-|---|---|---|---|
-| **SCRUM-192** | **FarmOS Epic** | - | Backlog |
-| SCRUM-193 | Database schema | 3d | Todo |
-| SCRUM-194 | Backend NestJS CRUD | 10d | Todo |
-| SCRUM-195 | Frontend React | 10d | Todo |
-| **SCRUM-191** | **CRM Mobile Epic** | - | Backlog |
-| SCRUM-196 | Phase 1: Responsive | 10d | Todo |
-| SCRUM-197 | Phase 2: Offline-First | 15d | Todo |
-| SCRUM-198 | Phase 3: Performance | 10d | Todo |
-| SCRUM-199 | Phase 4: Flutter | 20d | Todo |
+See **FARMOS_JIRA_STORIES.md** for complete story definitions with acceptance criteria, tasks, and database schema examples.
+
+### **Epic Structure**
+
+| ID | Titre | Type | Estimation | Status |
+|---|---|---|---|---|
+| **SCRUM-192** | **FarmOS Backend** | Epic | 18 points | Backlog |
+| SCRUM-193 | Database Schema | Story | 5 pts | Todo |
+| SCRUM-194 | CRUD API Endpoints | Story | 8 pts | Todo |
+| SCRUM-195 | Auto-Sync to CRM | Story | 5 pts | Todo |
+| **SCRUM-191** | **FarmOS Frontend React SPA** | Epic | 64 points | Backlog |
+| SCRUM-196 | Identification Module | Story | 13 pts | Todo |
+| SCRUM-197 | QuickEntry Module | Story | 21 pts | Todo |
+| SCRUM-198 | History & Animals | Story | 13 pts | Todo |
+| SCRUM-199 | Integration & Offline Sync | Story | 17 pts | Todo |
+| **SCRUM-200** | **CRM Integration** | Epic | 8 points | Backlog |
+| SCRUM-201 | Sidebar Menu & Navigation | Story | 3 pts | Todo |
+| SCRUM-202 | Shared JWT Auth | Story | 5 pts | Todo |
+| **SCRUM-199** | **Mobile Flutter Apps** | Epic | 34 points | Backlog |
+| SCRUM-203 | Setup & Navigation | Story | 5 pts | Todo |
+| SCRUM-204 | Scanner Integration | Story | 8 pts | Todo |
+| SCRUM-205 | Mobile Forms | Story | 8 pts | Todo |
+| SCRUM-206 | Sync & Offline Mode | Story | 8 pts | Todo |
+| SCRUM-207 | Native Integrations | Story | 5 pts | Todo |
+
+**Total**: 98 points / ~12 weeks / 4 developers
 
 ---
 
