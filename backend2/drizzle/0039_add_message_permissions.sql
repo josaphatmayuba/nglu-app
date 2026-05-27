@@ -1,13 +1,13 @@
 -- Add message permissions if they don't already exist
-INSERT IGNORE INTO permission (name, type, createdAt, updatedAt) VALUES
+INSERT IGNORE INTO permission (name, type, created_at, updated_at) VALUES
   ('create-message', 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('readAll-message', 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('readSingle-message', 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('update-message', 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
   ('delete-message', 'email', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 --> statement-breakpoint
--- Assign message permissions to admin role (roleId = 1)
-INSERT IGNORE INTO rolePermission (roleId, permissionId, createdAt, updatedAt)
+-- Assign message permissions to system roles
+INSERT IGNORE INTO rolePermission (roleId, permissionId, created_at, updated_at)
 SELECT r.id, p.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 FROM role r
 JOIN permission p ON p.name IN ('create-message', 'readAll-message', 'readSingle-message', 'update-message', 'delete-message')
