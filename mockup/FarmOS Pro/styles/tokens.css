@@ -1,0 +1,257 @@
+/* ============================================================
+   LexiBridge — Colors & Typography Tokens
+   Canadian Legal AI · Bilingual FR/EN · Civil Law + Common Law
+   ============================================================ */
+
+/* Google Fonts: Newsreader (editorial serif), Geist (UI sans),
+   JetBrains Mono (citations/code). Self-host these later for prod. */
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---------- INK (primary text / brand neutral) ---------- */
+  --ink-950: #07101F;   /* deepest, headings on parchment */
+  --ink-900: #0E1626;   /* brand ink, default text */
+  --ink-800: #16243C;
+  --ink-700: #1F2A44;
+  --ink-600: #36425A;
+  --ink-500: #5A6479;   /* body secondary */
+  --ink-400: #8590A4;
+  --ink-300: #B3BCCB;
+  --ink-200: #D6DCE5;
+  --ink-100: #E7EBF1;
+  --ink-50:  #F2F4F8;
+
+  /* ---------- PARCHMENT (warm surface, "paper") ---------- */
+  --parchment-50:  #FBF8F2;  /* default app background */
+  --parchment-100: #F5EFE2;  /* subtle surface tint */
+  --parchment-200: #ECE3CE;
+  --parchment-300: #DCCFAE;
+
+  --paper: #FFFFFF;          /* pure white cards on parchment */
+
+  /* ---------- OXBLOOD (brand accent — Quebec/heritage red) ---------- */
+  --oxblood-900: #4A0F18;
+  --oxblood-800: #5E1620;
+  --oxblood-700: #7A1F2B;    /* primary brand accent */
+  --oxblood-600: #94293A;
+  --oxblood-500: #B0394A;
+  --oxblood-300: #E5A8B1;
+  --oxblood-100: #F5DCE0;
+  --oxblood-50:  #FBEEF0;
+
+  /* ---------- SCORE 3D (the product's signature triplet) ---------- */
+  /* 🟡 Autorité — court hierarchy / authority weight */
+  --autorite-900: #6B4A0E;
+  --autorite-700: #A87E1A;
+  --autorite-500: #C8941F;
+  --autorite-300: #E8C56C;
+  --autorite-100: #F6E7B5;
+  --autorite-50:  #FBF3D9;
+
+  /* 🔵 Pertinence — semantic match to the case at hand */
+  --pertinence-900: #102B57;
+  --pertinence-700: #1F4682;
+  --pertinence-500: #2B5FA8;
+  --pertinence-300: #7DA0CC;
+  --pertinence-100: #C9D7EA;
+  --pertinence-50:  #E4ECF5;
+
+  /* 🟢 Solidité — strength / standing of the precedent */
+  --solidite-900: #1B3D26;
+  --solidite-700: #2B5C3A;
+  --solidite-500: #3D7A4E;
+  --solidite-300: #8FB89A;
+  --solidite-100: #CFE2D4;
+  --solidite-50:  #E7F0EA;
+
+  /* ---------- SEMANTIC ---------- */
+  --success: var(--solidite-500);
+  --success-bg: var(--solidite-50);
+  --warning: var(--autorite-500);
+  --warning-bg: var(--autorite-50);
+  --danger: var(--oxblood-500);
+  --danger-bg: var(--oxblood-50);
+  --info: var(--pertinence-500);
+  --info-bg: var(--pertinence-50);
+
+  /* ---------- FUNCTIONAL ---------- */
+  --bg-app:        var(--parchment-50);
+  --bg-surface:    var(--paper);
+  --bg-sunken:     var(--parchment-100);
+  --bg-inverse:    var(--ink-900);
+
+  --fg-1: var(--ink-900);    /* primary text */
+  --fg-2: var(--ink-600);    /* secondary */
+  --fg-3: var(--ink-400);    /* tertiary, meta */
+  --fg-inverse: var(--parchment-50);
+  --fg-accent:  var(--oxblood-700);
+  --fg-link:    var(--pertinence-700);
+
+  --border-1: var(--ink-100);    /* default hairline */
+  --border-2: var(--ink-200);    /* stronger */
+  --border-strong: var(--ink-300);
+  --border-accent: var(--oxblood-700);
+
+  /* ---------- TYPOGRAPHY FAMILIES ---------- */
+  --font-display: 'Newsreader', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+  --font-sans:    'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Type scale — modest, editorial */
+  --fs-display: 64px;   --lh-display: 1.05;  --tk-display: -0.025em;
+  --fs-h1: 44px;        --lh-h1: 1.1;        --tk-h1: -0.02em;
+  --fs-h2: 32px;        --lh-h2: 1.18;       --tk-h2: -0.015em;
+  --fs-h3: 24px;        --lh-h3: 1.25;       --tk-h3: -0.01em;
+  --fs-h4: 19px;        --lh-h4: 1.35;       --tk-h4: -0.005em;
+  --fs-body: 16px;      --lh-body: 1.55;     --tk-body: 0;
+  --fs-body-sm: 14px;   --lh-body-sm: 1.5;
+  --fs-meta: 12px;      --lh-meta: 1.4;      --tk-meta: 0.02em;
+  --fs-overline: 11px;  --lh-overline: 1.2;  --tk-overline: 0.12em;
+
+  /* ---------- SPACING ---------- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
+  --s-10: 72px;
+
+  /* ---------- RADII ---------- */
+  --r-xs: 3px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-pill: 999px;
+
+  /* ---------- SHADOWS (soft, editorial — never glowy) ---------- */
+  --shadow-1: 0 1px 0 rgba(14, 22, 38, 0.04), 0 1px 2px rgba(14, 22, 38, 0.06);
+  --shadow-2: 0 1px 0 rgba(14, 22, 38, 0.04), 0 4px 10px -2px rgba(14, 22, 38, 0.08);
+  --shadow-3: 0 2px 4px rgba(14, 22, 38, 0.06), 0 12px 28px -8px rgba(14, 22, 38, 0.12);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --shadow-focus: 0 0 0 3px rgba(43, 95, 168, 0.25); /* pertinence-500 @ 25% */
+
+  /* ---------- MOTION ---------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+}
+
+/* ============================================================
+   SEMANTIC TYPE — apply via class or element
+   ============================================================ */
+
+html { font-family: var(--font-sans); color: var(--fg-1); background: var(--bg-app); }
+body { margin: 0; font-size: var(--fs-body); line-height: var(--lh-body); -webkit-font-smoothing: antialiased; }
+
+.lb-display, h1.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--tk-display);
+  color: var(--ink-950);
+  font-optical-sizing: auto;
+}
+
+.lb-h1, h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  letter-spacing: var(--tk-h1);
+  color: var(--ink-950);
+  margin: 0;
+}
+
+.lb-h2, h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: var(--tk-h2);
+  color: var(--ink-900);
+  margin: 0;
+}
+
+.lb-h3, h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  letter-spacing: var(--tk-h3);
+  color: var(--ink-900);
+  margin: 0;
+}
+
+.lb-h4, h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-h4);
+  line-height: var(--lh-h4);
+  color: var(--ink-900);
+  margin: 0;
+}
+
+.lb-body, p {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.lb-body-sm { font-size: var(--fs-body-sm); line-height: var(--lh-body-sm); }
+
+.lb-meta {
+  font-family: var(--font-sans);
+  font-size: var(--fs-meta);
+  line-height: var(--lh-meta);
+  letter-spacing: var(--tk-meta);
+  color: var(--fg-2);
+}
+
+.lb-overline {
+  font-family: var(--font-sans);
+  font-size: var(--fs-overline);
+  line-height: var(--lh-overline);
+  letter-spacing: var(--tk-overline);
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.lb-citation, code, .lb-mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: -0.005em;
+  color: var(--ink-800);
+}
+
+/* Italic in legal usage: case names, foreign terms */
+.lb-case {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  color: var(--ink-900);
+}
+
+/* Bilingual helper — small caps style language pill */
+.lb-lang-tag {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-xs);
+  padding: 1px 4px;
+}
