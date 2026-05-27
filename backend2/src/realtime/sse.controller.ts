@@ -21,6 +21,7 @@ import type { Database } from "../database/types";
 import { DATA_UPDATED_EVENT_TYPE } from "./data-update-event";
 import { EventBusService, type RealtimeEvent } from "./event-bus.service";
 import { PERMISSIONS_UPDATED_EVENT_TYPE } from "./permissions-update-event";
+import { scopeAllowsUser, type UserScopeContext } from "./scope-guard";
 
 const HEARTBEAT_MS = 25_000;
 
@@ -99,7 +100,8 @@ export class SseController {
   ): boolean {
     if (event.type === DATA_UPDATED_EVENT_TYPE) {
       const e = event as import("./data-update-event").DataUpdatedEvent;
-      return e.permissions.some((p) => userPerms.has(p));
+      const user: UserScopeContext = { userId, roleId, permissions: userPerms };
+      return scopeAllowsUser(e.scope, e.permissions, user);
     }
     if (event.type === PERMISSIONS_UPDATED_EVENT_TYPE) {
       const e = event as import("./permissions-update-event").PermissionsUpdatedEvent;

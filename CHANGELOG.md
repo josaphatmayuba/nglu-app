@@ -12,6 +12,12 @@ This project follows:
 
 ### Added
 
+- SCRUM-22: **Realtime — Phase E: Scopes et confidentialité des données**
+  - Nouveau fichier `backend2/src/realtime/scope-guard.ts` : définit les 4 types de scopes (`global`, `per_property`, `per_account`, `per_department`) et la fonction `scopeAllowsUser(scope, requiredPermissions, user)`.
+  - V1 : filtrage par permissions (role-based). Les TODOs dans le code documentent précisément où ajouter les vérifications fines par propriété/compte/département quand les tables d'affectation existeront.
+  - `SseController.canReceive()` utilise maintenant `scopeAllowsUser` au lieu d'inliner la vérification de permission.
+  - Comportement V1 identique à avant (pas de régression) ; abstraction en place pour les phases suivantes.
+
 - SCRUM-85: **HR Hub — Fonctionnalités manquantes complétées**
   - **Nouvel employé** : Bouton wiring + modal `EditStaffModal` en mode create (`mode="create"`). Champ password obligatoire (min 12 chars, lettre + chiffre). Appel `POST /user/register` au lieu de `PATCH /user/:id`.
   - **Filtres** : Dropdowns Select Ant Design pour département et statut dans l'onglet Employés. Filtre appliqué sur `filteredStaff` combinant recherche texte + département + statut.
