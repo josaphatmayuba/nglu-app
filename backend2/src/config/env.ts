@@ -39,7 +39,7 @@ export const env = {
     host: process.env.REDIS_HOST || "",
     port: Number(process.env.REDIS_PORT || 6379),
     password: process.env.REDIS_PASSWORD || "",
-    userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "user-updates",
+    userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "permissions-updates",
     dataUpdatesChannel: process.env.REDIS_CHANNEL_DATA_UPDATES || "data-updates",
   },
   db: {

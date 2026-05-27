@@ -3,6 +3,20 @@
 # Launch: docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: nglu_prod_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - nglu_prod_network
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend2:
     build:
       context: ./backend2
@@ -26,10 +40,10 @@ services:
       DB_WAIT_DELAY_MS: 1500
       JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
-      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
+      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-permissions-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
       SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -50,6 +64,9 @@ services:
     networks:
       - nglu_prod_network
     mem_limit: 180m
+    depends_on:
+      redis:
+        condition: service_healthy
 
   middleware:
     build:

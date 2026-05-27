@@ -16,6 +16,22 @@ services:
     networks:
       - nglu_network
 
+  # Redis - Realtime Pub/Sub for SSE permission/data updates
+  redis:
+    image: redis:7-alpine
+    container_name: nglu_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nglu_network
+
   # Backend - Laravel API (deprecated, historical only).
   # Not started by default. Use:
   # docker compose --profile legacy-laravel up -d backend
@@ -69,10 +85,10 @@ services:
       APP_URL: http://localhost:3000
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
-      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
+      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-permissions-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
       SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -97,6 +113,7 @@ services:
       - /app/node_modules
     depends_on:
       - mysql
+      - redis
     networks:
       - nglu_network
     command: npm run docker:dev

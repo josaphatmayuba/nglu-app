@@ -84,7 +84,16 @@ Environment variables:
 
 - `REDIS_URL`
 - `REDIS_ENABLED` defaults to `true`; set `false` to disable Redis Pub/Sub without blocking business writes.
-- `REDIS_HOST`
-- `REDIS_PORT`
+- `REDIS_HOST` defaults to `redis` in the Docker stacks.
+- `REDIS_PORT` defaults to `6379`.
 - `REDIS_PASSWORD`
-- `REDIS_CHANNEL_USER_UPDATES` defaults to `user-updates`
+- `REDIS_CHANNEL_USER_UPDATES` defaults to `permissions-updates`
+- `REDIS_CHANNEL_DATA_UPDATES` defaults to `data-updates`
+
+Docker stacks:
+
+- Local `docker-compose.yml` includes an internal Redis service exposed on `localhost:6379` for development tools.
+- Dev `docker-compose.dev.yml` includes `nglu_dev_redis` on the private dev network.
+- Prod `docker-compose.prod.yml` includes `nglu_prod_redis` on the private prod network.
+
+Nginx routes SSE through `/api/events/` and disables response buffering there. The frontend SSE client must keep using `/api/events/me` so the same build works behind dev and prod nginx.
