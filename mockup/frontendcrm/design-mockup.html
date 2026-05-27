@@ -3890,7 +3890,7 @@
                   <i data-lucide="calendar-range" class="w-3.5 h-3.5"></i> Calendrier
                 </button>
               </div>
-              <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm">
+              <button class="flex items-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm" data-wired="mockup-add-payment" onclick="openMockupAddPayment()">
                 <i data-lucide="plus" class="w-4 h-4"></i>
                 <span>Enregistrer paiement</span>
               </button>
@@ -3934,6 +3934,16 @@
                       <td class="px-4 py-3 text-ink-400 italic text-xs">—</td>
                       <td class="px-4 py-3"><span class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>En retard</span></td>
                       <td class="px-4 py-3 text-right font-medium text-red-600">CDF 1,200,000</td>
+                      <td class="px-4 py-3"><div class="flex items-center gap-2 justify-end">
+                        <button class="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition shadow-sm" title="Enregistrer paiement">
+                          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                          <span>Payer</span>
+                        </button>
+                        <button class="flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-medium transition shadow-sm" title="Envoyer rappel">
+                          <i data-lucide="bell" class="w-4 h-4"></i>
+                          <span>Rappel</span>
+                        </button>
+                      </div></td>
                     </tr>
                     <tr class="hover:bg-ink-50 transition">
                       <td class="px-4 py-3 font-mono text-xs text-ink-700">#QUIT-2026-0141</td>
@@ -4826,6 +4836,309 @@
           <!-- ============= /VIEW: CALENDAR ============= -->
         </div>
         <!-- ============= /PANEL: MAINTENANCE ============= -->
+
+        <!-- ============= MOCKUP MODALS ============= -->
+        <!-- Modal: Ajouter un paiement (formulaire complet) -->
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden" id="mockup-add-payment-modal">
+          <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-ink-200 p-4 md:p-6 flex items-center justify-between">
+              <h2 class="text-lg md:text-xl font-semibold text-ink-900">Ajouter un paiement</h2>
+              <button class="text-ink-400 hover:text-ink-700 p-1" title="Fermer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+            <div class="p-4 md:p-6 space-y-4">
+
+              <!-- Bail à sélectionner -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Sélectionner un bail</label>
+                <select class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                  <option value="">-- Choisir un bail --</option>
+                  <option value="bail-142">#BAIL-2026-0142 · Paul Lumumba · Lemba Salongo (1,200,000 CDF/mois)</option>
+                  <option value="bail-141">#BAIL-2026-0141 · Marie Kabongo · Tombalbaye A-203 (850,000 CDF/mois)</option>
+                  <option value="bail-140">#BAIL-2026-0140 · Sysconnect SARL · Tour Wagenia (2,400,000 CDF/mois)</option>
+                  <option value="bail-139">#BAIL-2026-0139 · Christine Tshisekedi · Galerie Présidentielle (1,800,000 CDF/mois)</option>
+                </select>
+              </div>
+
+              <!-- Montant du paiement -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Montant du paiement</label>
+                <div class="flex gap-2">
+                  <input type="number" placeholder="0" class="flex-1 px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                  <div class="relative w-24">
+                    <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-ink-400"></i>
+                    <input type="text" value="CDF" class="w-full pl-7 pr-2 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                  </div>
+                </div>
+                <div class="text-xs text-ink-500 mt-1">Montant attendu selon le bail</div>
+              </div>
+
+              <!-- Date de paiement -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Date de paiement</label>
+                <input type="date" class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </div>
+
+              <!-- Méthode de paiement -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Méthode de paiement</label>
+                <select class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                  <option value="">-- Choisir une méthode --</option>
+                  <option selected>Virement bancaire</option>
+                  <option>Chèque</option>
+                  <option>Espèces</option>
+                  <option>Mobile Money</option>
+                  <option>Virement Orange Money</option>
+                  <option>Autre</option>
+                </select>
+              </div>
+
+              <!-- Numéro de référence -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1.5">Numéro de référence</label>
+                <input type="text" placeholder="ex: TRF-2026-05-001" class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </div>
+
+              <!-- Date de confirmation (optionnel) -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1.5">Date de confirmation</label>
+                <input type="date" class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </div>
+
+              <!-- Notes -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1.5">Notes</label>
+                <textarea rows="2" placeholder="Détails du paiement, commentaires..." class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 resize-none"></textarea>
+              </div>
+
+              <!-- Checkbox: Marquer comme reçu -->
+              <div class="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <input type="checkbox" id="mark-received" class="w-4 h-4 text-emerald-600 rounded focus:ring-2 focus:ring-emerald-500" checked />
+                <label for="mark-received" class="text-xs font-medium text-emerald-700">Marquer comme confirmé/reçu</label>
+              </div>
+
+              <!-- Actions -->
+              <div class="pt-3 border-t border-ink-200 flex items-center gap-2 justify-end">
+                <button class="px-4 py-2 bg-white border border-ink-200 text-ink-700 rounded-lg text-sm font-medium hover:bg-ink-50 transition">
+                  Annuler
+                </button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                  <i data-lucide="plus" class="w-4 h-4"></i>
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Enregistrer paiement (pré-rempli depuis ligne EN RETARD) -->
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden" id="mockup-payment-modal">
+          <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-ink-200 p-4 md:p-6 flex items-center justify-between">
+              <h2 class="text-lg md:text-xl font-semibold text-ink-900">Enregistrer paiement</h2>
+              <button class="text-ink-400 hover:text-ink-700 p-1" title="Fermer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+            <div class="p-4 md:p-6 space-y-4">
+
+              <!-- Bail pré-rempli (read-only) -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Bail</label>
+                <div class="px-3 py-2.5 bg-ink-50 border border-ink-200 rounded-lg text-sm text-ink-700 flex items-center gap-2">
+                  <i data-lucide="file-text" class="w-4 h-4 text-ink-400"></i>
+                  <div class="min-w-0">
+                    <div class="font-mono text-xs">#BAIL-2023-014</div>
+                    <div class="text-xs text-ink-500 truncate">Paul Lumumba · Lemba Salongo</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Montant pré-rempli -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Montant</label>
+                <div class="flex gap-2">
+                  <input type="number" value="1200000" class="flex-1 px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm font-semibold focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                  <select class="px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                    <option selected>CDF</option>
+                    <option>USD</option>
+                    <option>EUR</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Date de paiement -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Date de paiement</label>
+                <input type="date" value="2026-05-26" class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </div>
+
+              <!-- Méthode de paiement -->
+              <div>
+                <label class="block text-xs font-medium text-red-600 mb-1.5">* Méthode de paiement</label>
+                <select class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                  <option>Virement bancaire</option>
+                  <option>Chèque</option>
+                  <option>Espèces</option>
+                  <option>Mobile Money</option>
+                  <option>Autre</option>
+                </select>
+              </div>
+
+              <!-- Numéro de référence (optionnel) -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1.5">Numéro de référence</label>
+                <input type="text" placeholder="ex: TRF-2026-05-001" class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </div>
+
+              <!-- Notes optionnelles -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1.5">Notes</label>
+                <textarea rows="2" placeholder="Détails du paiement..." class="w-full px-3 py-2.5 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 resize-none"></textarea>
+              </div>
+
+              <!-- Récapitulatif -->
+              <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                  <span class="text-xs text-ink-600">Montant à enregistrer:</span>
+                  <span class="text-sm font-semibold text-emerald-700">CDF 1,200,000</span>
+                </div>
+                <div class="text-xs text-emerald-600 flex items-center gap-1">
+                  <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+                  Résoudra le paiement en retard
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="pt-3 border-t border-ink-200 flex items-center gap-2 justify-end">
+                <button class="px-4 py-2 bg-white border border-ink-200 text-ink-700 rounded-lg text-sm font-medium hover:bg-ink-50 transition">
+                  Annuler
+                </button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition shadow-sm flex items-center gap-2">
+                  <i data-lucide="check" class="w-4 h-4"></i>
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal: Créer un nouveau bail -->
+        <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden" id="mockup-lease-modal">
+          <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-ink-200 p-4 md:p-6 flex items-center justify-between">
+              <h2 class="text-lg md:text-xl font-semibold text-ink-900">Créer</h2>
+              <button class="text-ink-400 hover:text-ink-700 p-1" title="Fermer">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+            <div class="p-4 md:p-6 space-y-4">
+
+              <!-- Row 1: Bien, Unité, Locataire -->
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-red-600 mb-1">* Bien</label>
+                  <select class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500">
+                    <option>Résidence Tombalbaye</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-red-600 mb-1">* Unité</label>
+                  <select class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500">
+                    <option>A-203</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-red-600 mb-1">* Locataire</label>
+                  <select class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500">
+                    <option>Marie Kabongo</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 2: Statut, Début, Fin -->
+              <div class="grid grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-ink-600 mb-1">Statut</label>
+                  <select class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500">
+                    <option>Actif</option>
+                    <option>Inactif</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-red-600 mb-1">* Début</label>
+                  <input type="date" value="2026-06-01" placeholder="aaaa-mm-jj" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-ink-600 mb-1">Fin</label>
+                  <input type="date" value="2029-05-31" placeholder="aaaa-mm-jj" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+                </div>
+              </div>
+
+              <!-- Row 3: Prochaine facture, Cycle -->
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-ink-600 mb-1">Prochaine facture</label>
+                  <input type="date" value="2026-07-01" placeholder="aaaa-mm-jj" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-ink-600 mb-1">Cycle</label>
+                  <select class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500">
+                    <option>Mensuel</option>
+                    <option>Trimestriel</option>
+                    <option>Annuel</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 4: Loyer, Devise -->
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-red-600 mb-1">* Loyer</label>
+                  <input type="number" value="850000" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-ink-600 mb-1">Devise</label>
+                  <div class="relative">
+                    <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-ink-400"></i>
+                    <input type="text" placeholder="Devise par défaut" class="w-full pl-7 pr-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 5: Dépôt -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Dépôt</label>
+                <input type="number" placeholder="0" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+              </div>
+
+              <!-- Row 6: Relevé compteur entrée -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Relevé compteur entrée</label>
+                <input type="text" placeholder="" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500" />
+              </div>
+
+              <!-- Row 7: Conditions / clauses -->
+              <div>
+                <label class="block text-xs font-medium text-ink-600 mb-1">Conditions / clauses</label>
+                <textarea rows="3" placeholder="" class="w-full px-2 py-2 bg-white border border-ink-200 rounded text-xs focus:outline-none focus:border-brand-500"></textarea>
+              </div>
+
+              <!-- Actions -->
+              <div class="pt-3 border-t border-ink-200 flex items-center gap-2 justify-between">
+                <button class="px-4 py-2 bg-white border border-ink-200 text-ink-700 rounded text-sm font-medium hover:bg-ink-50 transition">
+                  Annuler
+                </button>
+                <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded text-sm font-medium transition shadow-sm flex items-center gap-2">
+                  <i data-lucide="check" class="w-4 h-4"></i>
+                  Créer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- ============= /MOCKUP MODALS ============= -->
 
       </section>
       <!-- ============= /PAGE: IMMOBILIER ============= -->
@@ -7970,6 +8283,109 @@
           const title = btn.getAttribute('title') || '';
           const label = txt || title || 'Action';
           comptaToast(`Action : ${label}`, 'info');
+        });
+      });
+    })();
+
+    // ============= MOCKUP MODALS - Global Functions =============
+    window.openMockupAddPayment = function() {
+      const modal = document.getElementById('mockup-add-payment-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+    };
+
+    // ============= MOCKUP MODALS =============
+    (function setupMockupModals() {
+      const paymentModal = document.getElementById('mockup-payment-modal');
+      const addPaymentModal = document.getElementById('mockup-add-payment-modal');
+      const leaseModal = document.getElementById('mockup-lease-modal');
+
+      // Show "add payment" modal when clicking "+ Enregistrer paiement" button (top right of payments panel)
+      const immoPage = document.querySelector('section[data-page="immobilier"]');
+      if (immoPage) {
+        // Find the button in the payments panel toolbar (has both plus icon and "Enregistrer paiement" text)
+        const paymentsPanel = immoPage.querySelector('[data-immo-panel="paiements"]');
+        if (paymentsPanel) {
+          paymentsPanel.querySelectorAll('button').forEach(btn => {
+            const txt = btn.textContent.trim();
+            const hasPlus = btn.querySelector('i[data-lucide="plus"]');
+            if (txt.includes('Enregistrer paiement') && hasPlus) {
+              btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (addPaymentModal) {
+                  addPaymentModal.classList.remove('hidden');
+                  document.body.style.overflow = 'hidden';
+                }
+              });
+            }
+          });
+        }
+      }
+
+      // Show payment modal when clicking "Payer" button on overdue payment row
+      document.querySelectorAll('[title="Enregistrer paiement"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (paymentModal) {
+            paymentModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+          }
+        });
+      });
+
+      // Show lease modal when clicking "Nouveau bail" button
+      document.querySelectorAll('button').forEach(btn => {
+        if (btn.textContent.includes('Nouveau bail')) {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (leaseModal) {
+              leaseModal.classList.remove('hidden');
+              document.body.style.overflow = 'hidden';
+            }
+          });
+        }
+      });
+
+      // Close modals on X button or Annuler button
+      [paymentModal, addPaymentModal, leaseModal].forEach(modal => {
+        if (!modal) return;
+        modal.querySelectorAll('button').forEach(btn => {
+          const txt = btn.textContent.trim();
+          const hasXIcon = btn.querySelector('i[data-lucide="x"]');
+          if (txt === 'Annuler' || hasXIcon) {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              modal.classList.add('hidden');
+              document.body.style.overflow = '';
+            });
+          }
+        });
+
+        // Close modal on backdrop click
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+          }
+        });
+
+        // Success action handlers
+        modal.querySelectorAll('button').forEach(btn => {
+          const txt = btn.textContent.trim();
+          if (txt === 'Enregistrer' || txt === 'Créer le bail' || txt === 'Ajouter') {
+            btn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              let message = 'Action complétée ✓';
+              if (txt === 'Enregistrer') message = 'Paiement enregistré ✓';
+              else if (txt === 'Créer le bail') message = 'Bail créé ✓';
+              else if (txt === 'Ajouter') message = 'Paiement ajouté ✓';
+              comptaToast(message, 'success');
+              modal.classList.add('hidden');
+              document.body.style.overflow = '';
+            });
+          }
         });
       });
     })();

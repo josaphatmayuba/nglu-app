@@ -120,26 +120,29 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
                 {compactMoney(payment.amount, payment.currencySymbol)}
               </strong>
               {paymentStatus === "danger" && (onQuickPay || onReminder) && (
-                <span style={{ display: "flex", gap: "4px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                <span style={{ display: "flex", gap: "8px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                   {onQuickPay && (
-                    <Tooltip title="Enregistrer paiement">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<PlusCircle size={14} />}
-                        onClick={() => onQuickPay(payment)}
-                      />
-                    </Tooltip>
+                    <Button
+                      type="primary"
+                      danger
+                      size="small"
+                      icon={<PlusCircle size={16} />}
+                      onClick={() => onQuickPay(payment)}
+                      title="Enregistrer paiement"
+                    >
+                      Payer
+                    </Button>
                   )}
                   {onReminder && (
-                    <Tooltip title="Envoyer rappel">
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<Bell size={14} />}
-                        onClick={() => onReminder(payment)}
-                      />
-                    </Tooltip>
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<Bell size={16} />}
+                      onClick={() => onReminder(payment)}
+                      title="Envoyer rappel"
+                    >
+                      Rappel
+                    </Button>
                   )}
                 </span>
               )}
