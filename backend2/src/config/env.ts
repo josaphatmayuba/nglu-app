@@ -12,11 +12,11 @@ export const env = {
   // MUST be set explicitly per environment in docker-compose / .env.
   appUrl: process.env.APP_URL || "http://localhost:3000",
   smtp: {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    host: process.env.SMTP_HOST || "mail.ongdngolu.org",
     port: Number(process.env.SMTP_PORT || 587),
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
-    from: process.env.SMTP_FROM || "noreply@nglu.app",
+    from: process.env.SMTP_FROM || "noreply@ongdngolu.org",
     tlsRejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
   imap: {

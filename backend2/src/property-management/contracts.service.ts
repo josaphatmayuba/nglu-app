@@ -1,9 +1,7 @@
 import * as crypto from "crypto";
 import { GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { desc, eq, ne, sql } from "drizzle-orm";
-import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
-import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -16,6 +14,8 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { SystemEmailService } from "../system-email/system-email.service";
+import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
@@ -57,6 +57,7 @@ export class ContractsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly templates: ContractTemplatesService,
+    private readonly emails: SystemEmailService,
   ) {}
 
   async createContract(dto: CreateContractDto, createdBy?: number) {
@@ -234,11 +235,12 @@ export class ContractsService {
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
-    if (contract.tenantEmail && env.smtp.user) {
+    if (contract.tenantEmail) {
       await this.sendEmail(
         contract.tenantEmail,
         "Votre contrat de bail est prêt à être signé",
         this.signingEmailHtml(contract.tenantName ?? "", signingUrl),
+        "contract_signature",
       );
     }
 
@@ -290,11 +292,12 @@ export class ContractsService {
 
     await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
 
-    if (contract.tenantEmail && env.smtp.user) {
+    if (contract.tenantEmail) {
       await this.sendEmail(
         contract.tenantEmail,
         "Contrat signé — confirmation",
         `<p>Bonjour ${contract.tenantName ?? ""},</p><p>Votre contrat a bien été signé électroniquement. Merci.</p>`,
+        "contract_signed",
       );
     }
 
@@ -720,9 +723,14 @@ export class ContractsService {
     });
   }
 
-  private async sendEmail(to: string, subject: string, html: string) {
-    const transporter = nodemailer.createTransport(smtpTransportOptions());
-    await transporter.sendMail({ from: env.smtp.from, to, subject, html });
+  private async sendEmail(to: string, subject: string, html: string, type: SystemEmailType = "notification") {
+    await this.emails.send({
+      to,
+      subject,
+      html,
+      type,
+      relatedType: "real-estate-contract",
+    });
   }
 
   private signingEmailHtml(tenantName: string, url: string): string {

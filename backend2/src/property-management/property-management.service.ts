@@ -3,11 +3,9 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import * as nodemailer from "nodemailer";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
-import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -29,6 +27,7 @@ import {
 import type { Database } from "../database/types";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
+import { SystemEmailService } from "../system-email/system-email.service";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -59,6 +58,7 @@ export class PropertyManagementService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtimeData: RealtimeDataPublisher,
+    private readonly emails: SystemEmailService,
   ) {}
 
   async dashboard() {
@@ -806,10 +806,6 @@ export class PropertyManagementService {
   }
 
   async sendPaymentReminder(leaseId: number) {
-    if (!env.smtp.user) {
-      return { message: "success", note: "SMTP not configured, email not sent" };
-    }
-
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
@@ -840,10 +836,15 @@ export class PropertyManagementService {
       <p>Cordialement,<br>L'équipe de gestion immobilière</p>
     `;
 
-    const transporter = nodemailer.createTransport(smtpTransportOptions());
-
-    await transporter.sendMail({ from: env.smtp.from, to: lease.tenantEmail, subject, html });
-    return { message: "success" };
+    const result = await this.emails.send({
+      to: lease.tenantEmail,
+      subject,
+      html,
+      type: "payment_reminder",
+      relatedType: "real-estate-lease",
+      relatedId: leaseId,
+    });
+    return { message: "success", email: result };
   }
 
   maintenance() {

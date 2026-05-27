@@ -34,6 +34,7 @@ import { RolePermissionsModule } from "./role-permissions/role-permissions.modul
 import { RolesModule } from "./roles/roles.module";
 import { SaleInvoicesModule } from "./sale-invoices/sale-invoices.module";
 import { SuppliersModule } from "./suppliers/suppliers.module";
+import { SystemEmailModule } from "./system-email/system-email.module";
 import { TransactionTypesModule } from "./transaction-types/transaction-types.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { UomModule } from "./uom/uom.module";
@@ -75,6 +76,7 @@ import { UsersModule } from "./users/users.module";
     RolesModule,
     SaleInvoicesModule,
     SuppliersModule,
+    SystemEmailModule,
     TransactionsModule,
     TransactionTypesModule,
     UomModule,

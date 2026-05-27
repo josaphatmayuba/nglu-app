@@ -704,6 +704,22 @@ export const emailTemplates = mysqlTable("email_templates", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// SCRUM-76: outbound system email audit trail
+export const systemEmailLogs = mysqlTable("system_email_logs", {
+  id: serial("id").primaryKey(),
+  emailType: varchar("email_type", { length: 100 }).notNull(),
+  recipient: varchar("recipient", { length: 255 }).notNull(),
+  sender: varchar("sender", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 500 }).notNull(),
+  status: mysqlEnum("status", ["pending", "sent", "failed", "skipped"]).default("pending").notNull(),
+  relatedType: varchar("related_type", { length: 100 }),
+  relatedId: varchar("related_id", { length: 100 }),
+  providerMessageId: varchar("provider_message_id", { length: 255 }),
+  errorMessage: varchar("error_message", { length: 1000 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // SCRUM-146: invoice templates
 export const invoiceTemplates = mysqlTable("invoice_templates", {
   id: serial("id").primaryKey(),

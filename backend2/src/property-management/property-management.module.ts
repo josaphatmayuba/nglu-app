@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { SystemEmailModule } from "../system-email/system-email.module";
 import { ContractTemplatesController } from "./contract-templates.controller";
 import { ContractTemplatesService } from "./contract-templates.service";
 import { ContractsPublicController } from "./contracts-public.controller";
@@ -9,7 +10,7 @@ import { PropertyManagementService } from "./property-management.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SystemEmailModule],
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,

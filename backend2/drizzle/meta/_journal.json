@@ -162,6 +162,13 @@
       "when": 1779877030441,
       "tag": "0022_lumpy_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1780102800000,
+      "tag": "0040_add_system_email_logs",
+      "breakpoints": true
     }
   ]
 }
