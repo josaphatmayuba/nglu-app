@@ -1,7 +1,7 @@
-import { Bell, ChevronLeft, ChevronRight, PlusCircle } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, PlusCircle, MoreVertical } from "lucide-react";
 import moment from "moment";
 import { useMemo, useState } from "react";
-import { Button, Tooltip } from "antd";
+import { Button, Dropdown } from "antd";
 
 import { avatarColors, paymentMethodLabels } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
@@ -120,30 +120,33 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
                 {compactMoney(payment.amount, payment.currencySymbol)}
               </strong>
               {paymentStatus === "danger" && (onQuickPay || onReminder) && (
-                <span style={{ display: "flex", gap: "8px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                  {onQuickPay && (
+                <span style={{ display: "flex", justifyContent: "flex-end", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <Dropdown
+                    menu={{
+                      items: [
+                        ...(onQuickPay ? [{
+                          key: "pay",
+                          label: "Enregistrer paiement",
+                          icon: <PlusCircle size={14} />,
+                          onClick: () => onQuickPay(payment),
+                        }] : []),
+                        ...(onReminder ? [{
+                          key: "remind",
+                          label: "Envoyer un rappel",
+                          icon: <Bell size={14} />,
+                          onClick: () => onReminder(payment),
+                        }] : []),
+                      ],
+                    }}
+                    trigger={["click"]}
+                  >
                     <Button
-                      type="primary"
-                      danger
+                      type="text"
                       size="small"
-                      icon={<PlusCircle size={16} />}
-                      onClick={() => onQuickPay(payment)}
-                      title="Enregistrer paiement"
-                    >
-                      Payer
-                    </Button>
-                  )}
-                  {onReminder && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<Bell size={16} />}
-                      onClick={() => onReminder(payment)}
-                      title="Envoyer rappel"
-                    >
-                      Rappel
-                    </Button>
-                  )}
+                      icon={<MoreVertical size={16} />}
+                      className="text-ink-400 hover:text-ink-600"
+                    />
+                  </Dropdown>
                 </span>
               )}
             </div>

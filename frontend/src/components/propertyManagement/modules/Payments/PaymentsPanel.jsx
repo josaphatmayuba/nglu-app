@@ -304,6 +304,8 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
           payments={paymentsView}
           overduePayments={overduePayments}
           upcomingPayments={upcomingPayments}
+          onQuickPay={handleQuickPay}
+          onReminder={handleSendReminder}
         />
       )}
       {paymentView === "calendrier" && (
