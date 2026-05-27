@@ -74,6 +74,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
+      SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@ongdngolu.org}
     ports:
       - "8001:8001"
     volumes:
@@ -103,7 +108,7 @@ services:
       VITE_APP_API_NODE: ${VITE_APP_API_NODE:-http://localhost:8001}
     networks:
       - nglu_network
-    command: npm run dev
+    command: npm run dev:local
 
   # Marketing site - Vue + Vite public website
   # Local URL: http://localhost:3002

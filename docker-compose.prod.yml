@@ -31,6 +31,11 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
+      SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@ongdngolu.org}
     networks:
       - nglu_prod_network
     mem_limit: 180m
