@@ -21,11 +21,21 @@ export const sessions = mysqlTable("sessions", {
   jti:       varchar("jti", { length: 36 }).primaryKey(),
   userId:    bigint("user_id", { mode: "number" }).notNull(),
   roleId:    bigint("role_id", { mode: "number" }).notNull(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   ip:        varchar("ip", { length: 100 }),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   revoked:   tinyint("revoked").default(0).notNull(),
+});
+
+export const organizations = mysqlTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  slug: varchar("slug", { length: 255 }).notNull().unique(),
+  status: varchar("status", { length: 50 }).default("active").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });
 
 export const subAccounts = mysqlTable("subAccount", {
@@ -58,6 +68,7 @@ export const transactionTypes = mysqlTable("transaction_types", {
 
 export const customers = mysqlTable("customer", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   profileImage: varchar("profileImage", { length: 255 }),
   firstName: varchar("firstName", { length: 255 }),
   lastName: varchar("lastName", { length: 255 }),
@@ -168,6 +179,7 @@ export const discounts = mysqlTable("discount", {
 
 export const transactions = mysqlTable("transaction", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   date: datetime("date").notNull(),
   debitId: bigint("debitId", { mode: "number" }).notNull(),
   creditId: bigint("creditId", { mode: "number" }).notNull(),
@@ -183,6 +195,7 @@ export const transactions = mysqlTable("transaction", {
 
 export const realEstateProperties = mysqlTable("real_estate_properties", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   code: varchar("code", { length: 255 }),
   propertyType: varchar("property_type", { length: 255 }).default("building").notNull(),
@@ -203,6 +216,7 @@ export const realEstateProperties = mysqlTable("real_estate_properties", {
 
 export const realEstateUnits = mysqlTable("real_estate_units", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   propertyId: bigint("property_id", { mode: "number" }).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   unitType: varchar("unit_type", { length: 255 }).default("apartment").notNull(),
@@ -223,6 +237,7 @@ export const realEstateUnits = mysqlTable("real_estate_units", {
 
 export const realEstateLeases = mysqlTable("real_estate_leases", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   reference: varchar("reference", { length: 255 }).notNull(),
   propertyId: bigint("property_id", { mode: "number" }).notNull(),
   unitId: bigint("unit_id", { mode: "number" }).notNull(),
@@ -244,6 +259,7 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
 
 export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   leaseId: bigint("lease_id", { mode: "number" }).notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
   transactionId: bigint("transaction_id", { mode: "number" }),
@@ -258,6 +274,7 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
 
 export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance_requests", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   propertyId: bigint("property_id", { mode: "number" }).notNull(),
   unitId: bigint("unit_id", { mode: "number" }),
   title: varchar("title", { length: 255 }).notNull(),
@@ -273,6 +290,7 @@ export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance
 
 export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_costs", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   ticketId: bigint("ticket_id", { mode: "number" }).notNull(),
   type: varchar("type", { length: 50 }).default("service").notNull(),
   description: varchar("description", { length: 500 }).notNull(),
@@ -290,6 +308,7 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
 
 export const realEstateContracts = mysqlTable("real_estate_contracts", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   leaseId: bigint("lease_id", { mode: "number" }).notNull(),
   status: varchar("status", { length: 50 }).default("draft").notNull(),
   contractContent: text("contract_content"),
@@ -309,6 +328,7 @@ export const realEstateContracts = mysqlTable("real_estate_contracts", {
 
 export const realEstateContractTemplates = mysqlTable("real_estate_contract_templates", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   type: varchar("type", { length: 50 }).default("residential").notNull(),
   body: text("body").notNull(),
@@ -334,6 +354,7 @@ export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audi
 
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   firstName: varchar("firstName", { length: 255 }),
   lastName: varchar("lastName", { length: 255 }),
   username: varchar("username", { length: 255 }).notNull().unique(),
@@ -746,6 +767,7 @@ export const notificationPreferences = mysqlTable("notification_preferences", {
 
 export const products = mysqlTable("product", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   productThumbnailImage: varchar("productThumbnailImage", { length: 255 }),
   productSubCategoryId: bigint("productSubCategoryId", { mode: "number" }),
@@ -829,6 +851,7 @@ export const purchaseInvoiceProducts = mysqlTable("purchaseInvoiceProduct", {
 
 export const saleInvoices = mysqlTable("saleInvoice", {
   id: varchar("id", { length: 50 }).primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   date: datetime("date").notNull(),
   invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
   totalAmount: double("totalAmount").default(0).notNull(),
@@ -864,6 +887,7 @@ export const saleInvoiceProducts = mysqlTable("saleInvoiceProduct", {
 
 export const purchaseInvoices = mysqlTable("purchaseInvoice", {
   id: varchar("id", { length: 50 }).primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   date: datetime("date").notNull(),
   invoiceMemoNo: varchar("invoiceMemoNo", { length: 255 }),
   supplierMemoNo: varchar("supplierMemoNo", { length: 255 }),

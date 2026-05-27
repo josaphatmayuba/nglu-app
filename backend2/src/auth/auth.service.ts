@@ -56,11 +56,12 @@ export class AuthService {
     userId: number,
     roleId: number | undefined,
     roleName: string | undefined,
+    organizationId: number | undefined,
     ctx: AuditContext,
   ): Promise<{ accessToken: string; jti: string }> {
     const jti = randomUUID();
     const accessToken = this.jwtService.sign(
-      { sub: userId, roleId, role: roleName, jti },
+      { sub: userId, roleId, role: roleName, organizationId: organizationId ?? 1, jti },
       { secret: env.jwtSecret, expiresIn: "15m", algorithm: "HS256" },
     );
     const expiresAt = new Date(Date.now() + ACCESS_TTL_MS);
@@ -68,6 +69,7 @@ export class AuthService {
       jti,
       userId,
       roleId: roleId ?? 0,
+      organizationId: organizationId ?? 1,
       ip: ctx.ip ?? null,
       userAgent: ctx.userAgent ?? null,
       expiresAt,
@@ -130,7 +132,7 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
 
     const refreshToken = this.jwtService.sign(
       { sub: user.id, role: role?.name },
@@ -182,7 +184,7 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
 
     const refreshToken = this.jwtService.sign(
       { sub: user.id, role: role?.name },
@@ -229,7 +231,7 @@ export class AuthService {
     }
 
     const [user] = await this.db
-      .select({ id: users.id, roleId: users.roleId, refreshToken: users.refreshToken })
+      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, refreshToken: users.refreshToken })
       .from(users)
       .where(eq(users.id, payload.sub))
       .limit(1);
@@ -249,8 +251,8 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, ctx);
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
 
-    return { token: accessToken, roleId: role?.id, role: role?.name ?? null };
+    return { token: accessToken, roleId: role?.id, role: role?.name ?? null, organizationId: user.organizationId };
   }
 }
