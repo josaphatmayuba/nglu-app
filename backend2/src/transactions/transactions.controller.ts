@@ -30,6 +30,7 @@ export class TransactionsController {
 
   @ApiOperation({ summary: "Create an accounting transaction" })
   @ApiCreatedResponse({ description: "Created transaction" })
+  @Permissions("create-transaction")
   @Post()
   create(@Body() body: CreateTransactionDto) {
     return this.transactionsService.create(body);
@@ -37,6 +38,7 @@ export class TransactionsController {
 
   @ApiOperation({ summary: "List, search, or aggregate transactions" })
   @ApiOkResponse({ description: "Transaction result" })
+  @Permissions("readAll-transaction")
   @Get()
   findAll(@Query() query: TransactionQueryDto) {
     return this.transactionsService.findAll(query);
@@ -44,6 +46,7 @@ export class TransactionsController {
 
   @ApiOperation({ summary: "Get one transaction" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("readSingle-transaction", "readAll-transaction")
   @Get(":id")
   findOne(@Param("id", ParseIntPipe) id: number) {
     return this.transactionsService.findOne(id);

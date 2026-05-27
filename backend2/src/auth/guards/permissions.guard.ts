@@ -13,15 +13,17 @@ import { permissions, rolePermissions, roles } from "../../database/schema";
 import type { Database } from "../../database/types";
 import { PERMISSIONS_KEY } from "../decorators/permissions.decorator";
 
-const CACHE_TTL_MS = 30_000; // 30s — short enough to pick up grant changes quickly, long enough to dampen DB load
+const CACHE_TTL_MS = Number(process.env.PERMISSIONS_GUARD_CACHE_TTL_MS || 0);
 
 type AuthedUser = { sub?: number; roleId?: number; role?: string };
 
 type RoleCache = { perms: Set<string>; isSystem: boolean; expiresAt: number };
 
 /**
- * Caches the set of permission names and isSystem flag for each role.
- * Invalidated by TTL. Process-local (no shared cache between instances).
+ * Loads the current role permission set from the database by default.
+ * A short process-local cache can be enabled with PERMISSIONS_GUARD_CACHE_TTL_MS,
+ * but production keeps this at 0 so permission revocations are enforced
+ * immediately, even when the caller keeps using the same JWT.
  */
 const cache = new Map<number, RoleCache>();
 
@@ -64,7 +66,7 @@ export class PermissionsGuard implements CanActivate {
 
   private async roleData(roleId: number): Promise<{ isSystem: boolean; perms: Set<string> }> {
     const cached = cache.get(roleId);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (CACHE_TTL_MS > 0 && cached && cached.expiresAt > Date.now()) {
       return { isSystem: cached.isSystem, perms: cached.perms };
     }
 
@@ -83,7 +85,9 @@ export class PermissionsGuard implements CanActivate {
 
     const isSystem = roleRow?.isSystem === 1;
     const perms = new Set(permRows.map((r) => r.name));
-    cache.set(roleId, { isSystem, perms, expiresAt: Date.now() + CACHE_TTL_MS });
+    if (CACHE_TTL_MS > 0) {
+      cache.set(roleId, { isSystem, perms, expiresAt: Date.now() + CACHE_TTL_MS });
+    }
     return { isSystem, perms };
   }
 

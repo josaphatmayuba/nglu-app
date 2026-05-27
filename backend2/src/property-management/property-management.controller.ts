@@ -63,6 +63,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Property management dashboard totals" })
   @ApiOkResponse({ description: "Dashboard metrics" })
+  @Permissions("readAll-propertyManagement")
   @Get("dashboard")
   dashboard() {
     return this.propertyManagementService.dashboard();
@@ -70,6 +71,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "List active tenants from customers" })
   @ApiOkResponse({ description: "Tenant list" })
+  @Permissions("readAll-propertyManagement")
   @Get("tenants")
   tenants() {
     return this.propertyManagementService.tenants();
@@ -77,35 +79,41 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create a tenant customer with extended tenant details" })
   @ApiCreatedResponse({ description: "Created tenant" })
+  @Permissions("create-propertyManagement")
   @Post("tenants")
   createTenant(@Body() body: CreateTenantDto) {
     return this.propertyManagementService.createTenant(body);
   }
 
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
+  @Permissions("create-propertyManagement")
   @Post("onboarding")
   generateTenantOnboarding(@Body() body: GenerateTenantOnboardingDto) {
     return this.propertyManagementService.generateTenantOnboarding(body);
   }
 
   @ApiOperation({ summary: "List tenant onboarding dossiers" })
+  @Permissions("readAll-propertyManagement")
   @Get("onboarding")
   tenantOnboardingList() {
     return this.propertyManagementService.onboardingList();
   }
 
   @ApiOperation({ summary: "Admin update tenant onboarding draft" })
+  @Permissions("update-propertyManagement")
   @Put("onboarding/:id")
   updateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
     return this.propertyManagementService.saveOnboardingByAdmin(id, body);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("onboarding/:id")
   updateTenantOnboardingPatch(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
     return this.propertyManagementService.saveOnboardingByAdmin(id, body);
   }
 
   @ApiOperation({ summary: "Validate onboarding dossier and create tenant customer" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("onboarding/:id/validate")
   validateTenantOnboarding(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.validateOnboarding(id);
@@ -113,6 +121,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "List properties with unit counts" })
   @ApiOkResponse({ description: "Property list" })
+  @Permissions("readAll-propertyManagement")
   @Get("properties")
   properties() {
     return this.propertyManagementService.properties();
@@ -120,6 +129,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single property by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("properties/:id")
   findProperty(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findProperty(id);
@@ -158,6 +168,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "List rental units" })
+  @Permissions("readAll-propertyManagement")
   @Get("units")
   units() {
     return this.propertyManagementService.units();
@@ -165,6 +176,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single unit by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("units/:id")
   findUnit(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findUnit(id);
@@ -201,6 +213,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "List leases" })
+  @Permissions("readAll-propertyManagement")
   @Get("leases")
   leases() {
     return this.propertyManagementService.leases();
@@ -208,6 +221,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single lease by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("leases/:id")
   findLease(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findLease(id);
@@ -237,6 +251,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "List rent payments" })
+  @Permissions("readAll-propertyManagement")
   @Get("payments")
   payments() {
     return this.propertyManagementService.payments();
@@ -244,6 +259,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single rent payment by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("payments/:id")
   findPayment(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findPayment(id);
@@ -257,6 +273,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Send payment reminder email to tenant" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("payments/reminder")
   @HttpCode(200)
   sendPaymentReminder(@Body() body: { leaseId: number }) {
@@ -351,6 +368,7 @@ export class PropertyManagementController {
   // ── Contracts ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List all contracts" })
+  @Permissions("readAll-propertyManagement")
   @Get("contracts")
   listContracts() {
     return this.contractsService.listContracts();
@@ -358,12 +376,14 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single contract with audit log" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("contracts/:id")
   getContract(@Param("id", ParseIntPipe) id: number) {
     return this.contractsService.getContract(id);
   }
 
   @ApiOperation({ summary: "Create contract from a lease (auto-generates content)" })
+  @Permissions("create-propertyManagement")
   @Post("contracts")
   createContract(@Body() body: CreateContractDto, @Req() req: Request) {
     const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
@@ -372,6 +392,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Send contract for e-signature by email" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
   @Post("contracts/:id/send")
   @HttpCode(200)
   sendContract(@Param("id", ParseIntPipe) id: number) {
