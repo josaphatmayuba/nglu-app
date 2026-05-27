@@ -5,6 +5,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import * as nodemailer from "nodemailer";
 import { AuditService } from "../audit/audit.service";
 import { env } from "../config/env";
+import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import { passwordResetTokens, users } from "../database/schema";
 import type { Database } from "../database/types";
@@ -100,12 +101,7 @@ export class PasswordResetService {
       return;
     }
 
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      secure: env.smtp.port === 465,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    });
+    const transporter = nodemailer.createTransport(smtpTransportOptions());
 
     await transporter.sendMail({
       from: env.smtp.from,

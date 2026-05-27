@@ -3,6 +3,7 @@ import { GoneException, Inject, Injectable, NotFoundException } from "@nestjs/co
 import { desc, eq, ne, sql } from "drizzle-orm";
 import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
+import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -720,11 +721,7 @@ export class ContractsService {
   }
 
   private async sendEmail(to: string, subject: string, html: string) {
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    });
+    const transporter = nodemailer.createTransport(smtpTransportOptions());
     await transporter.sendMail({ from: env.smtp.from, to, subject, html });
   }
 

@@ -7,6 +7,7 @@ import * as nodemailer from "nodemailer";
 import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
+import { smtpTransportOptions } from "../config/smtp";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -839,11 +840,7 @@ export class PropertyManagementService {
       <p>Cordialement,<br>L'équipe de gestion immobilière</p>
     `;
 
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    });
+    const transporter = nodemailer.createTransport(smtpTransportOptions());
 
     await transporter.sendMail({ from: env.smtp.from, to: lease.tenantEmail, subject, html });
     return { message: "success" };
