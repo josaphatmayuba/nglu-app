@@ -127,6 +127,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create a property" })
   @ApiCreatedResponse({ description: "Created property" })
+  @Permissions("create-propertyManagement")
   @Post("properties")
   createProperty(@Body() body: CreatePropertyDto) {
     return this.propertyManagementService.createProperty(body);
@@ -134,11 +135,13 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Update a property" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
   @Put("properties/:id")
   updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
     return this.propertyManagementService.updateProperty(id, body);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("properties/:id")
   @Post("properties/:id")
   updatePropertyAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
@@ -168,17 +171,20 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Create a rental unit" })
+  @Permissions("create-propertyManagement")
   @Post("units")
   createUnit(@Body() body: CreateUnitDto) {
     return this.propertyManagementService.createUnit(body);
   }
 
   @ApiOperation({ summary: "Update a rental unit" })
+  @Permissions("update-propertyManagement")
   @Put("units/:id")
   updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
     return this.propertyManagementService.updateUnit(id, body);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("units/:id")
   @Post("units/:id")
   updateUnitAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
@@ -208,12 +214,14 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Create a lease" })
+  @Permissions("create-propertyManagement")
   @Post("leases")
   createLease(@Body() body: CreateLeaseDto) {
     return this.propertyManagementService.createLease(body);
   }
 
   @ApiOperation({ summary: "Update a lease" })
+  @Permissions("update-propertyManagement")
   @Put("leases/:id")
   updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto) {
     return this.propertyManagementService.updateLease(id, body);
@@ -221,6 +229,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Delete a lease" })
   @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
   @Delete("leases/:id")
   @HttpCode(200)
   deleteLease(@Param("id", ParseIntPipe) id: number) {
@@ -241,6 +250,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
+  @Permissions("create-propertyManagement")
   @Post("payments")
   createPayment(@Body() body: CreateRentPaymentDto) {
     return this.propertyManagementService.createPayment(body);
@@ -369,6 +379,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Delete a contract" })
+  @Permissions("delete-propertyManagement")
   @Delete("contracts/:id")
   @HttpCode(200)
   deleteContract(@Param("id", ParseIntPipe) id: number) {
