@@ -1,4 +1,4 @@
-import { Reply, Trash2, X } from 'lucide-react';
+import { Forward, Reply, ReplyAll, Trash2, X } from 'lucide-react';
 import { Button, Divider, Tooltip } from 'antd';
 import moment from 'moment';
 import './message-detail.css';
@@ -25,6 +25,9 @@ export default function MessageDetail({
   onMarkAsRead,
   onMarkAsUnread,
   onClose,
+  onReply,
+  onReplyAll,
+  onForward,
 }) {
   return (
     <div className="message-detail">
@@ -35,22 +38,14 @@ export default function MessageDetail({
         <div className="message-detail-actions">
           {!message.isRead && (
             <Tooltip title="Marquer comme lu">
-              <Button
-                type="text"
-                size="small"
-                onClick={() => onMarkAsRead(message.id)}
-              >
+              <Button type="text" size="small" onClick={() => onMarkAsRead(message.id)}>
                 Marquer lu
               </Button>
             </Tooltip>
           )}
           {message.isRead && (
             <Tooltip title="Marquer comme non lu">
-              <Button
-                type="text"
-                size="small"
-                onClick={() => onMarkAsUnread(message.id)}
-              >
+              <Button type="text" size="small" onClick={() => onMarkAsUnread(message.id)}>
                 Marquer non lu
               </Button>
             </Tooltip>
@@ -62,18 +57,13 @@ export default function MessageDetail({
               size="small"
               icon={<Trash2 size={16} />}
               onClick={() => {
-                if (confirm('Êtes-vous sûr ?')) {
+                if (confirm('Etes-vous sur ?')) {
                   onDelete(message.id);
                 }
               }}
             />
           </Tooltip>
-          <Button
-            type="text"
-            size="small"
-            icon={<X size={16} />}
-            onClick={onClose}
-          />
+          <Button type="text" size="small" icon={<X size={16} />} onClick={onClose} />
         </div>
       </div>
 
@@ -85,7 +75,7 @@ export default function MessageDetail({
           <span className="metadata-value">{message.fromEmail}</span>
         </div>
         <div className="metadata-row">
-          <span className="metadata-label">À :</span>
+          <span className="metadata-label">A :</span>
           <span className="metadata-value">{message.toEmail}</span>
         </div>
         <div className="metadata-row">
@@ -96,7 +86,7 @@ export default function MessageDetail({
         </div>
         {message.attachmentCount > 0 && (
           <div className="metadata-row">
-            <span className="metadata-label">Pièces jointes :</span>
+            <span className="metadata-label">Pieces jointes :</span>
             <span className="metadata-value">{message.attachmentCount}</span>
           </div>
         )}
@@ -117,13 +107,14 @@ export default function MessageDetail({
 
       {['received', 'read', 'unread'].includes(message.status) && (
         <div className="message-detail-reply">
-          <Button
-            type="primary"
-            icon={<Reply size={16} />}
-            block
-            disabled
-          >
-            Répondre
+          <Button type="primary" icon={<Reply size={16} />} onClick={() => onReply(message)}>
+            Repondre
+          </Button>
+          <Button icon={<ReplyAll size={16} />} onClick={() => onReplyAll(message)}>
+            Tous
+          </Button>
+          <Button icon={<Forward size={16} />} onClick={() => onForward(message)}>
+            Transferer
           </Button>
         </div>
       )}

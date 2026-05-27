@@ -9,8 +9,11 @@ import './messaging.css';
 
 export default function MessagingPanel() {
   const [messages, setMessages] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showCompose, setShowCompose] = useState(false);
+  const [composeInitialValues, setComposeInitialValues] = useState(null);
+  const [composeTitle, setComposeTitle] = useState('Composer un nouveau message');
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -51,7 +54,17 @@ export default function MessagingPanel() {
     }
   };
 
+  const fetchAccounts = async () => {
+    try {
+      const response = await axios.get('/messages/accounts');
+      setAccounts(response.data.data || []);
+    } catch (error) {
+      setAccounts([]);
+    }
+  };
+
   useEffect(() => {
+    fetchAccounts();
     fetchMessages();
   }, [status]);
 
@@ -109,6 +122,64 @@ export default function MessagingPanel() {
     }
   };
 
+  const openCompose = (initialValues = null, title = 'Composer un nouveau message') => {
+    setComposeInitialValues(initialValues);
+    setComposeTitle(title);
+    setShowCompose(true);
+  };
+
+  const closeCompose = () => {
+    setShowCompose(false);
+    setComposeInitialValues(null);
+    setComposeTitle('Composer un nouveau message');
+  };
+
+  const quotedBody = (msg) => {
+    const original = msg.body || msg.htmlBody || '';
+    return `\n\n--- Message original ---\nDe: ${msg.fromEmail}\nA: ${msg.toEmail}\nDate: ${msg.createdAt}\nObjet: ${msg.subject}\n\n${original}`;
+  };
+
+  const handleReply = (msg) => {
+    openCompose(
+      {
+        toEmail: msg.fromEmail,
+        subject: msg.subject?.startsWith('Re:') ? msg.subject : `Re: ${msg.subject}`,
+        body: quotedBody(msg),
+      },
+      'Repondre au message',
+    );
+  };
+
+  const handleReplyAll = (msg) => {
+    const currentAccount = accounts[0]?.email?.toLowerCase();
+    const recipients = [msg.fromEmail, msg.toEmail]
+      .join(';')
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item, index, all) => all.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index)
+      .filter((item) => item.toLowerCase() !== currentAccount);
+
+    openCompose(
+      {
+        toEmail: recipients.join('; '),
+        subject: msg.subject?.startsWith('Re:') ? msg.subject : `Re: ${msg.subject}`,
+        body: quotedBody(msg),
+      },
+      'Repondre a tous',
+    );
+  };
+
+  const handleForward = (msg) => {
+    openCompose(
+      {
+        subject: msg.subject?.startsWith('Fwd:') ? msg.subject : `Fwd: ${msg.subject}`,
+        body: quotedBody(msg),
+      },
+      'Transferer le message',
+    );
+  };
+
   const handleSyncInbox = async () => {
     setSyncing(true);
     try {
@@ -140,7 +211,7 @@ export default function MessagingPanel() {
           <Button
             type="primary"
             icon={<Plus size={16} />}
-            onClick={() => setShowCompose(true)}
+            onClick={() => openCompose()}
           >
             Nouveau message
           </Button>
@@ -150,8 +221,11 @@ export default function MessagingPanel() {
       {showCompose && (
         <div className="messaging-compose-container">
           <ComposeMessage
+            accounts={accounts}
+            initialValues={composeInitialValues}
+            title={composeTitle}
             onSend={handleSendMessage}
-            onCancel={() => setShowCompose(false)}
+            onCancel={closeCompose}
           />
         </div>
       )}
@@ -189,6 +263,9 @@ export default function MessagingPanel() {
                       onMarkAsRead={handleMarkAsRead}
                       onMarkAsUnread={handleMarkAsUnread}
                       onClose={() => setSelectedMessage(null)}
+                      onReply={handleReply}
+                      onReplyAll={handleReplyAll}
+                      onForward={handleForward}
                     />
                   )}
                 </div>

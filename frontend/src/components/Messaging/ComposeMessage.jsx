@@ -3,7 +3,7 @@ import { Button, Card, Divider, Form, Input, Space } from 'antd';
 import { Send, X } from 'lucide-react';
 import './compose-message.css';
 
-export default function ComposeMessage({ onSend, onCancel }) {
+export default function ComposeMessage({ onSend, onCancel, accounts = [], initialValues, title = 'Composer un nouveau message' }) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -11,6 +11,7 @@ export default function ComposeMessage({ onSend, onCancel }) {
     setLoading(true);
     try {
       await onSend({
+        fromEmail: values.fromEmail,
         toEmail: values.toEmail,
         subject: values.subject,
         body: values.body,
@@ -26,7 +27,7 @@ export default function ComposeMessage({ onSend, onCancel }) {
   return (
     <Card className="compose-message-card">
       <div className="compose-message-header">
-        <h3>Composer un nouveau message</h3>
+        <h3>{title}</h3>
         <Button
           type="text"
           icon={<X size={18} />}
@@ -41,7 +42,21 @@ export default function ComposeMessage({ onSend, onCancel }) {
         layout="vertical"
         onFinish={handleSubmit}
         requiredMark={false}
+        initialValues={{
+          fromEmail: accounts[0]?.email,
+          ...initialValues,
+        }}
       >
+        {accounts.length > 0 && (
+          <Form.Item
+            label="Compte expediteur"
+            name="fromEmail"
+            rules={[{ required: true, message: "Le compte expediteur est requis" }]}
+          >
+            <Input readOnly />
+          </Form.Item>
+        )}
+
         <Form.Item
           label="Destinataire"
           name="toEmail"

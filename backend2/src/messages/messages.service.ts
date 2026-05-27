@@ -3,7 +3,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import type { AddressObject, ParsedMail } from 'mailparser';
 import * as nodemailer from 'nodemailer';
-import { messages } from '../database/schema';
+import { messages, users } from '../database/schema';
 import { eq, and, like, desc, SQL, inArray, or } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import { env } from '../config/env';
@@ -23,9 +23,11 @@ export class MessagesService {
       throw new BadRequestException('toEmail and subject are required');
     }
 
+    const fromEmail = await this.authorizedSender(userId, createMessageDto.fromEmail);
+
     const [result] = await this.db.insert(messages).values({
       userId,
-      fromEmail: this.sender(createMessageDto.fromEmail),
+      fromEmail,
       toEmail: createMessageDto.toEmail,
       subject: createMessageDto.subject,
       body: createMessageDto.body,
@@ -84,6 +86,19 @@ export class MessagesService {
       page,
       pageSize: limit_val,
       totalPages: Math.ceil(total.length / limit_val),
+    };
+  }
+
+  async accounts(userId: number) {
+    const sender = await this.authorizedSender(userId);
+    return {
+      data: [
+        {
+          email: sender,
+          label: sender === env.smtp.from ? "Boite systeme" : "Boite personnelle",
+          provider: "Stalwart IMAP/SMTP",
+        },
+      ],
     };
   }
 
@@ -289,10 +304,21 @@ export class MessagesService {
     return { message: 'Message marked as unread' };
   }
 
-  private sender(fromEmail?: string) {
+  private async authorizedSender(userId: number, requested?: string) {
     const configured = env.smtp.from || 'noreply@ongdngolu.org';
-    if (!fromEmail) return configured;
-    return fromEmail.endsWith('@ongdngolu.org') ? fromEmail : configured;
+    const [user] = await this.db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const userEmail = user?.email?.toLowerCase();
+    const allowed = userEmail?.endsWith('@ongdngolu.org') ? userEmail : configured;
+    if (!requested) return allowed;
+
+    const normalized = requested.toLowerCase();
+    if (normalized === allowed || normalized === configured) return normalized;
+    throw new BadRequestException('Sender mailbox is not authorized for this user.');
   }
 
   private recipients(value: string) {
@@ -313,7 +339,7 @@ export class MessagesService {
 
     try {
       await transporter.sendMail({
-        from: this.sender(message.fromEmail),
+        from: message.fromEmail,
         to: this.recipients(message.toEmail),
         subject: message.subject,
         text: message.body ?? undefined,

@@ -166,6 +166,13 @@
     {
       "idx": 23,
       "version": "5",
+      "when": 1780099200000,
+      "tag": "0039_add_message_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
       "when": 1780102800000,
       "tag": "0040_add_system_email_logs",
       "breakpoints": true

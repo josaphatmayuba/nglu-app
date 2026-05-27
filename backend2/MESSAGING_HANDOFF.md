@@ -2,12 +2,15 @@
 
 ## Current integration decision
 
-`ongdngolu.org` currently has no MX record published. A DNS MX lookup on 2026-05-27 returned the AWS Route 53 SOA only, so inbound mailbox sync cannot be completed until the domain is connected to a mail provider.
+`ongdngolu.org` uses Stalwart on `mail.ongdngolu.org` for the current free self-hosted mailbox setup.
 
 The implemented backend therefore supports:
 
 - CRM-authenticated message CRUD under `/messages`.
 - SMTP delivery for new messages using the existing backend SMTP settings.
+- IMAP inbox sync from the configured mailbox.
+- Authorized sender selection from the connected CRM user's `@ongdngolu.org` email, falling back to `SMTP_FROM`.
+- Reply, reply-all, and forward composition in the React messaging UI.
 - Permission-gated access through `create-message`, `readAll-message`, `readSingle-message`, `update-message`, and `delete-message`.
 
 ## Required environment variables for sending
@@ -20,16 +23,15 @@ SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM=noreply@ongdngolu.org
+IMAP_HOST=mail.ongdngolu.org
+IMAP_PORT=993
+IMAP_USER=
+IMAP_PASS=
+IMAP_MAILBOX=INBOX
 ```
 
 `SMTP_FROM` should be an authorized sender for the configured SMTP account. The API refuses delivery when `SMTP_USER` or `SMTP_PASS` is missing.
 
-## Remaining work for real inbox sync
+## Remaining work
 
-After the domain has a real mail provider and MX records:
-
-1. If Microsoft 365: use Graph API with OAuth and delegated/shared mailbox permissions.
-2. If Google Workspace: use Gmail API with OAuth/domain-wide delegation.
-3. If classic hosting: use IMAP for inbox reads and SMTP for sending.
-
-Do not store mailbox passwords in clear text. Prefer OAuth tokens, encrypted at rest, and scope each connected mailbox to the CRM permissions/roles allowed to access it.
+The current backend uses one configured IMAP account for inbox sync. If each CRM user needs a separate live inbox sync, add encrypted per-user mailbox credentials or JMAP delegation from Stalwart. Do not store mailbox passwords in clear text.

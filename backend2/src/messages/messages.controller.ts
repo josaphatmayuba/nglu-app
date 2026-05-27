@@ -65,6 +65,12 @@ export class MessagesController {
     return this.messagesService.syncInbox(this.getUserId(req), parseInt(limit, 10));
   }
 
+  @Get('accounts')
+  @Permissions('readAll-message', 'create-message')
+  async accounts(@Req() req: AuthedRequest) {
+    return this.messagesService.accounts(this.getUserId(req));
+  }
+
   @Get(':id')
   @Permissions('readSingle-message', 'readAll-message')
   async findOne(@Req() req: AuthedRequest, @Param('id') id: string) {
