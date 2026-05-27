@@ -183,6 +183,13 @@
       "when": 1780106400000,
       "tag": "0041_add_mail_account_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1780110000000,
+      "tag": "0042_add_organizations_foundation",
+      "breakpoints": true
     }
   ]
 }
