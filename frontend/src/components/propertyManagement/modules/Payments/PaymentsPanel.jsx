@@ -140,8 +140,8 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     if (paymentStatusFilter === "late") return filteredOverduePayments;
     if (paymentStatusFilter === "pending") return filteredUpcomingPayments;
     if (paymentStatusFilter === "paid") return paidPayments;
-    return [...paidPayments, ...filteredUpcomingPayments, ...filteredOverduePayments];
-  }, [paymentStatusFilter, paidPayments, filteredOverduePayments, filteredUpcomingPayments]);
+    return [...paidPayments, ...filteredUpcomingPayments, ...filteredOverduePayments, ...overduePayments];
+  }, [paymentStatusFilter, paidPayments, filteredOverduePayments, filteredUpcomingPayments, overduePayments]);
 
   const paymentFilterChips = [
     {
