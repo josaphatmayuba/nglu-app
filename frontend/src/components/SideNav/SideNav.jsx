@@ -292,6 +292,15 @@ const SideNav = ({ collapsed, setCollapsed }) => {
             operator: "or",
           },
         },
+        {
+          label: "Messagerie",
+          to: "/admin/messages",
+          icon: Mail,
+          permit: {
+            permissions: ["readAll-message", "create-message"],
+            operator: "or",
+          },
+        },
       ],
     },
     {
@@ -459,6 +468,20 @@ const SideNav = ({ collapsed, setCollapsed }) => {
 
       key: "pos",
       icon: <ShoppingCartOutlined />,
+    },
+
+    {
+      label: (
+        <NavLink to="/admin/messages">
+          <span>Messagerie</span>
+        </NavLink>
+      ),
+      permit: {
+        permissions: ["readAll-message", "create-message"],
+        operator: "or",
+      },
+      key: "messages",
+      icon: <Mail className="h-4 w-4" />,
     },
 
     {
