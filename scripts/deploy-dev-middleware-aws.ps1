@@ -100,7 +100,7 @@ docker logs nglu_dev_middleware --tail 10
 Write-Step "Deploying middleware on AWS dev"
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$remoteScript | & ssh @sshArgs "bash -s"
+($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
 if ($sshExit -ne 0) { throw "Remote deploy script failed (exit $sshExit)" }

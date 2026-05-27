@@ -77,7 +77,7 @@ if (Test-Path $localArchive) {
 # This avoids Windows path issues with tar
 Push-Location $backendDir
 try {
-  & tar -czf $archiveName dist
+  & tar -czf $archiveName dist drizzle
   if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
   # Move archive to final location
   Move-Item -Path $archiveName -Destination $localArchive -Force

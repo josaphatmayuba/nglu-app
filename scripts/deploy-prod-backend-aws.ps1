@@ -99,6 +99,26 @@ Write-Step "Uploading backend2/dist archive"
 
 $remoteScript = @"
 set -euo pipefail
+
+LOCK_DIR="/tmp/nglu-prod-backend-deploy.lock"
+LOCK_META="`$LOCK_DIR/meta.txt"
+
+if ! mkdir "`$LOCK_DIR" 2>/dev/null; then
+  echo "Another production backend deployment is already running."
+  if [ -f "`$LOCK_META" ]; then cat "`$LOCK_META"; fi
+  exit 42
+fi
+
+cleanup() { rm -rf "`$LOCK_DIR"; }
+trap cleanup EXIT
+
+{
+  echo "started_at=`$(date -Iseconds)"
+  echo "user=`$(whoami)"
+  echo "archive=$remoteArchive"
+} > "`$LOCK_META"
+
+echo "[remote] production backend lock acquired"
 echo "[remote] replacing backend2/dist and drizzle"
 sudo rm -rf "$RemoteProdDir/backend2/dist"
 sudo rm -rf "$RemoteProdDir/backend2/drizzle"

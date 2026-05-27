@@ -3,7 +3,8 @@ param(
   [string]$HostName = "16.54.167.125",
   [string]$User = "admin",
   [string]$RemoteDir = "/opt/stalwart-mail",
-  [switch]$DryRun
+  [switch]$DryRun,
+  [string]$ConfirmProduction
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,6 +40,10 @@ if (-not (Test-Path $sourceDir)) { throw "Stalwart source directory not found: $
 
 Write-Host "Target: $sshTarget"
 Write-Host "Remote dir: $RemoteDir"
+
+if (-not $DryRun -and $ConfirmProduction -ne "DEPLOY_PROD") {
+  throw "Production deploy requires -ConfirmProduction DEPLOY_PROD. Use -DryRun to test without deploying."
+}
 
 Write-Step "Packing Stalwart compose files"
 if (Test-Path $localArchive) {

@@ -99,7 +99,7 @@ echo "[remote] health check"
 curl -fsS https://ongdngolu.org/api/health
 echo ""
 echo "[remote] middleware logs (last 10 lines)"
-docker logs nglu_middleware --tail 10
+docker logs nglu_prod_middleware --tail 10
 "@
 
 Write-Step "Deploying middleware on AWS production"
