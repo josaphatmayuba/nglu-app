@@ -8,8 +8,11 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import {
   CreateTransactionDto,
@@ -21,6 +24,7 @@ import { TransactionsService } from "./transactions.service";
 
 @ApiTags("transaction")
 @Controller("transaction")
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
