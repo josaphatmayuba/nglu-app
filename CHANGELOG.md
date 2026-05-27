@@ -26,6 +26,16 @@ This project follows:
   - **Bouton "Envoyer rappel"** : sur chaque ligne en retard, bouton (🔔) envoie un email nodemailer au locataire via nouvel endpoint `POST /property-management/payments/reminder`. Email inclut : bail référence, montant, appel à régulariser. Gestion SMTP : si non configuré, retour OK sans envoi.
   - Frontend : `PaymentsPanel` state `quickPayLeaseId`, handlers `handleQuickPay` et `handleSendReminder`. `PaymentsTable` ajoute boutons sur lignes `paymentStatus==="danger"`. Backend : `PropertyManagementService.sendPaymentReminder()` jointure `realEstateLeases → customers.email`, nodemailer HTML FR.
 
+### Security
+
+- SCRUM-15: **RISK-4 — Keep security server-side (Immobilier permissions audit)**
+  - Added `@Permissions()` decorators to sensitive routes in `property-management.controller.ts`
+  - Protected POST /properties, /units, /leases, /payments with `create-propertyManagement`
+  - Protected PUT /properties/:id, /units/:id, /leases/:id with `update-propertyManagement`
+  - Protected DELETE /leases/:id, /contracts/:id with `delete-propertyManagement`
+  - Backend now enforces permission checks on all sensitive operations (previously missing)
+  - Frontend permission hiding remains UX-only; backend validation is the security layer
+
 ### Fixed
 
 - SCRUM-169: Immobilier > Baux > Nouveau bail: formulaire enrichi avec selections recherchables Bien/Unite/Locataire, filtrage des unites deja occupees, duree calculant automatiquement la date de fin, valeurs par defaut, devise autocomplete et statut `inactive` qui libere l'unite.
