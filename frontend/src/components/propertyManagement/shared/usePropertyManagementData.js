@@ -140,12 +140,10 @@ export const usePropertyManagementData = () => {
     [safeLeases],
   );
   const visibleTenants = useMemo(() => {
-    return safeTenants.filter((tenant) => {
-      const tenantLeases = rawLeases.filter((lease) => lease.tenantId === tenant.id);
-      if (!tenantLeases.length) return true;
-      return tenantLeases.some((lease) => safeLeaseIds.has(lease.id));
-    });
-  }, [rawLeases, safeLeaseIds, safeTenants]);
+    // Show all visible (non-deleted) tenants, regardless of lease status
+    // This ensures counters don't change when a unit is deleted
+    return safeTenants;
+  }, [safeTenants]);
   const safeOnboarding = useMemo(() => (onboarding ?? []).filter(Boolean), [onboarding]);
   const safePayments = useMemo(
     () => (payments ?? []).filter((payment) => payment && safeLeaseIds.has(payment.leaseId)),
