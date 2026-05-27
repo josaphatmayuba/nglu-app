@@ -4,7 +4,7 @@ import { simpleParser } from 'mailparser';
 import type { AddressObject, ParsedMail } from 'mailparser';
 import * as nodemailer from 'nodemailer';
 import { messages, users } from '../database/schema';
-import { eq, and, like, desc, SQL, inArray, or } from 'drizzle-orm';
+import { eq, and, like, desc, SQL, inArray, or, count } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import { env } from '../config/env';
 import { smtpTransportOptions } from '../config/smtp';
@@ -49,7 +49,8 @@ export class MessagesService {
   }
 
   async findAll(userId: number, page = 1, limit_val = 20, status?: string, folder?: string, search?: string) {
-    const skip = (page - 1) * limit_val;
+    const safeLimit = Math.min(Math.max(Number(limit_val) || 20, 1), 100);
+    const skip = (page - 1) * safeLimit;
 
     const conditions: SQL<unknown>[] = [eq(messages.userId, userId)];
 
@@ -60,32 +61,33 @@ export class MessagesService {
     }
 
     if (search) {
+      const safeLike = search.replace(/[%_\\]/g, '\\$&');
       conditions.push(
         or(
-          like(messages.subject, `%${search}%`),
-          like(messages.fromEmail, `%${search}%`),
-          like(messages.toEmail, `%${search}%`),
+          like(messages.subject, `%${safeLike}%`),
+          like(messages.fromEmail, `%${safeLike}%`),
+          like(messages.toEmail, `%${safeLike}%`),
         ) as SQL<unknown>,
       );
     }
 
     const whereCondition = and(...conditions);
 
-    const total = await this.db.select().from(messages).where(whereCondition);
+    const [{ value: totalCount }] = await this.db.select({ value: count() }).from(messages).where(whereCondition);
     const data = await this.db
       .select()
       .from(messages)
       .where(whereCondition)
       .orderBy(desc(messages.createdAt))
-      .limit(limit_val)
+      .limit(safeLimit)
       .offset(skip);
 
     return {
       data,
-      total: total.length,
+      total: totalCount,
       page,
-      pageSize: limit_val,
-      totalPages: Math.ceil(total.length / limit_val),
+      pageSize: safeLimit,
+      totalPages: Math.ceil(totalCount / safeLimit),
     };
   }
 
@@ -228,14 +230,19 @@ export class MessagesService {
       throw new NotFoundException('Message not found');
     }
 
-    const updateData: any = { ...updateMessageDto };
-    if (updateData.isRead !== undefined) {
-      updateData.status = updateData.isRead ? 'read' : 'unread';
+    const patch: Record<string, unknown> = {};
+    if (updateMessageDto.subject !== undefined) patch.subject = updateMessageDto.subject;
+    if (updateMessageDto.body !== undefined) patch.body = updateMessageDto.body;
+    if (updateMessageDto.htmlBody !== undefined) patch.htmlBody = updateMessageDto.htmlBody;
+    if (updateMessageDto.toEmail !== undefined) patch.toEmail = updateMessageDto.toEmail;
+    if (updateMessageDto.isRead !== undefined) {
+      patch.isRead = updateMessageDto.isRead;
+      patch.status = updateMessageDto.isRead ? 'read' : 'unread';
     }
 
     await this.db
       .update(messages)
-      .set(updateData)
+      .set(patch)
       .where(eq(messages.id, id));
 
     return { message: 'Message updated successfully' };
@@ -317,7 +324,7 @@ export class MessagesService {
     if (!requested) return allowed;
 
     const normalized = requested.toLowerCase();
-    if (normalized === allowed || normalized === configured) return normalized;
+    if (normalized === allowed) return normalized;
     throw new BadRequestException('Sender mailbox is not authorized for this user.');
   }
 
