@@ -13,6 +13,7 @@ import { Link } from "react-router-dom";
 import { startRealtimeClient, stopRealtimeClient, onRealtimeEvent } from "../realtime/realtimeClient";
 import { createDataUpdateHandler } from "../realtime/dataUpdateHandlers";
 import { createPermissionsUpdateHandler } from "../realtime/permissionsUpdateHandlers";
+import { createAuthBroadcastChannel } from "../realtime/authBroadcastChannel";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
@@ -52,7 +53,23 @@ function AdminLayout() {
     const permsHandler = createPermissionsUpdateHandler(dispatch, navigate, toast);
     const unsubData = onRealtimeEvent("data.updated", dataHandler);
     const unsubPerms = onRealtimeEvent("permissions.updated", permsHandler);
-    return () => { unsubData(); unsubPerms(); stopRealtimeClient(); };
+    const authChannel = createAuthBroadcastChannel();
+
+    if (authChannel) {
+      authChannel.onmessage = (message) => {
+        const payload = message?.data;
+        if (payload?.type === "permissions.updated" && payload.event) {
+          permsHandler({ ...payload.event, __fromBroadcast: true });
+        }
+      };
+    }
+
+    return () => {
+      unsubData();
+      unsubPerms();
+      authChannel?.close();
+      stopRealtimeClient();
+    };
   }, [dispatch, navigate]);
 
   useEffect(() => {
