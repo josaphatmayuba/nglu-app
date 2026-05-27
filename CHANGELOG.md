@@ -12,6 +12,12 @@ This project follows:
 
 ### Added
 
+- SCRUM-165: **Fix — Immobilier: erreur "Validation failed (numeric string is expected)" lors de la suppression d'un locataire**
+  - `TenantsPanel.jsx`: conversion explicite de `tenant.id` en entier via `parseInt(String(tenant.id), 10)` avant l'appel `deleteCustomer`
+  - Garde ajoutée: si l'ID n'est pas un entier positif valide, affiche un message d'erreur sans appeler l'API
+  - Comparaison bail corrigée: `Number(lease.tenantId) === numericId` pour éviter les incohérences de type
+  - Message d'erreur amélioré: affiche le message API réel si disponible, sinon message générique
+
 - SCRUM-22: **Realtime — Phase E: Scopes et confidentialité des données**
   - Nouveau fichier `backend2/src/realtime/scope-guard.ts` : définit les 4 types de scopes (`global`, `per_property`, `per_account`, `per_department`) et la fonction `scopeAllowsUser(scope, requiredPermissions, user)`.
   - V1 : filtrage par permissions (role-based). Les TODOs dans le code documentent précisément où ajouter les vérifications fines par propriété/compte/département quand les tables d'affectation existeront.

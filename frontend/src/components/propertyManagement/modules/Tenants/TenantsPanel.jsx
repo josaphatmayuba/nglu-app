@@ -109,18 +109,24 @@ const TenantsPanel = ({
       return;
     }
     if (action === "delete") {
-      const hasLease = safeLeases.some((lease) => lease.tenantId === tenant.id);
+      const numericId = parseInt(String(tenant.id), 10);
+      if (!Number.isFinite(numericId) || numericId <= 0) {
+        message.error("Impossible de supprimer : identifiant locataire invalide.");
+        return;
+      }
+      const hasLease = safeLeases.some((lease) => Number(lease.tenantId) === numericId);
       if (hasLease) {
         message.warning("Impossible : ce locataire a un bail actif. Résiliez d'abord le bail.");
         return;
       }
       if (!window.confirm(`Supprimer définitivement le locataire « ${tenantName(tenant)} » ?`)) return;
-      const result = await dispatch(deleteCustomer({ id: tenant.id }));
+      const result = await dispatch(deleteCustomer({ id: numericId }));
       if (result?.payload?.message === "success" || result?.meta?.requestStatus === "fulfilled") {
         message.success("Locataire supprimé");
         dispatch(loadPropertyManagement());
       } else {
-        message.error("Échec de la suppression");
+        const apiError = result?.payload?.error || result?.error?.message;
+        message.error(apiError || "Échec de la suppression");
       }
     }
   };
