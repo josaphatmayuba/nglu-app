@@ -5,3 +5,5 @@ yarn-error.log
 .env
 .env.local
 .DS_Store
+dist
+dist.tar.gz

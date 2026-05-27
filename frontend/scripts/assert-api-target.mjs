@@ -8,6 +8,10 @@ const targets = {
     required: "https://dev.ongdngolu.org/api",
     forbidden: "https://ongdngolu.org/api",
   },
+  "development-local": {
+    required: "http://localhost:8001",
+    forbidden: "https://ongdngolu.org/api",
+  },
   production: {
     required: "https://ongdngolu.org/api",
     forbidden: "https://dev.ongdngolu.org/api",
@@ -15,7 +19,7 @@ const targets = {
 };
 
 if (!targets[mode]) {
-  console.error("Usage: node scripts/assert-api-target.mjs <development|production>");
+  console.error("Usage: node scripts/assert-api-target.mjs <development|development-local|production>");
   process.exit(2);
 }
 
