@@ -401,6 +401,7 @@ const LeasesPanel = ({
 
       <LeaseFormModal
         currencyOptions={currencyOptions}
+        leases={safeLeases}
         onCancel={() => setLeaseModal(null)}
         onSubmit={submitLease}
         open={Boolean(leaseModal)}

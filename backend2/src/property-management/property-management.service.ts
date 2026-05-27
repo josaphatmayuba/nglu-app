@@ -692,7 +692,7 @@ export class PropertyManagementService {
     if ((input.status ?? current.status) === "active") {
       await this.setUnitStatus(nextUnitId, "occupied");
     }
-    if (["ended", "cancelled"].includes(input.status ?? "")) {
+    if (["inactive", "ended", "cancelled"].includes(input.status ?? "")) {
       await this.setUnitStatus(nextUnitId, "vacant");
     }
 

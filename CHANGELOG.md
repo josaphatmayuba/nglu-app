@@ -28,6 +28,8 @@ This project follows:
 
 ### Fixed
 
+- SCRUM-169: Immobilier > Baux > Nouveau bail: formulaire enrichi avec selections recherchables Bien/Unite/Locataire, filtrage des unites deja occupees, duree calculant automatiquement la date de fin, valeurs par defaut, devise autocomplete et statut `inactive` qui libere l'unite.
+
 - SCRUM-168: Comptabilite > Ecritures permet maintenant aux usagers avec `update-transaction` ou `delete-transaction` de modifier ou supprimer logiquement une transaction.
 
 - SCRUM-164: les compteurs Immobilier et les onglets Propriétés/Locataires excluent maintenant les propriétés, unités et rattachements supprimés/inactifs afin de rester alignés avec les listes visibles.
