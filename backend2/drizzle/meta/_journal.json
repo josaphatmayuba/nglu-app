@@ -134,6 +134,13 @@
       "when": 1748649600000,
       "tag": "0035_add_leave_reason_to_users",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1779840000000,
+      "tag": "0036_repair_soft_delete_columns",
+      "breakpoints": true
     }
   ]
 }
