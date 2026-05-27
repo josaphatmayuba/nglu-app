@@ -4,6 +4,7 @@ import { messages } from '../database/schema';
 import { eq, and, like, desc, SQL, inArray, or } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import { env } from '../config/env';
+import { smtpTransportOptions } from '../config/smtp';
 import type { Database } from '../database/types';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { UpdateMessageDto } from './dto/update-message.dto';
@@ -212,12 +213,7 @@ export class MessagesService {
   }
 
   private async deliver(message: typeof messages.$inferSelect) {
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      secure: env.smtp.port === 465,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    });
+    const transporter = nodemailer.createTransport(smtpTransportOptions());
 
     try {
       await transporter.sendMail({

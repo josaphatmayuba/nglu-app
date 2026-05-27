@@ -17,6 +17,7 @@ export const env = {
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || "noreply@nglu.app",
+    tlsRejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
   redis: {
     enabled: process.env.REDIS_ENABLED !== "false",
