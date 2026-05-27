@@ -33,6 +33,13 @@
   color: #1677ff;
 }
 
+.messaging-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .messaging-search {
   padding: 12px 20px;
   border-bottom: 1px solid #e0e0e0;

@@ -59,6 +59,12 @@ export class MessagesController {
     );
   }
 
+  @Post('sync')
+  @Permissions('readAll-message')
+  async syncInbox(@Req() req: AuthedRequest, @Query('limit') limit: string = '50') {
+    return this.messagesService.syncInbox(this.getUserId(req), parseInt(limit, 10));
+  }
+
   @Get(':id')
   @Permissions('readSingle-message', 'readAll-message')
   async findOne(@Req() req: AuthedRequest, @Param('id') id: string) {

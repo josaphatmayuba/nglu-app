@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Mail, Plus, Search } from 'lucide-react';
+import { Mail, Plus, RefreshCw, Search } from 'lucide-react';
 import { Button, Empty, Input, Spin, Tabs, message as antMessage } from 'antd';
 import axios from 'axios';
 import MessageList from './MessageList';
@@ -12,6 +12,7 @@ export default function MessagingPanel() {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [showCompose, setShowCompose] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [status, setStatus] = useState('inbox');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
@@ -108,6 +109,19 @@ export default function MessagingPanel() {
     }
   };
 
+  const handleSyncInbox = async () => {
+    setSyncing(true);
+    try {
+      const response = await axios.post('/messages/sync', null, { params: { limit: 50 } });
+      await fetchMessages(1, status, searchTerm);
+      antMessage.success(`${response.data.imported || 0} message(s) synchronise(s)`);
+    } catch (error) {
+      antMessage.error(error.response?.data?.message || 'Erreur lors de la synchronisation');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="messaging-panel">
       <div className="messaging-header">
@@ -115,13 +129,22 @@ export default function MessagingPanel() {
           <Mail size={24} />
           <h2>Messagerie ongdngolu.org</h2>
         </div>
-        <Button
-          type="primary"
-          icon={<Plus size={16} />}
-          onClick={() => setShowCompose(true)}
-        >
-          Nouveau message
-        </Button>
+        <div className="messaging-actions">
+          <Button
+            icon={<RefreshCw size={16} />}
+            loading={syncing}
+            onClick={handleSyncInbox}
+          >
+            Synchroniser
+          </Button>
+          <Button
+            type="primary"
+            icon={<Plus size={16} />}
+            onClick={() => setShowCompose(true)}
+          >
+            Nouveau message
+          </Button>
+        </div>
       </div>
 
       {showCompose && (

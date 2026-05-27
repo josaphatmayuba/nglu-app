@@ -15,7 +15,6 @@ export default function ComposeMessage({ onSend, onCancel }) {
         subject: values.subject,
         body: values.body,
         htmlBody: values.body,
-        fromEmail: 'noreply@ongdngolu.org',
         sendNow: true,
       });
       form.resetFields();

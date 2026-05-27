@@ -3,6 +3,7 @@ import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
+import CurrencyCombobox from "../Shared/CurrencyCombobox";
 import {
   addSalaryHistory,
   deleteSalaryHistory,
@@ -10,12 +11,15 @@ import {
   updateSalaryHistory,
 } from "../../redux/rtk/features/salaryHistory/salaryHistorySlice";
 import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
+import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
+import { buildCurrencyOptions } from "../propertyManagement/shared/format";
 
 const SalariesPage = () => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const { list, total, loading } = useSelector((state) => state.salaryHistory);
   const staff = useSelector((state) => state.users?.list) || [];
+  const currenciesList = useSelector((state) => state.currency?.list) || [];
   const [modal, setModal] = useState(null);
 
   const load = () => dispatch(loadAllSalaryHistoryPaginated({ page: 1, count: 100 }));
@@ -23,6 +27,7 @@ const SalariesPage = () => {
   useEffect(() => {
     load();
     dispatch(loadAllStaff({ query: "all" }));
+    dispatch(loadAllCurrency());
   }, [dispatch]);
 
   const openModal = (record = null) => {
@@ -91,6 +96,9 @@ const SalariesPage = () => {
           </Form.Item>
           <Form.Item label="Salaire" name="salary" rules={[{ required: true }]}>
             <InputNumber className="w-full" min={0} />
+          </Form.Item>
+          <Form.Item label="Devise" name="currencyId">
+            <CurrencyCombobox options={buildCurrencyOptions(currenciesList)} />
           </Form.Item>
           <Form.Item label="Début" name="salaryStartDate"><DatePicker className="w-full" /></Form.Item>
           <Form.Item label="Fin" name="salaryEndDate"><DatePicker className="w-full" /></Form.Item>

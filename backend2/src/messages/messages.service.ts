@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, Logger } from '@nestjs/common';
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
+import type { AddressObject, ParsedMail } from 'mailparser';
 import * as nodemailer from 'nodemailer';
 import { messages } from '../database/schema';
 import { eq, and, like, desc, SQL, inArray, or } from 'drizzle-orm';
@@ -82,6 +85,99 @@ export class MessagesService {
       pageSize: limit_val,
       totalPages: Math.ceil(total.length / limit_val),
     };
+  }
+
+  async syncInbox(userId: number, limit = 50) {
+    if (!env.imap.user || !env.imap.pass) {
+      throw new BadRequestException('IMAP is not configured for reading emails.');
+    }
+
+    const client = new ImapFlow({
+      host: env.imap.host,
+      port: env.imap.port,
+      secure: env.imap.port === 993,
+      auth: {
+        user: env.imap.user,
+        pass: env.imap.pass,
+      },
+      tls: {
+        rejectUnauthorized: env.imap.tlsRejectUnauthorized,
+      },
+      logger: false,
+    });
+
+    let imported = 0;
+    let skipped = 0;
+
+    try {
+      await client.connect();
+      const mailbox = await client.mailboxOpen(env.imap.mailbox);
+      const exists = mailbox.exists ?? 0;
+
+      if (!exists) {
+        return { message: 'Inbox synchronized', imported, skipped, total: 0 };
+      }
+
+      const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+      const first = Math.max(1, exists - safeLimit + 1);
+      const range = `${first}:*`;
+
+      for await (const item of client.fetch(range, {
+        uid: true,
+        envelope: true,
+        flags: true,
+        internalDate: true,
+        source: true,
+      })) {
+        const externalMessageId = `${env.imap.user}:${env.imap.mailbox}:${item.uid}`;
+        const existing = await this.db
+          .select({ id: messages.id })
+          .from(messages)
+          .where(eq(messages.externalMessageId, externalMessageId))
+          .limit(1);
+
+        if (existing.length) {
+          skipped += 1;
+          continue;
+        }
+
+        if (!item.source) {
+          skipped += 1;
+          continue;
+        }
+
+        const parsed: ParsedMail = await simpleParser(item.source, {});
+        const fromEmail = parsed.from?.value?.[0]?.address || 'unknown@ongdngolu.org';
+        const toEmail = this.addresses(parsed.to) || env.imap.user;
+        const isRead = this.hasSeenFlag(item.flags);
+        const receivedAt = this.toDate(item.internalDate) ?? parsed.date ?? new Date();
+
+        await this.db.insert(messages).values({
+          userId,
+          fromEmail,
+          toEmail,
+          subject: parsed.subject || '(Sans objet)',
+          body: parsed.text || '',
+          htmlBody: typeof parsed.html === 'string' ? parsed.html : undefined,
+          messageType: 'email',
+          status: isRead ? 'read' : 'unread',
+          isRead,
+          attachmentCount: parsed.attachments?.length ?? 0,
+          externalMessageId,
+          mailbox: env.imap.mailbox,
+          createdAt: receivedAt,
+        });
+
+        imported += 1;
+      }
+
+      return { message: 'Inbox synchronized', imported, skipped, total: exists };
+    } catch (error) {
+      this.logger.error(`Failed to sync inbox: ${error instanceof Error ? error.message : String(error)}`);
+      throw new BadRequestException('Email inbox synchronization failed.');
+    } finally {
+      await client.logout().catch(() => undefined);
+    }
   }
 
   async findOne(userId: number, id: number) {
@@ -227,5 +323,29 @@ export class MessagesService {
       this.logger.error(`Failed to send message ${message.id}: ${error instanceof Error ? error.message : String(error)}`);
       throw new BadRequestException('Email delivery failed.');
     }
+  }
+
+  private hasSeenFlag(flags?: Iterable<string>) {
+    if (!flags) return false;
+    for (const flag of flags) {
+      if (flag.toLowerCase() === '\\seen') return true;
+    }
+    return false;
+  }
+
+  private addresses(value?: AddressObject | AddressObject[]) {
+    const items = Array.isArray(value) ? value : value ? [value] : [];
+    return items
+      .flatMap((item) => item.value)
+      .map((address) => address.address)
+      .filter((address): address is string => Boolean(address))
+      .join('; ');
+  }
+
+  private toDate(value?: Date | string | null) {
+    if (!value) return undefined;
+    if (value instanceof Date) return value;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
   }
 }

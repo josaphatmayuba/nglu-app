@@ -448,6 +448,7 @@ export const salaryHistories = mysqlTable("salary_histories", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   salary: double("salary").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
   startDate: date("startDate", { mode: "string" }),
   endDate: date("endDate", { mode: "string" }),
   comment: text("comment"),
@@ -968,6 +969,8 @@ export const messages = mysqlTable("messages", {
   relatedType: varchar("related_type", { length: 50 }),
   relatedId: int("related_id"),
   attachmentCount: int("attachment_count").default(0),
+  externalMessageId: varchar("external_message_id", { length: 255 }),
+  mailbox: varchar("mailbox", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });

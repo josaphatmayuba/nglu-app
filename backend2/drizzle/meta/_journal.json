@@ -148,6 +148,20 @@
       "when": 1780012800000,
       "tag": "0037_add_messages_table",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1780016400000,
+      "tag": "0038_add_message_sync_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1779877030441,
+      "tag": "0022_lumpy_mongoose",
+      "breakpoints": true
     }
   ]
 }

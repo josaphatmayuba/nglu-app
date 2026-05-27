@@ -19,6 +19,14 @@ export const env = {
     from: process.env.SMTP_FROM || "noreply@nglu.app",
     tlsRejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
+  imap: {
+    host: process.env.IMAP_HOST || process.env.SMTP_HOST || "mail.ongdngolu.org",
+    port: Number(process.env.IMAP_PORT || 993),
+    user: process.env.IMAP_USER || process.env.SMTP_USER || "",
+    pass: process.env.IMAP_PASS || process.env.SMTP_PASS || "",
+    mailbox: process.env.IMAP_MAILBOX || "INBOX",
+    tlsRejectUnauthorized: process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== "false",
+  },
   redis: {
     enabled: process.env.REDIS_ENABLED !== "false",
     url: process.env.REDIS_URL || "",

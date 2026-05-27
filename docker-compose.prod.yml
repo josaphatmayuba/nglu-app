@@ -37,6 +37,12 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-noreply@ongdngolu.org}
       SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      IMAP_HOST: ${IMAP_HOST:-mail.ongdngolu.org}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASS: ${IMAP_PASS:-}
+      IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
+      IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
     networks:
       - nglu_prod_network
     mem_limit: 180m
