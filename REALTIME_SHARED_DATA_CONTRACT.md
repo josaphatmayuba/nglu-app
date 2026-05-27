@@ -81,3 +81,25 @@ Environment variables:
 - `REDIS_PORT`
 - `REDIS_PASSWORD`
 - `REDIS_CHANNEL_DATA_UPDATES` defaults to `data-updates`
+
+Docker stacks:
+
+- Local `docker-compose.yml` includes Redis and exposes it on `localhost:6379` for development tools.
+- Dev `docker-compose.dev.yml` includes `nglu_dev_redis` on the private dev network.
+- Prod `docker-compose.prod.yml` includes `nglu_prod_redis` on the private prod network.
+
+Nginx/SSE routing:
+
+- The frontend SSE client must keep using `/api/events/me`.
+- Nginx routes `/api/events/*` to middleware/backend after stripping `/api/`.
+- Nginx disables buffering and cache for SSE streams.
+- Production routing remains: marketing at `https://ongdngolu.org/`, CRM entry at `https://ongdngolu.org/crm`, API/SSE under `https://ongdngolu.org/api/*`.
+
+Validate the deploy contract with:
+
+```bash
+node scripts/check-realtime-deploy-contract.mjs
+docker-compose config --quiet
+docker-compose -f docker-compose.dev.yml config --quiet
+docker-compose -f docker-compose.prod.yml config --quiet
+```

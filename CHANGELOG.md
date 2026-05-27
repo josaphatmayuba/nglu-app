@@ -12,6 +12,14 @@ This project follows:
 
 ### Added
 
+- SCRUM-23: Realtime multi-tab offline and recovery support.
+  - Added `BroadcastChannel("data-updates")` propagation for `data.updated` events across tabs.
+  - Added SSE connection status tracking, reconnect refresh for active dashboard/property-management pages, light fallback polling while SSE is down, and a discreet recovery indicator.
+
+- SCRUM-24: Realtime deploy contract guard for Redis/SSE/nginx routing.
+  - Added `scripts/check-realtime-deploy-contract.mjs` to validate Redis in local/dev/prod compose files, `/api/events/me` frontend SSE path, nginx `/api/events/` buffering rules, and the production marketing/CRM/API routing contract.
+  - Documented shared-data Docker and nginx validation in `REALTIME_SHARED_DATA_CONTRACT.md`.
+
 - SCRUM-165: **Fix — Immobilier: erreur "Validation failed (numeric string is expected)" lors de la suppression d'un locataire**
   - `TenantsPanel.jsx`: conversion explicite de `tenant.id` en entier via `parseInt(String(tenant.id), 10)` avant l'appel `deleteCustomer`
   - Garde ajoutée: si l'ID n'est pas un entier positif valide, affiche un message d'erreur sans appeler l'API

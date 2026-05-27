@@ -4,6 +4,7 @@
  */
 
 import { loadPropertyManagement } from "../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { broadcastDataUpdated } from "./dataBroadcastChannel";
 
 const DEBOUNCE_MS = 600;
 const pending = new Map(); // tag → timer
@@ -20,6 +21,10 @@ function debounced(tag, fn) {
 export function createDataUpdateHandler(dispatch) {
   return function handleDataUpdated(event) {
     const tags = event?.tags ?? [];
+
+    if (!event?.__fromBroadcast) {
+      broadcastDataUpdated(event);
+    }
 
     if (tags.some((t) => ["propertyManagement", "properties", "units", "leases", "payments", "maintenance"].includes(t))) {
       debounced("propertyManagement", () => dispatch(loadPropertyManagement()));

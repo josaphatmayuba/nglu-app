@@ -13,7 +13,9 @@ const INITIAL_BACKOFF_MS = 2_000;
 let source = null;
 let reconnectTimer = null;
 let backoffMs = INITIAL_BACKOFF_MS;
+let connected = false;
 const listeners = new Map(); // eventType → Set<handler>
+const statusListeners = new Set();
 
 function token() {
   return localStorage.getItem("access-token") || "";
@@ -31,9 +33,11 @@ function connect() {
 
     source.addEventListener("open", () => {
       backoffMs = INITIAL_BACKOFF_MS;
+      setConnected(true);
     });
 
     source.addEventListener("error", () => {
+      setConnected(false);
       source?.close();
       source = null;
       scheduleReconnect();
@@ -47,8 +51,15 @@ function connect() {
     // Catch-all via onmessage for generic "message" events
     source.onmessage = handleEvent;
   } catch {
+    setConnected(false);
     scheduleReconnect();
   }
+}
+
+function setConnected(nextConnected) {
+  if (connected === nextConnected) return;
+  connected = nextConnected;
+  statusListeners.forEach((handler) => handler({ connected }));
 }
 
 function handleEvent(event) {
@@ -75,6 +86,7 @@ function disconnect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   source?.close();
   source = null;
+  setConnected(false);
 }
 
 /**
@@ -90,6 +102,18 @@ export function onRealtimeEvent(eventType, handler) {
   return () => {
     listeners.get(eventType)?.delete(handler);
   };
+}
+
+export function onRealtimeStatusChange(handler) {
+  statusListeners.add(handler);
+  handler({ connected });
+  return () => {
+    statusListeners.delete(handler);
+  };
+}
+
+export function isRealtimeConnected() {
+  return connected;
 }
 
 export function startRealtimeClient() {
