@@ -44,7 +44,12 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const generate = async (values) => {
     setBusy(true);
     try {
-      const response = await dispatch(generateTenantOnboarding({ phone: values.phone }));
+      const response = await dispatch(generateTenantOnboarding({
+        firstName: values.firstName || null,
+        lastName: values.lastName || null,
+        email: values.email || null,
+        phone: values.phone,
+      }));
       const data = response.payload?.data;
       const url = data?.url || data?.onboardingUrl;
       if (response.payload?.message === "success" && url) {

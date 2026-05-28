@@ -12,6 +12,11 @@ This project follows:
 
 ### Added
 
+- SCRUM-227: Immobilier - restauration du suivi admin des liens d'inscription locataire.
+  - Les dossiers d'inscription generes apparaissent de nouveau dans l'onglet Locataires avec badges Non rempli, En remplissage, Soumis ou Expire.
+  - L'admin peut ouvrir un dossier, enregistrer un brouillon, completer les champs et valider pour creer le vrai locataire.
+  - La creation de bail verifie maintenant que le locataire est un vrai locataire valide de l'organisation.
+
 - SCRUM-221: Comptabilite/Dashboard - les factures vente/achat supprimees logiquement sont exclues des listes, totaux, graphiques et transactions comptables.
   - Ajout du statut soft-delete sur `saleInvoice` et `purchaseInvoice`.
   - La suppression d'une facture met aussi ses transactions liees en `status=false`.

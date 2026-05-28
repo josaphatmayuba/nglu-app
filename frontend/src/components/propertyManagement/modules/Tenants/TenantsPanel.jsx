@@ -4,12 +4,16 @@ import { Plus, UserRound } from "lucide-react";
 import { message } from "antd";
 
 import { deleteCustomer } from "../../../../redux/rtk/features/customer/customerSlice";
-import { loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import {
+  loadPropertyManagement,
+  validateTenantOnboarding,
+} from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
-import { tenantName } from "../../shared/tenants";
+import { parseOnboardingData, tenantName } from "../../shared/tenants";
 import { EmptyState } from "../../shared/ui";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 
+import OnboardingCard from "./OnboardingCard";
 import TenantCard from "./TenantCard";
 import TenantFormModal from "./TenantFormModal";
 import "./TenantsPanel.css";
@@ -23,7 +27,7 @@ const TenantsPanel = ({
   onOpenLeaseMenu,
 }) => {
   const dispatch = useDispatch();
-  const { visibleTenants, safeLeases, enrichedUnits } = usePropertyManagementData();
+  const { visibleTenants, safeOnboarding, safeLeases, enrichedUnits } = usePropertyManagementData();
 
   const [internalSearch, setInternalSearch] = useState("");
   const searchTerm = searchTermProp != null ? searchTermProp : internalSearch;
@@ -34,6 +38,7 @@ const TenantsPanel = ({
 
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalRecord, setModalRecord] = useState(null);
+  const [modalMode, setModalMode] = useState("tenant");
   const [modalOpen, setModalOpen] = useState(false);
 
   // Close any open context menu on outside click.
@@ -63,6 +68,30 @@ const TenantsPanel = ({
     });
   }, [visibleTenants, searchTerm]);
 
+  const pendingOnboarding = useMemo(
+    () => safeOnboarding.filter((record) => record?.status !== "validated"),
+    [safeOnboarding],
+  );
+
+  const filteredOnboarding = useMemo(() => {
+    const q = normalize(searchTerm);
+    if (!q) return pendingOnboarding;
+    return pendingOnboarding.filter((record) => {
+      const data = parseOnboardingData(record);
+      const haystack = normalize(
+        [
+          data.firstName,
+          data.lastName,
+          data.email,
+          data.phone,
+          record.phone,
+          record.status,
+        ].join(" "),
+      );
+      return haystack.includes(q);
+    });
+  }, [pendingOnboarding, searchTerm]);
+
   const tenantActiveLease = (tenant) =>
     safeLeases.find((lease) => lease.tenantId === tenant.id && lease.status === "active") ||
     safeLeases.find((lease) => lease.tenantId === tenant.id);
@@ -71,6 +100,7 @@ const TenantsPanel = ({
     setOpenMenuId(null);
     if (action === "edit") {
       setModalRecord(tenant);
+      setModalMode("tenant");
       setModalOpen(true);
       return;
     }
@@ -131,6 +161,27 @@ const TenantsPanel = ({
     }
   };
 
+  const openOnboarding = (record) => {
+    const data = parseOnboardingData(record);
+    setModalRecord({
+      ...data,
+      phone: data.phone || record.phone,
+      _onboardingId: record.id,
+    });
+    setModalMode("onboarding");
+    setModalOpen(true);
+  };
+
+  const validateOnboarding = async (record) => {
+    const response = await dispatch(validateTenantOnboarding(record.id));
+    if (response.payload?.message === "success") {
+      message.success("Dossier locataire valide");
+      dispatch(loadPropertyManagement());
+    } else {
+      message.error(response.payload?.error || "Impossible de valider ce dossier.");
+    }
+  };
+
   return (
     <div className="immo-tenants-panel">
       <div className="immo-tenants-toolbar">
@@ -156,6 +207,7 @@ const TenantsPanel = ({
           className="immo-primary-button"
           onClick={() => {
             setModalRecord(null);
+            setModalMode("tenant");
             setModalOpen(true);
           }}
         >
@@ -163,8 +215,17 @@ const TenantsPanel = ({
         </button>
       </div>
 
-      {filteredTenants.length ? (
+      {filteredOnboarding.length || filteredTenants.length ? (
         <div className="immo-tenant-grid">
+          {filteredOnboarding.map((record, index) => (
+            <OnboardingCard
+              key={`onboarding-${record.id}`}
+              record={record}
+              index={index}
+              onEdit={openOnboarding}
+              onValidate={validateOnboarding}
+            />
+          ))}
           {filteredTenants.map((tenant, index) => {
             const tenantLeases = safeLeases.filter((lease) => lease.tenantId === tenant.id);
             const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0];
@@ -195,6 +256,7 @@ const TenantsPanel = ({
       <TenantFormModal
         open={modalOpen}
         record={modalRecord}
+        mode={modalMode}
         onClose={() => setModalOpen(false)}
         onSaved={() => setModalOpen(false)}
       />

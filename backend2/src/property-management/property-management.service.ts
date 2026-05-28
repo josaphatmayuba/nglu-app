@@ -193,7 +193,12 @@ export class PropertyManagementService {
     const token = randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
-    const data = JSON.stringify({ phone: input.phone });
+    const data = JSON.stringify({
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      email: input.email ?? null,
+      phone: input.phone,
+    });
 
     const [result] = await this.db.insert(tenantOnboardings).values({
       phone: input.phone,
@@ -1244,7 +1249,7 @@ export class PropertyManagementService {
     if (units[0].propertyId !== propertyId) {
       throw new BadRequestException("Cette unité n'appartient pas au bien sélectionné.");
     }
-    await this.ensureExists(customers, tenantId, "Tenant not found.");
+    await this.findTenant(tenantId, orgId);
   }
 
   private async getTenantRole() {

@@ -35,6 +35,7 @@ const PropertyManagement = () => {
     activeLeases,
     openMaintenance,
     visibleTenants,
+    safeOnboarding,
     safeLeases,
     currencyOptions,
     occupancyRate,
@@ -51,10 +52,11 @@ const PropertyManagement = () => {
   // Properties view (grid card "Modifier", list "Edit", map popup, etc.).
   const [unitModalRecord, setUnitModalRecord] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
+  const pendingOnboardingCount = safeOnboarding.filter((record) => record?.status !== "validated").length;
 
   const tabItems = [
     { key: "properties", label: "Propriétés", count: enrichedUnits.length },
-    { key: "tenants", label: "Locataires", count: visibleTenants.length },
+    { key: "tenants", label: "Locataires", count: visibleTenants.length + pendingOnboardingCount },
     { key: "leases", label: "Baux", count: safeLeases.length },
     { key: "payments", label: "Paiements", count: safePayments.length },
     { key: "maintenance", label: "Maintenance", count: openMaintenance.length, danger: true },
