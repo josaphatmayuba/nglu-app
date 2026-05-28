@@ -99,9 +99,10 @@ Write-Step "Uploading backend2/dist archive"
 
 $remoteScript = @"
 set -euo pipefail
-echo "[remote] replacing backend2/dist"
-rm -rf "$RemoteDevDir/backend2/dist"
-mkdir -p "$RemoteDevDir/backend2/dist"
+echo "[remote] replacing backend2/dist and backend2/drizzle"
+sudo chown -R "${User}:${User}" "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle" 2>/dev/null || true
+sudo rm -rf "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle"
+mkdir -p "$RemoteDevDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteDevDir/backend2"
 rm -f "$remoteArchive"
 echo "[remote] restarting nglu_dev_backend2"
@@ -113,7 +114,7 @@ for i in {1..60}; do
     echo "[remote] backend2 is ready"
     break
   fi
-  echo "[remote] waiting... ($i/60)"
+  echo "[remote] waiting... (`$i/60)"
   sleep 2
 done
 echo "[remote] health check"
