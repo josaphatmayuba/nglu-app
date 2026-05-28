@@ -26,6 +26,13 @@ describe("buildDataUpdatedEvent", () => {
     expect(event.tags).toEqual(expect.arrayContaining(rule.tags));
   });
 
+  it("builds contract events with contract refresh tags", () => {
+    const event = buildDataUpdatedEvent({ entity: "contract", action: "status_changed", entityId: 7 });
+    expect(event.scope.module).toBe("propertyManagement");
+    expect(event.tags).toEqual(expect.arrayContaining(["propertyManagement", "contracts", "leases"]));
+    expect(event.permissions).toEqual(expect.arrayContaining(["readAll-propertyManagement"]));
+  });
+
   it("uses provided permissions and tags, deduped", () => {
     const event = buildDataUpdatedEvent({
       entity: "property",

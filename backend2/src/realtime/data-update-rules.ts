@@ -2,6 +2,7 @@ export type DataUpdateEntity =
   | "property"
   | "unit"
   | "lease"
+  | "contract"
   | "payment"
   | "maintenance";
 
@@ -98,6 +99,36 @@ export const DATA_UPDATE_RULES: Record<DataUpdateEntity, DataUpdateRule> = {
     dataLoaders: [
       "frontend/src/components/propertyManagement/usePropertyManagementData.js",
       "frontend/src/components/propertyManagement/modules/Leases/LeasesPanel.jsx",
+      "frontend/src/components/propertyManagement/modules/Leases/ContractWorkflowModal.jsx",
+    ],
+  },
+  contract: {
+    module: "propertyManagement",
+    endpoints: [
+      "GET /property-management/contracts",
+      "GET /property-management/contracts/:id",
+      "POST /property-management/contracts",
+      "POST /property-management/contracts/:id/send",
+      "DELETE /property-management/contracts/:id",
+      "GET /property-management/contracts/sign/:token",
+      "POST /property-management/contracts/sign/:token",
+      "POST /property-management/leases/:id/renew",
+    ],
+    permissions: [
+      "readAll-propertyManagement",
+      "readSingle-propertyManagement",
+      "create-propertyManagement",
+      "update-propertyManagement",
+      "delete-propertyManagement",
+    ],
+    tags: ["propertyManagement", "contracts", "leases", "dashboard"],
+    pages: [
+      "/admin/property-management",
+      "/admin/property-management?section=leases",
+    ],
+    dataLoaders: [
+      "frontend/src/redux/rtk/features/propertyManagement/propertyManagementSlice.js",
+      "frontend/src/components/propertyManagement/ContractsTab.jsx",
       "frontend/src/components/propertyManagement/modules/Leases/ContractWorkflowModal.jsx",
     ],
   },

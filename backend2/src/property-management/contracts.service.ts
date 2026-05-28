@@ -14,6 +14,8 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
+import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
@@ -58,6 +60,7 @@ export class ContractsService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly templates: ContractTemplatesService,
     private readonly emails: SystemEmailService,
+    private readonly realtimeData: RealtimeDataPublisher,
   ) {}
 
   async createContract(dto: CreateContractDto, createdBy?: number) {
@@ -78,6 +81,7 @@ export class ContractsService {
 
     const id = Number(result.insertId);
     await this.log(id, "created", null, null, `Contract created for lease #${dto.leaseId}`);
+    await this.publishContractUpdate("created", id, dto.leaseId);
     return this.getContract(id);
   }
 
@@ -245,7 +249,8 @@ export class ContractsService {
     }
 
     await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}`);
-    return { message: "Contract sent.", signingUrl, token };
+    await this.publishContractUpdate("status_changed", id, contract.leaseId);
+    return { message: "Contract sent.", id, signingUrl, token };
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {
@@ -256,6 +261,7 @@ export class ContractsService {
         .update(realEstateContracts)
         .set({ status: "viewed", updatedAt: sql`CURRENT_TIMESTAMP` })
         .where(eq(realEstateContracts.id, contract.id));
+      await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     }
 
     await this.log(contract.id, "viewed", ip, ua, null);
@@ -291,6 +297,7 @@ export class ContractsService {
       .where(eq(realEstateContracts.id, contract.id));
 
     await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
 
     if (contract.tenantEmail) {
       await this.sendEmail(
@@ -373,7 +380,7 @@ export class ContractsService {
 
   async deleteContract(id: number) {
     const rows = await this.db
-      .select({ id: realEstateContracts.id })
+      .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId })
       .from(realEstateContracts)
       .where(eq(realEstateContracts.id, id))
       .limit(1);
@@ -384,7 +391,36 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateContracts.id, id));
+    await this.publishContractUpdate("deleted", id, rows[0].leaseId);
     return { message: "Contract deleted." };
+  }
+
+  private async publishContractUpdate(action: DataUpdateAction, contractId: number, leaseId?: number | null) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "contract",
+      action,
+      entityId: contractId,
+      scope: await this.contractScope(leaseId),
+    });
+  }
+
+  private async contractScope(leaseId?: number | null): Promise<Partial<DataUpdateScope>> {
+    if (!leaseId) return { module: "propertyManagement" };
+
+    const [lease] = await this.db
+      .select({
+        propertyId: realEstateLeases.propertyId,
+        unitId: realEstateLeases.unitId,
+      })
+      .from(realEstateLeases)
+      .where(eq(realEstateLeases.id, leaseId))
+      .limit(1);
+
+    return {
+      module: "propertyManagement",
+      propertyId: lease?.propertyId ?? null,
+      unitId: lease?.unitId ?? null,
+    };
   }
 
   private async findByToken(token: string) {

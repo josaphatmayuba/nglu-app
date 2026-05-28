@@ -12,6 +12,10 @@ This project follows:
 
 ### Added
 
+- Immobilier: les signatures publiques de contrats publient maintenant un evenement realtime `contract`, et l'administration recharge automatiquement la liste des contrats.
+  - Le statut signe, vu, envoye, cree ou supprime est propage via `data.updated` avec le tag `contracts`.
+  - Le script backend dev remplace maintenant aussi `backend2/drizzle` afin de deployer les nouvelles migrations avec le code.
+
 - SCRUM-226: Immobilier - correction du paiement des loyers en retard.
   - Le formulaire "Enregistrer paiement" ouvert depuis un retard pre-remplit maintenant le bail, le montant restant, la devise, la date, le mode et une note.
   - Les retards sont recalcules sur le solde restant du cycle: un paiement complet retire le retard, un paiement partiel reduit le montant du.

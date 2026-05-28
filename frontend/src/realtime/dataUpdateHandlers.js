@@ -3,7 +3,10 @@
  * Only dispatches if the relevant data is currently loaded (avoids unnecessary network calls).
  */
 
-import { loadPropertyManagement } from "../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import {
+  loadContracts,
+  loadPropertyManagement,
+} from "../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { broadcastDataUpdated } from "./dataBroadcastChannel";
 
 const DEBOUNCE_MS = 600;
@@ -24,6 +27,10 @@ export function createDataUpdateHandler(dispatch) {
 
     if (!event?.__fromBroadcast) {
       broadcastDataUpdated(event);
+    }
+
+    if (tags.includes("contracts")) {
+      debounced("contracts", () => dispatch(loadContracts()));
     }
 
     if (tags.some((t) => ["propertyManagement", "properties", "units", "leases", "payments", "maintenance"].includes(t))) {
