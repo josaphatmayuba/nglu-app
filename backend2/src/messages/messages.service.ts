@@ -344,9 +344,13 @@ export class MessagesService {
   private async deliver(message: typeof messages.$inferSelect) {
     const transporter = nodemailer.createTransport(smtpTransportOptions());
 
+    const systemFrom = env.smtp.from || env.smtp.user;
+    const replyTo = message.fromEmail !== systemFrom ? message.fromEmail : undefined;
+
     try {
       await transporter.sendMail({
-        from: message.fromEmail,
+        from: systemFrom,
+        replyTo,
         to: this.recipients(message.toEmail),
         subject: message.subject,
         text: message.body ?? undefined,

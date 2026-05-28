@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { Button, Form, Input, Modal, message } from "antd";
+import axios from "axios";
 import {
   Copy,
   ExternalLink,
@@ -28,6 +29,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const [form] = Form.useForm();
   const [step, setStep] = useState("form");
   const [busy, setBusy] = useState(false);
+  const [smsBusy, setSmsBusy] = useState(false);
   const [link, setLink] = useState("");
   const [contact, setContact] = useState({ email: "", phone: "" });
 
@@ -36,6 +38,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
       form.resetFields();
       setStep("form");
       setBusy(false);
+      setSmsBusy(false);
       setLink("");
       setContact({ email: "", phone: "" });
     }
@@ -99,17 +102,27 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
     window.location.href = `mailto:${contact.email}?subject=${subject}&body=${body}`;
   };
 
-  const sendSms = () => {
+  const sendSms = async () => {
     if (!contact.phone) {
       message.warning("Aucun numéro saisi à l'étape 1.");
       return;
     }
-    // wa.me strips the leading "+", expects digits only.
-    const digits = contact.phone.replace(/[^\d]/g, "");
-    const text = encodeURIComponent(
-      `Bonjour, voici votre lien d'inscription NGOLU (valide 7 jours) : ${link}`,
-    );
-    window.open(`https://wa.me/${digits}?text=${text}`, "_blank", "noopener,noreferrer");
+    setSmsBusy(true);
+    try {
+      const { data } = await axios.post("send-sms", {
+        phone: contact.phone,
+        message: `Bonjour, voici votre lien d'inscription NGOLU (valide 7 jours) : ${link}`,
+      });
+      if (data?.success) {
+        message.success("SMS envoye");
+      } else {
+        message.error(data?.message || "Impossible d'envoyer le SMS.");
+      }
+    } catch (error) {
+      message.error(error?.response?.data?.message || "Impossible d'envoyer le SMS.");
+    } finally {
+      setSmsBusy(false);
+    }
   };
 
   return (
@@ -308,7 +321,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
               <button
                 type="button"
                 onClick={sendSms}
-                disabled={!contact.phone}
+                disabled={!contact.phone || smsBusy}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -316,10 +329,10 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
                   padding: 12,
                   borderRadius: 10,
                   border: "1px solid #e4e4e7",
-                  background: contact.phone ? "#fff" : "#f4f4f5",
-                  cursor: contact.phone ? "pointer" : "not-allowed",
+                  background: contact.phone && !smsBusy ? "#fff" : "#f4f4f5",
+                  cursor: contact.phone && !smsBusy ? "pointer" : "not-allowed",
                   textAlign: "left",
-                  opacity: contact.phone ? 1 : 0.55,
+                  opacity: contact.phone && !smsBusy ? 1 : 0.55,
                 }}
               >
                 <span
@@ -337,7 +350,9 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
                   <MessageSquare size={16} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 500, fontSize: 14 }}>SMS / WhatsApp</div>
+                  <div style={{ fontWeight: 500, fontSize: 14 }}>
+                    {smsBusy ? "Envoi..." : "SMS / WhatsApp"}
+                  </div>
                   <div
                     style={{
                       fontSize: 11,
