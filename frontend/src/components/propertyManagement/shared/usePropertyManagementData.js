@@ -24,6 +24,9 @@ import { buildCurrencyOptions, cleanCurrencySymbol } from "./format";
 import { getUnitKind } from "./units";
 import { typeLabel } from "./constants";
 
+const expectedLeaseAmount = (lease) =>
+  Number(lease.remainingAmount ?? lease.expectedAmount ?? lease.rentAmount ?? lease.monthlyRent ?? 0);
+
 const groupLeasesByCurrency = (leases, currencyById) => {
   const grouped = new Map();
 
@@ -36,7 +39,7 @@ const groupLeasesByCurrency = (leases, currencyById) => {
       amount: 0,
     };
 
-    current.amount += Number(lease.rentAmount || lease.monthlyRent || 0);
+    current.amount += expectedLeaseAmount(lease);
     grouped.set(currencyId, current);
   });
 
@@ -258,26 +261,40 @@ export const usePropertyManagementData = () => {
   // lease's nextInvoiceDate and the absence of a payment for that period.
   const paymentBuckets = useMemo(() => {
     const today = moment();
-    const leaseHasPaymentInPeriod = (leaseId, periodStart, periodEnd) =>
-      safePayments.some(
-        (p) =>
-          p.leaseId === leaseId &&
-          p.paymentDate &&
-          moment(p.paymentDate).isBetween(periodStart, periodEnd, "day", "[]"),
-      );
-    const overdueLeases = activeLeases.filter((lease) => {
+    const paidAmountForLeaseSince = (leaseId, periodStart, periodEnd) =>
+      safePayments.reduce((sum, p) => {
+        if (p.leaseId !== leaseId || !p.paymentDate) return sum;
+        const paidAt = moment(p.paymentDate);
+        if (!paidAt.isBetween(periodStart, periodEnd, "day", "[]")) return sum;
+        return sum + Number(p.amount || 0);
+      }, 0);
+    const withRemainingAmount = (lease, paidAmount) => {
+      const expectedAmount = Number(lease.rentAmount || 0);
+      const remainingAmount = Math.max(expectedAmount - paidAmount, 0);
+      return {
+        ...lease,
+        expectedAmount,
+        paidAmount,
+        remainingAmount,
+      };
+    };
+    const overdueLeases = activeLeases.map((lease) => {
       if (!lease.nextInvoiceDate) return false;
       const due = moment(lease.nextInvoiceDate);
       if (!due.isBefore(today, "day")) return false;
-      return !leaseHasPaymentInPeriod(lease.id, due.clone().subtract(1, "month"), due);
-    });
-    const upcomingLeases = activeLeases.filter((lease) => {
+      const paidAmount = paidAmountForLeaseSince(lease.id, due.clone().subtract(1, "month"), today);
+      const leaseWithRemaining = withRemainingAmount(lease, paidAmount);
+      return leaseWithRemaining.remainingAmount > 0 ? leaseWithRemaining : false;
+    }).filter(Boolean);
+    const upcomingLeases = activeLeases.map((lease) => {
       if (!lease.nextInvoiceDate) return false;
       const due = moment(lease.nextInvoiceDate);
       if (due.isBefore(today, "day")) return false;
       if (due.diff(today, "days") > 5) return false;
-      return !leaseHasPaymentInPeriod(lease.id, today.clone().subtract(1, "month"), due);
-    });
+      const paidAmount = paidAmountForLeaseSince(lease.id, today.clone().subtract(1, "month"), due);
+      const leaseWithRemaining = withRemainingAmount(lease, paidAmount);
+      return leaseWithRemaining.remainingAmount > 0 ? leaseWithRemaining : false;
+    }).filter(Boolean);
     const currentMonthStart = today.clone().startOf("month");
     const currentMonthEnd = today.clone().endOf("month");
     const paidPaymentsThisMonth = safePayments.filter(
@@ -287,11 +304,11 @@ export const usePropertyManagementData = () => {
     );
     const paidAmount = paidPaymentsThisMonth.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const pendingAmount = upcomingLeases.reduce(
-      (sum, item) => sum + Number(item.rentAmount || 0),
+      (sum, item) => sum + expectedLeaseAmount(item),
       0,
     );
     const lateAmount = overdueLeases.reduce(
-      (sum, item) => sum + Number(item.rentAmount || 0),
+      (sum, item) => sum + expectedLeaseAmount(item),
       0,
     );
     return {

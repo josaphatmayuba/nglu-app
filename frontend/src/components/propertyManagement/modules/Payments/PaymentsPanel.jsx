@@ -5,7 +5,7 @@ import moment from "moment";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 
-import { createRentPayment, loadPaymentsDashboard } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { createRentPayment, loadPropertyManagement } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize, optionalNumber } from "../../shared/format";
 import { MultiCurrencyValue } from "../../shared/ui";
 import { tenantNameFromLease } from "../../shared/tenants";
@@ -72,7 +72,11 @@ const leaseToExpectedPayment = (lease) => ({
   tenantLastName: lease.tenantLastName || lease.tenant?.lastName,
   propertyName: lease.propertyName || lease.unit?.property?.name,
   unitName: lease.unitName || lease.unit?.name,
-  amount: lease.rentAmount,
+  amount: lease.remainingAmount ?? lease.expectedAmount ?? lease.rentAmount,
+  expectedAmount: lease.expectedAmount ?? lease.rentAmount,
+  paidAmount: lease.paidAmount ?? 0,
+  remainingAmount: lease.remainingAmount ?? lease.rentAmount,
+  currencyId: lease.currencyId,
   currencySymbol: lease.currencySymbol || lease.currency?.symbol,
   paymentDate: lease.nextInvoiceDate,
   status: null,
@@ -85,7 +89,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [quickPayLeaseId, setQuickPayLeaseId] = useState(null);
+  const [quickPayInitialValues, setQuickPayInitialValues] = useState(null);
   const [saving, setSaving] = useState(false);
   const [paymentView, setPaymentView] = useState(readStoredView);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -140,8 +144,8 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
     if (paymentStatusFilter === "late") return filteredOverduePayments;
     if (paymentStatusFilter === "pending") return filteredUpcomingPayments;
     if (paymentStatusFilter === "paid") return paidPayments;
-    return [...paidPayments, ...filteredUpcomingPayments, ...filteredOverduePayments, ...overduePayments];
-  }, [paymentStatusFilter, paidPayments, filteredOverduePayments, filteredUpcomingPayments, overduePayments]);
+    return [...paidPayments, ...filteredUpcomingPayments, ...filteredOverduePayments];
+  }, [paymentStatusFilter, paidPayments, filteredOverduePayments, filteredUpcomingPayments]);
 
   const paymentFilterChips = [
     {
@@ -172,12 +176,19 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
 
   const closeModal = () => {
     setPaymentModalOpen(false);
-    setQuickPayLeaseId(null);
+    setQuickPayInitialValues(null);
     form.resetFields();
   };
 
   const handleQuickPay = (payment) => {
-    setQuickPayLeaseId(payment.leaseId);
+    setQuickPayInitialValues({
+      leaseId: payment.leaseId,
+      amount: payment.remainingAmount ?? payment.amount,
+      currencyId: payment.currencyId,
+      paymentDate: moment().format("YYYY-MM-DD"),
+      method: "cash",
+      notes: `Paiement du loyer en retard - ${payment.leaseReference || ""}`.trim(),
+    });
     openModal();
   };
 
@@ -212,7 +223,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
       }));
       if (response.payload?.message === "success") {
         message.success("Paiement enregistré");
-        dispatch(loadPaymentsDashboard());
+        dispatch(loadPropertyManagement());
         closeModal();
       }
     } finally {
@@ -320,7 +331,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
         accounts={accounts}
         currencyOptions={currencyOptions}
         form={form}
-        initialLeaseId={quickPayLeaseId}
+        initialValues={quickPayInitialValues}
         leaseOptions={leaseOptions}
         onCancel={closeModal}
         onSubmit={submitPayment}

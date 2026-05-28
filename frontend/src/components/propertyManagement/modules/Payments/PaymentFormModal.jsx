@@ -15,7 +15,7 @@ const PaymentFormModal = ({
   accounts,
   currencyOptions,
   form,
-  initialLeaseId,
+  initialValues,
   leaseOptions,
   onCancel,
   onSubmit,
@@ -23,10 +23,10 @@ const PaymentFormModal = ({
   saving,
 }) => {
   useEffect(() => {
-    if (open && initialLeaseId) {
-      form.setFieldsValue({ leaseId: initialLeaseId });
+    if (open && initialValues) {
+      form.setFieldsValue(initialValues);
     }
-  }, [open, initialLeaseId, form]);
+  }, [open, initialValues, form]);
   const cashBankAccounts = (accounts ?? []).filter((account) =>
     ["cash", "bank"].includes(account.name?.toLowerCase()),
   );

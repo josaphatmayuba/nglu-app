@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -816,11 +816,46 @@ export class PropertyManagementService {
     });
 
     const paymentId = Number(paymentResult.insertId);
+    await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
     return this.findPayment(paymentId);
+  }
+
+  private async advanceLeaseInvoiceDateIfCovered(
+    lease: typeof realEstateLeases.$inferSelect,
+    orgId: number,
+    paymentDate: string,
+  ) {
+    if (!lease.nextInvoiceDate) return;
+
+    const due = this.parseDateOnly(lease.nextInvoiceDate);
+    const paidAt = this.parseDateOnly(paymentDate);
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const periodStart = this.addBillingCycle(due, lease.billingCycle, -1);
+    const periodEnd = new Date(Math.max(due.getTime(), paidAt.getTime(), today.getTime()));
+
+    const [row] = await this.db
+      .select({ total: sql<string>`coalesce(sum(${realEstateRentPayments.amount}), 0)` })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+        gte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodStart)),
+        lte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodEnd)),
+      ));
+
+    if (Number(row?.total || 0) < Number(lease.rentAmount || 0)) return;
+
+    await this.db
+      .update(realEstateLeases)
+      .set({
+        nextInvoiceDate: this.formatDateOnly(this.addBillingCycle(due, lease.billingCycle, 1)),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
   }
 
   async sendPaymentReminder(leaseId: number) {
@@ -1444,6 +1479,28 @@ export class PropertyManagementService {
 
   private requiredDate(value: string) {
     return value;
+  }
+
+  private parseDateOnly(value: string | Date) {
+    if (value instanceof Date) {
+      return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    }
+    return new Date(`${value}T00:00:00.000Z`);
+  }
+
+  private formatDateOnly(value: Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private addBillingCycle(value: Date, billingCycle?: string | null, direction = 1) {
+    const next = new Date(value.getTime());
+    const normalized = String(billingCycle || "monthly").toLowerCase();
+    const months =
+      normalized === "yearly" || normalized === "annual" ? 12 :
+      normalized === "quarterly" ? 3 :
+      1;
+    next.setUTCMonth(next.getUTCMonth() + months * direction);
+    return next;
   }
 
   private pick(input: object, keys: string[]) {

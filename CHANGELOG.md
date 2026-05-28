@@ -12,6 +12,11 @@ This project follows:
 
 ### Added
 
+- SCRUM-226: Immobilier - correction du paiement des loyers en retard.
+  - Le formulaire "Enregistrer paiement" ouvert depuis un retard pre-remplit maintenant le bail, le montant restant, la devise, la date, le mode et une note.
+  - Les retards sont recalcules sur le solde restant du cycle: un paiement complet retire le retard, un paiement partiel reduit le montant du.
+  - Apres saisie d'un paiement, les donnees immobilier completes sont rechargees pour refleter la nouvelle echeance.
+
 - SCRUM-23: Realtime multi-tab offline and recovery support.
   - Added `BroadcastChannel("data-updates")` propagation for `data.updated` events across tabs.
   - Added SSE connection status tracking, reconnect refresh for active dashboard/property-management pages, light fallback polling while SSE is down, and a discreet recovery indicator.
