@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -59,5 +60,13 @@ export class PurchaseInvoicesController {
   @Get(":id")
   findOne(@Param("id") id: string, @CurrentOrg() orgId: number) {
     return this.purchaseInvoicesService.findOne(id, orgId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Soft delete purchase invoice" })
+  @Patch(":id")
+  updateStatus(@Param("id") id: string, @Body() body: { status?: string }, @CurrentOrg() orgId: number) {
+    return this.purchaseInvoicesService.updateStatus(id, body.status ?? "false", orgId);
   }
 }

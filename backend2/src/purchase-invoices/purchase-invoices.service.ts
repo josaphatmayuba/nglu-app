@@ -194,7 +194,7 @@ export class PurchaseInvoicesService {
           totalDueAmount: sum(purchaseInvoices.dueAmount),
         })
         .from(purchaseInvoices)
-        .where(eq(purchaseInvoices.organizationId, orgId));
+        .where(and(eq(purchaseInvoices.organizationId, orgId), eq(purchaseInvoices.status, "true")));
 
       return {
         _count: { id: Number(row.totalCount ?? 0) },
@@ -244,8 +244,8 @@ export class PurchaseInvoicesService {
 
   async findOne(id: string, orgId?: number) {
     const where = orgId !== undefined
-      ? and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.organizationId, orgId))
-      : eq(purchaseInvoices.id, id);
+      ? and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.organizationId, orgId), eq(purchaseInvoices.status, "true"))
+      : and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.status, "true"));
 
     const rows = await this.db
       .select()
@@ -284,7 +284,7 @@ export class PurchaseInvoicesService {
     const [invoice] = await this.db
       .select({ id: purchaseInvoices.id, dueAmount: purchaseInvoices.dueAmount })
       .from(purchaseInvoices)
-      .where(eq(purchaseInvoices.id, input.purchaseInvoiceId))
+      .where(and(eq(purchaseInvoices.id, input.purchaseInvoiceId), eq(purchaseInvoices.status, "true")))
       .limit(1);
 
     if (!invoice) {
@@ -327,6 +327,30 @@ export class PurchaseInvoicesService {
     return { message: "Payment recorded successfully." };
   }
 
+  async updateStatus(id: string, status: string, orgId: number) {
+    const rows = await this.db
+      .select({ id: purchaseInvoices.id })
+      .from(purchaseInvoices)
+      .where(and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Purchase invoice not found.");
+    }
+
+    await this.db
+      .update(purchaseInvoices)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.organizationId, orgId)));
+
+    await this.db
+      .update(transactions)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(transactions.relatedId, id), eq(transactions.organizationId, orgId)));
+
+    return { message: "Purchase invoice deleted successfully." };
+  }
+
   async findAllPayments(query: Record<string, string>) {
     if (query["query"] === "all") {
       return this.db
@@ -362,7 +386,7 @@ export class PurchaseInvoicesService {
   }
 
   private filterConditions(query: Record<string, string>, orgId: number) {
-    const conditions = [eq(purchaseInvoices.organizationId, orgId)];
+    const conditions = [eq(purchaseInvoices.organizationId, orgId), eq(purchaseInvoices.status, "true")];
 
     if (query["startDate"]) {
       conditions.push(gte(purchaseInvoices.date, new Date(query["startDate"])));

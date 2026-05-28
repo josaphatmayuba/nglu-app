@@ -12,6 +12,11 @@ This project follows:
 
 ### Added
 
+- SCRUM-221: Comptabilite/Dashboard - les factures vente/achat supprimees logiquement sont exclues des listes, totaux, graphiques et transactions comptables.
+  - Ajout du statut soft-delete sur `saleInvoice` et `purchaseInvoice`.
+  - La suppression d'une facture met aussi ses transactions liees en `status=false`.
+  - Les dashboards, rapports et fiches client/fournisseur filtrent les factures et transactions actives.
+
 - Immobilier: les signatures publiques de contrats publient maintenant un evenement realtime `contract`, et l'administration recharge automatiquement la liste des contrats.
   - Le statut signe, vu, envoye, cree ou supprime est propage via `data.updated` avec le tag `contracts`.
   - Le script backend dev remplace maintenant aussi `backend2/drizzle` afin de deployer les nouvelles migrations avec le code.

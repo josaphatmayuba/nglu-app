@@ -20,6 +20,7 @@ import {
   returnPurchaseInvoices,
   returnSaleInvoices,
   saleInvoiceProducts,
+  saleInvoices,
   weightUnits,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -198,6 +199,7 @@ export class LegacyModulesService {
           totalQuantitySold: sql<number>`SUM(${saleInvoiceProducts.productQuantity})`,
         })
         .from(saleInvoiceProducts)
+        .innerJoin(saleInvoices, and(eq(saleInvoices.id, saleInvoiceProducts.invoiceId), eq(saleInvoices.status, "true")))
         .groupBy(saleInvoiceProducts.productId)
         .orderBy(desc(sql`SUM(${saleInvoiceProducts.productQuantity})`))
         .limit(limit)

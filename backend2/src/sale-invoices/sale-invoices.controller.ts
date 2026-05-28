@@ -116,4 +116,12 @@ export class SaleInvoicesController {
   updateOrderStatus(@Body() body: UpdateOrderStatusDto) {
     return this.saleInvoicesService.updateOrderStatus(body);
   }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Soft delete sale invoice" })
+  @Patch(":id")
+  updateStatus(@Param("id") id: string, @Body() body: { status?: string }, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.updateStatus(id, body.status ?? "false", orgId);
+  }
 }

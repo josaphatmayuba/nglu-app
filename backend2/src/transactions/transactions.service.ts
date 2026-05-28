@@ -54,7 +54,9 @@ export class TransactionsService {
     }
 
     if (query.query === "all") {
-      return this.baseQuery().where(eq(transactions.organizationId, orgId)).orderBy(desc(transactions.id));
+      return this.baseQuery()
+        .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")))
+        .orderBy(desc(transactions.id));
     }
 
     if (query.query === "search") {
@@ -125,7 +127,7 @@ export class TransactionsService {
       like(creditAccount.name, key),
     );
 
-    const orgFilter = eq(transactions.organizationId, orgId);
+    const orgFilter = and(eq(transactions.organizationId, orgId), eq(transactions.status, "true"));
     const rows = await this.baseQuery()
       .where(and(orgFilter, where))
       .orderBy(desc(transactions.id))

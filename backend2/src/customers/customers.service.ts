@@ -255,7 +255,7 @@ export class CustomersService {
 
   private async saleRelatedIds(customerId: number) {
     const rows = await this.db.execute(sql`
-      select id from saleInvoice where customerId = ${customerId}
+      select id from saleInvoice where customerId = ${customerId} and status = 'true'
     `);
     const result = Array.isArray(rows) ? rows[0] : rows;
     return (result as unknown as Array<{ id: number }>).map((row) => String(row.id));
@@ -268,6 +268,7 @@ export class CustomersService {
       .where(
         and(
           eq(transactions.type, type),
+          eq(transactions.status, "true"),
           inArray(transactions.relatedId, relatedIds),
           eq(side === "debitId" ? transactions.debitId : transactions.creditId, accountId),
         ),

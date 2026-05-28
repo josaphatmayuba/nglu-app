@@ -83,7 +83,7 @@ export class CompatService {
   }
 
   async purchaseReport(query: Record<string, string>) {
-    const conditions = [];
+    const conditions = [eq(purchaseInvoices.status, "true")];
     if (query.startDate) conditions.push(gte(purchaseInvoices.date, new Date(query.startDate)));
     if (query.endDate) conditions.push(lte(purchaseInvoices.date, new Date(query.endDate)));
     const where = conditions.length ? and(...conditions) : undefined;
@@ -107,7 +107,7 @@ export class CompatService {
       .leftJoin(products, eq(products.id, purchaseInvoiceProducts.productId))
       .leftJoin(purchaseInvoices, eq(purchaseInvoices.id, purchaseInvoiceProducts.invoiceId))
       .leftJoin(suppliers, eq(suppliers.id, purchaseInvoices.supplierId))
-      .where(inArray(purchaseInvoiceProducts.invoiceId, invoiceIds));
+      .where(and(inArray(purchaseInvoiceProducts.invoiceId, invoiceIds), eq(purchaseInvoices.status, "true")));
 
     return rows.map((row) => ({
       ...row,

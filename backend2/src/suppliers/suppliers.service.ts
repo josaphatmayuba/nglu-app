@@ -210,7 +210,7 @@ export class SuppliersService {
 
   private async purchaseRelatedIds(supplierId: number) {
     const rows = await this.db.execute(sql`
-      select id from purchaseInvoice where supplierId = ${supplierId}
+      select id from purchaseInvoice where supplierId = ${supplierId} and status = 'true'
     `);
     const result = Array.isArray(rows) ? rows[0] : rows;
     return (result as unknown as Array<{ id: number }>).map((row) => String(row.id));
@@ -223,6 +223,7 @@ export class SuppliersService {
       .where(
         and(
           eq(transactions.type, type),
+          eq(transactions.status, "true"),
           inArray(transactions.relatedId, relatedIds),
           eq(side === "debitId" ? transactions.debitId : transactions.creditId, accountId),
         ),

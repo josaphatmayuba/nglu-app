@@ -867,6 +867,7 @@ export const saleInvoices = mysqlTable("saleInvoice", {
   dueDate: datetime("dueDate"),
   isHold: varchar("isHold", { length: 10 }).default("false"),
   orderStatus: varchar("orderStatus", { length: 50 }),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -898,6 +899,7 @@ export const purchaseInvoices = mysqlTable("purchaseInvoice", {
   supplierId: bigint("supplierId", { mode: "number" }),
   currencyId: bigint("currencyId", { mode: "number" }),
   note: text("note"),
+  status: varchar("status", { length: 10 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

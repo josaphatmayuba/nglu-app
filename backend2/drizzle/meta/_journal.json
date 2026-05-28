@@ -190,6 +190,13 @@
       "when": 1780110000000,
       "tag": "0042_add_organizations_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1780113600000,
+      "tag": "0043_add_invoice_soft_delete_status",
+      "breakpoints": true
     }
   ]
 }

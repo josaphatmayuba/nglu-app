@@ -248,7 +248,7 @@ export class SaleInvoicesService {
           totalProfit: sum(saleInvoices.profit),
         })
         .from(saleInvoices)
-        .where(eq(saleInvoices.organizationId, orgId));
+        .where(and(eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")));
 
       return {
         _count: { id: Number(row.totalCount ?? 0) },
@@ -311,7 +311,7 @@ export class SaleInvoicesService {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(eq(saleInvoices.isHold, "true"))
+      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true")))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
@@ -319,14 +319,14 @@ export class SaleInvoicesService {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(eq(saleInvoices.customerId, customerId))
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true")))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
   async findOne(id: string, orgId?: number) {
     const where = orgId !== undefined
-      ? and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId))
-      : eq(saleInvoices.id, id);
+      ? and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true"))
+      : and(eq(saleInvoices.id, id), eq(saleInvoices.status, "true"));
     const rows = await this.db.select().from(saleInvoices).where(where).limit(1);
 
     if (!rows.length) {
@@ -418,13 +418,37 @@ export class SaleInvoicesService {
     return { message: "Order status updated." };
   }
 
+  async updateStatus(id: string, status: string, orgId: number) {
+    const rows = await this.db
+      .select({ id: saleInvoices.id })
+      .from(saleInvoices)
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Sale invoice not found.");
+    }
+
+    await this.db
+      .update(saleInvoices)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
+
+    await this.db
+      .update(transactions)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(transactions.relatedId, id), eq(transactions.organizationId, orgId)));
+
+    return { message: "Sale invoice deleted successfully." };
+  }
+
   // Payment sale invoices
   async createPayment(input: CreatePaymentSaleInvoiceDto) {
     // Validate invoice exists
     const [invoice] = await this.db
       .select({ id: saleInvoices.id, dueAmount: saleInvoices.dueAmount })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, input.saleInvoiceId))
+      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true")))
       .limit(1);
 
     if (!invoice) {
@@ -504,7 +528,7 @@ export class SaleInvoicesService {
   }
 
   private filterConditions(query: Record<string, string>, orgId: number) {
-    const conditions = [eq(saleInvoices.organizationId, orgId)];
+    const conditions = [eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")];
 
     if (query["startDate"]) {
       conditions.push(gte(saleInvoices.date, new Date(query["startDate"])));
