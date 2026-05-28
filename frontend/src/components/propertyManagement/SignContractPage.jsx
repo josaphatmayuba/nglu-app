@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useParams } from "react-router-dom";
 import { getContractForSigning, submitSignature } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { downloadSignedContractPdf } from "./shared/contractPdf";
 
 const STATUS_LABELS = {
   draft: { label: "Brouillon", color: "#888" },
@@ -19,6 +20,7 @@ export default function SignContractPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [done, setDone] = useState(false);
   const [mode, setMode] = useState("draw"); // "draw" | "upload"
 
@@ -109,11 +111,30 @@ export default function SignContractPage() {
     const signatureData = canvasRef.current.toDataURL("image/png");
     const res = await dispatch(submitSignature({ token, signatureData }));
     if (res.payload?.data?.message) {
+      setContract((prev) => ({
+        ...(prev || {}),
+        ...(res.payload.data.contract || {}),
+        status: "signed",
+        signatureData: res.payload.data.contract?.signatureData || signatureData,
+        signedAt: res.payload.data.contract?.signedAt || new Date().toISOString(),
+      }));
       setDone(true);
     } else {
       alert("Erreur lors de la soumission. Veuillez réessayer.");
     }
     setSubmitting(false);
+  };
+
+  const handleDownloadPdf = () => {
+    if (!contract?.signatureData) return;
+    try {
+      setDownloadingPdf(true);
+      downloadSignedContractPdf(contract);
+    } catch (e) {
+      alert("Impossible de generer le PDF. Veuillez reessayer.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   if (loading) {
@@ -146,6 +167,16 @@ export default function SignContractPage() {
             <p style={{ color: "#888", fontSize: 13 }}>
               Signé le : {new Date(contract.signedAt).toLocaleString("fr-CA")}
             </p>
+          )}
+          {contract?.signatureData && (
+            <button
+              type="button"
+              style={{ ...styles.downloadBtn, opacity: downloadingPdf ? 0.7 : 1 }}
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+            >
+              {downloadingPdf ? "Preparation du PDF..." : "Telecharger ma copie PDF"}
+            </button>
           )}
         </div>
       </div>
@@ -396,5 +427,16 @@ const styles = {
     padding: 40,
     textAlign: "center",
     boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
+  },
+  downloadBtn: {
+    marginTop: 16,
+    padding: "10px 20px",
+    border: "none",
+    borderRadius: 6,
+    background: "#1677ff",
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 600,
   },
 };

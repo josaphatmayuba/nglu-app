@@ -1,5 +1,5 @@
 import * as crypto from "crypto";
-import { GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { desc, eq, ne, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -56,6 +56,8 @@ type CompanyInfo = {
 
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly templates: ContractTemplatesService,
@@ -271,7 +273,11 @@ export class ContractsService {
       status: contract.status,
       contractContent: contract.contractContent,
       tenantName: contract.tenantName,
+      tenantEmail: contract.tenantEmail,
+      signatureData: contract.signatureData,
+      sentAt: contract.sentAt,
       signedAt: contract.signedAt,
+      createdAt: contract.createdAt,
       companyInfo: await this.getCompanyInfo(),
     };
   }
@@ -298,17 +304,22 @@ export class ContractsService {
 
     await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+    const signedContract = await this.getContract(contract.id);
 
     if (contract.tenantEmail) {
-      await this.sendEmail(
+      try {
+        await this.sendEmail(
         contract.tenantEmail,
         "Contrat signé — confirmation",
         `<p>Bonjour ${contract.tenantName ?? ""},</p><p>Votre contrat a bien été signé électroniquement. Merci.</p>`,
         "contract_signed",
-      );
+        );
+      } catch (error) {
+        this.logger.warn(`Contract ${contract.id} signed, but confirmation email failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
-    return { message: "Contract signed successfully." };
+    return { message: "Contract signed successfully.", contract: signedContract };
   }
 
   async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, createdBy?: number) {
