@@ -89,21 +89,64 @@ Write-Step "Uploading middleware source archive"
 
 $remoteScript = @"
 set -euo pipefail
+
+MW_IMG="$ComposeProject-middleware"
+HEALTH_URL="https://ongdngolu.org/api/health"
+
 echo "[remote] replacing middleware/src"
 rm -rf "$RemoteProdDir/middleware/src"
 mkdir -p "$RemoteProdDir/middleware"
 tar -xzf "$remoteArchive" -C "$RemoteProdDir/middleware"
 rm -f "$remoteArchive"
-echo "[remote] rebuilding and restarting nglu_prod_middleware"
+
 cd "$RemoteProdDir"
-docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate --build middleware
-echo "[remote] waiting for middleware to be ready"
-sleep 6
-echo "[remote] health check"
-curl -fsS https://ongdngolu.org/api/health
-echo ""
-echo "[remote] middleware logs (last 10 lines)"
-docker logs nglu_prod_middleware --tail 10
+
+# (#1) Tag the current working middleware image as a rollback point.
+MW_HAVE_PREV=0
+if docker image inspect "`$MW_IMG:latest" >/dev/null 2>&1; then
+  docker tag "`$MW_IMG:latest" "`$MW_IMG:previous"
+  MW_HAVE_PREV=1
+  echo "[remote] tagged current image as `$MW_IMG:previous (rollback point)"
+fi
+
+# Build the new image WITHOUT touching the running container.
+echo "[remote] building new middleware image"
+if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build middleware; then
+  echo "[remote] BUILD FAILED — running middleware untouched, nothing deployed"
+  exit 1
+fi
+
+echo "[remote] recreating nglu_prod_middleware with the new image"
+docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate middleware
+
+check_health() {
+  for i in `$(seq 1 20); do
+    if curl -fsS "`$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then return 0; fi
+    sleep 3
+  done
+  return 1
+}
+
+if check_health; then
+  echo "[remote] health OK — new middleware is live"
+  docker logs nglu_prod_middleware --tail 10
+else
+  echo "[remote] MIDDLEWARE HEALTH CHECK FAILED"
+  docker logs nglu_prod_middleware --tail 30 || true
+  if [ "`$MW_HAVE_PREV" = "1" ]; then
+    echo "[remote] ROLLING BACK middleware to previous image"
+    docker tag "`$MW_IMG:previous" "`$MW_IMG:latest"
+    docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate middleware
+    if check_health; then
+      echo "[remote] ROLLED BACK — previous middleware is live again"
+    else
+      echo "[remote] ROLLBACK still unhealthy — manual intervention required"
+    fi
+  else
+    echo "[remote] no previous middleware image to roll back to"
+  fi
+  exit 1
+fi
 "@
 
 Write-Step "Deploying middleware on AWS production"
@@ -112,7 +155,9 @@ $ErrorActionPreference = "Continue"
 ($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
-if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }
+if ($sshExit -ne 0) {
+  throw "Remote prod middleware deploy failed (exit $sshExit). The server attempted an automatic rollback to the previous working image - check the remote output above to confirm it is healthy."
+}
 
 if (-not $SkipSmoke) {
   Write-Step "Local smoke checks"
