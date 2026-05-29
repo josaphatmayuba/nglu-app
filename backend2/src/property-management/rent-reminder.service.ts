@@ -81,10 +81,14 @@ export class RentReminderService {
         ),
       );
 
+    // When the feature is disabled (e.g. dev), never send anything — report candidates only.
+    const send = env.rentReminders.enabled;
+
     let sent = 0;
     for (const lease of rows) {
       // Send once per overdue period (next_invoice_date advances when the tenant pays).
       if (lease.lastReminder && lease.lastReminder === lease.nextInvoiceDate) continue;
+      if (!send) continue;
 
       const daysLate = Math.floor(
         (Date.now() - new Date(`${lease.nextInvoiceDate}T00:00:00`).getTime()) / 86_400_000,
@@ -129,7 +133,7 @@ export class RentReminderService {
       sent += 1;
     }
 
-    return { candidates: rows.length, sent };
+    return { candidates: rows.length, sent, enabled: send };
   }
 
   private async safeSms(phone: string, message: string, leaseId: number) {
