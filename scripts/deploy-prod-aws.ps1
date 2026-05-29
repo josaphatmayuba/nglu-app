@@ -163,6 +163,7 @@ trap cleanup EXIT
 echo "[remote] production lock acquired"
 COMMIT="$gitCommit"
 sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+sudo sed -i 's/\r`$//' "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
 notify() { bash "$RemoteProdDir/deploy-notify.sh" frontend "`$1" "`$COMMIT" || true; }
 
 if [ "$pullServer" = "true" ]; then
