@@ -55,4 +55,10 @@ export const env = {
     from: process.env.TWILIO_FROM || "",
     messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || "",
   },
+  rentReminders: {
+    enabled: process.env.RENT_REMINDERS_ENABLED === "true",
+    overdueDays: Number(process.env.RENT_REMINDER_OVERDUE_DAYS || 15),
+    // Daily run time, server timezone. Default 09:00.
+    cron: process.env.RENT_REMINDER_CRON || "0 9 * * *",
+  },
 };

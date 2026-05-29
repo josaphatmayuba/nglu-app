@@ -50,6 +50,7 @@ import {
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
+import { RentReminderService } from "./rent-reminder.service";
 
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("property-management")
@@ -60,6 +61,7 @@ export class PropertyManagementController {
   constructor(
     private readonly propertyManagementService: PropertyManagementService,
     private readonly contractsService: ContractsService,
+    private readonly rentReminderService: RentReminderService,
   ) {}
 
   @ApiOperation({ summary: "Property management dashboard totals" })
@@ -288,6 +290,14 @@ export class PropertyManagementController {
   @HttpCode(200)
   sendPaymentReminder(@Body() body: { leaseId: number }) {
     return this.propertyManagementService.sendPaymentReminder(body.leaseId);
+  }
+
+  @ApiOperation({ summary: "Run overdue rent reminders now (SMS + email to late tenants)" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("payments/run-overdue-reminders")
+  @HttpCode(200)
+  runOverdueReminders() {
+    return this.rentReminderService.runOverdueReminders();
   }
 
   @ApiOperation({ summary: "List maintenance requests" })
