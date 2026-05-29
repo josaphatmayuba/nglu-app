@@ -29,3 +29,15 @@ export const parseOnboardingData = (record) => {
     return {};
   }
 };
+
+// An onboarding dossier is shown (and counted) while it is still pending:
+// not validated, and not an expired invitation. Submitted dossiers awaiting
+// validation stay visible even past their expiry.
+export const isPendingOnboarding = (record, now = Date.now()) => {
+  if (!record || record.status === "validated") return false;
+  if (record.status !== "submitted" && record.expiresAt) {
+    const expiry = new Date(record.expiresAt).getTime();
+    if (Number.isFinite(expiry) && expiry < now) return false;
+  }
+  return true;
+};
