@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, Divider, Form, Input, Space } from 'antd';
-import { Send, X } from 'lucide-react';
+import { ArrowLeft, Send } from 'lucide-react';
 import './compose-message.css';
 
 export default function ComposeMessage({ onSend, onCancel, accounts = [], initialValues, title = 'Composer un nouveau message' }) {
@@ -27,12 +27,13 @@ export default function ComposeMessage({ onSend, onCancel, accounts = [], initia
   return (
     <Card className="compose-message-card">
       <div className="compose-message-header">
-        <h3>{title}</h3>
         <Button
-          type="text"
-          icon={<X size={18} />}
+          icon={<ArrowLeft size={16} />}
           onClick={onCancel}
-        />
+        >
+          Retour aux messages
+        </Button>
+        <h3>{title}</h3>
       </div>
 
       <Divider style={{ margin: '12px 0' }} />

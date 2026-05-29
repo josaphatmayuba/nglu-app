@@ -1,5 +1,5 @@
 import { Forward, Reply, ReplyAll, Trash2, X } from 'lucide-react';
-import { Button, Divider, Tooltip } from 'antd';
+import { Button, Tooltip } from 'antd';
 import moment from 'moment';
 import './message-detail.css';
 
@@ -67,8 +67,6 @@ export default function MessageDetail({
         </div>
       </div>
 
-      <Divider style={{ margin: '12px 0' }} />
-
       <div className="message-detail-metadata">
         <div className="metadata-row">
           <span className="metadata-label">De :</span>
@@ -91,8 +89,6 @@ export default function MessageDetail({
           </div>
         )}
       </div>
-
-      <Divider style={{ margin: '12px 0' }} />
 
       <div className="message-detail-body">
         {message.htmlBody ? (
