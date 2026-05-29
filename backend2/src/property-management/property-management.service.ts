@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
@@ -26,6 +26,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
+import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import {
@@ -55,10 +56,13 @@ const unitCurrency = alias(currencies, "unitCurrency");
 
 @Injectable()
 export class PropertyManagementService {
+  private readonly logger = new Logger(PropertyManagementService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly emails: SystemEmailService,
+    private readonly sms: CompatService,
   ) {}
 
   async dashboard(orgId: number) {
@@ -212,7 +216,60 @@ export class PropertyManagementService {
     });
 
     const onboarding = await this.findOnboarding(Number(result.insertId));
-    return this.adminOnboardingResponse(onboarding);
+    const response = this.adminOnboardingResponse(onboarding);
+
+    // Send the onboarding link straight to the tenant by SMS and email (best-effort).
+    await this.sendOnboardingLink(response.url, input.phone, input.email ?? null, input.firstName ?? null);
+
+    return response;
+  }
+
+  private async sendOnboardingLink(
+    url: string | null,
+    phone: string | null,
+    email: string | null,
+    firstName: string | null,
+  ) {
+    if (!url) return;
+
+    const [company] = await this.db
+      .select({ name: appSettings.companyName })
+      .from(appSettings)
+      .limit(1);
+    const companyName = company?.name || "votre gestionnaire";
+    const greeting = firstName ? `Bonjour ${firstName}` : "Bonjour";
+
+    if (phone) {
+      const message =
+        `${greeting}, voici votre lien d'inscription en tant que locataire : ${url} ` +
+        `Merci de le compléter dès que possible. — ${companyName}`;
+      try {
+        const res = await this.sms.sendSms({ phone, message });
+        if (!res?.success) this.logger.warn(`Onboarding link SMS not sent to ${phone}: ${res?.message}`);
+      } catch (error) {
+        this.logger.warn(`Onboarding link SMS error to ${phone}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (email) {
+      const html =
+        `<p>${greeting},</p>` +
+        `<p>Voici votre lien d'inscription en tant que locataire :</p>` +
+        `<p><a href="${url}">${url}</a></p>` +
+        `<p>Merci de le compléter dès que possible.</p>` +
+        `<p>Cordialement,<br>${companyName}</p>`;
+      try {
+        await this.emails.send({
+          to: email,
+          subject: "Votre lien d'inscription locataire",
+          html,
+          type: "tenant_onboarding_link",
+          relatedType: "tenant-onboarding",
+        });
+      } catch (error) {
+        this.logger.warn(`Onboarding link email error to ${email}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   async onboardingList() {
