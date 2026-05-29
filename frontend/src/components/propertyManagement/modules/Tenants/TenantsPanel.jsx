@@ -10,7 +10,7 @@ import {
   validateTenantOnboarding,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { normalize } from "../../shared/format";
-import { parseOnboardingData, tenantName } from "../../shared/tenants";
+import { isPendingOnboarding, parseOnboardingData, tenantName } from "../../shared/tenants";
 import { EmptyState } from "../../shared/ui";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 
@@ -69,19 +69,10 @@ const TenantsPanel = ({
     });
   }, [visibleTenants, searchTerm]);
 
-  const pendingOnboarding = useMemo(() => {
-    const now = Date.now();
-    return safeOnboarding.filter((record) => {
-      if (!record || record.status === "validated") return false;
-      // Hide expired links automatically, unless the tenant already submitted
-      // the dossier (status "submitted" still needs admin validation).
-      if (record.status !== "submitted" && record.expiresAt) {
-        const expiry = new Date(record.expiresAt).getTime();
-        if (Number.isFinite(expiry) && expiry < now) return false;
-      }
-      return true;
-    });
-  }, [safeOnboarding]);
+  const pendingOnboarding = useMemo(
+    () => safeOnboarding.filter((record) => isPendingOnboarding(record)),
+    [safeOnboarding],
+  );
 
   const filteredOnboarding = useMemo(() => {
     const q = normalize(searchTerm);

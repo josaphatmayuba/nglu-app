@@ -12,6 +12,7 @@ import {
 import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 
 import { compactMoney } from "./shared/format";
+import { isPendingOnboarding } from "./shared/tenants";
 import { MetricCard, MultiCurrencyValue } from "./shared/ui";
 import { usePropertyManagementBootstrap, usePropertyManagementData } from "./shared/usePropertyManagementData";
 
@@ -52,7 +53,7 @@ const PropertyManagement = () => {
   // Properties view (grid card "Modifier", list "Edit", map popup, etc.).
   const [unitModalRecord, setUnitModalRecord] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
-  const pendingOnboardingCount = safeOnboarding.filter((record) => record?.status !== "validated").length;
+  const pendingOnboardingCount = safeOnboarding.filter((record) => isPendingOnboarding(record)).length;
 
   const tabItems = [
     { key: "properties", label: "Propriétés", count: enrichedUnits.length },
