@@ -6,6 +6,7 @@
 
 import { forwardRef } from "react";
 import PhoneInputBase from "react-phone-number-input";
+import fr from "react-phone-number-input/locale/fr.json";
 import "react-phone-number-input/style.css";
 import "./PhoneInput.css";
 
@@ -18,6 +19,7 @@ const PhoneInput = forwardRef(function PhoneInput(
       international
       countryCallingCodeEditable={false}
       defaultCountry={defaultCountry}
+      labels={fr}
       value={value || undefined}
       onChange={(v) => onChange?.(v || "")}
       placeholder={placeholder}

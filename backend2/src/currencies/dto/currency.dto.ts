@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { ArrayNotEmpty, IsArray, IsInt, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class CreateCurrencyDto {
   @ApiPropertyOptional({ example: "USD" })
@@ -41,6 +41,18 @@ export class UpdateCurrencyDto {
 }
 
 export class UpdateCurrencyStatusDto {
+  @ApiProperty({ example: "false" })
+  @IsString()
+  status: string;
+}
+
+export class BulkUpdateCurrencyStatusDto {
+  @ApiProperty({ example: [1, 2, 3], type: [Number] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsInt({ each: true })
+  ids: number[];
+
   @ApiProperty({ example: "false" })
   @IsString()
   status: string;

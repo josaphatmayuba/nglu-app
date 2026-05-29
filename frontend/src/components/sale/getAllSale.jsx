@@ -5,6 +5,7 @@ import { loadAllCustomer } from "@/redux/rtk/features/customer/customerSlice";
 import { loadAllSale, loadSingleSale } from "@/redux/rtk/features/sale/saleSlice";
 import { getSetting } from "@/redux/rtk/features/setting/settingSlice";
 import { loadAllStaff } from "@/redux/rtk/features/user/userSlice";
+import { useDefaultCurrencySymbol } from "@/utils/useDefaultCurrency";
 import { DatePicker } from "antd";
 import dayjs from "dayjs";
 import moment from "moment";
@@ -26,9 +27,6 @@ import SendSaleInvoice from "./SendSaleInvoice";
 // ────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────
-const fmtCDF = (n) =>
-  `CDF ${Math.round(Number(n || 0)).toLocaleString("fr-FR")}`;
-
 const fmtMoney = (n, symbol) => {
   const amount = Math.round(Number(n || 0)).toLocaleString("fr-FR");
   return `${symbol || "CDF"} ${amount}`;
@@ -87,6 +85,7 @@ const GetAllSale = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [openMenu, setOpenMenu] = useState(null);
   const companyInfo = useSelector((state) => state?.setting?.data) || null;
+  const currencySymbol = useDefaultCurrencySymbol();
 
   const {
     list,
@@ -246,19 +245,19 @@ const GetAllSale = () => {
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-ink-500 font-medium mb-1">Total facturé</div>
           <div className="text-lg md:text-2xl font-semibold text-ink-900 tracking-tight truncate">
-            {fmtCDF(kpis.total)}
+            {fmtMoney(kpis.total, currencySymbol)}
           </div>
         </div>
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-emerald-700 font-medium mb-1">Encaissé</div>
           <div className="text-lg md:text-2xl font-semibold text-emerald-700 tracking-tight truncate">
-            {fmtCDF(kpis.paid)}
+            {fmtMoney(kpis.paid, currencySymbol)}
           </div>
         </div>
         <div className="bg-white rounded-xl border border-ink-200 p-4">
           <div className="text-xs text-amber-700 font-medium mb-1">À recouvrer</div>
           <div className="text-lg md:text-2xl font-semibold text-amber-700 tracking-tight truncate">
-            {fmtCDF(kpis.due)}
+            {fmtMoney(kpis.due, currencySymbol)}
           </div>
         </div>
       </div>

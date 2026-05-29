@@ -3,7 +3,8 @@ import { Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
-import { buildCurrencyOptions } from "../../shared/format";
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import { cleanCurrencySymbol } from "../../shared/format";
 import { modalSelectProps } from "../../shared/constants";
 
 const COST_TYPES = [
@@ -18,15 +19,21 @@ const PAYMENT_METHODS = [
   { label: "Chèque", value: "cheque" },
 ];
 
-const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved }) => {
+const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved, viewOnly = false }) => {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [costs, setCosts] = useState([]);
   const [loadingCosts, setLoadingCosts] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
 
-  const currencies = useSelector((s) => s.currencies?.list ?? []);
-  const currencyOptions = buildCurrencyOptions(currencies);
+  const currencies = useSelector((s) => s.currency?.list ?? []);
+  const activeCurrencies = currencies.filter((c) => c?.status === true || c?.status === "true");
+  const defaultCurrencyId = useSelector((s) => s.setting?.data?.currencyId);
+  const symbolFor = (id) => {
+    const c = currencies.find((x) => x.id === id || x.currencyId === id);
+    return c ? cleanCurrencySymbol(c) : "";
+  };
+  const defaultSymbol = symbolFor(defaultCurrencyId) || "";
 
   const loadCosts = async () => {
     if (!ticketId) return;
@@ -64,8 +71,8 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
       message.success("Coût enregistré");
       form.resetFields();
       setReceiptFile(null);
-      loadCosts();
       onSaved?.();
+      onClose?.();
     } catch (e) {
       message.error(e?.response?.data?.message || "Erreur");
     } finally {
@@ -116,7 +123,7 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
                   {c.vendor_name && <span className="text-ink-400 ml-1">· {c.vendor_name}</span>}
                 </div>
                 <div className="flex items-center gap-2 ml-2 shrink-0">
-                  <span className="font-semibold tabular-nums">{Number(c.amount).toLocaleString()} {c.currency_id ? "" : ""}</span>
+                  <span className="font-semibold tabular-nums">{Number(c.amount).toLocaleString()} {symbolFor(c.currency_id) || defaultSymbol}</span>
                   {c.receipt_url && (
                     <a href={c.receipt_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700" title="Voir la facture">
                       <Paperclip size={14} />
@@ -133,9 +140,23 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
               </div>
             ))}
           </div>
+          <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 mt-2 pt-2 border-t border-ink-100 text-sm">
+            <span className="text-ink-500">Total :</span>
+            {Object.values(total).map((t, i) => (
+              <span key={i} className="font-semibold tabular-nums">
+                {Number(t.amount).toLocaleString()} {symbolFor(t.currencyId) || defaultSymbol}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
+      {viewOnly && costs.length === 0 && !loadingCosts && (
+        <p className="text-sm text-ink-400 py-6 text-center">Aucun coût enregistré pour cette maintenance.</p>
+      )}
+
+      {!viewOnly && (
+      <>
       {/* Add cost form */}
       <p className="text-xs font-semibold text-ink-500 uppercase mb-2">Ajouter un coût</p>
       <Form
@@ -160,7 +181,7 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
             <InputNumber className="w-full" min={0} />
           </Form.Item>
           <Form.Item label="Devise" name="currencyId">
-            <Select {...modalSelectProps} options={currencyOptions} allowClear placeholder="Devise par défaut" />
+            <CurrencyCombobox {...modalSelectProps} currencies={activeCurrencies} allowClear placeholder="Devise par défaut" />
           </Form.Item>
         </div>
         <div className="grid grid-cols-2 gap-x-3">
@@ -196,6 +217,14 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved })
           </Button>
         </div>
       </Form>
+      </>
+      )}
+
+      {viewOnly && (
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Fermer</Button>
+        </div>
+      )}
     </Modal>
   );
 };

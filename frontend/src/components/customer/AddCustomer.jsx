@@ -1,6 +1,9 @@
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 import { useState } from "react";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { CSVLink } from "react-csv";
 import { FaDownload } from "react-icons/fa";
 import { useDispatch } from "react-redux";
@@ -108,13 +111,11 @@ const AddCustomer = ({ drawer }) => {
             label="Phone"
             name="phone"
             rules={[
-              {
-                required: true,
-                message: "Please input Phone!",
-              },
+              { required: true, message: "Please input Phone!" },
+              phoneRule,
             ]}
           >
-            <Input />
+            <PhoneInput />
           </Form.Item>
           <Form.Item
             style={{ marginBottom: "10px" }}

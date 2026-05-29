@@ -3,7 +3,7 @@
 // 3 swim lanes: Ouvert / En cours / Résolu.
 
 import moment from "moment";
-import { CircleDollarSign, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { CircleDollarSign, Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
   DndContext,
@@ -34,7 +34,7 @@ const priorityClass = (p) =>
 
 // ── Draggable card ────────────────────────────────────────────────────────────
 
-const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, isDragOverlay = false }) => {
+const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, onViewCosts, isDragOverlay = false }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -67,7 +67,7 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, isDra
         <span className={`immo-pill ${priorityClass(request.priority)}`}>
           {priorityLabel(request.priority)}
         </span>
-        {(onEdit || onDelete || onAddCost) && (
+        {(onEdit || onDelete || onAddCost || onViewCosts) && (
           <span
             className="immo-menu-anchor"
             style={{ marginLeft: "auto" }}
@@ -84,6 +84,13 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, isDra
             </button>
             {menuOpen && (
               <ul className="immo-context-menu" role="menu">
+                {onViewCosts && (
+                  <li role="menuitem">
+                    <button type="button" onClick={() => { setMenuOpen(false); onViewCosts(request); }}>
+                      <Eye size={13} /> Voir les coûts
+                    </button>
+                  </li>
+                )}
                 {onAddCost && (
                   <li role="menuitem">
                     <button type="button" onClick={() => { setMenuOpen(false); onAddCost(request); }}>
@@ -130,7 +137,7 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, isDra
 
 // ── Droppable column ──────────────────────────────────────────────────────────
 
-const DroppableColumn = ({ col, items, onEdit, onDelete, onAddCost, isOver }) => {
+const DroppableColumn = ({ col, items, onEdit, onDelete, onAddCost, onViewCosts, isOver }) => {
   const { setNodeRef } = useDroppable({ id: col.key });
 
   return (
@@ -158,6 +165,7 @@ const DroppableColumn = ({ col, items, onEdit, onDelete, onAddCost, isOver }) =>
             onEdit={onEdit}
             onDelete={onDelete}
             onAddCost={onAddCost}
+            onViewCosts={onViewCosts}
           />
         ))}
       </div>
@@ -167,7 +175,7 @@ const DroppableColumn = ({ col, items, onEdit, onDelete, onAddCost, isOver }) =>
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete, onAddCost, onStatusChange }) => {
+const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete, onAddCost, onViewCosts, onStatusChange }) => {
   const [activeItem, setActiveItem] = useState(null);
   const [overColKey, setOverColKey] = useState(null);
 
@@ -229,6 +237,7 @@ const MaintenanceKanbanView = ({ requests = [], onEdit, onDelete, onAddCost, onS
             onEdit={onEdit}
             onDelete={onDelete}
             onAddCost={onAddCost}
+            onViewCosts={onViewCosts}
             isOver={overColKey === col.key}
           />
         ))}

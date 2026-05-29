@@ -1,4 +1,4 @@
-import { Building2, CalendarDays, Check, CircleDollarSign, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react";
+import { Building2, CalendarDays, Check, CircleDollarSign, Eye, MoreHorizontal, Pencil, Trash2, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import moment from "moment";
 
@@ -6,7 +6,7 @@ import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
 import { ticketIconFor, ticketIconTone } from "../../shared/units";
 
-const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost }) => {
+const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost, onViewCosts }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const urgent = ["urgent", "high"].includes(request.priority);
@@ -23,6 +23,7 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost }) 
     if (action === "edit") onEdit?.(request);
     if (action === "delete") onDelete?.(request);
     if (action === "cost") onAddCost?.(request);
+    if (action === "viewCosts") onViewCosts?.(request);
   };
 
   return (
@@ -55,7 +56,7 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost }) 
           {assignee || "Non assigné"}
         </span>
         <span className={`immo-pill ${statusKey}`}>{statusText}</span>
-        {(onEdit || onDelete || onAddCost) && (
+        {(onEdit || onDelete || onAddCost || onViewCosts) && (
           <span className="immo-menu-anchor" ref={menuRef}>
             <button
               type="button"
@@ -67,6 +68,13 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost }) 
             </button>
             {menuOpen && (
               <ul className="immo-context-menu" role="menu">
+                {onViewCosts && (
+                  <li role="menuitem">
+                    <button type="button" onClick={() => handleAction("viewCosts")}>
+                      <Eye size={14} /> Voir les coûts
+                    </button>
+                  </li>
+                )}
                 {onAddCost && (
                   <li role="menuitem">
                     <button type="button" onClick={() => handleAction("cost")}>

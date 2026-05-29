@@ -1,5 +1,8 @@
 import { Button, Card, Col, Form, Input, Row, Typography } from "antd";
 import React, { Fragment, useState } from "react";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useDispatch } from "react-redux";
 import { useLocation, useParams } from "react-router-dom";
 
@@ -74,13 +77,11 @@ function UpdateSupplier() {
                     label="Phone"
                     name="phone"
                     rules={[
-                      {
-                        required: true,
-                        message: "Please input supplier Phone!",
-                      },
+                      { required: true, message: "Please input supplier Phone!" },
+                      phoneRule,
                     ]}
                   >
-                    <Input />
+                    <PhoneInput />
                   </Form.Item>
 
                   <Form.Item

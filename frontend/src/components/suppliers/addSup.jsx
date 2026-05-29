@@ -1,5 +1,8 @@
 import { Button, Card, Form, Input, Typography } from "antd";
 import { useState } from "react";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 
 import { useDispatch } from "react-redux";
 import {
@@ -72,13 +75,11 @@ const AddSup = () => {
             label="Phone"
             name="phone"
             rules={[
-              {
-                required: true,
-                message: "Please input supplier phone!",
-              },
+              { required: true, message: "Please input supplier phone!" },
+              phoneRule,
             ]}
           >
-            <Input />
+            <PhoneInput />
           </Form.Item>
 
           <Form.Item

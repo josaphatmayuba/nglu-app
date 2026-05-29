@@ -1,5 +1,8 @@
 import { Button, DatePicker, Form, Input, Modal, Select } from "antd";
 import dayjs from "dayjs";
+import PhoneInput from "../../../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useParams } from "react-router-dom";
@@ -166,8 +169,9 @@ const ProfileEditPopup = ({ data }) => {
           <Form.Item
             style={{ marginBottom: "10px" }}
             label="Phone"
-            name="phone">
-            <Input placeholder="1234584515" />
+            name="phone"
+            rules={[phoneRule]}>
+            <PhoneInput />
           </Form.Item>
 
           <h2 className="text-center text-xl mt-3 mb-3 txt-color">

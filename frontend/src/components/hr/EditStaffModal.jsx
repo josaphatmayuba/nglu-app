@@ -1,7 +1,14 @@
-import { DatePicker, Form, Input, Modal, Select, Spin } from "antd";
+import { DatePicker, Form, Input, Modal, Select, Spin, message } from "antd";
 import axios from "axios";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+
+const phoneRule = {
+  validator: (_, v) =>
+    !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")),
+};
 
 const { Option } = Select;
 
@@ -78,11 +85,17 @@ export default function EditStaffModal({ user, designations, departments, onClos
 
     const request = isCreate
       ? axios.post("/user/register", payload)
-      : axios.patch(`/user/${user.id}`, payload);
+      : axios.put(`/user/${user.id}`, payload);
 
     request
-      .then(() => onSaved())
-      .catch(() => setSaving(false))
+      .then(() => {
+        message.success(isCreate ? "Employé créé" : "Employé mis à jour");
+        onSaved();
+      })
+      .catch((err) => {
+        message.error(err?.response?.data?.message || "Échec de l'enregistrement");
+        setSaving(false);
+      })
       .finally(() => setSaving(false));
   }
 
@@ -154,14 +167,14 @@ export default function EditStaffModal({ user, designations, departments, onClos
               <Input type="email" disabled={isCreate} placeholder={isCreate ? "prenom.nom@ongdngolu.org" : undefined} />
             </Form.Item>
             {!isCreate && (
-              <Form.Item name="phone" label="Téléphone">
-                <Input />
+              <Form.Item name="phone" label="Téléphone" rules={[phoneRule]}>
+                <PhoneInput />
               </Form.Item>
             )}
           </div>
           {isCreate && (
-            <Form.Item name="phone" label="Téléphone">
-              <Input />
+            <Form.Item name="phone" label="Téléphone" rules={[phoneRule]}>
+              <PhoneInput />
             </Form.Item>
           )}
 

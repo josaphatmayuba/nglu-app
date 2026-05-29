@@ -1,6 +1,9 @@
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Modal, Upload } from "antd";
 import { useState } from "react";
+import PhoneInput from "../../components/Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useDispatch } from "react-redux";
 import {
   loadSingleCustomerEcom,
@@ -137,8 +140,8 @@ export default function UpdateProfile({ customer, handleCancel: Cancel }) {
             <Input className="p-[9px]" />
           </Form.Item>
 
-          <Form.Item label="Phone" name="phone" className="-mt-4">
-            <Input className="p-[9px]" />
+          <Form.Item label="Phone" name="phone" className="-mt-4" rules={[phoneRule]}>
+            <PhoneInput />
           </Form.Item>
 
           <Form.Item label="Address" name="address" className="-mt-4">

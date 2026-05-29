@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query } from "@nestjs/common";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import {
+  BulkUpdateCurrencyStatusDto,
   CreateCurrencyDto,
   CurrencyQueryDto,
   UpdateCurrencyDto,
@@ -39,6 +40,12 @@ export class CurrenciesController {
   @Put(":id")
   update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateCurrencyDto) {
     return this.currenciesService.update(id, body);
+  }
+
+  @ApiOperation({ summary: "Bulk activate/deactivate currencies" })
+  @Patch("bulk-status")
+  bulkStatus(@Body() body: BulkUpdateCurrencyStatusDto) {
+    return this.currenciesService.bulkUpdateStatus(body.ids, body.status);
   }
 
   @ApiOperation({ summary: "Update currency status, compatible with Laravel delete route" })

@@ -1,6 +1,9 @@
 import { Button, Form, Input, Radio, Select } from 'antd';
 import React from 'react'
 import { useState } from 'react';
+import PhoneInput from "../../components/Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 
 export default function AddAddress() {
     const onFinish = () => {
@@ -100,13 +103,11 @@ export default function AddAddress() {
                 name="phone"
                 className="-mt-4"
                 rules={[
-                  {
-                    required: true,
-                    message: "Please  input your valid phone number!",
-                  },
+                  { required: true, message: "Please  input your valid phone number!" },
+                  phoneRule,
                 ]}
               >
-                <Input className="p-[9px]" placeholder="Input Valid Phone " />
+                <PhoneInput />
               </Form.Item>
               <Form.Item
                 label="Address"
