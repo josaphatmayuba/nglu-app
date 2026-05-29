@@ -5,9 +5,10 @@
 
 .compose-message-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
-  margin-bottom: 0;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .compose-message-header h3 {

@@ -75,6 +75,22 @@ export default function MessagingPanel() {
     fetchMessages();
   }, [status]);
 
+  const handleSelectMessage = async (msg) => {
+    setSelectedMessage(msg);
+    if (msg.isRead) return;
+    try {
+      await axios.post(`/messages/${msg.id}/mark-as-read`);
+      setMessages((prev) =>
+        prev.map((item) => (item.id === msg.id ? { ...item, isRead: true } : item)),
+      );
+      setSelectedMessage((prev) =>
+        prev && prev.id === msg.id ? { ...prev, isRead: true } : prev,
+      );
+    } catch (error) {
+      // Best-effort: opening still works even if the read flag fails to persist.
+    }
+  };
+
   const handleStatusChange = (newStatus) => {
     setStatus(newStatus);
     setSelectedMessage(null);
@@ -310,6 +326,7 @@ export default function MessagingPanel() {
         </Form>
       </Modal>
 
+      {!showCompose && (
       <div className="messaging-search">
         <Input
           placeholder="Rechercher dans les messages..."
@@ -319,7 +336,9 @@ export default function MessagingPanel() {
           style={{ maxWidth: '400px' }}
         />
       </div>
+      )}
 
+      {!showCompose && (
       <Tabs
         activeKey={status}
         items={statusTabs.map((tab) => ({
@@ -328,11 +347,11 @@ export default function MessagingPanel() {
           children: (
             <Spin spinning={loading}>
               {messages.length > 0 ? (
-                <div className="messaging-content">
+                <div className={`messaging-content${selectedMessage ? ' has-selection' : ''}`}>
                   <MessageList
                     messages={messages}
                     selectedId={selectedMessage?.id}
-                    onSelect={setSelectedMessage}
+                    onSelect={handleSelectMessage}
                     onMarkAsRead={handleMarkAsRead}
                     onMarkAsUnread={handleMarkAsUnread}
                   />
@@ -357,6 +376,7 @@ export default function MessagingPanel() {
         }))}
         onChange={handleStatusChange}
       />
+      )}
     </div>
   );
 }
