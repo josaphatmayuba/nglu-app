@@ -9,6 +9,7 @@ param(
   [switch]$PullServerCode,
   [switch]$RestartFrontendContainer,
   [switch]$SkipLocalBuild,
+  [switch]$SkipTests,
   [switch]$SkipSmoke,
   [switch]$DryRun,
   [string]$ConfirmProduction
@@ -61,6 +62,20 @@ Write-Host "PEM: $PemPath"
 
 if (-not $DryRun -and $ConfirmProduction -ne "DEPLOY_PROD") {
   throw "Production deploy requires -ConfirmProduction DEPLOY_PROD. Use -DryRun to test without deploying."
+}
+
+if (-not $SkipTests) {
+  Write-Step "Running frontend unit tests (gate)"
+  Push-Location $frontendDir
+  try {
+    npm test
+    if ($LASTEXITCODE -ne 0) { throw "Frontend unit tests failed - deploy aborted. Fix tests or rerun with -SkipTests for an emergency deploy." }
+  }
+  finally {
+    Pop-Location
+  }
+} else {
+  Write-Step "Skipping unit tests by request (-SkipTests)"
 }
 
 if (-not $SkipLocalBuild) {
@@ -161,20 +176,56 @@ sudo tar -xzf "$remoteArchive" -C "$RemoteProdDir"
 sudo chown -R "$User":"$User" "$RemoteProdDir/frontend/dist" "$RemoteProdDir/marketing-site/dist"
 rm -f "$remoteArchive"
 
-echo "[remote] rebuilding prod frontend image from updated dist files..."
 cd "$RemoteProdDir"
-docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build frontend
-echo "[remote] restarting prod frontend container..."
+FE_IMG="$ComposeProject-frontend"
+
+# (#1) Tag the current working frontend image as a rollback point.
+FE_HAVE_PREV=0
+if docker image inspect "`$FE_IMG:latest" >/dev/null 2>&1; then
+  docker tag "`$FE_IMG:latest" "`$FE_IMG:previous"
+  FE_HAVE_PREV=1
+  echo "[remote] tagged current frontend image as `$FE_IMG:previous (rollback point)"
+fi
+
+echo "[remote] building prod frontend image from updated dist files..."
+if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build frontend; then
+  echo "[remote] FRONTEND BUILD FAILED — running site untouched, nothing deployed"
+  exit 1
+fi
+
+echo "[remote] recreating prod frontend container..."
 docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
 
-echo "[remote] smoke checks"
-curl -fsSIL https://ongdngolu.org/ >/tmp/nglu-prod-smoke-root.txt
-curl -fsSIL https://ongdngolu.org/crm >/tmp/nglu-prod-smoke-crm.txt
-curl -fsSIL https://ongdngolu.org/admin/auth/login >/tmp/nglu-prod-smoke-login.txt
-curl -fsS https://ongdngolu.org/api/health >/tmp/nglu-prod-smoke-api-health.txt
-grep -R "https://ongdngolu.org/api" "$RemoteProdDir/frontend/dist" >/dev/null
+check_web() {
+  for i in `$(seq 1 15); do
+    if curl -fsSIL https://ongdngolu.org/ >/dev/null 2>&1 \
+       && curl -fsSIL https://ongdngolu.org/crm >/dev/null 2>&1 \
+       && curl -fsS https://ongdngolu.org/api/health 2>/dev/null | grep -q '"status":"ok"'; then
+      return 0
+    fi
+    sleep 3
+  done
+  return 1
+}
 
-echo "[remote] smoke ok: marketing root, crm entry, login route, API health, prod API target"
+if check_web; then
+  echo "[remote] smoke ok: marketing root, crm entry, API health"
+else
+  echo "[remote] FRONTEND HEALTH CHECK FAILED"
+  if [ "`$FE_HAVE_PREV" = "1" ]; then
+    echo "[remote] ROLLING BACK frontend to previous image"
+    docker tag "`$FE_IMG:previous" "`$FE_IMG:latest"
+    docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --force-recreate --no-deps frontend
+    if check_web; then
+      echo "[remote] ROLLED BACK — previous frontend is live again"
+    else
+      echo "[remote] ROLLBACK still unhealthy — manual intervention required"
+    fi
+  else
+    echo "[remote] no previous frontend image to roll back to"
+  fi
+  exit 1
+fi
 "@
 
 if ($DryRun) {
@@ -194,7 +245,9 @@ $ErrorActionPreference = "Continue"
 ($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
-if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }
+if ($sshExit -ne 0) {
+  throw "Remote prod deploy failed (exit $sshExit). The server attempted an automatic rollback to the previous working frontend - check the remote output above to confirm it is healthy."
+}
 
 if (-not $SkipSmoke) {
   Write-Step "Local production routing smoke"
