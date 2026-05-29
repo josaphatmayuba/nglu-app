@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { message } from "antd";
 import {
   AlertTriangle,
   Building2,
@@ -14,16 +13,18 @@ import UserPrivateComponent from "../PrivacyComponent/UserPrivateComponent";
 
 import { compactMoney } from "./shared/format";
 import { MetricCard, MultiCurrencyValue } from "./shared/ui";
-import { usePropertyManagementData } from "./shared/usePropertyManagementData";
+import { usePropertyManagementBootstrap, usePropertyManagementData } from "./shared/usePropertyManagementData";
 
 import PropertiesPanel from "./modules/Properties/PropertiesPanel";
 import UnitFormModal from "./modules/Properties/UnitFormModal";
 import TenantsPanel from "./modules/Tenants/TenantsPanel";
+import TenantOnboardingLinkModal from "./modules/Tenants/TenantOnboardingLinkModal";
 import LeasesPanel from "./modules/Leases/LeasesPanel";
 import PaymentsPanel from "./modules/Payments/PaymentsPanel";
 import MaintenancePanel from "./modules/Maintenance/MaintenancePanel";
 
 const PropertyManagement = () => {
+  usePropertyManagementBootstrap();
   const {
     safeProperties,
     safePayments,
@@ -33,7 +34,8 @@ const PropertyManagement = () => {
     maintenanceUnits,
     activeLeases,
     openMaintenance,
-    safeTenants,
+    visibleTenants,
+    safeOnboarding,
     safeLeases,
     currencyOptions,
     occupancyRate,
@@ -44,15 +46,17 @@ const PropertyManagement = () => {
 
   const [activeSection, setActiveSection] = useState("properties");
   const [searchTerm, setSearchTerm] = useState("");
+  const [onboardingLinkOpen, setOnboardingLinkOpen] = useState(false);
 
   // Unit modal is owned at page level because it can be triggered from any
   // Properties view (grid card "Modifier", list "Edit", map popup, etc.).
   const [unitModalRecord, setUnitModalRecord] = useState(null);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
+  const pendingOnboardingCount = safeOnboarding.filter((record) => record?.status !== "validated").length;
 
   const tabItems = [
-    { key: "properties", label: "Propriétés", count: enrichedUnits.length || safeProperties.length },
-    { key: "tenants", label: "Locataires", count: safeTenants.length },
+    { key: "properties", label: "Propriétés", count: enrichedUnits.length },
+    { key: "tenants", label: "Locataires", count: visibleTenants.length + pendingOnboardingCount },
     { key: "leases", label: "Baux", count: safeLeases.length },
     { key: "payments", label: "Paiements", count: safePayments.length },
     { key: "maintenance", label: "Maintenance", count: openMaintenance.length, danger: true },
@@ -67,9 +71,7 @@ const PropertyManagement = () => {
             onSearchTermChange={setSearchTerm}
             onNavigateToLeases={() => setActiveSection("leases")}
             onNavigateToPayments={() => setActiveSection("payments")}
-            onGenerateOnboardingLink={() =>
-              message.info("La génération du lien d'inscription sera ajoutée dans le module Locataires.")
-            }
+            onGenerateOnboardingLink={() => setOnboardingLinkOpen(true)}
           />
         );
       case "leases":
@@ -129,7 +131,7 @@ const PropertyManagement = () => {
           <MetricCard
             icon={<Building2 size={20} />}
             label="Propriétés"
-            value={enrichedUnits.length || safeProperties.length}
+            value={enrichedUnits.length}
             helper={`${occupiedUnits.length} louées · ${vacantUnits.length} vacantes · ${maintenanceUnits.length} maintenance`}
           />
           <MetricCard
@@ -179,6 +181,10 @@ const PropertyManagement = () => {
         currencyOptions={currencyOptions}
         onClose={() => setUnitModalOpen(false)}
         onSaved={() => setUnitModalOpen(false)}
+      />
+      <TenantOnboardingLinkModal
+        open={onboardingLinkOpen}
+        onClose={() => setOnboardingLinkOpen(false)}
       />
     </div>
   );

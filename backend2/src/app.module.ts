@@ -17,7 +17,9 @@ import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
+import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
+import { MessagesModule } from "./messages/messages.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
@@ -33,6 +35,7 @@ import { RolePermissionsModule } from "./role-permissions/role-permissions.modul
 import { RolesModule } from "./roles/roles.module";
 import { SaleInvoicesModule } from "./sale-invoices/sale-invoices.module";
 import { SuppliersModule } from "./suppliers/suppliers.module";
+import { SystemEmailModule } from "./system-email/system-email.module";
 import { TransactionTypesModule } from "./transaction-types/transaction-types.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { UomModule } from "./uom/uom.module";
@@ -57,7 +60,9 @@ import { UsersModule } from "./users/users.module";
     EmailTemplatesModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
+    MailAccountsModule,
     ManufacturersModule,
+    MessagesModule,
     NotificationPreferencesModule,
     PaymentMethodsModule,
     PermissionsModule,
@@ -73,6 +78,7 @@ import { UsersModule } from "./users/users.module";
     RolesModule,
     SaleInvoicesModule,
     SuppliersModule,
+    SystemEmailModule,
     TransactionsModule,
     TransactionTypesModule,
     UomModule,

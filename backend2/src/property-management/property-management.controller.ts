@@ -27,6 +27,7 @@ import {
 } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { Permissions } from "../auth/decorators/permissions.decorator";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
@@ -63,63 +64,73 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Property management dashboard totals" })
   @ApiOkResponse({ description: "Dashboard metrics" })
+  @Permissions("readAll-propertyManagement")
   @Get("dashboard")
-  dashboard() {
-    return this.propertyManagementService.dashboard();
+  dashboard(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.dashboard(orgId);
   }
 
   @ApiOperation({ summary: "List active tenants from customers" })
   @ApiOkResponse({ description: "Tenant list" })
+  @Permissions("readAll-propertyManagement")
   @Get("tenants")
-  tenants() {
-    return this.propertyManagementService.tenants();
+  tenants(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.tenants(orgId);
   }
 
   @ApiOperation({ summary: "Create a tenant customer with extended tenant details" })
   @ApiCreatedResponse({ description: "Created tenant" })
+  @Permissions("create-propertyManagement")
   @Post("tenants")
-  createTenant(@Body() body: CreateTenantDto) {
-    return this.propertyManagementService.createTenant(body);
+  createTenant(@Body() body: CreateTenantDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createTenant(body, orgId);
   }
 
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
+  @Permissions("create-propertyManagement")
   @Post("onboarding")
   generateTenantOnboarding(@Body() body: GenerateTenantOnboardingDto) {
     return this.propertyManagementService.generateTenantOnboarding(body);
   }
 
   @ApiOperation({ summary: "List tenant onboarding dossiers" })
+  @Permissions("readAll-propertyManagement")
   @Get("onboarding")
   tenantOnboardingList() {
     return this.propertyManagementService.onboardingList();
   }
 
   @ApiOperation({ summary: "Admin update tenant onboarding draft" })
+  @Permissions("update-propertyManagement")
   @Put("onboarding/:id")
   updateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
     return this.propertyManagementService.saveOnboardingByAdmin(id, body);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("onboarding/:id")
   updateTenantOnboardingPatch(@Param("id", ParseIntPipe) id: number, @Body() body: SaveTenantOnboardingDto) {
     return this.propertyManagementService.saveOnboardingByAdmin(id, body);
   }
 
   @ApiOperation({ summary: "Validate onboarding dossier and create tenant customer" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("onboarding/:id/validate")
-  validateTenantOnboarding(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.validateOnboarding(id);
+  validateTenantOnboarding(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.validateOnboarding(id, orgId);
   }
 
   @ApiOperation({ summary: "List properties with unit counts" })
   @ApiOkResponse({ description: "Property list" })
+  @Permissions("readAll-propertyManagement")
   @Get("properties")
-  properties() {
-    return this.propertyManagementService.properties();
+  properties(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.properties(orgId);
   }
 
   @ApiOperation({ summary: "Get single property by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("properties/:id")
   findProperty(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findProperty(id);
@@ -127,22 +138,25 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Create a property" })
   @ApiCreatedResponse({ description: "Created property" })
+  @Permissions("create-propertyManagement")
   @Post("properties")
-  createProperty(@Body() body: CreatePropertyDto) {
-    return this.propertyManagementService.createProperty(body);
+  createProperty(@Body() body: CreatePropertyDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createProperty(body, orgId);
   }
 
   @ApiOperation({ summary: "Update a property" })
   @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-propertyManagement")
   @Put("properties/:id")
-  updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
-    return this.propertyManagementService.updateProperty(id, body);
+  updateProperty(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateProperty(id, body, orgId);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("properties/:id")
   @Post("properties/:id")
-  updatePropertyAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto) {
-    return this.propertyManagementService.updateProperty(id, body);
+  updatePropertyAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdatePropertyDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateProperty(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Delete a property" })
@@ -150,39 +164,44 @@ export class PropertyManagementController {
   @Permissions("delete-propertyManagement")
   @Delete("properties/:id")
   @HttpCode(200)
-  deleteProperty(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.deleteProperty(id);
+  deleteProperty(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteProperty(id, orgId);
   }
 
   @ApiOperation({ summary: "List rental units" })
+  @Permissions("readAll-propertyManagement")
   @Get("units")
-  units() {
-    return this.propertyManagementService.units();
+  units(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.units(orgId);
   }
 
   @ApiOperation({ summary: "Get single unit by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("units/:id")
   findUnit(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findUnit(id);
   }
 
   @ApiOperation({ summary: "Create a rental unit" })
+  @Permissions("create-propertyManagement")
   @Post("units")
-  createUnit(@Body() body: CreateUnitDto) {
-    return this.propertyManagementService.createUnit(body);
+  createUnit(@Body() body: CreateUnitDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createUnit(body, orgId);
   }
 
   @ApiOperation({ summary: "Update a rental unit" })
+  @Permissions("update-propertyManagement")
   @Put("units/:id")
-  updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
-    return this.propertyManagementService.updateUnit(id, body);
+  updateUnit(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateUnit(id, body, orgId);
   }
 
+  @Permissions("update-propertyManagement")
   @Patch("units/:id")
   @Post("units/:id")
-  updateUnitAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto) {
-    return this.propertyManagementService.updateUnit(id, body);
+  updateUnitAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateUnitDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateUnit(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Delete a rental unit" })
@@ -190,96 +209,112 @@ export class PropertyManagementController {
   @Permissions("delete-propertyManagement")
   @Delete("units/:id")
   @HttpCode(200)
-  deleteUnit(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.deleteUnit(id);
+  deleteUnit(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteUnit(id, orgId);
   }
 
   @ApiOperation({ summary: "List leases" })
+  @Permissions("readAll-propertyManagement")
   @Get("leases")
-  leases() {
-    return this.propertyManagementService.leases();
+  leases(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.leases(orgId);
   }
 
   @ApiOperation({ summary: "Get single lease by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("leases/:id")
   findLease(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findLease(id);
   }
 
   @ApiOperation({ summary: "Create a lease" })
+  @Permissions("create-propertyManagement")
   @Post("leases")
-  createLease(@Body() body: CreateLeaseDto) {
-    return this.propertyManagementService.createLease(body);
+  createLease(@Body() body: CreateLeaseDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createLease(body, orgId);
   }
 
   @ApiOperation({ summary: "Update a lease" })
+  @Permissions("update-propertyManagement")
   @Put("leases/:id")
-  updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto) {
-    return this.propertyManagementService.updateLease(id, body);
+  updateLease(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateLeaseDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateLease(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Delete a lease" })
   @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
   @Delete("leases/:id")
   @HttpCode(200)
-  deleteLease(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.deleteLease(id);
+  deleteLease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteLease(id, orgId);
   }
 
   @ApiOperation({ summary: "List rent payments" })
+  @Permissions("readAll-propertyManagement")
   @Get("payments")
-  payments() {
-    return this.propertyManagementService.payments();
+  payments(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.payments(orgId);
   }
 
   @ApiOperation({ summary: "Get single rent payment by ID" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("payments/:id")
   findPayment(@Param("id", ParseIntPipe) id: number) {
     return this.propertyManagementService.findPayment(id);
   }
 
   @ApiOperation({ summary: "Create rent payment and linked accounting transaction" })
+  @Permissions("create-propertyManagement")
   @Post("payments")
-  createPayment(@Body() body: CreateRentPaymentDto) {
-    return this.propertyManagementService.createPayment(body);
+  createPayment(@Body() body: CreateRentPaymentDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createPayment(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Send payment reminder email to tenant" })
+  @Permissions("create-propertyManagement", "update-propertyManagement")
+  @Post("payments/reminder")
+  @HttpCode(200)
+  sendPaymentReminder(@Body() body: { leaseId: number }) {
+    return this.propertyManagementService.sendPaymentReminder(body.leaseId);
   }
 
   @ApiOperation({ summary: "List maintenance requests" })
   @Permissions("readAll-maintenance")
   @Get("maintenance")
-  maintenance() {
-    return this.propertyManagementService.listMaintenance();
+  maintenance(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listMaintenance(orgId);
   }
 
   @ApiOperation({ summary: "Get single maintenance request by ID" })
   @ApiParam({ name: "id", type: Number })
   @Permissions("readSingle-maintenance")
   @Get("maintenance/:id")
-  findMaintenance(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.findMaintenance(id);
+  findMaintenance(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.findMaintenance(id, orgId);
   }
 
   @ApiOperation({ summary: "Create a maintenance request" })
   @Permissions("create-maintenance")
   @Post("maintenance")
-  createMaintenance(@Body() body: CreateMaintenanceDto) {
-    return this.propertyManagementService.createMaintenance(body);
+  createMaintenance(@Body() body: CreateMaintenanceDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createMaintenance(body, orgId);
   }
 
   @ApiOperation({ summary: "Update a maintenance request" })
   @Permissions("update-maintenance")
   @Put("maintenance/:id")
-  updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
-    return this.propertyManagementService.updateMaintenance(id, body);
+  updateMaintenance(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMaintenance(id, body, orgId);
   }
 
   @Permissions("update-maintenance")
   @Patch("maintenance/:id")
   @Post("maintenance/:id")
-  updateMaintenanceAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto) {
-    return this.propertyManagementService.updateMaintenance(id, body);
+  updateMaintenanceAlias(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateMaintenanceDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateMaintenance(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Soft-delete a maintenance request (sets is_active=false)" })
@@ -287,8 +322,8 @@ export class PropertyManagementController {
   @Permissions("delete-maintenance")
   @Delete("maintenance/:id")
   @HttpCode(200)
-  deleteMaintenance(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.deleteMaintenance(id);
+  deleteMaintenance(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMaintenance(id, orgId);
   }
 
   // ── Maintenance Costs ──────────────────────────────────────────────────────
@@ -296,8 +331,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "List costs for a maintenance ticket" })
   @Permissions("readAll-maintenance-cost")
   @Get("maintenance/:id/costs")
-  listMaintenanceCosts(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.listMaintenanceCosts(id);
+  listMaintenanceCosts(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listMaintenanceCosts(id, orgId);
   }
 
   @ApiOperation({ summary: "Record a cost on a maintenance ticket" })
@@ -319,8 +354,9 @@ export class PropertyManagementController {
     @Body() body: CreateMaintenanceCostDto,
     @UploadedFile() receipt: any,
     @Req() req: Request,
+    @CurrentOrg() orgId: number,
   ) {
-    return this.propertyManagementService.createMaintenanceCost(id, body, receipt, this.publicApiBase(req));
+    return this.propertyManagementService.createMaintenanceCost(id, body, orgId, receipt, this.publicApiBase(req));
   }
 
   @ApiOperation({ summary: "Delete a maintenance cost entry" })
@@ -334,6 +370,7 @@ export class PropertyManagementController {
   // ── Contracts ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: "List all contracts" })
+  @Permissions("readAll-propertyManagement")
   @Get("contracts")
   listContracts() {
     return this.contractsService.listContracts();
@@ -341,12 +378,14 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Get single contract with audit log" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("contracts/:id")
   getContract(@Param("id", ParseIntPipe) id: number) {
     return this.contractsService.getContract(id);
   }
 
   @ApiOperation({ summary: "Create contract from a lease (auto-generates content)" })
+  @Permissions("create-propertyManagement")
   @Post("contracts")
   createContract(@Body() body: CreateContractDto, @Req() req: Request) {
     const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
@@ -355,6 +394,7 @@ export class PropertyManagementController {
 
   @ApiOperation({ summary: "Send contract for e-signature by email" })
   @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
   @Post("contracts/:id/send")
   @HttpCode(200)
   sendContract(@Param("id", ParseIntPipe) id: number) {
@@ -362,6 +402,7 @@ export class PropertyManagementController {
   }
 
   @ApiOperation({ summary: "Delete a contract" })
+  @Permissions("delete-propertyManagement")
   @Delete("contracts/:id")
   @HttpCode(200)
   deleteContract(@Param("id", ParseIntPipe) id: number) {

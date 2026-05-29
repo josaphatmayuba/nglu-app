@@ -1,4 +1,4 @@
-import { Button, message } from "antd";
+import { Button, Modal, message } from "antd";
 import { Download, Grid3X3, Layers, List, Plus, RefreshCw } from "lucide-react";
 import moment from "moment";
 import { useMemo, useState } from "react";
@@ -8,7 +8,7 @@ import {
   createContract,
   deleteLease,
   loadContracts,
-  loadPropertyManagement,
+  loadLeasesDashboard,
   renewLease as renewLeaseThunk,
   saveLease,
   sendContract,
@@ -41,6 +41,8 @@ const LeasesPanel = ({
   const [contractLinks, setContractLinks] = useState({});
   const [savingLease, setSavingLease] = useState(false);
   const [renewBusy, setRenewBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const {
     contractTemplates,
@@ -104,12 +106,22 @@ const LeasesPanel = ({
     dispatch(loadContracts());
   };
 
-  const deleteLeaseRecord = async (lease) => {
-    if (!window.confirm("Supprimer ce bail ?")) return;
-    const response = await dispatch(deleteLease(lease.id));
-    if (response.payload?.message === "success") {
-      message.success("Bail supprimé");
-      dispatch(loadPropertyManagement());
+  const requestLeaseDeletion = (lease, action) => {
+    setDeleteTarget({ lease, action });
+  };
+
+  const confirmDeleteLease = async () => {
+    if (!deleteTarget?.lease?.id) return;
+    setDeleteBusy(true);
+    try {
+      const response = await dispatch(deleteLease(deleteTarget.lease.id));
+      if (response.payload?.message === "success") {
+        message.success(deleteTarget.action === "terminate" ? "Bail résilié" : "Bail supprimé");
+        dispatch(loadLeasesDashboard());
+        setDeleteTarget(null);
+      }
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -194,7 +206,7 @@ const LeasesPanel = ({
       return;
     }
     if (action === "delete" || action === "terminate") {
-      deleteLeaseRecord(lease);
+      requestLeaseDeletion(lease, action);
       return;
     }
     if (action === "payments") {
@@ -262,7 +274,7 @@ const LeasesPanel = ({
       const response = await dispatch(saveLease({ id, values }));
       if (response.payload?.message === "success") {
         message.success(id ? "Bail mis à jour" : "Bail créé");
-        dispatch(loadPropertyManagement());
+        dispatch(loadLeasesDashboard());
         setLeaseModal(null);
       }
     } finally {
@@ -288,8 +300,7 @@ const LeasesPanel = ({
     setRenewBusy(false);
     if (response.payload?.message === "success") {
       message.success("Bail renouvelé");
-      dispatch(loadPropertyManagement());
-      dispatch(loadContracts());
+      dispatch(loadLeasesDashboard());
       setRenewModal(null);
     }
   };
@@ -390,6 +401,7 @@ const LeasesPanel = ({
 
       <LeaseFormModal
         currencyOptions={currencyOptions}
+        leases={safeLeases}
         onCancel={() => setLeaseModal(null)}
         onSubmit={submitLease}
         open={Boolean(leaseModal)}
@@ -425,6 +437,24 @@ const LeasesPanel = ({
         contractId={signedContractId}
         onClose={() => setSignedContractId(null)}
       />
+      <Modal
+        confirmLoading={deleteBusy}
+        okButtonProps={{ danger: true }}
+        okText={deleteTarget?.action === "terminate" ? "Résilier le bail" : "Supprimer le bail"}
+        onCancel={() => setDeleteTarget(null)}
+        onOk={confirmDeleteLease}
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.action === "terminate" ? "Résilier ce bail ?" : "Supprimer ce bail ?"}
+      >
+        <p>
+          Cette action applique une suppression logique: le bail sera retiré des vues actives, ses historiques
+          restent conservés, et l&apos;unité associée sera marquée vacante.
+        </p>
+        <p>
+          Bail concerné:{" "}
+          <strong>{deleteTarget?.lease?.reference || tenantNameFromLease(deleteTarget?.lease || {})}</strong>
+        </p>
+      </Modal>
     </div>
   );
 };

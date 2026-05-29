@@ -2,8 +2,10 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { count, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
   awardHistories,
   awards,
+  currencies,
   departments,
   designationHistories,
   designations,
@@ -172,9 +174,15 @@ export class HrService {
   }
 
   async createSalaryHistory(input: CreateSalaryHistoryDto) {
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) {
+      await this.ensureExists(currencies, currencyId, "Currency not found.");
+    }
+
     const [result] = await this.db.insert(salaryHistories).values({
       userId: input.userId,
       salary: input.salary,
+      currencyId: currencyId ?? null,
       startDate: input.salaryStartDate ?? null,
       endDate: input.salaryEndDate ?? null,
       comment: input.salaryComment ?? null,
@@ -210,9 +218,15 @@ export class HrService {
 
   async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto) {
     await this.findSalaryHistory(id);
+
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
+
     await this.db.update(salaryHistories).set({
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.salary !== undefined ? { salary: input.salary } : {}),
+      ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
       ...(input.salaryStartDate !== undefined ? { startDate: input.salaryStartDate } : {}),
       ...(input.salaryEndDate !== undefined ? { endDate: input.salaryEndDate } : {}),
       ...(input.salaryComment !== undefined ? { comment: input.salaryComment } : {}),
@@ -331,6 +345,19 @@ export class HrService {
     const rows = await this.db.select().from(table).where(eq(table.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException(message);
     return rows[0];
+  }
+
+  private async resolveDefaultCurrency(): Promise<number | null> {
+    const [row] = await this.db
+      .select({ currencyId: appSettings.currencyId })
+      .from(appSettings)
+      .limit(1);
+    return row?.currencyId ?? null;
+  }
+
+  private async ensureExists(table: any, id: number, message: string) {
+    const rows = await this.db.select().from(table).where(eq(table.id, id)).limit(1);
+    if (!rows.length) throw new NotFoundException(message);
   }
 
   private normalizeTime(value: string) {

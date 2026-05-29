@@ -33,7 +33,7 @@ function generateInvoiceId(prefix: string, length = 13): string {
 export class SaleInvoicesService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreateSaleInvoiceDto) {
+  async create(input: CreateSaleInvoiceDto, orgId: number) {
     // 1. Validate products and stock
     const productData: Array<{
       id: number;
@@ -110,6 +110,7 @@ export class SaleInvoicesService {
 
     await this.db.insert(saleInvoices).values({
       id: invoiceId,
+      organizationId: orgId,
       date: new Date(input.date),
       invoiceMemoNo: input.invoiceMemoNo ?? null,
       totalAmount,
@@ -163,6 +164,7 @@ export class SaleInvoicesService {
       amount: totalPurchasePrice,
       type: "sale",
       relatedId: invoiceId,
+      organizationId: orgId,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -177,6 +179,7 @@ export class SaleInvoicesService {
       amount: totalAmount + totalTaxAmount,
       type: "sale",
       relatedId: invoiceId,
+      organizationId: orgId,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -192,6 +195,7 @@ export class SaleInvoicesService {
         amount: totalTaxAmount,
         type: "sale",
         relatedId: invoiceId,
+        organizationId: orgId,
         status: "true",
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -209,6 +213,7 @@ export class SaleInvoicesService {
           amount: payment.amount,
           type: "sale",
           relatedId: invoiceId,
+          organizationId: orgId,
           status: "true",
           createdAt: sql`CURRENT_TIMESTAMP`,
           updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -229,10 +234,10 @@ export class SaleInvoicesService {
       }
     }
 
-    return this.findOne(invoiceId);
+    return this.findOne(invoiceId, orgId);
   }
 
-  async findAll(query: Record<string, string>) {
+  async findAll(query: Record<string, string>, orgId: number) {
     if (query["query"] === "info") {
       const [row] = await this.db
         .select({
@@ -242,7 +247,8 @@ export class SaleInvoicesService {
           totalDueAmount: sum(saleInvoices.dueAmount),
           totalProfit: sum(saleInvoices.profit),
         })
-        .from(saleInvoices);
+        .from(saleInvoices)
+        .where(and(eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")));
 
       return {
         _count: { id: Number(row.totalCount ?? 0) },
@@ -256,7 +262,7 @@ export class SaleInvoicesService {
     }
 
     const { skip, limit } = this.pagination(query);
-    const conditions = this.filterConditions(query);
+    const conditions = this.filterConditions(query, orgId);
     const where = conditions.length ? and(...conditions) : undefined;
 
     const rows = await this.db
@@ -305,7 +311,7 @@ export class SaleInvoicesService {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(eq(saleInvoices.isHold, "true"))
+      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true")))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
@@ -313,16 +319,15 @@ export class SaleInvoicesService {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(eq(saleInvoices.customerId, customerId))
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true")))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
-  async findOne(id: string) {
-    const rows = await this.db
-      .select()
-      .from(saleInvoices)
-      .where(eq(saleInvoices.id, id))
-      .limit(1);
+  async findOne(id: string, orgId?: number) {
+    const where = orgId !== undefined
+      ? and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true"))
+      : and(eq(saleInvoices.id, id), eq(saleInvoices.status, "true"));
+    const rows = await this.db.select().from(saleInvoices).where(where).limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Sale invoice not found.");
@@ -413,13 +418,37 @@ export class SaleInvoicesService {
     return { message: "Order status updated." };
   }
 
+  async updateStatus(id: string, status: string, orgId: number) {
+    const rows = await this.db
+      .select({ id: saleInvoices.id })
+      .from(saleInvoices)
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Sale invoice not found.");
+    }
+
+    await this.db
+      .update(saleInvoices)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
+
+    await this.db
+      .update(transactions)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(transactions.relatedId, id), eq(transactions.organizationId, orgId)));
+
+    return { message: "Sale invoice deleted successfully." };
+  }
+
   // Payment sale invoices
   async createPayment(input: CreatePaymentSaleInvoiceDto) {
     // Validate invoice exists
     const [invoice] = await this.db
       .select({ id: saleInvoices.id, dueAmount: saleInvoices.dueAmount })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, input.saleInvoiceId))
+      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true")))
       .limit(1);
 
     if (!invoice) {
@@ -498,8 +527,8 @@ export class SaleInvoicesService {
     return { getAllPayment: rows, totalPayment: Number(total ?? 0) };
   }
 
-  private filterConditions(query: Record<string, string>) {
-    const conditions = [];
+  private filterConditions(query: Record<string, string>, orgId: number) {
+    const conditions = [eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true")];
 
     if (query["startDate"]) {
       conditions.push(gte(saleInvoices.date, new Date(query["startDate"])));

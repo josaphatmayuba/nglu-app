@@ -67,6 +67,7 @@ const ENDPOINTS = [
   // communication
   { name: "email", type: "email" },
   { name: "emailConfig", type: "email" },
+  { name: "message", type: "email" },
 
   // settings
   { name: "setting", type: "settings" },

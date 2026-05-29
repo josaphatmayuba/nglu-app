@@ -56,12 +56,16 @@ if (Test-Path $localArchive) {
 }
 Push-Location $middlewareDir
 try {
-  tar -czf $localArchive src package.json package-lock.json 2>$null
-  if ($LASTEXITCODE -ne 0) {
-    # package-lock.json may not exist locally; retry without it
-    tar -czf $localArchive src package.json
-    if ($LASTEXITCODE -ne 0) { throw "tar failed" }
+  # Create archive in current dir first to avoid Windows path issues with tar,
+  # then move to temp location (same fix as deploy-dev-backend-aws.ps1).
+  $archiveName = Split-Path $localArchive -Leaf
+  if (Test-Path package-lock.json) {
+    & tar -czf $archiveName src package.json package-lock.json
+  } else {
+    & tar -czf $archiveName src package.json
   }
+  if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+  Move-Item -Path $archiveName -Destination $localArchive -Force
 }
 finally {
   Pop-Location
@@ -100,7 +104,7 @@ docker logs nglu_dev_middleware --tail 10
 Write-Step "Deploying middleware on AWS dev"
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$remoteScript | & ssh @sshArgs "bash -s"
+($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
 if ($sshExit -ne 0) { throw "Remote deploy script failed (exit $sshExit)" }

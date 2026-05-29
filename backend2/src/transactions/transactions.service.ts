@@ -17,10 +17,11 @@ const creditAccount = alias(subAccounts, "creditAccount");
 export class TransactionsService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreateTransactionDto) {
+  async create(input: CreateTransactionDto, orgId: number) {
     await this.ensureAccountsExist([input.debitId, input.creditId]);
 
     const [result] = await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: new Date(input.date),
       debitId: input.debitId,
       creditId: input.creditId,
@@ -33,10 +34,10 @@ export class TransactionsService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    return this.findOne(Number(result.insertId), orgId);
   }
 
-  async findAll(query: TransactionQueryDto) {
+  async findAll(query: TransactionQueryDto, orgId: number) {
     if (query.query === "info") {
       const [row] = await this.db
         .select({
@@ -44,7 +45,7 @@ export class TransactionsService {
           totalAmount: sum(transactions.amount),
         })
         .from(transactions)
-        .where(eq(transactions.status, "true"));
+        .where(and(eq(transactions.status, "true"), eq(transactions.organizationId, orgId)));
 
       return {
         _count: { id: Number(row.totalCount ?? 0) },
@@ -53,19 +54,23 @@ export class TransactionsService {
     }
 
     if (query.query === "all") {
-      return this.baseQuery().orderBy(desc(transactions.id));
+      return this.baseQuery()
+        .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")))
+        .orderBy(desc(transactions.id));
     }
 
     if (query.query === "search") {
-      return this.search(query);
+      return this.search(query, orgId);
     }
 
     const status = query.query === "inactive" ? "false" : query.status;
-    return this.paginated(query, status);
+    return this.paginated(query, orgId, status);
   }
 
-  async findOne(id: number) {
-    const rows = await this.baseQuery().where(eq(transactions.id, id)).limit(1);
+  async findOne(id: number, orgId: number) {
+    const rows = await this.baseQuery()
+      .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)))
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Transaction not found.");
@@ -74,8 +79,8 @@ export class TransactionsService {
     return rows[0];
   }
 
-  async update(id: number, input: UpdateTransactionDto) {
-    await this.ensureTransactionExists(id);
+  async update(id: number, input: UpdateTransactionDto, orgId: number) {
+    await this.ensureTransactionExists(id, orgId);
 
     const accountIds = [input.debitId, input.creditId].filter(
       (accountId): accountId is number => typeof accountId === "number",
@@ -95,23 +100,23 @@ export class TransactionsService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(transactions.id, id));
+      .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)));
 
-    return this.findOne(id);
+    return this.findOne(id, orgId);
   }
 
-  async updateStatus(id: number, status: string) {
-    await this.ensureTransactionExists(id);
+  async updateStatus(id: number, status: string, orgId: number) {
+    await this.ensureTransactionExists(id, orgId);
 
     await this.db
       .update(transactions)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(transactions.id, id));
+      .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)));
 
     return { message: "Transaction deleted successfully" };
   }
 
-  private async search(query: TransactionQueryDto) {
+  private async search(query: TransactionQueryDto, orgId: number) {
     const key = `%${query.key?.trim() || ""}%`;
     const pagination = this.pagination(query);
     const where = or(
@@ -122,8 +127,9 @@ export class TransactionsService {
       like(creditAccount.name, key),
     );
 
+    const orgFilter = and(eq(transactions.organizationId, orgId), eq(transactions.status, "true"));
     const rows = await this.baseQuery()
-      .where(where)
+      .where(and(orgFilter, where))
       .orderBy(desc(transactions.id))
       .limit(pagination.limit)
       .offset(pagination.skip);
@@ -132,7 +138,7 @@ export class TransactionsService {
       .from(transactions)
       .leftJoin(debitAccount, eq(debitAccount.id, transactions.debitId))
       .leftJoin(creditAccount, eq(creditAccount.id, transactions.creditId))
-      .where(where);
+      .where(and(orgFilter, where));
 
     return {
       getAllTransaction: rows,
@@ -140,9 +146,9 @@ export class TransactionsService {
     };
   }
 
-  private async paginated(query: TransactionQueryDto, forcedStatus?: string) {
+  private async paginated(query: TransactionQueryDto, orgId: number, forcedStatus?: string) {
     const pagination = this.pagination(query);
-    const conditions = this.filterConditions(query, forcedStatus);
+    const conditions = this.filterConditions(query, orgId, forcedStatus);
     const where = conditions.length ? and(...conditions) : undefined;
 
     const [aggregate] = await this.db
@@ -169,8 +175,8 @@ export class TransactionsService {
     };
   }
 
-  private filterConditions(query: TransactionQueryDto, forcedStatus?: string) {
-    const conditions = [];
+  private filterConditions(query: TransactionQueryDto, orgId: number, forcedStatus?: string) {
+    const conditions = [eq(transactions.organizationId, orgId)];
     const startDate = query.startDate ? new Date(query.startDate) : null;
     const endDate = query.endDate ? new Date(query.endDate) : null;
 
@@ -221,8 +227,12 @@ export class TransactionsService {
       .leftJoin(currencies, eq(currencies.id, transactions.currencyId));
   }
 
-  private async ensureTransactionExists(id: number) {
-    const rows = await this.db.select({ id: transactions.id }).from(transactions).where(eq(transactions.id, id)).limit(1);
+  private async ensureTransactionExists(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Transaction not found.");
     }

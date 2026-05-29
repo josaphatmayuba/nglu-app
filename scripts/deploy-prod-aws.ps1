@@ -154,10 +154,11 @@ if [ "$pullServer" = "true" ]; then
 fi
 
 echo "[remote] replacing built artifact contents without deleting mounted dist directories"
-mkdir -p "$RemoteProdDir/frontend/dist" "$RemoteProdDir/marketing-site/dist"
-find "$RemoteProdDir/frontend/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-find "$RemoteProdDir/marketing-site/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-tar -xzf "$remoteArchive" -C "$RemoteProdDir"
+sudo mkdir -p "$RemoteProdDir/frontend/dist" "$RemoteProdDir/marketing-site/dist"
+sudo find "$RemoteProdDir/frontend/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+sudo find "$RemoteProdDir/marketing-site/dist" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+sudo tar -xzf "$remoteArchive" -C "$RemoteProdDir"
+sudo chown -R "$User":"$User" "$RemoteProdDir/frontend/dist" "$RemoteProdDir/marketing-site/dist"
 rm -f "$remoteArchive"
 
 echo "[remote] rebuilding prod frontend image from updated dist files..."

@@ -3,6 +3,8 @@
 
 import moment from "moment";
 import { useMemo } from "react";
+import { Bell, PlusCircle, MoreVertical } from "lucide-react";
+import { Button, Dropdown } from "antd";
 import { avatarColors } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
 import { initials } from "../../shared/tenants";
@@ -52,7 +54,7 @@ const HistogramBar = ({ status }) => {
   );
 };
 
-const TenantCard = ({ name, payments, overdueLeaseIds, upcomingLeaseIds, colorIdx }) => {
+const TenantCard = ({ name, payments, overdueLeaseIds, upcomingLeaseIds, colorIdx, onQuickPay, onReminder }) => {
   const sorted = [...payments].sort(
     (a, b) => new Date(b.paymentDate || 0) - new Date(a.paymentDate || 0),
   );
@@ -163,11 +165,43 @@ const TenantCard = ({ name, payments, overdueLeaseIds, upcomingLeaseIds, colorId
         <span>{oldestDate}</span>
         <span>{newestDate}</span>
       </div>
+
+      {/* Action buttons for overdue/pending payments */}
+      {latestStatus !== "paid" && (onQuickPay || onReminder) && (
+        <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-ink-100">
+          <Dropdown
+            menu={{
+              items: [
+                ...(onQuickPay && latest ? [{
+                  key: "pay",
+                  label: "Enregistrer paiement",
+                  icon: <PlusCircle size={14} />,
+                  onClick: () => onQuickPay(latest),
+                }] : []),
+                ...(onReminder && latest ? [{
+                  key: "remind",
+                  label: "Envoyer un rappel",
+                  icon: <Bell size={14} />,
+                  onClick: () => onReminder(latest),
+                }] : []),
+              ],
+            }}
+            trigger={["click"]}
+          >
+            <Button
+              type="text"
+              size="small"
+              icon={<MoreVertical size={16} />}
+              className="text-ink-400 hover:text-ink-600 ml-auto"
+            />
+          </Dropdown>
+        </div>
+      )}
     </div>
   );
 };
 
-const PaymentsTenantView = ({ payments, overduePayments, upcomingPayments }) => {
+const PaymentsTenantView = ({ payments, overduePayments, upcomingPayments, onQuickPay, onReminder }) => {
   // Build Sets once for O(1) lookup — avoids the reference-equality trap of
   // Array.includes() when payments are synthetic objects from leaseToExpectedPayment().
   const overdueLeaseIds = useMemo(
@@ -207,6 +241,8 @@ const PaymentsTenantView = ({ payments, overduePayments, upcomingPayments }) => 
           overdueLeaseIds={overdueLeaseIds}
           upcomingLeaseIds={upcomingLeaseIds}
           colorIdx={idx}
+          onQuickPay={onQuickPay}
+          onReminder={onReminder}
         />
       ))}
     </div>

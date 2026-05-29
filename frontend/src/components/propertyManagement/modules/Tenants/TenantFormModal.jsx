@@ -5,6 +5,8 @@ import { Button, Form, Input, InputNumber, Modal, Select, message } from "antd";
 import {
   loadPropertyManagement,
   saveTenant,
+  saveTenantOnboardingAdmin,
+  validateTenantOnboarding,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { coupleStatuses, maritalStatuses } from "../../shared/constants";
 
@@ -17,7 +19,7 @@ const toTenantFormRecord = (record) => {
   return { ...record };
 };
 
-const TenantFormModal = ({ open, record, onClose, onSaved }) => {
+const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
   const maritalStatus = Form.useWatch("marital_status", form);
@@ -36,17 +38,62 @@ const TenantFormModal = ({ open, record, onClose, onSaved }) => {
     }
   }, [open, record, form]);
 
-  const handleSubmit = async (values) => {
+  const normalizeValues = (values) => {
     const normalizedChildNumber = Number(values.child_number || 0);
+    const payload = { ...values };
+    delete payload._onboardingId;
+    return {
+      ...payload,
+      child_number: normalizedChildNumber,
+      child_age:
+        normalizedChildNumber > 0
+          ? (values.child_age || []).slice(0, normalizedChildNumber)
+          : [],
+    };
+  };
+
+  const saveOnboardingDraft = async () => {
+    if (mode !== "onboarding" || !record?._onboardingId) return;
     const response = await dispatch(
-      saveTenant({
-        ...values,
-        child_number: normalizedChildNumber,
-        child_age:
-          normalizedChildNumber > 0
-            ? (values.child_age || []).slice(0, normalizedChildNumber)
-            : [],
+      saveTenantOnboardingAdmin({
+        id: record._onboardingId,
+        values: normalizeValues(form.getFieldsValue(true)),
       }),
+    );
+    if (response.payload?.message === "success") {
+      dispatch(loadPropertyManagement());
+      onSaved?.();
+    } else {
+      message.error("Echec de l'enregistrement du brouillon.");
+    }
+  };
+
+  const handleSubmit = async (values) => {
+    if (mode === "onboarding") {
+      if (!record?._onboardingId) return;
+      const saved = await dispatch(
+        saveTenantOnboardingAdmin({
+          id: record._onboardingId,
+          values: normalizeValues(values),
+        }),
+      );
+      if (saved.payload?.message !== "success") {
+        message.error("Echec de l'enregistrement du dossier.");
+        return;
+      }
+      const validated = await dispatch(validateTenantOnboarding(record._onboardingId));
+      if (validated.payload?.message === "success") {
+        dispatch(loadPropertyManagement());
+        onSaved?.();
+        onClose?.();
+      } else {
+        message.error(validated.payload?.error || "Impossible de valider le dossier.");
+      }
+      return;
+    }
+
+    const response = await dispatch(
+      saveTenant(normalizeValues(values)),
     );
     if (response.payload?.message === "success") {
       dispatch(loadPropertyManagement());
@@ -60,7 +107,7 @@ const TenantFormModal = ({ open, record, onClose, onSaved }) => {
   return (
     <Modal
       open={open}
-      title={record ? "Modifier le locataire" : "Nouveau Locataire"}
+      title={mode === "onboarding" ? "Dossier d'inscription locataire" : record ? "Modifier le locataire" : "Nouveau Locataire"}
       onCancel={onClose}
       footer={null}
       width={920}
@@ -193,8 +240,13 @@ const TenantFormModal = ({ open, record, onClose, onSaved }) => {
 
         <div className="immo-modal-footer">
           <Button onClick={onClose} className="immo-modal-cancel">Annuler</Button>
+          {mode === "onboarding" && (
+            <Button onClick={saveOnboardingDraft} className="immo-modal-cancel">
+              Enregistrer brouillon
+            </Button>
+          )}
           <Button type="primary" htmlType="submit" className="immo-modal-submit">
-            {record ? "Enregistrer" : "Créer"}
+            {mode === "onboarding" ? "Valider et creer le locataire" : record ? "Enregistrer" : "Creer"}
           </Button>
         </div>
       </Form>

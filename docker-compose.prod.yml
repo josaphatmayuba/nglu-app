@@ -3,6 +3,20 @@
 # Launch: docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: nglu_prod_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - nglu_prod_network
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   backend2:
     build:
       context: ./backend2
@@ -25,15 +39,40 @@ services:
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
       JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
+      REFRESH_SECRET: ${REFRESH_SECRET:-changeme_in_prod}
+      PERMISSIONS_GUARD_CACHE_TTL_MS: ${PERMISSIONS_GUARD_CACHE_TTL_MS:-0}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
-      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
+      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-permissions-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
+      SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@ongdngolu.org}
+      SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      IMAP_HOST: ${IMAP_HOST:-mail.ongdngolu.org}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASS: ${IMAP_PASS:-}
+      IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
+      IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
+      STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
+      STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
     networks:
       - nglu_prod_network
     mem_limit: 180m
+    depends_on:
+      redis:
+        condition: service_healthy
 
   middleware:
     build:

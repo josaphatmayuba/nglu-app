@@ -1,0 +1,25 @@
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16
+    container_name: stalwart-mail
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      STALWART_PUBLIC_URL: ${STALWART_PUBLIC_URL:-http://mail.ongdngolu.org:8088}
+      STALWART_RECOVERY_ADMIN: ${STALWART_RECOVERY_ADMIN}
+    ports:
+      # Temporary admin/setup listener. Disable it after HTTPS is configured.
+      - "${STALWART_ADMIN_PORT:-8088}:8080"
+      # Mail protocols.
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - stalwart_etc:/etc/stalwart
+      - stalwart_data:/var/lib/stalwart
+
+volumes:
+  stalwart_etc:
+  stalwart_data:

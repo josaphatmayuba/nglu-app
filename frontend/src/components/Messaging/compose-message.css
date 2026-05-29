@@ -1,0 +1,46 @@
+.compose-message-card {
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.compose-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.compose-message-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.compose-message-card .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.compose-message-card .ant-form-item-label > label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #262626;
+}
+
+.compose-message-card .ant-input,
+.compose-message-card .ant-input-textarea > textarea {
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.compose-message-card .ant-input-textarea > textarea {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  resize: vertical;
+}
+
+@media (max-width: 768px) {
+  .compose-message-card {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

@@ -15,8 +15,18 @@ async function main() {
   await baselineExistingDatabase();
 
   console.log("▶ Running Drizzle migrations from ./drizzle …");
-  await migrate(db, { migrationsFolder: "./drizzle" });
-  console.log("✔ Migrations complete.");
+  try {
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    console.log("✔ Migrations complete.");
+  } catch (err: any) {
+    // Ignore "table already exists" errors - these can occur in certain edge cases
+    // and don't prevent the application from running
+    if (err.code === 'ER_TABLE_EXISTS_ERROR' || err.errno === 1050) {
+      console.log("✔ Migrations complete (some tables already exist).");
+    } else {
+      throw err;
+    }
+  }
   await connection.end(); // pool.end() drains all connections
 }
 

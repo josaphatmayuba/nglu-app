@@ -29,7 +29,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing or invalid Authorization header");
     }
 
-    let payload: { sub?: number; roleId?: number; role?: string; jti?: string };
+    let payload: { sub?: number; roleId?: number; role?: string; organizationId?: number; jti?: string };
     try {
       payload = this.jwtService.verify(token, { secret: env.jwtSecret, algorithms: ["HS256"] }) as typeof payload;
     } catch {
@@ -54,12 +54,13 @@ export class JwtAuthGuard implements CanActivate {
       }
     }
 
-    await this.assertCurrentAuthContext(payload);
+    const current = await this.assertCurrentAuthContext(payload);
+    payload.organizationId = current.organizationId;
     request.user = payload;
     return true;
   }
 
-  private async assertCurrentAuthContext(payload: { sub?: number; roleId?: number }) {
+  private async assertCurrentAuthContext(payload: { sub?: number; roleId?: number; organizationId?: number }) {
     if (!payload.sub || !payload.roleId) {
       throw new UnauthorizedException("Invalid token payload");
     }
@@ -68,6 +69,7 @@ export class JwtAuthGuard implements CanActivate {
       .select({
         id: users.id,
         roleId: users.roleId,
+        organizationId: users.organizationId,
         isLogin: users.isLogin,
         status: users.status,
       })
@@ -82,5 +84,11 @@ export class JwtAuthGuard implements CanActivate {
     if (user.roleId !== payload.roleId) {
       throw new UnauthorizedException("AUTH_CONTEXT_STALE");
     }
+
+    if (payload.organizationId && user.organizationId !== payload.organizationId) {
+      throw new UnauthorizedException("AUTH_CONTEXT_STALE");
+    }
+
+    return { organizationId: user.organizationId };
   }
 }

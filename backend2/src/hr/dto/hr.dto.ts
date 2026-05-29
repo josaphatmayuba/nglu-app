@@ -102,6 +102,12 @@ export class CreateSalaryHistoryDto {
   @Type(() => Number)
   @IsNumber()
   paymentAccountId?: number;
+
+  /** Currency ID for this salary (defaults to app setting if not provided) */
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number;
 }
 
 export class UpdateSalaryHistoryDto extends PartialType(CreateSalaryHistoryDto) {}

@@ -1,3 +1,4 @@
+import axios from "axios";
 import { Form, message } from "antd";
 import { CalendarRange, Download, Plus, Table2, Users, X } from "lucide-react";
 import moment from "moment";
@@ -46,10 +47,49 @@ const exportPaymentsToCsv = (payments) => {
   URL.revokeObjectURL(url);
 };
 
+const paymentMatchesSearch = (payment, query) => {
+  if (!query) return true;
+  const haystack = normalize(
+    [
+      payment.reference,
+      payment.leaseReference,
+      payment.tenantFirstName,
+      payment.tenantLastName,
+      payment.propertyName,
+      payment.unitName,
+      payment.method,
+      String(payment.amount || ""),
+    ].join(" "),
+  );
+  return haystack.includes(query);
+};
+
+const leaseToExpectedPayment = (lease) => ({
+  id: `expected-${lease.id}`,
+  leaseId: lease.id,
+  leaseReference: lease.reference,
+  tenantFirstName: lease.tenantFirstName || lease.tenant?.firstName,
+  tenantLastName: lease.tenantLastName || lease.tenant?.lastName,
+  propertyName: lease.propertyName || lease.unit?.property?.name,
+  unitName: lease.unitName || lease.unit?.name,
+  amount: lease.remainingAmount ?? lease.expectedAmount ?? lease.rentAmount,
+  expectedAmount: lease.expectedAmount ?? lease.rentAmount,
+  paidAmount: lease.paidAmount ?? 0,
+  remainingAmount: lease.remainingAmount ?? lease.rentAmount,
+  currencyId: lease.currencyId,
+  currencySymbol: lease.currencySymbol || lease.currency?.symbol,
+  paymentDate: lease.nextInvoiceDate,
+  status: null,
+  method: null,
+  reference: null,
+  _isExpected: true,
+});
+
 const PaymentsPanel = ({ searchTerm = "" }) => {
   const dispatch = useDispatch();
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [quickPayInitialValues, setQuickPayInitialValues] = useState(null);
   const [saving, setSaving] = useState(false);
   const [paymentView, setPaymentView] = useState(readStoredView);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -74,62 +114,52 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
 
   const filteredPayments = useMemo(() => {
     const q = normalize(searchTerm);
-    if (!q) return safePayments;
-    return safePayments.filter((payment) => {
-      const haystack = normalize(
-        [
-          payment.reference,
-          payment.leaseReference,
-          payment.tenantFirstName,
-          payment.tenantLastName,
-          payment.propertyName,
-          payment.unitName,
-          payment.method,
-          String(payment.amount || ""),
-        ].join(" "),
-      );
-      return haystack.includes(q);
-    });
+    return safePayments.filter((payment) => paymentMatchesSearch(payment, q));
   }, [safePayments, searchTerm]);
-
-  // Convert a lease to a payment-compatible row for overdue/upcoming display
-  const leaseToExpectedPayment = (lease) => ({
-    id: `expected-${lease.id}`,
-    leaseId: lease.id,
-    leaseReference: lease.reference,
-    tenantFirstName: lease.tenantFirstName || lease.tenant?.firstName,
-    tenantLastName: lease.tenantLastName || lease.tenant?.lastName,
-    propertyName: lease.propertyName || lease.unit?.property?.name,
-    unitName: lease.unitName || lease.unit?.name,
-    amount: lease.rentAmount,
-    currencySymbol: lease.currencySymbol || lease.currency?.symbol,
-    paymentDate: lease.nextInvoiceDate,
-    status: null,
-    method: null,
-    reference: null,
-    _isExpected: true,
-  });
 
   const overdueLeaseIds = useMemo(() => new Set(overduePayments.map((l) => l.id)), [overduePayments]);
   const upcomingLeaseIds = useMemo(() => new Set(upcomingPayments.map((l) => l.id)), [upcomingPayments]);
+  const expectedOverduePayments = useMemo(
+    () => overduePayments.map(leaseToExpectedPayment),
+    [overduePayments],
+  );
+  const expectedUpcomingPayments = useMemo(
+    () => upcomingPayments.map(leaseToExpectedPayment),
+    [upcomingPayments],
+  );
+  const filteredOverduePayments = useMemo(() => {
+    const q = normalize(searchTerm);
+    return expectedOverduePayments.filter((payment) => paymentMatchesSearch(payment, q));
+  }, [expectedOverduePayments, searchTerm]);
+  const filteredUpcomingPayments = useMemo(() => {
+    const q = normalize(searchTerm);
+    return expectedUpcomingPayments.filter((payment) => paymentMatchesSearch(payment, q));
+  }, [expectedUpcomingPayments, searchTerm]);
+  const paidPayments = useMemo(
+    () => filteredPayments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId)),
+    [filteredPayments, overdueLeaseIds, upcomingLeaseIds],
+  );
 
   const paymentsView = useMemo(() => {
-    if (paymentStatusFilter === "late") return overduePayments.map(leaseToExpectedPayment);
-    if (paymentStatusFilter === "pending") return upcomingPayments.map(leaseToExpectedPayment);
-    if (paymentStatusFilter === "paid")
-      return filteredPayments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId));
-    return filteredPayments;
-  }, [paymentStatusFilter, filteredPayments, overduePayments, upcomingPayments, overdueLeaseIds, upcomingLeaseIds]);
+    if (paymentStatusFilter === "late") return filteredOverduePayments;
+    if (paymentStatusFilter === "pending") return filteredUpcomingPayments;
+    if (paymentStatusFilter === "paid") return paidPayments;
+    return [...paidPayments, ...filteredUpcomingPayments, ...filteredOverduePayments];
+  }, [paymentStatusFilter, paidPayments, filteredOverduePayments, filteredUpcomingPayments]);
 
   const paymentFilterChips = [
-    { key: "all", label: "Tous", count: filteredPayments.length },
+    {
+      key: "all",
+      label: "Tous",
+      count: paidPayments.length + filteredUpcomingPayments.length + filteredOverduePayments.length,
+    },
     {
       key: "paid",
       label: "Payés",
-      count: filteredPayments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId)).length,
+      count: paidPayments.length,
     },
-    { key: "pending", label: "En attente", count: upcomingPayments.length },
-    { key: "late", label: "En retard", count: overduePayments.length },
+    { key: "pending", label: "En attente", count: filteredUpcomingPayments.length },
+    { key: "late", label: "En retard", count: filteredOverduePayments.length },
   ];
 
   const leaseOptions = safeLeases
@@ -146,7 +176,29 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
 
   const closeModal = () => {
     setPaymentModalOpen(false);
+    setQuickPayInitialValues(null);
     form.resetFields();
+  };
+
+  const handleQuickPay = (payment) => {
+    setQuickPayInitialValues({
+      leaseId: payment.leaseId,
+      amount: payment.remainingAmount ?? payment.amount,
+      currencyId: payment.currencyId,
+      paymentDate: moment().format("YYYY-MM-DD"),
+      method: "cash",
+      notes: `Paiement du loyer en retard - ${payment.leaseReference || ""}`.trim(),
+    });
+    openModal();
+  };
+
+  const handleSendReminder = async (payment) => {
+    try {
+      await axios.post("/property-management/payments/reminder", { leaseId: payment.leaseId });
+      message.success("Rappel envoyé au locataire");
+    } catch (error) {
+      message.error(error.response?.data?.message || "Erreur lors de l'envoi du rappel");
+    }
   };
 
   const handleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -249,11 +301,13 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
       {paymentView === "tableau" && (
         <PaymentsTable
           payments={paymentsView}
-          pendingPayments={upcomingPayments}
-          latePayments={overduePayments}
+          pendingPayments={expectedUpcomingPayments}
+          latePayments={expectedOverduePayments}
           selectedIds={selectedIds}
           onSelect={handleSelect}
           onSelectAll={handleSelectAll}
+          onQuickPay={handleQuickPay}
+          onReminder={handleSendReminder}
         />
       )}
       {paymentView === "locataire" && (
@@ -261,13 +315,15 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
           payments={paymentsView}
           overduePayments={overduePayments}
           upcomingPayments={upcomingPayments}
+          onQuickPay={handleQuickPay}
+          onReminder={handleSendReminder}
         />
       )}
       {paymentView === "calendrier" && (
         <PaymentsCalendarView
           payments={paymentsView}
-          overduePayments={overduePayments}
-          upcomingPayments={upcomingPayments}
+          overduePayments={expectedOverduePayments}
+          upcomingPayments={expectedUpcomingPayments}
         />
       )}
 
@@ -275,6 +331,7 @@ const PaymentsPanel = ({ searchTerm = "" }) => {
         accounts={accounts}
         currencyOptions={currencyOptions}
         form={form}
+        initialValues={quickPayInitialValues}
         leaseOptions={leaseOptions}
         onCancel={closeModal}
         onSubmit={submitPayment}

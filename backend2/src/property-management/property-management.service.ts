@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -27,6 +27,7 @@ import {
 import type { Database } from "../database/types";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
+import { SystemEmailService } from "../system-email/system-email.service";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -57,44 +58,65 @@ export class PropertyManagementService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly realtimeData: RealtimeDataPublisher,
+    private readonly emails: SystemEmailService,
   ) {}
 
-  async dashboard() {
+  async dashboard(orgId: number) {
     const [properties] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateProperties)
-      .where(ne(realEstateProperties.status, "false"));
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId)));
     const [units] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(ne(realEstateUnits.status, "false"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ));
     const [vacantUnits] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(eq(realEstateUnits.status, "vacant"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        eq(realEstateUnits.status, "vacant"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ));
     const [occupiedUnits] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
-      .where(and(eq(realEstateUnits.status, "occupied"), ne(realEstateProperties.status, "false")));
+      .where(and(
+        eq(realEstateUnits.status, "occupied"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ));
     const [activeLeases] = await this.db
       .select({
         count: sql<number>`count(*)`,
         monthlyRent: sql<string>`coalesce(sum(${realEstateLeases.rentAmount}), 0)`,
       })
       .from(realEstateLeases)
-      .where(eq(realEstateLeases.status, "active"));
+      .where(and(eq(realEstateLeases.status, "active"), eq(realEstateLeases.organizationId, orgId)));
     const [collectedRent] = await this.db
       .select({ total: sql<string>`coalesce(sum(${realEstateRentPayments.amount}), 0)` })
-      .from(realEstateRentPayments);
+      .from(realEstateRentPayments)
+      .where(eq(realEstateRentPayments.organizationId, orgId));
     const [openMaintenance] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(realEstateMaintenanceRequests)
       .where(and(
         inArray(realEstateMaintenanceRequests.status, ["open", "in_progress"]),
         eq(realEstateMaintenanceRequests.isActive, true),
+        eq(realEstateMaintenanceRequests.organizationId, orgId),
       ));
 
     return {
@@ -109,12 +131,16 @@ export class PropertyManagementService {
     };
   }
 
-  tenants() {
-    return this.tenantQuery().orderBy(desc(customers.id));
+  tenants(orgId: number) {
+    return this.tenantQuery(undefined, orgId).orderBy(desc(customers.id));
   }
 
-  private tenantQuery(customerId?: number) {
-    const tenantWhere = and(eq(customers.status, "true"), inArray(roles.name, ["Locataire", "locataire", "tenant"]));
+  private tenantQuery(customerId?: number, orgId?: number) {
+    const tenantWhere = and(
+      eq(customers.status, "true"),
+      inArray(roles.name, ["Locataire", "locataire", "tenant"]),
+      ...(orgId !== undefined ? [eq(customers.organizationId, orgId)] : []),
+    );
     const where = customerId ? and(tenantWhere, eq(customers.id, customerId)) : tenantWhere;
 
     return this.db
@@ -127,6 +153,7 @@ export class PropertyManagementService {
         phone: customers.phone,
         address: customers.address,
         roleId: customers.roleId,
+        status: customers.status,
         birthDate: tenantDetails.birthDate,
         sex: tenantDetails.sex,
         nationality: tenantDetails.nationality,
@@ -158,15 +185,20 @@ export class PropertyManagementService {
       .where(where);
   }
 
-  async createTenant(input: CreateTenantDto) {
-    return this.createTenantRecord(input);
+  async createTenant(input: CreateTenantDto, orgId: number) {
+    return this.createTenantRecord(input, orgId);
   }
 
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
     const token = randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
-    const data = JSON.stringify({ phone: input.phone });
+    const data = JSON.stringify({
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      email: input.email ?? null,
+      phone: input.phone,
+    });
 
     const [result] = await this.db.insert(tenantOnboardings).values({
       phone: input.phone,
@@ -213,14 +245,14 @@ export class PropertyManagementService {
     return this.adminOnboardingResponse(await this.findOnboarding(id));
   }
 
-  async validateOnboarding(id: number) {
+  async validateOnboarding(id: number, orgId: number) {
     const onboarding = await this.findOnboarding(id);
     if (onboarding.status === "validated") {
       throw new BadRequestException("This onboarding dossier has already been validated.");
     }
 
     const payload = this.validatedTenantPayload(this.parseOnboardingData(onboarding.data), onboarding.phone);
-    const customer = await this.createTenantRecord(payload);
+    const customer = await this.createTenantRecord(payload, orgId);
 
     await this.db
       .update(tenantOnboardings)
@@ -274,7 +306,7 @@ export class PropertyManagementService {
     };
   }
 
-  private async createTenantRecord(input: CreateTenantDto) {
+  private async createTenantRecord(input: CreateTenantDto, orgId: number) {
     await this.ensureTenantForm(input);
     if (input.email) {
       await this.ensureCustomerEmailAvailable(input.email);
@@ -286,6 +318,7 @@ export class PropertyManagementService {
 
     const customerId = await this.db.transaction(async (tx) => {
       const [customerResult] = await tx.insert(customers).values({
+        organizationId: orgId,
         username,
         firstName: input.firstName,
         lastName: input.lastName,
@@ -337,10 +370,10 @@ export class PropertyManagementService {
       return createdCustomerId;
     });
 
-    return this.findTenant(customerId);
+    return this.findTenant(customerId, orgId);
   }
 
-  async properties() {
+  async properties(orgId: number) {
     const rows = await this.db
       .select({
         id: realEstateProperties.id,
@@ -348,6 +381,7 @@ export class PropertyManagementService {
         code: realEstateProperties.code,
         propertyType: realEstateProperties.propertyType,
         status: realEstateProperties.status,
+        isActive: realEstateProperties.isActive,
         address: realEstateProperties.address,
         city: realEstateProperties.city,
         country: realEstateProperties.country,
@@ -366,20 +400,21 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
-      .where(ne(realEstateProperties.status, "false"))
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId)))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
     return rows.map((row) => ({ ...row, unitsCount: Number(row.unitsCount) }));
   }
 
-  async createProperty(input: CreatePropertyDto) {
+  async createProperty(input: CreatePropertyDto, orgId: number) {
     const code = input.code?.trim() || (await this.nextPropertyCode());
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
     const [result] = await this.db.insert(realEstateProperties).values({
+      organizationId: orgId,
       name: input.name,
       code,
       propertyType: input.propertyType ?? "building",
@@ -402,8 +437,8 @@ export class PropertyManagementService {
     return this.findProperty(propertyId);
   }
 
-  async updateProperty(id: number, input: UpdatePropertyDto) {
-    await this.ensureActiveProperty(id);
+  async updateProperty(id: number, input: UpdatePropertyDto, orgId: number) {
+    await this.ensureActiveProperty(id, orgId);
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     }
@@ -427,14 +462,14 @@ export class PropertyManagementService {
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateProperties.id, id));
+      .where(and(eq(realEstateProperties.id, id), eq(realEstateProperties.organizationId, orgId)));
 
     await this.publishPropertyUpdate("updated", id, { propertyId: id });
     return this.findProperty(id);
   }
 
-  async deleteProperty(id: number) {
-    await this.ensureActiveProperty(id);
+  async deleteProperty(id: number, orgId: number) {
+    await this.ensureActiveProperty(id, orgId);
 
     // Block if any unit in this property has an active lease
     const units = await this.db
@@ -459,12 +494,12 @@ export class PropertyManagementService {
     await this.db
       .update(realEstateProperties)
       .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateProperties.id, id));
+      .where(and(eq(realEstateProperties.id, id), eq(realEstateProperties.organizationId, orgId)));
     await this.publishPropertyUpdate("deleted", id, { propertyId: id });
     return { message: "Property deleted successfully." };
   }
 
-  units() {
+  units(orgId: number) {
     return this.db
       .select({
         id: realEstateUnits.id,
@@ -472,6 +507,7 @@ export class PropertyManagementService {
         name: realEstateUnits.name,
         unitType: realEstateUnits.unitType,
         status: realEstateUnits.status,
+        isActive: realEstateUnits.isActive,
         floor: realEstateUnits.floor,
         bedrooms: realEstateUnits.bedrooms,
         bathrooms: realEstateUnits.bathrooms,
@@ -485,21 +521,29 @@ export class PropertyManagementService {
         description: realEstateUnits.description,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
+        propertyIsActive: realEstateProperties.isActive,
       })
       .from(realEstateUnits)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
       .leftJoin(unitCurrency, eq(unitCurrency.id, realEstateUnits.currencyId))
-      .where(and(ne(realEstateUnits.status, "false"), ne(realEstateProperties.status, "false")))
+      .where(and(
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ))
       .orderBy(desc(realEstateUnits.id));
   }
 
-  async createUnit(input: CreateUnitDto) {
-    await this.ensureActiveProperty(input.propertyId);
+  async createUnit(input: CreateUnitDto, orgId: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
     const [result] = await this.db.insert(realEstateUnits).values({
+      organizationId: orgId,
       propertyId: input.propertyId,
       name: input.name,
       unitType: input.unitType ?? "apartment",
@@ -521,10 +565,10 @@ export class PropertyManagementService {
     return this.findUnit(unitId);
   }
 
-  async updateUnit(id: number, input: UpdateUnitDto) {
-    await this.ensureActiveUnit(id);
+  async updateUnit(id: number, input: UpdateUnitDto, orgId: number) {
+    await this.ensureActiveUnit(id, orgId);
     if (input.propertyId !== undefined) {
-      await this.ensureActiveProperty(input.propertyId);
+      await this.ensureActiveProperty(input.propertyId, orgId);
     }
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
@@ -549,13 +593,13 @@ export class PropertyManagementService {
         ...(input.securityDeposit !== undefined ? { securityDeposit: this.money(input.securityDeposit) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateUnits.id, id));
+      .where(and(eq(realEstateUnits.id, id), eq(realEstateUnits.organizationId, orgId)));
     await this.publishUnitUpdate("updated", id, { propertyId: input.propertyId ?? null, unitId: id });
     return this.findUnit(id);
   }
 
-  async deleteUnit(id: number) {
-    await this.ensureActiveUnit(id);
+  async deleteUnit(id: number, orgId: number) {
+    await this.ensureActiveUnit(id, orgId);
 
     // Block if this unit has an active lease
     const [activeLease] = await this.db
@@ -572,19 +616,29 @@ export class PropertyManagementService {
     await this.db
       .update(realEstateUnits)
       .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateUnits.id, id));
+      .where(and(eq(realEstateUnits.id, id), eq(realEstateUnits.organizationId, orgId)));
     await this.publishUnitUpdate("deleted", id, { unitId: id });
     return { message: "Unit deleted successfully." };
   }
 
-  leases() {
-    return this.leaseQuery().where(ne(realEstateLeases.status, "cancelled")).orderBy(desc(realEstateLeases.id));
+  leases(orgId: number) {
+    return this.leaseQuery()
+      .where(and(
+        ne(realEstateLeases.status, "cancelled"),
+        ne(leaseProperty.status, "false"),
+        eq(leaseProperty.isActive, 1),
+        ne(leaseUnit.status, "false"),
+        eq(leaseUnit.isActive, 1),
+        eq(realEstateLeases.organizationId, orgId),
+      ))
+      .orderBy(desc(realEstateLeases.id));
   }
 
-  async createLease(input: CreateLeaseDto) {
-    await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId);
+  async createLease(input: CreateLeaseDto, orgId: number) {
+    await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId, orgId);
     const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency());
     const [result] = await this.db.insert(realEstateLeases).values({
+      organizationId: orgId,
       reference: input.reference || `LEASE-${Date.now()}`,
       propertyId: input.propertyId,
       unitId: input.unitId,
@@ -619,12 +673,13 @@ export class PropertyManagementService {
     return this.findLease(leaseId);
   }
 
-  async updateLease(id: number, input: UpdateLeaseDto) {
-    const current = await this.getLeaseOrThrow(id);
+  async updateLease(id: number, input: UpdateLeaseDto, orgId: number) {
+    const current = await this.getLeaseOrThrow(id, orgId);
     await this.ensureLeaseReferences(
       input.propertyId ?? current.propertyId,
       input.unitId ?? current.unitId,
       input.tenantId ?? current.tenantId,
+      orgId,
     );
 
     await this.db
@@ -650,7 +705,7 @@ export class PropertyManagementService {
           : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateLeases.id, id));
+      .where(and(eq(realEstateLeases.id, id), eq(realEstateLeases.organizationId, orgId)));
 
     const nextUnitId = input.unitId ?? current.unitId;
     if (input.unitId !== undefined && input.unitId !== current.unitId) {
@@ -659,7 +714,7 @@ export class PropertyManagementService {
     if ((input.status ?? current.status) === "active") {
       await this.setUnitStatus(nextUnitId, "occupied");
     }
-    if (["ended", "cancelled"].includes(input.status ?? "")) {
+    if (["inactive", "ended", "cancelled"].includes(input.status ?? "")) {
       await this.setUnitStatus(nextUnitId, "vacant");
     }
 
@@ -670,13 +725,13 @@ export class PropertyManagementService {
     return this.findLease(id);
   }
 
-  async deleteLease(id: number) {
-    const lease = await this.getLeaseOrThrow(id);
+  async deleteLease(id: number, orgId: number) {
+    const lease = await this.getLeaseOrThrow(id, orgId);
     await this.setUnitStatus(lease.unitId, "vacant");
     await this.db
       .update(realEstateLeases)
       .set({ status: "cancelled", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateLeases.id, id));
+      .where(and(eq(realEstateLeases.id, id), eq(realEstateLeases.organizationId, orgId)));
     await this.publishLeaseUpdate("deleted", id, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
@@ -684,7 +739,11 @@ export class PropertyManagementService {
     return { message: "Lease deleted successfully." };
   }
 
-  payments() {
+  payments(orgId: number) {
+    return this.paymentQuery(undefined, orgId).orderBy(desc(realEstateRentPayments.id));
+  }
+
+  private paymentQuery(id?: number, orgId?: number) {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -710,11 +769,19 @@ export class PropertyManagementService {
       .leftJoin(paymentUnit, eq(paymentUnit.id, paymentLease.unitId))
       .leftJoin(customers, eq(customers.id, paymentLease.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateRentPayments.currencyId))
-      .orderBy(desc(realEstateRentPayments.id));
+      .where(and(
+        ne(paymentLease.status, "cancelled"),
+        ne(paymentProperty.status, "false"),
+        eq(paymentProperty.isActive, 1),
+        ne(paymentUnit.status, "false"),
+        eq(paymentUnit.isActive, 1),
+        ...(id ? [eq(realEstateRentPayments.id, id)] : []),
+        ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
+      ));
   }
 
-  async createPayment(input: CreateRentPaymentDto) {
-    const lease = await this.getLeaseOrThrow(input.leaseId);
+  async createPayment(input: CreateRentPaymentDto, orgId: number) {
+    const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
     const rentPaymentType = await this.getRentPaymentType();
     const debitId = input.paymentAccountId ?? rentPaymentType.debitAccountId;
     await this.ensureExists(subAccounts, debitId, "Payment account not found.");
@@ -740,6 +807,7 @@ export class PropertyManagementService {
     });
 
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
+      organizationId: orgId,
       leaseId: lease.id,
       currencyId: paymentCurrencyId,
       transactionId: Number(transactionResult.insertId),
@@ -753,6 +821,7 @@ export class PropertyManagementService {
     });
 
     const paymentId = Number(paymentResult.insertId);
+    await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
@@ -760,7 +829,83 @@ export class PropertyManagementService {
     return this.findPayment(paymentId);
   }
 
-  maintenance() {
+  private async advanceLeaseInvoiceDateIfCovered(
+    lease: typeof realEstateLeases.$inferSelect,
+    orgId: number,
+    paymentDate: string,
+  ) {
+    if (!lease.nextInvoiceDate) return;
+
+    const due = this.parseDateOnly(lease.nextInvoiceDate);
+    const paidAt = this.parseDateOnly(paymentDate);
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    const periodStart = this.addBillingCycle(due, lease.billingCycle, -1);
+    const periodEnd = new Date(Math.max(due.getTime(), paidAt.getTime(), today.getTime()));
+
+    const [row] = await this.db
+      .select({ total: sql<string>`coalesce(sum(${realEstateRentPayments.amount}), 0)` })
+      .from(realEstateRentPayments)
+      .where(and(
+        eq(realEstateRentPayments.organizationId, orgId),
+        eq(realEstateRentPayments.leaseId, lease.id),
+        gte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodStart)),
+        lte(realEstateRentPayments.paymentDate, this.formatDateOnly(periodEnd)),
+      ));
+
+    if (Number(row?.total || 0) < Number(lease.rentAmount || 0)) return;
+
+    await this.db
+      .update(realEstateLeases)
+      .set({
+        nextInvoiceDate: this.formatDateOnly(this.addBillingCycle(due, lease.billingCycle, 1)),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(realEstateLeases.id, lease.id), eq(realEstateLeases.organizationId, orgId)));
+  }
+
+  async sendPaymentReminder(leaseId: number) {
+    const rows = await this.db
+      .select({
+        leaseId: realEstateLeases.id,
+        reference: realEstateLeases.reference,
+        rentAmount: realEstateLeases.rentAmount,
+        tenantFirstName: customers.firstName,
+        tenantLastName: customers.lastName,
+        tenantEmail: customers.email,
+      })
+      .from(realEstateLeases)
+      .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .where(eq(realEstateLeases.id, leaseId))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Bail introuvable.");
+
+    const lease = rows[0];
+    if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
+
+    const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    const subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
+    const html = `
+      <p>Bonjour ${tenantName},</p>
+      <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
+      <p><strong>Montant du:</strong> ${lease.rentAmount}</p>
+      <p>Merci de régulariser ce paiement au plus tôt possible.</p>
+      <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
+      <p>Cordialement,<br>L'équipe de gestion immobilière</p>
+    `;
+
+    const result = await this.emails.send({
+      to: lease.tenantEmail,
+      subject,
+      html,
+      type: "payment_reminder",
+      relatedType: "real-estate-lease",
+      relatedId: leaseId,
+    });
+    return { message: "success", email: result };
+  }
+
+  maintenance(_orgId?: number) {
     return this.db
       .select({
         id: realEstateMaintenanceRequests.id,
@@ -781,16 +926,17 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateMaintenanceRequests.id));
   }
 
-  listMaintenance() {
-    return this.maintenance().where(eq(realEstateMaintenanceRequests.isActive, true));
+  listMaintenance(orgId: number) {
+    return this.maintenance().where(and(eq(realEstateMaintenanceRequests.isActive, true), eq(realEstateMaintenanceRequests.organizationId, orgId)));
   }
 
-  async createMaintenance(input: CreateMaintenanceDto) {
-    await this.ensureActiveProperty(input.propertyId);
+  async createMaintenance(input: CreateMaintenanceDto, orgId: number) {
+    await this.ensureActiveProperty(input.propertyId, orgId);
     if (input.unitId) {
-      await this.ensureActiveUnit(input.unitId);
+      await this.ensureActiveUnit(input.unitId, orgId);
     }
     const [result] = await this.db.insert(realEstateMaintenanceRequests).values({
+      organizationId: orgId,
       propertyId: input.propertyId,
       unitId: input.unitId ?? null,
       title: input.title,
@@ -805,13 +951,13 @@ export class PropertyManagementService {
     return this.findMaintenance(Number(result.insertId));
   }
 
-  async updateMaintenance(id: number, input: UpdateMaintenanceDto) {
-    await this.ensureExists(realEstateMaintenanceRequests, id, "Maintenance request not found.");
+  async updateMaintenance(id: number, input: UpdateMaintenanceDto, orgId: number) {
+    await this.ensureOrgOwned(realEstateMaintenanceRequests, id, orgId, "Maintenance request not found.");
     if (input.propertyId !== undefined) {
-      await this.ensureActiveProperty(input.propertyId);
+      await this.ensureActiveProperty(input.propertyId, orgId);
     }
     if (input.unitId) {
-      await this.ensureActiveUnit(input.unitId);
+      await this.ensureActiveUnit(input.unitId, orgId);
     }
     await this.db
       .update(realEstateMaintenanceRequests)
@@ -821,16 +967,16 @@ export class PropertyManagementService {
         ...(input.estimatedCost !== undefined ? { estimatedCost: this.money(input.estimatedCost) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateMaintenanceRequests.id, id));
+      .where(and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId)));
     return this.findMaintenance(id);
   }
 
-  async deleteMaintenance(id: number) {
-    await this.ensureExists(realEstateMaintenanceRequests, id, "Maintenance request not found.");
+  async deleteMaintenance(id: number, orgId: number) {
+    await this.ensureOrgOwned(realEstateMaintenanceRequests, id, orgId, "Maintenance request not found.");
     await this.db
       .update(realEstateMaintenanceRequests)
       .set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateMaintenanceRequests.id, id));
+      .where(and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId)));
     return { message: "Maintenance request deleted successfully." };
   }
 
@@ -883,7 +1029,9 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstateUnits.id, id),
         ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
         ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Unit not found.");
@@ -892,26 +1040,36 @@ export class PropertyManagementService {
 
   async findLease(id: number) {
     const rows = await this.leaseQuery()
-      .where(and(ne(realEstateLeases.status, "cancelled"), eq(realEstateLeases.id, id)))
+      .where(and(
+        ne(realEstateLeases.status, "cancelled"),
+        eq(realEstateLeases.id, id),
+        ne(leaseProperty.status, "false"),
+        eq(leaseProperty.isActive, 1),
+        ne(leaseUnit.status, "false"),
+        eq(leaseUnit.isActive, 1),
+      ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
   }
 
   async findPayment(id: number) {
-    const rows = await this.payments().where(eq(realEstateRentPayments.id, id)).limit(1);
+    const rows = await this.paymentQuery(id).limit(1);
     if (!rows.length) throw new NotFoundException("Payment not found.");
     return rows[0];
   }
 
-  async findMaintenance(id: number) {
-    const rows = await this.maintenance().where(eq(realEstateMaintenanceRequests.id, id)).limit(1);
+  async findMaintenance(id: number, orgId?: number) {
+    const where = orgId !== undefined
+      ? and(eq(realEstateMaintenanceRequests.id, id), eq(realEstateMaintenanceRequests.organizationId, orgId))
+      : eq(realEstateMaintenanceRequests.id, id);
+    const rows = await this.maintenance().where(where).limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance request not found.");
     return rows[0];
   }
 
-  async listMaintenanceCosts(ticketId: number) {
-    await this.findMaintenance(ticketId);
+  async listMaintenanceCosts(ticketId: number, orgId: number) {
+    await this.findMaintenance(ticketId, orgId);
     return this.db
       .select()
       .from(realEstateMaintenanceCosts)
@@ -931,8 +1089,8 @@ export class PropertyManagementService {
     return `${base}/uploads/${name}`;
   }
 
-  async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, receipt?: any, publicApiBase?: string) {
-    await this.findMaintenance(ticketId);
+  async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
+    await this.findMaintenance(ticketId, orgId);
 
     const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
 
@@ -996,8 +1154,8 @@ export class PropertyManagementService {
     return { message: "Deleted successfully." };
   }
 
-  private async findTenant(id: number) {
-    const rows = await this.tenantQuery(id).limit(1);
+  private async findTenant(id: number, orgId: number) {
+    const rows = await this.tenantQuery(id, orgId).limit(1);
     if (!rows.length) throw new NotFoundException("Tenant not found.");
     return rows[0];
   }
@@ -1050,8 +1208,12 @@ export class PropertyManagementService {
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
   }
 
-  private async getLeaseOrThrow(id: number) {
-    const rows = await this.db.select().from(realEstateLeases).where(eq(realEstateLeases.id, id)).limit(1);
+  private async getLeaseOrThrow(id: number, orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateLeases)
+      .where(and(eq(realEstateLeases.id, id), eq(realEstateLeases.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
   }
@@ -1074,8 +1236,8 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  private async ensureLeaseReferences(propertyId: number, unitId: number, tenantId: number) {
-    await this.ensureActiveProperty(propertyId);
+  private async ensureLeaseReferences(propertyId: number, unitId: number, tenantId: number, orgId: number) {
+    await this.ensureActiveProperty(propertyId, orgId);
     const units = await this.db
       .select({ id: realEstateUnits.id, propertyId: realEstateUnits.propertyId })
       .from(realEstateUnits)
@@ -1087,7 +1249,7 @@ export class PropertyManagementService {
     if (units[0].propertyId !== propertyId) {
       throw new BadRequestException("Cette unité n'appartient pas au bien sélectionné.");
     }
-    await this.ensureExists(customers, tenantId, "Tenant not found.");
+    await this.findTenant(tenantId, orgId);
   }
 
   private async getTenantRole() {
@@ -1250,18 +1412,23 @@ export class PropertyManagementService {
     }
   }
 
-  private async ensureActiveProperty(id: number) {
+  private async ensureActiveProperty(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: realEstateProperties.id })
       .from(realEstateProperties)
-      .where(and(eq(realEstateProperties.id, id), ne(realEstateProperties.status, "false")))
+      .where(and(
+        eq(realEstateProperties.id, id),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateProperties.organizationId, orgId),
+      ))
       .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Property not found.");
     }
   }
 
-  private async ensureActiveUnit(id: number) {
+  private async ensureActiveUnit(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: realEstateUnits.id })
       .from(realEstateUnits)
@@ -1270,10 +1437,22 @@ export class PropertyManagementService {
         eq(realEstateUnits.id, id),
         ne(realEstateUnits.status, "false"),
         ne(realEstateProperties.status, "false"),
+        eq(realEstateUnits.organizationId, orgId),
       ))
       .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Unit not found.");
+    }
+  }
+
+  private async ensureOrgOwned(table: any, id: number, orgId: number, message: string) {
+    const rows = await this.db
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.id, id), eq(table.organizationId, orgId)))
+      .limit(1);
+    if (!rows.length) {
+      throw new NotFoundException(message);
     }
   }
 
@@ -1305,6 +1484,28 @@ export class PropertyManagementService {
 
   private requiredDate(value: string) {
     return value;
+  }
+
+  private parseDateOnly(value: string | Date) {
+    if (value instanceof Date) {
+      return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+    }
+    return new Date(`${value}T00:00:00.000Z`);
+  }
+
+  private formatDateOnly(value: Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private addBillingCycle(value: Date, billingCycle?: string | null, direction = 1) {
+    const next = new Date(value.getTime());
+    const normalized = String(billingCycle || "monthly").toLowerCase();
+    const months =
+      normalized === "yearly" || normalized === "annual" ? 12 :
+      normalized === "quarterly" ? 3 :
+      1;
+    next.setUTCMonth(next.getUTCMonth() + months * direction);
+    return next;
   }
 
   private pick(input: object, keys: string[]) {

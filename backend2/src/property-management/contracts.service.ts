@@ -1,7 +1,6 @@
 import * as crypto from "crypto";
-import { GoneException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { desc, eq, ne, sql } from "drizzle-orm";
-import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -15,6 +14,10 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
+import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
+import { SystemEmailService } from "../system-email/system-email.service";
+import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
@@ -53,9 +56,13 @@ type CompanyInfo = {
 
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly templates: ContractTemplatesService,
+    private readonly emails: SystemEmailService,
+    private readonly realtimeData: RealtimeDataPublisher,
   ) {}
 
   async createContract(dto: CreateContractDto, createdBy?: number) {
@@ -76,6 +83,7 @@ export class ContractsService {
 
     const id = Number(result.insertId);
     await this.log(id, "created", null, null, `Contract created for lease #${dto.leaseId}`);
+    await this.publishContractUpdate("created", id, dto.leaseId);
     return this.getContract(id);
   }
 
@@ -233,16 +241,18 @@ export class ContractsService {
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
-    if (contract.tenantEmail && env.smtp.user) {
+    if (contract.tenantEmail) {
       await this.sendEmail(
         contract.tenantEmail,
         "Votre contrat de bail est prêt à être signé",
         this.signingEmailHtml(contract.tenantName ?? "", signingUrl),
+        "contract_signature",
       );
     }
 
     await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}`);
-    return { message: "Contract sent.", signingUrl, token };
+    await this.publishContractUpdate("status_changed", id, contract.leaseId);
+    return { message: "Contract sent.", id, signingUrl, token };
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {
@@ -253,6 +263,7 @@ export class ContractsService {
         .update(realEstateContracts)
         .set({ status: "viewed", updatedAt: sql`CURRENT_TIMESTAMP` })
         .where(eq(realEstateContracts.id, contract.id));
+      await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     }
 
     await this.log(contract.id, "viewed", ip, ua, null);
@@ -262,7 +273,11 @@ export class ContractsService {
       status: contract.status,
       contractContent: contract.contractContent,
       tenantName: contract.tenantName,
+      tenantEmail: contract.tenantEmail,
+      signatureData: contract.signatureData,
+      sentAt: contract.sentAt,
       signedAt: contract.signedAt,
+      createdAt: contract.createdAt,
       companyInfo: await this.getCompanyInfo(),
     };
   }
@@ -288,16 +303,23 @@ export class ContractsService {
       .where(eq(realEstateContracts.id, contract.id));
 
     await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+    const signedContract = await this.getContract(contract.id);
 
-    if (contract.tenantEmail && env.smtp.user) {
-      await this.sendEmail(
+    if (contract.tenantEmail) {
+      try {
+        await this.sendEmail(
         contract.tenantEmail,
         "Contrat signé — confirmation",
         `<p>Bonjour ${contract.tenantName ?? ""},</p><p>Votre contrat a bien été signé électroniquement. Merci.</p>`,
-      );
+        "contract_signed",
+        );
+      } catch (error) {
+        this.logger.warn(`Contract ${contract.id} signed, but confirmation email failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
 
-    return { message: "Contract signed successfully." };
+    return { message: "Contract signed successfully.", contract: signedContract };
   }
 
   async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, createdBy?: number) {
@@ -369,7 +391,7 @@ export class ContractsService {
 
   async deleteContract(id: number) {
     const rows = await this.db
-      .select({ id: realEstateContracts.id })
+      .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId })
       .from(realEstateContracts)
       .where(eq(realEstateContracts.id, id))
       .limit(1);
@@ -380,7 +402,36 @@ export class ContractsService {
       .update(realEstateContracts)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateContracts.id, id));
+    await this.publishContractUpdate("deleted", id, rows[0].leaseId);
     return { message: "Contract deleted." };
+  }
+
+  private async publishContractUpdate(action: DataUpdateAction, contractId: number, leaseId?: number | null) {
+    return this.realtimeData.publishDataUpdated({
+      entity: "contract",
+      action,
+      entityId: contractId,
+      scope: await this.contractScope(leaseId),
+    });
+  }
+
+  private async contractScope(leaseId?: number | null): Promise<Partial<DataUpdateScope>> {
+    if (!leaseId) return { module: "propertyManagement" };
+
+    const [lease] = await this.db
+      .select({
+        propertyId: realEstateLeases.propertyId,
+        unitId: realEstateLeases.unitId,
+      })
+      .from(realEstateLeases)
+      .where(eq(realEstateLeases.id, leaseId))
+      .limit(1);
+
+    return {
+      module: "propertyManagement",
+      propertyId: lease?.propertyId ?? null,
+      unitId: lease?.unitId ?? null,
+    };
   }
 
   private async findByToken(token: string) {
@@ -719,13 +770,14 @@ export class ContractsService {
     });
   }
 
-  private async sendEmail(to: string, subject: string, html: string) {
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
+  private async sendEmail(to: string, subject: string, html: string, type: SystemEmailType = "notification") {
+    await this.emails.send({
+      to,
+      subject,
+      html,
+      type,
+      relatedType: "real-estate-contract",
     });
-    await transporter.sendMail({ from: env.smtp.from, to, subject, html });
   }
 
   private signingEmailHtml(tenantName: string, url: string): string {

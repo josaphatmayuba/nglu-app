@@ -8,15 +8,38 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import SideNav from "../components/SideNav/SideNav";
 import { loadPermissionById } from "../redux/rtk/features/auth/authSlice";
+import { loadDashboardStartup } from "../redux/rtk/features/dashboard/dashboardSlice";
+import { loadPropertyManagement } from "../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { cn } from "../utils/functions";
 import { Link } from "react-router-dom";
-import { startRealtimeClient, stopRealtimeClient, onRealtimeEvent } from "../realtime/realtimeClient";
+import {
+  startRealtimeClient,
+  stopRealtimeClient,
+  onRealtimeEvent,
+  onRealtimeStatusChange,
+} from "../realtime/realtimeClient";
 import { createDataUpdateHandler } from "../realtime/dataUpdateHandlers";
 import { createPermissionsUpdateHandler } from "../realtime/permissionsUpdateHandlers";
+import { createAuthBroadcastChannel } from "../realtime/authBroadcastChannel";
+import { createDataBroadcastChannel } from "../realtime/dataBroadcastChannel";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
 const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
+const DASHBOARD_POLL_INTERVAL_MS = 90_000;
+const PROPERTY_MANAGEMENT_POLL_INTERVAL_MS = 45_000;
+
+function dashboardDateRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setFullYear(start.getFullYear() - 1);
+  start.setDate(start.getDate() + 1);
+
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
 
 function AdminLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -37,6 +60,7 @@ function AdminLayout() {
   const [visible, setVisible] = useState(false);
   const [placement, setPlacement] = useState("right");
   const [imageError, setImageError] = useState();
+  const [realtimeConnected, setRealtimeConnected] = useState(true);
 
   const openDrawer = () => setVisible(!visible);
 
@@ -52,7 +76,46 @@ function AdminLayout() {
     const permsHandler = createPermissionsUpdateHandler(dispatch, navigate, toast);
     const unsubData = onRealtimeEvent("data.updated", dataHandler);
     const unsubPerms = onRealtimeEvent("permissions.updated", permsHandler);
-    return () => { unsubData(); unsubPerms(); stopRealtimeClient(); };
+    const unsubStatus = onRealtimeStatusChange(({ connected }) => {
+      setRealtimeConnected(connected);
+      if (connected) {
+        const path = window.location.pathname || "";
+        if (path.startsWith("/admin/property-management")) {
+          dispatch(loadPropertyManagement());
+        } else if (path.startsWith("/admin/dashboard")) {
+          dispatch(loadDashboardStartup(dashboardDateRange()));
+        }
+      }
+    });
+    const authChannel = createAuthBroadcastChannel();
+    const dataChannel = createDataBroadcastChannel();
+
+    if (authChannel) {
+      authChannel.onmessage = (message) => {
+        const payload = message?.data;
+        if (payload?.type === "permissions.updated" && payload.event) {
+          permsHandler({ ...payload.event, __fromBroadcast: true });
+        }
+      };
+    }
+
+    if (dataChannel) {
+      dataChannel.onmessage = (message) => {
+        const payload = message?.data;
+        if (payload?.type === "data.updated" && payload.event) {
+          dataHandler({ ...payload.event, __fromBroadcast: true });
+        }
+      };
+    }
+
+    return () => {
+      unsubData();
+      unsubPerms();
+      unsubStatus();
+      authChannel?.close();
+      dataChannel?.close();
+      stopRealtimeClient();
+    };
   }, [dispatch, navigate]);
 
   useEffect(() => {
@@ -67,6 +130,27 @@ function AdminLayout() {
     const timer = window.setInterval(refreshPermissions, PERMISSIONS_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [dispatch, roleId]);
+
+  useEffect(() => {
+    if (realtimeConnected || localStorage.getItem("isLogged") !== "true") return undefined;
+
+    const path = location.pathname || "";
+    if (path.startsWith("/admin/dashboard")) {
+      const timer = window.setInterval(() => {
+        dispatch(loadDashboardStartup(dashboardDateRange()));
+      }, DASHBOARD_POLL_INTERVAL_MS);
+      return () => window.clearInterval(timer);
+    }
+
+    if (path.startsWith("/admin/property-management")) {
+      const timer = window.setInterval(() => {
+        dispatch(loadPropertyManagement());
+      }, PROPERTY_MANAGEMENT_POLL_INTERVAL_MS);
+      return () => window.clearInterval(timer);
+    }
+
+    return undefined;
+  }, [dispatch, location.pathname, realtimeConnected]);
 
   useEffect(() => {
     setImageError(false);
@@ -193,6 +277,12 @@ function AdminLayout() {
         )}>
         <Header onPress={openDrawer} data={data} loading={loading} />
         <div className="flex-1 p-4 min-h-0 overflow-auto bg-ink-50 dark:from-gray-900 dark:to-gray-800">
+          {!realtimeConnected && (
+            <div className="mb-3 inline-flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Synchronisation en reprise
+            </div>
+          )}
           <AdminRoutes />
         </div>
       </div>

@@ -11,7 +11,7 @@ import { CreateCustomerDto, CustomerQueryDto, UpdateCustomerDto } from "./dto/cu
 export class CustomersService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreateCustomerDto) {
+  async create(input: CreateCustomerDto, orgId: number) {
     if (input.email) {
       await this.ensureEmailAvailable(input.email);
     }
@@ -19,6 +19,7 @@ export class CustomersService {
     const username = input.username || this.usernameFromEmail(input.email) || input.phone || "Customer";
     const password = await bcrypt.hash(randomBytes(12).toString("hex"), 10);
     const [result] = await this.db.insert(customers).values({
+      organizationId: orgId,
       username,
       firstName: input.firstName ?? null,
       lastName: input.lastName ?? null,
@@ -33,19 +34,21 @@ export class CustomersService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    return this.findOne(Number(result.insertId), orgId);
   }
 
-  async findAll(query: CustomerQueryDto) {
+  async findAll(query: CustomerQueryDto, orgId: number) {
     if (query.query === "all") {
-      return this.customerQuery().where(eq(customers.status, "true")).orderBy(desc(customers.id));
+      return this.customerQuery()
+        .where(and(eq(customers.status, "true"), eq(customers.organizationId, orgId)))
+        .orderBy(desc(customers.id));
     }
 
     if (query.query === "info") {
       const [row] = await this.db
         .select({ countedId: count(customers.id) })
         .from(customers)
-        .where(eq(customers.status, "true"));
+        .where(and(eq(customers.status, "true"), eq(customers.organizationId, orgId)));
 
       return {
         _count: {
@@ -55,18 +58,20 @@ export class CustomersService {
     }
 
     if (query.query === "search") {
-      return this.search(query);
+      return this.search(query, orgId);
     }
 
     if (query.query === "report") {
-      return this.report();
+      return this.report(orgId);
     }
 
-    return this.paginated(query);
+    return this.paginated(query, orgId);
   }
 
-  async findOne(id: number) {
-    const rows = await this.customerQuery().where(eq(customers.id, id)).limit(1);
+  async findOne(id: number, orgId: number) {
+    const rows = await this.customerQuery()
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)))
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Customer not found.");
@@ -80,8 +85,8 @@ export class CustomersService {
     };
   }
 
-  async update(id: number, input: UpdateCustomerDto) {
-    await this.ensureCustomerExists(id);
+  async update(id: number, input: UpdateCustomerDto, orgId: number) {
+    await this.ensureCustomerExists(id, orgId);
 
     if (input.email) {
       await this.ensureEmailAvailable(input.email, id);
@@ -99,26 +104,26 @@ export class CustomersService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(customers.id, id));
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)));
 
     return { message: "Customer Updated SuccessFully" };
   }
 
-  async updateStatus(id: number, status: string) {
-    await this.ensureCustomerExists(id);
+  async updateStatus(id: number, status: string, orgId: number) {
+    await this.ensureCustomerExists(id, orgId);
 
     await this.db
       .update(customers)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(customers.id, id));
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)));
 
     return { message: "Customer Deleted SuccessFull" };
   }
 
-  private async search(query: CustomerQueryDto) {
+  private async search(query: CustomerQueryDto, orgId: number) {
     const pagination = this.pagination(query);
     const key = `%${query.key?.trim() || ""}%`;
-    const where = or(
+    const keyWhere = or(
       like(customers.username, key),
       like(customers.firstName, key),
       like(customers.lastName, key),
@@ -126,6 +131,7 @@ export class CustomersService {
       like(customers.email, key),
       like(customers.address, key),
     );
+    const where = and(eq(customers.organizationId, orgId), keyWhere);
 
     const rows = await this.customerQuery()
       .where(where)
@@ -140,10 +146,11 @@ export class CustomersService {
     };
   }
 
-  private async paginated(query: CustomerQueryDto) {
+  private async paginated(query: CustomerQueryDto, orgId: number) {
     const pagination = this.pagination(query);
     const statuses = this.csv(query.status);
-    const where = statuses.length ? inArray(customers.status, statuses) : undefined;
+    const orgFilter = eq(customers.organizationId, orgId);
+    const where = statuses.length ? and(orgFilter, inArray(customers.status, statuses)) : orgFilter;
     const rows = await this.customerQuery()
       .where(where)
       .orderBy(desc(customers.id))
@@ -157,8 +164,10 @@ export class CustomersService {
     };
   }
 
-  private async report() {
-    const rows = await this.customerQuery().where(eq(customers.status, "true")).orderBy(desc(customers.createdAt));
+  private async report(orgId: number) {
+    const rows = await this.customerQuery()
+      .where(and(eq(customers.status, "true"), eq(customers.organizationId, orgId)))
+      .orderBy(desc(customers.createdAt));
     const enriched = await Promise.all(
       rows.map(async (customer) => ({
         ...customer,
@@ -246,7 +255,7 @@ export class CustomersService {
 
   private async saleRelatedIds(customerId: number) {
     const rows = await this.db.execute(sql`
-      select id from saleInvoice where customerId = ${customerId}
+      select id from saleInvoice where customerId = ${customerId} and status = 'true'
     `);
     const result = Array.isArray(rows) ? rows[0] : rows;
     return (result as unknown as Array<{ id: number }>).map((row) => String(row.id));
@@ -259,6 +268,7 @@ export class CustomersService {
       .where(
         and(
           eq(transactions.type, type),
+          eq(transactions.status, "true"),
           inArray(transactions.relatedId, relatedIds),
           eq(side === "debitId" ? transactions.debitId : transactions.creditId, accountId),
         ),
@@ -272,8 +282,12 @@ export class CustomersService {
     }
   }
 
-  private async ensureCustomerExists(id: number) {
-    const rows = await this.db.select({ id: customers.id }).from(customers).where(eq(customers.id, id)).limit(1);
+  private async ensureCustomerExists(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Customer not found.");
     }

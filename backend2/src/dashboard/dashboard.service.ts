@@ -76,7 +76,7 @@ export class DashboardService {
         due: sql<number>`COALESCE(SUM(${saleInvoices.dueAmount}), 0)`,
       })
       .from(saleInvoices)
-      .where(between(saleInvoices.date, start, end));
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")));
     return { total: Number(row.total), paid: Number(row.paid), due: Number(row.due) };
   }
 
@@ -88,7 +88,7 @@ export class DashboardService {
         due: sql<number>`COALESCE(SUM(${purchaseInvoices.dueAmount}), 0)`,
       })
       .from(purchaseInvoices)
-      .where(between(purchaseInvoices.date, start, end));
+      .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true")));
     return { total: Number(row.total), paid: Number(row.paid), due: Number(row.due) };
   }
 
@@ -117,7 +117,7 @@ export class DashboardService {
           sales: sql<number>`COALESCE(SUM(${saleInvoices.totalAmount}), 0)`,
         })
         .from(saleInvoices)
-        .where(between(saleInvoices.date, start, end))
+        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
         .groupBy(sql`DATE_FORMAT(${saleInvoices.date}, '%b %y')`)
         .orderBy(sql`MIN(${saleInvoices.date})`),
 
@@ -127,7 +127,7 @@ export class DashboardService {
           purchases: sql<number>`COALESCE(SUM(${purchaseInvoices.totalAmount}), 0)`,
         })
         .from(purchaseInvoices)
-        .where(between(purchaseInvoices.date, start, end))
+        .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true")))
         .groupBy(sql`DATE_FORMAT(${purchaseInvoices.date}, '%b %y')`),
     ]);
 
@@ -150,7 +150,7 @@ export class DashboardService {
           total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
         })
         .from(transactions)
-        .where(between(transactions.date, start, end))
+        .where(and(between(transactions.date, start, end), eq(transactions.status, "true")))
         .groupBy(transactions.creditId),
 
       this.db
@@ -159,7 +159,7 @@ export class DashboardService {
           total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
         })
         .from(transactions)
-        .where(between(transactions.date, start, end))
+        .where(and(between(transactions.date, start, end), eq(transactions.status, "true")))
         .groupBy(transactions.debitId),
     ]);
 
@@ -182,7 +182,7 @@ export class DashboardService {
         totalSales: sql<number>`SUM(${saleInvoices.totalAmount})`,
       })
       .from(saleInvoices)
-      .where(and(between(saleInvoices.date, start, end), isNotNull(saleInvoices.customerId)))
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), isNotNull(saleInvoices.customerId)))
       .groupBy(saleInvoices.customerId)
       .orderBy(desc(sql`SUM(${saleInvoices.totalAmount})`))
       .limit(5);
@@ -220,6 +220,7 @@ export class DashboardService {
       .innerJoin(saleInvoices, and(
         eq(saleInvoices.id, saleInvoiceProducts.invoiceId),
         between(saleInvoices.date, start, end),
+        eq(saleInvoices.status, "true"),
       ))
       .groupBy(saleInvoiceProducts.productId)
       .orderBy(desc(sql`SUM(${saleInvoiceProducts.productFinalAmount})`))
@@ -265,13 +266,15 @@ export class DashboardService {
   }
 
   private async dailyTrend(table: any, amountCol: any, dateCol: any, start: Date, end: Date): Promise<number[]> {
+    const activeStatus = table.status ? eq(table.status, "true") : undefined;
+    const where = activeStatus ? and(between(dateCol, start, end), activeStatus) : between(dateCol, start, end);
     const rows = await this.db
       .select({
         day: sql<string>`DATE(${dateCol})`,
         total: sql<number>`COALESCE(SUM(${amountCol}), 0)`,
       })
       .from(table)
-      .where(between(dateCol, start, end))
+      .where(where)
       .groupBy(sql`DATE(${dateCol})`);
 
     const map = new Map(rows.map((r) => [r.day, Math.round(Number(r.total))]));
@@ -302,7 +305,7 @@ export class DashboardService {
       })
       .from(saleInvoices)
       .leftJoin(currencies, eq(currencies.id, saleInvoices.currencyId))
-      .where(between(saleInvoices.date, start, end))
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
       .groupBy(saleInvoices.currencyId, currencies.currencyName, currencies.currencySymbol);
 
     return rows.map((r) => ({
@@ -362,7 +365,7 @@ export class DashboardService {
         this.db
           .select({ count: sql<number>`COUNT(*)` })
           .from(saleInvoices)
-          .where(between(saleInvoices.date, start, end)),
+          .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"))),
       ]);
 
     return {
@@ -387,7 +390,7 @@ export class DashboardService {
       this.db
         .select()
         .from(saleInvoices)
-        .where(between(saleInvoices.date, start, end))
+        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
         .orderBy(desc(saleInvoices.date))
         .limit(5),
 
@@ -410,12 +413,12 @@ export class DashboardService {
     const [countRow] = await this.db
       .select({ count: sql<number>`COUNT(*)` })
       .from(saleInvoices)
-      .where(eq(saleInvoices.orderStatus, status));
+      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true")));
 
     const items = await this.db
       .select()
       .from(saleInvoices)
-      .where(eq(saleInvoices.orderStatus, status))
+      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true")))
       .orderBy(desc(saleInvoices.date))
       .limit(5);
 

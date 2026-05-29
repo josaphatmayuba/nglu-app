@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -77,13 +77,52 @@ export class CompatService {
     };
   }
 
-  sendSms(body: Record<string, any>) {
+  private readonly logger = new Logger(CompatService.name);
+
+  async sendSms(body: Record<string, any>) {
     if (!body.phone) return { success: false, message: "Phone is required." };
-    return { success: true };
+
+    const { accountSid, authToken, from, messagingServiceSid } = env.twilio;
+    if (!accountSid || !authToken || (!from && !messagingServiceSid)) {
+      return { success: false, message: "SMS service is not configured." };
+    }
+
+    try {
+      const params = new URLSearchParams();
+      if (messagingServiceSid) {
+        params.set("MessagingServiceSid", messagingServiceSid);
+      } else {
+        params.set("From", from);
+      }
+      params.set("To", body.phone);
+      params.set("Body", body.message || body.text || "Message de NgoluApp");
+
+      const credentials = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+      const res = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${credentials}`,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: params.toString(),
+        }
+      );
+      const data: any = await res.json();
+      if (!res.ok) {
+        this.logger.error(`SMS failed to ${body.phone}: ${data?.message}`);
+        return { success: false, message: data?.message || "SMS delivery failed." };
+      }
+      return { success: true, sid: data.sid };
+    } catch (error) {
+      this.logger.error(`SMS failed to ${body.phone}: ${error instanceof Error ? error.message : String(error)}`);
+      return { success: false, message: "SMS delivery failed." };
+    }
   }
 
   async purchaseReport(query: Record<string, string>) {
-    const conditions = [];
+    const conditions = [eq(purchaseInvoices.status, "true")];
     if (query.startDate) conditions.push(gte(purchaseInvoices.date, new Date(query.startDate)));
     if (query.endDate) conditions.push(lte(purchaseInvoices.date, new Date(query.endDate)));
     const where = conditions.length ? and(...conditions) : undefined;
@@ -107,7 +146,7 @@ export class CompatService {
       .leftJoin(products, eq(products.id, purchaseInvoiceProducts.productId))
       .leftJoin(purchaseInvoices, eq(purchaseInvoices.id, purchaseInvoiceProducts.invoiceId))
       .leftJoin(suppliers, eq(suppliers.id, purchaseInvoices.supplierId))
-      .where(inArray(purchaseInvoiceProducts.invoiceId, invoiceIds));
+      .where(and(inArray(purchaseInvoiceProducts.invoiceId, invoiceIds), eq(purchaseInvoices.status, "true")));
 
     return rows.map((row) => ({
       ...row,

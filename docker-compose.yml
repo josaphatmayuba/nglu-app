@@ -16,6 +16,22 @@ services:
     networks:
       - nglu_network
 
+  # Redis - Realtime Pub/Sub for SSE permission/data updates
+  redis:
+    image: redis:7-alpine
+    container_name: nglu_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nglu_network
+
   # Backend - Laravel API (deprecated, historical only).
   # Not started by default. Use:
   # docker compose --profile legacy-laravel up -d backend
@@ -67,13 +83,33 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password}
       CORS_ORIGIN: http://localhost:3000
       APP_URL: http://localhost:3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-local_jwt_secret_change_me}
+      REFRESH_SECRET: ${REFRESH_SECRET:-local_refresh_secret_change_me}
+      PERMISSIONS_GUARD_CACHE_TTL_MS: ${PERMISSIONS_GUARD_CACHE_TTL_MS:-0}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
-      REDIS_HOST: ${REDIS_HOST:-}
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-user-updates}
+      REDIS_CHANNEL_USER_UPDATES: ${REDIS_CHANNEL_USER_UPDATES:-permissions-updates}
       REDIS_CHANNEL_DATA_UPDATES: ${REDIS_CHANNEL_DATA_UPDATES:-data-updates}
+      SMTP_HOST: ${SMTP_HOST:-mail.ongdngolu.org}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@ongdngolu.org}
+      SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      IMAP_HOST: ${IMAP_HOST:-mail.ongdngolu.org}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASS: ${IMAP_PASS:-}
+      IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
+      IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
+      STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
+      STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}
     ports:
       - "8001:8001"
     volumes:
@@ -81,6 +117,7 @@ services:
       - /app/node_modules
     depends_on:
       - mysql
+      - redis
     networks:
       - nglu_network
     command: npm run docker:dev
@@ -103,7 +140,7 @@ services:
       VITE_APP_API_NODE: ${VITE_APP_API_NODE:-http://localhost:8001}
     networks:
       - nglu_network
-    command: npm run dev
+    command: npm run dev:local
 
   # Marketing site - Vue + Vite public website
   # Local URL: http://localhost:3002

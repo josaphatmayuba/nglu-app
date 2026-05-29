@@ -2,12 +2,12 @@
 // Monthly grid (Mon→Sun) with colour-coded payment due dates.
 
 import moment from "moment";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-const statusOf = (payment, overduePayments, upcomingPayments) => {
-  if (overduePayments.includes(payment)) return "late";
-  if (upcomingPayments.includes(payment)) return "pending";
+const statusOf = (payment, overdueLeaseIds, upcomingLeaseIds) => {
+  if (overdueLeaseIds.has(payment.leaseId)) return "late";
+  if (upcomingLeaseIds.has(payment.leaseId)) return "pending";
   return "paid";
 };
 
@@ -33,6 +33,8 @@ const tenantShort = (p) => {
 
 const PaymentsCalendarView = ({ payments, overduePayments, upcomingPayments }) => {
   const [ref, setRef] = useState(() => moment().startOf("month"));
+  const overdueLeaseIds = useMemo(() => new Set(overduePayments.map((p) => p.leaseId)), [overduePayments]);
+  const upcomingLeaseIds = useMemo(() => new Set(upcomingPayments.map((p) => p.leaseId)), [upcomingPayments]);
 
   const startOfMonth = ref.clone().startOf("month");
   const endOfMonth = ref.clone().endOf("month");
@@ -57,7 +59,7 @@ const PaymentsCalendarView = ({ payments, overduePayments, upcomingPayments }) =
   const today = moment();
   const isCurrentMonth = ref.isSame(today, "month");
 
-  const paid = payments.filter((p) => !overduePayments.includes(p) && !upcomingPayments.includes(p)).length;
+  const paid = payments.filter((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId)).length;
   const pending = upcomingPayments.filter((p) => {
     const d = moment(p.paymentDate);
     return d.isSame(ref, "month");
@@ -127,9 +129,9 @@ const PaymentsCalendarView = ({ payments, overduePayments, upcomingPayments }) =
           }
 
           // Determine dominant status for cell border
-          const hasLate = dayPayments.some((p) => overduePayments.includes(p));
-          const hasPending = dayPayments.some((p) => upcomingPayments.includes(p));
-          const hasPaid = dayPayments.some((p) => !overduePayments.includes(p) && !upcomingPayments.includes(p));
+          const hasLate = dayPayments.some((p) => overdueLeaseIds.has(p.leaseId));
+          const hasPending = dayPayments.some((p) => upcomingLeaseIds.has(p.leaseId));
+          const hasPaid = dayPayments.some((p) => !overdueLeaseIds.has(p.leaseId) && !upcomingLeaseIds.has(p.leaseId));
           const cellBorder = hasLate
             ? "border-red-200 bg-red-50"
             : hasPending
@@ -149,7 +151,7 @@ const PaymentsCalendarView = ({ payments, overduePayments, upcomingPayments }) =
                 {dayNum}{isToday ? " ·" : ""}
               </div>
               {dayPayments.slice(0, 2).map((p) => {
-                const s = statusOf(p, overduePayments, upcomingPayments);
+                const s = statusOf(p, overdueLeaseIds, upcomingLeaseIds);
                 return (
                   <div key={p.id} className={`flex items-center gap-0.5 text-[10px] leading-tight ${LABEL_CLASS[s]}`}>
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT_CLASS[s]}`} />

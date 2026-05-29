@@ -7,7 +7,7 @@ import { useDispatch } from "react-redux";
 import { Button, Form, Input, InputNumber, Modal, Select, message } from "antd";
 
 import {
-  loadPropertyManagement,
+  loadPropertiesUnits,
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
@@ -60,7 +60,7 @@ const UnitFormModal = ({
     };
     const response = await dispatch(saveUnit({ id: record?.id, values: payload }));
     if (response.payload?.message === "success") {
-      dispatch(loadPropertyManagement());
+      dispatch(loadPropertiesUnits());
       onSaved?.();
       onClose?.();
     } else {

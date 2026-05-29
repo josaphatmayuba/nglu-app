@@ -91,7 +91,7 @@ export const deleteCustomer = createAsyncThunk(
           Accept: "application/json",
           "Content-Type": "application/json;charset=UTF-8",
         },
-        url: `customer/${id}`,
+        url: `/customer/${id}`,
         data: {
           status: status ? status : "false",
         },

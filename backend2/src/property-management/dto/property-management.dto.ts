@@ -521,6 +521,21 @@ export class CreateTenantDto {
 }
 
 export class GenerateTenantOnboardingDto {
+  @ApiPropertyOptional({ example: "Jean" })
+  @IsOptional()
+  @IsString()
+  firstName?: string | null;
+
+  @ApiPropertyOptional({ example: "Dupont" })
+  @IsOptional()
+  @IsString()
+  lastName?: string | null;
+
+  @ApiPropertyOptional({ example: "jean.dupont@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
   @ApiProperty({ example: "+243810000000" })
   @IsString()
   @IsNotEmpty()

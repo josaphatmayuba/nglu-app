@@ -1,6 +1,7 @@
 import Dashboard from "@/components/Dashboard/Graph/Dashboard";
 import GetAllDeliveryBoy from "@/components/DeliveryBoy/GetAllDeliveryBoy";
 import GetAllEmailConfig from "@/components/EmailConfig/GetAllEmailConfig";
+import MessagingPanel from "@/components/Messaging/MessagingPanel";
 import PermissionChecker from "@/components/PrivacyComponent/PermissionChecker";
 import GetAllCurrency from "@/components/eComErp/Currency/GetAllCurrency";
 import GetAllDeliveryFee from "@/components/eComErp/DeliveryFee/GetAllDeliveryFee";
@@ -18,6 +19,15 @@ export default function CommonRoutes() {
         element={
           <PermissionChecker permission={"readAll-emailConfig"}>
             <GetAllEmailConfig />
+          </PermissionChecker>
+        }
+      />
+      <Route
+        path='/messages'
+        exact
+        element={
+          <PermissionChecker permission={["readAll-message", "create-message"]}>
+            <MessagingPanel />
           </PermissionChecker>
         }
       />

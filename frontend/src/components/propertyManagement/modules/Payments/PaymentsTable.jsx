@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, PlusCircle, MoreVertical } from "lucide-react";
 import moment from "moment";
 import { useMemo, useState } from "react";
+import { Button, Dropdown } from "antd";
 
 import { avatarColors, paymentMethodLabels } from "../../shared/constants";
 import { compactMoney } from "../../shared/format";
@@ -21,9 +22,11 @@ const buildPageNumbers = (currentPage, totalPages) => {
   return pages;
 };
 
-const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll }) => {
+const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = [], onSelect, onSelectAll, onQuickPay, onReminder }) => {
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const lateLeaseIds = useMemo(() => new Set(latePayments.map((p) => p.leaseId)), [latePayments]);
+  const pendingLeaseIds = useMemo(() => new Set(pendingPayments.map((p) => p.leaseId)), [pendingPayments]);
   const totalPages = Math.max(1, Math.ceil(payments.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * pageSize;
@@ -62,9 +65,9 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
           <span>Montant</span>
         </div>
         {pageItems.map((payment, index) => {
-          const paymentStatus = latePayments.includes(payment)
+          const paymentStatus = lateLeaseIds.has(payment.leaseId)
             ? "danger"
-            : pendingPayments.includes(payment)
+            : pendingLeaseIds.has(payment.leaseId)
               ? "warning"
               : "success";
           const isPaid = paymentStatus === "success";
@@ -116,6 +119,36 @@ const PaymentsTable = ({ payments, pendingPayments, latePayments, selectedIds = 
               <strong className={paymentStatus === "danger" ? "red-text" : ""}>
                 {compactMoney(payment.amount, payment.currencySymbol)}
               </strong>
+              {paymentStatus === "danger" && (onQuickPay || onReminder) && (
+                <span style={{ display: "flex", justifyContent: "flex-end", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  <Dropdown
+                    menu={{
+                      items: [
+                        ...(onQuickPay ? [{
+                          key: "pay",
+                          label: "Enregistrer paiement",
+                          icon: <PlusCircle size={14} />,
+                          onClick: () => onQuickPay(payment),
+                        }] : []),
+                        ...(onReminder ? [{
+                          key: "remind",
+                          label: "Envoyer un rappel",
+                          icon: <Bell size={14} />,
+                          onClick: () => onReminder(payment),
+                        }] : []),
+                      ],
+                    }}
+                    trigger={["click"]}
+                  >
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<MoreVertical size={16} />}
+                      className="text-ink-400 hover:text-ink-600"
+                    />
+                  </Dropdown>
+                </span>
+              )}
             </div>
           );
         })}

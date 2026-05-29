@@ -134,6 +134,69 @@
       "when": 1748649600000,
       "tag": "0035_add_leave_reason_to_users",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1779840000000,
+      "tag": "0036_repair_soft_delete_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1780012800000,
+      "tag": "0037_add_messages_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1780016400000,
+      "tag": "0038_add_message_sync_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1779877030441,
+      "tag": "0022_lumpy_mongoose",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1780099200000,
+      "tag": "0039_add_message_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1780102800000,
+      "tag": "0040_add_system_email_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1780106400000,
+      "tag": "0041_add_mail_account_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1780110000000,
+      "tag": "0042_add_organizations_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1780113600000,
+      "tag": "0043_add_invoice_soft_delete_status",
+      "breakpoints": true
     }
   ]
 }

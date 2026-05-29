@@ -6,7 +6,7 @@ import {
   PlusOutlined,
   PrinterOutlined,
 } from "@ant-design/icons";
-import { Button, Form, Modal, Select, Table, Tag, Tooltip, message } from "antd";
+import { Button, Form, Modal, Popconfirm, Select, Table, Tag, Tooltip, message } from "antd";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -271,13 +271,18 @@ export default function ContractsTab({ leases }) {
               PDF
             </Button>
           </Tooltip>
-          <Button
-            size="small"
-            danger
-            onClick={() => handleDelete(record.id)}
+          <Popconfirm
+            title="Supprimer ce contrat ?"
+            description="Suppression logique uniquement: le contrat sera masqué des vues actives, mais son historique restera conservé."
+            okText="Supprimer"
+            cancelText="Annuler"
+            okButtonProps={{ danger: true }}
+            onConfirm={() => handleDelete(record.id)}
           >
-            Supprimer
-          </Button>
+            <Button size="small" danger>
+              Supprimer
+            </Button>
+          </Popconfirm>
         </div>
       ),
     },

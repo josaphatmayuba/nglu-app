@@ -1,13 +1,13 @@
-import { BadRequestException, GoneException, Inject, Injectable, Logger } from "@nestjs/common";
+import { GoneException, Inject, Injectable, Logger } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "crypto";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import * as nodemailer from "nodemailer";
 import { AuditService } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import { passwordResetTokens, users } from "../database/schema";
 import type { Database } from "../database/types";
+import { SystemEmailService } from "../system-email/system-email.service";
 
 const TOKEN_TTL_MINUTES = 15;
 
@@ -18,9 +18,10 @@ export class PasswordResetService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly audit: AuditService,
+    private readonly emails: SystemEmailService,
   ) {}
 
-  /** POST /auth/forgot-password — always returns 200 regardless of whether email exists. */
+  /** POST /auth/forgot-password - always returns 200 regardless of whether email exists. */
   async forgotPassword(email: string, ctx: { ip?: string; userAgent?: string } = {}): Promise<void> {
     const [user] = await this.db
       .select({ id: users.id, email: users.email, username: users.username })
@@ -50,7 +51,7 @@ export class PasswordResetService {
     });
   }
 
-  /** POST /auth/reset-password — verifies token, changes password, revokes all sessions. */
+  /** POST /auth/reset-password - verifies token, changes password, revokes all sessions. */
   async resetPassword(token: string, newPassword: string, ctx: { ip?: string; userAgent?: string } = {}): Promise<void> {
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const now = new Date();
@@ -69,10 +70,9 @@ export class PasswordResetService {
 
     if (!record) {
       await this.audit.log("auth.reset_password.fail", null, ctx, { reason: "invalid_or_expired" });
-      throw new GoneException("Token invalide, expiré ou déjà utilisé.");
+      throw new GoneException("Token invalide, expire ou deja utilise.");
     }
 
-    // Mark token as used immediately (one-shot)
     await this.db
       .update(passwordResetTokens)
       .set({ usedAt: sql`CURRENT_TIMESTAMP` })
@@ -80,7 +80,6 @@ export class PasswordResetService {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
-    // Change password + revoke all sessions (set refreshToken=null)
     await this.db
       .update(users)
       .set({
@@ -95,29 +94,12 @@ export class PasswordResetService {
   }
 
   private async sendResetEmail(to: string, username: string, resetUrl: string): Promise<void> {
-    if (!env.smtp.user || !env.smtp.pass) {
-      this.logger.warn(`SMTP not configured — reset URL for ${username}: ${resetUrl}`);
-      return;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      secure: env.smtp.port === 465,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    });
-
-    await transporter.sendMail({
-      from: env.smtp.from,
+    await this.emails.sendTemplate({
       to,
-      subject: "Réinitialisation de mot de passe — NgoluApp",
-      html: `
-        <p>Bonjour ${username},</p>
-        <p>Vous avez demandé la réinitialisation de votre mot de passe.</p>
-        <p><a href="${resetUrl}">Cliquez ici pour définir un nouveau mot de passe</a></p>
-        <p>Ce lien expire dans ${TOKEN_TTL_MINUTES} minutes.</p>
-        <p>Si vous n'avez pas effectué cette demande, ignorez cet email.</p>
-      `,
+      type: "password_reset",
+      variables: { username, resetUrl, ttlMinutes: TOKEN_TTL_MINUTES },
+      relatedType: "password-reset",
+      relatedId: username,
     });
   }
 }

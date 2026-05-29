@@ -1,12 +1,12 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { X, Plus, Trash2, AlertCircle, CheckCircle } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { addTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
+import { addTransaction, updateTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
 
-export default function EcritureFormModal({ open, onClose, accounts = [] }) {
+export default function EcritureFormModal({ open, onClose, accounts = [], record = null, onSaved }) {
   const dispatch = useDispatch();
 
   // Real transaction types from DB
@@ -17,6 +17,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
   const [note, setNote]   = useState("");
   const [lines, setLines] = useState([emptyLine(), emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
+  const isEdit = Boolean(record?.id);
 
   // When a transaction type is selected, auto-fill the debit/credit accounts from its definition
   const selectedType = useMemo(
@@ -55,23 +56,45 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
     setLines([emptyLine(), emptyLine()]);
   };
 
+  useEffect(() => {
+    if (!open) return;
+    if (!record?.id) {
+      reset();
+      return;
+    }
+    const amount = String(Number(record.amount || 0));
+    setType(record.type || "");
+    setDate(record.date ? new Date(record.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setNote(record.particulars || record.note || "");
+    setLines([
+      { id: crypto.randomUUID(), account: String(record.debitId || record.debit?.id || ""), label: record.particulars || "", debit: amount, credit: "" },
+      { id: crypto.randomUUID(), account: String(record.creditId || record.credit?.id || ""), label: record.particulars || "", debit: "", credit: amount },
+    ]);
+  }, [open, record]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!balanced) return;
     setSubmitting(true);
     const debitLine  = lines.find((l) => Number(l.debit)  > 0);
     const creditLine = lines.find((l) => Number(l.credit) > 0);
-    await dispatch(addTransaction({
+    const values = {
       date,
       type: type || "Other",
       particulars: note || type || "Manual entry",
       debitId:  Number(debitLine?.account)  || selectedType?.debitAccountId  || undefined,
       creditId: Number(creditLine?.account) || selectedType?.creditAccountId || undefined,
       amount: totalDebit,
-    }));
+    };
+    const response = isEdit
+      ? await dispatch(updateTransaction({ id: record.id, values }))
+      : await dispatch(addTransaction(values));
     setSubmitting(false);
-    reset();
-    onClose?.();
+    if (response?.payload?.message === "success") {
+      reset();
+      onSaved?.();
+      onClose?.();
+    }
   };
 
   if (!open) return null;
@@ -81,7 +104,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-ink-100">
-          <h2 className="text-base font-semibold text-ink-900">New journal entry</h2>
+          <h2 className="text-base font-semibold text-ink-900">{isEdit ? "Edit journal entry" : "New journal entry"}</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-ink-100 transition">
             <X className="w-4 h-4 text-ink-500" />
           </button>
@@ -250,7 +273,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [] }) {
             onClick={handleSubmit}
             className="px-4 py-2 text-sm font-medium bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
-            {submitting ? "Saving…" : "Validate entry"}
+            {submitting ? "Saving..." : isEdit ? "Save changes" : "Validate entry"}
           </button>
         </div>
       </div>

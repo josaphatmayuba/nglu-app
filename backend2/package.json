@@ -18,9 +18,29 @@
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seed.ts",
     "db:seed:demo": "ts-node -r tsconfig-paths/register src/database/seed-demo.ts",
     "db:migrate:run": "ts-node -r tsconfig-paths/register src/database/migrate.ts",
-    "docker:dev": "npm run db:wait && npm run db:migrate:run && npm run db:seed && npm run db:seed:demo && npm run dev",
+    "docker:dev": "npm run db:wait && npm run db:migrate:run && (npm run db:seed || true) && (npm run db:seed:demo || true) && npm run dev",
     "docker:prod": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && node dist/src/main.js",
-    "docker:dev-deployed": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && (node dist/src/database/seed.js || true) && (node dist/src/database/seed-demo.js || true) && node dist/src/main.js"
+    "docker:dev-deployed": "node dist/src/database/wait-for-db.js && node dist/src/database/migrate.js && (node dist/src/database/seed.js || true) && (node dist/src/database/seed-demo.js || true) && node dist/src/main.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
@@ -30,6 +50,7 @@
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/throttler": "^6.5.0",
     "@types/cookie-parser": "^1.4.10",
+    "@types/mailparser": "^3.4.6",
     "@types/nodemailer": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
@@ -38,7 +59,9 @@
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.4",
     "helmet": "^8.1.0",
+    "imapflow": "^1.3.3",
     "ioredis": "^5.10.1",
+    "mailparser": "^3.9.8",
     "mysql2": "^3.11.5",
     "nodemailer": "^8.0.7",
     "otplib": "^13.4.0",
@@ -46,13 +69,18 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
+    "twilio": "^6.0.2",
     "world-currencies": "^0.0.11"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.8",
-    "@types/node": "^22.10.2",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.19.19",
     "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.30.1",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.2"

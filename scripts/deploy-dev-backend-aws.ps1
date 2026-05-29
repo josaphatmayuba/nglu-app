@@ -30,7 +30,7 @@ $repoRoot    = Resolve-Path (Join-Path $PSScriptRoot "..")
 $backendDir  = Join-Path $repoRoot "backend2"
 $distDir     = Join-Path $backendDir "dist"
 $stamp       = Get-Date -Format "yyyyMMdd-HHmmss"
-$archiveName = "nglu-dev-backend-$stamp.tgz"
+$archiveName = "nglu-dev-backend-$stamp.tar.gz"
 $localArchive  = Join-Path ([System.IO.Path]::GetTempPath()) $archiveName
 $remoteArchive = "/tmp/$archiveName"
 $sshTarget   = "$User@$HostName"
@@ -68,14 +68,26 @@ if (-not $SkipLocalBuild) {
 if (-not (Test-Path $distDir)) {
   throw "backend2/dist not found. Run without -SkipLocalBuild or build first."
 }
+foreach ($f in @("package.json", "package-lock.json")) {
+  if (-not (Test-Path (Join-Path $backendDir $f))) {
+    throw "backend2/$f not found - required so the image installs the right deps."
+  }
+}
 
-Write-Step "Packing backend2/dist"
+# package.json + package-lock.json must ship too: the Dockerfile runs `npm ci`
+# from the server copy, so a stale lock silently drops newly added deps.
+Write-Step "Packing backend2/dist + package manifests"
 if (Test-Path $localArchive) {
   Remove-Item -LiteralPath $localArchive -Force
 }
+# Create .tar.gz in the backend2 directory first, then move to temp
+# This avoids Windows path issues with tar
 Push-Location $backendDir
 try {
-  tar -czf $localArchive dist
+  & tar -czf $archiveName dist drizzle package.json package-lock.json
+  if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
+  # Move archive to final location
+  Move-Item -Path $archiveName -Destination $localArchive -Force
 }
 finally {
   Pop-Location
@@ -94,16 +106,25 @@ Write-Step "Uploading backend2/dist archive"
 
 $remoteScript = @"
 set -euo pipefail
-echo "[remote] replacing backend2/dist"
-rm -rf "$RemoteDevDir/backend2/dist"
-mkdir -p "$RemoteDevDir/backend2/dist"
+echo "[remote] replacing backend2/dist, drizzle and package manifests"
+sudo chown -R "${User}:${User}" "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle" 2>/dev/null || true
+sudo rm -rf "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle"
+sudo rm -f "$RemoteDevDir/backend2/package.json" "$RemoteDevDir/backend2/package-lock.json"
+mkdir -p "$RemoteDevDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteDevDir/backend2"
 rm -f "$remoteArchive"
 echo "[remote] restarting nglu_dev_backend2"
 cd "$RemoteDevDir"
 docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate --build backend2
 echo "[remote] waiting for backend2 to be ready"
-sleep 20
+for i in {1..60}; do
+  if curl -fsS https://dev.ongdngolu.org/api/health 2>/dev/null; then
+    echo "[remote] backend2 is ready"
+    break
+  fi
+  echo "[remote] waiting... (`$i/60)"
+  sleep 2
+done
 echo "[remote] health check"
 curl -fsS https://dev.ongdngolu.org/api/health
 echo ""
@@ -114,7 +135,7 @@ docker logs nglu_dev_backend2 --tail 10
 Write-Step "Deploying backend2 on AWS dev"
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-$remoteScript | & ssh @sshArgs "bash -s"
+($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
 if ($sshExit -ne 0) { throw "Remote deploy script failed (exit $sshExit)" }

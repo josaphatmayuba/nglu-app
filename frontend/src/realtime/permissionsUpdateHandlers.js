@@ -5,6 +5,7 @@
  */
 
 import { loadPermissionById } from "../redux/rtk/features/auth/authSlice";
+import { broadcastPermissionsUpdated } from "./authBroadcastChannel";
 
 let lastHandledVersion = 0;
 
@@ -28,6 +29,10 @@ export function createPermissionsUpdateHandler(dispatch, navigate, toast) {
       (currentUserId > 0 && userIds.includes(currentUserId));
 
     if (!isForThisUser) return;
+
+    if (!event?.__fromBroadcast) {
+      broadcastPermissionsUpdated(event);
+    }
 
     const nextRoleId =
       event?.reason === "user-role-updated" &&
