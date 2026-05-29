@@ -29,6 +29,7 @@ import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
+import { normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -195,6 +196,8 @@ export class PropertyManagementService {
   }
 
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
+    // SCRUM-229 — store the phone identifier in canonical E.164.
+    const phoneE164 = normalizePhoneE164Strict(input.phone);
     const token = randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
@@ -202,11 +205,11 @@ export class PropertyManagementService {
       firstName: input.firstName ?? null,
       lastName: input.lastName ?? null,
       email: input.email ?? null,
-      phone: input.phone,
+      phone: phoneE164,
     });
 
     const [result] = await this.db.insert(tenantOnboardings).values({
-      phone: input.phone,
+      phone: phoneE164,
       tokenHash,
       token,
       status: "sent",
@@ -220,7 +223,7 @@ export class PropertyManagementService {
     const response = this.adminOnboardingResponse(onboarding);
 
     // Send the onboarding link straight to the tenant by SMS and email (best-effort).
-    await this.sendOnboardingLink(response.url, input.phone, input.email ?? null, input.firstName ?? null);
+    await this.sendOnboardingLink(response.url, phoneE164, input.email ?? null, input.firstName ?? null);
 
     return response;
   }
@@ -309,12 +312,26 @@ export class PropertyManagementService {
     return { message: "Dossier d'inscription supprimé." };
   }
 
+  // SCRUM-229 — normalize every phone field on an onboarding payload to E.164.
+  // Empty/optional fields are left null; invalid input throws so the API
+  // returns a clear error rather than silently storing a malformed number.
+  private normalizeOnboardingPhones<T extends Record<string, any>>(input: T): T {
+    const phoneFields = ["phone", "phone2", "partenair_number", "contacted_person_phone_number"] as const;
+    const next: Record<string, any> = { ...input };
+    for (const f of phoneFields) {
+      if (next[f] === undefined) continue;
+      next[f] = next[f] ? normalizePhoneE164Strict(next[f]) : null;
+    }
+    return next as T;
+  }
+
   async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {
     const onboarding = await this.findOnboarding(id);
     if (onboarding.status === "validated") {
       throw new BadRequestException("This onboarding dossier has already been validated.");
     }
-    await this.updateOnboardingData(id, { ...this.parseOnboardingData(onboarding.data), ...input }, "draft");
+    const normalized = this.normalizeOnboardingPhones(input);
+    await this.updateOnboardingData(id, { ...this.parseOnboardingData(onboarding.data), ...normalized }, "draft");
     return this.adminOnboardingResponse(await this.findOnboarding(id));
   }
 
@@ -353,14 +370,16 @@ export class PropertyManagementService {
 
   async savePublicOnboarding(token: string, input: SaveTenantOnboardingDto) {
     const onboarding = await this.getActiveOnboardingByToken(token, true);
-    const nextData = { ...this.parseOnboardingData(onboarding.data), ...input, phone: onboarding.phone };
+    const normalized = this.normalizeOnboardingPhones(input);
+    const nextData = { ...this.parseOnboardingData(onboarding.data), ...normalized, phone: onboarding.phone };
     await this.updateOnboardingData(onboarding.id, nextData, "draft");
     return this.getPublicOnboarding(token);
   }
 
   async submitPublicOnboarding(token: string, input: SaveTenantOnboardingDto) {
     const onboarding = await this.getActiveOnboardingByToken(token, true);
-    const nextData = { ...this.parseOnboardingData(onboarding.data), ...input, phone: onboarding.phone };
+    const normalized = this.normalizeOnboardingPhones(input);
+    const nextData = { ...this.parseOnboardingData(onboarding.data), ...normalized, phone: onboarding.phone };
     this.validatedTenantPayload(nextData, onboarding.phone);
     await this.db
       .update(tenantOnboardings)
