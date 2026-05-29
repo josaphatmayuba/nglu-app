@@ -97,6 +97,7 @@ MW_IMG="$ComposeProject-middleware"
 HEALTH_URL="https://ongdngolu.org/api/health"
 COMMIT="$gitCommit"
 sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+sudo sed -i 's/\r`$//' "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
 notify() { bash "$RemoteProdDir/deploy-notify.sh" middleware "`$1" "`$COMMIT" || true; }
 
 echo "[remote] replacing middleware/src"

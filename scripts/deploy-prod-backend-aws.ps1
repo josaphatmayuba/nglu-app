@@ -149,6 +149,7 @@ IMG="$ComposeProject-backend2"
 HEALTH_URL="https://ongdngolu.org/api/health"
 COMMIT="$gitCommit"
 sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+sudo sed -i 's/\r`$//' "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
 notify() { bash "$RemoteProdDir/deploy-notify.sh" backend2 "`$1" "`$COMMIT" || true; }
 
 echo "[remote] replacing build context (dist, drizzle, package manifests)"
