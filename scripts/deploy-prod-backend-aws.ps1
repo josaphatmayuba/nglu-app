@@ -37,6 +37,8 @@ $localArchive  = Join-Path ([System.IO.Path]::GetTempPath()) $archiveName
 $remoteArchive = "/tmp/$archiveName"
 $sshTarget   = "$User@$HostName"
 $sshArgs     = @("-i", $PemPath, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", $sshTarget)
+$gitCommit   = try { (& git -C $repoRoot rev-parse --short HEAD 2>$null).Trim() } catch { "unknown" }
+$notifyLocal = Join-Path $repoRoot "scripts/server/deploy-notify.sh"
 
 Write-Step "Checking prerequisites"
 Assert-Command "ssh"
@@ -116,8 +118,9 @@ if ($DryRun) {
   exit 0
 }
 
-Write-Step "Uploading backend2/dist archive"
+Write-Step "Uploading backend2/dist archive + deploy-notify helper"
 & scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $localArchive "${sshTarget}:$remoteArchive"
+& scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $notifyLocal "${sshTarget}:/tmp/deploy-notify.sh"
 
 $remoteScript = @"
 set -euo pipefail
@@ -144,6 +147,9 @@ echo "[remote] production backend lock acquired"
 
 IMG="$ComposeProject-backend2"
 HEALTH_URL="https://ongdngolu.org/api/health"
+COMMIT="$gitCommit"
+sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+notify() { bash "$RemoteProdDir/deploy-notify.sh" backend2 "`$1" "`$COMMIT" || true; }
 
 echo "[remote] replacing build context (dist, drizzle, package manifests)"
 sudo rm -rf "$RemoteProdDir/backend2/dist"
@@ -183,6 +189,7 @@ fi
 echo "[remote] building new backend2 image"
 if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build backend2; then
   echo "[remote] BUILD FAILED — running app untouched, nothing deployed"
+  notify BUILD_FAILED
   exit 1
 fi
 
@@ -200,6 +207,7 @@ check_health() {
 
 if check_health; then
   echo "[remote] health OK — new version is live"
+  notify DEPLOYED
   docker logs nglu_prod_backend2 --tail 10
 else
   echo "[remote] HEALTH CHECK FAILED for the new version"
@@ -216,6 +224,7 @@ else
   else
     echo "[remote] no previous image available to roll back to"
   fi
+  notify ROLLED_BACK
   exit 1
 fi
 "@

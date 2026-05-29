@@ -34,6 +34,8 @@ $localArchive  = Join-Path ([System.IO.Path]::GetTempPath()) $archiveName
 $remoteArchive = "/tmp/$archiveName"
 $sshTarget     = "$User@$HostName"
 $sshArgs       = @("-i", $PemPath, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", $sshTarget)
+$gitCommit     = try { (& git -C $repoRoot rev-parse --short HEAD 2>$null).Trim() } catch { "unknown" }
+$notifyLocal   = Join-Path $repoRoot "scripts/server/deploy-notify.sh"
 
 Write-Step "Checking prerequisites"
 Assert-Command "ssh"
@@ -84,14 +86,18 @@ if ($DryRun) {
   exit 0
 }
 
-Write-Step "Uploading middleware source archive"
+Write-Step "Uploading middleware source archive + deploy-notify helper"
 & scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $localArchive "${sshTarget}:$remoteArchive"
+& scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $notifyLocal "${sshTarget}:/tmp/deploy-notify.sh"
 
 $remoteScript = @"
 set -euo pipefail
 
 MW_IMG="$ComposeProject-middleware"
 HEALTH_URL="https://ongdngolu.org/api/health"
+COMMIT="$gitCommit"
+sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+notify() { bash "$RemoteProdDir/deploy-notify.sh" middleware "`$1" "`$COMMIT" || true; }
 
 echo "[remote] replacing middleware/src"
 rm -rf "$RemoteProdDir/middleware/src"
@@ -113,6 +119,7 @@ fi
 echo "[remote] building new middleware image"
 if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build middleware; then
   echo "[remote] BUILD FAILED — running middleware untouched, nothing deployed"
+  notify BUILD_FAILED
   exit 1
 fi
 
@@ -129,6 +136,7 @@ check_health() {
 
 if check_health; then
   echo "[remote] health OK — new middleware is live"
+  notify DEPLOYED
   docker logs nglu_prod_middleware --tail 10
 else
   echo "[remote] MIDDLEWARE HEALTH CHECK FAILED"
@@ -145,6 +153,7 @@ else
   else
     echo "[remote] no previous middleware image to roll back to"
   fi
+  notify ROLLED_BACK
   exit 1
 fi
 "@
