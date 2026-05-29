@@ -1,5 +1,5 @@
 import moment from "moment";
-import { CheckCircle2, Copy, ExternalLink, FileClock, Pencil } from "lucide-react";
+import { CheckCircle2, Copy, ExternalLink, FileClock, Pencil, Trash2 } from "lucide-react";
 import { message } from "antd";
 
 import { avatarColors } from "../../shared/constants";
@@ -18,7 +18,7 @@ const displayName = (record) => {
   return [data.firstName, data.lastName].filter(Boolean).join(" ") || data.email || record.phone || "Dossier locataire";
 };
 
-const OnboardingCard = ({ record, index = 0, onEdit, onValidate }) => {
+const OnboardingCard = ({ record, index = 0, onEdit, onValidate, onDelete }) => {
   const data = parseOnboardingData(record);
   const meta = statusMeta[record.status] || statusMeta.sent;
   const name = displayName(record);
@@ -75,6 +75,9 @@ const OnboardingCard = ({ record, index = 0, onEdit, onValidate }) => {
               <CheckCircle2 size={14} /> Valider
             </button>
           )}
+          <button type="button" className="danger" onClick={() => onDelete?.(record)}>
+            <Trash2 size={14} /> Supprimer
+          </button>
         </div>
       </div>
     </article>

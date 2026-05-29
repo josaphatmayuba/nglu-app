@@ -231,9 +231,24 @@ export class PropertyManagementService {
         updatedAt: tenantOnboardings.updatedAt,
       })
       .from(tenantOnboardings)
+      .where(ne(tenantOnboardings.status, "deleted"))
       .orderBy(desc(tenantOnboardings.id));
 
     return rows.map((row) => this.adminOnboardingResponse(row));
+  }
+
+  async deleteOnboarding(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    if (onboarding.status === "validated") {
+      throw new BadRequestException(
+        "Impossible de supprimer : ce dossier est validé et lié à un locataire.",
+      );
+    }
+    await this.db
+      .update(tenantOnboardings)
+      .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tenantOnboardings.id, id));
+    return { message: "Dossier d'inscription supprimé." };
   }
 
   async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {
