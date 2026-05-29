@@ -253,6 +253,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   moveInNotes: text("move_in_notes"),
   terms: text("terms"),
   status: varchar("status", { length: 255 }).default("draft").notNull(),
+  // Period (next_invoice_date value) we last sent an overdue reminder for, to send once per period.
+  lastOverdueReminderDate: date("last_overdue_reminder_date", { mode: "string" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

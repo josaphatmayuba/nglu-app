@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { CompatModule } from "../compat/compat.module";
 import { DatabaseModule } from "../database/database.module";
 import { SystemEmailModule } from "../system-email/system-email.module";
 import { ContractTemplatesController } from "./contract-templates.controller";
@@ -7,16 +8,17 @@ import { ContractsPublicController } from "./contracts-public.controller";
 import { ContractsService } from "./contracts.service";
 import { PropertyManagementController } from "./property-management.controller";
 import { PropertyManagementService } from "./property-management.service";
+import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 
 @Module({
-  imports: [DatabaseModule, SystemEmailModule],
+  imports: [DatabaseModule, SystemEmailModule, CompatModule],
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,
     PropertyManagementController,
     ContractTemplatesController,
   ],
-  providers: [PropertyManagementService, ContractsService, ContractTemplatesService],
+  providers: [PropertyManagementService, ContractsService, ContractTemplatesService, RentReminderService],
 })
 export class PropertyManagementModule {}

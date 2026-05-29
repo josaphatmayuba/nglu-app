@@ -7,5 +7,6 @@ import { CompatService } from "./compat.service";
   imports: [DatabaseModule],
   controllers: [CompatController],
   providers: [CompatService],
+  exports: [CompatService],
 })
 export class CompatModule {}

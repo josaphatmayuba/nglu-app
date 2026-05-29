@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { ScheduleModule } from "@nestjs/schedule";
 import { APP_GUARD } from "@nestjs/core";
 import { AccountsModule } from "./accounts/accounts.module";
 import { AppSettingsModule } from "./app-settings/app-settings.module";
@@ -44,6 +45,7 @@ import { UsersModule } from "./users/users.module";
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     AuditModule,
     AuthModule,
