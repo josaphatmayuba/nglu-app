@@ -116,6 +116,12 @@ export class AuthService {
     // Successful auth — clear failure counter
     this.resetFailures(dto.username);
 
+    // Disabled accounts (status "false", e.g. closed via HR) cannot sign in.
+    if (user.status !== "true") {
+      await this.audit.log("auth.login.fail", dto.username, { ...ctx, userId: user.id }, { reason: "account_disabled" });
+      throw new UnauthorizedException("Ce compte est désactivé. Contactez un administrateur.");
+    }
+
     // If MFA is enabled, return a short-lived mfaToken instead of full tokens
     if (user.totpEnabled) {
       const mfaToken = this.jwtService.sign(
@@ -231,7 +237,7 @@ export class AuthService {
     }
 
     const [user] = await this.db
-      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, refreshToken: users.refreshToken })
+      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, refreshToken: users.refreshToken, status: users.status })
       .from(users)
       .where(eq(users.id, payload.sub))
       .limit(1);
@@ -243,6 +249,11 @@ export class AuthService {
     if (!user || !tokenValid) {
       await this.audit.log("auth.refresh.fail", `user:${payload.sub}`, { ...ctx, userId: payload.sub }, { reason: "token_mismatch" });
       throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    if (user.status !== "true") {
+      await this.audit.log("auth.refresh.fail", `user:${user.id}`, { ...ctx, userId: user.id }, { reason: "account_disabled" });
+      throw new UnauthorizedException("Ce compte est désactivé.");
     }
 
     const [role] = await this.db
