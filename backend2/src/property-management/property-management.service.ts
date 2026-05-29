@@ -263,7 +263,7 @@ export class PropertyManagementService {
           to: email,
           subject: "Votre lien d'inscription locataire",
           html,
-          type: "tenant_onboarding_link",
+          type: "form_link",
           relatedType: "tenant-onboarding",
         });
       } catch (error) {
