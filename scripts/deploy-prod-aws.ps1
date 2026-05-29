@@ -205,11 +205,7 @@ docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -
 
 check_web() {
   for i in `$(seq 1 15); do
-    if curl -fsSIL https://ongdngolu.org/ >/dev/null 2>&1 \
-       && curl -fsSIL https://ongdngolu.org/crm >/dev/null 2>&1 \
-       && curl -fsS https://ongdngolu.org/api/health 2>/dev/null | grep -q '"status":"ok"'; then
-      return 0
-    fi
+    if curl -fsSIL https://ongdngolu.org/ >/dev/null 2>&1 && curl -fsSIL https://ongdngolu.org/crm >/dev/null 2>&1 && curl -fsS https://ongdngolu.org/api/health 2>/dev/null | grep -q '"status":"ok"'; then return 0; fi
     sleep 3
   done
   return 1
@@ -250,11 +246,22 @@ Write-Step "Uploading production artifacts + deploy-notify helper"
 & scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $notifyLocal "${sshTarget}:/tmp/deploy-notify.sh"
 
 Write-Step "Deploying on AWS production with lock"
+# Piping the script to `ssh "bash -s"` via PowerShell prepends a UTF-8 BOM and
+# rewrites the trailing newline to CRLF, which breaks `set -euo pipefail` and the
+# final `fi` on the server (unexpected end of file). Instead, write the script as
+# UTF-8 (no BOM, LF) to a temp file, scp it, strip any CR, then execute it.
+$remoteScriptLocal = Join-Path ([System.IO.Path]::GetTempPath()) "nglu-prod-frontend-deploy-$stamp.sh"
+$lfScript = ($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF)
+[System.IO.File]::WriteAllText($remoteScriptLocal, $lfScript, (New-Object System.Text.UTF8Encoding($false)))
+& scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $remoteScriptLocal "${sshTarget}:/tmp/nglu-prod-frontend-deploy.sh"
+
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
+$remoteCmd = 'sed -i ''s/\r$//'' /tmp/nglu-prod-frontend-deploy.sh; bash /tmp/nglu-prod-frontend-deploy.sh; rc=$?; rm -f /tmp/nglu-prod-frontend-deploy.sh; exit $rc'
+& ssh @sshArgs $remoteCmd
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
+Remove-Item -LiteralPath $remoteScriptLocal -Force -ErrorAction SilentlyContinue
 if ($sshExit -ne 0) {
   throw "Remote prod deploy failed (exit $sshExit). The server attempted an automatic rollback to the previous working frontend - check the remote output above to confirm it is healthy."
 }
