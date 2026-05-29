@@ -7,6 +7,7 @@ param(
   [string]$ComposeFile = "docker-compose.prod.yml",
   [string]$EnvFile = ".env.prod",
   [switch]$SkipLocalBuild,
+  [switch]$SkipTests,
   [switch]$SkipSmoke,
   [switch]$DryRun,
   [string]$ConfirmProduction
@@ -54,6 +55,20 @@ Write-Host "PEM:    $PemPath"
 
 if (-not $DryRun -and $ConfirmProduction -ne "DEPLOY_PROD") {
   throw "Production deploy requires -ConfirmProduction DEPLOY_PROD. Use -DryRun to test without deploying."
+}
+
+if (-not $SkipTests) {
+  Write-Step "Running backend unit tests (gate)"
+  Push-Location $backendDir
+  try {
+    npm test
+    if ($LASTEXITCODE -ne 0) { throw "Backend unit tests failed - deploy aborted. Fix tests or rerun with -SkipTests for an emergency deploy." }
+  }
+  finally {
+    Pop-Location
+  }
+} else {
+  Write-Step "Skipping unit tests by request (-SkipTests)"
 }
 
 if (-not $SkipLocalBuild) {
@@ -126,23 +141,83 @@ trap cleanup EXIT
 } > "`$LOCK_META"
 
 echo "[remote] production backend lock acquired"
-echo "[remote] replacing backend2/dist, drizzle and package manifests"
+
+IMG="$ComposeProject-backend2"
+HEALTH_URL="https://ongdngolu.org/api/health"
+
+echo "[remote] replacing build context (dist, drizzle, package manifests)"
 sudo rm -rf "$RemoteProdDir/backend2/dist"
 sudo rm -rf "$RemoteProdDir/backend2/drizzle"
 sudo rm -f "$RemoteProdDir/backend2/package.json" "$RemoteProdDir/backend2/package-lock.json"
 mkdir -p "$RemoteProdDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteProdDir/backend2"
 rm -f "$remoteArchive"
-echo "[remote] restarting backend2 (nglu_prod_backend2)"
+
 cd "$RemoteProdDir"
-docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate --build backend2
-echo "[remote] waiting for backend2 to be ready"
-sleep 20
-echo "[remote] health check"
-curl -fsS https://ongdngolu.org/api/health || echo "Health check failed (may retry)"
-echo ""
-echo "[remote] backend2 logs (last 10 lines)"
-docker logs nglu_prod_backend2 --tail 10
+
+# --- (#3) Back up the DB before the new container runs migrations ---
+echo "[remote] backing up prod DB before migrations"
+DBH=`$(sudo grep -E "^DB_HOST=" "$EnvFile" | cut -d= -f2)
+DBP=`$(sudo grep -E "^DB_PORT=" "$EnvFile" | cut -d= -f2)
+DBN=`$(sudo grep -E "^DB_DATABASE=" "$EnvFile" | cut -d= -f2)
+DBU=`$(sudo grep -E "^DB_USERNAME=" "$EnvFile" | cut -d= -f2)
+DBPW=`$(sudo grep -E "^DB_PASSWORD=" "$EnvFile" | cut -d= -f2-)
+sudo mkdir -p "$RemoteProdDir/backups"
+BACKUP="$RemoteProdDir/backups/pre-deploy-$stamp.sql.gz"
+if docker run --rm mysql:8 mysqldump -h "`$DBH" -P "`$DBP" -u "`$DBU" -p"`$DBPW" --single-transaction --quick --no-tablespaces "`$DBN" 2>/dev/null | gzip | sudo tee "`$BACKUP" >/dev/null && [ "`$(sudo stat -c%s "`$BACKUP" 2>/dev/null || echo 0)" -gt 100 ]; then
+  echo "[remote] DB backup OK -> `$BACKUP"
+else
+  echo "[remote] DB BACKUP FAILED — aborting (running app untouched)"
+  exit 1
+fi
+
+# --- (#1) Tag the current working image as a rollback point ---
+HAVE_PREV=0
+if docker image inspect "`$IMG:latest" >/dev/null 2>&1; then
+  docker tag "`$IMG:latest" "`$IMG:previous"
+  HAVE_PREV=1
+  echo "[remote] tagged current image as `$IMG:previous (rollback point)"
+fi
+
+# --- Build the new image WITHOUT touching the running container ---
+echo "[remote] building new backend2 image"
+if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build backend2; then
+  echo "[remote] BUILD FAILED — running app untouched, nothing deployed"
+  exit 1
+fi
+
+# --- Recreate with the freshly built image ---
+echo "[remote] recreating backend2 with the new image"
+docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate backend2
+
+check_health() {
+  for i in `$(seq 1 20); do
+    if curl -fsS "`$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then return 0; fi
+    sleep 4
+  done
+  return 1
+}
+
+if check_health; then
+  echo "[remote] health OK — new version is live"
+  docker logs nglu_prod_backend2 --tail 10
+else
+  echo "[remote] HEALTH CHECK FAILED for the new version"
+  docker logs nglu_prod_backend2 --tail 30 || true
+  if [ "`$HAVE_PREV" = "1" ]; then
+    echo "[remote] ROLLING BACK to previous image"
+    docker tag "`$IMG:previous" "`$IMG:latest"
+    docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" up -d --no-deps --force-recreate backend2
+    if check_health; then
+      echo "[remote] ROLLED BACK — previous working version is live again"
+    else
+      echo "[remote] ROLLBACK still unhealthy — manual intervention required"
+    fi
+  else
+    echo "[remote] no previous image available to roll back to"
+  fi
+  exit 1
+fi
 "@
 
 Write-Step "Deploying backend2 on AWS production"
@@ -151,7 +226,9 @@ $ErrorActionPreference = "Continue"
 ($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
-if ($sshExit -ne 0) { throw "Remote prod deploy script failed (exit $sshExit)" }
+if ($sshExit -ne 0) {
+  throw "Remote prod deploy failed (exit $sshExit). The server attempted an automatic rollback to the previous working image - check the remote output above to confirm it is healthy."
+}
 
 if (-not $SkipSmoke) {
   Write-Step "Local smoke checks"
