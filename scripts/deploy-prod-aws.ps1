@@ -41,6 +41,8 @@ $localArchive = Join-Path ([System.IO.Path]::GetTempPath()) $archiveName
 $remoteArchive = "/tmp/$archiveName"
 $sshTarget = "$User@$HostName"
 $sshArgs = @("-i", $PemPath, "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=accept-new", $sshTarget)
+$gitCommit = try { (& git -C $repoRoot rev-parse --short HEAD 2>$null).Trim() } catch { "unknown" }
+$notifyLocal = Join-Path $repoRoot "scripts/server/deploy-notify.sh"
 
 Write-Step "Checking prerequisites"
 Assert-Command "ssh"
@@ -159,6 +161,9 @@ trap cleanup EXIT
 } > "`$LOCK_META"
 
 echo "[remote] production lock acquired"
+COMMIT="$gitCommit"
+sudo cp /tmp/deploy-notify.sh "$RemoteProdDir/deploy-notify.sh" 2>/dev/null || true
+notify() { bash "$RemoteProdDir/deploy-notify.sh" frontend "`$1" "`$COMMIT" || true; }
 
 if [ "$pullServer" = "true" ]; then
   echo "[remote] pulling master in $RemoteProdDir"
@@ -190,6 +195,7 @@ fi
 echo "[remote] building prod frontend image from updated dist files..."
 if ! docker compose -p "$ComposeProject" -f "$ComposeFile" --env-file "$EnvFile" build frontend; then
   echo "[remote] FRONTEND BUILD FAILED — running site untouched, nothing deployed"
+  notify BUILD_FAILED
   exit 1
 fi
 
@@ -210,6 +216,7 @@ check_web() {
 
 if check_web; then
   echo "[remote] smoke ok: marketing root, crm entry, API health"
+  notify DEPLOYED
 else
   echo "[remote] FRONTEND HEALTH CHECK FAILED"
   if [ "`$FE_HAVE_PREV" = "1" ]; then
@@ -224,6 +231,7 @@ else
   else
     echo "[remote] no previous frontend image to roll back to"
   fi
+  notify ROLLED_BACK
   exit 1
 fi
 "@
@@ -236,8 +244,9 @@ if ($DryRun) {
   exit 0
 }
 
-Write-Step "Uploading production artifacts"
+Write-Step "Uploading production artifacts + deploy-notify helper"
 & scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $localArchive "${sshTarget}:$remoteArchive"
+& scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $notifyLocal "${sshTarget}:/tmp/deploy-notify.sh"
 
 Write-Step "Deploying on AWS production with lock"
 $prevEA = $ErrorActionPreference
