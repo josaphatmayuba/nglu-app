@@ -8,6 +8,17 @@ import {
   submitTenantOnboarding,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import "./PropertyManagement.css";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+
+const phoneValidator = {
+  validator: (_, value) =>
+    !value || isValidPhoneNumber(value)
+      ? Promise.resolve()
+      : Promise.reject(new Error("Numéro invalide pour ce pays")),
+};
+const requiredPhoneRules = [{ required: true, message: "Champ obligatoire" }, phoneValidator];
+const optionalPhoneRules = [phoneValidator];
 
 const maritalStatuses = [
   { label: "Célibataire", value: "single" },
@@ -126,8 +137,8 @@ const TenantOnboardingPage = () => {
             <Form.Item label="Email" name="email">
               <Input type="email" />
             </Form.Item>
-            <Form.Item label="Téléphone" name="phone" rules={requiredRules}>
-              <Input disabled />
+            <Form.Item label="Téléphone" name="phone" rules={requiredPhoneRules}>
+              <PhoneInput disabled />
             </Form.Item>
           </div>
           <Form.Item label="Adresse actuelle" name="address" rules={requiredRules}>
@@ -158,16 +169,16 @@ const TenantOnboardingPage = () => {
               <Form.Item label="Nom du partenaire" name="partenair_name" rules={requiredRules}>
                 <Input />
               </Form.Item>
-              <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={requiredRules}>
-                <Input />
+              <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={requiredPhoneRules}>
+                <PhoneInput />
               </Form.Item>
             </div>
           )}
 
           <div className="pm-section-title">Contact d'Urgence</div>
           <div className="pm-form-grid">
-            <Form.Item label="Téléphone secondaire" name="phone2">
-              <Input />
+            <Form.Item label="Téléphone secondaire" name="phone2" rules={optionalPhoneRules}>
+              <PhoneInput />
             </Form.Item>
             <Form.Item label="Personne à contacter" name="contacted_person" rules={requiredRules}>
               <Input />
@@ -175,9 +186,9 @@ const TenantOnboardingPage = () => {
             <Form.Item
               label="Téléphone personne à contacter"
               name="contacted_person_phone_number"
-              rules={requiredRules}
+              rules={requiredPhoneRules}
             >
-              <Input />
+              <PhoneInput />
             </Form.Item>
           </div>
 

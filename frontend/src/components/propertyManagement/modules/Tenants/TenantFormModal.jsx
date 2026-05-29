@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button, Form, Input, InputNumber, Modal, Select, message } from "antd";
 
 import {
@@ -9,6 +9,18 @@ import {
   validateTenantOnboarding,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { coupleStatuses, maritalStatuses } from "../../shared/constants";
+import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import PhoneInput from "../../../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+
+const phoneValidator = {
+  validator: (_, value) =>
+    !value || isValidPhoneNumber(value)
+      ? Promise.resolve()
+      : Promise.reject(new Error("Numéro invalide")),
+};
+const REQUIRED_PHONE = [{ required: true, message: "Champ obligatoire" }, phoneValidator];
+const OPTIONAL_PHONE = [phoneValidator];
 
 const REQUIRED = [{ required: true }];
 
@@ -26,6 +38,10 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
   const isCouple = coupleStatuses.includes(String(maritalStatus || "").toLowerCase());
 
+  const currencyList = useSelector((s) => s.currency?.list) || [];
+  const activeCurrencies = currencyList.filter((c) => c?.status === true || c?.status === "true");
+  const defaultCurrencyId = useSelector((s) => s.setting?.data?.currencyId);
+
   useEffect(() => {
     if (!open) {
       form.resetFields();
@@ -35,8 +51,9 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
       form.setFieldsValue(toTenantFormRecord(record));
     } else {
       form.resetFields();
+      if (defaultCurrencyId) form.setFieldValue("salary_currency_id", defaultCurrencyId);
     }
-  }, [open, record, form]);
+  }, [open, record, form, defaultCurrencyId]);
 
   const normalizeValues = (values) => {
     const normalizedChildNumber = Number(values.child_number || 0);
@@ -125,8 +142,8 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
           <Form.Item label="Email" name="email">
             <Input type="email" />
           </Form.Item>
-          <Form.Item label="Téléphone" name="phone" rules={REQUIRED}>
-            <Input />
+          <Form.Item label="Téléphone" name="phone" rules={REQUIRED_PHONE}>
+            <PhoneInput />
           </Form.Item>
         </div>
         <Form.Item label="Adresse actuelle" name="address" rules={REQUIRED}>
@@ -157,22 +174,22 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
             <Form.Item label="Nom du partenaire" name="partenair_name" rules={REQUIRED}>
               <Input />
             </Form.Item>
-            <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={REQUIRED}>
-              <Input />
+            <Form.Item label="Téléphone du partenaire" name="partenair_number" rules={REQUIRED_PHONE}>
+              <PhoneInput />
             </Form.Item>
           </div>
         )}
 
         <div className="pm-section-title">Contact d'Urgence</div>
         <div className="pm-form-grid">
-          <Form.Item label="Téléphone secondaire" name="phone2">
-            <Input />
+          <Form.Item label="Téléphone secondaire" name="phone2" rules={OPTIONAL_PHONE}>
+            <PhoneInput />
           </Form.Item>
           <Form.Item label="Personne à contacter" name="contacted_person" rules={REQUIRED}>
             <Input />
           </Form.Item>
-          <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={REQUIRED}>
-            <Input />
+          <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={REQUIRED_PHONE}>
+            <PhoneInput />
           </Form.Item>
         </div>
 
@@ -198,6 +215,9 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
           </Form.Item>
           <Form.Item label="Salaire mensuel" name="monthly_pay" rules={REQUIRED}>
             <InputNumber className="w-full" min={0} />
+          </Form.Item>
+          <Form.Item label="Devise du salaire" name="salary_currency_id">
+            <CurrencyCombobox currencies={activeCurrencies} allowClear placeholder="Devise par défaut" style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item label="Autres revenus mensuels" name="other_monthly_income">
             <InputNumber className="w-full" min={0} />

@@ -1,5 +1,8 @@
 import { Button, Col, Form, Input, Row, Typography } from "antd";
 import React, { useState } from "react";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useDispatch } from "react-redux";
 import { useLocation, useParams } from "react-router-dom";
 import { updateCustomer } from "../../redux/rtk/features/customer/customerSlice";
@@ -68,13 +71,11 @@ function UpdateCustomer() {
                   label="Phone"
                   name="phone"
                   rules={[
-                    {
-                      required: true,
-                      message: "Please input customer Phone!",
-                    },
+                    { required: true, message: "Please input customer Phone!" },
+                    phoneRule,
                   ]}
                 >
-                  <Input />
+                  <PhoneInput />
                 </Form.Item>
 
                 <Form.Item

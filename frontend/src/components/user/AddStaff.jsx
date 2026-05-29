@@ -1,5 +1,8 @@
 import { Button, Col, DatePicker, Form, Input, InputNumber, Row, Select } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { useDispatch, useSelector } from "react-redux";
@@ -97,8 +100,8 @@ const AddStaff = ({ onSuccess }) => {
               <Form.Item style={{ marginBottom: "10px" }} label="Email" name="email">
                 <Input placeholder="johndoe2@example.com" />
               </Form.Item>
-              <Form.Item style={{ marginBottom: "10px" }} label="Phone" name="phone">
-                <Input placeholder="015000000000" />
+              <Form.Item style={{ marginBottom: "10px" }} label="Phone" name="phone" rules={[phoneRule]}>
+                <PhoneInput />
               </Form.Item>
             </Col>
 

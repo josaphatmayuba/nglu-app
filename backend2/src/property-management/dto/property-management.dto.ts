@@ -351,6 +351,12 @@ export class CreateMaintenanceDto {
   @Min(0)
   estimatedCost?: number;
 
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currencyId?: number | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -462,6 +468,12 @@ export class CreateTenantDto {
   @IsNumber()
   @Min(0)
   monthly_pay: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  salary_currency_id?: number | null;
 
   @ApiPropertyOptional({ example: 200 })
   @IsOptional()
@@ -656,6 +668,12 @@ export class SaveTenantOnboardingDto {
   @IsNumber()
   @Min(0)
   monthly_pay?: number | null;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  salary_currency_id?: number | null;
 
   @ApiPropertyOptional({ example: 200 })
   @IsOptional()

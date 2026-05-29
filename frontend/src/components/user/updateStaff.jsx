@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Button, Card, Col, DatePicker, Form, Input, Row, Select, Typography } from "antd";
 import dayjs from "dayjs";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { loadAllDesignation } from "../../redux/rtk/features/designation/designationSlice";
@@ -118,7 +121,7 @@ function UpdateStaff({ passedUser, onClose }) {
                 <Col xs={24} md={12}><Form.Item label="Username" name="username"><Input /></Form.Item></Col>
                 <Col xs={24} md={12}><Form.Item label="Change Password" name="password"><Input.Password placeholder="Leave empty to keep old password" /></Form.Item></Col>
                 <Col xs={24} md={12}><Form.Item label="Email" name="email"><Input /></Form.Item></Col>
-                <Col xs={24} md={12}><Form.Item label="Phone" name="phone"><Input /></Form.Item></Col>
+                <Col xs={24} md={12}><Form.Item label="Phone" name="phone" rules={[phoneRule]}><PhoneInput /></Form.Item></Col>
 
                 {/* Employee Details */}
                 <Col xs={24} md={12}><Form.Item label="Joining Date" name="joinDate"><DatePicker style={{ width: "100%" }} /></Form.Item></Col>

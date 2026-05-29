@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 
 import { generateTenantOnboarding } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import PhoneInput from "../../../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const dispatch = useDispatch();
@@ -176,10 +178,18 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
           <Form.Item
             label="Téléphone"
             name="phone"
-            rules={[{ required: true, message: "Numéro requis" }]}
+            rules={[
+              { required: true, message: "Numéro requis" },
+              {
+                validator: (_, value) =>
+                  !value || isValidPhoneNumber(value)
+                    ? Promise.resolve()
+                    : Promise.reject(new Error("Numéro invalide pour ce pays")),
+              },
+            ]}
             extra="Ce numéro identifie le dossier d'inscription côté backend."
           >
-            <Input placeholder="+243 999 123 456" />
+            <PhoneInput placeholder="999 123 456" />
           </Form.Item>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Button onClick={onClose}>Annuler</Button>

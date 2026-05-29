@@ -22,7 +22,8 @@ import {
   UsersRound,
   Webhook,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import toast from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllCurrency } from "@/redux/rtk/features/eCommerce/currency/currencySlice";
@@ -32,6 +33,7 @@ import { loadAllRole } from "@/redux/rtk/features/hr/role/roleSlice";
 import { loadAllTermsAndConditions } from "@/redux/rtk/features/termsAndCondition/termsAndConditionSlice";
 import { loadAllEmailConfig } from "@/redux/rtk/features/EmailConfigAppSettings/emailConfigAppSettingSlice";
 import { loadNotificationPreferences as loadNotifPrefs, saveNotificationPreferences as saveNotifPrefs } from "@/redux/rtk/features/notificationPreferences/notificationPreferencesSlice";
+import CurrencyCombobox from "@/components/Shared/CurrencyCombobox";
 import AboutPanel from "./AppSettings/AboutPanel";
 import SecurityPanel from "./AppSettings/SecurityPanel";
 import AdminAudit from "./AdminSettings/tabs/AdminAudit";
@@ -155,17 +157,16 @@ function EntreprisePanel() {
           </div>
           <div>
             <label className="text-sm font-medium text-ink-700 mb-1.5 block">Devise</label>
-            <select
-              value={form.currencyId}
-              onChange={(e) => setForm((f) => ({ ...f, currencyId: e.target.value }))}
+            <CurrencyCombobox
+              currencies={currencies}
+              value={form.currencyId === "" ? undefined : form.currencyId}
+              onChange={(val) => setForm((f) => ({ ...f, currencyId: val ?? "" }))}
               disabled={currLoading}
-              className="w-full px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"
-            >
-              <option value="">— Sélectionner —</option>
-              {currencies.map((c) => (
-                <option key={c.id} value={c.id}>{c.currencyCode} — {c.currencyName}</option>
-              ))}
-            </select>
+              allowClear
+              size="large"
+              style={{ width: "100%" }}
+              placeholder="Rechercher une devise…"
+            />
           </div>
           <div>
             <label className="text-sm font-medium text-ink-700 mb-1.5 block">Fuseau horaire</label>
@@ -516,17 +517,102 @@ function FacturationPanel() {
   const dispatch = useDispatch();
   const settingData = useSelector((s) => s?.setting?.data);
   const saving = useSelector((s) => s?.setting?.loading) || false;
-  const { list: currenciesRaw } = useSelector((s) => s?.currency) || {};
-  const currencies = currenciesRaw ?? [];
+
+  // Load ALL currencies (active + inactive) so they can be toggled either way.
+  const [currencies, setCurrencies] = useState([]);
+  const [currLoading, setCurrLoading] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
 
   const defaultCurrencyId = settingData?.currencyId;
 
   const [num, setNum] = useState({ invoicePrefix: "", leasePrefix: "", defaultVatRate: "16", defaultPaymentTermDays: "14" });
 
+  const loadCurrencies = useCallback(async () => {
+    setCurrLoading(true);
+    try {
+      const { data } = await axios.get("currency?query=all&status=all");
+      setCurrencies(Array.isArray(data) ? data : data?.getAllCurrency ?? []);
+    } catch {
+      toast.error("Impossible de charger les devises");
+    } finally {
+      setCurrLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    dispatch(loadAllCurrency());
+    loadCurrencies();
     if (!settingData) dispatch(getSetting());
-  }, [dispatch, settingData]);
+  }, [dispatch, settingData, loadCurrencies]);
+
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState("");
+
+  const filteredCurrencies = useMemo(() => {
+    const q = currencySearch.trim().toLowerCase();
+    if (!q) return currencies;
+    return currencies.filter((c) =>
+      [c.currencyCode, c.currencyName, c.currencySymbol]
+        .filter(Boolean)
+        .some((field) => String(field).toLowerCase().includes(q)),
+    );
+  }, [currencies, currencySearch]);
+
+  const selectedFilteredCount = filteredCurrencies.reduce((n, c) => (selected.has(c.id) ? n + 1 : n), 0);
+  const allSelected = filteredCurrencies.length > 0 && selectedFilteredCount === filteredCurrencies.length;
+  const someSelected = selectedFilteredCount > 0 && !allSelected;
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        filteredCurrencies.forEach((c) => next.delete(c.id));
+      } else {
+        filteredCurrencies.forEach((c) => next.add(c.id));
+      }
+      return next;
+    });
+  };
+
+  const toggleCurrency = async (currency) => {
+    const nextStatus = currency.status === "true" ? "false" : "true";
+    setTogglingId(currency.id);
+    try {
+      await axios.patch(`currency/${currency.id}`, { status: nextStatus });
+      toast.success(nextStatus === "true" ? "Devise activée" : "Devise désactivée");
+      await loadCurrencies();
+      dispatch(loadAllCurrency()); // refresh the active list used elsewhere (Devise par défaut, Immobilier)
+    } catch {
+      toast.error("Échec de la mise à jour de la devise");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const bulkSetStatus = async (status) => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBulkSaving(true);
+    try {
+      await axios.patch("currency/bulk-status", { ids, status });
+      toast.success(`${ids.length} devise(s) ${status === "true" ? "activée(s)" : "désactivée(s)"}`);
+      setSelected(new Set());
+      await loadCurrencies();
+      dispatch(loadAllCurrency());
+    } catch {
+      toast.error("Échec de la mise à jour groupée");
+    } finally {
+      setBulkSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (settingData) {
@@ -558,22 +644,85 @@ function FacturationPanel() {
           <h3 className="font-semibold text-ink-900 text-lg">Devises supportées</h3>
           <p className="text-xs text-ink-500 mt-1">Devises actives dans l&apos;application (factures, paiements, baux)</p>
         </div>
-        <div className="space-y-2">
-          {currencies.length === 0 && <p className="text-xs text-ink-400 py-2">Chargement…</p>}
-          {currencies.map((c, i) => (
-            <div key={c.id} className="flex items-center justify-between p-3 border border-ink-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className={`w-9 h-9 rounded-full ${CURRENCY_COLORS[i % CURRENCY_COLORS.length]} font-semibold flex items-center justify-center text-sm`}>
-                  {c.currencySymbol || c.currencyCode?.slice(0, 2)}
-                </span>
-                <div>
-                  <div className="text-sm font-medium text-ink-900">{c.currencyCode} — {c.currencyName}</div>
-                  <div className="text-xs text-ink-500">{c.id === defaultCurrencyId ? "Devise par défaut" : "Devise active"}</div>
+        {currencies.length > 0 && (
+          <input
+            type="text"
+            value={currencySearch}
+            onChange={(e) => setCurrencySearch(e.target.value)}
+            placeholder="Rechercher une devise (code, nom, symbole)…"
+            className="w-full mb-3 px-3 py-2 bg-white border border-ink-200 rounded-lg text-sm focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          />
+        )}
+        {currencies.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3 p-2 bg-ink-50 rounded-lg">
+            <label className="flex items-center gap-2 text-sm text-ink-700 cursor-pointer select-none pl-1">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand-600"
+                checked={allSelected}
+                ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                onChange={toggleSelectAll}
+              />
+              {selected.size > 0 ? `${selected.size} sélectionnée(s)` : "Tout sélectionner"}
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={selected.size === 0 || bulkSaving}
+                onClick={() => bulkSetStatus("true")}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Activer la sélection
+              </button>
+              <button
+                type="button"
+                disabled={selected.size === 0 || bulkSaving}
+                onClick={() => bulkSetStatus("false")}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg border border-ink-200 text-ink-600 hover:bg-ink-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                Désactiver la sélection
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+          {currLoading && currencies.length === 0 && <p className="text-xs text-ink-400 py-2">Chargement…</p>}
+          {!currLoading && currencies.length > 0 && filteredCurrencies.length === 0 && (
+            <p className="text-xs text-ink-400 py-2">Aucune devise ne correspond à « {currencySearch} »</p>
+          )}
+          {filteredCurrencies.map((c, i) => {
+            const isActive = c.status === "true";
+            const isDefault = c.id === defaultCurrencyId;
+            return (
+              <div key={c.id} className={`flex items-center justify-between p-3 border border-ink-200 rounded-lg ${isActive ? "" : "opacity-60"}`}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 accent-brand-600"
+                    checked={selected.has(c.id)}
+                    onChange={() => toggleSelect(c.id)}
+                  />
+                  <span className={`w-9 h-9 rounded-full ${CURRENCY_COLORS[i % CURRENCY_COLORS.length]} font-semibold flex items-center justify-center text-sm`}>
+                    {c.currencySymbol || c.currencyCode?.slice(0, 2)}
+                  </span>
+                  <div>
+                    <div className="text-sm font-medium text-ink-900">{c.currencyCode} — {c.currencyName}</div>
+                    <div className="text-xs text-ink-500">{isDefault ? "Devise par défaut" : isActive ? "Devise active" : "Désactivée"}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${isActive ? "text-emerald-700 bg-emerald-50" : "text-ink-500 bg-ink-100"}`}>
+                    {isActive ? "Active" : "Inactive"}
+                  </span>
+                  <Toggle
+                    small
+                    checked={isActive}
+                    onChange={() => { if (togglingId !== c.id) toggleCurrency(c); }}
+                  />
                 </div>
               </div>
-              <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Active</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

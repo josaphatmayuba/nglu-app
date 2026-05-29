@@ -1,6 +1,9 @@
 import React, { Fragment, useState } from "react";
 
 import { Alert, Button, Card, Col, Form, Input, Row, Typography } from "antd";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import axios from "axios";
 import { useLocation, useParams } from "react-router-dom";
 import Main from "../layouts/Main";
@@ -98,13 +101,11 @@ function UpdateSup() {
                       label='Phone'
                       name='phone'
                       rules={[
-                        {
-                          required: true,
-                          message: "Please input supplier Phone!",
-                        },
+                        { required: true, message: "Please input supplier Phone!" },
+                        phoneRule,
                       ]}
                     >
-                      <Input />
+                      <PhoneInput />
                     </Form.Item>
 
                     <Form.Item

@@ -2,13 +2,13 @@
 // SCRUM-73 — Added Modifier / Supprimer actions per row.
 
 import moment from "moment";
-import { Building2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Building2, CircleDollarSign, Eye, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { avatarColors } from "../../shared/constants";
 import { initials } from "../../shared/tenants";
 import { ticketIconFor, ticketIconTone } from "../../shared/units";
-import { compactMoney } from "../../shared/format";
+import { compactMoney, cleanCurrencySymbol } from "../../shared/format";
 
 const priorityLabel = (p) =>
   ["urgent", "high"].includes(p) ? "Urgent" : p === "low" ? "Bas" : "Moyen";
@@ -22,7 +22,7 @@ const statusLabel = (s) =>
 const statusClass = (s) =>
   s === "done" ? "success" : s === "in_progress" ? "warning" : "danger";
 
-const RowMenu = ({ request, onEdit, onDelete }) => {
+const RowMenu = ({ request, onEdit, onDelete, onAddCost, onViewCosts }) => {
   const [open, setOpen] = useState(false);
   return (
     <span className="immo-menu-anchor">
@@ -36,6 +36,20 @@ const RowMenu = ({ request, onEdit, onDelete }) => {
       </button>
       {open && (
         <ul className="immo-context-menu" role="menu">
+          {onViewCosts && (
+            <li role="menuitem">
+              <button type="button" onClick={() => { setOpen(false); onViewCosts(request); }}>
+                <Eye size={14} /> Voir les coûts
+              </button>
+            </li>
+          )}
+          {onAddCost && (
+            <li role="menuitem">
+              <button type="button" onClick={() => { setOpen(false); onAddCost(request); }}>
+                <CircleDollarSign size={14} /> Enregistrer un coût
+              </button>
+            </li>
+          )}
           {onEdit && (
             <li role="menuitem">
               <button type="button" onClick={() => { setOpen(false); onEdit(request); }}>
@@ -56,10 +70,14 @@ const RowMenu = ({ request, onEdit, onDelete }) => {
   );
 };
 
-const MaintenanceTableView = ({ requests = [], onEdit, onDelete }) => {
+const MaintenanceTableView = ({ requests = [], onEdit, onDelete, onAddCost, onViewCosts, currencies = [], defaultCurrencySymbol = "" }) => {
   if (!requests.length) {
     return <div className="immo-table-empty">Aucun ticket à afficher pour ce filtre.</div>;
   }
+  const symbolFor = (id) => {
+    const c = currencies.find((x) => x.id === id || x.currencyId === id);
+    return (c ? cleanCurrencySymbol(c) : "") || defaultCurrencySymbol;
+  };
   return (
     <div className="immo-table-wrap">
       <table className="immo-table">
@@ -121,10 +139,10 @@ const MaintenanceTableView = ({ requests = [], onEdit, onDelete }) => {
                   {request.tenantName ? ` · ${request.tenantName}` : ""}
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  {request.estimatedCost ? compactMoney(request.estimatedCost) : <span className="muted">—</span>}
+                  {request.estimatedCost ? compactMoney(request.estimatedCost, symbolFor(request.currencyId)) : <span className="muted">—</span>}
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  <RowMenu request={request} onEdit={onEdit} onDelete={onDelete} />
+                  <RowMenu request={request} onEdit={onEdit} onDelete={onDelete} onAddCost={onAddCost} onViewCosts={onViewCosts} />
                 </td>
               </tr>
             );

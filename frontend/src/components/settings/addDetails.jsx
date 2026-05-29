@@ -10,6 +10,9 @@ import {
   Upload,
 } from "antd";
 import { Fragment, useEffect, useState } from "react";
+import PhoneInput from "../Shared/PhoneInput";
+import { isValidPhoneNumber } from "react-phone-number-input";
+const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import toast from "react-hot-toast";
 import ReactQuill from "react-quill";
 import { useDispatch, useSelector } from "react-redux";
@@ -256,12 +259,10 @@ const AddDetails = () => {
                   label="Phone Number"
                   name="phone"
                   rules={[
-                    {
-                      required: true,
-                      message: "Please input Phone Number!",
-                    },
+                    { required: true, message: "Please input Phone Number!" },
+                    phoneRule,
                   ]}>
-                  <Input />
+                  <PhoneInput />
                 </Form.Item>
 
                 <Form.Item

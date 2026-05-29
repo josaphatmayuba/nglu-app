@@ -39,6 +39,7 @@ const PropertyManagement = () => {
     safeOnboarding,
     safeLeases,
     currencyOptions,
+    defaultCurrencySymbol,
     occupancyRate,
     monthlyRent,
     monthlyRentByCurrency,
@@ -145,7 +146,7 @@ const PropertyManagement = () => {
           <MetricCard
             icon={<CreditCard size={20} />}
             label="Loyers du mois"
-            value={<MultiCurrencyValue byCurrency={monthlyRentByCurrency} fallback={compactMoney(monthlyRent)} />}
+            value={<MultiCurrencyValue byCurrency={monthlyRentByCurrency} fallback={compactMoney(monthlyRent, defaultCurrencySymbol)} />}
             helper={`${safePayments.length} reçus · ${Math.max(activeLeases.length - safePayments.length, 0)} en attente`}
             tone="amber"
           />
@@ -153,7 +154,7 @@ const PropertyManagement = () => {
             icon={<AlertTriangle size={20} />}
             label="Loyers en retard"
             value={overduePayments.length}
-            helper={`${compactMoney(overduePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0))} à recouvrer`}
+            helper={`${compactMoney(overduePayments.reduce((sum, item) => sum + Number(item.amount || 0), 0), defaultCurrencySymbol)} à recouvrer`}
             tone="red"
           />
         </div>

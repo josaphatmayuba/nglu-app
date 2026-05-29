@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { count, desc, eq, like, sql } from "drizzle-orm";
+import { count, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { currencies } from "../database/schema";
 import type { Database } from "../database/types";
@@ -24,10 +24,13 @@ export class CurrenciesService {
 
   async findAll(query: CurrencyQueryDto) {
     if (query.query === "all") {
+      if (query.status === "all") {
+        return this.db.select().from(currencies).orderBy(desc(currencies.id));
+      }
       return this.db
         .select()
         .from(currencies)
-        .where(eq(currencies.status, "true"))
+        .where(eq(currencies.status, query.status ?? "true"))
         .orderBy(desc(currencies.id));
     }
 
@@ -70,6 +73,18 @@ export class CurrenciesService {
       .where(eq(currencies.id, id));
 
     return { message: "Currency deleted successfully." };
+  }
+
+  async bulkUpdateStatus(ids: number[], status: string) {
+    if (!ids?.length) {
+      return { message: "No currencies selected.", updated: 0 };
+    }
+    await this.db
+      .update(currencies)
+      .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(inArray(currencies.id, ids));
+
+    return { message: "Currencies updated.", updated: ids.length };
   }
 
   private async search(query: CurrencyQueryDto) {

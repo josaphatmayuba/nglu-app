@@ -14,6 +14,7 @@ import { useDispatch, useSelector } from "react-redux";
 
 import { loadAllAccount } from "../../../redux/rtk/features/account/accountSlice";
 import { loadAllCurrency } from "../../../redux/rtk/features/eCommerce/currency/currencySlice";
+import { getSetting } from "../../../redux/rtk/features/setting/settingSlice";
 import {
   loadContractTemplates,
   loadContracts,
@@ -27,7 +28,7 @@ import { typeLabel } from "./constants";
 const expectedLeaseAmount = (lease) =>
   Number(lease.remainingAmount ?? lease.expectedAmount ?? lease.rentAmount ?? lease.monthlyRent ?? 0);
 
-const groupLeasesByCurrency = (leases, currencyById) => {
+const groupLeasesByCurrency = (leases, currencyById, defaultSymbol = "CDF") => {
   const grouped = new Map();
 
   leases.forEach((lease) => {
@@ -35,7 +36,7 @@ const groupLeasesByCurrency = (leases, currencyById) => {
     const currency = currencyById.get(currencyId);
     const current = grouped.get(currencyId) || {
       currencyId,
-      currencySymbol: lease.currencySymbol || (currency ? cleanCurrencySymbol(currency) : null) || "CDF",
+      currencySymbol: lease.currencySymbol || (currency ? cleanCurrencySymbol(currency) : null) || defaultSymbol,
       amount: 0,
     };
 
@@ -46,14 +47,14 @@ const groupLeasesByCurrency = (leases, currencyById) => {
   return Array.from(grouped.values());
 };
 
-const groupPaymentsByCurrency = (payments) => {
+const groupPaymentsByCurrency = (payments, defaultSymbol = "CDF") => {
   const grouped = new Map();
 
   payments.forEach((payment) => {
     const currencyId = payment.currencyId ?? "default";
     const current = grouped.get(currencyId) || {
       currencyId,
-      currencySymbol: payment.currencySymbol || payment.currencyName || "CDF",
+      currencySymbol: payment.currencySymbol || payment.currencyName || defaultSymbol,
       amount: 0,
     };
 
@@ -87,6 +88,7 @@ export const usePropertyManagementBootstrap = () => {
     dispatch(loadContracts());
     dispatch(loadContractTemplates());
     dispatch(loadAllCurrency());
+    dispatch(getSetting());
   }, [dispatch]);
 };
 
@@ -107,6 +109,7 @@ export const usePropertyManagementData = () => {
   const accounts = useSelector((state) => state.accounts?.list) || [];
   const rawCurrencyList = useSelector((state) => state.currency?.list);
   const currencyList = useMemo(() => rawCurrencyList || [], [rawCurrencyList]);
+  const settingData = useSelector((state) => state.setting?.data);
 
   // ─── Safe collections (filter out nulls coming from the API) ─────────
   const rawProperties = useMemo(() => (properties ?? []).filter(Boolean), [properties]);
@@ -169,6 +172,14 @@ export const usePropertyManagementData = () => {
     });
     return map;
   }, [currencyList]);
+
+  // Symbol of the company's default currency (Paramètres > Entreprise), used as
+  // the fallback for empty/zero money KPIs instead of a hardcoded "CDF".
+  const defaultCurrencySymbol = useMemo(() => {
+    const id = settingData?.currencyId;
+    const currency = id != null ? currencyById.get(id) : null;
+    return (currency ? cleanCurrencySymbol(currency) : "") || "CDF";
+  }, [settingData, currencyById]);
 
   // ─── Cross-collection enrichments ────────────────────────────────────
   const availabilityRows = useMemo(
@@ -245,8 +256,8 @@ export const usePropertyManagementData = () => {
     dashboard?.monthlyRent ??
     activeLeases.reduce((sum, lease) => sum + Number(lease.rentAmount || 0), 0);
   const monthlyRentByCurrency = useMemo(
-    () => groupLeasesByCurrency(activeLeases, currencyById),
-    [activeLeases, currencyById],
+    () => groupLeasesByCurrency(activeLeases, currencyById, defaultCurrencySymbol),
+    [activeLeases, currencyById, defaultCurrencySymbol],
   );
   const collectedRent =
     dashboard?.collectedRent ??
@@ -318,12 +329,12 @@ export const usePropertyManagementData = () => {
       pendingAmount,
       lateAmount,
       plannedAmount: monthlyRent,
-      paidAmountByCurrency: groupPaymentsByCurrency(paidPaymentsThisMonth),
-      pendingAmountByCurrency: groupLeasesByCurrency(upcomingLeases, currencyById),
-      lateAmountByCurrency: groupLeasesByCurrency(overdueLeases, currencyById),
-      plannedAmountByCurrency: groupLeasesByCurrency(activeLeases, currencyById),
+      paidAmountByCurrency: groupPaymentsByCurrency(paidPaymentsThisMonth, defaultCurrencySymbol),
+      pendingAmountByCurrency: groupLeasesByCurrency(upcomingLeases, currencyById, defaultCurrencySymbol),
+      lateAmountByCurrency: groupLeasesByCurrency(overdueLeases, currencyById, defaultCurrencySymbol),
+      plannedAmountByCurrency: groupLeasesByCurrency(activeLeases, currencyById, defaultCurrencySymbol),
     };
-  }, [activeLeases, safePayments, monthlyRent, currencyById]);
+  }, [activeLeases, safePayments, monthlyRent, currencyById, defaultCurrencySymbol]);
 
   return {
     // raw slice
@@ -334,6 +345,7 @@ export const usePropertyManagementData = () => {
     currencyList,
     activeCurrencies,
     currencyOptions,
+    defaultCurrencySymbol,
 
     // safe collections
     safeProperties,
