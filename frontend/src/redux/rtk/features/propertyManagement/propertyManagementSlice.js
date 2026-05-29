@@ -302,6 +302,18 @@ export const validateTenantOnboarding = createAsyncThunk(
   },
 );
 
+export const deleteTenantOnboarding = createAsyncThunk(
+  "propertyManagement/deleteTenantOnboarding",
+  async (id) => {
+    try {
+      const data = await request("delete", `property-management/onboarding/${id}`);
+      return successHandler({ ...data, id }, "Dossier d'inscription supprimé");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  },
+);
+
 export const deleteUnit = createAsyncThunk(
   "propertyManagement/deleteUnit",
   async (id) => {
@@ -652,6 +664,12 @@ const propertyManagementSlice = createSlice({
         state.onboarding = upsert(state.onboarding, action.payload.data);
         if (action.payload.data?.customer) {
           state.tenants = upsert(state.tenants, action.payload.data.customer);
+        }
+      })
+      .addCase(deleteTenantOnboarding.fulfilled, (state, action) => {
+        const removedId = action.payload?.data?.id;
+        if (removedId != null) {
+          state.onboarding = state.onboarding.filter((record) => record.id !== removedId);
         }
       })
       .addCase(saveLease.fulfilled, (state, action) => {

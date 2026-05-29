@@ -120,6 +120,15 @@ export class PropertyManagementController {
     return this.propertyManagementService.validateOnboarding(id, orgId);
   }
 
+  @ApiOperation({ summary: "Delete a tenant onboarding dossier" })
+  @ApiOkResponse({ type: MessageResponseDto })
+  @Permissions("delete-propertyManagement")
+  @Delete("onboarding/:id")
+  @HttpCode(200)
+  deleteTenantOnboarding(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.deleteOnboarding(id);
+  }
+
   @ApiOperation({ summary: "List properties with unit counts" })
   @ApiOkResponse({ description: "Property list" })
   @Permissions("readAll-propertyManagement")

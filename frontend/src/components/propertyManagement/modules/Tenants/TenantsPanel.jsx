@@ -5,6 +5,7 @@ import { message } from "antd";
 
 import { deleteCustomer } from "../../../../redux/rtk/features/customer/customerSlice";
 import {
+  deleteTenantOnboarding,
   loadPropertyManagement,
   validateTenantOnboarding,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
@@ -68,10 +69,19 @@ const TenantsPanel = ({
     });
   }, [visibleTenants, searchTerm]);
 
-  const pendingOnboarding = useMemo(
-    () => safeOnboarding.filter((record) => record?.status !== "validated"),
-    [safeOnboarding],
-  );
+  const pendingOnboarding = useMemo(() => {
+    const now = Date.now();
+    return safeOnboarding.filter((record) => {
+      if (!record || record.status === "validated") return false;
+      // Hide expired links automatically, unless the tenant already submitted
+      // the dossier (status "submitted" still needs admin validation).
+      if (record.status !== "submitted" && record.expiresAt) {
+        const expiry = new Date(record.expiresAt).getTime();
+        if (Number.isFinite(expiry) && expiry < now) return false;
+      }
+      return true;
+    });
+  }, [safeOnboarding]);
 
   const filteredOnboarding = useMemo(() => {
     const q = normalize(searchTerm);
@@ -172,6 +182,16 @@ const TenantsPanel = ({
     setModalOpen(true);
   };
 
+  const removeOnboarding = async (record) => {
+    if (!window.confirm("Supprimer ce dossier d'inscription ?")) return;
+    const response = await dispatch(deleteTenantOnboarding(record.id));
+    if (response.payload?.message === "success" || response.meta?.requestStatus === "fulfilled") {
+      message.success("Dossier d'inscription supprimé");
+    } else {
+      message.error(response.payload?.error || "Impossible de supprimer ce dossier.");
+    }
+  };
+
   const validateOnboarding = async (record) => {
     const response = await dispatch(validateTenantOnboarding(record.id));
     if (response.payload?.message === "success") {
@@ -224,6 +244,7 @@ const TenantsPanel = ({
               index={index}
               onEdit={openOnboarding}
               onValidate={validateOnboarding}
+              onDelete={removeOnboarding}
             />
           ))}
           {filteredTenants.map((tenant, index) => {
