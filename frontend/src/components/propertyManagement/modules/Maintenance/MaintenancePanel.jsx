@@ -1,7 +1,7 @@
 import { Form, Modal, message } from "antd";
 import { CalendarRange, Columns3, List, Plus, Table2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 
 import {
   deleteMaintenance,
@@ -43,6 +43,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
   const [maintenanceView, setMaintenanceView] = useState(readStoredView);
   const [costModalOpen, setCostModalOpen] = useState(false);
   const [costTicket, setCostTicket] = useState(null);
+  const [costViewOnly, setCostViewOnly] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -51,6 +52,8 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
   }, [maintenanceView]);
 
   const {
+    activeCurrencies,
+    defaultCurrencySymbol,
     inProgressMaintenance,
     maintenanceCost,
     openMaintenance,
@@ -60,6 +63,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     safeUnits,
     urgentMaintenance,
   } = usePropertyManagementData();
+  const defaultCurrencyId = useSelector((s) => s.setting?.data?.currencyId);
 
   const filteredMaintenance = useMemo(() => {
     const q = normalize(searchTerm);
@@ -97,6 +101,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
 
   const openCreateModal = () => {
     form.resetFields();
+    form.setFieldsValue({ currencyId: defaultCurrencyId ?? undefined });
     setEditingRecord(null);
     setModalMode("create");
     setModalOpen(true);
@@ -113,6 +118,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
       status: record.status ?? "open",
       scheduledDate: record.scheduledDate ?? undefined,
       estimatedCost: record.estimatedCost ? Number(record.estimatedCost) : undefined,
+      currencyId: record.currencyId ?? defaultCurrencyId ?? undefined,
       description: record.description ?? undefined,
     });
     setModalOpen(true);
@@ -160,8 +166,9 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     }
   };
 
-  const openCostModal = (record) => { setCostTicket(record); setCostModalOpen(true); };
-  const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete, onAddCost: openCostModal };
+  const openCostModal = (record) => { setCostTicket(record); setCostViewOnly(false); setCostModalOpen(true); };
+  const openViewCosts = (record) => { setCostTicket(record); setCostViewOnly(true); setCostModalOpen(true); };
+  const sharedViewProps = { onEdit: openEditModal, onDelete: confirmDelete, onAddCost: openCostModal, onViewCosts: openViewCosts };
 
   return (
     <div className="immo-table-flow">
@@ -169,7 +176,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         <div><span>Tickets ouverts</span><strong className="red">{openMaintenance.length}</strong></div>
         <div><span>En cours</span><strong className="amber">{inProgressMaintenance.length}</strong></div>
         <div><span>Résolus ce mois</span><strong className="green">{resolvedMaintenance.length}</strong></div>
-        <div><span>Coût total</span><strong>{compactMoney(maintenanceCost)}</strong></div>
+        <div><span>Coût total</span><strong>{compactMoney(maintenanceCost, defaultCurrencySymbol)}</strong></div>
       </div>
       <div className="immo-table-toolbar">
         <div className="immo-filter-group">
@@ -224,12 +231,14 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
                 index={index}
                 onEdit={openEditModal}
                 onDelete={confirmDelete}
+                onAddCost={openCostModal}
+                onViewCosts={openViewCosts}
               />
             ))
           )}
         </div>
       )}
-      {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} {...sharedViewProps} />}
+      {maintenanceView === "table"    && <MaintenanceTableView    requests={ticketsForView} {...sharedViewProps} currencies={activeCurrencies} defaultCurrencySymbol={defaultCurrencySymbol} />}
       {maintenanceView === "kanban"   && <MaintenanceKanbanView   requests={ticketsForView} {...sharedViewProps} onStatusChange={handleStatusChange} />}
       {maintenanceView === "calendar" && <MaintenanceCalendarView requests={ticketsForView} />}
 
@@ -242,13 +251,15 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         propertyOptions={propertyOptions}
         saving={saving}
         unitOptions={unitOptions}
+        currencies={activeCurrencies}
       />
 
       <MaintenanceCostModal
         open={costModalOpen}
         ticketId={costTicket?.id}
         ticketTitle={costTicket?.title}
-        onClose={() => { setCostModalOpen(false); setCostTicket(null); }}
+        viewOnly={costViewOnly}
+        onClose={() => { setCostModalOpen(false); setCostTicket(null); setCostViewOnly(false); }}
         onSaved={() => dispatch(loadPropertyManagement())}
       />
 

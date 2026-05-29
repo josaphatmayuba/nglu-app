@@ -173,6 +173,7 @@ export class PropertyManagementService {
         hiringDate: tenantDetails.hiringDate,
         contractType: tenantDetails.contractType,
         monthlyPay: tenantDetails.monthlyPay,
+        salaryCurrencyId: tenantDetails.salaryCurrencyId,
         otherMonthlyIncome: tenantDetails.otherMonthlyIncome,
         oldAddress: tenantDetails.oldAddress,
         oldLessor: tenantDetails.oldLessor,
@@ -423,6 +424,7 @@ export class PropertyManagementService {
         hiringDate: input.hiring_date,
         contractType: input.contract_type,
         monthlyPay: this.money(input.monthly_pay),
+        salaryCurrencyId: input.salary_currency_id ?? null,
         otherMonthlyIncome:
           input.other_monthly_income === undefined || input.other_monthly_income === null
             ? null
@@ -988,6 +990,7 @@ export class PropertyManagementService {
         status: realEstateMaintenanceRequests.status,
         scheduledDate: realEstateMaintenanceRequests.scheduledDate,
         estimatedCost: realEstateMaintenanceRequests.estimatedCost,
+        currencyId: realEstateMaintenanceRequests.currencyId,
         description: realEstateMaintenanceRequests.description,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
@@ -1016,6 +1019,7 @@ export class PropertyManagementService {
       status: input.status ?? "open",
       scheduledDate: this.date(input.scheduledDate),
       estimatedCost: this.money(input.estimatedCost),
+      currencyId: input.currencyId ?? null,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1034,7 +1038,7 @@ export class PropertyManagementService {
     await this.db
       .update(realEstateMaintenanceRequests)
       .set({
-        ...this.pick(input, ["propertyId", "unitId", "title", "priority", "status", "description"]),
+        ...this.pick(input, ["propertyId", "unitId", "title", "priority", "status", "description", "currencyId"]),
         ...(input.scheduledDate !== undefined ? { scheduledDate: this.date(input.scheduledDate) } : {}),
         ...(input.estimatedCost !== undefined ? { estimatedCost: this.money(input.estimatedCost) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
