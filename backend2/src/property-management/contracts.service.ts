@@ -14,6 +14,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { CompatService } from "../compat/compat.service";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
@@ -63,6 +64,7 @@ export class ContractsService {
     private readonly templates: ContractTemplatesService,
     private readonly emails: SystemEmailService,
     private readonly realtimeData: RealtimeDataPublisher,
+    private readonly sms: CompatService,
   ) {}
 
   async createContract(dto: CreateContractDto, createdBy?: number) {
@@ -250,7 +252,30 @@ export class ContractsService {
       );
     }
 
-    await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}`);
+    // Also send the signing link by SMS to the tenant (best-effort).
+    let tenantPhone: string | null = null;
+    try {
+      const lease = await this.getLeaseDetails(contract.leaseId);
+      tenantPhone = lease.tenantPhone ?? null;
+    } catch {
+      tenantPhone = null;
+    }
+    if (tenantPhone) {
+      const company = await this.getCompanyInfo();
+      const companyName = company?.companyName || "votre gestionnaire";
+      const greeting = contract.tenantName ? `Bonjour ${contract.tenantName}` : "Bonjour";
+      const message =
+        `${greeting}, votre contrat de bail est prêt à être signé. ` +
+        `Signez-le ici : ${signingUrl} (lien valable 7 jours). — ${companyName}`;
+      try {
+        const res = await this.sms.sendSms({ phone: tenantPhone, message });
+        if (!res?.success) this.logger.warn(`Contract signing SMS not sent (contract ${id}): ${res?.message}`);
+      } catch (error) {
+        this.logger.warn(`Contract signing SMS error (contract ${id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
     return { message: "Contract sent.", id, signingUrl, token };
   }
