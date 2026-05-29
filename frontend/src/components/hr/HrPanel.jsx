@@ -130,6 +130,7 @@ function CloseAccountModal({ user, onClose, onClosed }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    setSaving(false);
     if (user) { setReason("Démission"); setNote(""); }
   }, [user]);
 
