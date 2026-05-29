@@ -68,8 +68,15 @@ if (-not $SkipLocalBuild) {
 if (-not (Test-Path $distDir)) {
   throw "backend2/dist not found. Run without -SkipLocalBuild or build first."
 }
+foreach ($f in @("package.json", "package-lock.json")) {
+  if (-not (Test-Path (Join-Path $backendDir $f))) {
+    throw "backend2/$f not found - required so the image installs the right deps."
+  }
+}
 
-Write-Step "Packing backend2/dist"
+# package.json + package-lock.json must ship too: the Dockerfile runs `npm ci`
+# from the server copy, so a stale lock silently drops newly added deps.
+Write-Step "Packing backend2/dist + package manifests"
 if (Test-Path $localArchive) {
   Remove-Item -LiteralPath $localArchive -Force
 }
@@ -77,7 +84,7 @@ if (Test-Path $localArchive) {
 # This avoids Windows path issues with tar
 Push-Location $backendDir
 try {
-  & tar -czf $archiveName dist drizzle
+  & tar -czf $archiveName dist drizzle package.json package-lock.json
   if ($LASTEXITCODE -ne 0) { throw "tar failed with exit code $LASTEXITCODE" }
   # Move archive to final location
   Move-Item -Path $archiveName -Destination $localArchive -Force
@@ -99,9 +106,10 @@ Write-Step "Uploading backend2/dist archive"
 
 $remoteScript = @"
 set -euo pipefail
-echo "[remote] replacing backend2/dist and backend2/drizzle"
+echo "[remote] replacing backend2/dist, drizzle and package manifests"
 sudo chown -R "${User}:${User}" "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle" 2>/dev/null || true
 sudo rm -rf "$RemoteDevDir/backend2/dist" "$RemoteDevDir/backend2/drizzle"
+sudo rm -f "$RemoteDevDir/backend2/package.json" "$RemoteDevDir/backend2/package-lock.json"
 mkdir -p "$RemoteDevDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteDevDir/backend2"
 rm -f "$remoteArchive"

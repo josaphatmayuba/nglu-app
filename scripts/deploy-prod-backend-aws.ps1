@@ -73,14 +73,21 @@ if (-not $SkipLocalBuild) {
 if (-not (Test-Path $distDir)) {
   throw "backend2/dist not found. Run without -SkipLocalBuild or build first."
 }
+foreach ($f in @("package.json", "package-lock.json")) {
+  if (-not (Test-Path (Join-Path $backendDir $f))) {
+    throw "backend2/$f not found - required so the prod image installs the right deps."
+  }
+}
 
-Write-Step "Packing backend2/dist"
+# package.json + package-lock.json must ship too: Dockerfile.prod runs `npm ci`
+# from the server copy, so a stale lock silently drops newly added deps.
+Write-Step "Packing backend2/dist + package manifests"
 if (Test-Path $localArchive) {
   Remove-Item -LiteralPath $localArchive -Force
 }
 Push-Location $backendDir
 try {
-  tar -czf $localArchive dist drizzle
+  tar -czf $localArchive dist drizzle package.json package-lock.json
 }
 finally {
   Pop-Location
@@ -119,9 +126,10 @@ trap cleanup EXIT
 } > "`$LOCK_META"
 
 echo "[remote] production backend lock acquired"
-echo "[remote] replacing backend2/dist and drizzle"
+echo "[remote] replacing backend2/dist, drizzle and package manifests"
 sudo rm -rf "$RemoteProdDir/backend2/dist"
 sudo rm -rf "$RemoteProdDir/backend2/drizzle"
+sudo rm -f "$RemoteProdDir/backend2/package.json" "$RemoteProdDir/backend2/package-lock.json"
 mkdir -p "$RemoteProdDir/backend2"
 tar -xzf "$remoteArchive" -C "$RemoteProdDir/backend2"
 rm -f "$remoteArchive"
