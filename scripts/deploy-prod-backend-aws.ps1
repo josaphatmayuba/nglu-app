@@ -231,11 +231,22 @@ fi
 "@
 
 Write-Step "Deploying backend2 on AWS production"
+# Piping the script to `ssh "bash -s"` via PowerShell prepends a UTF-8 BOM and
+# rewrites the trailing newline to CRLF, which breaks `set -euo pipefail` and the
+# final `fi` on the server (unexpected end of file) so the health-check /
+# auto-rollback / notify never run. Write as UTF-8 (no BOM, LF), scp, strip CR, run.
+$remoteScriptLocal = Join-Path ([System.IO.Path]::GetTempPath()) "nglu-prod-backend-deploy-$stamp.sh"
+$lfScript = ($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF)
+[System.IO.File]::WriteAllText($remoteScriptLocal, $lfScript, (New-Object System.Text.UTF8Encoding($false)))
+& scp -i $PemPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new $remoteScriptLocal "${sshTarget}:/tmp/nglu-prod-backend-deploy.sh"
+
 $prevEA = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-($remoteScript -replace "`r`n", "`n").TrimStart([char]0xFEFF) | & ssh @sshArgs "bash -s"
+$remoteCmd = 'sed -i ''s/\r$//'' /tmp/nglu-prod-backend-deploy.sh; bash /tmp/nglu-prod-backend-deploy.sh; rc=$?; rm -f /tmp/nglu-prod-backend-deploy.sh; exit $rc'
+& ssh @sshArgs $remoteCmd
 $sshExit = $LASTEXITCODE
 $ErrorActionPreference = $prevEA
+Remove-Item -LiteralPath $remoteScriptLocal -Force -ErrorAction SilentlyContinue
 if ($sshExit -ne 0) {
   throw "Remote prod deploy failed (exit $sshExit). The server attempted an automatic rollback to the previous working image - check the remote output above to confirm it is healthy."
 }
