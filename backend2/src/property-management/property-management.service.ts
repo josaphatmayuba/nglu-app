@@ -23,6 +23,7 @@ import {
   tenantOnboardings,
   transactions,
   transactionTypes,
+  users,
 } from "../database/schema";
 import type { Database } from "../database/types";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
@@ -53,6 +54,7 @@ const paymentProperty = alias(realEstateProperties, "paymentProperty");
 const paymentUnit = alias(realEstateUnits, "paymentUnit");
 const maintenanceProperty = alias(realEstateProperties, "maintenanceProperty");
 const maintenanceUnit = alias(realEstateUnits, "maintenanceUnit");
+const maintenanceAssignee = alias(users, "maintenanceAssignee");
 const unitCurrency = alias(currencies, "unitCurrency");
 
 @Injectable()
@@ -359,12 +361,30 @@ export class PropertyManagementService {
 
   async getPublicOnboarding(token: string) {
     const onboarding = await this.getActiveOnboardingByToken(token, false);
+    // SCRUM-229 — expose the active currency list + company default so the
+    // public form can render a currency picker next to the salary fields
+    // without needing an authenticated /currency call.
+    const activeCurrencies = await this.db
+      .select({
+        id: currencies.id,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(currencies)
+      .where(eq(currencies.status, "true"));
+    const [setting] = await this.db
+      .select({ currencyId: appSettings.currencyId })
+      .from(appSettings)
+      .limit(1);
     return {
       id: onboarding.id,
       phone: onboarding.phone,
       status: onboarding.status,
       data: this.parseOnboardingData(onboarding.data),
       expiresAt: onboarding.expiresAt,
+      currencies: activeCurrencies,
+      defaultCurrencyId: setting?.currencyId ?? null,
     };
   }
 
@@ -1010,6 +1030,10 @@ export class PropertyManagementService {
         scheduledDate: realEstateMaintenanceRequests.scheduledDate,
         estimatedCost: realEstateMaintenanceRequests.estimatedCost,
         currencyId: realEstateMaintenanceRequests.currencyId,
+        assigneeId: realEstateMaintenanceRequests.assigneeId,
+        assigneeFirstName: maintenanceAssignee.firstName,
+        assigneeLastName: maintenanceAssignee.lastName,
+        assigneeUsername: maintenanceAssignee.username,
         description: realEstateMaintenanceRequests.description,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
@@ -1017,6 +1041,7 @@ export class PropertyManagementService {
       .from(realEstateMaintenanceRequests)
       .leftJoin(maintenanceProperty, eq(maintenanceProperty.id, realEstateMaintenanceRequests.propertyId))
       .leftJoin(maintenanceUnit, eq(maintenanceUnit.id, realEstateMaintenanceRequests.unitId))
+      .leftJoin(maintenanceAssignee, eq(maintenanceAssignee.id, realEstateMaintenanceRequests.assigneeId))
       .orderBy(desc(realEstateMaintenanceRequests.id));
   }
 
@@ -1024,11 +1049,13 @@ export class PropertyManagementService {
     return this.maintenance().where(and(eq(realEstateMaintenanceRequests.isActive, true), eq(realEstateMaintenanceRequests.organizationId, orgId)));
   }
 
-  async createMaintenance(input: CreateMaintenanceDto, orgId: number) {
+  async createMaintenance(input: CreateMaintenanceDto, orgId: number, userId?: number) {
     await this.ensureActiveProperty(input.propertyId, orgId);
     if (input.unitId) {
       await this.ensureActiveUnit(input.unitId, orgId);
     }
+    // Default assignee = ticket creator; explicit input.assigneeId wins.
+    const assigneeId = input.assigneeId ?? (userId && userId > 0 ? userId : null);
     const [result] = await this.db.insert(realEstateMaintenanceRequests).values({
       organizationId: orgId,
       propertyId: input.propertyId,
@@ -1039,6 +1066,7 @@ export class PropertyManagementService {
       scheduledDate: this.date(input.scheduledDate),
       estimatedCost: this.money(input.estimatedCost),
       currencyId: input.currencyId ?? null,
+      assigneeId,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1057,7 +1085,7 @@ export class PropertyManagementService {
     await this.db
       .update(realEstateMaintenanceRequests)
       .set({
-        ...this.pick(input, ["propertyId", "unitId", "title", "priority", "status", "description", "currencyId"]),
+        ...this.pick(input, ["propertyId", "unitId", "title", "priority", "status", "description", "currencyId", "assigneeId"]),
         ...(input.scheduledDate !== undefined ? { scheduledDate: this.date(input.scheduledDate) } : {}),
         ...(input.estimatedCost !== undefined ? { estimatedCost: this.money(input.estimatedCost) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,

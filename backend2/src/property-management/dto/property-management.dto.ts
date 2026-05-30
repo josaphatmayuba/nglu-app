@@ -357,6 +357,12 @@ export class CreateMaintenanceDto {
   @IsInt()
   currencyId?: number | null;
 
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  assigneeId?: number | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -463,11 +469,12 @@ export class CreateTenantDto {
   @IsNotEmpty()
   contract_type: string;
 
-  @ApiProperty({ example: 1500 })
+  @ApiPropertyOptional({ example: 1500 })
+  @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  monthly_pay: number;
+  monthly_pay?: number | null;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
@@ -482,20 +489,20 @@ export class CreateTenantDto {
   @Min(0)
   other_monthly_income?: number | null;
 
-  @ApiProperty({ example: "Ancienne adresse" })
+  @ApiPropertyOptional({ example: "Ancienne adresse" })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  old_address: string;
+  old_address?: string | null;
 
-  @ApiProperty({ example: "Monsieur Bailleur" })
+  @ApiPropertyOptional({ example: "Monsieur Bailleur" })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  old_lessor: string;
+  old_lessor?: string | null;
 
-  @ApiProperty({ example: "Rapprochement du lieu de travail" })
+  @ApiPropertyOptional({ example: "Rapprochement du lieu de travail" })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  moving_reason: string;
+  moving_reason?: string | null;
 
   @ApiProperty({ example: 3 })
   @Type(() => Number)

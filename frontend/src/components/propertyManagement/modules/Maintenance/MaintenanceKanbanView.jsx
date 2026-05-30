@@ -50,7 +50,12 @@ const KanbanCard = ({ request, index, colKey, onEdit, onDelete, onAddCost, onVie
     touchAction: "none",
   };
 
-  const assignee = request.assignee || request.assignedTo || request.technicianName;
+  const assignee =
+    request.assignee ||
+    request.assignedTo ||
+    request.technicianName ||
+    [request.assigneeFirstName, request.assigneeLastName].filter(Boolean).join(" ") ||
+    request.assigneeUsername;
   const dateRef = request.scheduledDate || request.createdAt || request.reportedAt;
 
   return (

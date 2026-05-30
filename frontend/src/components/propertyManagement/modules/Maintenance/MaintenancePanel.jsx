@@ -9,6 +9,7 @@ import {
   loadPropertyManagement,
   saveMaintenance,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { loadAllStaff } from "../../../../redux/rtk/features/user/userSlice";
 import { compactMoney, normalize } from "../../shared/format";
 import { usePropertyManagementData } from "../../shared/usePropertyManagementData";
 import MaintenanceCalendarView from "./MaintenanceCalendarView";
@@ -64,6 +65,17 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
     urgentMaintenance,
   } = usePropertyManagementData();
   const defaultCurrencyId = useSelector((s) => s.setting?.data?.currencyId);
+  const staffList = useSelector((s) => s.users?.list) || [];
+  const currentUserId = Number(localStorage.getItem("id")) || null;
+
+  useEffect(() => {
+    if (!staffList.length) dispatch(loadAllStaff({ query: "all" }));
+  }, [dispatch, staffList.length]);
+
+  const staffOptions = staffList.map((u) => ({
+    value: u.id,
+    label: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || `#${u.id}`,
+  }));
 
   const filteredMaintenance = useMemo(() => {
     const q = normalize(searchTerm);
@@ -101,7 +113,10 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
 
   const openCreateModal = () => {
     form.resetFields();
-    form.setFieldsValue({ currencyId: defaultCurrencyId ?? undefined });
+    form.setFieldsValue({
+      currencyId: defaultCurrencyId ?? undefined,
+      assigneeId: currentUserId ?? undefined,
+    });
     setEditingRecord(null);
     setModalMode("create");
     setModalOpen(true);
@@ -119,6 +134,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
       scheduledDate: record.scheduledDate ?? undefined,
       estimatedCost: record.estimatedCost ? Number(record.estimatedCost) : undefined,
       currencyId: record.currencyId ?? defaultCurrencyId ?? undefined,
+      assigneeId: record.assigneeId ?? undefined,
       description: record.description ?? undefined,
     });
     setModalOpen(true);
@@ -252,6 +268,7 @@ const MaintenancePanel = ({ searchTerm = "" }) => {
         saving={saving}
         unitOptions={unitOptions}
         currencies={activeCurrencies}
+        staffOptions={staffOptions}
       />
 
       <MaintenanceCostModal

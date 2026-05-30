@@ -10,7 +10,12 @@ import {
   loadPropertiesUnits,
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
-import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
+
+const symbolFromOptionLabel = (label) => {
+  const m = String(label || "").match(/\(([^)]+)\)\s*$/);
+  return m ? m[1].trim() : "";
+};
 import { modalSelectProps, unitTypes } from "../../shared/constants";
 import { optionalNumber } from "../../shared/format";
 
@@ -105,13 +110,13 @@ const UnitFormModal = ({
           <Form.Item label="Chambres" name="bedrooms"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Salles de bain" name="bathrooms"><InputNumber className="w-full" min={0} /></Form.Item>
           <Form.Item label="Surface" name="area"><InputNumber className="w-full" min={0} /></Form.Item>
-          <Form.Item label="Loyer mensuel" name="monthlyRent"><InputNumber className="w-full" min={0} /></Form.Item>
-          <Form.Item label="Devise loyer / dépôt" name="currencyId">
-            <CurrencyCombobox allowClear placeholder="Devise par défaut" options={currencyOptions} {...modalSelectProps} />
+          <Form.Item label="Loyer mensuel" name="monthlyRent">
+            <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} />
           </Form.Item>
+          <Form.Item name="currencyId" hidden><Input /></Form.Item>
         </div>
         <Form.Item label="Dépôt de garantie" name="securityDeposit">
-          <InputNumber className="w-full" min={0} />
+          <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} />
         </Form.Item>
 
         <div className="immo-modal-footer">

@@ -1,0 +1,64 @@
+/* MoneyInput — InputNumber + compact currency Select glued as one row.
+   All rules use !important / high-specificity selectors so they survive
+   the various form-specific stylesheets (immo, pm-form-grid, etc.). */
+
+.nglu-money-input {
+  display: flex !important;
+  width: 100% !important;
+  align-items: stretch !important;
+  height: 36px !important;
+  gap: 0 !important;
+}
+
+.nglu-money-input .ant-input-number,
+.nglu-money-input .nglu-money-amount.ant-input-number,
+.nglu-money-input > .ant-input-number {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  width: auto !important;
+  height: 36px !important;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  border-right: none !important;
+  margin: 0 !important;
+}
+
+.nglu-money-input .ant-input-number-input,
+.nglu-money-input .ant-input-number-input-wrap {
+  height: 20px !important;
+}
+
+.nglu-money-input .nglu-money-currency.ant-select {
+  flex: 0 0 90px !important;
+  width: 90px !important;
+  height: 36px !important;
+  margin-left: -1px !important;
+}
+
+.nglu-money-input .nglu-money-currency .ant-select-selector {
+  height: 36px !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  background: #fafafa !important;
+  padding-inline: 10px !important;
+  border-color: #d9d9d9 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.nglu-money-input .nglu-money-currency .ant-select-selection-item {
+  font-weight: 600 !important;
+  color: #4f46e5 !important;
+  padding-inline-end: 18px !important;
+  line-height: 34px !important;
+}
+
+.nglu-money-input .nglu-money-currency .ant-select-arrow {
+  inset-inline-end: 8px !important;
+  width: 12px !important;
+}
+
+.nglu-money-input .nglu-money-currency:focus-within .ant-select-selector,
+.nglu-money-input .ant-input-number:focus-within {
+  z-index: 1 !important;
+}

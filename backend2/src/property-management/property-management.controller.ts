@@ -28,6 +28,7 @@ import {
 import { Throttle } from "@nestjs/throttler";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
@@ -318,8 +319,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Create a maintenance request" })
   @Permissions("create-maintenance")
   @Post("maintenance")
-  createMaintenance(@Body() body: CreateMaintenanceDto, @CurrentOrg() orgId: number) {
-    return this.propertyManagementService.createMaintenance(body, orgId);
+  createMaintenance(@Body() body: CreateMaintenanceDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.propertyManagementService.createMaintenance(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Update a maintenance request" })

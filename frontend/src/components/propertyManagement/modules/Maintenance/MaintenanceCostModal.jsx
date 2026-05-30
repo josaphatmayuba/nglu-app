@@ -3,7 +3,7 @@ import { Paperclip, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { useSelector } from "react-redux";
-import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
 import { cleanCurrencySymbol } from "../../shared/format";
 import { modalSelectProps } from "../../shared/constants";
 
@@ -176,14 +176,10 @@ const MaintenanceCostModal = ({ open, ticketId, ticketTitle, onClose, onSaved, v
         <Form.Item label="Description" name="description" rules={[{ required: true }]}>
           <Input placeholder="Ex: Remplacement serrure, Installation électrique..." />
         </Form.Item>
-        <div className="grid grid-cols-2 gap-x-3">
-          <Form.Item label="Montant" name="amount" rules={[{ required: true }]}>
-            <InputNumber className="w-full" min={0} />
-          </Form.Item>
-          <Form.Item label="Devise" name="currencyId">
-            <CurrencyCombobox {...modalSelectProps} currencies={activeCurrencies} allowClear placeholder="Devise par défaut" />
-          </Form.Item>
-        </div>
+        <Form.Item label="Montant" name="amount" rules={[{ required: true }]}>
+          <MoneyInput form={form} currencyField="currencyId" currencies={activeCurrencies} />
+        </Form.Item>
+        <Form.Item name="currencyId" hidden><Input /></Form.Item>
         <div className="grid grid-cols-2 gap-x-3">
           <Form.Item label="Fournisseur / Prestataire" name="vendorName">
             <Input placeholder="Nom du fournisseur" />

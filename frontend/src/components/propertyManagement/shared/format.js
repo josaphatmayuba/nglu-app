@@ -28,11 +28,15 @@ export const decodeCurrencyText = (value) => {
     .replace(/â‚½/g, "₽");
 };
 
+// Prefer the ISO currency code (USD, CDF, CAD…) for display. Falls back to a
+// cleaned symbol or the legacy fallback map when the catalog has no code.
 export const cleanCurrencySymbol = (currency) => {
+  const code = String(currency?.currencyCode || "").trim().toUpperCase();
+  if (code) return code;
   const name = String(currency?.currencyName || "").toUpperCase();
   const rawSymbol = String(currency?.currencySymbol || "");
   const decoded = decodeCurrencyText(rawSymbol).trim();
-  if (name.includes("FRANC CONGOLAIS")) return "FC";
+  if (name.includes("FRANC CONGOLAIS")) return "CDF";
   if (/&#|&[a-z]+;|Â|â|à/i.test(rawSymbol) && currencySymbolFallbacks[name]) {
     return currencySymbolFallbacks[name];
   }

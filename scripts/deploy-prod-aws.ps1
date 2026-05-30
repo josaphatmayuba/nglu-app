@@ -115,6 +115,19 @@ else {
 if (-not (Test-Path $crmDistDir)) {
   throw "frontend/dist not found. Run without -SkipLocalBuild or build the CRM frontend first."
 }
+# Guard: -SkipLocalBuild reuses whatever is already in dist/. If a dev build is
+# sitting there, the bundle will call dev.ongdngolu.org/api from prod and every
+# protected page will 500. Refuse to ship a dev-targeted bundle to prod.
+Push-Location $frontendDir
+try {
+  & node scripts/assert-api-target.mjs production
+  if ($LASTEXITCODE -ne 0) {
+    throw "frontend/dist is not a production build (API target check failed). Re-run without -SkipLocalBuild, or run 'npm run build:prod' in frontend/ first."
+  }
+}
+finally {
+  Pop-Location
+}
 if (-not (Test-Path $marketingDistDir)) {
   throw "marketing-site/dist not found. Run without -SkipLocalBuild or build the marketing site first."
 }

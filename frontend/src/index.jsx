@@ -6,6 +6,27 @@ import "./index.css";
 
 import store from "./redux/rtk/app/store";
 import getQuery from "./utils/getQuery";
+
+const CHUNK_RELOAD_FLAG = "nglu.chunkReloaded";
+const isChunkLoadError = (err) => {
+  const msg = String(err?.message || err || "");
+  return /Failed to fetch dynamically imported module|Loading chunk \d+ failed|Importing a module script failed/i.test(msg);
+};
+const handleChunkError = (err) => {
+  if (!isChunkLoadError(err)) return false;
+  try {
+    if (sessionStorage.getItem(CHUNK_RELOAD_FLAG)) return false;
+    sessionStorage.setItem(CHUNK_RELOAD_FLAG, "1");
+  } catch { /* ignore */ }
+  window.location.reload();
+  return true;
+};
+window.addEventListener("error", (e) => { handleChunkError(e?.error); });
+window.addEventListener("unhandledrejection", (e) => { handleChunkError(e?.reason); });
+window.addEventListener("load", () => {
+  setTimeout(() => { try { sessionStorage.removeItem(CHUNK_RELOAD_FLAG); } catch { /* ignore */ } }, 5000);
+});
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
 axios.defaults.baseURL = import.meta.env.VITE_APP_API;

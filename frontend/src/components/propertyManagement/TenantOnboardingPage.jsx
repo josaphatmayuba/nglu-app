@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Form, Input, InputNumber, Select, Spin } from "antd";
+import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Select, Spin } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
@@ -9,6 +9,7 @@ import {
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import "./PropertyManagement.css";
 import PhoneInput from "../Shared/PhoneInput";
+import MoneyInput from "../Shared/MoneyInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
 const phoneValidator = {
@@ -31,6 +32,18 @@ const maritalStatuses = [
 const coupleStatuses = ["married", "common_law", "marié", "marie", "conjoint de fait"];
 const requiredRules = [{ required: true, message: "Champ obligatoire" }];
 
+const professionalStatuses = [
+  { label: "Salarié", value: "salarie" },
+  { label: "Entrepreneur", value: "entrepreneur" },
+  { label: "Commerçant", value: "commercant" },
+  { label: "Travailleur autonome / Indépendant", value: "independant" },
+  { label: "Pigiste", value: "pigiste" },
+  { label: "Étudiant", value: "etudiant" },
+  { label: "Sans emploi", value: "sans_emploi" },
+  { label: "Retraité", value: "retraite" },
+  { label: "Stagiaire", value: "stagiaire" },
+];
+
 const TenantOnboardingPage = () => {
   const dispatch = useDispatch();
   const [searchParams] = useSearchParams();
@@ -44,6 +57,7 @@ const TenantOnboardingPage = () => {
 
   const maritalStatus = Form.useWatch("marital_status", form);
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
+  const firstRental = Boolean(Form.useWatch("first_rental", form));
   const isCouple = useMemo(
     () => coupleStatuses.includes(String(maritalStatus || "").toLowerCase()),
     [maritalStatus],
@@ -62,7 +76,12 @@ const TenantOnboardingPage = () => {
         setError(result.error || "Ce lien n'est plus valide.");
       } else {
         setRecord(result.data);
-        form.setFieldsValue({ child_number: 0, ...(result.data?.data || {}), phone: result.data?.phone });
+        form.setFieldsValue({
+          child_number: 0,
+          salary_currency_id: result.data?.defaultCurrencyId ?? undefined,
+          ...(result.data?.data || {}),
+          phone: result.data?.phone,
+        });
         setSubmitted(result.data?.status === "submitted");
       }
       setLoading(false);
@@ -140,6 +159,9 @@ const TenantOnboardingPage = () => {
             <Form.Item label="Téléphone" name="phone" rules={requiredPhoneRules}>
               <PhoneInput disabled />
             </Form.Item>
+            <Form.Item label="Téléphone secondaire" name="phone2" rules={optionalPhoneRules}>
+              <PhoneInput />
+            </Form.Item>
           </div>
           <Form.Item label="Adresse actuelle" name="address" rules={requiredRules}>
             <Input />
@@ -159,9 +181,6 @@ const TenantOnboardingPage = () => {
             <Form.Item label="État civil" name="marital_status" rules={requiredRules}>
               <Select options={maritalStatuses} />
             </Form.Item>
-            <Form.Item label="Province d'origine" name="origin_province" rules={requiredRules}>
-              <Input />
-            </Form.Item>
           </div>
 
           {isCouple && (
@@ -177,14 +196,11 @@ const TenantOnboardingPage = () => {
 
           <div className="pm-section-title">Contact d'Urgence</div>
           <div className="pm-form-grid">
-            <Form.Item label="Téléphone secondaire" name="phone2" rules={optionalPhoneRules}>
-              <PhoneInput />
-            </Form.Item>
-            <Form.Item label="Personne à contacter" name="contacted_person" rules={requiredRules}>
+            <Form.Item label="Nom de la personne à contacter" name="contacted_person" rules={requiredRules}>
               <Input />
             </Form.Item>
             <Form.Item
-              label="Téléphone personne à contacter"
+              label="Téléphone de la personne à contacter"
               name="contacted_person_phone_number"
               rules={requiredPhoneRules}
             >
@@ -195,42 +211,41 @@ const TenantOnboardingPage = () => {
           <div className="pm-section-title">Situation Professionnelle & Revenus</div>
           <div className="pm-form-grid">
             <Form.Item label="Statut professionnel" name="prossional_status" rules={requiredRules}>
-              <Input />
+              <Select options={professionalStatuses} placeholder="Sélectionnez un statut" />
             </Form.Item>
-            <Form.Item label="Activité principale" name="main_activity" rules={requiredRules}>
+            <Form.Item label="Domaine / Fonction" name="main_activity" rules={requiredRules}>
               <Input />
             </Form.Item>
             <Form.Item label="Nom de l'entité" name="entity_name" rules={requiredRules}>
               <Input />
             </Form.Item>
-            <Form.Item label="Adresse de l'entité" name="entity_address" rules={requiredRules}>
-              <Input />
+            <Form.Item label="Salaire mensuel" name="monthly_pay">
+              <MoneyInput form={form} currencyField="salary_currency_id" currencies={record?.currencies ?? []} />
             </Form.Item>
-            <Form.Item label="Date d'embauche" name="hiring_date" rules={requiredRules}>
-              <Input type="date" />
-            </Form.Item>
-            <Form.Item label="Type de contrat" name="contract_type" rules={requiredRules}>
-              <Input />
-            </Form.Item>
-            <Form.Item label="Salaire mensuel" name="monthly_pay" rules={requiredRules}>
-              <InputNumber className="w-full" min={0} />
-            </Form.Item>
+            <Form.Item name="salary_currency_id" hidden><Input /></Form.Item>
             <Form.Item label="Autres revenus mensuels" name="other_monthly_income">
-              <InputNumber className="w-full" min={0} />
+              <MoneyInput form={form} currencyField="salary_currency_id" currencies={record?.currencies ?? []} />
             </Form.Item>
           </div>
 
           <div className="pm-section-title">Historique & Ménage</div>
+          <Form.Item name="first_rental" valuePropName="checked" style={{ marginBottom: 12 }}>
+            <Checkbox>Première location (je n'ai jamais loué auparavant)</Checkbox>
+          </Form.Item>
           <div className="pm-form-grid">
-            <Form.Item label="Ancienne adresse" name="old_address" rules={requiredRules}>
-              <Input />
-            </Form.Item>
-            <Form.Item label="Ancien bailleur" name="old_lessor" rules={requiredRules}>
-              <Input />
-            </Form.Item>
-            <Form.Item label="Motif du déménagement" name="moving_reason" rules={requiredRules}>
-              <Input />
-            </Form.Item>
+            {!firstRental && (
+              <>
+                <Form.Item label="Ancienne adresse" name="old_address" rules={requiredRules}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Nom de l'ancien bailleur" name="old_lessor" rules={requiredRules}>
+                  <Input />
+                </Form.Item>
+                <Form.Item label="Motif du déménagement" name="moving_reason" rules={requiredRules}>
+                  <Input />
+                </Form.Item>
+              </>
+            )}
             <Form.Item label="Nombre d'occupants" name="occupant_number" rules={requiredRules}>
               <InputNumber className="w-full" min={1} />
             </Form.Item>
