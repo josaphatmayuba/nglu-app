@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ongd Ngolu Game — Mémoire Ferme</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #7ee8ff, #b9ff9b, #fff2a8);
+      color: #173a16;
+      padding: 18px;
+    }
+    .app { max-width: 1050px; margin: auto; }
+    header {
+      text-align: center;
+      background: rgba(255,255,255,.88);
+      border: 4px solid white;
+      border-radius: 32px;
+      padding: 24px;
+      box-shadow: 0 14px 30px rgba(0,0,0,.14);
+    }
+    h1 {
+      font-size: clamp(2.4rem, 7vw, 5.5rem);
+      color: #138037;
+      text-shadow: 4px 4px 0 #fff3a1;
+      margin-bottom: 10px;
+    }
+    p { font-weight: 700; line-height: 1.5; }
+    .stats {
+      margin: 22px 0;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      background: #fff1a8;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-weight: 900;
+      box-shadow: 0 6px 0 #d6a62b;
+    }
+    .board {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+    .card {
+      height: 150px;
+      perspective: 1000px;
+      cursor: pointer;
+    }
+    .inner {
+      width: 100%;
+      height: 100%;
+      transition: transform .45s;
+      transform-style: preserve-3d;
+      position: relative;
+    }
+    .card.open .inner, .card.matched .inner { transform: rotateY(180deg); }
+    .front, .back {
+      position: absolute;
+      inset: 0;
+      border-radius: 28px;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      border: 4px solid white;
+      box-shadow: 0 12px 25px rgba(0,0,0,.16);
+      font-weight: 900;
+      text-align: center;
+      padding: 10px;
+    }
+    .front {
+      background: #159447;
+      color: white;
+      font-size: 3.5rem;
+    }
+    .back {
+      background: #fff8c9;
+      transform: rotateY(180deg);
+      font-size: 1.1rem;
+    }
+    .back span { font-size: 3.3rem; display: block; margin-bottom: 6px; }
+    .matched .back { background: #bfff9c; }
+    .controls {
+      text-align: center;
+      margin-top: 24px;
+      background: rgba(255,255,255,.88);
+      border: 4px solid white;
+      border-radius: 28px;
+      padding: 22px;
+      box-shadow: 0 14px 30px rgba(0,0,0,.12);
+    }
+    #message {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #176b2e;
+      min-height: 35px;
+      margin-bottom: 14px;
+    }
+    button {
+      border: 0;
+      border-radius: 18px;
+      padding: 14px 20px;
+      font-size: 1rem;
+      font-weight: 900;
+      cursor: pointer;
+      background: #ffbf46;
+      color: #173a16;
+      box-shadow: 0 7px 0 #d88918;
+    }
+    button:hover { transform: translateY(-3px); }
+    @media (max-width: 780px) {
+      .board { grid-template-columns: repeat(3, 1fr); }
+      .card { height: 130px; }
+    }
+    @media (max-width: 520px) {
+      .board { grid-template-columns: repeat(2, 1fr); }
+      .card { height: 120px; }
+      .front { font-size: 2.7rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🧠 Mémoire Ferme</h1>
+      <p>Retourne les cartes et retrouve les paires: animaux, produits agricoles et outils de la ferme.</p>
+      <div class="stats">
+        <div class="pill">⭐ Score: <span id="score">0</span></div>
+        <div class="pill">🔁 Coups: <span id="moves">0</span></div>
+        <div class="pill">✅ Paires: <span id="pairs">0</span>/6</div>
+      </div>
+    </header>
+
+    <main class="board" id="board"></main>
+
+    <section class="controls">
+      <div id="message">Clique sur deux cartes pour trouver une paire.</div>
+      <button onclick="startGame()">Nouvelle partie</button>
+    </section>
+  </div>
+
+  <script>
+    const cardsData = [
+      { icon: '🐄', name: 'Vache' },
+      { icon: '🐓', name: 'Poule' },
+      { icon: '🌽', name: 'Maïs' },
+      { icon: '🥛', name: 'Lait' },
+      { icon: '🚜', name: 'Tracteur' },
+      { icon: '🥬', name: 'Légumes' }
+    ];
+
+    let first = null;
+    let second = null;
+    let locked = false;
+    let score = 0;
+    let moves = 0;
+    let pairs = 0;
+
+    const board = document.getElementById('board');
+    const scoreEl = document.getElementById('score');
+    const movesEl = document.getElementById('moves');
+    const pairsEl = document.getElementById('pairs');
+    const messageEl = document.getElementById('message');
+
+    function shuffle(array) {
+      return array.sort(() => Math.random() - 0.5);
+    }
+
+    function updateStats() {
+      scoreEl.textContent = score;
+      movesEl.textContent = moves;
+      pairsEl.textContent = pairs;
+    }
+
+    function startGame() {
+      first = null;
+      second = null;
+      locked = false;
+      score = 0;
+      moves = 0;
+      pairs = 0;
+      updateStats();
+      messageEl.textContent = 'Nouvelle partie! Trouve toutes les paires.';
+      board.innerHTML = '';
+
+      const gameCards = shuffle([...cardsData, ...cardsData]);
+
+      gameCards.forEach((item) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.dataset.name = item.name;
+        card.innerHTML = `
+          <div class="inner">
+            <div class="front">?</div>
+            <div class="back"><span>${item.icon}</span>${item.name}</div>
+          </div>
+        `;
+        card.addEventListener('click', () => flipCard(card));
+        board.appendChild(card);
+      });
+    }
+
+    function flipCard(card) {
+      if (locked || card.classList.contains('open') || card.classList.contains('matched')) return;
+
+      card.classList.add('open');
+
+      if (!first) {
+        first = card;
+        return;
+      }
+
+      second = card;
+      moves++;
+
+      if (first.dataset.name === second.dataset.name) {
+        first.classList.add('matched');
+        second.classList.add('matched');
+        score += 20;
+        pairs++;
+        messageEl.textContent = '✅ Bonne paire! +20 points';
+        first = null;
+        second = null;
+
+        if (pairs === 6) {
+          messageEl.textContent = '🏆 Bravo! Tu as terminé Mémoire Ferme!';
+        }
+      } else {
+        locked = true;
+        score = Math.max(0, score - 3);
+        messageEl.textContent = '❌ Pas pareil! -3 points';
+        setTimeout(() => {
+          first.classList.remove('open');
+          second.classList.remove('open');
+          first = null;
+          second = null;
+          locked = false;
+        }, 800);
+      }
+
+      updateStats();
+    }
+
+    startGame();
+  </script>
+</body>
+</html>

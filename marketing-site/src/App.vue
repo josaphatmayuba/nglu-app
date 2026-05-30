@@ -1,11 +1,13 @@
 <script setup>
 import { onMounted } from "vue";
 import {
-  ArrowRight, Award, BarChart3, Beef, Bird, Cpu, Globe, GraduationCap,
+  ArrowRight, Award, BarChart3, Beef, Bird, Brain, Cpu, Gamepad2, Globe, GraduationCap,
   Heart, HeartHandshake, HeartPulse, Leaf, LogIn, Mail, MapPin, Menu,
   PackageSearch, PiggyBank, Rocket, ShieldCheck, Sprout, Target,
-  TrendingUp, Utensils, Wheat, Zap,
+  TrendingUp, Tractor, Utensils, Wheat, Zap,
 } from "@lucide/vue";
+
+const logoUrl = `/static/logo.png?v=${__BUILD_TS__}`;
 
 onMounted(() => {
   // Mobile menu toggle
@@ -49,7 +51,7 @@ onMounted(() => {
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16 md:h-20">
           <a href="#" class="flex items-center gap-3">
-            <img src="/static/logo.png" alt="ONGD NGOLU" class="h-12 w-12 md:h-14 md:w-14">
+            <img :src="logoUrl" alt="ONGD NGOLU" class="h-12 w-12 md:h-14 md:w-14">
             <div class="hidden sm:block">
               <div class="font-bold text-primary-700 text-lg md:text-xl leading-none">ONGD NGOLU</div>
               <div class="text-[10px] md:text-xs text-slate-500 uppercase tracking-wider">Aide au Développement Durable</div>
@@ -59,8 +61,7 @@ onMounted(() => {
             <a href="#mission" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Mission</a>
             <a href="#agriculture" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Agriculture</a>
             <a href="#social" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Impact Social</a>
-            <a href="#technologie" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Technologie</a>
-            <a href="#contact" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Contact</a>
+            <a href="#espace-enfant" class="nav-link text-sm font-medium text-slate-700 hover:text-primary-700">Espace Enfant</a>
           </nav>
           <div class="flex items-center gap-2 md:gap-3">
             <a href="/crm" class="hidden md:inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary-700 border border-primary-700 rounded-lg hover:bg-primary-50 transition">
@@ -78,8 +79,7 @@ onMounted(() => {
           <a href="#mission" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Mission</a>
           <a href="#agriculture" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Agriculture</a>
           <a href="#social" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Impact Social</a>
-          <a href="#technologie" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Technologie</a>
-          <a href="#contact" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Contact</a>
+          <a href="#espace-enfant" class="block px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">Espace Enfant</a>
           <a href="/crm" class="block px-3 py-2 rounded-md text-sm font-medium text-primary-700 hover:bg-primary-50">Se connecter →</a>
         </nav>
       </div>
@@ -118,7 +118,7 @@ onMounted(() => {
           <div class="hidden lg:flex justify-center fade-in">
             <div class="relative">
               <div class="absolute inset-0 bg-accent-500/20 blur-3xl rounded-full"></div>
-              <img src="/static/logo.png" alt="ONGD NGOLU" class="relative w-96 h-96 drop-shadow-2xl">
+              <img :src="logoUrl" alt="ONGD NGOLU" class="relative w-96 h-96 drop-shadow-2xl">
             </div>
           </div>
         </div>
@@ -301,6 +301,54 @@ onMounted(() => {
       </div>
     </section>
 
+    <section id="espace-enfant" class="py-20 md:py-24 bg-gradient-to-br from-yellow-50 via-orange-50 to-amber-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-14 fade-in">
+          <div class="inline-flex items-center gap-2 px-3 py-1 mb-4 text-xs font-semibold tracking-wider uppercase text-orange-700 bg-orange-100 rounded-full">
+            <Gamepad2 class="w-4 h-4" /> Pour les enfants
+          </div>
+          <h2 class="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-4">
+            Apprends en t'amusant à la <span class="text-orange-600">ferme NGOLU</span>
+          </h2>
+          <p class="text-lg text-slate-600 max-w-2xl mx-auto">
+            Trois jeux interactifs pour découvrir l'agriculture, l'élevage et la mémoire de la ferme.
+          </p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 fade-in">
+          <a href="/games/site_ferme_amusant_html.html" target="_blank" rel="noopener" class="group bg-white rounded-2xl p-6 shadow-sm border border-orange-200 hover:shadow-xl hover:-translate-y-1 transition-all">
+            <div class="w-14 h-14 mb-4 flex items-center justify-center bg-growth-500/10 text-growth-600 rounded-2xl group-hover:scale-110 transition-transform">
+              <Tractor class="w-8 h-8" />
+            </div>
+            <h3 class="font-bold text-lg text-slate-900 mb-2">Ferme Joyeuse</h3>
+            <p class="text-sm text-slate-600 mb-4">Découvre l'élevage et l'agriculture en t'amusant.</p>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
+              Jouer <ArrowRight class="w-4 h-4" />
+            </span>
+          </a>
+          <a href="/games/ongdngolu_game_html.html" target="_blank" rel="noopener" class="group bg-white rounded-2xl p-6 shadow-sm border border-orange-200 hover:shadow-xl hover:-translate-y-1 transition-all">
+            <div class="w-14 h-14 mb-4 flex items-center justify-center bg-accent-500/10 text-accent-600 rounded-2xl group-hover:scale-110 transition-transform">
+              <Gamepad2 class="w-8 h-8" />
+            </div>
+            <h3 class="font-bold text-lg text-slate-900 mb-2">Ongd Ngolu Game</h3>
+            <p class="text-sm text-slate-600 mb-4">Le jeu officiel d'ONGD NGOLU pour les petits explorateurs.</p>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
+              Jouer <ArrowRight class="w-4 h-4" />
+            </span>
+          </a>
+          <a href="/games/ongdngolu_game_memoire.html" target="_blank" rel="noopener" class="group bg-white rounded-2xl p-6 shadow-sm border border-orange-200 hover:shadow-xl hover:-translate-y-1 transition-all">
+            <div class="w-14 h-14 mb-4 flex items-center justify-center bg-primary-100 text-primary-700 rounded-2xl group-hover:scale-110 transition-transform">
+              <Brain class="w-8 h-8" />
+            </div>
+            <h3 class="font-bold text-lg text-slate-900 mb-2">Mémoire Ferme</h3>
+            <p class="text-sm text-slate-600 mb-4">Entraîne ta mémoire en associant les animaux de la ferme.</p>
+            <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 group-hover:gap-2.5 transition-all">
+              Jouer <ArrowRight class="w-4 h-4" />
+            </span>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <section id="technologie" class="py-20 md:py-24 tech-bg relative overflow-hidden">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-14 fade-in">
@@ -417,7 +465,7 @@ onMounted(() => {
         <div class="grid grid-cols-1 md:grid-cols-4 gap-10">
           <div class="md:col-span-2">
             <div class="flex items-center gap-3 mb-4">
-              <img src="/static/logo.png" alt="ONGD NGOLU" class="h-14 w-14">
+              <img :src="logoUrl" alt="ONGD NGOLU" class="h-14 w-14">
               <div>
                 <div class="font-bold text-white text-lg">ONGD NGOLU</div>
                 <div class="text-xs text-slate-400 uppercase tracking-wider">Aide au Développement Durable</div>
