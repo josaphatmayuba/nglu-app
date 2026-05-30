@@ -103,6 +103,15 @@ export class PropertyManagementController {
     return this.propertyManagementService.onboardingList();
   }
 
+  @ApiOperation({ summary: "Send the onboarding link by email on demand" })
+  @Permissions("create-propertyManagement")
+  @Post("onboarding/send-email")
+  sendOnboardingEmail(
+    @Body() body: { email: string; url: string; firstName?: string | null },
+  ) {
+    return this.propertyManagementService.sendOnboardingEmail(body);
+  }
+
   @ApiOperation({ summary: "Admin update tenant onboarding draft" })
   @Permissions("update-propertyManagement")
   @Put("onboarding/:id")

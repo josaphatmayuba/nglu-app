@@ -100,7 +100,7 @@ export const tenantDetails = mysqlTable("tenant_details", {
   mainActivity: varchar("main_activity", { length: 255 }).notNull(),
   entityName: varchar("entity_name", { length: 255 }).notNull(),
   entityAddress: varchar("entity_address", { length: 255 }).notNull(),
-  hiringDate: date("hiring_date", { mode: "string" }).notNull(),
+  hiringDate: date("hiring_date", { mode: "string" }),
   contractType: varchar("contract_type", { length: 255 }).notNull(),
   monthlyPay: decimal("monthly_pay", { precision: 15, scale: 2 }).notNull(),
   salaryCurrencyId: bigint("salary_currency_id", { mode: "number" }),

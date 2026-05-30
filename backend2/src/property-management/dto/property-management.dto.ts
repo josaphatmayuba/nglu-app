@@ -3,6 +3,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsIn,
@@ -735,6 +736,11 @@ export class SaveTenantOnboardingDto {
   @IsInt({ each: true })
   @Min(0, { each: true })
   child_age?: number[];
+
+  @ApiPropertyOptional({ example: false, description: "Primo-locataire : masque l'historique de location" })
+  @IsOptional()
+  @IsBoolean()
+  first_rental?: boolean;
 }
 
 export class CreateContractDto {

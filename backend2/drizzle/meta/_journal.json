@@ -232,6 +232,13 @@
       "when": 1780131600000,
       "tag": "0048_make_tenant_history_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1780135200000,
+      "tag": "0049_make_tenant_hiring_date_nullable",
+      "breakpoints": true
     }
   ]
 }

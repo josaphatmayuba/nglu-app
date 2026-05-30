@@ -186,25 +186,34 @@ const TenantOnboardingPage = () => {
     );
   }
 
+  if (submitted) {
+    return (
+      <div className="tenant-onboarding-page">
+        <Card>
+          <div className="tenant-onboarding-thanks">
+            <CheckCircle2 size={72} className="text-green-600" />
+            <h1>Merci d'avoir rempli votre dossier&nbsp;!</h1>
+            <p>
+              Votre dossier a bien été soumis. Le gestionnaire va le vérifier et
+              reviendra vers vous très bientôt.
+            </p>
+            <p className="muted">Vous pouvez maintenant fermer cette page.</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="tenant-onboarding-page">
       <Card>
         <div className="pm-section-title">Dossier locataire</div>
-        {submitted && (
-          <Alert
-            className="mb-4"
-            type="success"
-            message="Votre dossier a été soumis. Le gestionnaire va le vérifier."
-            showIcon
-          />
-        )}
         {error && <Alert className="mb-4" type="error" message={error} showIcon />}
 
         <Form
           form={form}
           layout="vertical"
           onFinish={submit}
-          disabled={submitted}
           onValuesChange={scheduleAutoSave}
         >
           <div className="pm-section-title">Identité</div>
