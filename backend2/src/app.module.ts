@@ -16,6 +16,7 @@ import { FrontModulesModule } from "./front-modules/front-modules.module";
 import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
+import { FarmosModule } from "./farmos/farmos.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
@@ -60,6 +61,7 @@ import { UsersModule } from "./users/users.module";
     HealthModule,
     HrModule,
     EmailTemplatesModule,
+    FarmosModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
     MailAccountsModule,

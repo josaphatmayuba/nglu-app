@@ -239,6 +239,27 @@
       "when": 1780135200000,
       "tag": "0049_make_tenant_hiring_date_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1780138800000,
+      "tag": "0050_create_farmos_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1780142400000,
+      "tag": "0051_grant_farmos_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1780146000000,
+      "tag": "0052_farmos_diseases_catalog",
+      "breakpoints": true
     }
   ]
 }

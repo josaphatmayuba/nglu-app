@@ -1021,3 +1021,140 @@ export const messages = mysqlTable("messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCRUM-193 — FarmOS: schéma de base pour la gestion d'élevage.
+// Multi-organisation (organizationId), soft delete (isActive), timestamps.
+// Espèces supportées : cow, pig, chicken, fish, goat, sheep, rabbit, duck, turkey.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const farmosAnimals = mysqlTable("farmos_animals", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  externalId: varchar("external_id", { length: 100 }),
+  name: varchar("name", { length: 255 }),
+  species: varchar("species", { length: 50 }).notNull(),
+  race: varchar("race", { length: 100 }),
+  sex: varchar("sex", { length: 10 }),
+  dateOfBirth: date("date_of_birth", { mode: "string" }),
+  weight: decimal("weight", { precision: 10, scale: 2 }),
+  weightUnit: varchar("weight_unit", { length: 10 }).default("kg"),
+  lot: varchar("lot", { length: 100 }),
+  barn: varchar("barn", { length: 100 }),
+  status: varchar("status", { length: 20 }).default("healthy").notNull(),
+  withdrawalUntil: date("withdrawal_until", { mode: "string" }),
+  withdrawalKind: varchar("withdrawal_kind", { length: 20 }),
+  lastEvent: varchar("last_event", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosMedicines = mysqlTable("farmos_medicines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  kind: varchar("kind", { length: 20 }).default("med").notNull(),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).default("0").notNull(),
+  unit: varchar("unit", { length: 30 }),
+  minQuantity: decimal("min_quantity", { precision: 12, scale: 2 }),
+  supplier: varchar("supplier", { length: 255 }),
+  expiryDate: date("expiry_date", { mode: "string" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosDiseases = mysqlTable("farmos_diseases", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  nameFr: varchar("name_fr", { length: 255 }).notNull(),
+  nameEn: varchar("name_en", { length: 255 }),
+  contagious: tinyint("contagious").default(0).notNull(),
+  severityDefault: varchar("severity_default", { length: 20 }),
+  commonRoute: varchar("common_route", { length: 50 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosTreatments = mysqlTable("farmos_treatments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  medicineId: bigint("medicine_id", { mode: "number" }),
+  diseaseId: bigint("disease_id", { mode: "number" }).notNull(),
+  medicineName: varchar("medicine_name", { length: 255 }),
+  dosage: varchar("dosage", { length: 255 }),
+  route: varchar("route", { length: 50 }),
+  startDate: date("start_date", { mode: "string" }),
+  endDate: date("end_date", { mode: "string" }),
+  vet: varchar("vet", { length: 255 }),
+  withdrawalMeatDays: int("withdrawal_meat_days"),
+  withdrawalMilkHours: int("withdrawal_milk_hours"),
+  withdrawalEggsDays: int("withdrawal_eggs_days"),
+  status: varchar("status", { length: 20 }).default("running").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosSales = mysqlTable("farmos_sales", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }),
+  productType: varchar("product_type", { length: 50 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 30 }),
+  unitPrice: decimal("unit_price", { precision: 15, scale: 2 }),
+  totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  buyer: varchar("buyer", { length: 255 }),
+  saleDate: date("sale_date", { mode: "string" }).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosExpenses = mysqlTable("farmos_expenses", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  description: varchar("description", { length: 500 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }),
+  unit: varchar("unit", { length: 30 }),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  supplier: varchar("supplier", { length: 255 }),
+  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  relatedAnimalId: bigint("related_animal_id", { mode: "number" }),
+  relatedMedicineId: bigint("related_medicine_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  eventDate: date("event_date", { mode: "string" }).notNull(),
+  partnerExternalId: varchar("partner_external_id", { length: 100 }),
+  expectedDueDate: date("expected_due_date", { mode: "string" }),
+  offspringCount: int("offspring_count"),
+  outcome: varchar("outcome", { length: 50 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
