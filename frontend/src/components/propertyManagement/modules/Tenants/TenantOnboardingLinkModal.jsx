@@ -11,7 +11,7 @@
 // ("La génération du lien d'inscription n'est pas encore migrée…").
 
 import { useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { Button, Form, Input, Modal, message } from "antd";
 import axios from "axios";
 import {
@@ -25,6 +25,7 @@ import {
 import { generateTenantOnboarding } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import PhoneInput from "../../../Shared/PhoneInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
+import { useSmsCooldown } from "../../shared/useSmsCooldown";
 
 const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const dispatch = useDispatch();
@@ -32,8 +33,11 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
   const [step, setStep] = useState("form");
   const [busy, setBusy] = useState(false);
   const [smsBusy, setSmsBusy] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
   const [link, setLink] = useState("");
-  const [contact, setContact] = useState({ email: "", phone: "" });
+  const [contact, setContact] = useState({ email: "", phone: "", firstName: "" });
+  const companyName = useSelector((s) => s.setting?.data?.companyName) || "votre gestionnaire";
+  const { remainingSeconds: smsCooldown, start: startSmsCooldown } = useSmsCooldown(contact.phone);
 
   useEffect(() => {
     if (!open) {
@@ -41,8 +45,9 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
       setStep("form");
       setBusy(false);
       setSmsBusy(false);
+      setEmailBusy(false);
       setLink("");
-      setContact({ email: "", phone: "" });
+      setContact({ email: "", phone: "", firstName: "" });
     }
   }, [open, form]);
 
@@ -59,7 +64,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
       const url = data?.url || data?.onboardingUrl;
       if (response.payload?.message === "success" && url) {
         setLink(url);
-        setContact({ email: values.email || "", phone: values.phone });
+        setContact({ email: values.email || "", phone: values.phone, firstName: values.firstName || "" });
         setStep("share");
       } else {
         message.error(response.payload?.message || "Échec de la génération du lien.");
@@ -92,16 +97,30 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
     window.open(link, "_blank", "noopener,noreferrer");
   };
 
-  const sendEmail = () => {
+  const greeting = contact.firstName ? `Bonjour ${contact.firstName}` : "Bonjour";
+
+  const sendEmail = async () => {
     if (!contact.email) {
       message.warning("Aucune adresse email saisie à l'étape 1.");
       return;
     }
-    const subject = encodeURIComponent("Votre lien d'inscription NGOLU");
-    const body = encodeURIComponent(
-      `Bonjour,\n\nVeuillez compléter votre dossier locataire via ce lien sécurisé :\n${link}\n\nCe lien est valide 7 jours.\n\nCordialement,`,
-    );
-    window.location.href = `mailto:${contact.email}?subject=${subject}&body=${body}`;
+    setEmailBusy(true);
+    try {
+      const { data } = await axios.post("property-management/onboarding/send-email", {
+        email: contact.email,
+        url: link,
+        firstName: contact.firstName || null,
+      });
+      if (data?.success) {
+        message.success("Email envoyé");
+      } else {
+        message.error(data?.message || "Impossible d'envoyer l'email.");
+      }
+    } catch (error) {
+      message.error(error?.response?.data?.message || "Impossible d'envoyer l'email.");
+    } finally {
+      setEmailBusy(false);
+    }
   };
 
   const sendSms = async () => {
@@ -113,10 +132,13 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
     try {
       const { data } = await axios.post("send-sms", {
         phone: contact.phone,
-        message: `Bonjour, voici votre lien d'inscription NGOLU (valide 7 jours) : ${link}`,
+        message:
+          `${greeting}, voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien : ${link} ` +
+          `Merci de le compléter dès que possible. — ${companyName}`,
       });
       if (data?.success) {
         message.success("SMS envoye");
+        startSmsCooldown();
       } else {
         message.error(data?.message || "Impossible d'envoyer le SMS.");
       }
@@ -285,7 +307,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
               <button
                 type="button"
                 onClick={sendEmail}
-                disabled={!contact.email}
+                disabled={!contact.email || emailBusy}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -293,10 +315,10 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
                   padding: 12,
                   borderRadius: 10,
                   border: "1px solid #e4e4e7",
-                  background: contact.email ? "#fff" : "#f4f4f5",
-                  cursor: contact.email ? "pointer" : "not-allowed",
+                  background: contact.email && !emailBusy ? "#fff" : "#f4f4f5",
+                  cursor: contact.email && !emailBusy ? "pointer" : "not-allowed",
                   textAlign: "left",
-                  opacity: contact.email ? 1 : 0.55,
+                  opacity: contact.email && !emailBusy ? 1 : 0.55,
                 }}
               >
                 <span
@@ -331,7 +353,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
               <button
                 type="button"
                 onClick={sendSms}
-                disabled={!contact.phone || smsBusy}
+                disabled={!contact.phone || smsBusy || smsCooldown > 0}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -339,10 +361,10 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
                   padding: 12,
                   borderRadius: 10,
                   border: "1px solid #e4e4e7",
-                  background: contact.phone && !smsBusy ? "#fff" : "#f4f4f5",
-                  cursor: contact.phone && !smsBusy ? "pointer" : "not-allowed",
+                  background: contact.phone && !smsBusy && smsCooldown === 0 ? "#fff" : "#f4f4f5",
+                  cursor: contact.phone && !smsBusy && smsCooldown === 0 ? "pointer" : "not-allowed",
                   textAlign: "left",
-                  opacity: contact.phone && !smsBusy ? 1 : 0.55,
+                  opacity: contact.phone && !smsBusy && smsCooldown === 0 ? 1 : 0.55,
                 }}
               >
                 <span
@@ -361,7 +383,7 @@ const TenantOnboardingLinkModal = ({ open, onClose }) => {
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 14 }}>
-                    {smsBusy ? "Envoi..." : "SMS / WhatsApp"}
+                    {smsBusy ? "Envoi..." : smsCooldown > 0 ? `SMS envoyé (${smsCooldown}s)` : "SMS / WhatsApp"}
                   </div>
                   <div
                     style={{

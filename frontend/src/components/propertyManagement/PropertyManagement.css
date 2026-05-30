@@ -966,6 +966,36 @@
   max-width: 960px;
 }
 
+.tenant-onboarding-thanks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 60px 24px 40px;
+  gap: 16px;
+}
+.tenant-onboarding-thanks h1 {
+  margin: 8px 0 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.tenant-onboarding-thanks p {
+  max-width: 520px;
+  font-size: 16px;
+  color: #334155;
+  margin: 0;
+  line-height: 1.5;
+}
+.tenant-onboarding-thanks p.muted {
+  font-size: 14px;
+  color: #64748b;
+  margin-top: 8px;
+}
+.tenant-onboarding-thanks .text-green-600 {
+  color: #16a34a;
+}
+
 .tenant-autosave-status {
   display: inline-flex;
   align-items: center;

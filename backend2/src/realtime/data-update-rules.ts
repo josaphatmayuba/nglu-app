@@ -4,7 +4,8 @@ export type DataUpdateEntity =
   | "lease"
   | "contract"
   | "payment"
-  | "maintenance";
+  | "maintenance"
+  | "tenantOnboarding";
 
 export type DataUpdateRule = {
   module: string;
@@ -192,6 +193,33 @@ export const DATA_UPDATE_RULES: Record<DataUpdateEntity, DataUpdateRule> = {
     dataLoaders: [
       "frontend/src/components/propertyManagement/usePropertyManagementData.js",
       "frontend/src/components/propertyManagement/modules/Maintenance/MaintenancePanel.jsx",
+    ],
+  },
+  tenantOnboarding: {
+    module: "propertyManagement",
+    endpoints: [
+      "GET /property-management/onboarding",
+      "POST /property-management/onboarding",
+      "PUT/PATCH /property-management/onboarding/:id",
+      "POST /property-management/onboarding/:id/validate",
+      "DELETE /property-management/onboarding/:id",
+      "POST /tenant-onboarding/save",
+      "POST /tenant-onboarding/submit",
+    ],
+    permissions: [
+      "readAll-propertyManagement",
+      "create-propertyManagement",
+      "update-propertyManagement",
+      "delete-propertyManagement",
+    ],
+    tags: ["propertyManagement", "tenants", "onboarding"],
+    pages: [
+      "/admin/property-management",
+      "/admin/property-management?section=tenants",
+    ],
+    dataLoaders: [
+      "frontend/src/components/propertyManagement/usePropertyManagementData.js",
+      "frontend/src/components/propertyManagement/modules/Tenants/TenantsPanel.jsx",
     ],
   },
 };
