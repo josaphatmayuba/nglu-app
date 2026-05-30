@@ -966,6 +966,22 @@
   max-width: 960px;
 }
 
+.tenant-autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+  margin-right: auto;
+  min-height: 22px;
+}
+.tenant-autosave-status .spin {
+  animation: tenant-spin 1s linear infinite;
+}
+@keyframes tenant-spin {
+  to { transform: rotate(360deg); }
+}
+
 .tenant-onboarding-page .ant-input,
 .tenant-onboarding-page .ant-input-number,
 .tenant-onboarding-page .ant-input-number-input,

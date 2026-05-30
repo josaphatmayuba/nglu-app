@@ -1,5 +1,6 @@
 import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Select, Spin } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -54,6 +55,13 @@ const TenantOnboardingPage = () => {
   const [record, setRecord] = useState(null);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState("idle");
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveInFlightRef = useRef(false);
+  const lastSavedSnapshotRef = useRef("");
+  const submittedRef = useRef(false);
+  useEffect(() => { submittedRef.current = submitted; }, [submitted]);
 
   const maritalStatus = Form.useWatch("marital_status", form);
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
@@ -82,6 +90,7 @@ const TenantOnboardingPage = () => {
           ...(result.data?.data || {}),
           phone: result.data?.phone,
         });
+        lastSavedSnapshotRef.current = JSON.stringify(form.getFieldsValue(true));
         setSubmitted(result.data?.status === "submitted");
       }
       setLoading(false);
@@ -90,16 +99,63 @@ const TenantOnboardingPage = () => {
     load();
   }, [dispatch, form, token]);
 
-  const saveDraft = async () => {
-    setSaving(true);
+  const hasAnyValue = (values) =>
+    Object.entries(values || {}).some(([k, v]) => {
+      if (k === "phone") return false;
+      if (v == null || v === "") return false;
+      if (Array.isArray(v)) return v.some((x) => x != null && x !== "");
+      if (typeof v === "number") return true;
+      if (typeof v === "boolean") return v === true;
+      return true;
+    });
+
+  const persistDraft = async ({ silent } = { silent: false }) => {
     const values = form.getFieldsValue(true);
-    const result = await dispatch(saveTenantOnboardingDraft({ token, values })).unwrap();
-    if (result?.message !== "error") {
-      setRecord(result.data);
-      form.setFieldsValue({ ...(result.data?.data || {}), phone: result.data?.phone });
+    const snapshot = JSON.stringify(values);
+    if (snapshot === lastSavedSnapshotRef.current) return { skipped: true };
+    if (!hasAnyValue(values)) return { skipped: true };
+
+    if (silent) {
+      autoSaveInFlightRef.current = true;
+      setAutoSaveStatus("saving");
+    } else {
+      setSaving(true);
     }
-    setSaving(false);
+    try {
+      const result = await dispatch(saveTenantOnboardingDraft({ token, values })).unwrap();
+      if (result?.message !== "error") {
+        setRecord(result.data);
+        form.setFieldsValue({ ...(result.data?.data || {}), phone: result.data?.phone });
+        lastSavedSnapshotRef.current = JSON.stringify(form.getFieldsValue(true));
+        setLastSavedAt(new Date());
+        if (silent) setAutoSaveStatus("saved");
+        return { ok: true };
+      }
+      if (silent) setAutoSaveStatus("error");
+      return { ok: false };
+    } finally {
+      if (silent) autoSaveInFlightRef.current = false;
+      else setSaving(false);
+    }
   };
+
+  const saveDraft = () => persistDraft({ silent: false });
+
+  const scheduleAutoSave = () => {
+    if (submittedRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (autoSaveInFlightRef.current) {
+        scheduleAutoSave();
+        return;
+      }
+      persistDraft({ silent: true });
+    }, 2000);
+  };
+
+  useEffect(() => () => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+  }, []);
 
   const submit = async (values) => {
     setSaving(true);
@@ -144,7 +200,13 @@ const TenantOnboardingPage = () => {
         )}
         {error && <Alert className="mb-4" type="error" message={error} showIcon />}
 
-        <Form form={form} layout="vertical" onFinish={submit} disabled={submitted}>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={submit}
+          disabled={submitted}
+          onValuesChange={scheduleAutoSave}
+        >
           <div className="pm-section-title">Identité</div>
           <div className="pm-form-grid">
             <Form.Item label="Prénom" name="firstName" rules={requiredRules}>
@@ -270,6 +332,18 @@ const TenantOnboardingPage = () => {
           )}
 
           <div className="pm-actions-row">
+            <div className="tenant-autosave-status">
+              {autoSaveStatus === "saving" && (
+                <><Loader2 className="spin" size={14} /> <span>Sauvegarde…</span></>
+              )}
+              {autoSaveStatus === "saved" && lastSavedAt && (
+                <><CheckCircle2 size={14} className="text-green-600" />
+                <span>Sauvegardé à {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></>
+              )}
+              {autoSaveStatus === "error" && (
+                <span className="text-red-600">Sauvegarde auto en échec — utilisez le bouton.</span>
+              )}
+            </div>
             <Button htmlType="button" onClick={saveDraft} loading={saving}>
               Sauvegarder pour plus tard
             </Button>

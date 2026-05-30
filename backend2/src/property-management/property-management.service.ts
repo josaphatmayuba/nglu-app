@@ -30,7 +30,7 @@ import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
-import { normalizePhoneE164Strict } from "../common/phone.util";
+import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -317,12 +317,21 @@ export class PropertyManagementService {
   // SCRUM-229 — normalize every phone field on an onboarding payload to E.164.
   // Empty/optional fields are left null; invalid input throws so the API
   // returns a clear error rather than silently storing a malformed number.
-  private normalizeOnboardingPhones<T extends Record<string, any>>(input: T): T {
+  private normalizeOnboardingPhones<T extends Record<string, any>>(
+    input: T,
+    options: { lenient?: boolean } = {},
+  ): T {
     const phoneFields = ["phone", "phone2", "partenair_number", "contacted_person_phone_number"] as const;
     const next: Record<string, any> = { ...input };
     for (const f of phoneFields) {
       if (next[f] === undefined) continue;
-      next[f] = next[f] ? normalizePhoneE164Strict(next[f]) : null;
+      if (!next[f]) { next[f] = null; continue; }
+      if (options.lenient) {
+        const cleaned = normalizePhoneE164(next[f]);
+        next[f] = cleaned ?? next[f];
+      } else {
+        next[f] = normalizePhoneE164Strict(next[f]);
+      }
     }
     return next as T;
   }
@@ -332,7 +341,7 @@ export class PropertyManagementService {
     if (onboarding.status === "validated") {
       throw new BadRequestException("This onboarding dossier has already been validated.");
     }
-    const normalized = this.normalizeOnboardingPhones(input);
+    const normalized = this.normalizeOnboardingPhones(input, { lenient: true });
     await this.updateOnboardingData(id, { ...this.parseOnboardingData(onboarding.data), ...normalized }, "draft");
     return this.adminOnboardingResponse(await this.findOnboarding(id));
   }
@@ -390,7 +399,7 @@ export class PropertyManagementService {
 
   async savePublicOnboarding(token: string, input: SaveTenantOnboardingDto) {
     const onboarding = await this.getActiveOnboardingByToken(token, true);
-    const normalized = this.normalizeOnboardingPhones(input);
+    const normalized = this.normalizeOnboardingPhones(input, { lenient: true });
     const nextData = { ...this.parseOnboardingData(onboarding.data), ...normalized, phone: onboarding.phone };
     await this.updateOnboardingData(onboarding.id, nextData, "draft");
     return this.getPublicOnboarding(token);
