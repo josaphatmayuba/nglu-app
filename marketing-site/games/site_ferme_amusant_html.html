@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ferme Joyeuse — Élevage & Agriculture</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(#9ee7ff, #dfffc7 45%, #fff5cc);
+      color: #244018;
+      overflow-x: hidden;
+    }
+    header {
+      min-height: 92vh;
+      padding: 28px 18px 80px;
+      text-align: center;
+      position: relative;
+    }
+    nav {
+      max-width: 1100px;
+      margin: auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,.75);
+      border: 3px solid #fff;
+      border-radius: 24px;
+      padding: 14px 20px;
+      box-shadow: 0 12px 30px rgba(57, 120, 36, .18);
+      backdrop-filter: blur(8px);
+    }
+    .logo { font-size: 1.45rem; font-weight: 900; }
+    .nav-links { display: flex; gap: 14px; flex-wrap: wrap; }
+    .nav-links a {
+      color: #244018;
+      text-decoration: none;
+      font-weight: 700;
+      background: #fff8b5;
+      padding: 9px 13px;
+      border-radius: 999px;
+    }
+    .hero {
+      max-width: 1000px;
+      margin: 70px auto 0;
+    }
+    .badge {
+      display: inline-block;
+      background: #ffef7d;
+      border: 3px solid #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-weight: 800;
+      box-shadow: 0 8px 0 #f6c23e;
+    }
+    h1 {
+      font-size: clamp(2.6rem, 7vw, 6.4rem);
+      line-height: .95;
+      margin: 25px 0 18px;
+      color: #196b2e;
+      text-shadow: 4px 5px 0 #fff4a3;
+    }
+    .hero p {
+      max-width: 720px;
+      margin: auto;
+      font-size: 1.2rem;
+      line-height: 1.6;
+      font-weight: 600;
+    }
+    .actions { margin-top: 30px; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    button, .btn {
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 22px;
+      font-weight: 900;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 8px 0 rgba(0,0,0,.15);
+      transition: .2s;
+      text-decoration: none;
+      color: #193b16;
+    }
+    button:hover, .btn:hover { transform: translateY(-4px) rotate(-1deg); }
+    .primary { background: #78e06e; }
+    .secondary { background: #ffb84d; }
+    .farm-scene {
+      margin: 40px auto 0;
+      max-width: 900px;
+      min-height: 180px;
+      display: flex;
+      align-items: end;
+      justify-content: space-around;
+      font-size: clamp(3rem, 8vw, 6rem);
+    }
+    .animal { animation: bounce 2s infinite ease-in-out; }
+    .animal:nth-child(2) { animation-delay: .25s; }
+    .animal:nth-child(3) { animation-delay: .5s; }
+    .animal:nth-child(4) { animation-delay: .75s; }
+    @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-18px); } }
+    section { padding: 70px 18px; }
+    .container { max-width: 1120px; margin: auto; }
+    .section-title { text-align: center; font-size: clamp(2rem, 4vw, 3rem); margin-bottom: 18px; }
+    .section-intro { text-align: center; max-width: 690px; margin: 0 auto 35px; line-height: 1.6; font-weight: 600; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 22px;
+    }
+    .card {
+      background: rgba(255,255,255,.85);
+      border: 4px solid #fff;
+      border-radius: 30px;
+      padding: 24px;
+      box-shadow: 0 15px 30px rgba(72, 112, 39, .16);
+      transition: .2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .card:hover { transform: translateY(-8px); }
+    .icon { font-size: 3.4rem; margin-bottom: 12px; }
+    .card h3 { font-size: 1.35rem; margin-bottom: 10px; color: #26722d; }
+    .card p { line-height: 1.55; }
+    .yellow { background: #fff2a8; }
+    .green { background: #c8f7a4; }
+    .orange { background: #ffd19a; }
+    .blue { background: #c7efff; }
+    .market {
+      background: linear-gradient(135deg, #fff7d1, #c8f7a4);
+    }
+    .product-list {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 28px;
+    }
+    .product {
+      width: 135px;
+      background: white;
+      padding: 18px 10px;
+      border-radius: 24px;
+      text-align: center;
+      font-weight: 900;
+      border: 3px dashed #79c84f;
+      box-shadow: 0 10px 22px rgba(0,0,0,.1);
+    }
+    .product span { display: block; font-size: 2.5rem; margin-bottom: 8px; }
+    .mini-game {
+      background: #fff;
+      border-radius: 32px;
+      padding: 30px;
+      border: 4px solid #ffdd57;
+      text-align: center;
+      box-shadow: 0 18px 35px rgba(0,0,0,.12);
+    }
+    #message {
+      margin-top: 22px;
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: #23722d;
+      min-height: 36px;
+    }
+    footer {
+      background: #244018;
+      color: white;
+      text-align: center;
+      padding: 30px 18px;
+      font-weight: 700;
+    }
+    @media (max-width: 720px) {
+      nav { justify-content: center; gap: 14px; flex-direction: column; }
+      .nav-links { justify-content: center; }
+      header { min-height: auto; }
+      .farm-scene { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <div class="logo">🌾 Ferme Joyeuse</div>
+      <div class="nav-links">
+        <a href="#animaux">Animaux</a>
+        <a href="#cultures">Cultures</a>
+        <a href="#marche">Marché</a>
+        <a href="#jeu">Jeu</a>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <span class="badge">🐔 Bienvenue dans la ferme la plus drôle!</span>
+      <h1>Élevage, agriculture & bonne humeur</h1>
+      <p>
+        Un site amusant pour présenter les animaux, les produits agricoles, les activités de la ferme,
+        et donner envie aux visiteurs de découvrir un monde rural moderne, vivant et joyeux.
+      </p>
+      <div class="actions">
+        <a class="btn primary" href="#animaux">Voir les animaux 🐮</a>
+        <a class="btn secondary" href="#marche">Visiter le marché 🧺</a>
+      </div>
+    </div>
+
+    <div class="farm-scene" aria-label="Animaux de ferme">
+      <div class="animal">🐄</div>
+      <div class="animal">🐐</div>
+      <div class="animal">🐖</div>
+      <div class="animal">🐓</div>
+      <div class="animal">🐑</div>
+    </div>
+  </header>
+
+  <section id="animaux">
+    <div class="container">
+      <h2 class="section-title">Nos animaux vedettes</h2>
+      <p class="section-intro">Chaque animal a sa petite personnalité. Ici, on suit leur santé, leur alimentation, leur croissance et leurs activités.</p>
+      <div class="grid">
+        <div class="card yellow"><div class="icon">🐄</div><h3>Vaches laitières</h3><p>Suivi du lait, alimentation, reproduction et soins vétérinaires.</p></div>
+        <div class="card green"><div class="icon">🐐</div><h3>Chèvres agiles</h3><p>Gestion du troupeau, pâturage, petits soins et production.</p></div>
+        <div class="card orange"><div class="icon">🐖</div><h3>Cochons gourmands</h3><p>Pesée, alimentation, hygiène, croissance et suivi sanitaire.</p></div>
+        <div class="card blue"><div class="icon">🐓</div><h3>Poules pondeuses</h3><p>Œufs, poulailler, vaccination, nourriture et production quotidienne.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cultures" class="green">
+    <div class="container">
+      <h2 class="section-title">Activités agricoles</h2>
+      <p class="section-intro">Des champs colorés, des récoltes fraîches et une organisation claire pour mieux produire.</p>
+      <div class="grid">
+        <div class="card"><div class="icon">🌽</div><h3>Champ de maïs</h3><p>Planification des semis, entretien, arrosage et récolte.</p></div>
+        <div class="card"><div class="icon">🥬</div><h3>Légumes frais</h3><p>Gestion des parcelles, calendrier agricole et qualité des produits.</p></div>
+        <div class="card"><div class="icon">🍌</div><h3>Plantation</h3><p>Suivi des bananiers, manioc, fruits et cultures tropicales.</p></div>
+        <div class="card"><div class="icon">🚜</div><h3>Travaux du champ</h3><p>Préparation du sol, machines, ouvriers et tâches quotidiennes.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="marche" class="market">
+    <div class="container">
+      <h2 class="section-title">Petit marché de la ferme</h2>
+      <p class="section-intro">Les visiteurs peuvent découvrir les produits disponibles: frais, locaux et bien présentés.</p>
+      <div class="product-list">
+        <div class="product"><span>🥚</span>Œufs</div>
+        <div class="product"><span>🥛</span>Lait</div>
+        <div class="product"><span>🧀</span>Fromage</div>
+        <div class="product"><span>🌽</span>Maïs</div>
+        <div class="product"><span>🍅</span>Tomates</div>
+        <div class="product"><span>🥔</span>Pommes de terre</div>
+        <div class="product"><span>🍯</span>Miel</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="jeu">
+    <div class="container">
+      <div class="mini-game">
+        <h2 class="section-title">Jeu rapide: nourris la ferme!</h2>
+        <p class="section-intro">Clique sur un bouton pour donner à manger aux animaux ou arroser les champs.</p>
+        <div class="actions">
+          <button class="primary" onclick="farmAction('🐄 Miam! Les vaches ont reçu du foin frais!')">Donner du foin</button>
+          <button class="secondary" onclick="farmAction('🐓 Cot cot! Les poules ont mangé leurs grains!')">Nourrir les poules</button>
+          <button class="primary" onclick="farmAction('🌱 Bravo! Les cultures sont bien arrosées!')">Arroser le champ</button>
+        </div>
+        <div id="message">🌞 La ferme attend ton action!</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    🌾 Ferme Joyeuse — Élevage, agriculture, produits frais et sourire garanti.
+  </footer>
+
+  <script>
+    function farmAction(text) {
+      const message = document.getElementById('message');
+      message.textContent = text;
+      message.animate([
+        { transform: 'scale(1)', opacity: .7 },
+        { transform: 'scale(1.12)', opacity: 1 },
+        { transform: 'scale(1)', opacity: 1 }
+      ], { duration: 500 });
+    }
+  </script>
+</body>

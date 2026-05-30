@@ -95,7 +95,12 @@ const MaintenanceTableView = ({ requests = [], onEdit, onDelete, onAddCost, onVi
         </thead>
         <tbody>
           {requests.map((request, index) => {
-            const assignee = request.assignee || request.assignedTo || request.technicianName;
+            const assignee =
+              request.assignee ||
+              request.assignedTo ||
+              request.technicianName ||
+              [request.assigneeFirstName, request.assigneeLastName].filter(Boolean).join(" ") ||
+              request.assigneeUsername;
             const reportedAt = request.createdAt || request.reportedAt;
             return (
               <tr key={request.id} className={request.status === "done" ? "row-done" : ""}>

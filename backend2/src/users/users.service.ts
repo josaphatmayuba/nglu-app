@@ -55,14 +55,22 @@ export class UsersService {
 
       const userIds = rows.map((r) => r.user.id);
       const salaryMap: Record<number, number | null> = {};
+      const salaryCurrencyMap: Record<number, number | null> = {};
       if (userIds.length) {
         const allSalaries = await this.db
-          .select({ userId: salaryHistories.userId, salary: salaryHistories.salary })
+          .select({
+            userId: salaryHistories.userId,
+            salary: salaryHistories.salary,
+            currencyId: salaryHistories.currencyId,
+          })
           .from(salaryHistories)
           .where(inArray(salaryHistories.userId, userIds))
           .orderBy(desc(salaryHistories.id));
         for (const s of allSalaries) {
-          if (!(s.userId in salaryMap)) salaryMap[s.userId] = s.salary;
+          if (!(s.userId in salaryMap)) {
+            salaryMap[s.userId] = s.salary;
+            salaryCurrencyMap[s.userId] = s.currencyId ?? null;
+          }
         }
       }
 
@@ -73,6 +81,7 @@ export class UsersService {
           designation: r.designation,
           department: r.department,
           currentSalary: salaryMap[r.user.id] ?? null,
+          currentSalaryCurrencyId: salaryCurrencyMap[r.user.id] ?? null,
         })),
         totalUser: rows.length,
       };

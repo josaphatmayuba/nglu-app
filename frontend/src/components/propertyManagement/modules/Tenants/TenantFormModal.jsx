@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, Form, Input, InputNumber, Modal, Select, message } from "antd";
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Select, message } from "antd";
 
 import {
   loadPropertyManagement,
@@ -11,6 +11,7 @@ import {
 import { coupleStatuses, maritalStatuses } from "../../shared/constants";
 import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import PhoneInput from "../../../Shared/PhoneInput";
+import MoneyInput from "../../../Shared/MoneyInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
 const phoneValidator = {
@@ -21,6 +22,18 @@ const phoneValidator = {
 };
 const REQUIRED_PHONE = [{ required: true, message: "Champ obligatoire" }, phoneValidator];
 const OPTIONAL_PHONE = [phoneValidator];
+
+const professionalStatuses = [
+  { label: "Salarié", value: "salarie" },
+  { label: "Entrepreneur", value: "entrepreneur" },
+  { label: "Commerçant", value: "commercant" },
+  { label: "Travailleur autonome / Indépendant", value: "independant" },
+  { label: "Pigiste", value: "pigiste" },
+  { label: "Étudiant", value: "etudiant" },
+  { label: "Sans emploi", value: "sans_emploi" },
+  { label: "Retraité", value: "retraite" },
+  { label: "Stagiaire", value: "stagiaire" },
+];
 
 const REQUIRED = [{ required: true }];
 
@@ -36,6 +49,7 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
   const [form] = Form.useForm();
   const maritalStatus = Form.useWatch("marital_status", form);
   const childNumber = Number(Form.useWatch("child_number", form) || 0);
+  const firstRental = Boolean(Form.useWatch("first_rental", form));
   const isCouple = coupleStatuses.includes(String(maritalStatus || "").toLowerCase());
 
   const currencyList = useSelector((s) => s.currency?.list) || [];
@@ -145,6 +159,9 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
           <Form.Item label="Téléphone" name="phone" rules={REQUIRED_PHONE}>
             <PhoneInput />
           </Form.Item>
+          <Form.Item label="Téléphone secondaire" name="phone2" rules={OPTIONAL_PHONE}>
+            <PhoneInput />
+          </Form.Item>
         </div>
         <Form.Item label="Adresse actuelle" name="address" rules={REQUIRED}>
           <Input />
@@ -164,9 +181,6 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
           <Form.Item label="État civil" name="marital_status" rules={REQUIRED}>
             <Select options={maritalStatuses} />
           </Form.Item>
-          <Form.Item label="Province d'origine" name="origin_province" rules={REQUIRED}>
-            <Input />
-          </Form.Item>
         </div>
 
         {isCouple && (
@@ -182,13 +196,10 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
 
         <div className="pm-section-title">Contact d'Urgence</div>
         <div className="pm-form-grid">
-          <Form.Item label="Téléphone secondaire" name="phone2" rules={OPTIONAL_PHONE}>
-            <PhoneInput />
-          </Form.Item>
-          <Form.Item label="Personne à contacter" name="contacted_person" rules={REQUIRED}>
+          <Form.Item label="Nom de la personne à contacter" name="contacted_person" rules={REQUIRED}>
             <Input />
           </Form.Item>
-          <Form.Item label="Téléphone personne à contacter" name="contacted_person_phone_number" rules={REQUIRED_PHONE}>
+          <Form.Item label="Téléphone de la personne à contacter" name="contacted_person_phone_number" rules={REQUIRED_PHONE}>
             <PhoneInput />
           </Form.Item>
         </div>
@@ -196,45 +207,41 @@ const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) =>
         <div className="pm-section-title">Situation Professionnelle & Revenus</div>
         <div className="pm-form-grid">
           <Form.Item label="Statut professionnel" name="prossional_status" rules={REQUIRED}>
-            <Input />
+            <Select options={professionalStatuses} placeholder="Sélectionnez un statut" />
           </Form.Item>
-          <Form.Item label="Activité principale" name="main_activity" rules={REQUIRED}>
+          <Form.Item label="Domaine / Fonction" name="main_activity" rules={REQUIRED}>
             <Input />
           </Form.Item>
           <Form.Item label="Nom de l'entité" name="entity_name" rules={REQUIRED}>
             <Input />
           </Form.Item>
-          <Form.Item label="Adresse de l'entité" name="entity_address" rules={REQUIRED}>
-            <Input />
+          <Form.Item label="Salaire mensuel" name="monthly_pay">
+            <MoneyInput form={form} currencyField="salary_currency_id" currencies={activeCurrencies} />
           </Form.Item>
-          <Form.Item label="Date d'embauche" name="hiring_date" rules={REQUIRED}>
-            <Input type="date" />
-          </Form.Item>
-          <Form.Item label="Type de contrat" name="contract_type" rules={REQUIRED}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="Salaire mensuel" name="monthly_pay" rules={REQUIRED}>
-            <InputNumber className="w-full" min={0} />
-          </Form.Item>
-          <Form.Item label="Devise du salaire" name="salary_currency_id">
-            <CurrencyCombobox currencies={activeCurrencies} allowClear placeholder="Devise par défaut" style={{ width: "100%" }} />
-          </Form.Item>
+          <Form.Item name="salary_currency_id" hidden><Input /></Form.Item>
           <Form.Item label="Autres revenus mensuels" name="other_monthly_income">
-            <InputNumber className="w-full" min={0} />
+            <MoneyInput form={form} currencyField="salary_currency_id" currencies={activeCurrencies} />
           </Form.Item>
         </div>
 
         <div className="pm-section-title">Historique & Ménage</div>
+        <Form.Item name="first_rental" valuePropName="checked" style={{ marginBottom: 12 }}>
+          <Checkbox>Première location (jamais loué auparavant)</Checkbox>
+        </Form.Item>
         <div className="pm-form-grid">
-          <Form.Item label="Ancienne adresse" name="old_address" rules={REQUIRED}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="Ancien bailleur" name="old_lessor" rules={REQUIRED}>
-            <Input />
-          </Form.Item>
-          <Form.Item label="Motif du déménagement" name="moving_reason" rules={REQUIRED}>
-            <Input />
-          </Form.Item>
+          {!firstRental && (
+            <>
+              <Form.Item label="Ancienne adresse" name="old_address" rules={REQUIRED}>
+                <Input />
+              </Form.Item>
+              <Form.Item label="Nom de l'ancien bailleur" name="old_lessor" rules={REQUIRED}>
+                <Input />
+              </Form.Item>
+              <Form.Item label="Motif du déménagement" name="moving_reason" rules={REQUIRED}>
+                <Input />
+              </Form.Item>
+            </>
+          )}
           <Form.Item label="Nombre d'occupants" name="occupant_number" rules={REQUIRED}>
             <InputNumber className="w-full" min={1} />
           </Form.Item>

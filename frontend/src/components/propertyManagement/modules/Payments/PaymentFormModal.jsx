@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 
-import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
+
+const symbolFromOptionLabel = (label) => {
+  const m = String(label || "").match(/\(([^)]+)\)\s*$/);
+  return m ? m[1].trim() : "";
+};
 import { modalSelectProps } from "../../shared/constants";
 
 const paymentMethods = [
@@ -49,7 +54,7 @@ const PaymentFormModal = ({
             <Input type="date" />
           </Form.Item>
           <Form.Item label="Montant" name="amount" rules={[{ required: true }]}>
-            <InputNumber className="w-full" min={0} />
+            <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} />
           </Form.Item>
           <Form.Item label="Méthode" name="method" initialValue="cash">
             <Select {...modalSelectProps} options={paymentMethods} />
@@ -65,14 +70,7 @@ const PaymentFormModal = ({
               }))}
             />
           </Form.Item>
-          <Form.Item label="Devise" name="currencyId">
-            <CurrencyCombobox
-              allowClear
-              placeholder="Devise du bail ou par défaut"
-              {...modalSelectProps}
-              options={currencyOptions}
-            />
-          </Form.Item>
+          <Form.Item name="currencyId" hidden><Input /></Form.Item>
         </div>
         <Form.Item label="Référence" name="reference">
           <Input />

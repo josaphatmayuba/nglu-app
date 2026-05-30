@@ -966,6 +966,22 @@
   max-width: 960px;
 }
 
+.tenant-onboarding-page .ant-input,
+.tenant-onboarding-page .ant-input-number,
+.tenant-onboarding-page .ant-input-number-input,
+.tenant-onboarding-page .ant-input-affix-wrapper,
+.tenant-onboarding-page .ant-select:not(.ant-select-disabled) .ant-select-selector,
+.tenant-onboarding-page .ant-picker,
+.tenant-onboarding-page .nglu-phone-input,
+.tenant-onboarding-page .nglu-phone-input input,
+.tenant-onboarding-page input[type="date"],
+.tenant-onboarding-page input[type="email"],
+.tenant-onboarding-page input[type="text"],
+.tenant-onboarding-page input[type="number"] {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+}
+
 /* ── Responsive ─────────────────────────────────────────────── */
 
 @media (max-width: 768px) {

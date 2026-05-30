@@ -12,7 +12,12 @@ const MaintenanceTicketCard = ({ request, index, onEdit, onDelete, onAddCost, on
   const urgent = ["urgent", "high"].includes(request.priority);
   const done = request.status === "done";
   const iconTone = ticketIconTone(request);
-  const assignee = request.assignee || request.assignedTo || request.technicianName;
+  const assignee =
+    request.assignee ||
+    request.assignedTo ||
+    request.technicianName ||
+    [request.assigneeFirstName, request.assigneeLastName].filter(Boolean).join(" ") ||
+    request.assigneeUsername;
   const statusKey = done ? "success" : request.status === "in_progress" ? "warning" : "danger";
   const statusText = done ? "Résolu" : request.status === "in_progress" ? "En cours" : "Ouvert";
   const priorityText = urgent ? "Urgent" : request.priority === "low" ? "Bas" : "Moyen";

@@ -2,7 +2,12 @@ import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
 import moment from "moment";
 import { useEffect, useMemo } from "react";
 
-import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
+
+const symbolFromOptionLabel = (label) => {
+  const m = String(label || "").match(/\(([^)]+)\)\s*$/);
+  return m ? m[1].trim() : "";
+};
 import { modalSelectProps } from "../../shared/constants";
 import { optionalNumber } from "../../shared/format";
 import { tenantName } from "../../shared/tenants";
@@ -221,13 +226,11 @@ const LeaseFormModal = ({
             <Select {...modalSelectProps} options={billingCycleOptions} />
           </Form.Item>
           <Form.Item label="Loyer" name="rentAmount" rules={[{ required: true, message: requiredMessage }]}>
-            <InputNumber className="w-full" min={0} />
+            <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} />
           </Form.Item>
-          <Form.Item label="Devise" name="currencyId">
-            <CurrencyCombobox allowClear placeholder="Devise par defaut" {...modalSelectProps} options={currencyOptions} />
-          </Form.Item>
+          <Form.Item name="currencyId" hidden><Input /></Form.Item>
           <Form.Item label="Depot" name="securityDeposit">
-            <InputNumber className="w-full" min={0} />
+            <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} />
           </Form.Item>
         </div>
         <Form.Item label="Releve compteur entree" name="moveInMeterReading">

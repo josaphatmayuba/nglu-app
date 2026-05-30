@@ -30,6 +30,7 @@ import {
   saveUnit,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
 import { propertyTypes, unitTypes } from "../../shared/constants";
 import { optionalNumber } from "../../shared/format";
 
@@ -223,10 +224,10 @@ const PropertyFormModal = ({ open, record, currencyOptions = [], onClose, onSave
             </Form.Item>
             <div className="pm-form-grid">
               <Form.Item label="Valeur marchande estimée" name="marketValue" extra="Pour analyse de patrimoine">
-                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 480 000 000" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
+                <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} placeholder="ex. 480 000 000" />
               </Form.Item>
               <Form.Item label="Loyer mensuel par défaut" name="defaultRent" extra="Hérité par défaut sur chaque unité créée">
-                <InputNumber className="w-full immo-cdf-field" min={0} placeholder="ex. 850 000" controls={false} prefix={<span className="immo-cdf-prefix-text">{selectedCurrencySymbol}</span>} />
+                <MoneyInput form={form} currencyField="currencyId" currencies={currencyOptions.map((o) => ({ id: o.value, currencyName: o.label, currencySymbol: symbolFromOptionLabel(o.label) }))} placeholder="ex. 850 000" />
               </Form.Item>
             </div>
           </div>

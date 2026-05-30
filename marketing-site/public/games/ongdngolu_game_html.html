@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ongd Ngolu Game</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(#7ee8ff, #d8ffc2 45%, #fff2a8);
+      color: #183b16;
+      min-height: 100vh;
+    }
+    .game {
+      max-width: 1180px;
+      margin: auto;
+      padding: 18px;
+    }
+    .topbar {
+      background: rgba(255,255,255,.88);
+      border: 4px solid #fff;
+      border-radius: 28px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      box-shadow: 0 12px 30px rgba(0,0,0,.15);
+      position: sticky;
+      top: 10px;
+      z-index: 10;
+    }
+    .logo {
+      font-size: clamp(1.3rem, 4vw, 2rem);
+      font-weight: 900;
+      color: #197333;
+    }
+    .stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .stat {
+      background: #fff1a8;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 900;
+      box-shadow: 0 5px 0 #e4b531;
+    }
+    .hero {
+      text-align: center;
+      padding: 52px 10px 30px;
+    }
+    .badge {
+      display: inline-block;
+      background: #ffcf52;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-weight: 900;
+      border: 3px solid white;
+      box-shadow: 0 7px 0 #d69424;
+    }
+    h1 {
+      margin: 22px auto 12px;
+      font-size: clamp(2.6rem, 8vw, 6.5rem);
+      line-height: .95;
+      color: #148034;
+      text-shadow: 5px 5px 0 #fff49e;
+    }
+    .hero p {
+      max-width: 780px;
+      margin: auto;
+      font-size: 1.15rem;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+    .farm-scene {
+      margin: 30px auto;
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      font-size: clamp(3rem, 8vw, 5.7rem);
+    }
+    .emoji {
+      animation: jump 1.8s infinite ease-in-out;
+      filter: drop-shadow(0 10px 5px rgba(0,0,0,.15));
+    }
+    .emoji:nth-child(2) { animation-delay: .15s; }
+    .emoji:nth-child(3) { animation-delay: .3s; }
+    .emoji:nth-child(4) { animation-delay: .45s; }
+    .emoji:nth-child(5) { animation-delay: .6s; }
+    @keyframes jump { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-16px); } }
+    .panel {
+      background: rgba(255,255,255,.86);
+      border: 4px solid white;
+      border-radius: 32px;
+      padding: 24px;
+      box-shadow: 0 16px 35px rgba(0,0,0,.14);
+      margin: 22px 0;
+    }
+    .panel h2 {
+      font-size: clamp(1.8rem, 4vw, 2.8rem);
+      margin-bottom: 10px;
+      color: #276b22;
+      text-align: center;
+    }
+    .subtitle {
+      text-align: center;
+      margin: 0 auto 25px;
+      max-width: 680px;
+      line-height: 1.5;
+      font-weight: 700;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+    }
+    .card {
+      border: 3px solid white;
+      border-radius: 28px;
+      padding: 20px;
+      text-align: center;
+      min-height: 230px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 10px 25px rgba(0,0,0,.12);
+      transition: .2s;
+    }
+    .card:hover { transform: translateY(-7px) rotate(-1deg); }
+    .card .icon { font-size: 4rem; }
+    .card h3 { font-size: 1.3rem; margin: 8px 0; }
+    .card p { line-height: 1.45; font-weight: 600; }
+    .animal { background: #fff3a6; }
+    .crop { background: #c8ffa7; }
+    .market { background: #ffd2a0; }
+    .health { background: #c9efff; }
+    button {
+      border: 0;
+      background: #36d463;
+      color: #123b16;
+      border-radius: 18px;
+      padding: 13px 16px;
+      font-size: 1rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 7px 0 #15913b;
+      transition: .15s;
+      margin-top: 14px;
+    }
+    button:hover { transform: translateY(-4px); }
+    button:active { transform: translateY(3px); box-shadow: 0 3px 0 #15913b; }
+    .orange-btn { background: #ffbd45; box-shadow: 0 7px 0 #d68619; }
+    .blue-btn { background: #72d9ff; box-shadow: 0 7px 0 #1895bd; }
+    .red-btn { background: #ff8c8c; box-shadow: 0 7px 0 #cb4545; }
+    .mission-box {
+      background: #183b16;
+      color: white;
+      border-radius: 26px;
+      padding: 22px;
+      text-align: center;
+      border: 4px dashed #fff1a8;
+    }
+    #message {
+      margin-top: 18px;
+      min-height: 42px;
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #ffef7a;
+    }
+    .inventory {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .item {
+      background: white;
+      color: #183b16;
+      border-radius: 22px;
+      padding: 14px 8px;
+      text-align: center;
+      font-weight: 900;
+      border: 3px dashed #70c44d;
+    }
+    .item span { display: block; font-size: 2.4rem; }
+    footer {
+      text-align: center;
+      padding: 30px 10px 12px;
+      font-weight: 900;
+    }
+    @media (max-width: 700px) {
+      .topbar { justify-content: center; text-align: center; }
+      .stats { justify-content: center; }
+      .panel { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <div class="topbar">
+      <div class="logo">🎮 Ongd Ngolu Game</div>
+      <div class="stats">
+        <div class="stat">⭐ Score: <span id="score">0</span></div>
+        <div class="stat">🌾 Récoltes: <span id="harvest">0</span></div>
+        <div class="stat">🐾 Animaux: <span id="animals">0</span></div>
+      </div>
+    </div>
+
+    <section class="hero">
+      <span class="badge">🚜 Jeu agricole & élevage</span>
+      <h1>Construis ta ferme!</h1>
+      <p>
+        Nourris les animaux, soigne la ferme, plante les cultures, récolte les produits et gagne des points.
+        Plus tu joues, plus ta ferme devient vivante!
+      </p>
+      <div class="farm-scene">
+        <div class="emoji">🐄</div>
+        <div class="emoji">🐐</div>
+        <div class="emoji">🐓</div>
+        <div class="emoji">🌽</div>
+        <div class="emoji">🥬</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Choisis ton activité</h2>
+      <p class="subtitle">Chaque action donne des points. Essaie de compléter les missions de la ferme.</p>
+      <div class="grid">
+        <div class="card animal">
+          <div class="icon">🐄</div>
+          <div>
+            <h3>Nourrir les animaux</h3>
+            <p>Donne du foin, des grains et de l’eau aux animaux de la ferme.</p>
+          </div>
+          <button onclick="play('animal')">Nourrir +10</button>
+        </div>
+
+        <div class="card crop">
+          <div class="icon">🌱</div>
+          <div>
+            <h3>Planter les cultures</h3>
+            <p>Plante du maïs, des légumes, du manioc et des fruits.</p>
+          </div>
+          <button onclick="play('plant')">Planter +12</button>
+        </div>
+
+        <div class="card market">
+          <div class="icon">🧺</div>
+          <div>
+            <h3>Vendre au marché</h3>
+            <p>Vends les œufs, le lait, le maïs et les légumes frais.</p>
+          </div>
+          <button class="orange-btn" onclick="play('market')">Vendre +15</button>
+        </div>
+
+        <div class="card health">
+          <div class="icon">💊</div>
+          <div>
+            <h3>Soigner la ferme</h3>
+            <p>Surveille la santé des animaux et protège les cultures.</p>
+          </div>
+          <button class="blue-btn" onclick="play('health')">Soigner +20</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="mission-box">
+        <h2>Mission du jour</h2>
+        <p>Atteins 100 points pour débloquer le titre: Roi de la Ferme 👑</p>
+        <div id="message">Clique sur une activité pour commencer!</div>
+        <button class="red-btn" onclick="resetGame()">Recommencer le jeu</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Inventaire de la ferme</h2>
+      <p class="subtitle">Voici les produits que ta ferme peut produire dans le jeu.</p>
+      <div class="inventory">
+        <div class="item"><span>🥚</span>Œufs</div>
+        <div class="item"><span>🥛</span>Lait</div>
+        <div class="item"><span>🧀</span>Fromage</div>
+        <div class="item"><span>🌽</span>Maïs</div>
+        <div class="item"><span>🥬</span>Légumes</div>
+        <div class="item"><span>🍌</span>Bananes</div>
+        <div class="item"><span>🍯</span>Miel</div>
+        <div class="item"><span>🥔</span>Pommes de terre</div>
+      </div>
+    </section>
+
+    <footer>🌾 Ongd Ngolu Game — apprendre l’agriculture en s’amusant.</footer>
+  </main>
+
+  <script>
+    let score = 0;
+    let harvest = 0;
+    let animals = 0;
+
+    const scoreEl = document.getElementById('score');
+    const harvestEl = document.getElementById('harvest');
+    const animalsEl = document.getElementById('animals');
+    const messageEl = document.getElementById('message');
+
+    function updateStats() {
+      scoreEl.textContent = score;
+      harvestEl.textContent = harvest;
+      animalsEl.textContent = animals;
+
+      if (score >= 100) {
+        messageEl.textContent = '👑 Bravo! Tu es Roi de la Ferme Ongd Ngolu!';
+      }
+    }
+
+    function animateMessage() {
+      messageEl.animate([
+        { transform: 'scale(1)', opacity: .5 },
+        { transform: 'scale(1.08)', opacity: 1 },
+        { transform: 'scale(1)', opacity: 1 }
+      ], { duration: 500 });
+    }
+
+    function play(type) {
+      if (type === 'animal') {
+        score += 10;
+        animals += 1;
+        messageEl.textContent = '🐄 Les animaux sont contents! +10 points';
+      }
+      if (type === 'plant') {
+        score += 12;
+        harvest += 1;
+        messageEl.textContent = '🌱 Les cultures poussent bien! +12 points';
+      }
+      if (type === 'market') {
+        score += 15;
+        messageEl.textContent = '🧺 Vente réussie au marché! +15 points';
+      }
+      if (type === 'health') {
+        score += 20;
+        messageEl.textContent = '💊 Ferme protégée et animaux soignés! +20 points';
+      }
+      updateStats();
+      animateMessage();
+    }
+
+    function resetGame() {
+      score = 0;
+      harvest = 0;
+      animals = 0;
+      messageEl.textContent = 'Nouvelle partie! Clique sur une activité.';
+      updateStats();
+      animateMessage();
+    }
+  </script>
+</body>
+</html>

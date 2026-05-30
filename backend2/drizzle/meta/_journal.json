@@ -218,6 +218,20 @@
       "when": 1780124400000,
       "tag": "0046_add_maintenance_currency",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1780128000000,
+      "tag": "0047_add_maintenance_assignee",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1780131600000,
+      "tag": "0048_make_tenant_history_nullable",
+      "breakpoints": true
     }
   ]
 }

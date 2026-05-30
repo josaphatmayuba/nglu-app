@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
-import CurrencyCombobox from "../Shared/CurrencyCombobox";
+import MoneyInput from "../Shared/MoneyInput";
 import {
   addSalaryHistory,
   deleteSalaryHistory,
@@ -12,7 +12,7 @@ import {
 } from "../../redux/rtk/features/salaryHistory/salaryHistorySlice";
 import { loadAllStaff } from "../../redux/rtk/features/user/userSlice";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
-import { buildCurrencyOptions } from "../propertyManagement/shared/format";
+import { buildCurrencyOptions, cleanCurrencySymbol } from "../propertyManagement/shared/format";
 
 const SalariesPage = () => {
   const dispatch = useDispatch();
@@ -65,6 +65,17 @@ const SalariesPage = () => {
     return user ? [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username : id;
   };
 
+  const currencyCodeFor = (id) => {
+    const c = currenciesList.find((x) => x.id === id || x.currencyId === id);
+    return c ? cleanCurrencySymbol(c) : "";
+  };
+
+  const fmtSalary = (amount, currencyId) => {
+    const code = currencyCodeFor(currencyId);
+    const n = Number(amount || 0).toLocaleString();
+    return code ? `${n} ${code}` : n;
+  };
+
   return (
     <Card title="Salaires" extra={<Button type="primary" onClick={() => openModal()}>Nouveau salaire</Button>}>
       <Table
@@ -74,7 +85,7 @@ const SalariesPage = () => {
         pagination={{ total: total || 0 }}
         columns={[
           { title: "Employé", render: (_, record) => staffName(record.userId) },
-          { title: "Salaire", dataIndex: "salary" },
+          { title: "Salaire", render: (_, r) => fmtSalary(r.salary, r.currencyId) },
           { title: "Début", dataIndex: "startDate" },
           { title: "Fin", dataIndex: "endDate" },
           { title: "Commentaire", dataIndex: "comment" },
@@ -95,11 +106,9 @@ const SalariesPage = () => {
             <Select options={staff.map((user) => ({ value: user.id, label: staffName(user.id) }))} />
           </Form.Item>
           <Form.Item label="Salaire" name="salary" rules={[{ required: true }]}>
-            <InputNumber className="w-full" min={0} />
+            <MoneyInput form={form} currencyField="currencyId" currencies={currenciesList} />
           </Form.Item>
-          <Form.Item label="Devise" name="currencyId">
-            <CurrencyCombobox options={buildCurrencyOptions(currenciesList)} />
-          </Form.Item>
+          <Form.Item name="currencyId" hidden><Input /></Form.Item>
           <Form.Item label="Début" name="salaryStartDate"><DatePicker className="w-full" /></Form.Item>
           <Form.Item label="Fin" name="salaryEndDate"><DatePicker className="w-full" /></Form.Item>
           <Form.Item label="Commentaire" name="salaryComment"><Input /></Form.Item>

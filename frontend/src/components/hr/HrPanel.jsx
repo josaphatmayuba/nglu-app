@@ -2,9 +2,20 @@ import { Drawer, Dropdown, Input, Modal, Select, Spin, Table } from "antd";
 import axios from "axios";
 import { BriefcaseBusiness, Download, Eye, Filter, LayoutGrid, List, Lock, MoreHorizontal, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import EditStaffModal from "./EditStaffModal";
 import RolesTab from "./RolesTab";
 import SalariesPage from "./SalariesPage";
+import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
+import { cleanCurrencySymbol } from "../propertyManagement/shared/format";
+
+const fmtSalary = (amount, currencyId, currenciesList) => {
+  if (amount == null) return null;
+  const n = new Intl.NumberFormat("fr-FR").format(amount);
+  const c = currenciesList?.find((x) => x.id === currencyId || x.currencyId === currencyId);
+  const code = c ? cleanCurrencySymbol(c) : "";
+  return code ? `${n} ${code}` : n;
+};
 
 const AVATAR_COLORS = [
   "from-purple-500 to-purple-700",
@@ -59,7 +70,9 @@ function InfoRow({ label, value }) {
 }
 
 function ViewStaffDrawer({ user, onClose }) {
+  const currenciesList = useSelector((state) => state.currency?.list) || [];
   if (!user) return null;
+  user = { ...user, __currencies: currenciesList };
   const idx = 0;
   const color = AVATAR_COLORS[idx % AVATAR_COLORS.length];
   return (
@@ -104,7 +117,7 @@ function ViewStaffDrawer({ user, onClose }) {
         <InfoRow label="Rôle" value={user.role?.name} />
         <InfoRow label="Poste" value={user.designation?.name} />
         <InfoRow label="Département" value={user.department?.name} />
-        <InfoRow label="Salaire actuel" value={user.currentSalary != null ? new Intl.NumberFormat("fr-FR").format(user.currentSalary) : null} />
+        <InfoRow label="Salaire actuel" value={fmtSalary(user.currentSalary, user.currentSalaryCurrencyId, user.__currencies)} />
         <InfoRow label="Date d'embauche" value={user.joinDate ? new Date(user.joinDate).toLocaleDateString("fr-FR") : null} />
         <InfoRow label="Date de départ" value={user.leaveDate ? new Date(user.leaveDate).toLocaleDateString("fr-FR") : null} />
         <InfoRow label="Motif de départ" value={user.leaveReason} />
@@ -201,8 +214,7 @@ function buildTableColumns(onView, onEdit, onClose) {
     { title: "Département", render: (_, u) => u.department?.name || "—" },
     {
       title: "Salaire",
-      render: (_, u) =>
-        u.currentSalary != null ? new Intl.NumberFormat("fr-FR").format(u.currentSalary) : "—",
+      render: (_, u) => fmtSalary(u.currentSalary, u.currentSalaryCurrencyId, currenciesList) ?? "—",
     },
     { title: "Username", dataIndex: "username" },
     {
@@ -259,6 +271,9 @@ export default function HrPanel() {
   const [newStaff, setNewStaff] = useState(false);
   const [deptFilter, setDeptFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  const dispatch = useDispatch();
+  const currenciesList = useSelector((state) => state.currency?.list) || [];
+  useEffect(() => { if (!currenciesList.length) dispatch(loadAllCurrency()); }, [dispatch, currenciesList.length]);
 
   function loadStaff() {
     setStaffLoading(true);
@@ -567,7 +582,7 @@ export default function HrPanel() {
                             Salaire
                           </div>
                           <div className="text-xs font-medium text-ink-900">
-                            {new Intl.NumberFormat("fr-FR").format(user.currentSalary)}
+                            {fmtSalary(user.currentSalary, user.currentSalaryCurrencyId, currenciesList)}
                           </div>
                         </div>
                       )}

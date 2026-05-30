@@ -1,5 +1,5 @@
 import { Button, Form, Input, InputNumber, Modal, Select } from "antd";
-import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
+import MoneyInput from "../../../Shared/MoneyInput";
 
 const priorityOptions = [
   { label: "Basse", value: "low" },
@@ -23,6 +23,7 @@ const MaintenanceFormModal = ({
   saving,
   unitOptions,
   currencies = [],
+  staffOptions = [],
 }) => (
   <Modal
     open={open}
@@ -58,10 +59,17 @@ const MaintenanceFormModal = ({
           <Input type="date" />
         </Form.Item>
         <Form.Item label="Coût estimé" name="estimatedCost">
-          <InputNumber className="w-full" min={0} />
+          <MoneyInput form={form} currencyField="currencyId" currencies={currencies} />
         </Form.Item>
-        <Form.Item label="Devise" name="currencyId">
-          <CurrencyCombobox currencies={currencies} allowClear placeholder="Devise par défaut" />
+        <Form.Item name="currencyId" hidden><Input /></Form.Item>
+        <Form.Item label="Assigné à" name="assigneeId">
+          <Select
+            showSearch
+            allowClear
+            options={staffOptions}
+            optionFilterProp="label"
+            placeholder="Sélectionnez un utilisateur"
+          />
         </Form.Item>
       </div>
       <Form.Item label="Description" name="description">
