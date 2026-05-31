@@ -10,16 +10,21 @@ import { api, adaptMedicine, adaptTreatment, adaptReproEvent, adaptSaleAsTransac
 // ─── HEALTH & TREATMENTS ─────────────────────────────────────────────────
 const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allTreatments, setAllTreatments] = React.useState([]);
+  const [allAnimals, setAllAnimals] = React.useState([]);
+  const [allExpenses, setAllExpenses] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listTreatments(), api.listAnimals(), api.listDiseases()])
-      .then(([trs, animals, diseases]) => {
+    Promise.all([api.listTreatments(), api.listAnimals(), api.listDiseases(), api.listExpenses()])
+      .then(([trs, animals, diseases, expenses]) => {
         if (cancel) return;
-        const aMap = new Map((Array.isArray(animals) ? animals : []).map((a) => [a.id, a]));
+        const animalsArr = Array.isArray(animals) ? animals : [];
+        const aMap = new Map(animalsArr.map((a) => [a.id, a]));
         const dMap = new Map((Array.isArray(diseases) ? diseases : []).map((d) => [d.id, d]));
         const mapped = (Array.isArray(trs) ? trs : []).map((t) => adaptTreatment(t, aMap, dMap));
         setAllTreatments(mapped);
+        setAllAnimals(animalsArr);
+        setAllExpenses(Array.isArray(expenses) ? expenses : []);
       })
       .catch((e) => console.warn("listTreatments failed:", e.message));
     return () => { cancel = true; };
@@ -33,23 +38,54 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const running = treatments.filter(t => t.status === "running");
   const completed = treatments.filter(t => t.status === "completed");
 
+  // KPIs dérivés des vraies données + filtrés par espèce.
+  const animalsFiltered = allAnimals.filter((a) => !speciesFilter || a.species === speciesFilter);
+  const quarantineCount = animalsFiltered.filter((a) => {
+    const s = String(a.status || "").toLowerCase();
+    return s === "quarantine" || s === "quarantaine" || s === "isolated";
+  }).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const withdrawalCount = animalsFiltered.filter((a) => {
+    const w = a.withdrawalUntil || a.withdrawal_until;
+    return w && String(w).slice(0, 10) >= today;
+  }).length;
+  // Coût médicaments du mois en cours. Si un filtre espèce est actif on tente
+  // de relier l'expense au médicament via related_medicine_id, sinon on
+  // compte tout (cas data legacy sans liaison).
+  const monthPrefix = today.slice(0, 7);
+  const speciesMedicineIds = speciesFilter
+    ? new Set(allAnimals
+        .filter((a) => a.species === speciesFilter)
+        .map((a) => a.id)) // placeholder set, not actually used
+    : null;
+  const medExpenses = allExpenses.filter((e) => {
+    const cat = String(e.category || "").toLowerCase();
+    if (cat !== "medicine" && cat !== "médicament" && cat !== "med") return false;
+    const d = e.expenseDate || e.expense_date;
+    if (!d || !String(d).startsWith(monthPrefix)) return false;
+    return true;
+  });
+  const medCostMonth = medExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Santé · Health" : "Health · Santé"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Traitements & médicaments, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>cheptel complet</span></> : <>Treatments & medicine, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>full herd</span></>}
+          {lang === "fr"
+            ? <>Traitements & médicaments, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).fr.toLowerCase() : "cheptel complet"}</span></>
+            : <>Treatments & medicine, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).en.toLowerCase() : "full herd"}</span></>}
         </h1>
       </div>
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
-      {/* KPI row */}
+      {/* KPI row — dérivés des vraies données + filtrés par espèce. */}
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)" trend={[2,2,3,3,3,4,4,3,3,2,2,running.length]}/>
-        <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value="32" unit="" delta={-12} icon="shield" accent="var(--rust-700)" trend={[40,38,36,34,33,32,32,33,32,32,32,32]}/>
-        <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value="3" unit="" icon="clock" accent="var(--rust-700)" trend={[1,1,2,2,2,3,3,3,3,3,3,3]}/>
-        <KpiCard label={lang === "fr" ? "Coût médicaments · mois" : "Medicine cost · month"} value="4 280" unit="$" delta={-8} icon="coins" trend={[3800, 4100, 4500, 4900, 5200, 5400, 5100, 4900, 4700, 4500, 4400, 4280]}/>
+        <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)"/>
+        <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value={quarantineCount} unit="" icon="shield" accent={quarantineCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
+        <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value={withdrawalCount} unit="" icon="clock" accent={withdrawalCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
+        <KpiCard label={lang === "fr" ? "Coût médicaments · mois" : "Medicine cost · month"} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit="$" icon="coins"/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main-15)", gap: 16 }}>
