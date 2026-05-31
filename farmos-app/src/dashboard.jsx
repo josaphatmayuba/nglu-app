@@ -189,7 +189,7 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
               }
             </h1>
           </div>
-          <FarmScore sante={isAll ? 82 : speciesScore(species.id, "sante")} prod={isAll ? 91 : speciesScore(species.id, "prod")} finance={isAll ? 78 : speciesScore(species.id, "finance")}/>
+          <FarmScore {...computeFarmScore(live, speciesFilter)}/>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -231,19 +231,34 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   );
 };
 
-function speciesScore(id, axis) {
-  const map = {
-    cow:    { sante: 84, prod: 92, finance: 81 },
-    pig:    { sante: 72, prod: 88, finance: 76 },
-    chicken:{ sante: 89, prod: 94, finance: 84 },
-    fish:   { sante: 66, prod: 78, finance: 70 },
-    goat:   { sante: 86, prod: 81, finance: 68 },
-    sheep:  { sante: 79, prod: 72, finance: 62 },
-    rabbit: { sante: 81, prod: 85, finance: 71 },
-    duck:   { sante: 88, prod: 86, finance: 74 },
-    turkey: { sante: 84, prod: 79, finance: 73 },
-  };
-  return (map[id] || { sante: 80, prod: 80, finance: 80 })[axis];
+// Score de la ferme — calculé sur les vraies données live.
+// - sante:  100 * (animaux sains / total). 80 par défaut si pas encore de data.
+// - prod:   100 - min(80, 10 * traitements actifs / total). Approximation:
+//           si peu de traitements en cours pour la taille du troupeau, prod
+//           est haute. À remplacer par une métrique production réelle quand
+//           on aura un objectif par espèce.
+// - finance: marge (rev - exp) / rev * 100, plafonnée [0..100]. 80 si rev=0.
+function computeFarmScore(live, speciesFilter) {
+  if (!live?.ready) return { sante: 0, prod: 0, finance: 0 };
+  const animals = (live.animals || []).filter((a) => !speciesFilter || a.species === speciesFilter);
+  const total = animals.length || 1;
+  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+  const sante = Math.round(((total - sick) / total) * 100);
+  const treatments = (live.treatments || []).filter((t) => {
+    if (!speciesFilter) return t.status === "running";
+    const a = live.animals.find((x) => x.id === t.animalId);
+    return t.status === "running" && a?.species === speciesFilter;
+  });
+  const prodPenalty = Math.min(80, Math.round((10 * treatments.length) / total));
+  const prod = Math.max(0, 100 - prodPenalty);
+  const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
+  const monthISO = monthStart.toISOString().slice(0, 10);
+  const sales = (live.sales || []).filter((s) => (!speciesFilter || s.species === speciesFilter) && (s.saleDate || s.sale_date) >= monthISO);
+  const expenses = (live.expenses || []).filter((e) => (e.expenseDate || e.expense_date) >= monthISO);
+  const rev = sales.reduce((s, x) => s + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
+  const exp = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 80;
+  return { sante, prod, finance };
 }
 
 // ─── Withdrawal banner ───────────────────────────────────────────────────

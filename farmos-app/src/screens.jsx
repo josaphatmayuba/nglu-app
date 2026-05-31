@@ -676,22 +676,59 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     return () => window.removeEventListener("farmos:production-created", onCreated);
   }, []);
   const filteredLogs = logs.filter((l) => !speciesFilter || l.species === speciesFilter).slice(0, 12);
+
+  // KPIs production : agrégats live des production_logs (date la plus récente
+  // disponible). Pas de delta (pas d'historique mois-1 facile à comparer ici).
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const sumProduct = (productType, date) => logs
+    .filter((l) => {
+      const d = l.logDate || l.log_date;
+      const ok = d && String(d).slice(0, 10) === date;
+      return ok && l.productType === productType && (!speciesFilter || l.species === speciesFilter);
+    })
+    .reduce((s, l) => s + Number(l.quantity || 0), 0);
+  // Lait: somme du jour (AM+PM) ou hier si rien aujourd'hui.
+  const milkToday = sumProduct("milk", today) || sumProduct("milk", yesterday);
+  // Œufs idem
+  const eggsToday = sumProduct("eggs", today) || sumProduct("eggs", yesterday);
+  // GMQ porcs (g/j): moyenne des derniers logs growth/weight pour porc.
+  const growthLogs = logs.filter((l) => (l.productType === "growth" || l.productType === "weight") && l.species === "pig").slice(0, 20);
+  const gmqAvg = growthLogs.length
+    ? Math.round(growthLogs.reduce((s, l) => s + Number(l.quantity || 0), 0) / growthLogs.length)
+    : 0;
+  // Biomasse poisson: dernière valeur connue par bassin sommée
+  const fishBiomass = (() => {
+    const byPond = new Map();
+    logs
+      .filter((l) => l.species === "fish" && l.productType === "biomass")
+      .forEach((l) => {
+        const key = l.animalId ?? "all";
+        const prev = byPond.get(key);
+        const d = l.logDate || l.log_date;
+        if (!prev || (d && String(d) > String(prev.d || ""))) byPond.set(key, { qty: Number(l.quantity || 0), d });
+      });
+    return Array.from(byPond.values()).reduce((s, x) => s + x.qty, 0);
+  })();
+  const fmt = (n) => n.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Production · Output" : "Output · Production"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Production journalière, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>lait, œufs, croissance</span></> : <>Daily production, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>milk, eggs, growth</span></>}
+          {lang === "fr"
+            ? <>Production journalière, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).fr.toLowerCase() : "lait, œufs, croissance"}</span></>
+            : <>Daily production, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).en.toLowerCase() : "milk, eggs, growth"}</span></>}
         </h1>
       </div>
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Lait · aujourd'hui" : "Milk · today"} value="5 412" unit="L" delta={2.4} icon="droplet" accent="var(--pertinence-500)" trend={SPECIES[0].productTrend}/>
-        <KpiCard label={lang === "fr" ? "Œufs · aujourd'hui" : "Eggs · today"} value="16 248" unit="" delta={1.2} icon="egg" accent="var(--autorite-500)" trend={SPECIES[2].productTrend.map(v => v/1000)}/>
-        <KpiCard label={lang === "fr" ? "GMQ porcs" : "Pig ADG"} value="856" unit="g/j" delta={3.2} icon="weight" accent="var(--oxblood-700)" trend={SPECIES[1].productTrend}/>
-        <KpiCard label={lang === "fr" ? "Biomasse poisson" : "Fish biomass"} value="9 820" unit="kg" delta={4.1} icon="fish" accent="var(--pertinence-700)" trend={SPECIES[3].productTrend.map(v => v/100)}/>
+        <KpiCard label={lang === "fr" ? "Lait · aujourd'hui" : "Milk · today"} value={milkToday > 0 ? fmt(Math.round(milkToday)) : "—"} unit="L" icon="droplet" accent="var(--pertinence-500)"/>
+        <KpiCard label={lang === "fr" ? "Œufs · aujourd'hui" : "Eggs · today"} value={eggsToday > 0 ? fmt(Math.round(eggsToday)) : "—"} unit="" icon="egg" accent="var(--autorite-500)"/>
+        <KpiCard label={lang === "fr" ? "GMQ porcs" : "Pig ADG"} value={gmqAvg > 0 ? fmt(gmqAvg) : "—"} unit="g/j" icon="weight" accent="var(--oxblood-700)"/>
+        <KpiCard label={lang === "fr" ? "Biomasse poisson" : "Fish biomass"} value={fishBiomass > 0 ? fmt(Math.round(fishBiomass)) : "—"} unit="kg" icon="fish" accent="var(--pertinence-700)"/>
       </div>
 
       {/* Per-species production cards */}
