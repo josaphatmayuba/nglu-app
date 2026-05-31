@@ -3,6 +3,7 @@ import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, ANIMALS, STOCK, speciesById } from "./data";
 import { api } from "./api";
+import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
@@ -338,6 +339,21 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const sp = speciesById(species);
 
+  // Auto-génération de l'ID à chaque fois que l'espèce change, tant que
+  // l'utilisateur n'a pas modifié manuellement le champ (tagDirty=false).
+  const [tagDirty, setTagDirty] = React.useState(false);
+  const [animalsForGen, setAnimalsForGen] = React.useState([]);
+  React.useEffect(() => {
+    let cancel = false;
+    api.listAnimals().then((rows) => { if (!cancel && Array.isArray(rows)) setAnimalsForGen(rows); }).catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+  React.useEffect(() => {
+    if (tagDirty) return;
+    const next = nextAnimalExternalId(species, animalsForGen);
+    setForm((f) => ({ ...f, tag: next }));
+  }, [species, animalsForGen, tagDirty]);
+
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -394,7 +410,18 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
       <FormSection label={lang === "fr" ? "Identification" : "Identification"}>
         <FormGrid>
           <FormField label={species === "chicken" || species === "duck" || species === "turkey" ? (lang === "fr" ? "ID Lot" : "Batch ID") : species === "fish" ? (lang === "fr" ? "ID Bassin" : "Pond ID") : (lang === "fr" ? "ID / Numéro" : "ID / Tag")} required>
-            <input className="input mono" placeholder={`${sp.id.toUpperCase()}-2026-${Math.floor(Math.random() * 900 + 100)}`} value={form.tag || ""} onChange={(e) => set("tag", e.target.value)}/>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input className="input mono" style={{ flex: 1 }}
+                value={form.tag || ""}
+                onChange={(e) => { setTagDirty(true); set("tag", e.target.value); }}
+                placeholder={lang === "fr" ? "généré automatiquement…" : "auto-generated…"}/>
+              <button type="button" className="btn btn-sm"
+                title={lang === "fr" ? "Régénérer (revient à l'auto)" : "Regenerate (back to auto)"}
+                onClick={() => { setTagDirty(false); set("tag", nextAnimalExternalId(species, animalsForGen)); }}>
+                <Icon name="sparkle" size={12} color="var(--clay-700)"/>
+                {lang === "fr" ? "Auto" : "Auto"}
+              </button>
+            </div>
           </FormField>
           {!(species === "chicken" || species === "duck" || species === "turkey" || species === "fish") && (
             <FormField label={lang === "fr" ? "Nom (optionnel)" : "Name (optional)"}>
@@ -962,6 +989,13 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [lots, setLots] = React.useState([]);
+  const [invoiceDirty, setInvoiceDirty] = React.useState(false);
+  React.useEffect(() => {
+    api.listExpenses().then((rows) => {
+      if (invoiceDirty) return;
+      setForm((f) => f.invoice ? f : { ...f, invoice: nextInvoiceNumber(rows) });
+    }).catch(() => {});
+  }, [invoiceDirty]);
   React.useEffect(() => {
     api.listMedicines().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveMeds(rows); }).catch(() => {});
     // Lots disponibles = valeurs distinctes de `lot` parmi les animaux,
@@ -1070,7 +1104,14 @@ const StockForm = ({ lang, onSaved, onClose }) => {
               <input className="input mono" type="number" placeholder="4320" value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
             </FormField>
             <FormField label={lang === "fr" ? "N° facture" : "Invoice #"}>
-              <input className="input mono" placeholder="INV-2026-0824" value={form.invoice || ""} onChange={(e) => set("invoice", e.target.value)}/>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input className="input mono" style={{ flex: 1 }} placeholder={lang === "fr" ? "généré automatiquement…" : "auto-generated…"}
+                  value={form.invoice || ""} onChange={(e) => { setInvoiceDirty(true); set("invoice", e.target.value); }}/>
+                <button type="button" className="btn btn-sm" title={lang === "fr" ? "Régénérer" : "Regenerate"}
+                  onClick={async () => { try { const rows = await api.listExpenses(); setInvoiceDirty(false); set("invoice", nextInvoiceNumber(rows)); } catch {} }}>
+                  <Icon name="sparkle" size={12} color="var(--clay-700)"/>Auto
+                </button>
+              </div>
             </FormField>
             <FormField label={lang === "fr" ? "Date d'expiration" : "Expiry date"}>
               <input className="input" type="date" value={form.expiry || ""} onChange={(e) => set("expiry", e.target.value)}/>

@@ -4,6 +4,7 @@ import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
 import { api } from "./api";
+import { nextStrawCode } from "./id-gen";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -274,6 +275,13 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
     code: "", sire_name: "", species: "cow", straws_total: 25,
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [codeDirty, setCodeDirty] = React.useState(editing);
+  React.useEffect(() => {
+    if (codeDirty || editing) return;
+    api.listSemenStraws().then((rows) => {
+      setForm((f) => ({ ...f, code: nextStrawCode(f.species || "cow", Array.isArray(rows) ? rows : []) }));
+    }).catch(() => {});
+  }, [codeDirty, editing, form.species]);
   const [suppliers, setSuppliers] = React.useState([]);
   React.useEffect(() => {
     // Use the supplier names already joined in listSemenStraws as a shallow cache;
@@ -337,7 +345,17 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
         </div>
 
         <Row><Field label={lang === "fr" ? "Code (unique)" : "Code (unique)"} req>
-          <input className="input mono" value={form.code || ""} disabled={editing} onChange={(e) => set("code", e.target.value)} placeholder="CIAQ-HOLM-1H10567"/>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input className="input mono" style={{ flex: 1 }} value={form.code || ""} disabled={editing}
+              onChange={(e) => { setCodeDirty(true); set("code", e.target.value); }}
+              placeholder={lang === "fr" ? "généré automatiquement…" : "auto-generated…"}/>
+            {!editing && (
+              <button type="button" className="btn btn-sm" title={lang === "fr" ? "Régénérer" : "Regenerate"}
+                onClick={async () => { try { const rows = await api.listSemenStraws(); setCodeDirty(false); set("code", nextStrawCode(form.species || "cow", Array.isArray(rows) ? rows : [])); } catch {} }}>
+                <Icon name="sparkle" size={12} color="var(--clay-700)"/>Auto
+              </button>
+            )}
+          </div>
         </Field>
         <Field label={lang === "fr" ? "Espèce" : "Species"} req>
           <select className="input" value={form.species} onChange={(e) => set("species", e.target.value)}>
