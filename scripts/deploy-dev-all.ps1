@@ -85,12 +85,14 @@ echo OK
 # ── 3. FarmOS app (Vite SPA) ─────────────────────────────────────────────
 if (-not $SkipFarmos) {
   Section "Deploying farmos-app"
-  $faArgs = @("-SkipGitPull")
-  if ($SkipBuild) { $faArgs += "-SkipBuild" }
   # Le script existant peut écrire sur stderr (warnings tar) — on tolère.
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  & "$repoRoot\scripts\deploy-dev-farmos-aws.ps1" @faArgs 2>&1 | ForEach-Object { Write-Host $_ }
+  if ($SkipBuild) {
+    & "$repoRoot\scripts\deploy-dev-farmos-aws.ps1" -SkipBuild -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  } else {
+    & "$repoRoot\scripts\deploy-dev-farmos-aws.ps1" -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  }
   $ErrorActionPreference = $prev
 }
 

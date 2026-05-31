@@ -323,7 +323,7 @@ export class FarmosController {
     return this.farmos.listVaccinations(orgId);
   }
 
-  @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 Claude integration)." })
+  @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 ChatGPT integration)." })
   @Permissions("readAll-farmos")
   @Get("ai-insights")
   listAiInsights(@CurrentOrg() orgId: number) {

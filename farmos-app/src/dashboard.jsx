@@ -573,7 +573,7 @@ const AIPanel = ({ lang, insights, onNav }) => (
           <span className="sec">{lang === "fr" ? "AI insights" : "recommandations"}</span>
         </div>
       </div>
-      <span className="tag" style={{ background: "var(--ink-900)", color: "var(--parchment-50)" }}>Claude Haiku · 4.5</span>
+      <span className="tag" style={{ background: "var(--ink-900)", color: "var(--parchment-50)" }}>ChatGPT</span>
     </div>
     <div className="rule-lines" style={{ background: "var(--parchment-50)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 14px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
