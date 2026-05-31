@@ -167,29 +167,55 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
     { id: "manual",  icon: "edit",     fr: "Manuel",     en: "Manual" },
   ];
 
-  const simulateScan = (specific) => {
-    if (scanning) return;
-    const pool = animals.filter(a => !speciesFilter || a.species === speciesFilter);
-    if (!specific && pool.length === 0) {
+  // Manual / résultat direct : un animal a été choisi explicitement.
+  // Plus de "pick aléatoire" — si rien n'est scanné, on n'affiche rien.
+  const acceptResult = (specific) => {
+    if (!specific) return;
+    setFound(specific);
+    setScanning(false);
+    const newRec = { animalPk: specific._pk, externalId: specific.id, method: mode, at: new Date().toISOString() };
+    setRecent((r) => {
+      const next = [{ ...newRec, animal: specific }, ...r.filter((x) => x.animalPk !== specific._pk)].slice(0, 8);
+      saveRecent(next.map(({ animal, ...rest }) => rest));
+      return next;
+    });
+  };
+
+  // Bouton "scan" central : selon le mode, déclenche l'action réelle.
+  // Pour QR/scanner/rfid on n'invente pas de résultat — on rappelle juste
+  // qu'il faut que le code soit dans le champ de la caméra / du lecteur.
+  const onScanButton = () => {
+    if (mode === "photo") return handlePhoto();
+    if (mode === "qr" || mode === "scanner") {
+      if (!cam.stream) {
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "info",
+          message: lang === "fr" ? "Caméra non disponible — autorise l'accès puis pointe vers le code." : "Camera unavailable — grant access then aim at the code.",
+        } }));
+      } else {
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "info",
+          message: lang === "fr" ? "En attente du scan… maintiens le code dans le cadre." : "Waiting for scan… keep the code in the frame.",
+        } }));
+      }
+      return;
+    }
+    if (mode === "rfid") {
       window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
         severity: "info",
-        message: lang === "fr" ? "Aucun animal en BD pour ce filtre." : "No animal in DB for this filter.",
+        message: lang === "fr"
+          ? (typeof window !== "undefined" && "NDEFReader" in window ? "Approche le lecteur NFC de la boucle." : "NFC non supporté sur ce navigateur.")
+          : (typeof window !== "undefined" && "NDEFReader" in window ? "Bring the NFC reader close to the tag." : "NFC not supported on this browser."),
       } }));
       return;
     }
-    setScanning(true);
-    setFlash(false);
-    setTimeout(() => {
-      const picked = specific || pool[Math.floor(Math.random() * pool.length)];
-      setFound(picked);
-      setScanning(false);
-      const newRec = { animalPk: picked._pk, externalId: picked.id, method: mode, at: new Date().toISOString() };
-      setRecent((r) => {
-        const next = [{ ...newRec, animal: picked }, ...r.filter((x) => x.animalPk !== picked._pk)].slice(0, 8);
-        saveRecent(next.map(({ animal, ...rest }) => rest));
-        return next;
-      });
-    }, mode === "rfid" ? 1100 : mode === "face" ? 2200 : 1700);
+    if (mode === "face") {
+      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+        severity: "info",
+        message: lang === "fr" ? "Reconnaissance faciale — bientôt disponible." : "Face recognition — coming soon.",
+      } }));
+      return;
+    }
   };
 
   const handlePhoto = () => {
@@ -207,7 +233,8 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
         setPhoto(c.toDataURL("image/jpeg", 0.85));
       } catch {}
     }
-    setTimeout(() => simulateScan(), 200);
+    // Photo prise — pas d'identification automatique. L'utilisateur peut
+    // saisir l'animal en mode "manuel" si besoin.
   };
 
   // Find an animal by code read from QR/barcode/NFC. Matches against
@@ -294,7 +321,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
       {!found && mode !== "manual" && (
         <CameraViewport
           mode={mode} scanning={scanning} flash={flash}
-          onScan={() => mode === "photo" ? handlePhoto() : simulateScan()}
+          onScan={onScanButton}
           lang={lang}
           videoRef={videoRef}
           camStream={cam.stream}
@@ -306,7 +333,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
         />
       )}
 
-      {!found && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => simulateScan(a)}/>}
+      {!found && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => acceptResult(a)}/>}
 
       {found && <ResultCard lang={lang} animal={found} method={mode} onClose={reset} onNav={onNav}/>}
 
