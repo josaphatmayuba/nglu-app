@@ -1228,7 +1228,54 @@ export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events",
   offspringCount: int("offspring_count"),
   outcome: varchar("outcome", { length: 50 }),
   notes: text("notes"),
+  // Saillie / IA — soit une paillette de la banque, soit un mâle du troupeau.
+  breedingType: varchar("breeding_type", { length: 20 }).default("unknown").notNull(), // ai | natural | unknown
+  sireStrawId: bigint("sire_straw_id", { mode: "number" }),
+  sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ─── Banque de semence (insémination artificielle) ──────────────────────
+// Une ligne = une référence de paillette détenue par l'organisation.
+// `strawsRemaining` est décrémenté à chaque event repro de type "ai".
+export const farmosSemenStraws = mysqlTable("farmos_semen_straws", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+
+  // Identification
+  code: varchar("code", { length: 100 }).notNull(),
+  sireName: varchar("sire_name", { length: 255 }).notNull(),
+  sireRegistration: varchar("sire_registration", { length: 100 }),
+  species: varchar("species", { length: 50 }).notNull(), // cow | pig | goat | sheep
+
+  // Origine
+  breed: varchar("breed", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+  region: varchar("region", { length: 100 }),
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  collectionCenter: varchar("collection_center", { length: 255 }),
+  collectionDate: date("collection_date", { mode: "string" }),
+
+  // Qualité / lot
+  batchNumber: varchar("batch_number", { length: 100 }),
+  motilityPct: int("motility_pct"),
+  concentrationMillionPerMl: int("concentration_million_per_ml"),
+  strawsPerDose: int("straws_per_dose").default(1),
+
+  // Traits génétiques (JSON libre)
+  geneticTraits: json("genetic_traits"),
+  notes: text("notes"),
+
+  // Stock
+  strawsTotal: int("straws_total").notNull(),
+  strawsRemaining: int("straws_remaining").notNull(),
+  tankLocation: varchar("tank_location", { length: 100 }),
+  pricePerDose: decimal("price_per_dose", { precision: 12, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+
+  status: varchar("status", { length: 20 }).default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });

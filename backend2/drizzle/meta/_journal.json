@@ -302,6 +302,13 @@
       "when": 1780167600000,
       "tag": "0058_farmos_animal_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1780171200000,
+      "tag": "0059_farmos_semen_bank",
+      "breakpoints": true
     }
   ]
 }

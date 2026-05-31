@@ -296,6 +296,63 @@ export class CreateReproductionEventDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() offspring_count?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() outcome?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional({ enum: ["ai", "natural", "unknown"] })
+    @IsOptional() @IsString() @IsIn(["ai", "natural", "unknown"]) breeding_type?: string | null;
+  @ApiPropertyOptional({ description: "Paillette utilisée (banque de semence). Décrémente straws_remaining." })
+    @IsOptional() @Type(() => Number) @IsInt() sire_straw_id?: number | null;
+  @ApiPropertyOptional({ description: "Mâle du troupeau utilisé pour saillie naturelle." })
+    @IsOptional() @Type(() => Number) @IsInt() sire_animal_id?: number | null;
+}
+
+// ─── Semen straws (banque de semence pour IA) ───────────────────────────
+export class CreateSemenStrawDto {
+  @ApiProperty({ example: "CIAQ-HOLM-1H10567" }) @IsString() code: string;
+  @ApiProperty() @IsString() sire_name: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() sire_registration?: string | null;
+  @ApiProperty({ enum: FARMOS_SPECIES }) @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() breed?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() country?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() region?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() supplier_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() collection_center?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() collection_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() batch_number?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() motility_pct?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() concentration_million_per_ml?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() straws_per_dose?: number | null;
+  @ApiPropertyOptional({ description: "Traits génétiques (JSON libre, ex: {milk_kg:1200, longevity:105})" })
+    @IsOptional() genetic_traits?: Record<string, unknown> | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiProperty() @Type(() => Number) @IsInt() straws_total: number;
+  @ApiPropertyOptional({ description: "Si omis, initialisé à straws_total." })
+    @IsOptional() @Type(() => Number) @IsInt() straws_remaining?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() tank_location?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) price_per_dose?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+}
+
+export class UpdateSemenStrawDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() sire_name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() sire_registration?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() breed?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() country?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() region?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() supplier_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() collection_center?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() collection_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() batch_number?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() motility_pct?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() concentration_million_per_ml?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() straws_per_dose?: number | null;
+  @ApiPropertyOptional() @IsOptional() genetic_traits?: Record<string, unknown> | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() straws_total?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() straws_remaining?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() tank_location?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) price_per_dose?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional({ enum: ["active", "archived"] })
+    @IsOptional() @IsString() @IsIn(["active", "archived"]) status?: string;
 }
 
 // ─── Production logs ─────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosTreatments, farmosVaccinations, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
   CreateAnimalDto,
@@ -11,10 +11,12 @@ import type {
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
+  CreateSemenStrawDto,
   CreateTreatmentDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
   UpdateMedicineDto,
+  UpdateSemenStrawDto,
   UpdateTreatmentDto,
 } from "./dto/farmos.dto";
 
@@ -406,6 +408,35 @@ export class FarmosService {
     // Validate the animal belongs to the organisation.
     const [a] = await this.db.select().from(farmosAnimals).where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId))).limit(1);
     if (!a) throw new NotFoundException("Animal not found in this organisation.");
+
+    const breedingType = (input.breeding_type ?? "unknown");
+
+    // Si IA: vérifie la paillette + décrémente le stock.
+    if (input.sire_straw_id) {
+      const [straw] = await this.db.select().from(farmosSemenStraws)
+        .where(and(eq(farmosSemenStraws.id, input.sire_straw_id), eq(farmosSemenStraws.organizationId, orgId)))
+        .limit(1);
+      if (!straw) throw new NotFoundException("Paillette introuvable.");
+      if (straw.species !== a.species) {
+        throw new BadRequestException(`Espèce de la paillette (${straw.species}) ne correspond pas à la femelle (${a.species}).`);
+      }
+      if (straw.strawsRemaining <= 0) throw new BadRequestException("Stock paillettes épuisé.");
+      await this.db.update(farmosSemenStraws)
+        .set({ strawsRemaining: straw.strawsRemaining - 1 })
+        .where(eq(farmosSemenStraws.id, straw.id));
+    }
+    // Si saillie naturelle: vérifie que le mâle existe et est compatible.
+    if (input.sire_animal_id) {
+      const [sire] = await this.db.select().from(farmosAnimals)
+        .where(and(eq(farmosAnimals.id, input.sire_animal_id), eq(farmosAnimals.organizationId, orgId)))
+        .limit(1);
+      if (!sire) throw new NotFoundException("Mâle introuvable.");
+      if (sire.sex !== "M") throw new BadRequestException("L'animal sélectionné comme père doit avoir sex=M.");
+      if (sire.species !== a.species) {
+        throw new BadRequestException(`Espèce du mâle (${sire.species}) ne correspond pas à la femelle (${a.species}).`);
+      }
+    }
+
     const [res] = await this.db.insert(farmosReproductionEvents).values({
       organizationId: orgId,
       animalId: input.animal_id,
@@ -416,6 +447,9 @@ export class FarmosService {
       offspringCount: input.offspring_count ?? null,
       outcome: input.outcome ?? null,
       notes: input.notes ?? null,
+      breedingType,
+      sireStrawId: input.sire_straw_id ?? null,
+      sireAnimalId: input.sire_animal_id ?? null,
     }).$returningId();
     return { id: res.id };
   }
@@ -423,6 +457,195 @@ export class FarmosService {
   async deleteReproductionEvent(id: number, orgId: number) {
     await this.db.update(farmosReproductionEvents).set({ isActive: 0 }).where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId)));
     return { message: "Événement supprimé." };
+  }
+
+  // ─── Semen straws (banque IA) ────────────────────────────────────────────
+
+  async listSemenStraws(orgId: number, species?: string | null) {
+    const conds = [eq(farmosSemenStraws.organizationId, orgId), eq(farmosSemenStraws.status, "active")];
+    if (species) conds.push(eq(farmosSemenStraws.species, species));
+    return this.db
+      .select({
+        id: farmosSemenStraws.id,
+        code: farmosSemenStraws.code,
+        sireName: farmosSemenStraws.sireName,
+        sireRegistration: farmosSemenStraws.sireRegistration,
+        species: farmosSemenStraws.species,
+        breed: farmosSemenStraws.breed,
+        country: farmosSemenStraws.country,
+        region: farmosSemenStraws.region,
+        supplierId: farmosSemenStraws.supplierId,
+        supplierName: suppliers.name,
+        collectionCenter: farmosSemenStraws.collectionCenter,
+        collectionDate: farmosSemenStraws.collectionDate,
+        batchNumber: farmosSemenStraws.batchNumber,
+        motilityPct: farmosSemenStraws.motilityPct,
+        concentrationMillionPerMl: farmosSemenStraws.concentrationMillionPerMl,
+        strawsPerDose: farmosSemenStraws.strawsPerDose,
+        geneticTraits: farmosSemenStraws.geneticTraits,
+        notes: farmosSemenStraws.notes,
+        strawsTotal: farmosSemenStraws.strawsTotal,
+        strawsRemaining: farmosSemenStraws.strawsRemaining,
+        tankLocation: farmosSemenStraws.tankLocation,
+        pricePerDose: farmosSemenStraws.pricePerDose,
+        currencyId: farmosSemenStraws.currencyId,
+        status: farmosSemenStraws.status,
+      })
+      .from(farmosSemenStraws)
+      .leftJoin(suppliers, eq(farmosSemenStraws.supplierId, suppliers.id))
+      .where(and(...conds))
+      .orderBy(farmosSemenStraws.sireName);
+  }
+
+  async getSemenStraw(id: number, orgId: number) {
+    const rows = await this.listSemenStraws(orgId, null);
+    const row = rows.find((r) => r.id === id);
+    if (!row) throw new NotFoundException("Paillette introuvable.");
+    // Historique d'utilisation (events repro) + taux réussite.
+    const events = await this.db.select()
+      .from(farmosReproductionEvents)
+      .where(and(eq(farmosReproductionEvents.sireStrawId, id), eq(farmosReproductionEvents.organizationId, orgId)))
+      .orderBy(desc(farmosReproductionEvents.eventDate));
+    const ai = events.filter((e) => e.eventType === "insemination");
+    const ok = ai.filter((e) => e.outcome === "success" || e.outcome === "confirmed" || e.outcome === "pregnant").length;
+    const successRate = ai.length > 0 ? Math.round((ok / ai.length) * 100) : null;
+    return { ...row, events, successRate, totalUses: ai.length };
+  }
+
+  async createSemenStraw(input: CreateSemenStrawDto, orgId: number) {
+    const [res] = await this.db.insert(farmosSemenStraws).values({
+      organizationId: orgId,
+      code: input.code,
+      sireName: input.sire_name,
+      sireRegistration: input.sire_registration ?? null,
+      species: input.species,
+      breed: input.breed ?? null,
+      country: input.country ?? null,
+      region: input.region ?? null,
+      supplierId: input.supplier_id ?? null,
+      collectionCenter: input.collection_center ?? null,
+      collectionDate: input.collection_date ?? null,
+      batchNumber: input.batch_number ?? null,
+      motilityPct: input.motility_pct ?? null,
+      concentrationMillionPerMl: input.concentration_million_per_ml ?? null,
+      strawsPerDose: input.straws_per_dose ?? 1,
+      geneticTraits: input.genetic_traits ?? null,
+      notes: input.notes ?? null,
+      strawsTotal: input.straws_total,
+      strawsRemaining: input.straws_remaining ?? input.straws_total,
+      tankLocation: input.tank_location ?? null,
+      pricePerDose: input.price_per_dose != null ? String(input.price_per_dose) : null,
+      currencyId: input.currency_id ?? null,
+    }).$returningId();
+    return this.getSemenStraw(Number(res.id), orgId);
+  }
+
+  async updateSemenStraw(id: number, input: UpdateSemenStrawDto, orgId: number) {
+    const [existing] = await this.db.select().from(farmosSemenStraws)
+      .where(and(eq(farmosSemenStraws.id, id), eq(farmosSemenStraws.organizationId, orgId))).limit(1);
+    if (!existing) throw new NotFoundException("Paillette introuvable.");
+    const patch: Record<string, unknown> = {};
+    if (input.sire_name !== undefined) patch.sireName = input.sire_name;
+    if (input.sire_registration !== undefined) patch.sireRegistration = input.sire_registration;
+    if (input.breed !== undefined) patch.breed = input.breed;
+    if (input.country !== undefined) patch.country = input.country;
+    if (input.region !== undefined) patch.region = input.region;
+    if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id;
+    if (input.collection_center !== undefined) patch.collectionCenter = input.collection_center;
+    if (input.collection_date !== undefined) patch.collectionDate = input.collection_date;
+    if (input.batch_number !== undefined) patch.batchNumber = input.batch_number;
+    if (input.motility_pct !== undefined) patch.motilityPct = input.motility_pct;
+    if (input.concentration_million_per_ml !== undefined) patch.concentrationMillionPerMl = input.concentration_million_per_ml;
+    if (input.straws_per_dose !== undefined) patch.strawsPerDose = input.straws_per_dose;
+    if (input.genetic_traits !== undefined) patch.geneticTraits = input.genetic_traits;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (input.straws_total !== undefined) patch.strawsTotal = input.straws_total;
+    if (input.straws_remaining !== undefined) patch.strawsRemaining = input.straws_remaining;
+    if (input.tank_location !== undefined) patch.tankLocation = input.tank_location;
+    if (input.price_per_dose !== undefined) patch.pricePerDose = input.price_per_dose != null ? String(input.price_per_dose) : null;
+    if (input.currency_id !== undefined) patch.currencyId = input.currency_id;
+    if (input.status !== undefined) patch.status = input.status;
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(farmosSemenStraws).set(patch).where(eq(farmosSemenStraws.id, id));
+    }
+    return this.getSemenStraw(id, orgId);
+  }
+
+  async deleteSemenStraw(id: number, orgId: number) {
+    await this.db.update(farmosSemenStraws).set({ status: "archived" })
+      .where(and(eq(farmosSemenStraws.id, id), eq(farmosSemenStraws.organizationId, orgId)));
+    return { message: "Paillette archivée." };
+  }
+
+  // Mâles disponibles pour saillie naturelle (filtré par espèce).
+  async listBreedingMales(orgId: number, species?: string | null) {
+    const conds = [
+      eq(farmosAnimals.organizationId, orgId),
+      eq(farmosAnimals.isActive, 1),
+      eq(farmosAnimals.sex, "M"),
+    ];
+    if (species) conds.push(eq(farmosAnimals.species, species));
+    return this.db.select({
+      id: farmosAnimals.id,
+      externalId: farmosAnimals.externalId,
+      name: farmosAnimals.name,
+      species: farmosAnimals.species,
+      race: farmosAnimals.race,
+      dateOfBirth: farmosAnimals.dateOfBirth,
+      status: farmosAnimals.status,
+    }).from(farmosAnimals).where(and(...conds)).orderBy(farmosAnimals.name);
+  }
+
+  // Suggestion pour pré-remplir le formulaire IA: dernière paillette utilisée
+  // avec succès sur cette femelle (mode "history"), sinon la dernière utilisée
+  // sur la même race (fallback "breed").
+  async suggestBreedingForFemale(animalId: number, orgId: number, mode: "history" | "genetic" = "history") {
+    const [female] = await this.db.select().from(farmosAnimals)
+      .where(and(eq(farmosAnimals.id, animalId), eq(farmosAnimals.organizationId, orgId))).limit(1);
+    if (!female) throw new NotFoundException("Femelle introuvable.");
+
+    if (mode === "history") {
+      // 1) Dernière IA réussie sur cette femelle
+      const [hit] = await this.db.select().from(farmosReproductionEvents)
+        .where(and(
+          eq(farmosReproductionEvents.animalId, animalId),
+          eq(farmosReproductionEvents.organizationId, orgId),
+          eq(farmosReproductionEvents.eventType, "insemination"),
+          or(eq(farmosReproductionEvents.outcome, "success"), eq(farmosReproductionEvents.outcome, "confirmed"), eq(farmosReproductionEvents.outcome, "pregnant")),
+        ))
+        .orderBy(desc(farmosReproductionEvents.eventDate))
+        .limit(1);
+      if (hit?.sireStrawId) {
+        const straw = await this.getSemenStraw(hit.sireStrawId, orgId).catch(() => null);
+        if (straw && straw.strawsRemaining > 0) return { reason: "last_success_on_female", straw };
+      }
+      // 2) Sinon, dernière utilisée sur la même race
+      if (female.race) {
+        const sameRace = await this.listSemenStraws(orgId, female.species);
+        const byBreed = sameRace.find((s) => (s.breed || "").toLowerCase() === female.race!.toLowerCase() && s.strawsRemaining > 0);
+        if (byBreed) return { reason: "same_breed", straw: byBreed };
+      }
+      // 3) Sinon, n'importe quelle paillette de la même espèce avec stock
+      const any = await this.listSemenStraws(orgId, female.species);
+      const firstAvail = any.find((s) => s.strawsRemaining > 0);
+      return firstAvail ? { reason: "same_species", straw: firstAvail } : { reason: "none", straw: null };
+    }
+
+    // mode = "genetic": classe par taux de réussite décroissant sur la race.
+    const candidates = await this.listSemenStraws(orgId, female.species);
+    const scored: Array<{ straw: typeof candidates[number]; score: number }> = [];
+    for (const c of candidates) {
+      if (c.strawsRemaining <= 0) continue;
+      const detail = await this.getSemenStraw(c.id, orgId);
+      let score = detail.successRate ?? 50; // neutre si jamais utilisé
+      if (female.race && (c.breed || "").toLowerCase() === female.race.toLowerCase()) score += 15;
+      if ((c.motilityPct ?? 0) >= 70) score += 5;
+      scored.push({ straw: c, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.length > 0
+      ? { reason: "genetic_ranked", straw: scored[0].straw, score: scored[0].score }
+      : { reason: "none", straw: null };
   }
 
   // ─── Production logs ────────────────────────────────────────────────────

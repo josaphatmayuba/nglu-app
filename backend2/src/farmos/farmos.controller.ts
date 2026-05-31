@@ -24,10 +24,12 @@ import {
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
+  CreateSemenStrawDto,
   CreateTreatmentDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
   UpdateMedicineDto,
+  UpdateSemenStrawDto,
   UpdateTreatmentDto,
 } from "./dto/farmos.dto";
 import { FarmosService } from "./farmos.service";
@@ -368,6 +370,65 @@ export class FarmosController {
   @Get("staff")
   listFarmosStaff(@CurrentOrg() orgId: number, @Query("role") role?: string) {
     return this.farmos.listFarmosStaff(orgId, role || null);
+  }
+
+  // ─── Semen straws (banque IA) ────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List semen straws (optional ?species filter)." })
+  @Permissions("readAll-farmos")
+  @Get("semen-straws")
+  listSemenStraws(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmos.listSemenStraws(orgId, species || null);
+  }
+
+  @ApiOperation({ summary: "Get a semen straw with usage history + success rate." })
+  @Permissions("readAll-farmos")
+  @Get("semen-straws/:id")
+  getSemenStraw(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.getSemenStraw(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Create a semen straw record." })
+  @Permissions("create-farmos")
+  @Post("semen-straws")
+  createSemenStraw(@CurrentOrg() orgId: number, @Body() body: CreateSemenStrawDto) {
+    return this.farmos.createSemenStraw(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a semen straw record." })
+  @Permissions("update-farmos")
+  @Patch("semen-straws/:id")
+  updateSemenStraw(
+    @CurrentOrg() orgId: number,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateSemenStrawDto,
+  ) {
+    return this.farmos.updateSemenStraw(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Archive a semen straw record." })
+  @Permissions("delete-farmos")
+  @Delete("semen-straws/:id")
+  deleteSemenStraw(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.deleteSemenStraw(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List males available for natural breeding (optional ?species)." })
+  @Permissions("readAll-farmos")
+  @Get("breeding-males")
+  listBreedingMales(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmos.listBreedingMales(orgId, species || null);
+  }
+
+  @ApiOperation({ summary: "Suggest a semen straw for an insemination on a given female. mode = history | genetic." })
+  @Permissions("readAll-farmos")
+  @Get("breeding-suggestion/:animalId")
+  suggestBreeding(
+    @CurrentOrg() orgId: number,
+    @Param("animalId", ParseIntPipe) animalId: number,
+    @Query("mode") mode?: "history" | "genetic",
+  ) {
+    return this.farmos.suggestBreedingForFemale(animalId, orgId, mode === "genetic" ? "genetic" : "history");
   }
 
   @ApiOperation({ summary: "List photos for an animal." })
