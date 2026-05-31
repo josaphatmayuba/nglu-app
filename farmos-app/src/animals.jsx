@@ -93,6 +93,18 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
       });
     return () => { cancelled = true; };
   }, [reloadKey]);
+  // Récupère une éventuelle sélection en attente (posée par l'écran
+  // Identification → "Voir fiche"). On essaie après chaque chargement
+  // d'animaux pour matcher l'external_id quand la liste est prête.
+  React.useEffect(() => {
+    const pending = (typeof window !== "undefined" && window.__farmosSelectAnimal) || null;
+    if (!pending || animals.length === 0) return;
+    const match = animals.find((a) => a.id === pending || a._pk === pending);
+    if (match) {
+      setSelectedId(match.id);
+      try { delete window.__farmosSelectAnimal; } catch {}
+    }
+  }, [animals]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:animal-created", onCreated);

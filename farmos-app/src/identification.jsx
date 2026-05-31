@@ -1026,7 +1026,13 @@ const ResultCard = ({ lang, animal, method, onClose, onNav }) => {
               };
               window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: ctx }));
             }
-            else if (a.id === "view") onNav && onNav("animals");
+            else if (a.id === "view") {
+              // Stocke l'animal à sélectionner avant de naviguer; l'écran
+              // Animaux le ramassera dans son useEffect (mobile = pousse en
+              // détail plein écran, desktop = sélectionne dans la liste).
+              window.__farmosSelectAnimal = animal.id ?? animal.externalId ?? null;
+              onNav && onNav("animals");
+            }
           }} className="card" style={{
             padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 7,
             cursor: "pointer", textAlign: "center", border: "1px solid var(--border-1)",
