@@ -4,6 +4,7 @@ import React from "react";
 import { Icon, AnimalGlyph, Brand } from "./icons";
 import { SPECIES, t } from "./data";
 import { api } from "./api";
+import { NetStatusPill } from "./offline-status";
 
 const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
@@ -299,14 +300,7 @@ const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter,
 
     {right || (
       <>
-        {!compact && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6,
-                        background: "var(--paper)", border: "1px solid var(--border-2)",
-                        borderRadius: 999, padding: "5px 12px", fontSize: 12, height: 32 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--sage-500)" }}/>
-            <span style={{ color: "var(--ink-700)" }}>{t(lang, "syncOk")}</span>
-          </div>
-        )}
+        {!compact && <NetStatusPill lang={lang}/>}
         {!compact && (
           <button className="btn btn-ghost" style={{ height: 32, width: 32, padding: 0, justifyContent: "center", position: "relative", flexShrink: 0 }}>
             <Icon name="bell" size={16} color="var(--ink-700)"/>

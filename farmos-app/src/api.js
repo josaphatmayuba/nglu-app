@@ -32,23 +32,50 @@ async function jsonFetch(path, init = {}) {
   return res.json();
 }
 
+// SCRUM-239 : stale-while-revalidate via Dexie. Sert immédiatement la version
+// cachée de la collection (si présente), puis rafraîchit en arrière-plan et
+// émet `farmos:cache-updated` (detail = nom de table) pour que les composants
+// se ré-render si besoin.
+import { db, replaceCache, readCache } from "./offline-db";
+
+function cachedList(table, path) {
+  return async () => {
+    let cached;
+    try { cached = await readCache(table); } catch { cached = []; }
+    // Lance le refresh en background (non bloquant pour la valeur retournée).
+    const refresh = jsonFetch(path)
+      .then(async (fresh) => {
+        if (Array.isArray(fresh)) {
+          await replaceCache(table, fresh);
+          window.dispatchEvent(new CustomEvent("farmos:cache-updated", { detail: table }));
+        }
+        return fresh;
+      })
+      .catch(() => null);
+    // Si on a déjà du cache → retourne immédiatement. Sinon attend le serveur.
+    if (cached && cached.length > 0) return cached;
+    const fresh = await refresh;
+    return fresh || cached || [];
+  };
+}
+
 export const api = {
-  listAnimals:    () => jsonFetch("/animals"),
-  listMedicines:  () => jsonFetch("/medicines"),
-  listTreatments: () => jsonFetch("/treatments"),
-  listDiseases:   (species) => jsonFetch(`/diseases${species ? `?species=${encodeURIComponent(species)}` : ""}`),
-  listReproductionEvents: () => jsonFetch("/reproduction-events"),
-  listSales:    () => jsonFetch("/sales"),
-  listExpenses: () => jsonFetch("/expenses"),
+  listAnimals:    cachedList("animals", "/animals"),
+  listMedicines:  cachedList("medicines", "/medicines"),
+  listTreatments: cachedList("treatments", "/treatments"),
+  listDiseases:   (species) => cachedList("diseases", `/diseases${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),
+  listReproductionEvents: cachedList("reproductionEvents", "/reproduction-events"),
+  listSales:    cachedList("sales", "/sales"),
+  listExpenses: cachedList("expenses", "/expenses"),
   createAnimal:    (body) => jsonFetch("/animals",             { method: "POST",   body: JSON.stringify(body) }),
   updateAnimal:    (id, body) => jsonFetch(`/animals/${id}`,   { method: "PATCH",  body: JSON.stringify(body) }),
   createTreatment: (body) => jsonFetch("/treatments",          { method: "POST",   body: JSON.stringify(body) }),
   createSale:      (body) => jsonFetch("/sales",               { method: "POST",   body: JSON.stringify(body) }),
   createExpense:   (body) => jsonFetch("/expenses",            { method: "POST",   body: JSON.stringify(body) }),
   createReproductionEvent: (body) => jsonFetch("/reproduction-events", { method: "POST", body: JSON.stringify(body) }),
-  listProductionLogs: () => jsonFetch("/production-logs"),
-  listVaccinations: () => jsonFetch("/vaccinations"),
-  listAiInsights: () => jsonFetch("/ai-insights"),
+  listProductionLogs: cachedList("productionLogs", "/production-logs"),
+  listVaccinations: cachedList("vaccinations", "/vaccinations"),
+  listAiInsights: cachedList("aiInsights", "/ai-insights"),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   createProductionLog: (body) => jsonFetch("/production-logs", { method: "POST", body: JSON.stringify(body) }),
   deleteAnimal:  (id) => jsonFetch(`/animals/${id}`,  { method: "DELETE" }),
@@ -61,13 +88,13 @@ export const api = {
   listLookups: (category, scope) => jsonFetch(`/lookups?category=${encodeURIComponent(category)}${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`),
   createLookup: (body) => jsonFetch("/lookups", { method: "POST", body: JSON.stringify(body) }),
   createDisease: (body) => jsonFetch("/diseases", { method: "POST", body: JSON.stringify(body) }),
-  listFarmosStaff: (role) => jsonFetch(`/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`),
+  listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
   listAnimalsWithPhotos: (perAnimal = 3) => jsonFetch(`/animals-with-photos?perAnimal=${perAnimal}`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),
   deleteAnimalPhoto: (id) => jsonFetch(`/animals/photos/${id}`, { method: "DELETE" }),
   // Banque de semence (IA)
-  listSemenStraws: (species) => jsonFetch(`/semen-straws${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  listSemenStraws: (species) => cachedList("semenStraws", `/semen-straws${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),
   getSemenStraw: (id) => jsonFetch(`/semen-straws/${id}`),
   createSemenStraw: (body) => jsonFetch("/semen-straws", { method: "POST", body: JSON.stringify(body) }),
   updateSemenStraw: (id, body) => jsonFetch(`/semen-straws/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
