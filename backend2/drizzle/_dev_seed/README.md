@@ -27,6 +27,7 @@ docker exec -e MYSQL_PWD="$DB_ROOT_PASSWORD" nglu_dev_mysql sh -c "mysql -uroot 
 | `05_farmos_staff.sql` | Département CRM « FarmOS », 4 désignations (Vétérinaire, Gérant ferme, Technicien agricole, Éleveur), 5 employés démo rattachés au département. Vu dans l'écran **Équipe** de FarmOS et dans le module RH du CRM. Idempotent (INSERT si non existant). |
 | `06_alerts.sql` | Déclenche 13 alertes : 4 stocks faibles (2 critical), 4 délais de retrait actifs (lait/viande/œufs), 5 gestations en cours dont 4 imminentes, + 4 animaux marqués `sick`. Visibles dans l'écran **Alertes** (avec les filtres Critique/Élevée/Moyenne/Retrait) et dans la bannière dashboard. |
 | `07_suppliers_and_vet_tremblay.sql` | Promeut les noms écrits en dur dans `farmos_medicines.supplier` / `farmos_expenses.supplier` vers la vraie table CRM `supplier` (9 fournisseurs : Coop Agri-Pro, Meunerie Tremblay, Skretting, Ferme Lapierre, Vétoquinol, Elanco, Boehringer Ingelheim, MSD Santé Animale, Aquatech). Ajoute aussi le vétérinaire **Dr. Anne Tremblay** dans `users` (les autres vétos Boucher/Lavoie sont déjà dans `05`). Idempotent. |
+| `08_semen_straws.sql` | Banque de semence : 14 paillettes IA couvrant les 4 espèces (cow/pig/goat/sheep) — taureaux Holstein/Jersey/Angus/Hereford, verrats Duroc/Landrace/Yorkshire/Pietrain, boucs Alpine/Saanen/Boer, béliers Suffolk/Mérinos/Dorper. Rattachées aux fournisseurs créés par `07`, avec traits génétiques en JSON (motilité, lait, longévité…). Pré-requis: `07` appliqué (FK supplier_id). Idempotent. |
 
 ## Prod
 
