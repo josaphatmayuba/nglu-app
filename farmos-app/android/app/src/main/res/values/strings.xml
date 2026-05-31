@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FarmOS</string>
+    <string name="title_activity_main">FarmOS</string>
+    <string name="package_name">ca.ngolu.farmos</string>
+    <string name="custom_url_scheme">ca.ngolu.farmos</string>
+</resources>

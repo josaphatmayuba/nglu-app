@@ -1,7 +1,15 @@
 // FarmOS — API client. Reads access-token from the CRM's localStorage entry
 // (same-origin: /admin and /farmos share localStorage on ongdngolu.org).
-
-const BASE = "/api/farmos";
+//
+// Web : URLs relatives (/api/farmos/...), nginx route vers le backend.
+// Capacitor (Android/iOS) : la WebView a pour origin capacitor://localhost,
+// donc les URLs relatives ne marcheraient pas. On détecte Capacitor et on
+// préfixe avec l'hôte API configuré (FARMOS_API_HOST, sinon dev par défaut).
+const NATIVE = typeof window !== "undefined"
+  && (window.Capacitor?.isNativePlatform?.() === true
+      || /^capacitor:\/\//.test(window.location?.protocol || ""));
+const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
+const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
 
 function authHeaders() {
   const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;

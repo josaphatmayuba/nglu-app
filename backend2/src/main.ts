@@ -51,8 +51,18 @@ async function bootstrap() {
   app.use(advancedSecurityHeaders);
   app.use(cookieParser());
 
+  // CORS : accepte une liste séparée par virgules + autorise toujours les
+  // origines Capacitor (Android = https://localhost, iOS = capacitor://localhost)
+  // pour que l'app native FarmOS puisse appeler l'API.
+  const corsOrigins = String(env.corsOrigin).split(",").map((s) => s.trim()).filter(Boolean);
+  const NATIVE_ORIGINS = ["capacitor://localhost", "https://localhost", "http://localhost"];
   app.enableCors({
-    origin: env.corsOrigin,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (corsOrigins.includes(origin)) return cb(null, true);
+      if (NATIVE_ORIGINS.includes(origin)) return cb(null, true);
+      cb(new Error(`CORS denied: ${origin}`));
+    },
     credentials: true,
   });
 
