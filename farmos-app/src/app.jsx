@@ -44,8 +44,51 @@ function useLayoutMode(forced) {
   return mode;
 }
 
+// URL <-> route id. URLs en français, vu que l'app est principalement FR.
+const ROUTE_SLUGS = {
+  dashboard: "",
+  identification: "identification",
+  animals: "animaux",
+  health: "sante",
+  calendar: "calendrier",
+  stock: "stock",
+  repro: "reproduction",
+  "semen-bank": "banque-semence",
+  production: "production",
+  alerts: "alertes",
+  finances: "finances",
+  reports: "rapports",
+  employees: "employes",
+  settings: "parametres",
+};
+const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
+const BASE = "/farmos/";
+function routeFromLocation() {
+  if (typeof window === "undefined") return "dashboard";
+  const p = window.location.pathname || "";
+  if (!p.startsWith(BASE)) return "dashboard";
+  const slug = p.slice(BASE.length).replace(/\/$/, "").split("/")[0] || "";
+  return SLUGS_TO_ROUTE[slug] || "dashboard";
+}
+function pathForRoute(r) {
+  const slug = ROUTE_SLUGS[r] ?? "";
+  return BASE + slug + (slug ? "" : "");
+}
+
 function App() {
-  const [route, setRoute] = React.useState("dashboard");
+  const [route, setRouteState] = React.useState(routeFromLocation);
+  const setRoute = React.useCallback((r) => {
+    setRouteState(r);
+    const next = pathForRoute(r);
+    if (typeof window !== "undefined" && window.location.pathname !== next) {
+      window.history.pushState({ route: r }, "", next);
+    }
+  }, []);
+  React.useEffect(() => {
+    const onPop = () => setRouteState(routeFromLocation());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const [speciesFilter, setSpeciesFilter] = React.useState(null);
   const [tweaks, setTweaks] = React.useState(DEFAULTS);
   const setTweak = (k, v) => setTweaks((prev) => ({ ...prev, [k]: v }));
