@@ -397,6 +397,22 @@ export class FarmosService {
       relatedMedicineId: input.related_medicine_id ?? null,
       notes: input.notes ?? null,
     }).$returningId();
+    // Stock-in : si la dépense est liée à un médicament/aliment et porte une
+    // quantité, on incrémente l'inventaire. Sinon le stock affiché reste figé.
+    if (input.related_medicine_id && input.quantity != null && Number(input.quantity) > 0) {
+      const [med] = await this.db
+        .select({ id: farmosMedicines.id, quantity: farmosMedicines.quantity })
+        .from(farmosMedicines)
+        .where(and(eq(farmosMedicines.id, input.related_medicine_id), eq(farmosMedicines.organizationId, orgId)))
+        .limit(1);
+      if (med) {
+        const newQty = Number(med.quantity || 0) + Number(input.quantity);
+        await this.db
+          .update(farmosMedicines)
+          .set({ quantity: String(newQty) })
+          .where(eq(farmosMedicines.id, med.id));
+      }
+    }
     // Auto-sync to CRM ledger (SCRUM-220)
     const txId = await this.syncExpenseToTransaction(res.id, input, orgId);
     if (txId) {

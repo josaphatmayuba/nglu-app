@@ -603,7 +603,7 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
       : null;
     setSaving(true);
     const payload = {
-      animal_id: selectedAnimal?.id ?? null,
+      animal_id: selectedAnimal?._pk ?? null,
       species,
       product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : productKind === "wool" ? "wool" : "growth",
       log_date: form.date,
@@ -795,9 +795,9 @@ const HealthForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     const endDate = duration > 0 && startDate ? new Date(new Date(startDate).getTime() + duration * 86400000).toISOString().slice(0, 10) : null;
     setSaving(true);
     const payload = {
-      animal_id: selectedAnimal.id,
-      disease_id: selectedDisease.id,
-      medicine_id: selectedMed?.id ?? null,
+      animal_id: selectedAnimal._pk ?? selectedAnimal.id,
+      disease_id: selectedDisease._pk ?? selectedDisease.id,
+      medicine_id: selectedMed?._pk ?? null,
       medicine_name: selectedMed?.name || null,
       dosage: form.dosage || null,
       route: form.route || null,
@@ -1046,7 +1046,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       amount: Number(form.cost),
       supplier: form.supplier || null,
       expense_date: form.date,
-      related_medicine_id: selectedMed?.id ?? null,
+      related_medicine_id: selectedMed?._pk ?? null,
     };
     try {
       await api.createExpense(payload);
@@ -1207,7 +1207,7 @@ const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";
     const payload = {
-      animal_id: selected.id,
+      animal_id: selected._pk ?? selected.id,
       event_type: eventType,
       event_date: form.date,
       offspring_count: kind === "birth" ? (form.live ? Number(form.live) : null) : null,
