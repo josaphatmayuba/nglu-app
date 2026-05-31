@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS `farmos_semen_straws` (
   KEY `idx_farmos_straws_species` (`organization_id`, `species`, `status`),
   KEY `idx_farmos_straws_supplier` (`supplier_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+--> statement-breakpoint
 
 -- Extension reproduction-events : type de saillie + FK père
 ALTER TABLE `farmos_reproduction_events`
   ADD COLUMN `breeding_type`  varchar(20) NOT NULL DEFAULT 'unknown' AFTER `notes`,
   ADD COLUMN `sire_straw_id`  bigint DEFAULT NULL AFTER `breeding_type`,
   ADD COLUMN `sire_animal_id` bigint DEFAULT NULL AFTER `sire_straw_id`;
+--> statement-breakpoint
 
 ALTER TABLE `farmos_reproduction_events`
   ADD KEY `idx_farmos_repro_straw`  (`sire_straw_id`),
