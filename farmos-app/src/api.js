@@ -26,6 +26,14 @@ async function jsonFetch(path, init = {}) {
     },
   });
   if (!res.ok) {
+    // 401 = token invalide ou expiré → on purge l'auth et on laisse le shell
+    // basculer sur l'écran de login (useAuthToken réagit à 'farmos:auth-changed').
+    if (res.status === 401 && typeof window !== "undefined") {
+      try {
+        ["access-token", "role", "roleId", "user", "id", "isLogged"].forEach((k) => localStorage.removeItem(k));
+      } catch {}
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
+    }
     const body = await res.text().catch(() => "");
     throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
   }

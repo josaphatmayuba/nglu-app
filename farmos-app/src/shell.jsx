@@ -74,22 +74,34 @@ const UserChip = ({ showLabels, lang }) => {
       </div>
     );
   }
+  const logout = () => {
+    try {
+      ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k));
+    } catch {}
+    window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
+  };
   return (
-    <div style={{ padding: 12, borderTop: "1px solid #1F2A44", display: "flex", alignItems: "center", gap: 10, justifyContent: showLabels ? "flex-start" : "center" }}>
+    <div style={{ padding: 12, borderTop: "1px solid #1F2A44", display: "flex", alignItems: "center", gap: 8, justifyContent: showLabels ? "flex-start" : "center" }}>
       <div style={{
         width: 32, height: 32, borderRadius: 8, background: "#A85A2A",
         color: "#ECF1EC", display: "flex", alignItems: "center", justifyContent: "center",
         fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 14, flexShrink: 0,
       }}>{u.initials}</div>
       {showLabels && (
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#ECF1EC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.display}</div>
-          {(u.role || u.email) && (
-            <div style={{ fontSize: 11, color: "rgba(236,241,236,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {u.role || u.email}
-            </div>
-          )}
-        </div>
+        <>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#ECF1EC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.display}</div>
+            {(u.role || u.email) && (
+              <div style={{ fontSize: 11, color: "rgba(236,241,236,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {u.role || u.email}
+              </div>
+            )}
+          </div>
+          <button onClick={logout} title={lang === "fr" ? "Se déconnecter" : "Sign out"}
+            style={{ background: "transparent", border: 0, color: "rgba(236,241,236,0.55)", cursor: "pointer", padding: 6, flexShrink: 0 }}>
+            <Icon name="x" size={14} color="currentColor"/>
+          </button>
+        </>
       )}
     </div>
   );

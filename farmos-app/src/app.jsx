@@ -15,6 +15,7 @@ import {
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
+import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
 
 const DEFAULTS = {
@@ -74,6 +75,19 @@ function routeFromLocation() {
 function pathForRoute(r) {
   const slug = ROUTE_SLUGS[r] ?? "";
   return BASE + slug + (slug ? "" : "");
+}
+
+function AppShell() {
+  // Si pas de token CRM en localStorage, on bascule sur l'écran de login
+  // local. Sinon (token présent → CRM ou login FarmOS précédent), on charge
+  // l'app normalement. Le composant Sidebar lit la même clé pour afficher
+  // le user chip.
+  const [lang] = React.useState(() => {
+    try { return localStorage.getItem("farmos-lang") || "fr"; } catch { return "fr"; }
+  });
+  const token = useAuthToken();
+  if (!token) return <LoginScreen lang={lang}/>;
+  return <App/>;
 }
 
 function App() {
@@ -331,4 +345,4 @@ const FarmTweaks = ({ tweaks, setTweak }) => (
   </TweaksPanel>
 );
 
-export default App;
+export default AppShell;
