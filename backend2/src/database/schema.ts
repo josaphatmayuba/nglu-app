@@ -1039,6 +1039,7 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   dateOfBirth: date("date_of_birth", { mode: "string" }),
   weight: decimal("weight", { precision: 10, scale: 2 }),
   weightUnit: varchar("weight_unit", { length: 10 }).default("kg"),
+  count: int("count"),
   lot: varchar("lot", { length: 100 }),
   barn: varchar("barn", { length: 100 }),
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
@@ -1137,6 +1138,79 @@ export const farmosExpenses = mysqlTable("farmos_expenses", {
   transactionId: bigint("transaction_id", { mode: "number" }),
   relatedAnimalId: bigint("related_animal_id", { mode: "number" }),
   relatedMedicineId: bigint("related_medicine_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosVaccinations = mysqlTable("farmos_vaccinations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  species: varchar("species", { length: 50 }).notNull(),
+  vaccine: varchar("vaccine", { length: 255 }).notNull(),
+  target: varchar("target", { length: 255 }),
+  animalCount: int("animal_count"),
+  dueDate: date("due_date", { mode: "string" }).notNull(),
+  status: varchar("status", { length: 20 }).default("scheduled").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosAiInsights = mysqlTable("farmos_ai_insights", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  kind: varchar("kind", { length: 50 }).notNull(),
+  icon: varchar("icon", { length: 50 }),
+  confidence: int("confidence"),
+  textFr: text("text_fr").notNull(),
+  textEn: text("text_en"),
+  actionLabelFr: varchar("action_label_fr", { length: 255 }),
+  actionLabelEn: varchar("action_label_en", { length: 255 }),
+  actionTarget: varchar("action_target", { length: 50 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosAnimalPhotos = mysqlTable("farmos_animal_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  filename: varchar("filename", { length: 255 }),
+  contentType: varchar("content_type", { length: 100 }),
+  sizeBytes: int("size_bytes"),
+  dataUrl: text("data_url").notNull(),
+  uploadedBy: bigint("uploaded_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const farmosLookups = mysqlTable("farmos_lookups", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  scopeKey: varchar("scope_key", { length: 50 }),
+  valueFr: varchar("value_fr", { length: 255 }).notNull(),
+  valueEn: varchar("value_en", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosProductionLogs = mysqlTable("farmos_production_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  productType: varchar("product_type", { length: 20 }).notNull(),
+  logDate: date("log_date", { mode: "string" }).notNull(),
+  period: varchar("period", { length: 10 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 20 }),
+  quality: json("quality"),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

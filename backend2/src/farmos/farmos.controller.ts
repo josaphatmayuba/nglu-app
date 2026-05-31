@@ -19,7 +19,11 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   CreateAnimalDto,
   CreateDiseaseDto,
+  CreateExpenseDto,
   CreateMedicineDto,
+  CreateProductionLogDto,
+  CreateReproductionEventDto,
+  CreateSaleDto,
   CreateTreatmentDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
@@ -224,5 +228,170 @@ export class FarmosController {
   @Delete("diseases/:id")
   deleteDisease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteDisease(id, orgId);
+  }
+
+  // ─── Reproduction events ─────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List reproduction events for the organisation." })
+  @Permissions("readAll-farmos")
+  @Get("reproduction-events")
+  listReproductionEvents(@CurrentOrg() orgId: number) {
+    return this.farmos.listReproductionEvents(orgId);
+  }
+
+  // ─── Sales & expenses ────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List FarmOS sales for the organisation." })
+  @Permissions("readAll-farmos")
+  @Get("sales")
+  listSales(@CurrentOrg() orgId: number) {
+    return this.farmos.listSales(orgId);
+  }
+
+  @ApiOperation({ summary: "List FarmOS expenses for the organisation." })
+  @Permissions("readAll-farmos")
+  @Get("expenses")
+  listExpenses(@CurrentOrg() orgId: number) {
+    return this.farmos.listExpenses(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("sales")
+  createSale(@Body() body: CreateSaleDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createSale(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("sales/:id")
+  deleteSale(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteSale(id, orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("expenses")
+  createExpense(@Body() body: CreateExpenseDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createExpense(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("expenses/:id")
+  deleteExpense(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteExpense(id, orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("reproduction-events")
+  createReproductionEvent(@Body() body: CreateReproductionEventDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createReproductionEvent(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("reproduction-events/:id")
+  deleteReproductionEvent(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteReproductionEvent(id, orgId);
+  }
+
+  // ─── Production logs ─────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: "List production logs for the organisation." })
+  @Permissions("readAll-farmos")
+  @Get("production-logs")
+  listProductionLogs(@CurrentOrg() orgId: number) {
+    return this.farmos.listProductionLogs(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("production-logs")
+  createProductionLog(@Body() body: CreateProductionLogDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createProductionLog(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("production-logs/:id")
+  deleteProductionLog(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteProductionLog(id, orgId);
+  }
+
+  // ─── Vaccinations & AI insights ─────────────────────────────────────────
+
+  @ApiOperation({ summary: "List vaccinations." })
+  @Permissions("readAll-farmos")
+  @Get("vaccinations")
+  listVaccinations(@CurrentOrg() orgId: number) {
+    return this.farmos.listVaccinations(orgId);
+  }
+
+  @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 Claude integration)." })
+  @Permissions("readAll-farmos")
+  @Get("ai-insights")
+  listAiInsights(@CurrentOrg() orgId: number) {
+    return this.farmos.listAiInsights(orgId);
+  }
+
+  @ApiOperation({ summary: "Aggregated finance summary (12-month revenue/expense + by-category)." })
+  @Permissions("readAll-farmos")
+  @Get("finance-summary")
+  getFinanceSummary(@CurrentOrg() orgId: number) {
+    return this.farmos.getFinanceSummary(orgId);
+  }
+
+  @ApiOperation({ summary: "List user-editable lookup values (breeds, vets, routes, …)." })
+  @Permissions("readAll-farmos")
+  @Get("lookups")
+  listLookups(
+    @CurrentOrg() orgId: number,
+    @Query("category") category: string,
+    @Query("scope") scope?: string,
+  ) {
+    return this.farmos.listLookups(orgId, category, scope || null);
+  }
+
+  @ApiOperation({ summary: "Create a new lookup value." })
+  @Permissions("create-farmos")
+  @Post("lookups")
+  createLookup(
+    @CurrentOrg() orgId: number,
+    @Body() body: { category: string; value_fr: string; value_en?: string; scope_key?: string },
+  ) {
+    return this.farmos.createLookup(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a lookup value." })
+  @Permissions("delete-farmos")
+  @Delete("lookups/:id")
+  deleteLookup(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.deleteLookup(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List FarmOS staff (HR users in the FarmOS department). Optional ?role=vet." })
+  @Permissions("readAll-farmos")
+  @Get("staff")
+  listFarmosStaff(@CurrentOrg() orgId: number, @Query("role") role?: string) {
+    return this.farmos.listFarmosStaff(orgId, role || null);
+  }
+
+  @ApiOperation({ summary: "List photos for an animal." })
+  @Permissions("readAll-farmos")
+  @Get("animals/:id/photos")
+  listAnimalPhotos(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.listAnimalPhotos(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload a photo for an animal (base64 data URL)." })
+  @Permissions("create-farmos")
+  @Post("animals/:id/photos")
+  createAnimalPhoto(
+    @CurrentOrg() orgId: number,
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { data_url: string; filename?: string; content_type?: string; size_bytes?: number },
+  ) {
+    return this.farmos.createAnimalPhoto(id, body, orgId, null);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a photo." })
+  @Permissions("delete-farmos")
+  @Delete("animals/photos/:id")
+  deleteAnimalPhoto(@CurrentOrg() orgId: number, @Param("id", ParseIntPipe) id: number) {
+    return this.farmos.deleteAnimalPhoto(id, orgId);
   }
 }

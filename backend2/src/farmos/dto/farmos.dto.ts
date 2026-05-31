@@ -68,6 +68,13 @@ export class CreateAnimalDto {
   @IsString()
   weight_unit?: string | null;
 
+  @ApiPropertyOptional({ example: 4200, description: "Nombre d'animaux pour les lots (poulets, canards, dindes, poissons)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  count?: number | null;
+
   @ApiPropertyOptional({ example: "Lot A" })
   @IsOptional()
   @IsString()
@@ -98,6 +105,7 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() date_of_birth?: string | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) weight?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() weight_unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) count?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() barn?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string | null;
@@ -245,5 +253,61 @@ export class UpdateTreatmentDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_milk_hours?: number | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_eggs_days?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+// ─── Sales ───────────────────────────────────────────────────────────────
+export class CreateSaleDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional({ enum: FARMOS_SPECIES }) @IsOptional() @IsString() species?: string | null;
+  @ApiPropertyOptional({ example: "milk" }) @IsOptional() @IsString() product_type?: string | null;
+  @ApiProperty() @Type(() => Number) quantity: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) unit_price?: number | null;
+  @ApiProperty() @Type(() => Number) total_amount: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() buyer?: string | null;
+  @ApiProperty() @IsDateString() sale_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+// ─── Expenses ────────────────────────────────────────────────────────────
+export class CreateExpenseDto {
+  @ApiProperty({ example: "feed" }) @IsString() category: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiProperty() @Type(() => Number) amount: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() supplier?: string | null;
+  @ApiProperty() @IsDateString() expense_date: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_medicine_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+// ─── Reproduction events ─────────────────────────────────────────────────
+export class CreateReproductionEventDto {
+  @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
+  @ApiProperty({ example: "insemination" }) @IsString() event_type: string;
+  @ApiProperty() @IsDateString() event_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() partner_external_id?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() expected_due_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() offspring_count?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() outcome?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+// ─── Production logs ─────────────────────────────────────────────────────
+export class CreateProductionLogDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiProperty({ enum: FARMOS_SPECIES }) @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species: string;
+  @ApiProperty({ example: "milk" }) @IsString() product_type: string;
+  @ApiProperty() @IsDateString() log_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() period?: string | null;
+  @ApiProperty() @Type(() => Number) quantity: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
+  @ApiPropertyOptional({ description: "Free-form quality JSON: fat, protein, conductivity, broken, size, lay_rate…" })
+  @IsOptional() quality?: Record<string, unknown> | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }

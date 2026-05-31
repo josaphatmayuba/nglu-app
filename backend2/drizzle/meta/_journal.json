@@ -260,6 +260,48 @@
       "when": 1780146000000,
       "tag": "0052_farmos_diseases_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1780149600000,
+      "tag": "0053_farmos_animals_uniq_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1780153200000,
+      "tag": "0054_farmos_production_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1780156800000,
+      "tag": "0055_farmos_vaccinations_and_insights",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1780160400000,
+      "tag": "0056_farmos_lookups",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1780164000000,
+      "tag": "0057_farmos_animals_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1780167600000,
+      "tag": "0058_farmos_animal_photos",
+      "breakpoints": true
     }
   ]
 }

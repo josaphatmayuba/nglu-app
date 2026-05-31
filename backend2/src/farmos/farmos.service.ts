@@ -1,12 +1,16 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { farmosAnimals, farmosDiseases, farmosMedicines, farmosTreatments } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosTreatments, farmosVaccinations, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
   CreateAnimalDto,
   CreateDiseaseDto,
+  CreateExpenseDto,
   CreateMedicineDto,
+  CreateProductionLogDto,
+  CreateReproductionEventDto,
+  CreateSaleDto,
   CreateTreatmentDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
@@ -49,6 +53,7 @@ export class FarmosService {
       dateOfBirth: input.date_of_birth ?? null,
       weight: input.weight != null ? String(input.weight) : null,
       weightUnit: input.weight_unit ?? "kg",
+      count: input.count ?? null,
       lot: input.lot ?? null,
       barn: input.barn ?? null,
       status: input.status ?? "healthy",
@@ -68,6 +73,7 @@ export class FarmosService {
     if (input.date_of_birth !== undefined) patch.dateOfBirth = input.date_of_birth;
     if (input.weight !== undefined) patch.weight = input.weight != null ? String(input.weight) : null;
     if (input.weight_unit !== undefined) patch.weightUnit = input.weight_unit;
+    if (input.count !== undefined) patch.count = input.count;
     if (input.lot !== undefined) patch.lot = input.lot;
     if (input.barn !== undefined) patch.barn = input.barn;
     if (input.status !== undefined) patch.status = input.status;
@@ -302,5 +308,442 @@ export class FarmosService {
     }
     await this.db.update(farmosDiseases).set({ isActive: 0 }).where(eq(farmosDiseases.id, id));
     return { message: "Maladie supprimée." };
+  }
+
+  // ─── Reproduction events ───────────────────────────────────────────────
+
+  async listReproductionEvents(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosReproductionEvents)
+      .where(and(eq(farmosReproductionEvents.organizationId, orgId), eq(farmosReproductionEvents.isActive, 1)))
+      .orderBy(desc(farmosReproductionEvents.eventDate));
+  }
+
+  // ─── Sales & expenses (read-only for now) ───────────────────────────────
+
+  async listSales(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosSales)
+      .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1)))
+      .orderBy(desc(farmosSales.saleDate));
+  }
+
+  async listExpenses(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosExpenses)
+      .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1)))
+      .orderBy(desc(farmosExpenses.expenseDate));
+  }
+
+  async createSale(input: CreateSaleDto, orgId: number) {
+    const [res] = await this.db.insert(farmosSales).values({
+      organizationId: orgId,
+      animalId: input.animal_id ?? null,
+      species: input.species ?? null,
+      productType: input.product_type ?? null,
+      quantity: String(input.quantity),
+      unit: input.unit ?? null,
+      unitPrice: input.unit_price != null ? String(input.unit_price) : null,
+      totalAmount: String(input.total_amount),
+      currencyId: input.currency_id ?? null,
+      buyer: input.buyer ?? null,
+      saleDate: input.sale_date,
+      notes: input.notes ?? null,
+    }).$returningId();
+    // Auto-sync to CRM ledger (SCRUM-220)
+    const txId = await this.syncSaleToTransaction(res.id, input, orgId);
+    if (txId) {
+      await this.db.update(farmosSales).set({ transactionId: txId }).where(eq(farmosSales.id, res.id));
+    }
+    return { id: res.id, transactionId: txId };
+  }
+
+  async deleteSale(id: number, orgId: number) {
+    const [row] = await this.db.select().from(farmosSales).where(and(eq(farmosSales.id, id), eq(farmosSales.organizationId, orgId))).limit(1);
+    await this.db.update(farmosSales).set({ isActive: 0 }).where(and(eq(farmosSales.id, id), eq(farmosSales.organizationId, orgId)));
+    if (row?.transactionId) {
+      await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
+    }
+    return { message: "Vente supprimée." };
+  }
+
+  async createExpense(input: CreateExpenseDto, orgId: number) {
+    const [res] = await this.db.insert(farmosExpenses).values({
+      organizationId: orgId,
+      category: input.category,
+      description: input.description ?? null,
+      quantity: input.quantity != null ? String(input.quantity) : null,
+      unit: input.unit ?? null,
+      amount: String(input.amount),
+      currencyId: input.currency_id ?? null,
+      supplier: input.supplier ?? null,
+      expenseDate: input.expense_date,
+      relatedAnimalId: input.related_animal_id ?? null,
+      relatedMedicineId: input.related_medicine_id ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    // Auto-sync to CRM ledger (SCRUM-220)
+    const txId = await this.syncExpenseToTransaction(res.id, input, orgId);
+    if (txId) {
+      await this.db.update(farmosExpenses).set({ transactionId: txId }).where(eq(farmosExpenses.id, res.id));
+    }
+    return { id: res.id, transactionId: txId };
+  }
+
+  async deleteExpense(id: number, orgId: number) {
+    const [row] = await this.db.select().from(farmosExpenses).where(and(eq(farmosExpenses.id, id), eq(farmosExpenses.organizationId, orgId))).limit(1);
+    await this.db.update(farmosExpenses).set({ isActive: 0 }).where(and(eq(farmosExpenses.id, id), eq(farmosExpenses.organizationId, orgId)));
+    if (row?.transactionId) {
+      await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
+    }
+    return { message: "Dépense supprimée." };
+  }
+
+  async createReproductionEvent(input: CreateReproductionEventDto, orgId: number) {
+    // Validate the animal belongs to the organisation.
+    const [a] = await this.db.select().from(farmosAnimals).where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId))).limit(1);
+    if (!a) throw new NotFoundException("Animal not found in this organisation.");
+    const [res] = await this.db.insert(farmosReproductionEvents).values({
+      organizationId: orgId,
+      animalId: input.animal_id,
+      eventType: input.event_type,
+      eventDate: input.event_date,
+      partnerExternalId: input.partner_external_id ?? null,
+      expectedDueDate: input.expected_due_date ?? null,
+      offspringCount: input.offspring_count ?? null,
+      outcome: input.outcome ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    return { id: res.id };
+  }
+
+  async deleteReproductionEvent(id: number, orgId: number) {
+    await this.db.update(farmosReproductionEvents).set({ isActive: 0 }).where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId)));
+    return { message: "Événement supprimé." };
+  }
+
+  // ─── Production logs ────────────────────────────────────────────────────
+
+  async listProductionLogs(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosProductionLogs)
+      .where(and(eq(farmosProductionLogs.organizationId, orgId), eq(farmosProductionLogs.isActive, 1)))
+      .orderBy(desc(farmosProductionLogs.logDate));
+  }
+
+  async createProductionLog(input: CreateProductionLogDto, orgId: number) {
+    const [res] = await this.db.insert(farmosProductionLogs).values({
+      organizationId: orgId,
+      animalId: input.animal_id ?? null,
+      species: input.species,
+      productType: input.product_type,
+      logDate: input.log_date,
+      period: input.period ?? null,
+      quantity: String(input.quantity),
+      unit: input.unit ?? null,
+      quality: (input.quality ?? null) as any,
+      notes: input.notes ?? null,
+    }).$returningId();
+    return { id: res.id };
+  }
+
+  async deleteProductionLog(id: number, orgId: number) {
+    await this.db.update(farmosProductionLogs).set({ isActive: 0 }).where(and(eq(farmosProductionLogs.id, id), eq(farmosProductionLogs.organizationId, orgId)));
+    return { message: "Production supprimée." };
+  }
+
+  // ─── CRM ledger auto-sync (SCRUM-220) ───────────────────────────────────
+  // Looks up a transaction_type configured by name ("FarmOS Sale" / "FarmOS Expense")
+  // and creates a transaction with its debit/credit accounts. If the type isn't
+  // configured for the organisation, sync is skipped silently (returns null).
+
+  private async findTransactionType(name: string) {
+    const [t] = await this.db
+      .select()
+      .from(transactionTypes)
+      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true)))
+      .limit(1);
+    return t ?? null;
+  }
+
+  // ─── Vaccinations & AI insights ─────────────────────────────────────────
+
+  async listVaccinations(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosVaccinations)
+      .where(and(eq(farmosVaccinations.organizationId, orgId), eq(farmosVaccinations.isActive, 1)))
+      .orderBy(farmosVaccinations.dueDate);
+  }
+
+  async listAiInsights(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosAiInsights)
+      .where(and(eq(farmosAiInsights.organizationId, orgId), eq(farmosAiInsights.isActive, 1)))
+      .orderBy(desc(farmosAiInsights.confidence));
+  }
+
+  // ─── Lookups (user-editable dropdowns: breeds, types, vets, routes…) ────
+
+  async listLookups(orgId: number, category: string, scope?: string | null) {
+    const conds = [
+      eq(farmosLookups.organizationId, orgId),
+      eq(farmosLookups.category, category),
+      eq(farmosLookups.isActive, 1),
+    ];
+    if (scope) conds.push(eq(farmosLookups.scopeKey, scope));
+    return this.db
+      .select()
+      .from(farmosLookups)
+      .where(and(...conds))
+      .orderBy(farmosLookups.valueFr);
+  }
+
+  async createLookup(
+    input: { category: string; value_fr: string; value_en?: string | null; scope_key?: string | null },
+    orgId: number,
+  ) {
+    if (!input.category || !input.value_fr) {
+      throw new BadRequestException("category and value_fr are required.");
+    }
+    const [existing] = await this.db
+      .select()
+      .from(farmosLookups)
+      .where(
+        and(
+          eq(farmosLookups.organizationId, orgId),
+          eq(farmosLookups.category, input.category),
+          input.scope_key ? eq(farmosLookups.scopeKey, input.scope_key) : isNull(farmosLookups.scopeKey),
+          eq(farmosLookups.valueFr, input.value_fr),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      if (existing.isActive !== 1) {
+        await this.db.update(farmosLookups).set({ isActive: 1 }).where(eq(farmosLookups.id, existing.id));
+      }
+      return { id: existing.id };
+    }
+    const [result] = await this.db.insert(farmosLookups).values({
+      organizationId: orgId,
+      category: input.category,
+      scopeKey: input.scope_key ?? null,
+      valueFr: input.value_fr,
+      valueEn: input.value_en ?? null,
+    });
+    return { id: (result as any).insertId };
+  }
+
+  async deleteLookup(id: number, orgId: number) {
+    await this.db
+      .update(farmosLookups)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosLookups.id, id), eq(farmosLookups.organizationId, orgId)));
+    return { ok: true };
+  }
+
+  // ─── Animal photos (dev: data URL inline; prod-ready for S3 swap) ───────
+  async listAnimalPhotos(animalId: number, orgId: number) {
+    return this.db
+      .select({
+        id: farmosAnimalPhotos.id,
+        animalId: farmosAnimalPhotos.animalId,
+        filename: farmosAnimalPhotos.filename,
+        contentType: farmosAnimalPhotos.contentType,
+        sizeBytes: farmosAnimalPhotos.sizeBytes,
+        dataUrl: farmosAnimalPhotos.dataUrl,
+        createdAt: farmosAnimalPhotos.createdAt,
+      })
+      .from(farmosAnimalPhotos)
+      .where(and(
+        eq(farmosAnimalPhotos.animalId, animalId),
+        eq(farmosAnimalPhotos.organizationId, orgId),
+        eq(farmosAnimalPhotos.isActive, 1),
+      ))
+      .orderBy(desc(farmosAnimalPhotos.createdAt));
+  }
+
+  async createAnimalPhoto(
+    animalId: number,
+    input: { data_url: string; filename?: string | null; content_type?: string | null; size_bytes?: number | null },
+    orgId: number,
+    userId?: number | null,
+  ) {
+    if (!input?.data_url || !input.data_url.startsWith("data:")) {
+      throw new BadRequestException("data_url required (data:image/*;base64,…)");
+    }
+    if (input.data_url.length > 8_000_000) {
+      throw new BadRequestException("Photo too large (max ~6MB base64).");
+    }
+    const [result] = await this.db.insert(farmosAnimalPhotos).values({
+      organizationId: orgId,
+      animalId,
+      dataUrl: input.data_url,
+      filename: input.filename ?? null,
+      contentType: input.content_type ?? null,
+      sizeBytes: input.size_bytes ?? null,
+      uploadedBy: userId ?? null,
+    });
+    return { id: (result as any).insertId };
+  }
+
+  async deleteAnimalPhoto(id: number, orgId: number) {
+    await this.db
+      .update(farmosAnimalPhotos)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosAnimalPhotos.id, id), eq(farmosAnimalPhotos.organizationId, orgId)));
+    return { ok: true };
+  }
+
+  // ─── Staff (HR users assigned to the "FarmOS" department) ───────────────
+  // Returns active employees from CRM HR (table `users`) that are part of the
+  // FarmOS / Ferme department. Optional ?role= filters by designation name.
+  async listFarmosStaff(orgId: number, role?: string | null) {
+    const rows = await this.db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        phone: users.phone,
+        image: users.image,
+        joinDate: users.joinDate,
+        leaveDate: users.leaveDate,
+        designationId: users.designationId,
+        designation: designations.name,
+        departmentId: users.departmentId,
+        department: departments.name,
+      })
+      .from(users)
+      .leftJoin(designations, eq(users.designationId, designations.id))
+      .leftJoin(departments, eq(users.departmentId, departments.id))
+      .where(
+        and(
+          eq(users.organizationId, orgId),
+          eq(users.status, "true"),
+          or(
+            sql`LOWER(${departments.name}) = 'farmos'`,
+            sql`LOWER(${departments.name}) = 'ferme'`,
+          ),
+        ),
+      )
+      .orderBy(users.firstName);
+
+    const filtered = role
+      ? rows.filter((r) => (r.designation || "").toLowerCase().includes(role.toLowerCase()))
+      : rows;
+    return filtered;
+  }
+
+  // ─── Finance summary (monthly aggregates for charts) ────────────────────
+
+  async getFinanceSummary(orgId: number) {
+    // 12 month rolling window ending current month.
+    const now = new Date();
+    const startMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+    const startISO = startMonth.toISOString().slice(0, 10);
+
+    const salesRaw = await this.db
+      .select({ saleDate: farmosSales.saleDate, total: farmosSales.totalAmount, productType: farmosSales.productType, species: farmosSales.species })
+      .from(farmosSales)
+      .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1), gte(farmosSales.saleDate, startISO)));
+
+    const expensesRaw = await this.db
+      .select({ expenseDate: farmosExpenses.expenseDate, amount: farmosExpenses.amount, category: farmosExpenses.category })
+      .from(farmosExpenses)
+      .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), gte(farmosExpenses.expenseDate, startISO)));
+
+    // Build 12 month buckets.
+    const buckets: { key: string; revenue: number; expense: number }[] = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1));
+      buckets.push({ key: d.toISOString().slice(0, 7), revenue: 0, expense: 0 });
+    }
+    const idxFor = (iso: string) => buckets.findIndex((b) => b.key === iso.slice(0, 7));
+    for (const r of salesRaw) {
+      const i = idxFor(String(r.saleDate));
+      if (i >= 0) buckets[i].revenue += Number(r.total ?? 0);
+    }
+    for (const r of expensesRaw) {
+      const i = idxFor(String(r.expenseDate));
+      if (i >= 0) buckets[i].expense += Number(r.amount ?? 0);
+    }
+
+    const PRODUCT_LABELS: Record<string, { fr: string; en: string; color: string }> = {
+      milk: { fr: "Lait", en: "Milk", color: "var(--pertinence-500)" },
+      eggs: { fr: "Œufs", en: "Eggs", color: "var(--autorite-500)" },
+      meat: { fr: "Viande", en: "Meat", color: "var(--oxblood-500)" },
+      wool: { fr: "Laine", en: "Wool", color: "var(--solidite-500)" },
+      fish: { fr: "Poisson", en: "Fish", color: "var(--pertinence-300)" },
+    };
+    const byCategoryMap: Record<string, number> = {};
+    for (const r of salesRaw) {
+      const key = (r.productType ?? r.species ?? "other") as string;
+      byCategoryMap[key] = (byCategoryMap[key] ?? 0) + Number(r.total ?? 0);
+    }
+    const byCategory = Object.entries(byCategoryMap).map(([cat, amount]) => ({
+      cat, amount,
+      fr: PRODUCT_LABELS[cat]?.fr ?? cat,
+      en: PRODUCT_LABELS[cat]?.en ?? cat,
+      color: PRODUCT_LABELS[cat]?.color ?? "var(--ink-400)",
+    }));
+
+    return {
+      months: buckets.map((b) => b.key),
+      revenue: buckets.map((b) => Math.round(b.revenue)),
+      expense: buckets.map((b) => Math.round(b.expense)),
+      byCategory,
+    };
+  }
+
+  private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {
+    try {
+      const type = await this.findTransactionType("FarmOS Sale");
+      if (!type) return null;
+      const particulars = `Vente FarmOS · ${input.product_type ?? input.species ?? "produit"}${input.buyer ? ` · ${input.buyer}` : ""}`;
+      const [res] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: new Date(input.sale_date) as any,
+        debitId: type.debitAccountId,
+        creditId: type.creditAccountId,
+        particulars,
+        amount: Number(input.total_amount),
+        currencyId: input.currency_id ?? null,
+        type: "FarmOS Sale",
+        relatedId: `farmos_sale:${saleId}`,
+      }).$returningId();
+      return res.id;
+    } catch (err) {
+      console.warn("[FarmOS] syncSaleToTransaction failed:", (err as Error).message);
+      return null;
+    }
+  }
+
+  private async syncExpenseToTransaction(expenseId: number, input: CreateExpenseDto, orgId: number): Promise<number | null> {
+    try {
+      const type = await this.findTransactionType("FarmOS Expense");
+      if (!type) return null;
+      const particulars = `Dépense FarmOS · ${input.category}${input.supplier ? ` · ${input.supplier}` : ""}${input.description ? ` · ${input.description}` : ""}`.slice(0, 250);
+      const [res] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: new Date(input.expense_date) as any,
+        debitId: type.debitAccountId,
+        creditId: type.creditAccountId,
+        particulars,
+        amount: Number(input.amount),
+        currencyId: input.currency_id ?? null,
+        type: "FarmOS Expense",
+        relatedId: `farmos_expense:${expenseId}`,
+      }).$returningId();
+      return res.id;
+    } catch (err) {
+      console.warn("[FarmOS] syncExpenseToTransaction failed:", (err as Error).message);
+      return null;
+    }
   }
 }
