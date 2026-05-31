@@ -28,6 +28,7 @@ import {
   Boxes,
   CalendarClock,
   Wrench,
+  Layers,
 } from "lucide-react";
 
 const AVAILABLE_APPS = [
@@ -38,9 +39,10 @@ const AVAILABLE_APPS = [
   { key: "customer", name: "Clients", path: "/admin/customer", icon: Users, gradient: "from-sky-400 to-sky-600" },
   { key: "purchase", name: "Achats", path: "/admin/purchase", icon: Truck, gradient: "from-rose-400 to-rose-600" },
   { key: "property", name: "Immobilier", path: "/admin/property-management", icon: Building2, gradient: "from-teal-400 to-teal-600" },
-  { key: "hr", name: "RH", path: "/admin/hr/staffs", icon: Briefcase, gradient: "from-purple-400 to-purple-600" },
-  { key: "accounting", name: "Comptabilité", path: "/admin/account", icon: Wallet, gradient: "from-amber-400 to-amber-600" },
-  { key: "reports", name: "Rapports", path: "/admin/transactions", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
+  { key: "hr", name: "RH", path: "/admin/hr", icon: Briefcase, gradient: "from-purple-400 to-purple-600" },
+  { key: "farmos", name: "FarmOS", path: "/farmos/", icon: Layers, gradient: "from-green-500 to-emerald-700", external: true },
+  { key: "accounting", name: "Comptabilité", path: "/admin/accounting", icon: Wallet, gradient: "from-amber-400 to-amber-600" },
+  { key: "reports", name: "Rapports", path: "/admin/reports", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
   { key: "settings", name: "Paramètres", path: "/admin/app-settings", icon: Settings, gradient: "from-zinc-500 to-zinc-700" },
 ];
 
@@ -92,9 +94,13 @@ export default function AppSwitcher({ open, onClose }) {
 
   if (!open) return null;
 
-  const handleNavigate = (path) => {
+  const handleNavigate = (path, external = false) => {
     onClose();
-    navigate(path);
+    if (external || !path.startsWith("/admin")) {
+      window.location.href = path;
+    } else {
+      navigate(path);
+    }
   };
 
   return (
@@ -146,7 +152,7 @@ export default function AppSwitcher({ open, onClose }) {
                   return (
                     <button
                       key={app.key}
-                      onClick={() => handleNavigate(app.path)}
+                      onClick={() => handleNavigate(app.path, app.external)}
                       className="group flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-ink-50 transition"
                     >
                       <div
