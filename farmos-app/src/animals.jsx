@@ -56,8 +56,20 @@ const FIELD_DEFS = {
   pond:         { fr: "Bassin",              en: "Pond",               icon: "drop2", type: "text", group: "housing" },
 };
 
+function useIsMobile(breakpoint = 768) {
+  const get = () => typeof window !== "undefined" && window.innerWidth < breakpoint;
+  const [m, setM] = React.useState(get);
+  React.useEffect(() => {
+    const onR = () => setM(get());
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+  return m;
+}
+
 const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
-  const [selectedId, setSelectedId] = React.useState("BQ-2024-0119");
+  const isMobile = useIsMobile();
+  const [selectedId, setSelectedId] = React.useState(null);
   const [layout, setLayout] = React.useState("split"); // split | full
   const [animals, setAnimals] = React.useState([]);
   const [loadState, setLoadState] = React.useState("idle"); // idle | loading | ok | error
@@ -88,10 +100,29 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   }, []);
 
   const filtered = animals.filter(a => !speciesFilter || a.species === speciesFilter);
-  const selected = animals.find(a => a.id === selectedId) || filtered[0];
+  // Desktop: auto-select first animal for split view.
+  // Mobile: only show detail after explicit row click — single scroll on the list.
+  const selected = isMobile
+    ? (selectedId ? animals.find(a => a.id === selectedId) : null)
+    : (animals.find(a => a.id === selectedId) || filtered[0]);
+
+  // Mobile + selected: render detail full-screen with a back button (single scroll).
+  if (isMobile && selected) {
+    return (
+      <div style={{ height: "100%", overflow: "auto", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border-1)", background: "var(--paper)", flexShrink: 0 }}>
+          <button className="btn btn-sm btn-ghost" onClick={() => setSelectedId(null)}>
+            <Icon name="chevLeft" size={13} color="var(--ink-700)"/>
+            {lang === "fr" ? "Retour à la liste" : "Back to list"}
+          </button>
+        </div>
+        <AnimalDetail lang={lang} animal={selected} onClose={() => setSelectedId(null)} embedded/>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: selected && layout === "split" ? "var(--cols-main-detail)" : "1fr", height: "100%", overflow: "hidden" }}>
+    <div style={{ display: "grid", gridTemplateColumns: selected && layout === "split" && !isMobile ? "var(--cols-main-detail)" : "1fr", height: "100%", overflow: "hidden" }}>
       <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto" }}>
         {/* Header */}
         <div>
@@ -129,8 +160,8 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         </div>
       </div>
 
-      {/* Detail drawer */}
-      {selected && layout === "split" && (
+      {/* Detail drawer (desktop split only) */}
+      {selected && layout === "split" && !isMobile && (
         <AnimalDetail lang={lang} animal={selected} onClose={() => setLayout("full")}/>
       )}
     </div>
@@ -208,7 +239,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 };
 
 // ─── Animal detail drawer (species-adaptive) ─────────────────────────────
-const AnimalDetail = ({ lang, animal, onClose }) => {
+const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const sp = speciesById(animal.species);
   const groups = groupFields(sp.fields);
   const [tab, setTab] = React.useState("details");
@@ -265,7 +296,13 @@ const AnimalDetail = ({ lang, animal, onClose }) => {
   };
 
   return (
-    <aside style={{ background: "var(--bg-sunken)", borderLeft: "1px solid var(--border-1)", overflow: "auto", display: "flex", flexDirection: "column" }}>
+    <aside style={{
+      background: "var(--bg-sunken)",
+      borderLeft: embedded ? 0 : "1px solid var(--border-1)",
+      overflow: embedded ? "visible" : "auto",
+      display: "flex", flexDirection: "column",
+      flex: embedded ? "1 1 auto" : undefined,
+    }}>
       {showQr && <QrPrintModal lang={lang} animal={animal} sp={sp} onClose={() => setShowQr(false)}/>}
 
       {/* Hero */}
