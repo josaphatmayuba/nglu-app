@@ -283,9 +283,9 @@ export class CreateSaleDto {
 export class CreateExpenseDto {
   @ApiProperty({ example: "feed" }) @IsString() category: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() quantity?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
-  @ApiProperty() @Type(() => Number) amount: number;
+  @ApiProperty() @Type(() => Number) @IsNumber() @Min(0) amount: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() supplier?: string | null;
   @ApiProperty() @IsDateString() expense_date: string;
