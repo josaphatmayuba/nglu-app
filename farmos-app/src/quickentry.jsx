@@ -9,6 +9,19 @@ import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
 // Species-aware forms (e.g., milk entry only for milk-producing species).
 
+// Récupère l'ID numérique d'un row, qu'il vienne d'une API brute (id=7) ou
+// d'un adapter qui préfixe (id="M-7", _pk=7). Retourne null si aucun.
+function toNumericId(row) {
+  if (!row) return null;
+  if (typeof row._pk === "number") return row._pk;
+  if (typeof row.id === "number") return row.id;
+  if (typeof row.id === "string") {
+    const m = row.id.match(/(\d+)$/);
+    if (m) return Number(m[1]);
+  }
+  return null;
+}
+
 // ─── Autocomplete (replaces native <select> across forms) ───────────────
 const Autocomplete = ({ value, onChange, options, placeholder, allowClear = true }) => {
   const norm = (options || []).map((o) =>
@@ -603,7 +616,7 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
       : null;
     setSaving(true);
     const payload = {
-      animal_id: selectedAnimal?._pk ?? null,
+      animal_id: toNumericId(selectedAnimal),
       species,
       product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : productKind === "wool" ? "wool" : "growth",
       log_date: form.date,
@@ -795,9 +808,9 @@ const HealthForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     const endDate = duration > 0 && startDate ? new Date(new Date(startDate).getTime() + duration * 86400000).toISOString().slice(0, 10) : null;
     setSaving(true);
     const payload = {
-      animal_id: selectedAnimal._pk ?? selectedAnimal.id,
-      disease_id: selectedDisease._pk ?? selectedDisease.id,
-      medicine_id: selectedMed?._pk ?? null,
+      animal_id: toNumericId(selectedAnimal),
+      disease_id: toNumericId(selectedDisease),
+      medicine_id: toNumericId(selectedMed),
       medicine_name: selectedMed?.name || null,
       dosage: form.dosage || null,
       route: form.route || null,
@@ -1046,7 +1059,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       amount: Number(form.cost),
       supplier: form.supplier || null,
       expense_date: form.date,
-      related_medicine_id: selectedMed?._pk ?? null,
+      related_medicine_id: toNumericId(selectedMed),
     };
     try {
       await api.createExpense(payload);
@@ -1207,7 +1220,7 @@ const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";
     const payload = {
-      animal_id: selected._pk ?? selected.id,
+      animal_id: toNumericId(selected),
       event_type: eventType,
       event_date: form.date,
       offspring_count: kind === "birth" ? (form.live ? Number(form.live) : null) : null,
