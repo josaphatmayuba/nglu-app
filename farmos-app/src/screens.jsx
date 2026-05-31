@@ -518,22 +518,49 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   }, []);
   const gestations = allGestations.filter(g => !speciesFilter || g.species === speciesFilter);
 
+  // KPIs dérivés des events repro réels + filtrés par espèce.
+  // - Chaleurs sem. = events de type 'heat' dans les 7 derniers jours.
+  // - Mises bas 30 j = events 'birthing' (somme offspring si dispo, sinon 1)
+  //   dans les 30 derniers jours.
+  // - Taux fertilité = % inséminations confirmées (success/pregnant) parmi
+  //   les inséminations des 90 derniers jours pour cette espèce.
+  const now = Date.now();
+  const DAY = 86400000;
+  const eventsForSpecies = allGestations; // déjà filtrés via adapt → species
+  const inWindow = (raw, days) => {
+    if (!raw) return false;
+    const d = new Date(String(raw));
+    if (Number.isNaN(d.getTime())) return false;
+    return now - d.getTime() <= days * DAY;
+  };
+  const filteredEvents = eventsForSpecies.filter((g) => !speciesFilter || g.species === speciesFilter);
+  const heatsWeek = filteredEvents.filter((g) => /heat|chaleur/i.test(String(g.ai || g.eventType || "")) && inWindow(g.start, 7)).length;
+  const birthsMonth = filteredEvents.reduce((s, g) => {
+    if (!g.complete || !inWindow(g.start, 30)) return s;
+    return s + (Number(g.offspring) > 0 ? Number(g.offspring) : 1);
+  }, 0);
+  const ai90 = filteredEvents.filter((g) => /insemin|ai|saill/i.test(String(g.ai || g.eventType || "")) && inWindow(g.start, 90));
+  const ok90 = ai90.filter((g) => g.complete || /success|confirmed|pregnant/i.test(String(g.outcome || ""))).length;
+  const fertilityRate = ai90.length > 0 ? Math.round((ok90 / ai90.length) * 100) : null;
+
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Reproduction · Repro" : "Reproduction · Reproduction"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Reproduction, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>cycles & gestations</span></> : <>Reproduction, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>cycles & gestations</span></>}
+          {lang === "fr"
+            ? <>Reproduction, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).fr.toLowerCase() : "cycles & gestations"}</span></>
+            : <>Reproduction, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).en.toLowerCase() : "cycles & gestations"}</span></>}
         </h1>
       </div>
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Gestations actives" : "Active gestations"} value={gestations.filter(g=>!g.complete).length} icon="fingerprint" accent="var(--pertinence-700)" trend={[14,15,16,16,17,17,18,18,17,17,16,16]}/>
-        <KpiCard label={lang === "fr" ? "Chaleurs détectées · sem." : "Heats detected · week"} value="24" delta={18} icon="pulse" accent="var(--oxblood-700)" trend={[12,14,15,17,18,20,21,22,23,24,24,24]}/>
-        <KpiCard label={lang === "fr" ? "Taux fertilité" : "Fertility rate"} value="78" unit="%" delta={3} icon="chart" accent="var(--solidite-500)" trend={[68, 70, 72, 71, 73, 74, 75, 76, 77, 77, 78, 78]}/>
-        <KpiCard label={lang === "fr" ? "Mises bas · 30 j" : "Births · 30 d"} value="42" delta={8} icon="sparkle" trend={[28,30,32,34,36,38,38,40,40,41,42,42]}/>
+        <KpiCard label={lang === "fr" ? "Gestations actives" : "Active gestations"} value={gestations.filter(g=>!g.complete).length} icon="fingerprint" accent="var(--pertinence-700)"/>
+        <KpiCard label={lang === "fr" ? "Chaleurs détectées · sem." : "Heats detected · week"} value={heatsWeek} icon="pulse" accent={heatsWeek > 0 ? "var(--oxblood-700)" : "var(--ink-500)"}/>
+        <KpiCard label={lang === "fr" ? "Taux fertilité" : "Fertility rate"} value={fertilityRate != null ? fertilityRate : "—"} unit={fertilityRate != null ? "%" : ""} icon="chart" accent={fertilityRate != null && fertilityRate >= 60 ? "var(--solidite-500)" : "var(--ink-500)"}/>
+        <KpiCard label={lang === "fr" ? "Mises bas · 30 j" : "Births · 30 d"} value={birthsMonth} icon="sparkle"/>
       </div>
 
       {/* Gestation timeline */}
