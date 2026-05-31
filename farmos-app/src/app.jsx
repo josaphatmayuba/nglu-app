@@ -14,6 +14,7 @@ import {
   AlertsScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
+import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
 
 const DEFAULTS = {
@@ -227,6 +228,8 @@ function App() {
         {toast && <Toast message={toast.message} severity={toast.severity} onClose={() => setToast(null)}/>}
       </div>
       <FarmTweaks tweaks={tweaks} setTweak={setTweak}/>
+      <PwaUpdateBanner lang={tweaks.lang}/>
+      <PwaInstallBanner lang={tweaks.lang}/>
     </div>
   );
 }

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0E2418"/>
+  <g transform="translate(96 96)" fill="none" stroke="#D7AA45" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M40 96 L160 32 L280 96 L280 232 L160 296 L40 232 Z"/>
+    <path d="M160 32 L160 296"/>
+    <path d="M40 96 L160 168 L280 96"/>
+    <path d="M40 232 L160 168 L280 232" opacity="0.55"/>
+  </g>
+  <text x="256" y="430" text-anchor="middle" fill="#ECF1EC"
+        font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="500"
+        letter-spacing="-1">FarmOS</text>
+</svg>

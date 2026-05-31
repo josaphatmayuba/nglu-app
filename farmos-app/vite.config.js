@@ -1,8 +1,69 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      injectRegister: "auto",
+      // L'app est servie sous /farmos/ par nginx; tout le scope PWA doit l'être aussi.
+      base: "/farmos/",
+      scope: "/farmos/",
+      includeAssets: [
+        "farmos-icon.svg",
+        "apple-touch-icon.png",
+        "styles/app.css",
+        "styles/farm-tokens.css",
+        "styles/tokens.css",
+      ],
+      manifest: {
+        id: "/farmos/",
+        name: "FarmOS Pro · Élevage intelligent",
+        short_name: "FarmOS",
+        description: "Gestion de troupeau, traitements, alertes et reproduction.",
+        start_url: "/farmos/",
+        scope: "/farmos/",
+        display: "standalone",
+        orientation: "any",
+        background_color: "#FBF8F2",
+        theme_color: "#0E2418",
+        lang: "fr",
+        categories: ["business", "productivity", "utilities"],
+        icons: [
+          { src: "farmos-icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "farmos-icon-512.png", sizes: "512x512", type: "image/png" },
+          { src: "farmos-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "farmos-icon.svg", sizes: "any", type: "image/svg+xml" },
+        ],
+      },
+      workbox: {
+        // Limite à 5 Mo par fichier précaché (utile pour les chunks TF.js).
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        navigateFallback: "/farmos/index.html",
+        // Ne jamais intercepter les appels API : ils doivent toujours toucher le réseau.
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          // Lecture animaux/médicaments/etc. → cache-first 5 min, puis refresh background.
+          {
+            urlPattern: /^https?:\/\/[^/]+\/api\/farmos\/(animals|medicines|diseases|treatments|reproduction-events|sales|expenses|vaccinations|production-logs|ai-insights|finance-summary|lookups|staff|semen-straws|breeding-males|animals-with-photos)(\?.*)?$/,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "farmos-api-reads",
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Photos data-URL ne passent pas par ici (inline base64). Photos S3 plus tard.
+        ],
+      },
+      devOptions: {
+        enabled: false,
+      },
+    }),
+  ],
   base: "/farmos/",
   define: {
     __BUILD_TS__: JSON.stringify(Date.now()),
@@ -15,7 +76,6 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
-    // Sous /farmos-assets/ pour ne pas entrer en conflit avec le CRM (/assets/).
     assetsDir: "farmos-assets",
   },
 });
