@@ -54,6 +54,8 @@ const ROUTE_SLUGS = {
   health: "sante",
   calendar: "calendrier",
   stock: "stock",
+  feed: "aliments",
+  medicines: "medicaments",
   repro: "reproduction",
   "semen-bank": "banque-semence",
   production: "production",
@@ -149,6 +151,8 @@ function App() {
     health:     { title: t(lang, "health"),     subtitle: lang === "fr" ? "Traitements & vétérinaire" : "Treatments & vet",   breadcrumb: lang === "fr" ? "FERME · SANTÉ" : "FARM · HEALTH" },
     calendar:   { title: t(lang, "calendar"),   subtitle: lang === "fr" ? "Vaccination & rappels" : "Vaccines & reminders",   breadcrumb: lang === "fr" ? "FERME · CALENDRIER" : "FARM · CALENDAR" },
     stock:      { title: t(lang, "stock"),      subtitle: lang === "fr" ? "Aliments, médicaments, équipement" : "Feed, meds, gear", breadcrumb: lang === "fr" ? "FERME · STOCK" : "FARM · STOCK" },
+    feed:       { title: t(lang, "feed"),       subtitle: lang === "fr" ? "Stock d'aliments par espèce" : "Feed inventory by species",     breadcrumb: lang === "fr" ? "FERME · ALIMENTS" : "FARM · FEED" },
+    medicines:  { title: t(lang, "medicines"),  subtitle: lang === "fr" ? "Médicaments & traitements" : "Medicines & treatments",          breadcrumb: lang === "fr" ? "FERME · MÉDICAMENTS" : "FARM · MEDICINES" },
     repro:      { title: t(lang, "repro"),      subtitle: lang === "fr" ? "Chaleurs, gestations, mises bas" : "Heats, gestations, births", breadcrumb: lang === "fr" ? "FERME · REPRODUCTION" : "FARM · REPRODUCTION" },
     "semen-bank": { title: lang === "fr" ? "Banque de semence" : "Semen bank", subtitle: lang === "fr" ? "Paillettes IA & historique" : "AI straws & history",       breadcrumb: lang === "fr" ? "FERME · BANQUE SEMENCE" : "FARM · SEMEN BANK" },
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
@@ -169,6 +173,8 @@ function App() {
       case "health":     return <HealthScreen {...props}/>;
       case "calendar":   return <CalendarScreen {...props}/>;
       case "stock":      return <StockScreen {...props}/>;
+      case "feed":       return <StockScreen {...props} kindFilter="feed"/>;
+      case "medicines":  return <StockScreen {...props} kindFilter="med"/>;
       case "repro":      return <ReproScreen {...props}/>;
       case "semen-bank": return <SemenBankScreen {...props}/>;
       case "production": return <ProductionScreen {...props}/>;

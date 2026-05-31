@@ -374,7 +374,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 };
 
 // ─── STOCK & FEED ────────────────────────────────────────────────────────
-const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
+const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [stock, setStock] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [allAnimals, setAllAnimals] = React.useState([]);
@@ -432,18 +432,20 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>
-        <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." icon="pill"/>
+        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>}
+        {kindFilter !== "feed" && <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." icon="pill"/>}
         <KpiCard label={lang === "fr" ? "Stock faible" : "Low stock"} value={visible.filter(s => s.lowStock).length} unit="" icon="alert" accent={visible.some(s => s.lowStock) ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Coût alimentation · mois" : "Feed cost · month"} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>
+        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Coût alimentation · mois" : "Feed cost · month"} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
-        <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)" onAdd={() => setAddOpen("feed")}/>
-        <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)" onAdd={() => setAddOpen("med")}/>
+      <div style={{ display: "grid", gridTemplateColumns: kindFilter ? "1fr" : "var(--cols-2)", gap: 16 }}>
+        {kindFilter !== "med" && <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)" onAdd={() => setAddOpen("feed")}/>}
+        {kindFilter !== "feed" && <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)" onAdd={() => setAddOpen("med")}/>}
       </div>
 
-      <FeedForecastBlock lang={lang} forecasts={forecasts.filter(f => !speciesFilter || f.species === speciesFilter)}/>
+      {kindFilter !== "med" && (
+        <FeedForecastBlock lang={lang} forecasts={forecasts.filter(f => !speciesFilter || f.species === speciesFilter)}/>
+      )}
 
       {addOpen && (
         <MedicineFormModal
