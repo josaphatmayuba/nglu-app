@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsDateString,
   IsIn,
   IsInt,
@@ -155,6 +156,12 @@ export class CreateMedicineDto {
   @IsOptional()
   @IsString()
   notes?: string | null;
+
+  @ApiPropertyOptional({ example: ["cow", "pig"], description: "Espèces concernées. Vide/absent = toutes espèces." })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  species?: string[] | null;
 }
 
 export class UpdateMedicineDto {
@@ -166,6 +173,7 @@ export class UpdateMedicineDto {
   @ApiPropertyOptional() @IsOptional() @IsString() supplier?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiry_date?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) species?: string[] | null;
 }
 
 export class CreateDiseaseDto {

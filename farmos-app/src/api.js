@@ -117,6 +117,10 @@ export const api = {
   listProductionLogs: cachedList("productionLogs", "/production-logs"),
   listVaccinations: cachedList("vaccinations", "/vaccinations"),
   listAiInsights: cachedList("aiInsights", "/ai-insights"),
+  listFeedForecasts: cachedList("feedForecasts", "/feed-forecasts"),
+  createMedicine: (body) => mutate({ kind: "createMedicine", method: "POST", path: "/medicines", body,
+                       optimistic: { table: "medicines", row: { id: tempId("m"), ...body, _pending: true } } }),
+  updateMedicine: (id, body) => mutate({ kind: "updateMedicine", method: "PATCH", path: `/medicines/${id}`, body }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
@@ -253,9 +257,18 @@ export function adaptMedicine(row) {
     min,
     supplier: row.supplier,
     expiry: exp ? String(exp).slice(0, 10) : "—",
-    species: [],
+    species: parseSpeciesList(row.species),
     lowStock: min != null && qty < min,
   };
+}
+
+function parseSpeciesList(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string" && raw.trim().startsWith("[")) {
+    try { const arr = JSON.parse(raw); return Array.isArray(arr) ? arr : []; }
+    catch { return []; }
+  }
+  return [];
 }
 
 // Treatment row → mockup TREATMENTS shape. Needs animal + disease maps for joins.

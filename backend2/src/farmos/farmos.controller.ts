@@ -330,6 +330,13 @@ export class FarmosController {
     return this.farmos.listAiInsights(orgId);
   }
 
+  @ApiOperation({ summary: "Feed-needs forecast rows. Filled by AI worker; empty until then." })
+  @Permissions("readAll-farmos")
+  @Get("feed-forecasts")
+  listFeedForecasts(@CurrentOrg() orgId: number) {
+    return this.farmos.listFeedForecasts(orgId);
+  }
+
   @ApiOperation({ summary: "Aggregated finance summary (12-month revenue/expense + by-category)." })
   @Permissions("readAll-farmos")
   @Get("finance-summary")

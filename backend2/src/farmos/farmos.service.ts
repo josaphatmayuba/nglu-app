@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
   CreateAnimalDto,
@@ -122,6 +122,7 @@ export class FarmosService {
       supplier: input.supplier ?? null,
       expiryDate: input.expiry_date ?? null,
       notes: input.notes ?? null,
+      species: Array.isArray(input.species) && input.species.length ? input.species : null,
     });
     return this.getMedicine(Number(result.insertId), orgId);
   }
@@ -137,9 +138,18 @@ export class FarmosService {
     if (input.supplier !== undefined) patch.supplier = input.supplier;
     if (input.expiry_date !== undefined) patch.expiryDate = input.expiry_date;
     if (input.notes !== undefined) patch.notes = input.notes;
+    if (input.species !== undefined) patch.species = Array.isArray(input.species) && input.species.length ? input.species : null;
     if (Object.keys(patch).length === 0) return this.getMedicine(id, orgId);
     await this.db.update(farmosMedicines).set(patch).where(eq(farmosMedicines.id, id));
     return this.getMedicine(id, orgId);
+  }
+
+  async listFeedForecasts(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosFeedForecasts)
+      .where(and(eq(farmosFeedForecasts.organizationId, orgId), eq(farmosFeedForecasts.isActive, 1)))
+      .orderBy(desc(farmosFeedForecasts.urgent), desc(farmosFeedForecasts.neededKg));
   }
 
   async deleteMedicine(id: number, orgId: number) {

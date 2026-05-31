@@ -377,15 +377,20 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [stock, setStock] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
+  const [allAnimals, setAllAnimals] = React.useState([]);
+  const [forecasts, setForecasts] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listMedicines(), api.listExpenses()])
-      .then(([meds, expenses]) => {
+    Promise.all([api.listMedicines(), api.listExpenses(), api.listAnimals(), api.listFeedForecasts().catch(() => [])])
+      .then(([meds, expenses, animals, fcs]) => {
         if (cancel) return;
         const mapped = (Array.isArray(meds) ? meds : []).map(adaptMedicine);
         setStock(mapped);
         setAllExpenses(Array.isArray(expenses) ? expenses : []);
+        setAllAnimals(Array.isArray(animals) ? animals : []);
+        setForecasts(Array.isArray(fcs) ? fcs : []);
       })
       .catch((e) => console.warn("StockScreen load failed:", e.message));
     return () => { cancel = true; };
@@ -395,9 +400,10 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     window.addEventListener("farmos:expense-created", onCreated);
     return () => window.removeEventListener("farmos:expense-created", onCreated);
   }, []);
-  // Backend medicines don't carry per-species mapping yet, so species filter is bypassed for now.
-  const filteredFeed = stock.filter(s => s.kind === "feed" && (!speciesFilter || (s.species || []).includes(speciesFilter) || (s.species || []).length === 0));
-  const filteredMed = stock.filter(s => s.kind === "med" && (!speciesFilter || (s.species || []).includes(speciesFilter) || (s.species || []).length === 0));
+  // species: tableau vide = produit large spectre (visible pour toutes les espèces).
+  const matchesSpecies = (s) => !speciesFilter || (s.species || []).length === 0 || (s.species || []).includes(speciesFilter);
+  const filteredFeed = stock.filter(s => s.kind === "feed" && matchesSpecies(s));
+  const filteredMed = stock.filter(s => s.kind === "med" && matchesSpecies(s));
   const visible = [...filteredFeed, ...filteredMed];
 
   // KPI Coût alimentation · mois : somme des dépenses catégorie 'feed' pour
@@ -433,53 +439,178 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
-        <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)"/>
-        <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)"/>
+        <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)" onAdd={() => setAddOpen("feed")}/>
+        <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)" onAdd={() => setAddOpen("med")}/>
       </div>
 
-      {/* AI feed prediction */}
-      <div className="card rule-lines" style={{ background: "var(--parchment-50)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--ink-900)", color: "var(--parchment-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon name="sparkle" size={15} color="#D7AA45"/>
-          </div>
-          <div className="bilang">
-            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Prédiction des besoins · 14 j" : "Needs forecast · 14 d"}</h3>
-            <span className="sec">{lang === "fr" ? "IA — consommation moyenne par espèce" : "AI — average consumption by species"}</span>
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-          {[
-            { species: "cow", item: "Granulé vache 18 %", needed: "1 850 kg", confidence: 92 },
-            { species: "pig", item: "Aliment porc engr.", needed: "2 400 kg", confidence: 88, urgent: true },
-            { species: "chicken", item: "Aliment ponte", needed: "920 kg", confidence: 91 },
-            { species: "fish", item: "Granulé truite", needed: "180 kg", confidence: 79 },
-          ].map((p, i) => {
-            const sp = speciesById(p.species);
-            return (
-              <div key={i} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <AnimalGlyph kind={sp.glyph} size={16} color={sp.accent}/>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? sp.fr : sp.en}</span>
-                  {p.urgent && <span className="tag tag-danger" style={{ marginLeft: "auto", fontSize: 10 }}>{lang === "fr" ? "Urgent" : "Urgent"}</span>}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--fg-2)" }}>{p.item}</div>
-                <div className="serif tnum" style={{ fontSize: 22, fontWeight: 500, color: "var(--ink-950)", letterSpacing: "-0.01em", marginTop: 4 }}>{p.needed}</div>
-                <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>confiance {p.confidence}%</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <FeedForecastBlock lang={lang} forecasts={forecasts.filter(f => !speciesFilter || f.species === speciesFilter)}/>
+
+      {addOpen && (
+        <MedicineFormModal
+          lang={lang}
+          kind={addOpen}
+          defaultSpecies={speciesFilter ? [speciesFilter] : []}
+          onClose={() => setAddOpen(null)}
+          onSaved={() => { setAddOpen(null); setReloadKey(k => k + 1); }}
+        />
+      )}
     </div>
   );
 };
 
-const StockTable = ({ lang, kind, items, title, accent }) => (
+function FeedForecastBlock({ lang, forecasts }) {
+  return (
+    <div className="card rule-lines" style={{ background: "var(--parchment-50)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--ink-900)", color: "var(--parchment-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="sparkle" size={15} color="#D7AA45"/>
+        </div>
+        <div className="bilang">
+          <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Prédiction des besoins · 14 j" : "Needs forecast · 14 d"}</h3>
+          <span className="sec">{lang === "fr" ? "IA — généré côté serveur" : "AI — server-generated"}</span>
+        </div>
+      </div>
+      {forecasts.length === 0 ? (
+        <div style={{ padding: "20px 12px", textAlign: "center", color: "var(--fg-3)", fontSize: 13, fontStyle: "italic" }}>
+          {lang === "fr"
+            ? "Aucune prédiction disponible. L'IA publiera ses estimations dans cette zone dès qu'elle sera connectée."
+            : "No forecast available. The AI will publish its estimates here once connected."}
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {forecasts.map((p) => {
+            const sp = speciesById(p.species);
+            return (
+              <div key={p.id} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <AnimalGlyph kind={sp.glyph} size={16} color={sp.accent}/>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? sp.fr : sp.en}</span>
+                  {!!p.urgent && <span className="tag tag-danger" style={{ marginLeft: "auto", fontSize: 10 }}>{lang === "fr" ? "Urgent" : "Urgent"}</span>}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--fg-2)" }}>{p.item}</div>
+                <div className="serif tnum" style={{ fontSize: 22, fontWeight: 500, color: "var(--ink-950)", letterSpacing: "-0.01em", marginTop: 4 }}>
+                  {Number(p.neededKg).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} kg
+                </div>
+                {p.confidence != null && (
+                  <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{lang === "fr" ? "confiance" : "confidence"} {p.confidence}%</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MedicineFormModal({ lang, kind, defaultSpecies, onClose, onSaved }) {
+  const [name, setName] = React.useState("");
+  const [quantity, setQuantity] = React.useState("");
+  const [unit, setUnit] = React.useState(kind === "feed" ? "kg" : "doses");
+  const [minQuantity, setMinQuantity] = React.useState("");
+  const [supplier, setSupplier] = React.useState("");
+  const [expiryDate, setExpiryDate] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [species, setSpecies] = React.useState(defaultSpecies || []);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const toggleSpecies = (sp) => setSpecies(s => s.includes(sp) ? s.filter(x => x !== sp) : [...s, sp]);
+  const handleSave = async () => {
+    if (!name.trim() || !quantity) { setError(lang === "fr" ? "Nom et quantité requis." : "Name and quantity required."); return; }
+    setSaving(true); setError("");
+    try {
+      await api.createMedicine({
+        name: name.trim(),
+        kind,
+        quantity: Number(quantity),
+        unit: unit || null,
+        min_quantity: minQuantity ? Number(minQuantity) : null,
+        supplier: supplier.trim() || null,
+        expiry_date: expiryDate || null,
+        notes: notes.trim() || null,
+        species: species.length ? species : null,
+      });
+      onSaved();
+    } catch (e) {
+      setError(e.message || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const title = kind === "feed"
+    ? (lang === "fr" ? "Nouvel aliment" : "New feed")
+    : (lang === "fr" ? "Nouveau médicament" : "New medicine");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, marginBottom: 4 }}>{title}</h3>
+        <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 16 }}>
+          {lang === "fr" ? "Coche les espèces concernées. Aucune coche = produit large spectre (visible pour toutes)." : "Check applicable species. None = broad-spectrum (visible to all)."}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Nom" : "Name"}
+            <input value={name} onChange={(e) => setName(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Quantité" : "Quantity"}
+              <input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Unité" : "Unit"}
+              <input value={unit} onChange={(e) => setUnit(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }} placeholder="kg, doses, ml…"/>
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Seuil minimum" : "Min threshold"}
+              <input type="number" min="0" step="0.01" value={minQuantity} onChange={(e) => setMinQuantity(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Expiration" : "Expiry"}
+              <input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+            </label>
+          </div>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Fournisseur" : "Supplier"}
+            <input value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <div>
+            <div style={{ fontSize: 12, color: "var(--fg-2)", marginBottom: 6 }}>{lang === "fr" ? "Espèces concernées" : "Applicable species"}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {SPECIES.map((sp) => {
+                const checked = species.includes(sp.id);
+                return (
+                  <button key={sp.id} type="button" onClick={() => toggleSpecies(sp.id)}
+                    className={`tag ${checked ? "tag-success" : ""}`}
+                    style={{ cursor: "pointer", border: "1px solid var(--border-1)", background: checked ? "var(--health-100)" : "var(--paper)", color: "var(--ink-900)", fontSize: 11.5, padding: "4px 10px" }}>
+                    {lang === "fr" ? sp.fr : sp.en}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Notes" : "Notes"}
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input" rows={2} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const StockTable = ({ lang, kind, items, title, accent, onAdd }) => (
   <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-    <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
       <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{title}</h3>
-      <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "stock" }))}><Icon name="plus" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Entrée" : "Entry"}</button>
+      <div style={{ display: "flex", gap: 6 }}>
+        {onAdd && (
+          <button className="btn btn-sm btn-primary" onClick={onAdd}>
+            <Icon name="plus" size={12} color="var(--paper)"/>{lang === "fr" ? "Ajouter" : "Add"}
+          </button>
+        )}
+        <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "stock" }))}><Icon name="plus" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Entrée" : "Entry"}</button>
+      </div>
     </div>
     {items.map((s, i) => {
       const pct = Math.min(100, (s.qty / (s.min * 3)) * 100);

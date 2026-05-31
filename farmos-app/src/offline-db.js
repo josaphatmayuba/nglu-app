@@ -28,6 +28,9 @@ db.version(1).stores({
   // Méta : pour chaque ressource (clé = nom de la table miroir), suivi sync.
   meta:            "key, lastSyncedAt",
 });
+db.version(2).stores({
+  feedForecasts:   "id, species, urgent",
+});
 
 // Met à jour la table miroir avec la dernière réponse API.
 export async function replaceCache(tableName, rows) {
