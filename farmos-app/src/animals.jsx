@@ -170,7 +170,57 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
 
 // ─── Animal table ────────────────────────────────────────────────────────
 const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
+  const isMobile = useIsMobile();
   const rowH = density === "compact" ? 38 : 50;
+
+  // Mobile: stacked cards, no inner scroll, the page scrolls naturally.
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {animals.map((a) => {
+          const sp = speciesById(a.species);
+          const sel = selectedId === a.id;
+          const statusColor = a.status === "healthy" ? "var(--solidite-500)" : a.status === "treatment" ? "var(--autorite-500)" : a.status === "alert" ? "var(--oxblood-700)" : "var(--ink-400)";
+          const statusLbl = { healthy: lang === "fr" ? "Sain" : "Healthy", treatment: lang === "fr" ? "Traitement" : "Treatment", alert: lang === "fr" ? "Alerte" : "Alert" }[a.status] || a.status;
+          return (
+            <div key={a.id} onClick={() => onSelect(a.id)} style={{
+              background: a.withdrawal ? "rgba(122, 31, 43, 0.04)" : "var(--paper)",
+              border: `1px solid ${sel ? "var(--oxblood-700)" : "var(--border-1)"}`,
+              borderRadius: 10, padding: "10px 12px", cursor: "pointer",
+              display: "flex", gap: 10, alignItems: "center", boxShadow: "var(--shadow-1)",
+            }}>
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <AnimalGlyph kind={sp.glyph} size={18} color="currentColor"/>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+                  <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
+                  {a.withdrawal && (
+                    <span className="tag tag-danger" style={{ fontSize: 9.5, padding: "1px 6px" }}>
+                      <Icon name="shield" size={9} color="var(--oxblood-700)"/>
+                      {lang === "fr" ? "Retrait" : "Withdrawal"}
+                    </span>
+                  )}
+                </div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.id}</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4, fontSize: 11.5, color: "var(--fg-2)", flexWrap: "wrap" }}>
+                  {a.race && <span>{a.race}</span>}
+                  {a.weight != null && <span className="mono tnum">{a.weight} kg</span>}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: statusColor }}/>
+                    <span>{statusLbl}</span>
+                  </span>
+                  {a.lot && <span>· {a.lot}</span>}
+                </div>
+              </div>
+              <Icon name="chevRight" size={14} color="var(--fg-3)"/>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 10, overflow: "auto", boxShadow: "var(--shadow-1)" }}>
       <div style={{ minWidth: 880 }}>
