@@ -13,6 +13,7 @@ import {
   HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
   AlertsScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
 } from "./screens";
+import { SemenBankScreen } from "./semen-bank";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
 
 const DEFAULTS = {
@@ -91,6 +92,7 @@ function App() {
     calendar:   { title: t(lang, "calendar"),   subtitle: lang === "fr" ? "Vaccination & rappels" : "Vaccines & reminders",   breadcrumb: lang === "fr" ? "FERME · CALENDRIER" : "FARM · CALENDAR" },
     stock:      { title: t(lang, "stock"),      subtitle: lang === "fr" ? "Aliments, médicaments, équipement" : "Feed, meds, gear", breadcrumb: lang === "fr" ? "FERME · STOCK" : "FARM · STOCK" },
     repro:      { title: t(lang, "repro"),      subtitle: lang === "fr" ? "Chaleurs, gestations, mises bas" : "Heats, gestations, births", breadcrumb: lang === "fr" ? "FERME · REPRODUCTION" : "FARM · REPRODUCTION" },
+    "semen-bank": { title: lang === "fr" ? "Banque de semence" : "Semen bank", subtitle: lang === "fr" ? "Paillettes IA & historique" : "AI straws & history",       breadcrumb: lang === "fr" ? "FERME · BANQUE SEMENCE" : "FARM · SEMEN BANK" },
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
     alerts:     { title: t(lang, "alerts"),     subtitle: lang === "fr" ? "Alertes intelligentes" : "Smart alerts",            breadcrumb: lang === "fr" ? "FERME · ALERTES" : "FARM · ALERTS" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
@@ -110,6 +112,7 @@ function App() {
       case "calendar":   return <CalendarScreen {...props}/>;
       case "stock":      return <StockScreen {...props}/>;
       case "repro":      return <ReproScreen {...props}/>;
+      case "semen-bank": return <SemenBankScreen {...props}/>;
       case "production": return <ProductionScreen {...props}/>;
       case "alerts":     return <AlertsScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;

@@ -57,6 +57,16 @@ export const api = {
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),
   deleteAnimalPhoto: (id) => jsonFetch(`/animals/photos/${id}`, { method: "DELETE" }),
+  // Banque de semence (IA)
+  listSemenStraws: (species) => jsonFetch(`/semen-straws${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  getSemenStraw: (id) => jsonFetch(`/semen-straws/${id}`),
+  createSemenStraw: (body) => jsonFetch("/semen-straws", { method: "POST", body: JSON.stringify(body) }),
+  updateSemenStraw: (id, body) => jsonFetch(`/semen-straws/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSemenStraw: (id) => jsonFetch(`/semen-straws/${id}`, { method: "DELETE" }),
+  // Mâles disponibles pour saillie naturelle
+  listBreedingMales: (species) => jsonFetch(`/breeding-males${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  // Suggestion pour pré-remplir le formulaire d'IA
+  suggestBreeding: (animalId, mode) => jsonFetch(`/breeding-suggestion/${animalId}${mode ? `?mode=${mode}` : ""}`),
 };
 
 export function fileToDataUrl(file) {

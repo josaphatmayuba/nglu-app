@@ -1068,12 +1068,53 @@ const StockForm = ({ lang, onSaved, onClose }) => {
 // ─── Repro form ──────────────────────────────────────────────────────────
 const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
   const [kind, setKind] = React.useState("heat");
-  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: defaultSpecies || "cow" });
+  const [form, setForm] = React.useState({
+    date: new Date().toISOString().slice(0, 10),
+    species: defaultSpecies || "cow",
+    breeding_type: "ai", // ai | natural | unknown
+  });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [straws, setStraws] = React.useState([]);
+  const [males, setMales] = React.useState([]);
+  const [suggesting, setSuggesting] = React.useState(false);
   React.useEffect(() => {
     api.listAnimals().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveAnimals(rows); }).catch(() => {});
   }, []);
+  React.useEffect(() => {
+    if (kind !== "ai" || !form.species) { setStraws([]); setMales([]); return; }
+    api.listSemenStraws(form.species).then((rows) => setStraws(Array.isArray(rows) ? rows : [])).catch(() => setStraws([]));
+    api.listBreedingMales(form.species).then((rows) => setMales(Array.isArray(rows) ? rows : [])).catch(() => setMales([]));
+  }, [kind, form.species]);
+
+  const doSuggest = async (mode) => {
+    const selected = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
+    if (!selected || !selected.id) {
+      onSaved && onSaved({ kind: "repro", severity: "info", message: lang === "fr" ? "Sélectionne d'abord une femelle." : "Pick a female first." });
+      return;
+    }
+    setSuggesting(true);
+    try {
+      const res = await api.suggestBreeding(selected.id, mode);
+      if (res?.straw?.id) {
+        set("sire_straw_id", res.straw.id);
+        set("breeding_type", "ai");
+        const reasonLabel = {
+          last_success_on_female: lang === "fr" ? "dernière IA réussie sur cette femelle" : "last successful AI on this female",
+          same_breed: lang === "fr" ? "même race" : "same breed",
+          same_species: lang === "fr" ? "même espèce, premier disponible" : "same species, first available",
+          genetic_ranked: lang === "fr" ? "meilleur score génétique" : "best genetic score",
+        }[res.reason] || res.reason;
+        onSaved && onSaved({ kind: "repro", severity: "success", message: (lang === "fr" ? "Suggestion : " : "Suggestion: ") + res.straw.sireName + " (" + reasonLabel + ")" });
+      } else {
+        onSaved && onSaved({ kind: "repro", severity: "info", message: lang === "fr" ? "Aucune paillette disponible pour cette femelle." : "No straw available for this female." });
+      }
+    } catch (err) {
+      onSaved && onSaved({ kind: "repro", severity: "error", message: err.message });
+    } finally {
+      setSuggesting(false);
+    }
+  };
   const animalsForSpecies = (liveAnimals || ANIMALS).filter((a) => {
     const sp = a.species;
     const sex = a.sex;
@@ -1098,6 +1139,9 @@ const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
       outcome: kind === "birth" ? "success" : "pending",
       partner_external_id: form.male || null,
       notes: form.notes || null,
+      breeding_type: kind === "ai" ? form.breeding_type : null,
+      sire_straw_id: kind === "ai" && form.breeding_type === "ai" ? (form.sire_straw_id || null) : null,
+      sire_animal_id: kind === "ai" && form.breeding_type === "natural" ? (form.sire_animal_id || null) : null,
     };
     try {
       await api.createReproductionEvent(payload);
@@ -1154,10 +1198,84 @@ const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
             <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
           </FormField>
           {kind === "ai" && (
-            <FormField label={lang === "fr" ? "Mâle / Semence" : "Male / Semen"}>
-              <input className="input mono" placeholder={form.species === "cow" ? "Holstein #2042" : "—"} value={form.male || ""} onChange={(e) => set("male", e.target.value)}/>
+            <FormField label={lang === "fr" ? "Type de saillie" : "Breeding type"}>
+              <div style={{ display: "flex", gap: 4, padding: 3, background: "var(--bg-sunken)", borderRadius: 6, width: "fit-content" }}>
+                {[
+                  { id: "ai", fr: "IA (paillette)", en: "AI (straw)" },
+                  { id: "natural", fr: "Saillie naturelle", en: "Natural" },
+                  { id: "unknown", fr: "Inconnu", en: "Unknown" },
+                ].map((opt) => (
+                  <button key={opt.id} type="button"
+                    onClick={() => { set("breeding_type", opt.id); set("sire_straw_id", null); set("sire_animal_id", null); }}
+                    className="btn btn-sm"
+                    style={form.breeding_type === opt.id
+                      ? { background: "var(--clay-700)", color: "var(--bone-50)", borderColor: "var(--clay-700)" }
+                      : { background: "transparent", border: 0 }}>
+                    {lang === "fr" ? opt.fr : opt.en}
+                  </button>
+                ))}
+              </div>
             </FormField>
           )}
+        </FormGrid>
+        {kind === "ai" && form.breeding_type === "ai" && (
+          <FormGrid cols={1}>
+            <FormField label={lang === "fr" ? "Paillette (banque de semence)" : "Straw (semen bank)"}>
+              <Autocomplete
+                value={form.sire_straw_id || ""}
+                onChange={(v) => set("sire_straw_id", v ? Number(v) : null)}
+                placeholder={lang === "fr" ? "Rechercher par code, taureau, race…" : "Search by code, sire, breed…"}
+                options={straws.map((s) => ({
+                  value: s.id,
+                  label: `${s.code} — ${s.sireName}${s.breed ? ` · ${s.breed}` : ""} (${s.strawsRemaining}/${s.strawsTotal} paillettes)`,
+                }))}
+              />
+              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                <button type="button" className="btn btn-sm" disabled={suggesting} onClick={() => doSuggest("history")}>
+                  <Icon name="sparkle" size={11} color="var(--ink-700)"/>
+                  {lang === "fr" ? "Reprendre la dernière" : "Reuse last"}
+                </button>
+                <button type="button" className="btn btn-sm" disabled={suggesting} onClick={() => doSuggest("genetic")}>
+                  <Icon name="sparkle" size={11} color="var(--clay-700)"/>
+                  {lang === "fr" ? "Recommandation génétique" : "Genetic recommendation"}
+                </button>
+                {straws.length === 0 && (
+                  <span style={{ fontSize: 11, color: "var(--fg-3)", alignSelf: "center" }}>
+                    {lang === "fr" ? "Banque vide — ajoute des paillettes dans Banque de semence." : "Bank empty — add straws in Semen bank."}
+                  </span>
+                )}
+              </div>
+            </FormField>
+          </FormGrid>
+        )}
+        {kind === "ai" && form.breeding_type === "natural" && (
+          <FormGrid cols={1}>
+            <FormField label={lang === "fr" ? "Mâle du troupeau" : "Sire (herd male)"}>
+              <Autocomplete
+                value={form.sire_animal_id || ""}
+                onChange={(v) => set("sire_animal_id", v ? Number(v) : null)}
+                placeholder={lang === "fr" ? "Rechercher un mâle…" : "Search a male…"}
+                options={males.map((m) => ({
+                  value: m.id,
+                  label: `${m.externalId || `#${m.id}`}${m.name ? ` — ${m.name}` : ""}${m.race ? ` · ${m.race}` : ""}`,
+                }))}
+              />
+              {males.length === 0 && (
+                <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
+                  {lang === "fr" ? "Aucun mâle enregistré pour cette espèce." : "No male recorded for this species."}
+                </div>
+              )}
+            </FormField>
+          </FormGrid>
+        )}
+        {kind === "ai" && form.breeding_type === "unknown" && (
+          <FormGrid cols={1}>
+            <FormField label={lang === "fr" ? "Réf. mâle / semence (libre)" : "Male / semen ref (free)"}>
+              <input className="input mono" placeholder={form.species === "cow" ? "Holstein #2042" : "—"} value={form.male || ""} onChange={(e) => set("male", e.target.value)}/>
+            </FormField>
+          </FormGrid>
+        )}
+        <FormGrid cols={2}>
           {kind === "birth" && (
             <FormField label={lang === "fr" ? "Nb. nés vivants" : "Live births"}>
               <input className="input mono" type="number" placeholder={form.species === "pig" ? "11" : "1"} value={form.live || ""} onChange={(e) => set("live", e.target.value)}/>

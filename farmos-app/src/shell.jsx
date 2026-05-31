@@ -13,6 +13,7 @@ const NAV = [
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
   { id: "stock",     icon: "package",   labelKey: "stock" },
   { id: "repro",     icon: "fingerprint", labelKey: "repro" },
+  { id: "semen-bank",icon: "flask",       labelKey: "semenBank" },
   { id: "production",icon: "chart",     labelKey: "production" },
   { id: "alerts",    icon: "bell",      labelKey: "alerts", critical: true },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
