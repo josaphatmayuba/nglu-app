@@ -4,6 +4,7 @@ import { Icon, AnimalGlyph } from "./icons";
 import { speciesById } from "./data";
 import { api, adaptAnimal } from "./api";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { loadFaceModel, buildFaceIndex, findBestFace } from "./face-recognition";
 
 // ─── Hardware hooks (camera, zxing, web speech, NFC) ────────────────────
 // useCamera — getUserMedia + facing toggle + torch (Android Chrome only).
@@ -129,6 +130,9 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
   const [animals, setAnimals] = React.useState([]);
   const [recent, setRecent] = React.useState([]);
   const videoRef = React.useRef(null);
+  // Reco faciale (lazy)
+  const [face, setFace] = React.useState({ state: "idle", index: null, progress: null, lastScore: null, error: null });
+  const faceModelRef = React.useRef(null);
 
   const cameraModes = ["scanner", "qr", "face", "photo"];
   const modeUsesCamera = cameraModes.includes(mode) && !found;
@@ -210,11 +214,103 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
       return;
     }
     if (mode === "face") {
+      return runFaceScan();
+    }
+  };
+
+  // Charge MobileNet + construit l'index d'embeddings (1 fois par session).
+  const ensureFaceIndex = React.useCallback(async () => {
+    if (face.state === "loading" || face.state === "indexing" || face.state === "ready") return;
+    setFace((f) => ({ ...f, state: "loading", error: null }));
+    try {
+      const bundle = await loadFaceModel();
+      faceModelRef.current = bundle;
+      setFace((f) => ({ ...f, state: "indexing", progress: { done: 0, total: 0 } }));
+      const rows = await api.listAnimalsWithPhotos(3);
+      const safeRows = Array.isArray(rows) ? rows : [];
+      if (safeRows.length === 0) {
+        setFace({ state: "empty", index: null, progress: null, lastScore: null, error: null });
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "info",
+          message: lang === "fr"
+            ? "Aucune photo d'animal en base — uploade des photos depuis la fiche pour entraîner la reco."
+            : "No animal photos on file — upload photos from the animal page to enroll faces.",
+        } }));
+        return;
+      }
+      const idx = await buildFaceIndex(bundle, safeRows, (p) => setFace((f) => ({ ...f, progress: p })));
+      setFace({ state: "ready", index: idx, progress: null, lastScore: null, error: null });
+      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+        severity: "success",
+        message: lang === "fr"
+          ? `Reco faciale prête — ${idx.animals.length} animaux indexés.`
+          : `Face recog ready — ${idx.animals.length} animals indexed.`,
+      } }));
+    } catch (err) {
+      setFace({ state: "error", index: null, progress: null, lastScore: null, error: err.message || String(err) });
+    }
+  }, [face.state, lang]);
+
+  // Quand l'utilisateur ouvre l'onglet "face", on déclenche le chargement
+  // (modèle + index) sans attendre qu'il appuie sur "scan".
+  React.useEffect(() => {
+    if (mode === "face") ensureFaceIndex();
+  }, [mode, ensureFaceIndex]);
+
+  const runFaceScan = async () => {
+    if (face.state !== "ready") {
+      // Si pas prêt, on (re)lance le chargement et on prévient.
       window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
         severity: "info",
-        message: lang === "fr" ? "Reconnaissance faciale — bientôt disponible." : "Face recognition — coming soon.",
+        message: face.state === "indexing"
+          ? (lang === "fr" ? "Indexation en cours…" : "Indexing…")
+          : (lang === "fr" ? "Modèle en chargement…" : "Loading model…"),
+      } }));
+      ensureFaceIndex();
+      return;
+    }
+    if (!videoRef.current || !cam.stream) {
+      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+        severity: "error",
+        message: lang === "fr" ? "Caméra non disponible." : "Camera unavailable.",
       } }));
       return;
+    }
+    try {
+      setScanning(true);
+      const v = videoRef.current;
+      const c = document.createElement("canvas");
+      c.width = v.videoWidth || 640;
+      c.height = v.videoHeight || 480;
+      c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      const res = await findBestFace(faceModelRef.current, c, face.index, 0.78);
+      setFace((f) => ({ ...f, lastScore: res.score }));
+      if (res.match) {
+        // Le match renvoyé est au format backend (externalId, name…). On le
+        // ré-aligne sur la forme front (id, _pk) via la liste live.
+        const live = animals.find((a) => a._pk === res.match.id) || {
+          ...res.match, _pk: res.match.id, id: res.match.externalId || `farmos-${res.match.id}`,
+        };
+        acceptResult(live);
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "success",
+          message: (lang === "fr" ? "Reconnu : " : "Recognized: ") + (live.name || live.id) + ` (${Math.round(res.score * 100)}%)`,
+        } }));
+      } else {
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "info",
+          message: lang === "fr"
+            ? `Animal non reconnu (meilleur score ${Math.round(res.score * 100)}%, seuil 78%).`
+            : `Not recognized (best score ${Math.round(res.score * 100)}%, threshold 78%).`,
+        } }));
+      }
+    } catch (err) {
+      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+        severity: "error",
+        message: (lang === "fr" ? "Erreur reco : " : "Recog error: ") + (err.message || String(err)),
+      } }));
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -319,18 +415,21 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
 
       {/* Viewport + result */}
       {!found && mode !== "manual" && (
-        <CameraViewport
-          mode={mode} scanning={scanning} flash={flash}
-          onScan={onScanButton}
-          lang={lang}
-          videoRef={videoRef}
-          camStream={cam.stream}
-          camError={cam.error}
-          canTorch={cam.canTorch}
-          torchOn={cam.torch}
-          onToggleTorch={cam.toggleTorch}
-          onFlipCamera={cam.flipCamera}
-        />
+        <>
+          {mode === "face" && <FaceStatusBar lang={lang} face={face} onRetry={ensureFaceIndex}/>}
+          <CameraViewport
+            mode={mode} scanning={scanning} flash={flash}
+            onScan={onScanButton}
+            lang={lang}
+            videoRef={videoRef}
+            camStream={cam.stream}
+            camError={cam.error}
+            canTorch={cam.canTorch}
+            torchOn={cam.torch}
+            onToggleTorch={cam.toggleTorch}
+            onFlipCamera={cam.flipCamera}
+          />
+        </>
       )}
 
       {!found && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => acceptResult(a)}/>}
@@ -962,5 +1061,47 @@ function methodName(m, lang) {
   };
   return n[m] ? n[m][lang] : m;
 }
+
+// Petit bandeau d'état pour la reco faciale : modèle/indexation/prêt/erreur.
+const FaceStatusBar = ({ lang, face, onRetry }) => {
+  const palette = {
+    idle:     { bg: "var(--bg-sunken)", fg: "var(--ink-700)" },
+    loading:  { bg: "var(--autorite-50)", fg: "var(--autorite-900)" },
+    indexing: { bg: "var(--autorite-50)", fg: "var(--autorite-900)" },
+    ready:    { bg: "var(--solidite-50)", fg: "var(--solidite-900)" },
+    empty:    { bg: "var(--bg-sunken)", fg: "var(--fg-2)" },
+    error:    { bg: "var(--oxblood-50)", fg: "var(--oxblood-800)" },
+  }[face.state] || { bg: "var(--bg-sunken)", fg: "var(--ink-700)" };
+  const msg = (() => {
+    if (face.state === "loading") return lang === "fr" ? "Chargement du modèle (MobileNet)…" : "Loading model (MobileNet)…";
+    if (face.state === "indexing") {
+      const p = face.progress || { done: 0, total: 0 };
+      return (lang === "fr" ? "Indexation des photos… " : "Indexing photos… ") + `${p.done}/${p.total}`;
+    }
+    if (face.state === "ready") return lang === "fr"
+      ? `Reco prête (${face.index.animals.length} animaux indexés, seuil 78 %).`
+      : `Recog ready (${face.index.animals.length} animals indexed, threshold 78%).`;
+    if (face.state === "empty") return lang === "fr"
+      ? "Aucune photo en base — ajoute des photos sur les fiches animaux pour entraîner la reco."
+      : "No photos on file — add photos on animal pages to enroll faces.";
+    if (face.state === "error") return (lang === "fr" ? "Erreur : " : "Error: ") + (face.error || "—");
+    return lang === "fr" ? "Initialisation…" : "Initializing…";
+  })();
+  return (
+    <div style={{
+      background: palette.bg, color: palette.fg,
+      padding: "8px 12px", borderRadius: 8,
+      display: "flex", alignItems: "center", gap: 8, fontSize: 12,
+    }}>
+      <Icon name={face.state === "ready" ? "check" : face.state === "error" ? "alert" : "sparkle"} size={14} color="currentColor"/>
+      <span style={{ flex: 1 }}>{msg}</span>
+      {(face.state === "error" || face.state === "empty") && (
+        <button onClick={onRetry} className="btn btn-sm" style={{ background: "transparent", border: `1px solid ${palette.fg}`, color: palette.fg, padding: "2px 8px", fontSize: 11 }}>
+          {lang === "fr" ? "Réessayer" : "Retry"}
+        </button>
+      )}
+    </div>
+  );
+};
 
 export { Identification };

@@ -438,6 +438,14 @@ export class FarmosController {
     return this.farmos.listAnimalPhotos(id, orgId);
   }
 
+  @ApiOperation({ summary: "All animals with their photos (capped) — used by client-side face recognition." })
+  @Permissions("readAll-farmos")
+  @Get("animals-with-photos")
+  listAnimalsWithPhotos(@CurrentOrg() orgId: number, @Query("perAnimal") perAnimal?: string) {
+    const n = Math.max(1, Math.min(5, Number(perAnimal) || 3));
+    return this.farmos.listAnimalsWithPhotos(orgId, n);
+  }
+
   @ApiOperation({ summary: "Upload a photo for an animal (base64 data URL)." })
   @Permissions("create-farmos")
   @Post("animals/:id/photos")

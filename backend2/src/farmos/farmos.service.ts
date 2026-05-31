@@ -771,6 +771,49 @@ export class FarmosService {
   }
 
   // ─── Animal photos (dev: data URL inline; prod-ready for S3 swap) ───────
+  // Listing global utilisé par la reconnaissance faciale côté navigateur:
+  // pour chaque animal de l'organisation, on renvoie ses N premières photos
+  // (data URL). Le client calcule un embedding local par photo et indexe.
+  async listAnimalsWithPhotos(orgId: number, perAnimal = 3) {
+    const photos = await this.db
+      .select({
+        id: farmosAnimalPhotos.id,
+        animalId: farmosAnimalPhotos.animalId,
+        dataUrl: farmosAnimalPhotos.dataUrl,
+        contentType: farmosAnimalPhotos.contentType,
+        createdAt: farmosAnimalPhotos.createdAt,
+      })
+      .from(farmosAnimalPhotos)
+      .where(and(eq(farmosAnimalPhotos.organizationId, orgId), eq(farmosAnimalPhotos.isActive, 1)))
+      .orderBy(desc(farmosAnimalPhotos.createdAt));
+
+    const animalIds = Array.from(new Set(photos.map((p) => p.animalId)));
+    if (animalIds.length === 0) return [];
+    const animalRows = await this.db
+      .select({
+        id: farmosAnimals.id,
+        externalId: farmosAnimals.externalId,
+        name: farmosAnimals.name,
+        species: farmosAnimals.species,
+        race: farmosAnimals.race,
+      })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+
+    const byId = new Map(animalRows.map((a) => [a.id, a]));
+    const grouped = new Map<number, { id: number; dataUrl: string }[]>();
+    for (const p of photos) {
+      if (!byId.has(p.animalId)) continue;
+      const arr = grouped.get(p.animalId) ?? [];
+      if (arr.length < perAnimal) arr.push({ id: p.id, dataUrl: p.dataUrl });
+      grouped.set(p.animalId, arr);
+    }
+    return Array.from(grouped.entries()).map(([animalId, photos]) => ({
+      ...byId.get(animalId)!,
+      photos,
+    }));
+  }
+
   async listAnimalPhotos(animalId: number, orgId: number) {
     return this.db
       .select({

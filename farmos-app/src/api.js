@@ -55,6 +55,7 @@ export const api = {
   createDisease: (body) => jsonFetch("/diseases", { method: "POST", body: JSON.stringify(body) }),
   listFarmosStaff: (role) => jsonFetch(`/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
+  listAnimalsWithPhotos: (perAnimal = 3) => jsonFetch(`/animals-with-photos?perAnimal=${perAnimal}`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),
   deleteAnimalPhoto: (id) => jsonFetch(`/animals/photos/${id}`, { method: "DELETE" }),
   // Banque de semence (IA)
