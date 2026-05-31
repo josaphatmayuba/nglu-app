@@ -325,6 +325,15 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           },
         },
         {
+          label: "FarmOS",
+          action: () => { window.location.href = "/farmos/"; },
+          icon: Layers,
+          permit: {
+            permissions: ["readAll-farmos", "create-farmos"],
+            operator: "or",
+          },
+        },
+        {
           label: "Comptabilité",
           to: "/admin/accounting",
           icon: WalletCards,
