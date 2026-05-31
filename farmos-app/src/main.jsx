@@ -1,6 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
+import { startOutboxWorker } from "./offline-outbox";
+
+startOutboxWorker();
 
 class ErrorBoundary extends React.Component {
   state = { err: null };

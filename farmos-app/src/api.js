@@ -37,6 +37,34 @@ async function jsonFetch(path, init = {}) {
 // émet `farmos:cache-updated` (detail = nom de table) pour que les composants
 // se ré-render si besoin.
 import { db, replaceCache, readCache } from "./offline-db";
+import { enqueueMutation } from "./offline-outbox";
+
+// ID temporaire pour les enregistrements optimistes en attente du retour
+// serveur. Remplacé par le vrai id quand l'outbox sync.
+let _tempCounter = 0;
+function tempId(prefix) {
+  _tempCounter++;
+  return `tmp-${prefix}-${Date.now()}-${_tempCounter}`;
+}
+
+// Helper : enqueue si offline, sinon tente le réseau direct. Si le réseau
+// échoue (timeout/connection), retombe sur la queue pour ne pas perdre la donnée.
+async function mutate({ kind, method, path, body, optimistic }) {
+  if (!navigator.onLine) {
+    const id = await enqueueMutation({ kind, method, path, body, optimistic });
+    return { id, _queued: true };
+  }
+  try {
+    return await jsonFetch(path, { method, body: body ? JSON.stringify(body) : undefined });
+  } catch (err) {
+    // Si l'erreur est réseau (pas un 4xx serveur), on enqueue.
+    if (/Failed to fetch|NetworkError|TypeError/i.test(String(err.message || err))) {
+      const id = await enqueueMutation({ kind, method, path, body, optimistic });
+      return { id, _queued: true };
+    }
+    throw err;
+  }
+}
 
 function cachedList(table, path) {
   return async () => {
@@ -67,24 +95,29 @@ export const api = {
   listReproductionEvents: cachedList("reproductionEvents", "/reproduction-events"),
   listSales:    cachedList("sales", "/sales"),
   listExpenses: cachedList("expenses", "/expenses"),
-  createAnimal:    (body) => jsonFetch("/animals",             { method: "POST",   body: JSON.stringify(body) }),
-  updateAnimal:    (id, body) => jsonFetch(`/animals/${id}`,   { method: "PATCH",  body: JSON.stringify(body) }),
-  createTreatment: (body) => jsonFetch("/treatments",          { method: "POST",   body: JSON.stringify(body) }),
-  createSale:      (body) => jsonFetch("/sales",               { method: "POST",   body: JSON.stringify(body) }),
-  createExpense:   (body) => jsonFetch("/expenses",            { method: "POST",   body: JSON.stringify(body) }),
-  createReproductionEvent: (body) => jsonFetch("/reproduction-events", { method: "POST", body: JSON.stringify(body) }),
+  createAnimal:    (body) => mutate({ kind: "createAnimal", method: "POST", path: "/animals", body,
+                       optimistic: { table: "animals", row: { id: tempId("a"), ...body, _pending: true } } }),
+  updateAnimal:    (id, body) => mutate({ kind: "updateAnimal", method: "PATCH", path: `/animals/${id}`, body }),
+  createTreatment: (body) => mutate({ kind: "createTreatment", method: "POST", path: "/treatments", body,
+                       optimistic: { table: "treatments", row: { id: tempId("t"), ...body, _pending: true } } }),
+  createSale:      (body) => mutate({ kind: "createSale", method: "POST", path: "/sales", body,
+                       optimistic: { table: "sales", row: { id: tempId("s"), ...body, _pending: true } } }),
+  createExpense:   (body) => mutate({ kind: "createExpense", method: "POST", path: "/expenses", body,
+                       optimistic: { table: "expenses", row: { id: tempId("e"), ...body, _pending: true } } }),
+  createReproductionEvent: (body) => mutate({ kind: "createReproductionEvent", method: "POST", path: "/reproduction-events", body,
+                       optimistic: { table: "reproductionEvents", row: { id: tempId("r"), ...body, _pending: true } } }),
   listProductionLogs: cachedList("productionLogs", "/production-logs"),
   listVaccinations: cachedList("vaccinations", "/vaccinations"),
   listAiInsights: cachedList("aiInsights", "/ai-insights"),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
-  createProductionLog: (body) => jsonFetch("/production-logs", { method: "POST", body: JSON.stringify(body) }),
-  deleteAnimal:  (id) => jsonFetch(`/animals/${id}`,  { method: "DELETE" }),
-  deleteMedicine: (id) => jsonFetch(`/medicines/${id}`, { method: "DELETE" }),
-  deleteTreatment: (id) => jsonFetch(`/treatments/${id}`, { method: "DELETE" }),
-  deleteReproductionEvent: (id) => jsonFetch(`/reproduction-events/${id}`, { method: "DELETE" }),
-  deleteProductionLog: (id) => jsonFetch(`/production-logs/${id}`, { method: "DELETE" }),
-  deleteSale:    (id) => jsonFetch(`/sales/${id}`,    { method: "DELETE" }),
-  deleteExpense: (id) => jsonFetch(`/expenses/${id}`, { method: "DELETE" }),
+  createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
+  deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
+  deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),
+  deleteTreatment: (id) => mutate({ kind: "deleteTreatment", method: "DELETE", path: `/treatments/${id}` }),
+  deleteReproductionEvent: (id) => mutate({ kind: "deleteReproductionEvent", method: "DELETE", path: `/reproduction-events/${id}` }),
+  deleteProductionLog: (id) => mutate({ kind: "deleteProductionLog", method: "DELETE", path: `/production-logs/${id}` }),
+  deleteSale:    (id) => mutate({ kind: "deleteSale",    method: "DELETE", path: `/sales/${id}` }),
+  deleteExpense: (id) => mutate({ kind: "deleteExpense", method: "DELETE", path: `/expenses/${id}` }),
   listLookups: (category, scope) => jsonFetch(`/lookups?category=${encodeURIComponent(category)}${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`),
   createLookup: (body) => jsonFetch("/lookups", { method: "POST", body: JSON.stringify(body) }),
   createDisease: (body) => jsonFetch("/diseases", { method: "POST", body: JSON.stringify(body) }),
