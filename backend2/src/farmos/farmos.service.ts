@@ -152,6 +152,15 @@ export class FarmosService {
       .orderBy(desc(farmosFeedForecasts.urgent), desc(farmosFeedForecasts.neededKg));
   }
 
+  async consumeMedicine(id: number, quantity: number, orgId: number) {
+    if (!(quantity > 0)) throw new BadRequestException("Quantity must be > 0.");
+    const med = await this.getMedicine(id, orgId);
+    const current = Number(med.quantity || 0);
+    const next = Math.max(0, current - quantity);
+    await this.db.update(farmosMedicines).set({ quantity: String(next) }).where(eq(farmosMedicines.id, id));
+    return { id, previousQuantity: current, newQuantity: next, consumed: current - next };
+  }
+
   async deleteMedicine(id: number, orgId: number) {
     await this.getMedicine(id, orgId);
     await this.db.update(farmosMedicines).set({ isActive: 0 }).where(eq(farmosMedicines.id, id));

@@ -1039,12 +1039,28 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
+    const selectedMed = (liveMeds || []).find((s) => String(s.id) === String(form.item));
     if (mode !== "in") {
-      onSaved && onSaved({ kind: "stock", severity: "info", message: lang === "fr" ? "Sortie stock enregistrée (démo)" : "Stock out saved (demo)" });
-      onClose();
+      // Sortie / consommation : décrémente directement le stock du produit choisi.
+      const medId = toNumericId(selectedMed);
+      const qty = Number(form.qty);
+      if (!medId || !(qty > 0)) {
+        onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Produit et quantité requis." : "Product and quantity required." });
+        return;
+      }
+      setSaving(true);
+      try {
+        await api.consumeMedicine(medId, qty);
+        window.dispatchEvent(new CustomEvent("farmos:expense-created"));
+        onSaved && onSaved({ kind: "stock", severity: "success", message: lang === "fr" ? `Sortie : −${qty} ${selectedMed?.unit || ""} de ${selectedMed?.name}` : `Out: −${qty} ${selectedMed?.unit || ""} of ${selectedMed?.name}` });
+        onClose();
+      } catch (err) {
+        onSaved && onSaved({ kind: "stock", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+      } finally {
+        setSaving(false);
+      }
       return;
     }
-    const selectedMed = (liveMeds || []).find((s) => String(s.id) === String(form.item));
     const category = selectedMed?.kind === "feed" ? "feed" : "medicine";
     if (!form.cost || !form.date) {
       onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Coût et date requis." : "Cost and date are required." });

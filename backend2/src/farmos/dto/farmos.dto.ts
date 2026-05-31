@@ -164,6 +164,12 @@ export class CreateMedicineDto {
   species?: string[] | null;
 }
 
+export class ConsumeMedicineDto {
+  @ApiProperty({ example: 5, description: "Quantity to deduct from current stock." })
+  @Type(() => Number) @IsNumber() @Min(0.001)
+  quantity: number;
+}
+
 export class UpdateMedicineDto {
   @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() kind?: string;

@@ -121,6 +121,7 @@ export const api = {
   createMedicine: (body) => mutate({ kind: "createMedicine", method: "POST", path: "/medicines", body,
                        optimistic: { table: "medicines", row: { id: tempId("m"), ...body, _pending: true } } }),
   updateMedicine: (id, body) => mutate({ kind: "updateMedicine", method: "PATCH", path: `/medicines/${id}`, body }),
+  consumeMedicine: (id, quantity) => mutate({ kind: "consumeMedicine", method: "POST", path: `/medicines/${id}/consume`, body: { quantity } }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),

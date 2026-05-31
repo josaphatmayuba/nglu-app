@@ -17,6 +17,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
+  ConsumeMedicineDto,
   CreateAnimalDto,
   CreateDiseaseDto,
   CreateExpenseDto,
@@ -130,6 +131,13 @@ export class FarmosController {
     @CurrentOrg() orgId: number,
   ) {
     return this.farmos.updateMedicine(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Decrement medicine/feed inventory (consumption/sortie)." })
+  @Permissions("update-farmos")
+  @Post("medicines/:id/consume")
+  consumeMedicine(@Param("id", ParseIntPipe) id: number, @Body() body: ConsumeMedicineDto, @CurrentOrg() orgId: number) {
+    return this.farmos.consumeMedicine(id, body.quantity, orgId);
   }
 
   @Permissions("delete-farmos")
