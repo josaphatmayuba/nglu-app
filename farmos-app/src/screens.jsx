@@ -376,16 +376,18 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 // ─── STOCK & FEED ────────────────────────────────────────────────────────
 const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [stock, setStock] = React.useState([]);
+  const [allExpenses, setAllExpenses] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   React.useEffect(() => {
     let cancel = false;
-    api.listMedicines()
-      .then((rows) => {
+    Promise.all([api.listMedicines(), api.listExpenses()])
+      .then(([meds, expenses]) => {
         if (cancel) return;
-        const mapped = (Array.isArray(rows) ? rows : []).map(adaptMedicine);
+        const mapped = (Array.isArray(meds) ? meds : []).map(adaptMedicine);
         setStock(mapped);
+        setAllExpenses(Array.isArray(expenses) ? expenses : []);
       })
-      .catch((e) => console.warn("listMedicines failed:", e.message));
+      .catch((e) => console.warn("StockScreen load failed:", e.message));
     return () => { cancel = true; };
   }, [reloadKey]);
   React.useEffect(() => {
@@ -396,24 +398,38 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   // Backend medicines don't carry per-species mapping yet, so species filter is bypassed for now.
   const filteredFeed = stock.filter(s => s.kind === "feed" && (!speciesFilter || (s.species || []).includes(speciesFilter) || (s.species || []).length === 0));
   const filteredMed = stock.filter(s => s.kind === "med" && (!speciesFilter || (s.species || []).includes(speciesFilter) || (s.species || []).length === 0));
-  const STOCK = stock;
+  const visible = [...filteredFeed, ...filteredMed];
+
+  // KPI Coût alimentation · mois : somme des dépenses catégorie 'feed' pour
+  // le mois courant. Pas de filtre espèce sur les expenses (pas relié).
+  const monthPrefix = new Date().toISOString().slice(0, 7);
+  const feedCostMonth = allExpenses.reduce((s, e) => {
+    const cat = String(e.category || "").toLowerCase();
+    const d = e.expenseDate || e.expense_date;
+    if ((cat === "feed" || cat === "alimentation") && d && String(d).startsWith(monthPrefix)) {
+      return s + Number(e.amount || 0);
+    }
+    return s;
+  }, 0);
 
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Stock · Inventory" : "Inventory · Stock"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Stock & alimentation, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>magasin central</span></> : <>Stock & feed, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>central storage</span></>}
+          {lang === "fr"
+            ? <>Stock & alimentation, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).fr.toLowerCase() : "magasin central"}</span></>
+            : <>Stock & feed, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesFilter ? speciesById(speciesFilter).en.toLowerCase() : "central storage"}</span></>}
         </h1>
       </div>
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} delta={-2.4} trend={[10, 9.8, 9.6, 9.4, 9.2, 9.0, 8.8, 8.6, 8.4, 8.2, 8.0, 8.06]} icon="wheat" accent="var(--health-500)"/>
-        <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." trend={[18, 18, 19, 19, 18, 18, 17, 17, 17, 16, filteredMed.length, filteredMed.length]} icon="pill"/>
-        <KpiCard label={lang === "fr" ? "Stock faible" : "Low stock"} value={STOCK.filter(s => s.lowStock).length} unit="" icon="alert" accent="var(--rust-700)" trend={[1,1,2,2,2,2,2,2,2,2,2,2]}/>
-        <KpiCard label={lang === "fr" ? "Coût alimentation · mois" : "Feed cost · month"} value="—" unit="$" trend={[0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
+        <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>
+        <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." icon="pill"/>
+        <KpiCard label={lang === "fr" ? "Stock faible" : "Low stock"} value={visible.filter(s => s.lowStock).length} unit="" icon="alert" accent={visible.some(s => s.lowStock) ? "var(--rust-700)" : "var(--ink-500)"}/>
+        <KpiCard label={lang === "fr" ? "Coût alimentation · mois" : "Feed cost · month"} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
