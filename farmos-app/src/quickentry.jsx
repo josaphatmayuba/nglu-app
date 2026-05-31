@@ -961,9 +961,33 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveMeds, setLiveMeds] = React.useState(null);
+  const [lots, setLots] = React.useState([]);
   React.useEffect(() => {
     api.listMedicines().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveMeds(rows); }).catch(() => {});
-  }, []);
+    // Lots disponibles = valeurs distinctes de `lot` parmi les animaux,
+    // avec compteur d'animaux et espèce dominante pour le label.
+    api.listAnimals().then((rows) => {
+      if (!Array.isArray(rows)) return;
+      const byLot = new Map();
+      rows.forEach((a) => {
+        const lot = (a.lot || "").trim();
+        if (!lot) return;
+        const entry = byLot.get(lot) || { lot, count: 0, species: {} };
+        const head = Number(a.count) > 0 ? Number(a.count) : 1;
+        entry.count += head;
+        if (a.species) entry.species[a.species] = (entry.species[a.species] || 0) + head;
+        byLot.set(lot, entry);
+      });
+      const SPECIES_LBL_FR = { cow: "vaches", pig: "porcs", goat: "chèvres", sheep: "moutons", chicken: "poulets", duck: "canards", turkey: "dindes", rabbit: "lapins", fish: "poissons" };
+      const SPECIES_LBL_EN = { cow: "cows", pig: "pigs", goat: "goats", sheep: "sheep", chicken: "chickens", duck: "ducks", turkey: "turkeys", rabbit: "rabbits", fish: "fish" };
+      const opts = Array.from(byLot.values()).map((e) => {
+        const dominant = Object.entries(e.species).sort((a, b) => b[1] - a[1])[0]?.[0];
+        const sp = dominant ? (lang === "fr" ? SPECIES_LBL_FR[dominant] : SPECIES_LBL_EN[dominant]) || dominant : "";
+        return { value: e.lot, label: `${e.lot} · ${e.count.toLocaleString("fr-CA")} ${sp}`.trim() };
+      }).sort((a, b) => a.value.localeCompare(b.value));
+      setLots(opts);
+    }).catch(() => {});
+  }, [lang]);
   const stockOptions = liveMeds || STOCK;
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
@@ -1055,7 +1079,17 @@ const StockForm = ({ lang, onSaved, onClose }) => {
         )}
         {mode === "out" && (
           <FormField label={lang === "fr" ? "Destination / lot" : "Destination / batch"}>
-            <input className="input" placeholder={lang === "fr" ? "Lot Engr. 77 · 198 porcs" : "Finishing 77 · 198 pigs"} value={form.dest || ""} onChange={(e) => set("dest", e.target.value)}/>
+            <Autocomplete
+              value={form.dest || ""}
+              onChange={(v) => set("dest", v)}
+              placeholder={lang === "fr" ? "Rechercher un lot…" : "Search a batch…"}
+              options={lots}
+            />
+            {lots.length === 0 && (
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
+                {lang === "fr" ? "Aucun lot trouvé sur les animaux en base." : "No batch found on existing animals."}
+              </div>
+            )}
           </FormField>
         )}
       </FormSection>
