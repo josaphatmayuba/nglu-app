@@ -5,6 +5,8 @@ import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
 import { api } from "./api";
 import { nextStrawCode } from "./id-gen";
+import { useDataRefresh } from "./use-data-refresh";
+import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -18,6 +20,8 @@ const SemenBankScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [selected, setSelected] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("all"));
+  const refresh = useDataRefresh(["semenStraws"]);
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -27,7 +31,7 @@ const SemenBankScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       .finally(() => setLoading(false));
   }, [speciesFilter]);
 
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => { reload(); }, [reload, refresh]);
   React.useEffect(() => {
     const h = () => reload();
     window.addEventListener("farmos:semen-changed", h);
@@ -35,6 +39,7 @@ const SemenBankScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   }, [reload]);
 
   const filtered = straws.filter((s) => {
+    if (s.collectionDate && !inDateRange(s.collectionDate, dateRange)) return false;
     if (!query) return true;
     const q = query.toLowerCase();
     return (
@@ -64,6 +69,7 @@ const SemenBankScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             style={{ border: 0, background: "transparent", flex: 1, minWidth: 0, outline: "none", fontSize: 13 }}/>
         </div>
         <SpeciesPicker lang={lang} value={speciesFilter} onChange={onSpeciesFilter}/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
         <button className="btn btn-sm btn-primary" onClick={() => { setSelected(null); setShowForm(true); }}>
           <Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Nouvelle paillette" : "New straw"}
         </button>

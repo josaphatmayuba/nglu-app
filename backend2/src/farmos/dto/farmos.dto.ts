@@ -195,6 +195,15 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class CreateWorkLogDto {
+  @ApiProperty() @IsDateString() work_date: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() user_id?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) hours?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional({ description: "Optionnel : ventilation par tâche.", type: [Object] })
+  @IsOptional() @IsArray() tasks?: any[] | null;
+}
+
 export class CreateFarmosStaffDto {
   @ApiProperty() @IsString() @IsNotEmpty() email: string;
   @ApiProperty({ example: "Vétérinaire" }) @IsString() @IsNotEmpty() designation: string;

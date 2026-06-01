@@ -6,6 +6,8 @@ import { Icon, AnimalGlyph } from "./icons";
 import { speciesById, t, SPECIES } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore } from "./shell";
 import { api } from "./api";
+import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
+import { useDataRefresh } from "./use-data-refresh";
 
 function formatLongDate(d, lang) {
   try {
@@ -59,6 +61,7 @@ function deriveDashAlerts(d, lang) {
 function useDashboardData() {
   const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
   const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([
@@ -73,7 +76,7 @@ function useDashboardData() {
       })
       .catch(() => {});
     return () => { cancel = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   React.useEffect(() => {
     const reload = () => setReloadKey((k) => k + 1);
     const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created"];
@@ -83,16 +86,14 @@ function useDashboardData() {
   return data;
 }
 
-function computeDashboardKpis(d, speciesFilter, lang) {
+function computeDashboardKpis(d, speciesFilter, lang, dateRange) {
   if (!d.ready) return null;
   const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
   const animals = filterSp(d.animals, (a) => a.species);
   const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
   const total = animals.length;
-  const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
-  const monthISO = monthStart.toISOString().slice(0, 10);
-  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && (s.saleDate || s.sale_date) >= monthISO);
-  const expenses = d.expenses.filter((e) => (e.expenseDate || e.expense_date) >= monthISO);
+  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
   const expMonth = expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
   const lowStock = d.medicines.filter((m) => m.minQuantity != null && Number(m.quantity) < Number(m.minQuantity)).length;
@@ -106,8 +107,9 @@ function computeDashboardKpis(d, speciesFilter, lang) {
 const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const species = speciesFilter ? speciesById(speciesFilter) : null;
   const isAll = !species;
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
   const live = useDashboardData();
-  const k = computeDashboardKpis(live, speciesFilter, lang);
+  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange);
   const fin = deriveDashFinanceKpis(live.finance);
   const ALERTS = deriveDashAlerts(live, lang);
   const aiFiltered = live.aiInsights.map((i) => ({
@@ -123,8 +125,8 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
     { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
     { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
-    { label: t(lang, "kRevenue"),     value: k.revMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
-    { label: t(lang, "kExpense"),     value: k.expMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
+    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
+    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
     { label: lang==="fr"?"Stock faible":"Low stock", value: k.lowStock, unit: lang==="fr"?"réf.":"refs", delta: null, trend: [k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock], icon: "wheat", accent: k.lowStock > 0 ? "var(--rust-700)" : "var(--health-500)" },
     { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
   ] : null;
@@ -136,13 +138,15 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
       return a?.species === species.id && t.status === "running";
     }).length;
     const vaccUpcomingSp = live.vaccinations.filter((v) => v.species === species.id && v.status !== "done").length;
-    const revSp = (live.finance?.byCategory || []).filter((c) => c.species === species.id).reduce((s, c) => s + Number(c.amount || 0), 0);
+    const revSp = (live.sales || [])
+      .filter((s) => s.species === species.id && inDateRange(s.saleDate || s.sale_date, dateRange))
+      .reduce((sum, s) => sum + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
     return [
       { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: animalsSp.length.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(animalsSp.length), icon: "layers", accent: species.accent },
       { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },
-      { label: lang === "fr" ? "Revenu (12 mois)" : "Revenue (12 mo)", value: revSp.toLocaleString("fr-CA"), unit: "$", delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
+      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: "$", delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
     ];
   })() : null;
   const kpis = isAll ? (liveKpis || []) : (speciesKpis || []);
@@ -189,11 +193,12 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
               }
             </h1>
           </div>
-          <FarmScore {...computeFarmScore(live, speciesFilter)}/>
+          <FarmScore {...computeFarmScore(live, speciesFilter, dateRange)}/>
         </div>
 
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter}/>
+          <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
         </div>
       </div>
 
@@ -238,7 +243,7 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
 //           est haute. À remplacer par une métrique production réelle quand
 //           on aura un objectif par espèce.
 // - finance: marge (rev - exp) / rev * 100, plafonnée [0..100]. 80 si rev=0.
-function computeFarmScore(live, speciesFilter) {
+function computeFarmScore(live, speciesFilter, dateRange) {
   if (!live?.ready) return { sante: 0, prod: 0, finance: 0 };
   const animals = (live.animals || []).filter((a) => !speciesFilter || a.species === speciesFilter);
   const total = animals.length || 1;
@@ -251,10 +256,8 @@ function computeFarmScore(live, speciesFilter) {
   });
   const prodPenalty = Math.min(80, Math.round((10 * treatments.length) / total));
   const prod = Math.max(0, 100 - prodPenalty);
-  const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0,0,0,0);
-  const monthISO = monthStart.toISOString().slice(0, 10);
-  const sales = (live.sales || []).filter((s) => (!speciesFilter || s.species === speciesFilter) && (s.saleDate || s.sale_date) >= monthISO);
-  const expenses = (live.expenses || []).filter((e) => (e.expenseDate || e.expense_date) >= monthISO);
+  const sales = (live.sales || []).filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = (live.expenses || []).filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const rev = sales.reduce((s, x) => s + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
   const exp = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
   const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 80;

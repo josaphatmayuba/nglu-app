@@ -3,8 +3,9 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
+import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   CreateAnimalDto,
   CreateDiseaseDto,
@@ -27,6 +28,7 @@ export class FarmosService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly usersService: UsersService,
+    private readonly realtime: RealtimeDataPublisher,
   ) {}
 
   // ─── FarmOS staff onboarding (creates a CRM user assigned to the FarmOS dept) ─
@@ -85,6 +87,7 @@ export class FarmosService {
       status: "true",
     } as any, {});
 
+    await this.publishFarmosUpdate("createFarmosStaff", ["staff"], "created", created?.id ?? input.email, orgId);
     return { user: created, generatedPassword: input.password ? null : generatedPassword };
   }
 
@@ -125,7 +128,9 @@ export class FarmosService {
       status: input.status ?? "healthy",
       lastEvent: input.last_event ?? null,
     });
-    return this.getAnimal(Number(result.insertId), orgId);
+    const id = Number(result.insertId);
+    await this.publishFarmosUpdate("createAnimal", ["animals"], "created", id, orgId);
+    return this.getAnimal(id, orgId);
   }
 
   async updateAnimal(id: number, input: UpdateAnimalDto, orgId: number) {
@@ -146,12 +151,14 @@ export class FarmosService {
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
     await this.db.update(farmosAnimals).set(patch).where(eq(farmosAnimals.id, id));
+    await this.publishFarmosUpdate("updateAnimal", ["animals"], "updated", id, orgId);
     return this.getAnimal(id, orgId);
   }
 
   async deleteAnimal(id: number, orgId: number) {
     await this.getAnimal(id, orgId);
     await this.db.update(farmosAnimals).set({ isActive: 0 }).where(eq(farmosAnimals.id, id));
+    await this.publishFarmosUpdate("deleteAnimal", ["animals"], "deleted", id, orgId);
     return { message: "Animal supprimé." };
   }
 
@@ -188,7 +195,9 @@ export class FarmosService {
       notes: input.notes ?? null,
       species: Array.isArray(input.species) && input.species.length ? input.species : null,
     });
-    return this.getMedicine(Number(result.insertId), orgId);
+    const id = Number(result.insertId);
+    await this.publishFarmosUpdate("createMedicine", ["medicines"], "created", id, orgId);
+    return this.getMedicine(id, orgId);
   }
 
   async updateMedicine(id: number, input: UpdateMedicineDto, orgId: number) {
@@ -205,6 +214,7 @@ export class FarmosService {
     if (input.species !== undefined) patch.species = Array.isArray(input.species) && input.species.length ? input.species : null;
     if (Object.keys(patch).length === 0) return this.getMedicine(id, orgId);
     await this.db.update(farmosMedicines).set(patch).where(eq(farmosMedicines.id, id));
+    await this.publishFarmosUpdate("updateMedicine", ["medicines"], "updated", id, orgId);
     return this.getMedicine(id, orgId);
   }
 
@@ -222,12 +232,14 @@ export class FarmosService {
     const current = Number(med.quantity || 0);
     const next = Math.max(0, current - quantity);
     await this.db.update(farmosMedicines).set({ quantity: String(next) }).where(eq(farmosMedicines.id, id));
+    await this.publishFarmosUpdate("consumeMedicine", ["medicines"], "updated", id, orgId);
     return { id, previousQuantity: current, newQuantity: next, consumed: current - next };
   }
 
   async deleteMedicine(id: number, orgId: number) {
     await this.getMedicine(id, orgId);
     await this.db.update(farmosMedicines).set({ isActive: 0 }).where(eq(farmosMedicines.id, id));
+    await this.publishFarmosUpdate("deleteMedicine", ["medicines"], "deleted", id, orgId);
     return { message: "Médicament supprimé." };
   }
 
@@ -293,7 +305,9 @@ export class FarmosService {
       status: input.status ?? "running",
       notes: input.notes ?? null,
     });
-    return this.getTreatment(Number(result.insertId), orgId);
+    const id = Number(result.insertId);
+    await this.publishFarmosUpdate("createTreatment", ["treatments", "medicines", "animals"], "created", id, orgId);
+    return this.getTreatment(id, orgId);
   }
 
   async updateTreatment(id: number, input: UpdateTreatmentDto, orgId: number) {
@@ -315,12 +329,14 @@ export class FarmosService {
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return this.getTreatment(id, orgId);
     await this.db.update(farmosTreatments).set(patch).where(eq(farmosTreatments.id, id));
+    await this.publishFarmosUpdate("updateTreatment", ["treatments", "medicines", "animals"], "updated", id, orgId);
     return this.getTreatment(id, orgId);
   }
 
   async deleteTreatment(id: number, orgId: number) {
     await this.getTreatment(id, orgId);
     await this.db.update(farmosTreatments).set({ isActive: 0 }).where(eq(farmosTreatments.id, id));
+    await this.publishFarmosUpdate("deleteTreatment", ["treatments"], "deleted", id, orgId);
     return { message: "Traitement supprimé." };
   }
 
@@ -365,7 +381,9 @@ export class FarmosService {
       commonRoute: input.common_route ?? null,
       notes: input.notes ?? null,
     });
-    return this.getDisease(Number(result.insertId), orgId);
+    const id = Number(result.insertId);
+    await this.publishFarmosUpdate("createDisease", ["diseases"], "created", id, orgId);
+    return this.getDisease(id, orgId);
   }
 
   async updateDisease(id: number, input: UpdateDiseaseDto, orgId: number) {
@@ -383,6 +401,7 @@ export class FarmosService {
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return disease;
     await this.db.update(farmosDiseases).set(patch).where(eq(farmosDiseases.id, id));
+    await this.publishFarmosUpdate("updateDisease", ["diseases"], "updated", id, orgId);
     return this.getDisease(id, orgId);
   }
 
@@ -392,6 +411,7 @@ export class FarmosService {
       throw new BadRequestException("Cannot delete a disease from the global catalogue.");
     }
     await this.db.update(farmosDiseases).set({ isActive: 0 }).where(eq(farmosDiseases.id, id));
+    await this.publishFarmosUpdate("deleteDisease", ["diseases"], "deleted", id, orgId);
     return { message: "Maladie supprimée." };
   }
 
@@ -443,6 +463,7 @@ export class FarmosService {
     if (txId) {
       await this.db.update(farmosSales).set({ transactionId: txId }).where(eq(farmosSales.id, res.id));
     }
+    await this.publishFarmosUpdate("createSale", ["sales"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
   }
 
@@ -452,6 +473,7 @@ export class FarmosService {
     if (row?.transactionId) {
       await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
     }
+    await this.publishFarmosUpdate("deleteSale", ["sales"], "deleted", id, orgId);
     return { message: "Vente supprimée." };
   }
 
@@ -491,6 +513,7 @@ export class FarmosService {
     if (txId) {
       await this.db.update(farmosExpenses).set({ transactionId: txId }).where(eq(farmosExpenses.id, res.id));
     }
+    await this.publishFarmosUpdate("createExpense", ["expenses", "medicines"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
   }
 
@@ -500,6 +523,7 @@ export class FarmosService {
     if (row?.transactionId) {
       await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
     }
+    await this.publishFarmosUpdate("deleteExpense", ["expenses"], "deleted", id, orgId);
     return { message: "Dépense supprimée." };
   }
 
@@ -550,11 +574,13 @@ export class FarmosService {
       sireStrawId: input.sire_straw_id ?? null,
       sireAnimalId: input.sire_animal_id ?? null,
     }).$returningId();
+    await this.publishFarmosUpdate("createReproductionEvent", ["reproductionEvents", "semenStraws"], "created", res.id, orgId);
     return { id: res.id };
   }
 
   async deleteReproductionEvent(id: number, orgId: number) {
     await this.db.update(farmosReproductionEvents).set({ isActive: 0 }).where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteReproductionEvent", ["reproductionEvents"], "deleted", id, orgId);
     return { message: "Événement supprimé." };
   }
 
@@ -636,6 +662,7 @@ export class FarmosService {
       pricePerDose: input.price_per_dose != null ? String(input.price_per_dose) : null,
       currencyId: input.currency_id ?? null,
     }).$returningId();
+    await this.publishFarmosUpdate("createSemenStraw", ["semenStraws"], "created", res.id, orgId);
     return this.getSemenStraw(Number(res.id), orgId);
   }
 
@@ -667,12 +694,14 @@ export class FarmosService {
     if (Object.keys(patch).length > 0) {
       await this.db.update(farmosSemenStraws).set(patch).where(eq(farmosSemenStraws.id, id));
     }
+    await this.publishFarmosUpdate("updateSemenStraw", ["semenStraws"], "updated", id, orgId);
     return this.getSemenStraw(id, orgId);
   }
 
   async deleteSemenStraw(id: number, orgId: number) {
     await this.db.update(farmosSemenStraws).set({ status: "archived" })
       .where(and(eq(farmosSemenStraws.id, id), eq(farmosSemenStraws.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteSemenStraw", ["semenStraws"], "deleted", id, orgId);
     return { message: "Paillette archivée." };
   }
 
@@ -770,11 +799,13 @@ export class FarmosService {
       quality: (input.quality ?? null) as any,
       notes: input.notes ?? null,
     }).$returningId();
+    await this.publishFarmosUpdate("createProductionLog", ["productionLogs"], "created", res.id, orgId);
     return { id: res.id };
   }
 
   async deleteProductionLog(id: number, orgId: number) {
     await this.db.update(farmosProductionLogs).set({ isActive: 0 }).where(and(eq(farmosProductionLogs.id, id), eq(farmosProductionLogs.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteProductionLog", ["productionLogs"], "deleted", id, orgId);
     return { message: "Production supprimée." };
   }
 
@@ -782,6 +813,27 @@ export class FarmosService {
   // Looks up a transaction_type configured by name ("FarmOS Sale" / "FarmOS Expense")
   // and creates a transaction with its debit/credit accounts. If the type isn't
   // configured for the organisation, sync is skipped silently (returns null).
+
+  private async publishFarmosUpdate(
+    kind: string,
+    tables: string[],
+    action: "created" | "updated" | "deleted",
+    entityId: number | string,
+    orgId: number,
+  ) {
+    try {
+      await this.realtime.publishDataUpdated({
+        entity: "farmos",
+        action,
+        entityId,
+        scope: { module: "farmos", tenantId: orgId },
+        permissions: ["readAll-farmos"],
+        tags: ["farmos", kind, ...tables],
+      });
+    } catch (error) {
+      console.warn("[FarmOS] realtime publish failed:", error instanceof Error ? error.message : String(error));
+    }
+  }
 
   private async findTransactionType(name: string) {
     const [t] = await this.db
@@ -813,6 +865,7 @@ export class FarmosService {
       status: input.status ?? "scheduled",
       notes: input.notes ?? null,
     }).$returningId();
+    await this.publishFarmosUpdate("createVaccination", ["vaccinations"], "created", res.id, orgId);
     return { id: res.id };
   }
 
@@ -835,6 +888,45 @@ export class FarmosService {
       diagnosis: input.diagnosis ?? null,
       notes: input.notes ?? null,
     }).$returningId();
+    await this.publishFarmosUpdate("createVetExam", ["vetExams"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async listWorkLogs(orgId: number, userId?: number | null, from?: string | null, to?: string | null) {
+    const conds = [eq(farmosWorkLogs.organizationId, orgId), eq(farmosWorkLogs.isActive, 1)];
+    if (userId) conds.push(eq(farmosWorkLogs.userId, userId));
+    if (from) conds.push(gte(farmosWorkLogs.workDate, from));
+    if (to) conds.push(lt(farmosWorkLogs.workDate, to));
+    return this.db
+      .select({
+        id: farmosWorkLogs.id,
+        userId: farmosWorkLogs.userId,
+        workDate: farmosWorkLogs.workDate,
+        hours: farmosWorkLogs.hours,
+        notes: farmosWorkLogs.notes,
+        tasks: farmosWorkLogs.tasks,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(farmosWorkLogs)
+      .leftJoin(users, eq(users.id, farmosWorkLogs.userId))
+      .where(and(...conds))
+      .orderBy(desc(farmosWorkLogs.workDate), desc(farmosWorkLogs.id));
+  }
+
+  async createWorkLog(input: any, orgId: number, currentUserId: number) {
+    const userId = input.user_id ?? currentUserId;
+    if (!userId) throw new BadRequestException("user_id manquant.");
+    const [res] = await this.db.insert(farmosWorkLogs).values({
+      organizationId: orgId,
+      userId,
+      workDate: input.work_date,
+      hours: input.hours != null ? String(input.hours) : null,
+      notes: input.notes ?? null,
+      tasks: Array.isArray(input.tasks) && input.tasks.length ? input.tasks : null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createWorkLog", ["workLogs"], "created", res.id, orgId);
     return { id: res.id };
   }
 
@@ -864,6 +956,7 @@ export class FarmosService {
         .set({ status: "deceased" })
         .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)));
     }
+    await this.publishFarmosUpdate("createMortalityEvent", ["mortalityEvents", "animals"], "created", res.id, orgId);
     return { id: res.id };
   }
 
@@ -923,7 +1016,9 @@ export class FarmosService {
       valueFr: input.value_fr,
       valueEn: input.value_en ?? null,
     });
-    return { id: (result as any).insertId };
+    const id = (result as any).insertId;
+    await this.publishFarmosUpdate("createLookup", ["lookups"], "created", id, orgId);
+    return { id };
   }
 
   async deleteLookup(id: number, orgId: number) {
@@ -931,6 +1026,7 @@ export class FarmosService {
       .update(farmosLookups)
       .set({ isActive: 0 })
       .where(and(eq(farmosLookups.id, id), eq(farmosLookups.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteLookup", ["lookups"], "deleted", id, orgId);
     return { ok: true };
   }
 

@@ -2,8 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
 import { startOutboxWorker } from "./offline-outbox";
+import { startFarmosRealtime } from "./farmos-realtime";
 
 startOutboxWorker();
+startFarmosRealtime();
 
 class ErrorBoundary extends React.Component {
   state = { err: null };

@@ -13,6 +13,7 @@ import {
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -26,6 +27,7 @@ import {
   CreateMortalityEventDto,
   CreateVaccinationDto,
   CreateVetExamDto,
+  CreateWorkLogDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
@@ -39,12 +41,41 @@ import {
 } from "./dto/farmos.dto";
 import { FarmosService } from "./farmos.service";
 
+const FARMOS_REALTIME_TABLES = [
+  "animals",
+  "medicines",
+  "diseases",
+  "treatments",
+  "reproductionEvents",
+  "sales",
+  "expenses",
+  "vaccinations",
+  "productionLogs",
+  "vetExams",
+  "mortalityEvents",
+  "lookups",
+  "staff",
+  "semenStraws",
+];
+
 @ApiTags("farmos")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller("farmos")
 export class FarmosController {
   constructor(private readonly farmos: FarmosService) {}
+
+  @ApiOperation({ summary: "Fallback realtime version for FarmOS clients when SSE is unavailable." })
+  @Permissions("readAll-farmos")
+  @Get("events/version")
+  eventsVersion(@Query("since") since?: string) {
+    return {
+      version: Date.now(),
+      updatedAt: new Date().toISOString(),
+      since: since || null,
+      tables: FARMOS_REALTIME_TABLES,
+    };
+  }
 
   // ─── Animals ─────────────────────────────────────────────────────────────
 
@@ -426,6 +457,25 @@ export class FarmosController {
   @Post("staff")
   createFarmosStaff(@Body() body: CreateFarmosStaffDto, @CurrentOrg() orgId: number) {
     return this.farmos.createFarmosStaff(body, orgId);
+  }
+
+  @ApiOperation({ summary: "List daily work logs. Optional ?user_id, ?from, ?to (YYYY-MM-DD)." })
+  @Permissions("readAll-farmos")
+  @Get("work-logs")
+  listWorkLogs(
+    @CurrentOrg() orgId: number,
+    @Query("user_id") userId?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.farmos.listWorkLogs(orgId, userId ? Number(userId) : null, from || null, to || null);
+  }
+
+  @ApiOperation({ summary: "Declare daily work (current user by default)." })
+  @Permissions("create-farmos")
+  @Post("work-logs")
+  createWorkLog(@Body() body: CreateWorkLogDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createWorkLog(body, orgId, userId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────

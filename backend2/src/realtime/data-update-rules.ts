@@ -5,7 +5,8 @@ export type DataUpdateEntity =
   | "contract"
   | "payment"
   | "maintenance"
-  | "tenantOnboarding";
+  | "tenantOnboarding"
+  | "farmos";
 
 export type DataUpdateRule = {
   module: string;
@@ -221,6 +222,24 @@ export const DATA_UPDATE_RULES: Record<DataUpdateEntity, DataUpdateRule> = {
       "frontend/src/components/propertyManagement/usePropertyManagementData.js",
       "frontend/src/components/propertyManagement/modules/Tenants/TenantsPanel.jsx",
     ],
+  },
+  farmos: {
+    module: "farmos",
+    endpoints: [
+      "GET /farmos/*",
+      "POST /farmos/*",
+      "PUT/PATCH /farmos/*",
+      "DELETE /farmos/*",
+    ],
+    permissions: [
+      "readAll-farmos",
+      "create-farmos",
+      "update-farmos",
+      "delete-farmos",
+    ],
+    tags: ["farmos"],
+    pages: ["/farmos/"],
+    dataLoaders: ["farmos-app/src/api.js"],
   },
 };
 

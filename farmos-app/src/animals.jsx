@@ -8,6 +8,7 @@ import { speciesById, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
+import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import QRCode from "qrcode";
 
 const FIELD_DEFS = {
@@ -74,6 +75,8 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const [layout, setLayout] = React.useState("split"); // split | full
   const [animals, setAnimals] = React.useState([]);
   const [loadState, setLoadState] = React.useState("idle"); // idle | loading | ok | error
+  const [query, setQuery] = React.useState("");
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("all"));
 
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals"]);
@@ -113,7 +116,14 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
     return () => window.removeEventListener("farmos:animal-created", onCreated);
   }, []);
 
-  const filtered = animals.filter(a => !speciesFilter || a.species === speciesFilter);
+  const filtered = animals.filter((a) => {
+    if (speciesFilter && a.species !== speciesFilter) return false;
+    if (a.dob && !inDateRange(a.dob, dateRange)) return false;
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return [a.name, a.id, a.tag, a.externalId, a.lot, a.race, a.breed]
+      .some((v) => String(v || "").toLowerCase().includes(q));
+  });
   // Desktop: auto-select first animal for split view.
   // Mobile: only show detail after explicit row click — single scroll on the list.
   const selected = isMobile
@@ -147,13 +157,16 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         </div>
 
         {/* Filter bar */}
-        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+          <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+        </div>
 
         {/* Search + toolbar */}
         <div className="toolbar-row" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", rowGap: 8 }}>
           <div style={{ flex: "1 1 200px", minWidth: 0, display: "flex", alignItems: "center", gap: 8, background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 6, padding: "0 10px", height: 34 }}>
             <Icon name="search" size={14} color="var(--ink-500)"/>
-            <input placeholder={lang === "fr" ? "Rechercher par nom, ID, lot, race…" : "Search by name, ID, batch, breed…"} style={{ border: 0, background: "transparent", flex: 1, minWidth: 0, outline: "none", fontSize: 13 }}/>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={lang === "fr" ? "Rechercher par nom, ID, lot, race…" : "Search by name, ID, batch, breed…"} style={{ border: 0, background: "transparent", flex: 1, minWidth: 0, outline: "none", fontSize: 13 }}/>
           </div>
           <button className="btn btn-sm"><Icon name="filter" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Filtres" : "Filters"}</button>
           <button className="btn btn-sm"><Icon name="download" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Exporter" : "Export"}</button>
@@ -598,7 +611,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Lot" : "Lot"}</span>
-          <input className="input" value={form.lot} onChange={(e) => set("lot", e.target.value)}/>
+          <input className="input" value={form.lot} onChange={(e) => set("lot", e.target.value)} list="all-lots"
+            placeholder={lang === "fr" ? "Choisir ou créer un lot…" : "Pick or create a lot…"}/>
+          <AllLotsDataList/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Bâtiment" : "Barn"}</span>
@@ -622,6 +637,22 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         </button>
       </div>
     </div>
+  );
+};
+
+const AllLotsDataList = () => {
+  const [lots, setLots] = React.useState([]);
+  React.useEffect(() => {
+    api.listAnimals().then((rows) => {
+      const set = new Set();
+      (rows || []).forEach((a) => { const l = (a.lot || "").trim(); if (l) set.add(l); });
+      setLots(Array.from(set).sort());
+    }).catch(() => {});
+  }, []);
+  return (
+    <datalist id="all-lots">
+      {lots.map((l) => <option key={l} value={l}/>)}
+    </datalist>
   );
 };
 

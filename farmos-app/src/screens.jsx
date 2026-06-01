@@ -5,6 +5,7 @@ import { SPECIES, speciesById, t } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore, EmptyState } from "./shell";
 import { api, adaptMedicine, adaptTreatment, adaptReproEvent, adaptSaleAsTransaction, adaptExpenseAsTransaction } from "./api";
 import { useDataRefresh } from "./use-data-refresh";
+import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -14,6 +15,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
   const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
@@ -36,7 +38,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     window.addEventListener("farmos:treatment-created", onCreated);
     return () => window.removeEventListener("farmos:treatment-created", onCreated);
   }, []);
-  const treatments = allTreatments.filter(t => !speciesFilter || t.species === speciesFilter);
+  const treatments = allTreatments.filter(t => (!speciesFilter || t.species === speciesFilter) && inDateRange(t.start || t.end, dateRange));
   const running = treatments.filter(t => t.status === "running");
   const completed = treatments.filter(t => t.status === "completed");
 
@@ -54,7 +56,6 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   // Coût médicaments du mois en cours. Si un filtre espèce est actif on tente
   // de relier l'expense au médicament via related_medicine_id, sinon on
   // compte tout (cas data legacy sans liaison).
-  const monthPrefix = today.slice(0, 7);
   const speciesMedicineIds = speciesFilter
     ? new Set(allAnimals
         .filter((a) => a.species === speciesFilter)
@@ -64,7 +65,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     const cat = String(e.category || "").toLowerCase();
     if (cat !== "medicine" && cat !== "médicament" && cat !== "med") return false;
     const d = e.expenseDate || e.expense_date;
-    if (!d || !String(d).startsWith(monthPrefix)) return false;
+    if (!inDateRange(d, dateRange)) return false;
     return true;
   });
   const medCostMonth = medExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -80,14 +81,17 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       {/* KPI row — dérivés des vraies données + filtrés par espèce. */}
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)"/>
         <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value={quarantineCount} unit="" icon="shield" accent={quarantineCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
         <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value={withdrawalCount} unit="" icon="clock" accent={withdrawalCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Coût médicaments · mois" : "Medicine cost · month"} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit="$" icon="coins"/>
+        <KpiCard label={lang === "fr" ? "Coût médicaments · période" : "Medicine cost · period"} sublabel={rangeLabel(dateRange, lang)} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit="$" icon="coins"/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main-15)", gap: 16 }}>
@@ -216,6 +220,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 // ─── VACCINATION CALENDAR ────────────────────────────────────────────────
 const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allEvents, setAllEvents] = React.useState([]);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const refresh = useDataRefresh(["animals", "treatments", "reproductionEvents", "vaccinations"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listAnimals(), api.listTreatments(), api.listReproductionEvents(), api.listVaccinations()])
@@ -258,8 +264,8 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       })
       .catch(() => {});
     return () => { cancel = true; };
-  }, [lang]);
-  const filtered = allEvents.filter(v => !speciesFilter || v.species === speciesFilter);
+  }, [lang, refresh]);
+  const filtered = allEvents.filter(v => (!speciesFilter || v.species === speciesFilter) && inDateRange(v.due, dateRange));
   // Build a month grid
   const days = Array.from({ length: 35 }, (_, i) => i - 4); // May 2026 starting Fri = day 1 on col 5
   return (
@@ -271,7 +277,10 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main-cal)", gap: 16 }}>
         {/* Month grid */}
@@ -382,6 +391,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [forecasts, setForecasts] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
   const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
   const [editing, setEditing] = React.useState(null); // medicine row in edit mode
   const refresh = useDataRefresh(["medicines", "expenses", "animals", "feedForecasts"]);
@@ -412,11 +422,10 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
 
   // KPI Coût alimentation · mois : somme des dépenses catégorie 'feed' pour
   // le mois courant. Pas de filtre espèce sur les expenses (pas relié).
-  const monthPrefix = new Date().toISOString().slice(0, 7);
   const feedCostMonth = allExpenses.reduce((s, e) => {
     const cat = String(e.category || "").toLowerCase();
     const d = e.expenseDate || e.expense_date;
-    if ((cat === "feed" || cat === "alimentation") && d && String(d).startsWith(monthPrefix)) {
+    if ((cat === "feed" || cat === "alimentation") && inDateRange(d, dateRange)) {
       return s + Number(e.amount || 0);
     }
     return s;
@@ -433,13 +442,16 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>}
         {kindFilter !== "feed" && <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." icon="pill"/>}
         <KpiCard label={lang === "fr" ? "Stock faible" : "Low stock"} value={visible.filter(s => s.lowStock).length} unit="" icon="alert" accent={visible.some(s => s.lowStock) ? "var(--rust-700)" : "var(--ink-500)"}/>
-        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Coût alimentation · mois" : "Feed cost · month"} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>}
+        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Coût alimentation · période" : "Feed cost · period"} sublabel={rangeLabel(dateRange, lang)} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: kindFilter ? "1fr" : "var(--cols-2)", gap: 16 }}>
@@ -694,6 +706,7 @@ const StockTable = ({ lang, kind, items, title, accent, onAdd, onRowClick }) => 
 const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allGestations, setAllGestations] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("quarter"));
   const refresh = useDataRefresh(["reproductionEvents", "animals"]);
   React.useEffect(() => {
     let cancel = false;
@@ -712,7 +725,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     window.addEventListener("farmos:repro-created", onCreated);
     return () => window.removeEventListener("farmos:repro-created", onCreated);
   }, []);
-  const gestations = allGestations.filter(g => !speciesFilter || g.species === speciesFilter);
+  const gestations = allGestations.filter(g => (!speciesFilter || g.species === speciesFilter) && inDateRange(g.start, dateRange));
 
   // KPIs dérivés des events repro réels + filtrés par espèce.
   // - Chaleurs sem. = events de type 'heat' dans les 7 derniers jours.
@@ -729,7 +742,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     if (Number.isNaN(d.getTime())) return false;
     return now - d.getTime() <= days * DAY;
   };
-  const filteredEvents = eventsForSpecies.filter((g) => !speciesFilter || g.species === speciesFilter);
+  const filteredEvents = eventsForSpecies.filter((g) => (!speciesFilter || g.species === speciesFilter) && inDateRange(g.start, dateRange));
   const heatsWeek = filteredEvents.filter((g) => /heat|chaleur/i.test(String(g.ai || g.eventType || "")) && inWindow(g.start, 7)).length;
   const birthsMonth = filteredEvents.reduce((s, g) => {
     if (!g.complete || !inWindow(g.start, 30)) return s;
@@ -750,7 +763,10 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         <KpiCard label={lang === "fr" ? "Gestations actives" : "Active gestations"} value={gestations.filter(g=>!g.complete).length} icon="fingerprint" accent="var(--pertinence-700)"/>
@@ -843,6 +859,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [logs, setLogs] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("7d"));
   const refresh = useDataRefresh(["productionLogs"]);
   React.useEffect(() => {
     let cancel = false;
@@ -856,32 +873,29 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     window.addEventListener("farmos:production-created", onCreated);
     return () => window.removeEventListener("farmos:production-created", onCreated);
   }, []);
-  const filteredLogs = logs.filter((l) => !speciesFilter || l.species === speciesFilter).slice(0, 12);
+  const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(l.logDate || l.log_date, dateRange));
+  const filteredLogs = periodLogs.slice(0, 12);
 
   // KPIs production : agrégats live des production_logs (date la plus récente
   // disponible). Pas de delta (pas d'historique mois-1 facile à comparer ici).
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const sumProduct = (productType, date) => logs
+  const sumProduct = (productType) => periodLogs
     .filter((l) => {
-      const d = l.logDate || l.log_date;
-      const ok = d && String(d).slice(0, 10) === date;
-      return ok && l.productType === productType && (!speciesFilter || l.species === speciesFilter);
+      return (l.productType || l.product_type) === productType;
     })
     .reduce((s, l) => s + Number(l.quantity || 0), 0);
   // Lait: somme du jour (AM+PM) ou hier si rien aujourd'hui.
-  const milkToday = sumProduct("milk", today) || sumProduct("milk", yesterday);
+  const milkToday = sumProduct("milk");
   // Œufs idem
-  const eggsToday = sumProduct("eggs", today) || sumProduct("eggs", yesterday);
+  const eggsToday = sumProduct("eggs");
   // GMQ porcs (g/j): moyenne des derniers logs growth/weight pour porc.
-  const growthLogs = logs.filter((l) => (l.productType === "growth" || l.productType === "weight") && l.species === "pig").slice(0, 20);
+  const growthLogs = periodLogs.filter((l) => (l.productType === "growth" || l.productType === "weight") && l.species === "pig").slice(0, 20);
   const gmqAvg = growthLogs.length
     ? Math.round(growthLogs.reduce((s, l) => s + Number(l.quantity || 0), 0) / growthLogs.length)
     : 0;
   // Biomasse poisson: dernière valeur connue par bassin sommée
   const fishBiomass = (() => {
     const byPond = new Map();
-    logs
+    periodLogs
       .filter((l) => l.species === "fish" && l.productType === "biomass")
       .forEach((l) => {
         const key = l.animalId ?? "all";
@@ -903,11 +917,14 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Lait · aujourd'hui" : "Milk · today"} value={milkToday > 0 ? fmt(Math.round(milkToday)) : "—"} unit="L" icon="droplet" accent="var(--pertinence-500)"/>
-        <KpiCard label={lang === "fr" ? "Œufs · aujourd'hui" : "Eggs · today"} value={eggsToday > 0 ? fmt(Math.round(eggsToday)) : "—"} unit="" icon="egg" accent="var(--autorite-500)"/>
+        <KpiCard label={lang === "fr" ? "Lait · période" : "Milk · period"} sublabel={rangeLabel(dateRange, lang)} value={milkToday > 0 ? fmt(Math.round(milkToday)) : "—"} unit="L" icon="droplet" accent="var(--pertinence-500)"/>
+        <KpiCard label={lang === "fr" ? "Œufs · période" : "Eggs · period"} sublabel={rangeLabel(dateRange, lang)} value={eggsToday > 0 ? fmt(Math.round(eggsToday)) : "—"} unit="" icon="egg" accent="var(--autorite-500)"/>
         <KpiCard label={lang === "fr" ? "GMQ porcs" : "Pig ADG"} value={gmqAvg > 0 ? fmt(gmqAvg) : "—"} unit="g/j" icon="weight" accent="var(--oxblood-700)"/>
         <KpiCard label={lang === "fr" ? "Biomasse poisson" : "Fish biomass"} value={fishBiomass > 0 ? fmt(Math.round(fishBiomass)) : "—"} unit="kg" icon="fish" accent="var(--pertinence-700)"/>
       </div>
@@ -1125,6 +1142,8 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const totalRev = summary.byCategory.reduce((a,b)=>a+b.amount,0);
   const [transactions, setTransactions] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const refresh = useDataRefresh(["sales", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listSales(), api.listExpenses(), api.getFinanceSummary()])
@@ -1133,13 +1152,14 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         const merged = [
           ...(Array.isArray(sales) ? sales : []).map((s) => adaptSaleAsTransaction(s, lang)),
           ...(Array.isArray(expenses) ? expenses : []).map((e) => adaptExpenseAsTransaction(e, lang)),
-        ].sort((a, b) => (b.isoDate || "").localeCompare(a.isoDate || ""));
+        ].filter((t) => inDateRange(t.isoDate, dateRange))
+          .sort((a, b) => (b.isoDate || "").localeCompare(a.isoDate || ""));
         setTransactions(merged.slice(0, 12));
         if (sumry && typeof sumry === "object") setSummary(sumry);
       })
       .catch((e) => console.warn("listSales/Expenses failed:", e.message));
     return () => { cancel = true; };
-  }, [lang, reloadKey]);
+  }, [lang, reloadKey, refresh, dateRange]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:expense-created", onCreated);
@@ -1158,19 +1178,22 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </h1>
       </div>
 
-      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         {(() => {
-          const totalR = summary.revenue.reduce((a, b) => a + b, 0);
-          const totalE = summary.expense.reduce((a, b) => a + b, 0);
+          const totalR = transactions.filter((t) => t.kind === "rev").reduce((a, b) => a + Number(b.rawAmount || 0), 0);
+          const totalE = Math.abs(transactions.filter((t) => t.kind === "exp").reduce((a, b) => a + Number(b.rawAmount || 0), 0));
           const profit = totalR - totalE;
           const margin = totalR > 0 ? (profit / totalR) * 100 : 0;
           return <>
-            <KpiCard label={t(lang, "revenue")} value={totalR.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
-            <KpiCard label={t(lang, "expense")} value={totalE.toLocaleString("fr-CA")} unit="$" trend={summary.expense.length ? summary.expense : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="wallet"/>
-            <KpiCard label={t(lang, "profit")} value={profit.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue.map((v, i) => v - (summary.expense[i] || 0)) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chart" accent="var(--money-500)"/>
-            <KpiCard label={t(lang, "margin")} value={margin.toFixed(1).replace(".", ",")} unit="%" trend={[margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin]} icon="chartPie" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "revenue")} sublabel={rangeLabel(dateRange, lang)} value={totalR.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "expense")} sublabel={rangeLabel(dateRange, lang)} value={totalE.toLocaleString("fr-CA")} unit="$" trend={summary.expense.length ? summary.expense : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="wallet"/>
+            <KpiCard label={t(lang, "profit")} sublabel={rangeLabel(dateRange, lang)} value={profit.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue.map((v, i) => v - (summary.expense[i] || 0)) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chart" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "margin")} sublabel={rangeLabel(dateRange, lang)} value={margin.toFixed(1).replace(".", ",")} unit="%" trend={[margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin]} icon="chartPie" accent="var(--money-500)"/>
           </>;
         })()}
       </div>

@@ -80,6 +80,11 @@ const KIND_INVALIDATES = {
   createVetExam:          ["vetExams"],
   createMortalityEvent:   ["mortalityEvents", "animals"],
   createFarmosStaff:      ["staff"],
+  createSemenStraw:       ["semenStraws"],
+  updateSemenStraw:       ["semenStraws"],
+  deleteSemenStraw:       ["semenStraws"],
+  createLookup:           ["lookups"],
+  createDisease:          ["diseases"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -121,8 +126,11 @@ function cachedList(table, path) {
     const refresh = jsonFetch(path)
       .then(async (fresh) => {
         if (Array.isArray(fresh)) {
+          const changed = !sameRows(cached, fresh);
           await replaceCache(table, fresh);
-          window.dispatchEvent(new CustomEvent("farmos:cache-updated", { detail: table }));
+          if (changed) {
+            window.dispatchEvent(new CustomEvent("farmos:cache-updated", { detail: table }));
+          }
         }
         return fresh;
       })
@@ -132,6 +140,19 @@ function cachedList(table, path) {
     const fresh = await refresh;
     return fresh || cached || [];
   };
+}
+
+function sameRows(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  if (a.length !== b.length) return false;
+  try { return JSON.stringify(a) === JSON.stringify(b); }
+  catch { return false; }
+}
+
+async function jsonMutate(kind, path, init = {}) {
+  const result = await jsonFetch(path, init);
+  await invalidateAndBroadcast(kind);
+  return result;
 }
 
 export const api = {
@@ -176,8 +197,8 @@ export const api = {
   deleteSale:    (id) => mutate({ kind: "deleteSale",    method: "DELETE", path: `/sales/${id}` }),
   deleteExpense: (id) => mutate({ kind: "deleteExpense", method: "DELETE", path: `/expenses/${id}` }),
   listLookups: (category, scope) => jsonFetch(`/lookups?category=${encodeURIComponent(category)}${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`),
-  createLookup: (body) => jsonFetch("/lookups", { method: "POST", body: JSON.stringify(body) }),
-  createDisease: (body) => jsonFetch("/diseases", { method: "POST", body: JSON.stringify(body) }),
+  createLookup: (body) => jsonMutate("createLookup", "/lookups", { method: "POST", body: JSON.stringify(body) }),
+  createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
@@ -187,9 +208,9 @@ export const api = {
   // Banque de semence (IA)
   listSemenStraws: (species) => cachedList("semenStraws", `/semen-straws${species ? `?species=${encodeURIComponent(species)}` : ""}`)(),
   getSemenStraw: (id) => jsonFetch(`/semen-straws/${id}`),
-  createSemenStraw: (body) => jsonFetch("/semen-straws", { method: "POST", body: JSON.stringify(body) }),
-  updateSemenStraw: (id, body) => jsonFetch(`/semen-straws/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteSemenStraw: (id) => jsonFetch(`/semen-straws/${id}`, { method: "DELETE" }),
+  createSemenStraw: (body) => jsonMutate("createSemenStraw", "/semen-straws", { method: "POST", body: JSON.stringify(body) }),
+  updateSemenStraw: (id, body) => jsonMutate("updateSemenStraw", `/semen-straws/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSemenStraw: (id) => jsonMutate("deleteSemenStraw", `/semen-straws/${id}`, { method: "DELETE" }),
   // Mâles disponibles pour saillie naturelle
   listBreedingMales: (species) => jsonFetch(`/breeding-males${species ? `?species=${encodeURIComponent(species)}` : ""}`),
   // Suggestion pour pré-remplir le formulaire d'IA

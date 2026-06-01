@@ -1160,6 +1160,19 @@ export const farmosVaccinations = mysqlTable("farmos_vaccinations", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+export const farmosWorkLogs = mysqlTable("farmos_work_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  workDate: date("work_date", { mode: "string" }).notNull(),
+  hours: decimal("hours", { precision: 5, scale: 2 }),
+  notes: text("notes"),
+  tasks: json("tasks").$type<Array<{ task: string; durationMinutes?: number; lot?: string; animalId?: number; notes?: string }> | null>(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosVetExams = mysqlTable("farmos_vet_exams", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
