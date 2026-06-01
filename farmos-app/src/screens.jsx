@@ -381,6 +381,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [forecasts, setForecasts] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
+  const [editing, setEditing] = React.useState(null); // medicine row in edit mode
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listMedicines(), api.listExpenses(), api.listAnimals(), api.listFeedForecasts().catch(() => [])])
@@ -439,8 +440,8 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: kindFilter ? "1fr" : "var(--cols-2)", gap: 16 }}>
-        {kindFilter !== "med" && <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)" onAdd={() => setAddOpen("feed")}/>}
-        {kindFilter !== "feed" && <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)" onAdd={() => setAddOpen("med")}/>}
+        {kindFilter !== "med" && <StockTable lang={lang} kind="feed" items={filteredFeed} title={lang === "fr" ? "Aliments" : "Feed"} accent="var(--health-500)" onAdd={() => setAddOpen("feed")} onRowClick={setEditing}/>}
+        {kindFilter !== "feed" && <StockTable lang={lang} kind="med" items={filteredMed} title={lang === "fr" ? "Médicaments" : "Medicines"} accent="var(--oxblood-700)" onAdd={() => setAddOpen("med")} onRowClick={setEditing}/>}
       </div>
 
       {kindFilter !== "med" && (
@@ -454,6 +455,14 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
           defaultSpecies={speciesFilter ? [speciesFilter] : []}
           onClose={() => setAddOpen(null)}
           onSaved={() => { setAddOpen(null); setReloadKey(k => k + 1); }}
+        />
+      )}
+      {editing && (
+        <MedicineFormModal
+          lang={lang}
+          medicine={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); setReloadKey(k => k + 1); }}
         />
       )}
     </div>
@@ -505,33 +514,38 @@ function FeedForecastBlock({ lang, forecasts }) {
   );
 }
 
-function MedicineFormModal({ lang, kind, defaultSpecies, onClose, onSaved }) {
-  const [name, setName] = React.useState("");
-  const [quantity, setQuantity] = React.useState("");
-  const [unit, setUnit] = React.useState(kind === "feed" ? "kg" : "doses");
-  const [minQuantity, setMinQuantity] = React.useState("");
-  const [supplier, setSupplier] = React.useState("");
-  const [expiryDate, setExpiryDate] = React.useState("");
-  const [notes, setNotes] = React.useState("");
-  const [species, setSpecies] = React.useState(defaultSpecies || []);
+function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSaved }) {
+  const isEdit = !!medicine;
+  const effectiveKind = medicine?.kind || kind;
+  const [name, setName] = React.useState(medicine?.name || "");
+  const [quantity, setQuantity] = React.useState(medicine?.qty != null ? String(medicine.qty) : "");
+  const [unit, setUnit] = React.useState(medicine?.unit || (effectiveKind === "feed" ? "kg" : "doses"));
+  const [minQuantity, setMinQuantity] = React.useState(medicine?.min != null ? String(medicine.min) : "");
+  const [supplier, setSupplier] = React.useState(medicine?.supplier || "");
+  const [expiryDate, setExpiryDate] = React.useState(medicine && medicine.expiry && medicine.expiry !== "—" ? medicine.expiry : "");
+  const [notes, setNotes] = React.useState(medicine?.notes || "");
+  const [species, setSpecies] = React.useState(medicine?.species?.length ? medicine.species : (defaultSpecies || []));
   const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
   const [error, setError] = React.useState("");
   const toggleSpecies = (sp) => setSpecies(s => s.includes(sp) ? s.filter(x => x !== sp) : [...s, sp]);
   const handleSave = async () => {
-    if (!name.trim() || !quantity) { setError(lang === "fr" ? "Nom et quantité requis." : "Name and quantity required."); return; }
+    if (!name.trim() || quantity === "" || quantity == null) { setError(lang === "fr" ? "Nom et quantité requis." : "Name and quantity required."); return; }
     setSaving(true); setError("");
+    const payload = {
+      name: name.trim(),
+      kind: effectiveKind,
+      quantity: Number(quantity),
+      unit: unit || null,
+      min_quantity: minQuantity ? Number(minQuantity) : null,
+      supplier: supplier.trim() || null,
+      expiry_date: expiryDate || null,
+      notes: notes.trim() || null,
+      species: species.length ? species : null,
+    };
     try {
-      await api.createMedicine({
-        name: name.trim(),
-        kind,
-        quantity: Number(quantity),
-        unit: unit || null,
-        min_quantity: minQuantity ? Number(minQuantity) : null,
-        supplier: supplier.trim() || null,
-        expiry_date: expiryDate || null,
-        notes: notes.trim() || null,
-        species: species.length ? species : null,
-      });
+      if (isEdit) await api.updateMedicine(medicine._pk, payload);
+      else await api.createMedicine(payload);
       onSaved();
     } catch (e) {
       setError(e.message || "Erreur");
@@ -539,9 +553,25 @@ function MedicineFormModal({ lang, kind, defaultSpecies, onClose, onSaved }) {
       setSaving(false);
     }
   };
-  const title = kind === "feed"
+  const handleDelete = async () => {
+    if (!isEdit) return;
+    if (!window.confirm(lang === "fr" ? `Supprimer définitivement "${name}" ?` : `Permanently delete "${name}"?`)) return;
+    setDeleting(true); setError("");
+    try {
+      await api.deleteMedicine(medicine._pk);
+      onSaved();
+    } catch (e) {
+      setError(e.message || "Erreur");
+      setDeleting(false);
+    }
+  };
+  const titleNew = effectiveKind === "feed"
     ? (lang === "fr" ? "Nouvel aliment" : "New feed")
     : (lang === "fr" ? "Nouveau médicament" : "New medicine");
+  const titleEdit = effectiveKind === "feed"
+    ? (lang === "fr" ? "Détails / modifier — aliment" : "Details / edit — feed")
+    : (lang === "fr" ? "Détails / modifier — médicament" : "Details / edit — medicine");
+  const title = isEdit ? titleEdit : titleNew;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
       <div className="card" style={{ width: 520, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
@@ -590,10 +620,21 @@ function MedicineFormModal({ lang, kind, defaultSpecies, onClose, onSaved }) {
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Notes" : "Notes"}
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input" rows={2} style={{ width: "100%", marginTop: 4 }}/>
           </label>
+          {isEdit && (
+            <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", display: "flex", gap: 12, paddingTop: 4, borderTop: "1px dashed var(--border-1)" }}>
+              <span>ID: {medicine.id}</span>
+              {medicine.lowStock && <span style={{ color: "var(--rust-700)" }}>{lang === "fr" ? "⚠ Stock sous le seuil" : "⚠ Below threshold"}</span>}
+            </div>
+          )}
           {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-            <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
+            {isEdit && (
+              <button className="btn" style={{ color: "var(--rust-700)", borderColor: "var(--rust-700)", marginRight: "auto" }} onClick={handleDelete} disabled={saving || deleting}>
+                {deleting ? "…" : (lang === "fr" ? "Supprimer" : "Delete")}
+              </button>
+            )}
+            <button className="btn" onClick={onClose} disabled={saving || deleting}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving || deleting}>{saving ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
           </div>
         </div>
       </div>
@@ -601,7 +642,7 @@ function MedicineFormModal({ lang, kind, defaultSpecies, onClose, onSaved }) {
   );
 }
 
-const StockTable = ({ lang, kind, items, title, accent, onAdd }) => (
+const StockTable = ({ lang, kind, items, title, accent, onAdd, onRowClick }) => (
   <div className="card" style={{ padding: 0, overflow: "hidden" }}>
     <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
       <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{title}</h3>
@@ -618,7 +659,9 @@ const StockTable = ({ lang, kind, items, title, accent, onAdd }) => (
       const pct = Math.min(100, (s.qty / (s.min * 3)) * 100);
       const low = s.qty < s.min;
       return (
-        <div key={s.id} style={{ padding: "12px 16px", borderBottom: i < items.length - 1 ? "1px solid var(--border-1)" : "none", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div key={s.id} onClick={() => onRowClick && onRowClick(s)} style={{ padding: "12px 16px", borderBottom: i < items.length - 1 ? "1px solid var(--border-1)" : "none", display: "flex", flexDirection: "column", gap: 6, cursor: onRowClick ? "pointer" : "default" }}
+          onMouseEnter={onRowClick ? (e) => e.currentTarget.style.background = "var(--bg-sunken)" : undefined}
+          onMouseLeave={onRowClick ? (e) => e.currentTarget.style.background = "transparent" : undefined}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{s.name}</div>
