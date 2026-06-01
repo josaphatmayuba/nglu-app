@@ -4,6 +4,7 @@ import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById, t } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore, EmptyState } from "./shell";
 import { api, adaptMedicine, adaptTreatment, adaptReproEvent, adaptSaleAsTransaction, adaptExpenseAsTransaction } from "./api";
+import { useDataRefresh } from "./use-data-refresh";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -13,6 +14,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listTreatments(), api.listAnimals(), api.listDiseases(), api.listExpenses()])
@@ -28,7 +30,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       })
       .catch((e) => console.warn("listTreatments failed:", e.message));
     return () => { cancel = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:treatment-created", onCreated);
@@ -382,6 +384,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
   const [editing, setEditing] = React.useState(null); // medicine row in edit mode
+  const refresh = useDataRefresh(["medicines", "expenses", "animals", "feedForecasts"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listMedicines(), api.listExpenses(), api.listAnimals(), api.listFeedForecasts().catch(() => [])])
@@ -395,7 +398,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
       })
       .catch((e) => console.warn("StockScreen load failed:", e.message));
     return () => { cancel = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:expense-created", onCreated);
@@ -691,6 +694,7 @@ const StockTable = ({ lang, kind, items, title, accent, onAdd, onRowClick }) => 
 const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allGestations, setAllGestations] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["reproductionEvents", "animals"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listReproductionEvents(), api.listAnimals()])
@@ -702,7 +706,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       })
       .catch((e) => console.warn("listReproductionEvents failed:", e.message));
     return () => { cancel = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:repro-created", onCreated);
@@ -839,13 +843,14 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [logs, setLogs] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["productionLogs"]);
   React.useEffect(() => {
     let cancel = false;
     api.listProductionLogs()
       .then((rows) => { if (!cancel && Array.isArray(rows)) setLogs(rows); })
       .catch(() => {});
     return () => { cancel = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:production-created", onCreated);
@@ -1330,20 +1335,127 @@ const ReportsScreen = ({ lang }) => {
 };
 
 // ─── EMPLOYEES (équipe FarmOS depuis RH du CRM) ──────────────────────────
+const FARM_DESIGNATIONS = [
+  "Gérant ferme", "Vétérinaire", "Technicien agricole", "Éleveur",
+  "Ouvrier agricole", "Trayeur", "Berger", "Aviculteur", "Apiculteur",
+  "Inséminateur", "Maréchal-ferrant", "Mécanicien agricole", "Conducteur d'engins",
+  "Responsable nutrition", "Responsable reproduction", "Comptable ferme", "Stagiaire",
+];
+
+function FarmosStaffModal({ lang, onClose, onSaved }) {
+  const [firstName, setFirstName] = React.useState("");
+  const [lastName, setLastName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [designation, setDesignation] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [generated, setGenerated] = React.useState(null);
+  const handleSave = async () => {
+    if (!email.trim() || !designation.trim()) {
+      setError(lang === "fr" ? "Email et poste requis." : "Email and role required.");
+      return;
+    }
+    if (password && password.length < 12) {
+      setError(lang === "fr" ? "Le mot de passe doit avoir au moins 12 caractères." : "Password must have at least 12 characters.");
+      return;
+    }
+    setSaving(true); setError("");
+    try {
+      const res = await api.createFarmosStaff({
+        firstName: firstName.trim() || null,
+        lastName: lastName.trim() || null,
+        email: email.trim(),
+        phone: phone.trim() || null,
+        designation: designation.trim(),
+        password: password || undefined,
+      });
+      if (res?.generatedPassword) {
+        setGenerated(res.generatedPassword);
+      } else {
+        onSaved();
+      }
+    } catch (e) {
+      setError(e.message || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, marginBottom: 4 }}>
+          {lang === "fr" ? "Nouvel employé" : "New employee"}
+        </h3>
+        <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 16 }}>
+          {lang === "fr" ? "Sera créé dans le RH du CRM et visible côté FarmOS." : "Will be created in CRM HR and visible in FarmOS."}
+        </div>
+        {generated ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ padding: 12, background: "var(--health-100)", borderRadius: 8, fontSize: 13 }}>
+              {lang === "fr" ? "Employé créé. Mot de passe temporaire (à transmettre une fois) :" : "Employee created. Temporary password (share once):"}
+              <div className="mono" style={{ fontSize: 16, fontWeight: 600, marginTop: 8, padding: "8px 12px", background: "var(--paper)", borderRadius: 6, userSelect: "all" }}>{generated}</div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button className="btn btn-primary" onClick={onSaved}>{lang === "fr" ? "Terminé" : "Done"}</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prénom" : "First name"}
+                <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+              </label>
+              <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Nom" : "Last name"}
+                <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+              </label>
+            </div>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Email *" : "Email *"}
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Téléphone" : "Phone"}
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Poste *" : "Role *"}
+              <input list="farm-designations" value={designation} onChange={(e) => setDesignation(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}
+                placeholder={lang === "fr" ? "ex. Gérant ferme, Trayeur, Berger…" : "e.g. Farm manager, Milker…"}/>
+              <datalist id="farm-designations">
+                {FARM_DESIGNATIONS.map((d) => <option key={d} value={d}/>)}
+              </datalist>
+            </label>
+            <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Mot de passe (optionnel)" : "Password (optional)"}
+              <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}
+                placeholder={lang === "fr" ? "Laisser vide pour génération auto (min 12 car.)" : "Leave blank to auto-generate (min 12 chars)"}/>
+            </label>
+            {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+              <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? "…" : (lang === "fr" ? "Créer" : "Create")}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const EmployeesScreen = ({ lang }) => {
   const [staff, setStaff] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState(null);
   const [search, setSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("");
+  const [addOpen, setAddOpen] = React.useState(false);
 
+  const refresh = useDataRefresh(["staff"]);
   const reload = React.useCallback(() => {
     setLoading(true);
     api.listFarmosStaff().then((rows) => { setStaff(Array.isArray(rows) ? rows : []); setErr(null); })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   }, []);
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => { reload(); }, [reload, refresh]);
 
   const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.email || `#${u.id}`;
   const initials = (u) => fullName(u).split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -1374,16 +1486,19 @@ const EmployeesScreen = ({ lang }) => {
           <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Équipe · Team" : "Team · Équipe"}</div>
           <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em" }}>
             {lang === "fr"
-              ? <>Employés ferme, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>gérés depuis le RH du CRM</span></>
-              : <>Farm staff, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>managed in CRM HR</span></>}
+              ? <>Employés ferme, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>synchronisés avec le RH du CRM</span></>
+              : <>Farm staff, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>synced with CRM HR</span></>}
           </h1>
         </div>
-        <a className="btn btn-primary" href="/admin/employees" target="_blank" rel="noreferrer"
-           style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <button className="btn btn-primary" onClick={() => setAddOpen(true)}
+           style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <Icon name="plus" size={13} color="#FBF8F2"/>
-          {lang === "fr" ? "Ajouter un employé (RH)" : "Add employee (HR)"}
-        </a>
+          {lang === "fr" ? "Ajouter un employé" : "Add employee"}
+        </button>
       </div>
+      {addOpen && (
+        <FarmosStaffModal lang={lang} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }}/>
+      )}
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <input className="input" style={{ flex: "1 1 240px", maxWidth: 320 }}

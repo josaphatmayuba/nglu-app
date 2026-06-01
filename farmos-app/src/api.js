@@ -40,6 +40,7 @@ async function jsonFetch(path, init = {}) {
   return res.json();
 }
 
+
 // SCRUM-239 : stale-while-revalidate via Dexie. Sert immédiatement la version
 // cachée de la collection (si présente), puis rafraîchit en arrière-plan et
 // émet `farmos:cache-updated` (detail = nom de table) pour que les composants
@@ -55,6 +56,42 @@ function tempId(prefix) {
   return `tmp-${prefix}-${Date.now()}-${_tempCounter}`;
 }
 
+// Quelles tables doivent être ré-interrogées après chaque mutation.
+// Permet aux écrans de se rafraîchir automatiquement, sans F5.
+const KIND_INVALIDATES = {
+  createAnimal:           ["animals"],
+  updateAnimal:           ["animals"],
+  deleteAnimal:           ["animals"],
+  createMedicine:         ["medicines"],
+  updateMedicine:         ["medicines"],
+  deleteMedicine:         ["medicines"],
+  consumeMedicine:        ["medicines"],
+  createTreatment:        ["treatments", "medicines", "animals"],
+  deleteTreatment:        ["treatments"],
+  createExpense:          ["expenses", "medicines"],
+  deleteExpense:          ["expenses"],
+  createSale:             ["sales"],
+  deleteSale:             ["sales"],
+  createReproductionEvent:["reproductionEvents", "semenStraws"],
+  deleteReproductionEvent:["reproductionEvents"],
+  createProductionLog:    ["productionLogs"],
+  deleteProductionLog:    ["productionLogs"],
+  createVaccination:      ["vaccinations"],
+  createVetExam:          ["vetExams"],
+  createMortalityEvent:   ["mortalityEvents", "animals"],
+  createFarmosStaff:      ["staff"],
+};
+
+async function invalidateAndBroadcast(kind) {
+  const tables = KIND_INVALIDATES[kind] || [];
+  for (const table of tables) {
+    try { await db.meta.delete(table); } catch {}
+  }
+  if (tables.length) {
+    window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind, tables } }));
+  }
+}
+
 // Helper : enqueue si offline, sinon tente le réseau direct. Si le réseau
 // échoue (timeout/connection), retombe sur la queue pour ne pas perdre la donnée.
 async function mutate({ kind, method, path, body, optimistic }) {
@@ -63,7 +100,9 @@ async function mutate({ kind, method, path, body, optimistic }) {
     return { id, _queued: true };
   }
   try {
-    return await jsonFetch(path, { method, body: body ? JSON.stringify(body) : undefined });
+    const result = await jsonFetch(path, { method, body: body ? JSON.stringify(body) : undefined });
+    await invalidateAndBroadcast(kind);
+    return result;
   } catch (err) {
     // Si l'erreur est réseau (pas un 4xx serveur), on enqueue.
     if (/Failed to fetch|NetworkError|TypeError/i.test(String(err.message || err))) {
@@ -140,6 +179,7 @@ export const api = {
   createLookup: (body) => jsonFetch("/lookups", { method: "POST", body: JSON.stringify(body) }),
   createDisease: (body) => jsonFetch("/diseases", { method: "POST", body: JSON.stringify(body) }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
+  createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
   listAnimalsWithPhotos: (perAnimal = 3) => jsonFetch(`/animals-with-photos?perAnimal=${perAnimal}`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),

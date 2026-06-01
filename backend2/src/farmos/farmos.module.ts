@@ -1,10 +1,11 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { UsersModule } from "../users/users.module";
 import { FarmosController } from "./farmos.controller";
 import { FarmosService } from "./farmos.service";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, UsersModule],
   controllers: [FarmosController],
   providers: [FarmosService],
   exports: [FarmosService],

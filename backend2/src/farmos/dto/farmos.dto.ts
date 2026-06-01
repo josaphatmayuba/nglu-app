@@ -195,6 +195,16 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class CreateFarmosStaffDto {
+  @ApiProperty() @IsString() @IsNotEmpty() email: string;
+  @ApiProperty({ example: "Vétérinaire" }) @IsString() @IsNotEmpty() designation: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
+  @ApiPropertyOptional({ description: "Min 12 chars. Si omis, un mot de passe est généré et retourné une fois." })
+  @IsOptional() @IsString() password?: string;
+}
+
 export class ConsumeMedicineDto {
   @ApiProperty({ example: 5, description: "Quantity to deduct from current stock." })
   @Type(() => Number) @IsNumber() @Min(0.001)

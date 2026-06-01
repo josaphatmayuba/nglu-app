@@ -1,6 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
+import { UsersService } from "../users/users.service";
+import { roles } from "../database/schema";
 import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
@@ -22,7 +24,69 @@ import type {
 
 @Injectable()
 export class FarmosService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly usersService: UsersService,
+  ) {}
+
+  // ─── FarmOS staff onboarding (creates a CRM user assigned to the FarmOS dept) ─
+  async createFarmosStaff(
+    input: { firstName?: string; lastName?: string; email: string; designation: string; phone?: string; password?: string },
+    orgId: number,
+  ) {
+    if (!input.email) throw new BadRequestException("Email requis.");
+    if (!input.designation) throw new BadRequestException("Désignation (rôle métier) requise.");
+
+    // Find or create the FarmOS department (departments are global, not per-org).
+    let [dept] = await this.db
+      .select({ id: departments.id, name: departments.name })
+      .from(departments)
+      .where(or(sql`LOWER(${departments.name}) = 'farmos'`, sql`LOWER(${departments.name}) = 'ferme'`))
+      .limit(1);
+    if (!dept) {
+      const [r] = await this.db.insert(departments).values({ name: "FarmOS" } as any).$returningId();
+      dept = { id: Number(r.id), name: "FarmOS" };
+    }
+
+    // Find or create the designation by name.
+    let [desig] = await this.db
+      .select({ id: designations.id })
+      .from(designations)
+      .where(sql`LOWER(${designations.name}) = ${input.designation.toLowerCase()}`)
+      .limit(1);
+    if (!desig) {
+      const [r] = await this.db.insert(designations).values({ name: input.designation } as any).$returningId();
+      desig = { id: Number(r.id) };
+    }
+
+    // Pick a sensible default role (manager > salesman > first non super-admin).
+    const roleRows = await this.db.select({ id: roles.id, name: roles.name }).from(roles);
+    const pickRole = (name: string) => roleRows.find((r) => (r.name || "").toLowerCase() === name)?.id;
+    const roleId = pickRole("manager") || pickRole("salesman") || roleRows.find((r) => (r.name || "").toLowerCase() !== "super-admin")?.id;
+    if (!roleId) throw new BadRequestException("Aucun rôle CRM disponible pour assigner l'employé.");
+
+    // Username from email local-part; password generated if not provided.
+    const username = (input.email.split("@")[0] || `user-${Date.now()}`).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+    const generatedPassword = input.password && input.password.length >= 12
+      ? input.password
+      : `Farm${Math.random().toString(36).slice(2, 10)}${Math.floor(Math.random() * 9000 + 1000)}!`;
+
+    const created = await this.usersService.create({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone,
+      username,
+      password: generatedPassword,
+      roleId,
+      designationId: desig.id,
+      departmentId: dept.id,
+      organizationId: orgId,
+      status: "true",
+    } as any, {});
+
+    return { user: created, generatedPassword: input.password ? null : generatedPassword };
+  }
 
   // ─── Animals ─────────────────────────────────────────────────────────────
 

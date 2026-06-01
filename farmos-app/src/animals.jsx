@@ -5,6 +5,7 @@
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
 import { speciesById, t } from "./data";
+import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
 import QRCode from "qrcode";
@@ -75,6 +76,7 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const [loadState, setLoadState] = React.useState("idle"); // idle | loading | ok | error
 
   const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["animals"]);
   React.useEffect(() => {
     let cancelled = false;
     setLoadState("loading");
@@ -92,7 +94,7 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         setLoadState("error");
       });
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [reloadKey, refresh]);
   // Récupère une éventuelle sélection en attente (posée par l'écran
   // Identification → "Voir fiche"). On essaie après chaque chargement
   // d'animaux pour matcher l'external_id quand la liste est prête.

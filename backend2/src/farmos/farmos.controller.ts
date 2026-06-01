@@ -19,6 +19,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   ConsumeMedicineDto,
   CreateAnimalDto,
+  CreateFarmosStaffDto,
   CreateDiseaseDto,
   CreateExpenseDto,
   CreateMedicineDto,
@@ -418,6 +419,13 @@ export class FarmosController {
   @Get("staff")
   listFarmosStaff(@CurrentOrg() orgId: number, @Query("role") role?: string) {
     return this.farmos.listFarmosStaff(orgId, role || null);
+  }
+
+  @ApiOperation({ summary: "Onboard a FarmOS staff member (also visible in CRM /staff)." })
+  @Permissions("create-farmos")
+  @Post("staff")
+  createFarmosStaff(@Body() body: CreateFarmosStaffDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createFarmosStaff(body, orgId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────
