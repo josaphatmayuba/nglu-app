@@ -18,6 +18,7 @@ This project follows:
 - FarmOS: les appels API frontend sont maintenant serialises et les lectures identiques deja en cours sont dedupliquees pour eviter les rafales `429` au chargement des ecrans.
 - FarmOS: Workbox ne revalide plus les endpoints `/api/farmos/*`; le mode offline reste assure par Dexie et l'outbox, sans doubler les appels API.
 - FarmOS: les refresh Dexie de fond (`farmos:cache-updated`) ne relancent plus les ecrans en boucle; les mutations et le realtime continuent de passer par `farmos:data-changed`.
+- FarmOS: ajout d'une migration PWA qui desinscrit une seule fois les anciens service workers FarmOS pouvant encore intercepter `/api/farmos/*` et nettoyer leurs caches API.
 
 ### Added
 

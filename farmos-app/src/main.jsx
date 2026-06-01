@@ -3,9 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
 import { startOutboxWorker } from "./offline-outbox";
 import { startFarmosRealtime } from "./farmos-realtime";
-
-startOutboxWorker();
-startFarmosRealtime();
+import { cleanupLegacyFarmosApiServiceWorker } from "./service-worker-migration";
 
 class ErrorBoundary extends React.Component {
   state = { err: null };
@@ -30,6 +28,16 @@ window.addEventListener("error", (e) => {
   }
 });
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <ErrorBoundary><App /></ErrorBoundary>
-);
+async function boot() {
+  const reloadingForSwCleanup = await cleanupLegacyFarmosApiServiceWorker();
+  if (reloadingForSwCleanup) return;
+
+  startOutboxWorker();
+  startFarmosRealtime();
+
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <ErrorBoundary><App /></ErrorBoundary>
+  );
+}
+
+boot();
