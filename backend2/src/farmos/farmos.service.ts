@@ -22,6 +22,7 @@ import type {
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
 } from "./dto/farmos.dto";
+import { FARMOS_SPECIES, type FarmosSpecies } from "./dto/farmos.dto";
 
 @Injectable()
 export class FarmosService {
@@ -70,6 +71,47 @@ export class FarmosService {
   }
 
   // ─── FarmOS staff onboarding (creates a CRM user assigned to the FarmOS dept) ─
+  async getSettings(orgId: number) {
+    const rows = await this.db
+      .select({ valueFr: farmosLookups.valueFr })
+      .from(farmosLookups)
+      .where(and(
+        eq(farmosLookups.organizationId, orgId),
+        eq(farmosLookups.category, "enabled_species"),
+        eq(farmosLookups.isActive, 1),
+      ));
+    const valid = new Set(FARMOS_SPECIES);
+    const enabled = Array.from(new Set(rows
+      .map((r) => r.valueFr)
+      .filter((v): v is FarmosSpecies => valid.has(v as FarmosSpecies))));
+    return {
+      enabled_species: enabled.length ? enabled : [...FARMOS_SPECIES],
+      available_species: [...FARMOS_SPECIES],
+    };
+  }
+
+  async updateSpeciesSettings(orgId: number, enabledSpecies: FarmosSpecies[]) {
+    const valid = new Set(FARMOS_SPECIES);
+    const enabled = Array.from(new Set((enabledSpecies || []).filter((s) => valid.has(s))));
+    if (enabled.length === 0) throw new BadRequestException("Au moins une espece doit rester active.");
+
+    await this.db
+      .update(farmosLookups)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosLookups.organizationId, orgId), eq(farmosLookups.category, "enabled_species")));
+
+    await this.db.insert(farmosLookups).values(enabled.map((species) => ({
+      organizationId: orgId,
+      category: "enabled_species",
+      scopeKey: null,
+      valueFr: species,
+      valueEn: species,
+    })));
+
+    await this.publishFarmosUpdate("updateFarmosSettings", ["lookups"], "updated", "enabled_species", orgId);
+    return this.getSettings(orgId);
+  }
+
   async createFarmosStaff(
     input: { firstName?: string; lastName?: string; email: string; designation: string; phone?: string; password?: string },
     orgId: number,
@@ -163,6 +205,8 @@ export class FarmosService {
       count: input.count ?? null,
       lot: input.lot ?? null,
       barn: input.barn ?? null,
+      room: input.room ?? null,
+      type: input.type ?? null,
       status: input.status ?? "healthy",
       lastEvent: input.last_event ?? null,
     });
@@ -185,6 +229,8 @@ export class FarmosService {
     if (input.count !== undefined) patch.count = input.count;
     if (input.lot !== undefined) patch.lot = input.lot;
     if (input.barn !== undefined) patch.barn = input.barn;
+    if (input.room !== undefined) patch.room = input.room;
+    if (input.type !== undefined) patch.type = input.type;
     if (input.status !== undefined) patch.status = input.status;
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
@@ -482,11 +528,12 @@ export class FarmosService {
   }
 
   async createSale(input: CreateSaleDto, orgId: number) {
+    const animal = input.animal_id ? await this.getAnimal(input.animal_id, orgId) : null;
     const [res] = await this.db.insert(farmosSales).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
-      species: input.species ?? null,
-      productType: input.product_type ?? null,
+      species: input.species ?? animal?.species ?? null,
+      productType: input.product_type ?? (animal ? "animal" : null),
       quantity: String(input.quantity),
       unit: input.unit ?? null,
       unitPrice: input.unit_price != null ? String(input.unit_price) : null,
@@ -501,8 +548,27 @@ export class FarmosService {
     if (txId) {
       await this.db.update(farmosSales).set({ transactionId: txId }).where(eq(farmosSales.id, res.id));
     }
-    await this.publishFarmosUpdate("createSale", ["sales"], "created", res.id, orgId);
+    if (animal) {
+      await this.applyAnimalSale(animal, Number(input.quantity), orgId);
+    }
+    await this.publishFarmosUpdate("createSale", ["sales", "animals"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
+  }
+
+  private async applyAnimalSale(animal: any, quantity: number, orgId: number) {
+    const soldQty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+    const currentCount = Number(animal.count ?? 0);
+    if (currentCount > soldQty) {
+      await this.db
+        .update(farmosAnimals)
+        .set({ count: Math.max(0, currentCount - soldQty), status: "available_sale" })
+        .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+      return;
+    }
+    await this.db
+      .update(farmosAnimals)
+      .set({ count: currentCount > 0 ? 0 : animal.count, status: "sold" })
+      .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
   }
 
   async deleteSale(id: number, orgId: number) {
@@ -1267,7 +1333,8 @@ export class FarmosService {
 
   private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {
     try {
-      const type = await this.findTransactionType("FarmOS Sale");
+      const txTypeName = this.resolveFarmosSaleTransactionType(input);
+      const type = await this.findTransactionType(txTypeName) ?? await this.findTransactionType("FarmOS Sale");
       if (!type) return null;
       const particulars = `Vente FarmOS · ${input.product_type ?? input.species ?? "produit"}${input.buyer ? ` · ${input.buyer}` : ""}`;
       const [res] = await this.db.insert(transactions).values({
@@ -1275,17 +1342,49 @@ export class FarmosService {
         date: new Date(input.sale_date) as any,
         debitId: type.debitAccountId,
         creditId: type.creditAccountId,
-        particulars,
+        particulars: this.buildFarmosSaleParticulars(input, txTypeName),
         amount: Number(input.total_amount),
         currencyId: input.currency_id ?? null,
-        type: "FarmOS Sale",
-        relatedId: `farmos_sale:${saleId}`,
+        type: txTypeName,
+        relatedId: `farmos_sale:${saleId}:${input.sale_source ?? this.resolveFarmosSaleSource(input)}:${input.product_type ?? input.species ?? "item"}`,
       }).$returningId();
       return res.id;
     } catch (err) {
       console.warn("[FarmOS] syncSaleToTransaction failed:", (err as Error).message);
       return null;
     }
+  }
+
+  private resolveFarmosSaleSource(input: CreateSaleDto) {
+    if (input.sale_source) return input.sale_source;
+    if (input.animal_id) return "animal";
+    if (input.product_type) return "production";
+    return "other";
+  }
+
+  private resolveFarmosSaleTransactionType(input: CreateSaleDto) {
+    const product = (input.product_type || "").toLowerCase();
+    const source = this.resolveFarmosSaleSource(input);
+    if (source === "animal" || product === "animal" || product === "livestock") return "FarmOS Animal Sale";
+    if (product === "eggs" || product === "egg") return "FarmOS Egg Sale";
+    if (product === "milk") return "FarmOS Milk Sale";
+    if (product === "meat") return "FarmOS Meat Sale";
+    if (product === "wool") return "FarmOS Wool Sale";
+    if (product === "fish") return "FarmOS Fish Sale";
+    if (source === "production") return "FarmOS Production Sale";
+    return "FarmOS Sale";
+  }
+
+  private buildFarmosSaleParticulars(input: CreateSaleDto, txTypeName: string) {
+    const parts = [
+      txTypeName.replace("FarmOS ", "Vente FarmOS - "),
+      input.species ? `espece=${input.species}` : null,
+      input.product_type ? `produit=${input.product_type}` : null,
+      input.animal_id ? `animal=${input.animal_id}` : null,
+      `qte=${input.quantity}${input.unit ? ` ${input.unit}` : ""}`,
+      input.buyer ? `acheteur=${input.buyer}` : null,
+    ].filter(Boolean);
+    return parts.join(" | ").slice(0, 255);
   }
 
   private async syncExpenseToTransaction(expenseId: number, input: CreateExpenseDto, orgId: number): Promise<number | null> {

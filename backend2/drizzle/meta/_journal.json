@@ -309,6 +309,27 @@
       "when": 1780171200000,
       "tag": "0059_farmos_semen_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1780174800000,
+      "tag": "0064_repair_farmos_production_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1780178400000,
+      "tag": "0065_farmos_sale_transaction_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1780182000000,
+      "tag": "0066_farmos_animals_room_type",
+      "breakpoints": true
     }
   ]
 }

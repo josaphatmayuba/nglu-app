@@ -35,6 +35,7 @@ import {
   CreateTreatmentDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
+  UpdateFarmosSpeciesSettingsDto,
   UpdateMedicineDto,
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
@@ -70,6 +71,20 @@ export class FarmosController {
   @Get("dashboard")
   dashboard(@CurrentOrg() orgId: number) {
     return this.farmos.getDashboardSnapshot(orgId);
+  }
+
+  @ApiOperation({ summary: "Get FarmOS organization settings." })
+  @Permissions("readAll-farmos")
+  @Get("settings")
+  getSettings(@CurrentOrg() orgId: number) {
+    return this.farmos.getSettings(orgId);
+  }
+
+  @ApiOperation({ summary: "Update enabled species for the organization." })
+  @Permissions("update-farmos")
+  @Put("settings/species")
+  updateSpeciesSettings(@CurrentOrg() orgId: number, @Body() body: UpdateFarmosSpeciesSettingsDto) {
+    return this.farmos.updateSpeciesSettings(orgId, body.enabled_species);
   }
 
   @ApiOperation({ summary: "Fallback realtime version for FarmOS clients when SSE is unavailable." })

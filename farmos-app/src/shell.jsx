@@ -18,6 +18,7 @@ const NAV = [
   { id: "semen-bank",icon: "flask",       labelKey: "semenBank" },
   { id: "production",icon: "chart",     labelKey: "production" },
   { id: "alerts",    icon: "bell",      labelKey: "alerts", critical: true },
+  { id: "pos",       icon: "cart",      labelKey: "pos" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
 ];
@@ -108,7 +109,7 @@ const UserChip = ({ showLabels, lang }) => {
   );
 };
 
-const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarStyle }) => {
+const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarStyle, enabledSpecies }) => {
   const showLabels = sidebarStyle !== "icons";
   const width = showLabels ? 248 : 64;
   const [animals, setAnimals] = React.useState([]);
@@ -120,6 +121,9 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
     return () => { cancel = true; window.removeEventListener("farmos:animal-created", load); };
   }, []);
   const { counts, sick, total } = deriveSpeciesCounts(animals);
+  const visibleSpecies = (enabledSpecies && enabledSpecies.length)
+    ? SPECIES.filter((s) => enabledSpecies.includes(s.id))
+    : SPECIES;
   // alertCount is now derived in App from live data and shown via badge prop elsewhere.
   const alertCount = 0;
   return (
@@ -193,7 +197,7 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
               <span style={{ flex: 1 }}>{t(lang, "allSpecies")}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(236,241,236,0.42)" }}>{total.toLocaleString("fr-CA")}</span>
             </button>
-            {SPECIES.map((s) => (
+            {visibleSpecies.map((s) => (
               <button key={s.id} onClick={() => onSpeciesFilter(s.id)}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "7px 10px",
@@ -356,8 +360,9 @@ function deriveSpeciesCounts(animals) {
   return { counts, sick, total };
 }
 
-const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = false, animals }) => {
+const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = false, animals, enabledSpecies }) => {
   const [fetched, setFetched] = React.useState(null);
+  const [settingsSpecies, setSettingsSpecies] = React.useState(null);
   React.useEffect(() => {
     if (animals) return;
     let cancel = false;
@@ -366,8 +371,24 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
     window.addEventListener("farmos:animal-created", reload);
     return () => { cancel = true; window.removeEventListener("farmos:animal-created", reload); };
   }, [animals]);
+  React.useEffect(() => {
+    if (enabledSpecies) return;
+    let cancel = false;
+    const load = () => api.getSettings()
+      .then((settings) => {
+        if (!cancel && Array.isArray(settings?.enabled_species)) setSettingsSpecies(settings.enabled_species);
+      })
+      .catch(() => {});
+    load();
+    window.addEventListener("farmos:settings-updated", load);
+    return () => { cancel = true; window.removeEventListener("farmos:settings-updated", load); };
+  }, [enabledSpecies]);
   const source = animals || fetched || [];
   const { counts, sick, total } = deriveSpeciesCounts(source);
+  const activeIds = enabledSpecies || settingsSpecies;
+  const visibleSpecies = (activeIds && activeIds.length)
+    ? SPECIES.filter((s) => activeIds.includes(s.id))
+    : SPECIES;
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
       {includeAll && (
@@ -379,7 +400,7 @@ const SpeciesPillBar = ({ lang, value, onChange, includeAll = true, compact = fa
           <span className="mono" style={{ fontSize: 11, opacity: 0.75 }}>{total.toLocaleString("fr-CA")}</span>
         </button>
       )}
-      {SPECIES.map((s) => {
+      {visibleSpecies.map((s) => {
         const active = value === s.id;
         const n = counts[s.id] || 0;
         const sickN = sick[s.id] || 0;
@@ -417,7 +438,7 @@ const KpiCard = ({ label, value, unit, delta, trend, accent, icon, sublabel }) =
           )}
           <div>
             <div className="overline" style={{ color: "var(--fg-2)" }}>{label}</div>
-            {sublabel && <div style={{ fontSize: 10, color: "var(--fg-3)", fontWeight: 600, fontFamily: "var(--font-display)", color: "var(--clay-700)", letterSpacing: 0 }}>{sublabel}</div>}
+            {sublabel && <div style={{ fontSize: 10, fontWeight: 600, fontFamily: "var(--font-display)", color: "var(--clay-700)", letterSpacing: 0 }}>{sublabel}</div>}
           </div>
         </div>
         {delta !== undefined && (

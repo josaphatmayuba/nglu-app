@@ -3,7 +3,7 @@
 
 import React from "react";
 import { Icon } from "./icons";
-import { speciesById, t, ALERTS, ANIMALS, STOCK } from "./data";
+import { SPECIES, speciesById, t, ALERTS, ANIMALS, STOCK } from "./data";
 import { Sidebar, Topbar } from "./shell";
 import { Dashboard } from "./dashboard";
 import { Animals } from "./animals";
@@ -11,12 +11,13 @@ import { Identification } from "./identification";
 import { QuickEntryDrawer, Toast } from "./quickentry";
 import {
   HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
-  AlertsScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
+  AlertsScreen, PosScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
+import { api } from "./api";
 
 const DEFAULTS = {
   lang: "fr",
@@ -60,6 +61,7 @@ const ROUTE_SLUGS = {
   "semen-bank": "banque-semence",
   production: "production",
   alerts: "alertes",
+  pos: "pos",
   finances: "finances",
   reports: "rapports",
   employees: "employes",
@@ -107,6 +109,7 @@ function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
   const [speciesFilter, setSpeciesFilter] = React.useState(null);
+  const [enabledSpecies, setEnabledSpecies] = React.useState(() => SPECIES.map((s) => s.id));
   const [tweaks, setTweaks] = React.useState(DEFAULTS);
   const setTweak = (k, v) => setTweaks((prev) => ({ ...prev, [k]: v }));
   const [entry, setEntry] = React.useState({ open: false, tab: "animal" });
@@ -115,6 +118,23 @@ function App() {
   const layoutMode = useLayoutMode(tweaks.deviceMode);
   const isMobile = layoutMode === "mobile";
   const isTablet = layoutMode === "tablet";
+  React.useEffect(() => {
+    let cancel = false;
+    const load = () => api.getSettings()
+      .then((settings) => {
+        const next = Array.isArray(settings?.enabled_species) && settings.enabled_species.length
+          ? settings.enabled_species
+          : SPECIES.map((s) => s.id);
+        if (!cancel) setEnabledSpecies(next);
+      })
+      .catch(() => {});
+    load();
+    window.addEventListener("farmos:settings-updated", load);
+    return () => { cancel = true; window.removeEventListener("farmos:settings-updated", load); };
+  }, []);
+  React.useEffect(() => {
+    if (speciesFilter && !enabledSpecies.includes(speciesFilter)) setSpeciesFilter(null);
+  }, [enabledSpecies, speciesFilter]);
 
   const openEntry = (input = "animal") => {
     if (typeof input === "string") setEntry({ open: true, tab: input });
@@ -157,6 +177,7 @@ function App() {
     "semen-bank": { title: lang === "fr" ? "Banque de semence" : "Semen bank", subtitle: lang === "fr" ? "Paillettes IA & historique" : "AI straws & history",       breadcrumb: lang === "fr" ? "FERME · BANQUE SEMENCE" : "FARM · SEMEN BANK" },
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
     alerts:     { title: t(lang, "alerts"),     subtitle: lang === "fr" ? "Alertes intelligentes" : "Smart alerts",            breadcrumb: lang === "fr" ? "FERME · ALERTES" : "FARM · ALERTS" },
+    pos:        { title: t(lang, "pos"),        subtitle: lang === "fr" ? "Ventes FarmOS" : "FarmOS sales",                    breadcrumb: lang === "fr" ? "FERME · POS" : "FARM · POS" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
     employees:  { title: t(lang, "employees"),  subtitle: lang === "fr" ? "Équipe & présences" : "Team & shifts",               breadcrumb: lang === "fr" ? "FERME · ÉQUIPE" : "FARM · TEAM" },
@@ -165,7 +186,7 @@ function App() {
   const meta = routeMeta[route] || routeMeta.dashboard;
 
   const renderScreen = () => {
-    const props = { lang, speciesFilter, onSpeciesFilter: setSpeciesFilter, onNav: setRoute, density: tweaks.density };
+    const props = { lang, speciesFilter, onSpeciesFilter: setSpeciesFilter, onNav: setRoute, density: tweaks.density, enabledSpecies, onEnabledSpeciesChange: setEnabledSpecies };
     switch (route) {
       case "dashboard":  return <Dashboard {...props}/>;
       case "identification": return <Identification {...props}/>;
@@ -179,6 +200,7 @@ function App() {
       case "semen-bank": return <SemenBankScreen {...props}/>;
       case "production": return <ProductionScreen {...props}/>;
       case "alerts":     return <AlertsScreen {...props}/>;
+      case "pos":        return <PosScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
@@ -211,6 +233,7 @@ function App() {
             speciesFilter={speciesFilter}
             onSpeciesFilter={(s) => { setSpeciesFilter(s); if (isMobile) setMobileNav(false); }}
             sidebarStyle={effectiveSidebarStyle}
+            enabledSpecies={enabledSpecies}
           />
         </div>
 
@@ -241,6 +264,7 @@ function App() {
           context={entry.context}
           lang={lang}
           defaultSpecies={(entry.context && entry.context.species) || speciesFilter}
+          enabledSpecies={enabledSpecies}
           onClose={closeEntry}
           onSaved={handleSaved}
         />

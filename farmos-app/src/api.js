@@ -96,6 +96,7 @@ const KIND_INVALIDATES = {
   updateSemenStraw:       ["semenStraws"],
   deleteSemenStraw:       ["semenStraws"],
   createLookup:           ["lookups"],
+  deleteLookup:           ["lookups"],
   createDisease:          ["diseases"],
 };
 
@@ -179,6 +180,8 @@ async function jsonMutate(kind, path, init = {}) {
 
 export const api = {
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
+  getSettings: () => jsonFetch("/settings"),
+  updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
   listAnimals:    cachedList("animals", "/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),
@@ -221,6 +224,7 @@ export const api = {
   deleteExpense: (id) => mutate({ kind: "deleteExpense", method: "DELETE", path: `/expenses/${id}` }),
   listLookups: (category, scope) => jsonFetch(`/lookups?category=${encodeURIComponent(category)}${scope ? `&scope=${encodeURIComponent(scope)}` : ""}`),
   createLookup: (body) => jsonMutate("createLookup", "/lookups", { method: "POST", body: JSON.stringify(body) }),
+  deleteLookup: (id) => jsonMutate("deleteLookup", `/lookups/${id}`, { method: "DELETE" }),
   createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),

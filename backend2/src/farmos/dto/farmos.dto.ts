@@ -26,6 +26,14 @@ export const FARMOS_SPECIES = [
 
 export type FarmosSpecies = (typeof FARMOS_SPECIES)[number];
 
+export class UpdateFarmosSpeciesSettingsDto {
+  @ApiProperty({ enum: FARMOS_SPECIES, isArray: true })
+  @IsArray()
+  @IsString({ each: true })
+  @IsIn(FARMOS_SPECIES as unknown as string[], { each: true })
+  enabled_species: FarmosSpecies[];
+}
+
 export class CreateAnimalDto {
   @ApiPropertyOptional({ example: "BQ-2024-0118" })
   @IsOptional()
@@ -86,6 +94,16 @@ export class CreateAnimalDto {
   @IsString()
   barn?: string | null;
 
+  @ApiPropertyOptional({ example: "Salle 3", description: "Salle/room within the building." })
+  @IsOptional()
+  @IsString()
+  room?: string | null;
+
+  @ApiPropertyOptional({ example: "Truie", description: "Animal type/classification (e.g. pig: truie, verrat, porcelet)." })
+  @IsOptional()
+  @IsString()
+  type?: string | null;
+
   @ApiPropertyOptional({ example: "healthy", default: "healthy" })
   @IsOptional()
   @IsString()
@@ -109,6 +127,8 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) count?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() barn?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() room?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() last_event?: string | null;
 }
@@ -325,10 +345,11 @@ export class CreateSaleDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
   @ApiPropertyOptional({ enum: FARMOS_SPECIES }) @IsOptional() @IsString() species?: string | null;
   @ApiPropertyOptional({ example: "milk" }) @IsOptional() @IsString() product_type?: string | null;
-  @ApiProperty() @Type(() => Number) quantity: number;
+  @ApiPropertyOptional({ example: "production", enum: ["animal", "production", "stock", "other"] }) @IsOptional() @IsString() sale_source?: string | null;
+  @ApiProperty() @Type(() => Number) @IsNumber() quantity: number;
   @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
-  @ApiPropertyOptional() @IsOptional() @Type(() => Number) unit_price?: number | null;
-  @ApiProperty() @Type(() => Number) total_amount: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() unit_price?: number | null;
+  @ApiProperty() @Type(() => Number) @IsNumber() total_amount: number;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currency_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() buyer?: string | null;
   @ApiProperty() @IsDateString() sale_date: string;
@@ -426,7 +447,7 @@ export class CreateProductionLogDto {
   @ApiProperty({ example: "milk" }) @IsString() product_type: string;
   @ApiProperty() @IsDateString() log_date: string;
   @ApiPropertyOptional() @IsOptional() @IsString() period?: string | null;
-  @ApiProperty() @Type(() => Number) quantity: number;
+  @ApiProperty() @Type(() => Number) @IsNumber() quantity: number;
   @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
   @ApiPropertyOptional({ description: "Free-form quality JSON: fat, protein, conductivity, broken, size, lay_rate…" })
   @IsOptional() quality?: Record<string, unknown> | null;

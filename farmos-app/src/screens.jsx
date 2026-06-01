@@ -15,7 +15,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
@@ -220,7 +220,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 // ─── VACCINATION CALENDAR ────────────────────────────────────────────────
 const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allEvents, setAllEvents] = React.useState([]);
-  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const refresh = useDataRefresh(["animals", "treatments", "reproductionEvents", "vaccinations"]);
   React.useEffect(() => {
     let cancel = false;
@@ -391,7 +391,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [forecasts, setForecasts] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
   const [editing, setEditing] = React.useState(null); // medicine row in edit mode
   const refresh = useDataRefresh(["medicines", "expenses", "animals", "feedForecasts"]);
@@ -856,7 +856,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 };
 
 // ─── PRODUCTION ──────────────────────────────────────────────────────────
-const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
+const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const [logs, setLogs] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("7d"));
@@ -875,6 +875,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   }, []);
   const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(l.logDate || l.log_date, dateRange));
   const filteredLogs = periodLogs.slice(0, 12);
+  const visibleSpecies = enabledSpecies && enabledSpecies.length ? SPECIES.filter((s) => enabledSpecies.includes(s.id)) : SPECIES;
 
   // KPIs production : agrégats live des production_logs (date la plus récente
   // disponible). Pas de delta (pas d'historique mois-1 facile à comparer ici).
@@ -918,7 +919,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} enabledSpecies={enabledSpecies} compact/>
         <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
       </div>
 
@@ -931,7 +932,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       {/* Per-species production cards */}
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
-        {SPECIES.filter(s => !speciesFilter || s.id === speciesFilter).slice(0, 6).map((s) => (
+        {visibleSpecies.filter(s => !speciesFilter || s.id === speciesFilter).slice(0, 6).map((s) => (
           <div key={s.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: s.accentBg, color: s.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1136,13 +1137,331 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   );
 };
 
+const SALE_PRODUCT_LABELS = {
+  eggs: { fr: "Oeufs", en: "Eggs", unit: "oeufs" },
+  milk: { fr: "Lait", en: "Milk", unit: "L" },
+  meat: { fr: "Viande", en: "Meat", unit: "kg" },
+  wool: { fr: "Laine", en: "Wool", unit: "kg" },
+  fish: { fr: "Poisson", en: "Fish", unit: "kg" },
+  animal: { fr: "Animal", en: "Animal", unit: "tete" },
+};
+
+const SELLABLE_PRODUCTION_TYPES = new Set(["eggs", "milk", "meat", "wool", "fish"]);
+
+function saleProductLabel(productType, lang) {
+  const row = SALE_PRODUCT_LABELS[productType];
+  return row ? row[lang] : productType || (lang === "fr" ? "Produit" : "Product");
+}
+
+function saleUnitFor(productType, fallback) {
+  return fallback || SALE_PRODUCT_LABELS[productType]?.unit || "";
+}
+
+function buildPosProductionItems(logs, speciesFilter) {
+  const groups = new Map();
+  (logs || []).forEach((log) => {
+    const species = log.species;
+    const productType = log.productType || log.product_type;
+    if (!SELLABLE_PRODUCTION_TYPES.has(productType)) return;
+    if (speciesFilter && species !== speciesFilter) return;
+    const unit = saleUnitFor(productType, log.unit);
+    const key = `${species || "all"}:${productType}:${unit}`;
+    const qty = Number(log.quantity || 0);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+    const current = groups.get(key) || {
+      id: key,
+      source: "production",
+      species,
+      productType,
+      unit,
+      available: 0,
+      latestDate: "",
+      notes: null,
+    };
+    current.available += qty;
+    const d = String(log.logDate || log.log_date || "").slice(0, 10);
+    if (d > current.latestDate) current.latestDate = d;
+    groups.set(key, current);
+  });
+  return Array.from(groups.values()).sort((a, b) => String(b.latestDate).localeCompare(String(a.latestDate)));
+}
+
+function PosSaleModal({ lang, item, onClose, onSaved }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(Math.min(1, item.available || 1)) : "");
+  const [unitPrice, setUnitPrice] = React.useState("");
+  const [buyer, setBuyer] = React.useState("");
+  const [saleDate, setSaleDate] = React.useState(today);
+  const [notes, setNotes] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  if (!item) return null;
+
+  const qty = Number(quantity || 0);
+  const price = Number(unitPrice || 0);
+  const total = Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0;
+  const sp = speciesById(item.species);
+
+  const save = async () => {
+    if (!qty || qty <= 0 || !price || price < 0) {
+      setError(lang === "fr" ? "Quantite et prix requis." : "Quantity and price required.");
+      return;
+    }
+    if (item.available && qty > item.available) {
+      setError(lang === "fr" ? "Quantite superieure au disponible." : "Quantity exceeds available stock.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await api.createSale({
+        sale_source: item.source,
+        animal_id: item.animalId || null,
+        species: item.species || null,
+        product_type: item.productType,
+        quantity: qty,
+        unit: item.unit || null,
+        unit_price: price,
+        total_amount: total,
+        buyer: buyer.trim() || null,
+        sale_date: saleDate,
+        notes: notes.trim() || null,
+      });
+      window.dispatchEvent(new CustomEvent("farmos:sale-created"));
+      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: sp?.accentBg || "var(--ink-50)", color: sp?.accent || "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {sp ? <AnimalGlyph kind={sp.glyph} size={20} color="currentColor"/> : <Icon name="cart" size={18} color="currentColor"/>}
+          </div>
+          <div>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{lang === "fr" ? "Vendre" : "Sell"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{item.title}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Quantite" : "Quantity"}
+            <input className="input" type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire" : "Unit price"}
+            <input className="input" type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Acheteur" : "Buyer"}
+            <input className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Date" : "Date"}
+            <input className="input" type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)", gridColumn: "1 / -1" }}>{lang === "fr" ? "Notes" : "Notes"}
+            <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%", marginTop: 4, minHeight: 72, resize: "vertical" }}/>
+          </label>
+        </div>
+
+        <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "var(--bg-sunken)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Total a encaisser" : "Total to collect"}</span>
+          <span className="mono tnum" style={{ fontSize: 22, fontWeight: 700, color: "var(--ink-950)" }}>{total.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $</span>
+        </div>
+        {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            <Icon name="cart" size={13} color="currentColor"/>
+            {saving ? "..." : (lang === "fr" ? "Enregistrer la vente" : "Save sale")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
+  const [animals, setAnimals] = React.useState([]);
+  const [logs, setLogs] = React.useState([]);
+  const [query, setQuery] = React.useState("");
+  const [modalItem, setModalItem] = React.useState(null);
+  const [busyId, setBusyId] = React.useState(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["animals", "productionLogs", "sales"]);
+
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.all([api.listAnimals(), api.listProductionLogs()])
+      .then(([a, p]) => {
+        if (cancel) return;
+        setAnimals(Array.isArray(a) ? a : []);
+        setLogs(Array.isArray(p) ? p : []);
+      })
+      .catch((e) => console.warn("POS load failed:", e.message));
+    return () => { cancel = true; };
+  }, [reloadKey, refresh]);
+
+  React.useEffect(() => {
+    const reload = () => setReloadKey((k) => k + 1);
+    window.addEventListener("farmos:sale-created", reload);
+    window.addEventListener("farmos:animal-created", reload);
+    window.addEventListener("farmos:production-created", reload);
+    return () => {
+      window.removeEventListener("farmos:sale-created", reload);
+      window.removeEventListener("farmos:animal-created", reload);
+      window.removeEventListener("farmos:production-created", reload);
+    };
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const animalRows = animals.filter((a) => {
+    const status = String(a.status || "").toLowerCase();
+    if (!["available_sale", "for_sale", "a_vendre"].includes(status)) return false;
+    if (speciesFilter && a.species !== speciesFilter) return false;
+    if (!q) return true;
+    return [a.name, a.externalId, a.external_id, a.lot, a.species].filter(Boolean).join(" ").toLowerCase().includes(q);
+  }).map((a) => ({
+    id: `animal-${a.id}`,
+    source: "animal",
+    animalId: a.id,
+    species: a.species,
+    productType: "animal",
+    title: a.name || a.externalId || a.external_id || a.lot || `#${a.id}`,
+    subtitle: [a.lot, a.race, a.barn].filter(Boolean).join(" - "),
+    available: Number(a.count) > 0 ? Number(a.count) : 1,
+    unit: "tete",
+  }));
+
+  const productionRows = buildPosProductionItems(logs, speciesFilter)
+    .filter((it) => {
+      if (!q) return true;
+      return [it.species, it.productType, it.unit].filter(Boolean).join(" ").toLowerCase().includes(q);
+    })
+    .map((it) => ({
+      ...it,
+      title: `${saleProductLabel(it.productType, lang)}${it.species && speciesById(it.species) ? ` - ${lang === "fr" ? speciesById(it.species).fr : speciesById(it.species).en}` : ""}`,
+      subtitle: it.latestDate ? `${lang === "fr" ? "Production recente" : "Recent production"} - ${it.latestDate}` : "",
+    }));
+
+  const candidates = animals.filter((a) => {
+    const status = String(a.status || "").toLowerCase();
+    if (["available_sale", "for_sale", "a_vendre", "sold"].includes(status)) return false;
+    if (speciesFilter && a.species !== speciesFilter) return false;
+    if (!q) return true;
+    return [a.name, a.externalId, a.external_id, a.lot, a.species].filter(Boolean).join(" ").toLowerCase().includes(q);
+  }).slice(0, 8);
+
+  const markForSale = async (animal) => {
+    setBusyId(animal.id);
+    try {
+      await api.updateAnimal(animal.id, { status: "available_sale" });
+      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderItem = (item) => {
+    const sp = speciesById(item.species);
+    return (
+      <div key={item.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 8, background: sp?.accentBg || "var(--ink-50)", color: sp?.accent || "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {sp ? <AnimalGlyph kind={sp.glyph} size={21} color="currentColor"/> : <Icon name="cart" size={18} color="currentColor"/>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+          <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle || (item.source === "animal" ? (lang === "fr" ? "Animal a vendre" : "Animal for sale") : "")}</div>
+          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            <span className="tag">{item.source === "animal" ? (lang === "fr" ? "Animal" : "Animal") : saleProductLabel(item.productType, lang)}</span>
+            <span className="tag">{Number(item.available || 0).toLocaleString("fr-CA")} {item.unit}</span>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={() => setModalItem(item)} style={{ flexShrink: 0 }}>
+          <Icon name="cart" size={13} color="currentColor"/>
+          {lang === "fr" ? "Vendre" : "Sell"}
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Point de vente" : "Point of sale"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+            {lang === "fr" ? <>POS FarmOS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>vente terrain</span></> : <>FarmOS POS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>field sales</span></>}
+          </h1>
+        </div>
+        <input className="input" value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder={lang === "fr" ? "Rechercher article, lot, espece..." : "Search item, batch, species..."}
+          style={{ width: 300, maxWidth: "100%" }}/>
+      </div>
+
+      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} enabledSpecies={enabledSpecies} compact/>
+
+      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
+        <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20 }}>{lang === "fr" ? "Disponible a vendre" : "Available to sell"}</h3>
+            <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{animalRows.length + productionRows.length}</span>
+          </div>
+          {[...animalRows, ...productionRows].length === 0 ? (
+            <EmptyState icon="cart" title={lang === "fr" ? "Aucun article disponible" : "No item available"} hint={lang === "fr" ? "Marque des animaux a vendre ou enregistre une production vendable." : "Mark animals for sale or record sellable production."}/>
+          ) : (
+            [...animalRows, ...productionRows].map(renderItem)
+          )}
+        </section>
+
+        <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20 }}>{lang === "fr" ? "Marquer a vendre" : "Mark for sale"}</h3>
+            <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{candidates.length}</span>
+          </div>
+          {candidates.length === 0 ? (
+            <EmptyState icon="layers" title={lang === "fr" ? "Aucun animal a preparer" : "No animal to prepare"} hint={lang === "fr" ? "Les animaux deja vendus ou deja a vendre sont exclus." : "Already sold or for-sale animals are hidden."}/>
+          ) : candidates.map((a) => {
+            const sp = speciesById(a.species);
+            const title = a.name || a.externalId || a.external_id || a.lot || `#${a.id}`;
+            return (
+              <div key={a.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: sp?.accentBg || "var(--ink-50)", color: sp?.accent || "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {sp && <AnimalGlyph kind={sp.glyph} size={19} color="currentColor"/>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+                  <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{[a.lot, a.race, a.status].filter(Boolean).join(" - ")}</div>
+                </div>
+                <button className="btn btn-sm" disabled={busyId === a.id} onClick={() => markForSale(a)}>
+                  <Icon name="plus" size={12} color="currentColor"/>
+                  {busyId === a.id ? "..." : (lang === "fr" ? "A vendre" : "For sale")}
+                </button>
+              </div>
+            );
+          })}
+        </section>
+      </div>
+
+      {modalItem && <PosSaleModal lang={lang} item={modalItem} onClose={() => setModalItem(null)} onSaved={() => { setModalItem(null); setReloadKey((k) => k + 1); }}/>}
+    </div>
+  );
+};
+
 // ─── FINANCES ────────────────────────────────────────────────────────────
 const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [summary, setSummary] = React.useState({ months: [], revenue: [], expense: [], byCategory: [] });
   const totalRev = summary.byCategory.reduce((a,b)=>a+b.amount,0);
   const [transactions, setTransactions] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const refresh = useDataRefresh(["sales", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
@@ -1587,18 +1906,221 @@ const EmployeesScreen = ({ lang }) => {
 };
 
 // ─── SETTINGS (placeholder) ──────────────────────────────────────────────
-const SettingsScreen = ({ lang }) => (
-  <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%" }}>
-    <div>
-      <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Paramètres · Settings" : "Settings · Paramètres"}</div>
-      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em" }}>
-        {lang === "fr" ? <>Paramètres, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>ferme & utilisateurs</span></> : <>Settings, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>farm & users</span></>}
-      </h1>
+// ─── Localisations manager (bâtiments + salles) ──────────────────────────
+// Bâtiments = référentiel par espèce (scopeKey = espèce). Salles = référentiel
+// par bâtiment (scopeKey = nom du bâtiment). Réutilise farmos_lookups.
+const RoomManager = ({ lang, building }) => {
+  const [rooms, setRooms] = React.useState([]);
+  const [val, setVal] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const load = React.useCallback(() => {
+    api.listLookups("room", building).then((r) => setRooms(Array.isArray(r) ? r : [])).catch(() => {});
+  }, [building]);
+  React.useEffect(() => { load(); }, [load]);
+  const add = async () => {
+    const v = val.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try { await api.createLookup({ category: "room", scope_key: building, value_fr: v, value_en: v }); setVal(""); load(); }
+    finally { setBusy(false); }
+  };
+  const remove = async (id) => { try { await api.deleteLookup(id); } catch {} load(); };
+  return (
+    <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: "2px solid var(--border-1)", display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="overline" style={{ fontSize: 10 }}>{lang === "fr" ? "Salles" : "Rooms"}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {rooms.length === 0 && <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune salle" : "No rooms"}</span>}
+        {rooms.map((r) => (
+          <span key={r.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg-sunken)", borderRadius: 999, padding: "4px 6px 4px 10px", fontSize: 12.5 }}>
+            {r.valueFr || r.value_fr}
+            <button type="button" onClick={() => remove(r.id)} aria-label="delete"
+              style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--ink-500)", padding: 2, lineHeight: 1 }}>
+              <Icon name="x" size={11} color="currentColor"/>
+            </button>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input className="input" style={{ height: 32, fontSize: 12.5, maxWidth: 220 }}
+          placeholder={lang === "fr" ? "Ajouter une salle…" : "Add a room…"}
+          value={val} onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}/>
+        <button type="button" className="btn btn-sm" onClick={add} disabled={busy || !val.trim()}>
+          <Icon name="plus" size={12} color="currentColor"/>{lang === "fr" ? "Ajouter" : "Add"}
+        </button>
+      </div>
     </div>
-    <div style={{ marginTop: 20, maxWidth: 720 }}>
-      <EmptyState title={lang === "fr" ? "À configurer" : "To configure"} hint={lang === "fr" ? "Permissions, rôles, sauvegardes, intégrations MAPAQ — disponible à la demande." : "Roles, permissions, backups, MAPAQ integrations — available on request."} icon="settings"/>
-    </div>
-  </div>
-);
+  );
+};
 
-export { HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };
+const LocationsManager = ({ lang, enabledSpecies }) => {
+  const list = (enabledSpecies && enabledSpecies.length) ? SPECIES.filter((s) => enabledSpecies.includes(s.id)) : SPECIES;
+  const [species, setSpecies] = React.useState(list[0]?.id || SPECIES[0].id);
+  const [buildings, setBuildings] = React.useState([]);
+  const [val, setVal] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [openId, setOpenId] = React.useState(null);
+  const load = React.useCallback(() => {
+    api.listLookups("building", species).then((r) => setBuildings(Array.isArray(r) ? r : [])).catch(() => {});
+  }, [species]);
+  React.useEffect(() => { load(); }, [load]);
+  const add = async () => {
+    const v = val.trim();
+    if (!v || busy) return;
+    setBusy(true);
+    try { await api.createLookup({ category: "building", scope_key: species, value_fr: v, value_en: v }); setVal(""); load(); }
+    finally { setBusy(false); }
+  };
+  const remove = async (id) => { try { await api.deleteLookup(id); } catch {} if (openId === id) setOpenId(null); load(); };
+  return (
+    <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div className="overline">{lang === "fr" ? "Bâtiments & salles" : "Buildings & rooms"}</div>
+        <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
+          {lang === "fr"
+            ? "Référentiel de localisation par espèce, proposé en autocomplétion à la création d'un animal."
+            : "Per-species location reference, offered as autocomplete when creating an animal."}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {list.map((s) => (
+          <button key={s.id} type="button" onClick={() => { setSpecies(s.id); setOpenId(null); }}
+            className={`species-pill ${species === s.id ? "active" : ""}`} style={{ height: 32, fontSize: 12 }}>
+            <AnimalGlyph kind={s.glyph} size={14} color={species === s.id ? "var(--bone-50)" : "var(--forest-700)"}/>
+            {lang === "fr" ? s.fr : s.en}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {buildings.length === 0 && (
+          <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun bâtiment pour cette espèce." : "No building for this species."}</div>
+        )}
+        {buildings.map((b) => {
+          const name = b.valueFr || b.value_fr;
+          const open = openId === b.id;
+          return (
+            <div key={b.id} style={{ border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Icon name="layers" size={15} color="var(--forest-700)"/>
+                <span style={{ flex: 1, fontWeight: 700, fontSize: 13.5 }}>{name}</span>
+                <button type="button" className="btn btn-sm" onClick={() => setOpenId(open ? null : b.id)}>
+                  <Icon name={open ? "chevDown" : "chevRight"} size={12} color="currentColor"/>
+                  {lang === "fr" ? "Salles" : "Rooms"}
+                </button>
+                <button type="button" className="btn btn-sm" onClick={() => remove(b.id)} title={lang === "fr" ? "Supprimer" : "Delete"}>
+                  <Icon name="x" size={12} color="currentColor"/>
+                </button>
+              </div>
+              {open && <RoomManager lang={lang} building={name}/>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 6, borderTop: "1px solid var(--border-1)", paddingTop: 14 }}>
+        <input className="input" style={{ maxWidth: 280 }}
+          placeholder={species === "fish" ? (lang === "fr" ? "Ajouter un bassin…" : "Add a pond…") : (lang === "fr" ? "Ajouter un bâtiment…" : "Add a building…")}
+          value={val} onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}/>
+        <button type="button" className="btn btn-primary" onClick={add} disabled={busy || !val.trim()}>
+          <Icon name="plus" size={13} color="currentColor"/>{lang === "fr" ? "Ajouter" : "Add"}
+        </button>
+      </div>
+    </section>
+  );
+};
+
+const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesFilter, onSpeciesFilter }) => {
+  const [selected, setSelected] = React.useState(enabledSpecies && enabledSpecies.length ? enabledSpecies : SPECIES.map((s) => s.id));
+  const [saving, setSaving] = React.useState(false);
+  const [message, setMessage] = React.useState(null);
+
+  React.useEffect(() => {
+    if (enabledSpecies && enabledSpecies.length) setSelected(enabledSpecies);
+  }, [enabledSpecies]);
+
+  const toggle = (id) => {
+    setMessage(null);
+    setSelected((prev) => {
+      const has = prev.includes(id);
+      if (has && prev.length === 1) return prev;
+      return has ? prev.filter((x) => x !== id) : [...prev, id];
+    });
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await api.updateSpeciesSettings(selected);
+      const next = Array.isArray(res?.enabled_species) && res.enabled_species.length ? res.enabled_species : selected;
+      onEnabledSpeciesChange && onEnabledSpeciesChange(next);
+      if (speciesFilter && !next.includes(speciesFilter)) onSpeciesFilter && onSpeciesFilter(null);
+      window.dispatchEvent(new CustomEvent("farmos:settings-updated"));
+      setMessage({ type: "ok", text: lang === "fr" ? "Especes actives enregistrees." : "Enabled species saved." });
+    } catch (err) {
+      setMessage({ type: "err", text: (lang === "fr" ? "Echec : " : "Failed: ") + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const allSelected = selected.length === SPECIES.length;
+
+  return (
+    <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%" }}>
+      <div>
+        <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Parametres - Settings" : "Settings"}</div>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em" }}>
+          {lang === "fr" ? <>Parametres, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>especes FarmOS</span></> : <>Settings, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>FarmOS species</span></>}
+        </h1>
+      </div>
+      <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div className="overline">{lang === "fr" ? "Especes utilisees" : "Enabled species"}</div>
+            <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
+              {lang === "fr" ? "Ces choix filtrent la barre d'especes, la navigation et la saisie rapide." : "These choices filter species bars, navigation and quick entry."}
+            </div>
+          </div>
+          <button type="button" className="btn btn-sm" onClick={() => setSelected(allSelected ? [SPECIES[0].id] : SPECIES.map((s) => s.id))}>
+            <Icon name={allSelected ? "x" : "grid"} size={13} color="currentColor"/>
+            {allSelected ? (lang === "fr" ? "Reduire" : "Reduce") : (lang === "fr" ? "Tout activer" : "Enable all")}
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          {SPECIES.map((s) => {
+            const active = selected.includes(s.id);
+            return (
+              <button key={s.id} type="button" onClick={() => toggle(s.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10, minHeight: 44,
+                  border: `1px solid ${active ? "var(--forest-700)" : "var(--border-1)"}`,
+                  background: active ? "var(--forest-50)" : "var(--paper)",
+                  color: active ? "var(--forest-900)" : "var(--ink-700)",
+                  borderRadius: 8, padding: "9px 10px", cursor: "pointer", textAlign: "left",
+                  fontFamily: "var(--font-sans)", fontWeight: 700,
+                }}>
+                <AnimalGlyph kind={s.glyph} size={17} color="currentColor"/>
+                <span style={{ flex: 1 }}>{lang === "fr" ? s.fr : s.en}</span>
+                <Icon name={active ? "check" : "plus"} size={13} color="currentColor"/>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", borderTop: "1px solid var(--border-1)", paddingTop: 14 }}>
+          <div style={{ fontSize: 12.5, color: message?.type === "err" ? "var(--rust-700)" : "var(--fg-2)" }}>
+            {message ? message.text : `${selected.length} / ${SPECIES.length} ${lang === "fr" ? "especes actives" : "species enabled"}`}
+          </div>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
+            <Icon name="check" size={13} color="currentColor"/>
+            {saving ? (lang === "fr" ? "Enregistrement..." : "Saving...") : (lang === "fr" ? "Enregistrer" : "Save")}
+          </button>
+        </div>
+      </section>
+      <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
+    </div>
+  );
+};
+
+export { HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };

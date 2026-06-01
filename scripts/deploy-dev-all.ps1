@@ -57,8 +57,10 @@ if (-not $SkipMigrations) {
       foreach ($f in $files) {
         $filesToUpload += $f.FullName
         $applyLines += "echo '-- applying $($f.Name) --'"
-        $applyLines += "docker exec -i nglu_dev_mysql mysql -u`"`$DBU`" -p`"`$DBPW`" `"`$DBN`" < /tmp/$($f.Name)"
+        $applyLines += "sed '/^--> statement-breakpoint$/d' /tmp/$($f.Name) > /tmp/$($f.Name).mysql"
+        $applyLines += "docker exec -i nglu_dev_mysql mysql -u`"`$DBU`" -p`"`$DBPW`" `"`$DBN`" < /tmp/$($f.Name).mysql"
         $applyLines += "rm -f /tmp/$($f.Name)"
+        $applyLines += "rm -f /tmp/$($f.Name).mysql"
       }
     }
     if ($filesToUpload.Count -eq 0) { throw "No migration files matched: $($Migrations -join ', ')" }
@@ -76,7 +78,7 @@ echo "-- restarting backend2 --"
 docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev restart backend2
 echo OK
 "@
-    ($script -replace "`r`n","`n") | Set-Content -NoNewline -Encoding utf8 $tmpScript
+    [System.IO.File]::WriteAllText($tmpScript, ($script -replace "`r`n","`n"), [System.Text.UTF8Encoding]::new($false))
     & scp -i $KeyPath -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new @filesToUpload $tmpScript "${Server}:/tmp/"
     if ($LASTEXITCODE -ne 0) { throw "scp failed" }
     & ssh -i $KeyPath -o IdentitiesOnly=yes $Server "bash $remoteScript"
