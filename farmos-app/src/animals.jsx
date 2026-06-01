@@ -486,6 +486,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             ))}
           </>
         )}
+        {!editing && (tab === "health" || tab === "repro" || tab === "prod") && (
+          <AddForAnimalButton lang={lang} tab={tab} animal={animal}/>
+        )}
         {!editing && tab === "health" && (
           <RelatedList lang={lang} loading={related.loading} items={related.treatments} kind="health" emptyFr="Aucun traitement enregistré pour cet animal." emptyEn="No treatment recorded for this animal."/>
         )}
@@ -617,6 +620,31 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         </button>
       </div>
     </div>
+  );
+};
+
+const AddForAnimalButton = ({ lang, tab, animal }) => {
+  const tabMap = { health: "health", repro: "repro", prod: "production" };
+  const labels = {
+    health:  { fr: "Ajouter un traitement / soin", en: "Add treatment / care" },
+    repro:   { fr: "Ajouter un événement de repro", en: "Add reproduction event" },
+    prod:    { fr: "Ajouter une production",        en: "Add production record" },
+  };
+  const onClick = () => {
+    window.dispatchEvent(new CustomEvent("farmos:openEntry", {
+      detail: {
+        tab: tabMap[tab],
+        species: animal.species,
+        animalId: animal._pk,
+        animalExternalId: animal.id,
+      },
+    }));
+  };
+  return (
+    <button className="btn btn-sm btn-primary" onClick={onClick} style={{ alignSelf: "flex-start" }}>
+      <Icon name="plus" size={13} color="#ECF1EC"/>
+      {lang === "fr" ? labels[tab].fr : labels[tab].en}
+    </button>
   );
 };
 

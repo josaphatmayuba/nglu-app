@@ -335,9 +335,9 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
         <div style={{ flex: 1, overflow: "auto", padding: "20px 24px 24px" }}>
           {tab === "animal"     && <AnimalForm     lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
           {tab === "production" && <ProductionForm lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "stock"      && <StockForm      lang={lang} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "death"      && <DeathForm      lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
         </div>
       </aside>
@@ -760,9 +760,13 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
 };
 
 // ─── Health (treatment / vaccine) ────────────────────────────────────────
-const HealthForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
+const HealthForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
   const [kind, setKind] = React.useState("treatment");
-  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: defaultSpecies || "cow" });
+  const [form, setForm] = React.useState({
+    date: new Date().toISOString().slice(0, 10),
+    species: context?.species || defaultSpecies || "cow",
+    animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
+  });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [liveMeds, setLiveMeds] = React.useState(null);
@@ -1209,11 +1213,12 @@ const StockForm = ({ lang, onSaved, onClose }) => {
 };
 
 // ─── Repro form ──────────────────────────────────────────────────────────
-const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
+const ReproForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
   const [kind, setKind] = React.useState("heat");
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
-    species: defaultSpecies || "cow",
+    species: context?.species || defaultSpecies || "cow",
+    animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
     breeding_type: "ai", // ai | natural | unknown
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
