@@ -21,22 +21,35 @@ export function startFarmosRealtime() {
   started = true;
 
   const online = () => {
+    if (!hasToken()) return;
     connectSse();
-    startPolling();
   };
   const offline = () => {
     closeSse();
     stopPolling();
   };
+  const authChanged = () => {
+    if (hasToken() && navigator.onLine) {
+      connectSse();
+    } else {
+      closeSse();
+      stopPolling();
+      clearReconnect();
+    }
+  };
 
   window.addEventListener("online", online);
   window.addEventListener("offline", offline);
+  window.addEventListener("storage", authChanged);
+  window.addEventListener("farmos:auth-changed", authChanged);
 
-  if (navigator.onLine) online();
+  if (navigator.onLine && hasToken()) online();
 }
 
 function connectSse() {
-  if (source || typeof EventSource === "undefined") {
+  if (!hasToken()) return;
+  if (source) return;
+  if (typeof EventSource === "undefined") {
     startPolling();
     return;
   }
@@ -73,7 +86,7 @@ function closeSse() {
 }
 
 function scheduleReconnect() {
-  if (reconnectTimer || !navigator.onLine) return;
+  if (reconnectTimer || !navigator.onLine || !hasToken()) return;
   const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempt++));
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
@@ -82,7 +95,7 @@ function scheduleReconnect() {
 }
 
 function startPolling() {
-  if (pollTimer || !navigator.onLine) return;
+  if (pollTimer || !navigator.onLine || !hasToken()) return;
   const poll = () => pollEvents().catch(() => {});
   poll();
   pollTimer = setInterval(poll, 45000);
@@ -94,7 +107,15 @@ function stopPolling() {
   pollTimer = null;
 }
 
+function clearReconnect() {
+  if (!reconnectTimer) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnectAttempt = 0;
+}
+
 async function pollEvents() {
+  if (!hasToken()) return;
   const res = await fetch(`${FARMOS_BASE}/events/version${lastSeen ? `?since=${encodeURIComponent(lastSeen)}` : ""}`, {
     headers: {
       "Content-Type": "application/json",
@@ -150,14 +171,26 @@ function parsePayload(raw) {
 }
 
 function authHeaders() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = currentToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function eventQuery() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = currentToken();
   const qs = [];
   if (token) qs.push(`token=${encodeURIComponent(token)}`);
   if (lastSeen) qs.push(`since=${encodeURIComponent(lastSeen)}`);
   return qs.length ? `?${qs.join("&")}` : "";
+}
+
+function currentToken() {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasToken() {
+  return !!currentToken();
 }

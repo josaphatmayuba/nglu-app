@@ -156,6 +156,7 @@ async function jsonMutate(kind, path, init = {}) {
 }
 
 export const api = {
+  getDashboardSnapshot: () => jsonFetch("/dashboard"),
   listAnimals:    cachedList("animals", "/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),

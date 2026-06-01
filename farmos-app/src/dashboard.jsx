@@ -64,13 +64,21 @@ function useDashboardData() {
   const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs"]);
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([
-      api.listAnimals(), api.listMedicines(), api.listSales(), api.listExpenses(),
-      api.listTreatments(), api.listReproductionEvents(), api.listVaccinations(),
-      api.listAiInsights(), api.getFinanceSummary(), api.listProductionLogs(),
-    ])
-      .then(([animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, finance, productionLogs]) => {
+    api.getDashboardSnapshot()
+      .then((snapshot) => {
         if (cancel) return;
+        const {
+          animals = [],
+          medicines = [],
+          sales = [],
+          expenses = [],
+          treatments = [],
+          repro = [],
+          vaccinations = [],
+          aiInsights = [],
+          finance = { months: [], revenue: [], expense: [], byCategory: [] },
+          productionLogs = [],
+        } = snapshot || {};
         const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs].every((x) => Array.isArray(x));
         if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
       })

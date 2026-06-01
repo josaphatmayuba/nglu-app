@@ -65,6 +65,13 @@ const FARMOS_REALTIME_TABLES = [
 export class FarmosController {
   constructor(private readonly farmos: FarmosService) {}
 
+  @ApiOperation({ summary: "FarmOS dashboard snapshot grouped in one request" })
+  @Permissions("readAll-farmos")
+  @Get("dashboard")
+  dashboard(@CurrentOrg() orgId: number) {
+    return this.farmos.getDashboardSnapshot(orgId);
+  }
+
   @ApiOperation({ summary: "Fallback realtime version for FarmOS clients when SSE is unavailable." })
   @Permissions("readAll-farmos")
   @Get("events/version")

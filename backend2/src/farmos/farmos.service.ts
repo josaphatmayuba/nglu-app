@@ -31,6 +31,44 @@ export class FarmosService {
     private readonly realtime: RealtimeDataPublisher,
   ) {}
 
+  async getDashboardSnapshot(orgId: number) {
+    const [
+      animals,
+      medicines,
+      sales,
+      expenses,
+      treatments,
+      repro,
+      vaccinations,
+      aiInsights,
+      finance,
+      productionLogs,
+    ] = await Promise.all([
+      this.listAnimals(orgId),
+      this.listMedicines(orgId),
+      this.listSales(orgId),
+      this.listExpenses(orgId),
+      this.listTreatments(orgId),
+      this.listReproductionEvents(orgId),
+      this.listVaccinations(orgId),
+      this.listAiInsights(orgId),
+      this.getFinanceSummary(orgId),
+      this.listProductionLogs(orgId),
+    ]);
+    return {
+      animals,
+      medicines,
+      sales,
+      expenses,
+      treatments,
+      repro,
+      vaccinations,
+      aiInsights,
+      finance,
+      productionLogs,
+    };
+  }
+
   // ─── FarmOS staff onboarding (creates a CRM user assigned to the FarmOS dept) ─
   async createFarmosStaff(
     input: { firstName?: string; lastName?: string; email: string; designation: string; phone?: string; password?: string },
