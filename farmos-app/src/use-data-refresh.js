@@ -1,7 +1,7 @@
 import React from "react";
 
 // Bump un compteur quand l'une des tables passées est invalidée par une
-// mutation (event farmos:data-changed) ou quand l'onglet redevient visible.
+// mutation/realtime (event farmos:data-changed) ou quand l'onglet redevient visible.
 // À utiliser comme dépendance d'un useEffect pour relancer le fetch.
 //
 //   const reload = useDataRefresh(["medicines", "expenses"]);
@@ -18,16 +18,11 @@ export function useDataRefresh(tables) {
       const changed = e.detail?.tables || [];
       bumpIfTableChanged(changed);
     };
-    const onCacheUpdated = (e) => {
-      bumpIfTableChanged(e.detail);
-    };
     const onVisible = () => { if (document.visibilityState === "visible") setTick((n) => n + 1); };
     window.addEventListener("farmos:data-changed", onChange);
-    window.addEventListener("farmos:cache-updated", onCacheUpdated);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.removeEventListener("farmos:data-changed", onChange);
-      window.removeEventListener("farmos:cache-updated", onCacheUpdated);
       document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

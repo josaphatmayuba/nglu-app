@@ -57,7 +57,7 @@ async function jsonFetch(path, init = {}) {
 // cachée de la collection (si présente), puis rafraîchit en arrière-plan et
 // émet `farmos:cache-updated` (detail = nom de table) pour que les composants
 // se ré-render si besoin.
-import { db, replaceCache, readCache } from "./offline-db";
+import { db, lastSync, replaceCache, readCache } from "./offline-db";
 import { enqueueMutation } from "./offline-outbox";
 
 // ID temporaire pour les enregistrements optimistes en attente du retour
@@ -134,10 +134,12 @@ function cachedList(table, path) {
   return async () => {
     let cached;
     try { cached = await readCache(table); } catch { cached = []; }
+    let syncedAt = null;
+    try { syncedAt = await lastSync(table); } catch {}
     // Lance le refresh en background (non bloquant pour la valeur retournée).
     const refresh = readFreshList(`${table}:${path}`, table, path, cached);
     // Si on a déjà du cache → retourne immédiatement. Sinon attend le serveur.
-    if (cached && cached.length > 0) return cached;
+    if (cached && cached.length > 0 && syncedAt) return cached;
     const fresh = await refresh;
     return fresh || cached || [];
   };

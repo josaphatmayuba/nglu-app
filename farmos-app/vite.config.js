@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      // L'app est servie sous /farmos/ par nginx; tout le scope PWA doit l'être aussi.
+      // L'app est servie sous /farmos/ par nginx; tout le scope PWA doit l'etre aussi.
       base: "/farmos/",
       scope: "/farmos/",
       includeAssets: [
@@ -39,25 +39,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Limite à 5 Mo par fichier précaché (utile pour les chunks TF.js).
+        // Limite a 5 Mo par fichier precache (utile pour les chunks TF.js).
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         navigateFallback: "/farmos/index.html",
-        // Ne jamais intercepter les appels API : ils doivent toujours toucher le réseau.
+        // Ne jamais intercepter les appels API : ils doivent toujours toucher le reseau.
         navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          // Lecture animaux/médicaments/etc. → cache-first 5 min, puis refresh background.
-          {
-            urlPattern: /^https?:\/\/[^/]+\/api\/farmos\/(animals|medicines|diseases|treatments|reproduction-events|sales|expenses|vaccinations|production-logs|ai-insights|finance-summary|lookups|staff|semen-straws|breeding-males|animals-with-photos)(\?.*)?$/,
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "farmos-api-reads",
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Photos data-URL ne passent pas par ici (inline base64). Photos S3 plus tard.
-        ],
+        // Offline data is handled by Dexie + outbox. Do not let Workbox
+        // StaleWhileRevalidate duplicate /api/farmos requests.
+        runtimeCaching: [],
       },
       devOptions: {
         enabled: false,
