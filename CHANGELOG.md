@@ -15,6 +15,7 @@ This project follows:
 - FarmOS: le tableau de bord charge maintenant ses donnees via `GET /api/farmos/dashboard` au lieu de declencher plusieurs requetes liste cote navigateur.
   - Evite la cascade de rechargements causee par les evenements `farmos:cache-updated` de chaque table.
   - Le client realtime FarmOS attend maintenant un token avant d'ouvrir SSE/polling, et ne lance plus le polling en parallele d'une connexion SSE saine.
+- FarmOS: les appels API frontend sont maintenant serialises et les lectures identiques deja en cours sont dedupliquees pour eviter les rafales `429` au chargement des ecrans.
 
 ### Added
 

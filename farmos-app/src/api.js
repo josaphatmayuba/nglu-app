@@ -10,13 +10,21 @@ const NATIVE = typeof window !== "undefined"
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
 const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
+const inFlightReads = new Map();
+let requestQueue = Promise.resolve();
 
 function authHeaders() {
   const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function jsonFetch(path, init = {}) {
+function enqueueRequest(task) {
+  const run = requestQueue.catch(() => {}).then(task);
+  requestQueue = run.catch(() => {});
+  return run;
+}
+
+async function doJsonFetch(path, init = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -38,6 +46,10 @@ async function jsonFetch(path, init = {}) {
     throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
   }
   return res.json();
+}
+
+async function jsonFetch(path, init = {}) {
+  return enqueueRequest(() => doJsonFetch(path, init));
 }
 
 
@@ -123,23 +135,31 @@ function cachedList(table, path) {
     let cached;
     try { cached = await readCache(table); } catch { cached = []; }
     // Lance le refresh en background (non bloquant pour la valeur retournée).
-    const refresh = jsonFetch(path)
-      .then(async (fresh) => {
-        if (Array.isArray(fresh)) {
-          const changed = !sameRows(cached, fresh);
-          await replaceCache(table, fresh);
-          if (changed) {
-            window.dispatchEvent(new CustomEvent("farmos:cache-updated", { detail: table }));
-          }
-        }
-        return fresh;
-      })
-      .catch(() => null);
+    const refresh = readFreshList(`${table}:${path}`, table, path, cached);
     // Si on a déjà du cache → retourne immédiatement. Sinon attend le serveur.
     if (cached && cached.length > 0) return cached;
     const fresh = await refresh;
     return fresh || cached || [];
   };
+}
+
+function readFreshList(refreshKey, table, path, cached) {
+  if (inFlightReads.has(refreshKey)) return inFlightReads.get(refreshKey);
+  const refresh = jsonFetch(path)
+    .then(async (fresh) => {
+      if (Array.isArray(fresh)) {
+        const changed = !sameRows(cached, fresh);
+        await replaceCache(table, fresh);
+        if (changed) {
+          window.dispatchEvent(new CustomEvent("farmos:cache-updated", { detail: table }));
+        }
+      }
+      return fresh;
+    })
+    .catch(() => null)
+    .finally(() => inFlightReads.delete(refreshKey));
+  inFlightReads.set(refreshKey, refresh);
+  return refresh;
 }
 
 function sameRows(a, b) {
