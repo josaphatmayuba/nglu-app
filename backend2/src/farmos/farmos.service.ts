@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import type {
   CreateAnimalDto,
@@ -736,6 +736,71 @@ export class FarmosService {
       .from(farmosVaccinations)
       .where(and(eq(farmosVaccinations.organizationId, orgId), eq(farmosVaccinations.isActive, 1)))
       .orderBy(farmosVaccinations.dueDate);
+  }
+
+  async createVaccination(input: any, orgId: number) {
+    const [res] = await this.db.insert(farmosVaccinations).values({
+      organizationId: orgId,
+      species: input.species,
+      vaccine: input.vaccine,
+      target: input.target ?? null,
+      animalCount: input.animal_count ?? null,
+      dueDate: input.due_date,
+      status: input.status ?? "scheduled",
+      notes: input.notes ?? null,
+    }).$returningId();
+    return { id: res.id };
+  }
+
+  async listVetExams(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosVetExams)
+      .where(and(eq(farmosVetExams.organizationId, orgId), eq(farmosVetExams.isActive, 1)))
+      .orderBy(desc(farmosVetExams.examDate));
+  }
+
+  async createVetExam(input: any, orgId: number) {
+    const [res] = await this.db.insert(farmosVetExams).values({
+      organizationId: orgId,
+      animalId: input.animal_id ?? null,
+      species: input.species ?? null,
+      vet: input.vet ?? null,
+      vetUserId: input.vet_user_id ?? null,
+      examDate: input.exam_date,
+      diagnosis: input.diagnosis ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    return { id: res.id };
+  }
+
+  async listMortalityEvents(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosMortalityEvents)
+      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1)))
+      .orderBy(desc(farmosMortalityEvents.eventDate));
+  }
+
+  async createMortalityEvent(input: any, orgId: number) {
+    const [res] = await this.db.insert(farmosMortalityEvents).values({
+      organizationId: orgId,
+      animalId: input.animal_id ?? null,
+      species: input.species,
+      eventDate: input.event_date,
+      count: input.count ?? 1,
+      cause: input.cause ?? null,
+      necropsyRequested: input.necropsy_requested ? 1 : 0,
+      notes: input.notes ?? null,
+    }).$returningId();
+    // Marquer l'animal comme décédé si un ID précis est fourni.
+    if (input.animal_id) {
+      await this.db
+        .update(farmosAnimals)
+        .set({ status: "deceased" })
+        .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)));
+    }
+    return { id: res.id };
   }
 
   async listAiInsights(orgId: number) {

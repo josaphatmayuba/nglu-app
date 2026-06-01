@@ -31,6 +31,10 @@ db.version(1).stores({
 db.version(2).stores({
   feedForecasts:   "id, species, urgent",
 });
+db.version(3).stores({
+  vetExams:        "id, examDate, animalId",
+  mortalityEvents: "id, eventDate, species, animalId",
+});
 
 // Met à jour la table miroir avec la dernière réponse API.
 export async function replaceCache(tableName, rows) {

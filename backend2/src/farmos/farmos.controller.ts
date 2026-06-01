@@ -22,6 +22,9 @@ import {
   CreateDiseaseDto,
   CreateExpenseDto,
   CreateMedicineDto,
+  CreateMortalityEventDto,
+  CreateVaccinationDto,
+  CreateVetExamDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
@@ -329,6 +332,36 @@ export class FarmosController {
   @Get("vaccinations")
   listVaccinations(@CurrentOrg() orgId: number) {
     return this.farmos.listVaccinations(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("vaccinations")
+  createVaccination(@Body() body: CreateVaccinationDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createVaccination(body, orgId);
+  }
+
+  @Permissions("readAll-farmos")
+  @Get("vet-exams")
+  listVetExams(@CurrentOrg() orgId: number) {
+    return this.farmos.listVetExams(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("vet-exams")
+  createVetExam(@Body() body: CreateVetExamDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createVetExam(body, orgId);
+  }
+
+  @Permissions("readAll-farmos")
+  @Get("mortality-events")
+  listMortalityEvents(@CurrentOrg() orgId: number) {
+    return this.farmos.listMortalityEvents(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("mortality-events")
+  createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createMortalityEvent(body, orgId);
   }
 
   @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 ChatGPT integration)." })

@@ -1160,6 +1160,36 @@ export const farmosVaccinations = mysqlTable("farmos_vaccinations", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+export const farmosVetExams = mysqlTable("farmos_vet_exams", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }),
+  vet: varchar("vet", { length: 255 }),
+  vetUserId: bigint("vet_user_id", { mode: "number" }),
+  examDate: date("exam_date", { mode: "string" }).notNull(),
+  diagnosis: text("diagnosis"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosMortalityEvents = mysqlTable("farmos_mortality_events", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  eventDate: date("event_date", { mode: "string" }).notNull(),
+  count: int("count").default(1).notNull(),
+  cause: varchar("cause", { length: 255 }),
+  necropsyRequested: tinyint("necropsy_requested").default(0).notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosAiInsights = mysqlTable("farmos_ai_insights", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

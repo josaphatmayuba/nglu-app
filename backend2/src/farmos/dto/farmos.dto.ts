@@ -164,6 +164,37 @@ export class CreateMedicineDto {
   species?: string[] | null;
 }
 
+export class CreateVaccinationDto {
+  @ApiProperty({ example: "cow", enum: FARMOS_SPECIES })
+  @IsString() species: string;
+  @ApiProperty({ example: "Newcastle" }) @IsString() @IsNotEmpty() vaccine: string;
+  @ApiProperty() @IsDateString() due_date: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() target?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_count?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() status?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateVetExamDto {
+  @ApiProperty() @IsDateString() exam_date: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() species?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() vet?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() vet_user_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() diagnosis?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateMortalityEventDto {
+  @ApiProperty() @IsString() species: string;
+  @ApiProperty() @IsDateString() event_date: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) count?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() cause?: string | null;
+  @ApiPropertyOptional({ default: false }) @IsOptional() necropsy_requested?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class ConsumeMedicineDto {
   @ApiProperty({ example: 5, description: "Quantity to deduct from current stock." })
   @Type(() => Number) @IsNumber() @Min(0.001)

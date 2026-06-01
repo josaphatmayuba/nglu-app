@@ -789,10 +789,49 @@ const HealthForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
 
   const submit = async () => {
     if (saving) return;
-    if (kind !== "treatment") {
-      // Vaccine and exam don't have a backend table yet → demo only.
-      onSaved && onSaved({ kind, severity: "info", message: lang === "fr" ? (kind === "vaccine" ? "Vaccin enregistré (démo)" : "Examen enregistré (démo)") : (kind === "vaccine" ? "Vaccine saved (demo)" : "Exam saved (demo)") });
-      onClose();
+    if (kind === "vaccine") {
+      if (!form.vaccine || !form.date) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Vaccin et date requis." : "Vaccine and date required." });
+        return;
+      }
+      setSaving(true);
+      try {
+        await api.createVaccination({
+          species: form.species,
+          vaccine: form.vaccine,
+          due_date: form.date,
+          animal_count: form.n ? Number(form.n) : null,
+          notes: form.booster ? `Prochain rappel: ${form.booster}` : null,
+        });
+        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré` : `Vaccine ${form.vaccine} saved` });
+        onClose();
+      } catch (err) {
+        onSaved && onSaved({ kind, severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    if (kind === "exam") {
+      if (!form.date) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Date requise." : "Date required." });
+        return;
+      }
+      setSaving(true);
+      try {
+        await api.createVetExam({
+          exam_date: form.date,
+          species: form.species,
+          vet: form.vet || null,
+          diagnosis: form.diagnosis || null,
+        });
+        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? "Examen vétérinaire enregistré" : "Vet exam saved" });
+        onClose();
+      } catch (err) {
+        onSaved && onSaved({ kind, severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+      } finally {
+        setSaving(false);
+      }
       return;
     }
     const selectedAnimal = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
@@ -1423,6 +1462,37 @@ const ReproForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
 const DeathForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: defaultSpecies || "cow" });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
+  React.useEffect(() => {
+    api.listAnimals().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveAnimals(rows); }).catch(() => {});
+  }, []);
+  const submit = async () => {
+    if (saving) return;
+    if (!form.date || !form.cause) {
+      onSaved && onSaved({ kind: "death", severity: "error", message: lang === "fr" ? "Date et cause requises." : "Date and cause required." });
+      return;
+    }
+    const selectedAnimal = (liveAnimals || []).find((a) => String(a.id) === String(form.animal) || String(a.externalId || a.external_id) === String(form.animal));
+    setSaving(true);
+    try {
+      await api.createMortalityEvent({
+        species: form.species,
+        event_date: form.date,
+        animal_id: toNumericId(selectedAnimal),
+        count: form.count ? Number(form.count) : 1,
+        cause: form.cause,
+        necropsy_requested: !!form.necropsy,
+        notes: form.notes || null,
+      });
+      onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` });
+      onClose();
+    } catch (err) {
+      onSaved && onSaved({ kind: "death", severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -1489,7 +1559,7 @@ const DeathForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
         </FormField>
       </FormSection>
 
-      <FormActions lang={lang} onCancel={onClose} onSubmit={() => { onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` }); onClose(); }}/>
+      <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
 };

@@ -32,9 +32,11 @@ if (-not (Test-Path $KeyPath)) { throw "SSH key not found: $KeyPath" }
 # ── 1. Backend2 (NestJS) ─────────────────────────────────────────────────
 if (-not $SkipBackend) {
   Section "Deploying backend2"
-  $beArgs = @()
-  if ($SkipBuild) { $beArgs += "-SkipLocalBuild" }
-  & "$repoRoot\scripts\deploy-dev-backend-aws.ps1" @beArgs
+  if ($SkipBuild) {
+    & "$repoRoot\scripts\deploy-dev-backend-aws.ps1" -SkipLocalBuild
+  } else {
+    & "$repoRoot\scripts\deploy-dev-backend-aws.ps1"
+  }
   if ($LASTEXITCODE -ne 0) { throw "Backend deploy failed" }
 } else { Section "Skipping backend2 (by flag)" }
 
