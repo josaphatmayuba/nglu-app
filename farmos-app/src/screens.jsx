@@ -266,14 +266,24 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     return () => { cancel = true; };
   }, [lang, refresh]);
   const filtered = allEvents.filter(v => (!speciesFilter || v.species === speciesFilter) && inDateRange(v.due, dateRange));
-  // Build a month grid
-  const days = Array.from({ length: 35 }, (_, i) => i - 4); // May 2026 starting Fri = day 1 on col 5
+  // Build the grid for the current month (Monday-first), driven by today's date.
+  const now = new Date();
+  const calYear = now.getFullYear();
+  const calMonth = now.getMonth(); // 0-based
+  const todayDate = now.getDate();
+  const monthLabel = now.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { month: "long", year: "numeric" });
+  const calYm = `${calYear}-${String(calMonth + 1).padStart(2, "0")}`;
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(calYear, calMonth, 0).getDate();
+  const leadOffset = (new Date(calYear, calMonth, 1).getDay() + 6) % 7; // 0=Mon … 6=Sun
+  const cellCount = Math.ceil((leadOffset + daysInMonth) / 7) * 7;
+  const days = Array.from({ length: cellCount }, (_, i) => i - leadOffset); // value + 1 = day number
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Vaccination · Vaccines" : "Vaccines · Vaccination"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Calendrier vaccinal, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>mai 2026</span></> : <>Vaccination calendar, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>May 2026</span></>}
+          {lang === "fr" ? <>Calendrier vaccinal, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{monthLabel}</span></> : <>Vaccination calendar, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{monthLabel}</span></>}
         </h1>
       </div>
 
@@ -288,7 +298,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--border-1)" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <button className="btn btn-sm btn-ghost"><Icon name="chevLeft" size={13} color="var(--ink-700)"/></button>
-              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Mai 2026" : "May 2026"}</h3>
+              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, textTransform: "capitalize" }}>{monthLabel}</h3>
               <button className="btn btn-sm btn-ghost"><Icon name="chevRight" size={13} color="var(--ink-700)"/></button>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -305,9 +315,9 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gridAutoRows: "100px" }}>
             {days.map((d, i) => {
               const day = d + 1;
-              const inMonth = day >= 1 && day <= 31;
-              const isToday = day === 26;
-              const dayVacc = filtered.filter(v => parseInt(v.due.split("-")[2]) === day && v.due.startsWith("2026-05"));
+              const inMonth = day >= 1 && day <= daysInMonth;
+              const isToday = inMonth && day === todayDate;
+              const dayVacc = filtered.filter(v => v.due.startsWith(calYm) && parseInt(v.due.split("-")[2], 10) === day);
               return (
                 <div key={i} style={{
                   borderRight: (i % 7) < 6 ? "1px solid var(--border-1)" : "none",
@@ -317,7 +327,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   opacity: inMonth ? 1 : 0.4,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span className="mono" style={{ fontSize: 11, color: isToday ? "var(--oxblood-700)" : "var(--ink-700)", fontWeight: isToday ? 600 : 400 }}>{inMonth ? day : (day < 1 ? 30 + day : day - 31)}</span>
+                    <span className="mono" style={{ fontSize: 11, color: isToday ? "var(--oxblood-700)" : "var(--ink-700)", fontWeight: isToday ? 600 : 400 }}>{inMonth ? day : (day < 1 ? daysInPrevMonth + day : day - daysInMonth)}</span>
                     {isToday && <span style={{ fontSize: 9, fontWeight: 600, color: "var(--oxblood-700)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{lang === "fr" ? "Auj." : "Today"}</span>}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -1462,6 +1472,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [transactions, setTransactions] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
+  const monthLabel = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { month: "long", year: "numeric" });
   const refresh = useDataRefresh(["sales", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
@@ -1493,7 +1504,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Finances · Finances" : "Finances · Finances"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Finances de la ferme, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>mai 2026</span></> : <>Farm finances, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>May 2026</span></>}
+          {lang === "fr" ? <>Finances de la ferme, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{monthLabel}</span></> : <>Farm finances, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{monthLabel}</span></>}
         </h1>
       </div>
 
@@ -1512,7 +1523,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             <KpiCard label={t(lang, "revenue")} sublabel={rangeLabel(dateRange, lang)} value={totalR.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
             <KpiCard label={t(lang, "expense")} sublabel={rangeLabel(dateRange, lang)} value={totalE.toLocaleString("fr-CA")} unit="$" trend={summary.expense.length ? summary.expense : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="wallet"/>
             <KpiCard label={t(lang, "profit")} sublabel={rangeLabel(dateRange, lang)} value={profit.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue.map((v, i) => v - (summary.expense[i] || 0)) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chart" accent="var(--money-500)"/>
-            <KpiCard label={t(lang, "margin")} sublabel={rangeLabel(dateRange, lang)} value={margin.toFixed(1).replace(".", ",")} unit="%" trend={[margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin,margin]} icon="chartPie" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "margin")} sublabel={rangeLabel(dateRange, lang)} value={margin.toFixed(1).replace(".", ",")} unit="%" trend={summary.revenue.length ? summary.revenue.map((v, i) => { const e = summary.expense[i] || 0; return v > 0 ? ((v - e) / v) * 100 : 0; }) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chartPie" accent="var(--money-500)"/>
           </>;
         })()}
       </div>

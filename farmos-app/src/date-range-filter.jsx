@@ -28,12 +28,12 @@ function presetRange(preset) {
   return { from: "", to: "" };
 }
 
-export function defaultDateRange(preset = "month") {
+export function defaultDateRange(preset = "today") {
   return { preset, ...presetRange(preset) };
 }
 
 export function rangeLabel(range, lang = "fr") {
-  const p = range?.preset || "month";
+  const p = range?.preset || "today";
   const labels = {
     today: lang === "fr" ? "aujourd'hui" : "today",
     "7d": lang === "fr" ? "7 j" : "7d",
@@ -44,7 +44,7 @@ export function rangeLabel(range, lang = "fr") {
     all: lang === "fr" ? "tout" : "all",
     custom: `${range?.from || "…"} → ${range?.to || "…"}`,
   };
-  return labels[p] || labels.month;
+  return labels[p] || labels.today;
 }
 
 export function inDateRange(value, range) {
@@ -63,7 +63,6 @@ export function DateRangeFilter({ lang = "fr", value, onChange }) {
     ["today", lang === "fr" ? "Aujourd'hui" : "Today"],
     ["7d", "7 j"],
     ["30d", "30 j"],
-    ["month", lang === "fr" ? "Mois" : "Month"],
     ["quarter", lang === "fr" ? "Trim." : "Qtr"],
     ["year", lang === "fr" ? "Année" : "Year"],
     ["all", lang === "fr" ? "Tout" : "All"],

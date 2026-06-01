@@ -115,7 +115,7 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange) {
 const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const species = speciesFilter ? speciesById(speciesFilter) : null;
   const isAll = !species;
-  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("month"));
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const live = useDashboardData();
   const k = computeDashboardKpis(live, speciesFilter, lang, dateRange);
   const fin = deriveDashFinanceKpis(live.finance);

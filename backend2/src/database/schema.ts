@@ -1042,6 +1042,8 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   count: int("count"),
   lot: varchar("lot", { length: 100 }),
   barn: varchar("barn", { length: 100 }),
+  room: varchar("room", { length: 100 }),
+  type: varchar("type", { length: 50 }),
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
   withdrawalUntil: date("withdrawal_until", { mode: "string" }),
   withdrawalKind: varchar("withdrawal_kind", { length: 20 }),

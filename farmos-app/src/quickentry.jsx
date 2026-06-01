@@ -262,13 +262,26 @@ const AutocompleteDB = ({ value, onChange, category, scope, lang, placeholder, a
   );
 };
 
+const activeSpeciesList = (enabledSpecies) => {
+  const list = Array.isArray(enabledSpecies) && enabledSpecies.length
+    ? SPECIES.filter((s) => enabledSpecies.includes(s.id))
+    : SPECIES;
+  return list.length ? list : SPECIES;
+};
+
+const normalizeDefaultSpecies = (defaultSpecies, enabledSpecies, predicate = () => true) => {
+  const list = activeSpeciesList(enabledSpecies).filter(predicate);
+  if (defaultSpecies && list.some((s) => s.id === defaultSpecies)) return defaultSpecies;
+  return (list[0] || SPECIES[0]).id;
+};
+
 const animalLabel = (a) => {
   const id = a.external_id || a.externalId;
   const base = a.name || id || `#${a.id}`;
   return id && a.name ? `${base} · ${id}` : base;
 };
 
-const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultSpecies, context, onSaved }) => {
+const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultSpecies, enabledSpecies, context, onSaved }) => {
   const [tab, setTab] = React.useState(defaultTab);
   React.useEffect(() => { if (open) setTab(defaultTab); }, [open, defaultTab]);
 
@@ -333,12 +346,12 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
 
         {/* Body */}
         <div style={{ flex: 1, overflow: "auto", padding: "20px 24px 24px" }}>
-          {tab === "animal"     && <AnimalForm     lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "production" && <ProductionForm lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "animal"     && <AnimalForm     lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "production" && <ProductionForm lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "health"     && <HealthForm     lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
           {tab === "stock"      && <StockForm      lang={lang} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
-          {tab === "death"      && <DeathForm      lang={lang} defaultSpecies={defaultSpecies} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "repro"      && <ReproForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} context={context} onSaved={onSaved} onClose={onClose}/>}
+          {tab === "death"      && <DeathForm      lang={lang} defaultSpecies={defaultSpecies} enabledSpecies={enabledSpecies} onSaved={onSaved} onClose={onClose}/>}
         </div>
       </aside>
     </>
@@ -346,8 +359,9 @@ const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultS
 };
 
 // ─── Animal form (SPECIES-ADAPTIVE) ──────────────────────────────────────
-const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
-  const [species, setSpecies] = React.useState(defaultSpecies || "cow");
+const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
+  const [species, setSpecies] = React.useState(() => normalizeDefaultSpecies(defaultSpecies, enabledSpecies));
   const [form, setForm] = React.useState({});
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const sp = speciesById(species);
@@ -367,6 +381,17 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     setForm((f) => ({ ...f, tag: next }));
   }, [species, animalsForGen, tagDirty]);
 
+  // Lots = bandes/groupes existants (pas un référentiel fixe). On suggère les
+  // valeurs déjà saisies sur d'autres animaux, tout en laissant la saisie libre.
+  const existingLots = React.useMemo(() => {
+    const seen = new Set();
+    (animalsForGen || []).forEach((a) => {
+      const l = (a.lot || "").trim();
+      if (l) seen.add(l);
+    });
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  }, [animalsForGen]);
+
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -382,6 +407,8 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
       count: form.count ? Number(form.count) : null,
       lot: form.lot || null,
       barn: form.barn || null,
+      room: form.room || null,
+      type: form.type || null,
     };
     try {
       await api.createAnimal(payload);
@@ -409,7 +436,7 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
     <div className="entry-form" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <FormSection label={lang === "fr" ? "Espèce · les champs s'adaptent" : "Species · fields adapt"}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {SPECIES.map((s) => (
+          {availableSpecies.map((s) => (
             <button key={s.id} type="button" onClick={() => setSpecies(s.id)}
               className={`species-pill ${species === s.id ? "active" : ""}`}
               style={{ height: 32, fontSize: 12 }}>
@@ -482,10 +509,24 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
       <FormSection label={lang === "fr" ? "Localisation" : "Location"}>
         <FormGrid>
           <FormField label={species === "fish" ? (lang === "fr" ? "Bassin" : "Pond") : (lang === "fr" ? "Bâtiment" : "Barn")}>
-            <input className="input" placeholder={species === "fish" ? "Bassin 7 · Circuit B" : "Étable 1"} value={form.barn || ""} onChange={(e) => set("barn", e.target.value)}/>
+            <AutocompleteDB
+              value={form.barn || ""}
+              onChange={(v) => set("barn", v)}
+              useLabel
+              lang={lang}
+              category="building"
+              scope={species}
+              placeholder={species === "fish"
+                ? (lang === "fr" ? "Rechercher ou ajouter un bassin…" : "Search or add a pond…")
+                : (lang === "fr" ? "Rechercher ou ajouter un bâtiment…" : "Search or add a barn…")}
+            />
           </FormField>
           <FormField label={lang === "fr" ? "Lot" : "Batch"}>
-            <input className="input" placeholder={"Lot A"} value={form.lot || ""} onChange={(e) => set("lot", e.target.value)}/>
+            <input className="input" placeholder="Lot A" list="farmos-lots-list"
+              value={form.lot || ""} onChange={(e) => set("lot", e.target.value)}/>
+            <datalist id="farmos-lots-list">
+              {existingLots.map((l) => <option key={l} value={l}/>)}
+            </datalist>
           </FormField>
         </FormGrid>
       </FormSection>
@@ -517,7 +558,18 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
               />
             </FormField>
             <FormField label={lang === "fr" ? "Salle" : "Room"}>
-              <input className="input" placeholder="Salle 3" value={form.room || ""} onChange={(e) => set("room", e.target.value)}/>
+              <AutocompleteDB
+                key={form.barn || "_no-barn"}
+                value={form.room || ""}
+                onChange={(v) => set("room", v)}
+                useLabel
+                lang={lang}
+                category="room"
+                scope={form.barn || species}
+                placeholder={form.barn
+                  ? (lang === "fr" ? "Rechercher ou ajouter une salle…" : "Search or add a room…")
+                  : (lang === "fr" ? "Choisir un bâtiment d'abord…" : "Pick a building first…")}
+              />
             </FormField>
           </FormGrid>
         </FormSection>
@@ -577,12 +629,14 @@ const AnimalForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
 };
 
 // ─── Production form (milk / eggs / weight) ──────────────────────────────
-const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
-  const [species, setSpecies] = React.useState(defaultSpecies || "cow");
+const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
+  const [species, setSpecies] = React.useState(() => normalizeDefaultSpecies(defaultSpecies, enabledSpecies));
   const sp = speciesById(species);
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
     animal: context?.animalId ? String(context.animalId) : "",
+    period: "AM",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -620,7 +674,7 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
       species,
       product_type: productKind === "milk" ? "milk" : productKind === "eggs" ? "eggs" : productKind === "wool" ? "wool" : "growth",
       log_date: form.date,
-      period: form.period || null,
+      period: form.period || "AM",
       quantity: Number(form.value),
       unit,
       quality,
@@ -642,7 +696,7 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
       <FormSection label={lang === "fr" ? "Espèce" : "Species"}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {SPECIES.map((s) => (
+          {availableSpecies.map((s) => (
             <button key={s.id} type="button" onClick={() => setSpecies(s.id)}
               className={`species-pill ${species === s.id ? "active" : ""}`}
               style={{ height: 32, fontSize: 12 }}>
@@ -760,11 +814,12 @@ const ProductionForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => 
 };
 
 // ─── Health (treatment / vaccine) ────────────────────────────────────────
-const HealthForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
+const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
   const [kind, setKind] = React.useState("treatment");
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
-    species: context?.species || defaultSpecies || "cow",
+    species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -788,7 +843,8 @@ const HealthForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
   }, [loadAll]);
   const animalsForSpecies = (liveAnimals || ANIMALS).filter((a) => a.species === form.species);
   const medsForSpecies = liveMeds || STOCK.filter((s) => s.kind === "med" && s.species?.includes(form.species));
-  const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : speciesById(form.species).diseases.map((d, i) => ({ id: null, name_fr: d, name_en: speciesById(form.species).diseasesEn[i] }));
+  const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
+  const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : speciesDef.diseases.map((d, i) => ({ id: null, name_fr: d, name_en: speciesDef.diseasesEn[i] }));
   const [saving, setSaving] = React.useState(false);
 
   const submit = async () => {
@@ -906,9 +962,9 @@ const HealthForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
           <FormField label={lang === "fr" ? "Espèce" : "Species"}>
             <Autocomplete
               value={form.species}
-              onChange={(v) => set("species", v || "cow")}
+              onChange={(v) => set("species", v || availableSpecies[0]?.id || "cow")}
               allowClear={false}
-              options={SPECIES.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
+              options={availableSpecies.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
             />
           </FormField>
         </FormGrid>
@@ -1213,11 +1269,12 @@ const StockForm = ({ lang, onSaved, onClose }) => {
 };
 
 // ─── Repro form ──────────────────────────────────────────────────────────
-const ReproForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
+const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies).filter((s) => s.repro.length > 0);
   const [kind, setKind] = React.useState("heat");
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
-    species: context?.species || defaultSpecies || "cow",
+    species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies, (s) => s.repro.length > 0),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
     breeding_type: "ai", // ai | natural | unknown
   });
@@ -1324,9 +1381,9 @@ const ReproForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
           <FormField label={lang === "fr" ? "Espèce" : "Species"}>
             <Autocomplete
               value={form.species}
-              onChange={(v) => set("species", v || "cow")}
+              onChange={(v) => set("species", v || availableSpecies[0]?.id || "cow")}
               allowClear={false}
-              options={SPECIES.filter((s) => s.repro.length > 0).map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
+              options={availableSpecies.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
             />
           </FormField>
           <FormField label={lang === "fr" ? "Femelle" : "Female"} required>
@@ -1464,8 +1521,9 @@ const ReproForm = ({ lang, defaultSpecies, context, onSaved, onClose }) => {
 };
 
 // ─── Death / mortality ───────────────────────────────────────────────────
-const DeathForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
-  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: defaultSpecies || "cow" });
+const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) => {
+  const availableSpecies = activeSpeciesList(enabledSpecies);
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: normalizeDefaultSpecies(defaultSpecies, enabledSpecies) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
@@ -1518,9 +1576,9 @@ const DeathForm = ({ lang, defaultSpecies, onSaved, onClose }) => {
           <FormField label={lang === "fr" ? "Espèce" : "Species"}>
             <Autocomplete
               value={form.species}
-              onChange={(v) => set("species", v || "cow")}
+              onChange={(v) => set("species", v || availableSpecies[0]?.id || "cow")}
               allowClear={false}
-              options={SPECIES.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
+              options={availableSpecies.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
             />
           </FormField>
           <FormField label={lang === "fr" ? "Animal / Lot" : "Animal / Batch"}>

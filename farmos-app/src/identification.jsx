@@ -604,7 +604,7 @@ const CameraViewport = ({ mode, scanning, flash, onScan, lang, videoRef, camStre
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <MicButton lang={lang} onText={(txt) => window.dispatchEvent(new CustomEvent("farmos:scan-code", { detail: txt }))}/>
         <button onClick={onScan} disabled={scanning} style={{
-          flex: 1, height: 56, borderRadius: 999, border: 0, cursor: scanning ? "wait" : "pointer",
+          flex: 1, height: 56, borderRadius: 999, cursor: scanning ? "wait" : "pointer",
           background: scanning ? "var(--forest-700)" : (mode === "photo" ? "var(--bone-50)" : "var(--clay-700)"),
           color: mode === "photo" && !scanning ? "var(--ink-900)" : "var(--bone-50)",
           border: mode === "photo" && !scanning ? "3px solid var(--clay-700)" : "none",
@@ -982,7 +982,7 @@ const ResultCard = ({ lang, animal, method, onClose, onNav }) => {
           </div>
           <button style={{
             position: "absolute", bottom: 12, right: 12,
-            width: 38, height: 38, borderRadius: 999, border: 0,
+            width: 38, height: 38, borderRadius: 999,
             background: "rgba(6,20,13,0.6)", color: "var(--bone-50)",
             display: "flex", alignItems: "center", justifyContent: "center",
             cursor: "pointer", backdropFilter: "blur(8px)",
