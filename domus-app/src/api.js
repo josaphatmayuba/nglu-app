@@ -11,7 +11,8 @@ const NATIVE =
   (window.Capacitor?.isNativePlatform?.() === true ||
     /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.DOMUS_API_HOST) || "https://dev.ongdngolu.org";
-const BASE = (NATIVE ? API_HOST : "") + "/api/property-management";
+const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
+const BASE = `${API_ROOT}/property-management`;
 
 function authHeaders() {
   const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
@@ -19,19 +20,20 @@ function authHeaders() {
 }
 
 async function jsonFetch(path, init = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
+  const { base = BASE, ...fetchInit } = init;
+  const res = await fetch(`${base}${path}`, {
+    ...fetchInit,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),
-      ...(init.headers || {}),
+      ...(fetchInit.headers || {}),
     },
   });
   if (!res.ok) {
     // 401 = token invalide/expiré → purge auth et bascule sur l'écran de connexion.
     if (res.status === 401 && typeof window !== "undefined") {
       try {
-        ["access-token", "role", "roleId", "user", "id", "isLogged"].forEach((k) =>
+        ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) =>
           localStorage.removeItem(k),
         );
       } catch {}
@@ -53,6 +55,13 @@ const del = (path) => jsonFetch(path, { method: "DELETE" });
 
 // ── Endpoints (alignés sur property-management.controller.ts) ──
 export const api = {
+  currencies: () => jsonFetch("/currency?query=all", { method: "GET", base: API_ROOT }),
+  allCurrencies: () => jsonFetch("/currency?query=all&status=all", { method: "GET", base: API_ROOT }),
+  setting: () => jsonFetch("/setting", { method: "GET", base: API_ROOT }),
+  updateSetting: (b) => jsonFetch("/setting", { method: "PUT", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  setCurrencyStatus: (id, status) => jsonFetch(`/currency/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status }) }),
+  bulkCurrencyStatus: (ids, status) => jsonFetch("/currency/bulk-status", { method: "PATCH", base: API_ROOT, body: JSON.stringify({ ids, status }) }),
+
   dashboard: () => get("/dashboard"),
 
   tenants: () => get("/tenants"),
@@ -100,6 +109,8 @@ export const api = {
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   deleteContract: (id) => del(`/contracts/${id}`),
+
+  contractTemplates: () => get("/contract-templates"),
 };
 
-export { BASE, NATIVE };
+export { BASE, NATIVE, API_ROOT };

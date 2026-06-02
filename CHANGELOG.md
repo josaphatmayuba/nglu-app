@@ -22,6 +22,17 @@ This project follows:
 
 ### Added
 
+- SCRUM-247: Domus — ecran Contrats & signature (liste, KPIs, detail papier, journal d'audit, envoi/lien, modèles).
+  - Creation depuis un bail, impression/PDF, renvoi pour signature, filtre periode global.
+  - Panneau des modeles de contrat (lecture seule ; edition dans le CRM admin).
+
+- SCRUM-249: Domus — ecran Espace locataire cable sur l'API (baux, paiements, contrats).
+  - Hero locataire, prochain loyer avec statut, paiement mobile money, aide (maintenance, contact).
+  - Documents (bail + quittances) et historique des paiements, filtre par periode global.
+  - Selecteur gestionnaire pour previsualiser le portail d'un locataire ; pre-selection du bail vers Encaisser.
+
+- Domus: ajout d'un ecran de connexion local partageant la meme session CRM/FarmOS via `access-token`, `role`, `roleId`, `user`, `id`, `email` et `isLogged`.
+
 - SCRUM-227: Immobilier - restauration du suivi admin des liens d'inscription locataire.
   - Les dossiers d'inscription generes apparaissent de nouveau dans l'onglet Locataires avec badges Non rempli, En remplissage, Soumis ou Expire.
   - L'admin peut ouvrir un dossier, enregistrer un brouillon, completer les champs et valider pour creer le vrai locataire.

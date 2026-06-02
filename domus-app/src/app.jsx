@@ -1,20 +1,29 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, Lock,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut,
 } from "lucide-react";
-import { useAuthToken, clearToken } from "./auth.jsx";
+import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
+import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
 import { Dashboard } from "./screens/dashboard.jsx";
 import { Biens } from "./screens/biens.jsx";
+import { CarteBiens } from "./screens/carte.jsx";
+import { Locataires } from "./screens/locataires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
+import { Maintenance } from "./screens/maintenance.jsx";
+import { Baux } from "./screens/baux.jsx";
+import { Reglages } from "./screens/reglages.jsx";
+import { Portail } from "./screens/portail.jsx";
+import { Contrats } from "./screens/contrats.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
+import { useDeviceMode } from "./data.js";
+import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
 
-// Navigation : organisée en sections (bureau). `daily` = items de la bottom-nav mobile.
 const NAV = [
   { sec: "Pilotage", items: [{ key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard }] },
   { sec: "Patrimoine", items: [
-    { key: "biens", label: "Biens & unités", icon: Building },
-    { key: "carte", label: "Carte des biens", icon: MapPin },
+    { key: "biens", label: "Propriétés", icon: Building },
+    { key: "carte", label: "Carte des propriétés", icon: MapPin },
     { key: "locataires", label: "Locataires", icon: Users },
   ] },
   { sec: "Locatif", items: [
@@ -30,32 +39,41 @@ const NAV = [
     { key: "reglages", label: "Réglages", icon: Settings },
   ] },
 ];
+
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
-const DAILY = ["dashboard", "loyers", "locataires", "maintenance"]; // + "Plus"
+const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
 const MORE = ["baux", "contrats", "onboarding", "carte", "portail", "reglages"];
 
 const SCREENS = {
-  dashboard: (nav) => <Dashboard go={nav} />,
-  biens: () => <Biens />,
-  // À implémenter dans les stories suivantes (SCRUM-245..251) :
-  carte: () => <Placeholder title="Carte des biens" story="SCRUM-245" />,
-  locataires: () => <Placeholder title="Locataires" story="SCRUM-246" />,
-  baux: () => <Placeholder title="Baux" story="SCRUM-247" />,
-  contrats: () => <Placeholder title="Contrats & signature" story="SCRUM-247" />,
-  onboarding: () => <Placeholder title="Onboarding locataire" story="SCRUM-246" />,
-  loyers: (nav) => <Loyers go={nav} />,
-  paiement: (nav) => <Paiement go={nav} />,
-  maintenance: () => <Placeholder title="Maintenance" story="SCRUM-263" />,
-  portail: () => <Placeholder title="Espace locataire" story="SCRUM-249" />,
-  reglages: () => <Placeholder title="Réglages" story="SCRUM-250" />,
+  dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
+  biens: (nav, device) => <Biens go={nav} device={device} />,
+  carte: (_nav, device) => <CarteBiens device={device} />,
+  locataires: (_nav, device) => <Locataires device={device} />,
+  baux: (nav, device) => <Baux go={nav} device={device} />,
+  contrats: (_nav, device) => <Contrats device={device} />,
+  onboarding: (_nav, device) => <Placeholder title="Onboarding locataire" story="SCRUM-246" device={device} />,
+  loyers: (nav, device) => <Loyers go={nav} device={device} />,
+  paiement: (nav, device) => <Paiement go={nav} device={device} />,
+  maintenance: (_nav, device) => <Maintenance device={device} />,
+  portail: (nav, device) => <Portail go={nav} device={device} />,
+  reglages: (_nav, device) => <Reglages device={device} />,
 };
 
 export default function App() {
   const token = useAuthToken();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
+  const device = useDeviceMode();
+  const realtimeOnline = useRealtimeStatus();
 
-  if (!token) return <ConnectScreen />;
+  // Connexion temps réel maintenue tant qu'une session est ouverte.
+  useEffect(() => {
+    if (!token) return undefined;
+    startRealtimeClient();
+    return () => stopRealtimeClient();
+  }, [token]);
+
+  if (!token) return <LoginScreen />;
 
   const go = (key) => {
     setView(key);
@@ -63,11 +81,11 @@ export default function App() {
     window.scrollTo(0, 0);
   };
 
-  const ScreenEl = (SCREENS[view] || SCREENS.dashboard)(go);
+  const ScreenEl = (SCREENS[view] || SCREENS.dashboard)(go, device);
 
   return (
-    <div className="shell">
-      {/* ── Sidebar (bureau) ── */}
+    <DateRangeProvider>
+    <div className="shell" data-layout={device.mode} data-mobile={device.isMobile ? "true" : "false"}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo"><Building2 size={18} color="#fff" /></div>
@@ -92,32 +110,31 @@ export default function App() {
             <div style={{ fontWeight: 500 }}>A. Kalala</div>
             <div style={{ color: "var(--ink-400)", fontSize: 11 }}>Gestionnaire</div>
           </div>
-          <button className="navlink" style={{ width: "auto", marginLeft: "auto", padding: 8 }} title="Se déconnecter" onClick={clearToken}>
+          <button className="navlink" style={{ width: "auto", marginLeft: "auto", padding: 8 }} title="Se deconnecter" onClick={clearToken}>
             <LogOut size={16} />
           </button>
         </div>
       </aside>
 
-      {/* ── Contenu ── */}
       <main className="main">
         <div className="topbar">
-          <div className="eyebrow">Domus · Gestion locative</div>
-          <div style={{ marginLeft: "auto" }} className="chip chip-iris">Connecté</div>
+          <div className="eyebrow">Domus - Gestion locative</div>
+          <RealtimePill online={realtimeOnline} style={{ marginLeft: "auto" }} />
         </div>
+        <DateRangeBar />
 
-        {/* En-tête mobile */}
         <div className="mobhead mob-only">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div className="brand-logo" style={{ width: 32, height: 32 }}><Building2 size={16} color="#fff" /></div>
             <span className="mh-title">{TITLES[view]}</span>
           </div>
+          <RealtimePill online={realtimeOnline} compact />
           <div className="avatar">AK</div>
         </div>
 
         <div className="content">{ScreenEl}</div>
       </main>
 
-      {/* ── Bottom-nav mobile ── */}
       <nav className="mobnav">
         {DAILY.map((k) => {
           const item = NAV.flatMap((s) => s.items).find((i) => i.key === k);
@@ -134,7 +151,6 @@ export default function App() {
         </button>
       </nav>
 
-      {/* ── Feuille « Plus » ── */}
       <div className={`moresheet ${moreOpen ? "open" : ""}`}>
         <div className="scrim" onClick={() => setMoreOpen(false)} />
         <div className="panel">
@@ -152,28 +168,20 @@ export default function App() {
         </div>
       </div>
     </div>
+    </DateRangeProvider>
   );
 }
 
-// Écran de connexion : si pas de token partagé, on guide l'utilisateur.
-// (L'auth réelle se fait via le CRM ; Domus réutilise le même token.)
-function ConnectScreen() {
+function RealtimePill({ online, compact = false, style }) {
+  const label = online ? "Direct" : "Hors ligne";
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-      <div className="card" style={{ maxWidth: 380, width: "100%", padding: 28, textAlign: "center" }}>
-        <div className="brand-logo" style={{ margin: "0 auto 14px" }}><Lock size={18} color="#fff" /></div>
-        <div className="title" style={{ fontSize: 20 }}>Connexion requise</div>
-        <p className="muted" style={{ fontSize: 13, marginTop: 8 }}>
-          Domus utilise votre session NgoluApp. Ouvrez l'application depuis le CRM
-          (ou connectez-vous), puis revenez ici.
-        </p>
-        <a className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginTop: 16, textDecoration: "none" }} href="/admin">
-          Aller à la connexion
-        </a>
-        <p className="muted" style={{ fontSize: 11, marginTop: 12 }}>
-          En dev, un token <code>access-token</code> dans le localStorage suffit.
-        </p>
-      </div>
+    <div
+      className={`rt-pill ${online ? "rt-on" : "rt-off"}`}
+      style={style}
+      title={online ? "Temps réel actif - les données se mettent à jour automatiquement" : "Temps réel interrompu - reconnexion..."}
+    >
+      <span className="rt-dot" />
+      {!compact && <span>{label}</span>}
     </div>
   );
 }

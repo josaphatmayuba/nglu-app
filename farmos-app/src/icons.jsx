@@ -193,22 +193,24 @@ const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.
   );
 };
 
-// ─── Brand mark: wheat sheaf bound at the middle ─────────────────────────
+// ─── Brand mark: stylized bovine head ────────────────────────────────────
 const Brand = ({ size = 28, color = "#ECF1EC", accent = "#D7AA45" }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none">
-    {/* three stalks converging at a band */}
-    <g stroke={color} strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 14 L32 38"/>
-      <path d="M32 8 L32 38"/>
-      <path d="M50 14 L32 38"/>
-      <path d="M32 38 L32 56"/>
-    </g>
-    {/* grain heads */}
-    <ellipse cx="14" cy="14" rx="4" ry="5" fill={accent}/>
-    <ellipse cx="32" cy="8"  rx="4" ry="5" fill={accent}/>
-    <ellipse cx="50" cy="14" rx="4" ry="5" fill={accent}/>
-    {/* binding tie */}
-    <rect x="23" y="40" width="18" height="5" rx="1.5" fill={color}/>
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+    <circle cx="32" cy="33" r="25" fill={color} opacity="0.12"/>
+    <path d="M12 30c3-12 10-21 20-25 10 4 17 13 20 25" stroke={color} strokeWidth="3.8" strokeLinecap="round"/>
+    <path d="M19 24c-6-2-11 0-14 5 4 4 9 6 16 4 4-1 7-4 10-8-5 2-8 1-12-1Z" fill={color}/>
+    <path d="M45 24c6-2 11 0 14 5-4 4-9 6-16 4-4-1-7-4-10-8 5 2 8 1 12-1Z" fill={color}/>
+    <path d="M25 20c2-7 6-11 12-11s10 4 12 11c2 9 7 13 9 22 2 9-5 17-17 19-5 1-8-3-13-3s-8 4-13 3C3 59-4 51-2 42c2-9 7-13 9-22 2-7 6-11 12-11s10 4 12 11Z" fill={color} transform="translate(13 0) scale(0.72 0.72)"/>
+    <path d="M25 25c-4 10-4 22-1 32-6-5-10-13-10-22 0-6 4-9 11-10Z" fill={color}/>
+    <path d="M39 25c4 10 4 22 1 32 6-5 10-13 10-22 0-6-4-9-11-10Z" fill={color}/>
+    <path d="M28 49c3 2 9 2 12 0" stroke={color} strokeWidth="3" strokeLinecap="round"/>
+    <path d="M27 43c0-4 4-6 9-6s9 2 9 6c0 5-4 8-9 8s-9-3-9-8Z" fill={color}/>
+    <path d="M31 43c-2 2-2 4 0 6M41 43c2 2 2 4 0 6" stroke="#0E2418" strokeWidth="2.4" strokeLinecap="round"/>
+    <path d="M27 33c4 0 7 3 8 7-4 0-8-3-10-7h2Z" fill="#0E2418" opacity="0.9"/>
+    <path d="M45 33c-4 0-7 3-8 7 4 0 8-3 10-7h-2Z" fill="#0E2418" opacity="0.9"/>
+    <circle cx="29.5" cy="36" r="1.3" fill={color}/>
+    <circle cx="42.5" cy="36" r="1.3" fill={color}/>
+    <path d="M28 10c3 3 4 6 2 10-3-1-5-4-5-7 0-2 1-3 3-3ZM44 10c-3 3-4 6-2 10 3-1 5-4 5-7 0-2-1-3-3-3ZM36 5c4 5 4 10 0 15-4-5-4-10 0-15Z" fill={accent}/>
   </svg>
 );
 

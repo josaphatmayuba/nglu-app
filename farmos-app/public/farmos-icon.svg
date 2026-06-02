@@ -1,12 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="96" fill="#0E2418"/>
-  <g transform="translate(96 96)" fill="none" stroke="#D7AA45" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M40 96 L160 32 L280 96 L280 232 L160 296 L40 232 Z"/>
-    <path d="M160 32 L160 296"/>
-    <path d="M40 96 L160 168 L280 96"/>
-    <path d="M40 232 L160 168 L280 232" opacity="0.55"/>
-  </g>
-  <text x="256" y="430" text-anchor="middle" fill="#ECF1EC"
-        font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="500"
-        letter-spacing="-1">FarmOS</text>
+  <circle cx="256" cy="238" r="154" fill="#FBF8F2"/>
+  <path d="M120 214c9-41 39-81 79-104" fill="none" stroke="#0E5132" stroke-width="24" stroke-linecap="round"/>
+  <path d="M313 110c40 23 70 63 79 104" fill="none" stroke="#0E5132" stroke-width="24" stroke-linecap="round"/>
+  <path d="M158 317c22 32 58 51 98 51s76-19 98-51" fill="none" stroke="#0E5132" stroke-width="24" stroke-linecap="round"/>
+  <path d="M151 190c-40-9-68 2-84 26 20 21 50 36 90 28 28-6 43-25 60-47-24 7-43 1-66-7Z" fill="#0E5132"/>
+  <path d="M361 190c40-9 68 2 84 26-20 21-50 36-90 28-28-6-43-25-60-47 24 7 43 1 66-7Z" fill="#0E5132"/>
+  <path d="M207 179c9-33 30-53 56-53s47 20 56 53c11 39 32 64 45 104 10 32-13 77-64 86-15 3-27-8-44-8s-29 11-44 8c-51-9-74-54-64-86 13-40 34-65 45-104Z" fill="#FBF8F2"/>
+  <path d="M194 185c-18 48-22 111-8 161-29-24-49-63-47-108 1-30 18-47 55-53Z" fill="#0E5132"/>
+  <path d="M318 185c18 48 22 111 8 161 29-24 49-63 47-108-1-30-18-47-55-53Z" fill="#0E5132"/>
+  <path d="M230 332c11 9 41 9 52 0" fill="none" stroke="#0E5132" stroke-width="14" stroke-linecap="round"/>
+  <path d="M221 297c0-17 16-27 35-27s35 10 35 27c0 20-16 32-35 32s-35-12-35-32Z" fill="#0E5132"/>
+  <path d="M238 292c-9 7-9 21 0 28" fill="none" stroke="#FBF8F2" stroke-width="10" stroke-linecap="round"/>
+  <path d="M274 292c9 7 9 21 0 28" fill="none" stroke="#FBF8F2" stroke-width="10" stroke-linecap="round"/>
+  <path d="M217 237c16 0 29 12 32 31-17-1-32-12-42-30 3-1 7-1 10-1Z" fill="#FBF8F2"/>
+  <path d="M295 237c-16 0-29 12-32 31 17-1 32-12 42-30-3-1-7-1-10-1Z" fill="#FBF8F2"/>
+  <circle cx="226" cy="250" r="7" fill="#0E5132"/>
+  <circle cx="286" cy="250" r="7" fill="#0E5132"/>
+  <path d="M234 92c12 14 16 28 11 43-14-6-22-18-22-33 0-5 4-9 11-10Z" fill="#B86B3B"/>
+  <path d="M278 92c-12 14-16 28-11 43 14-6 22-18 22-33 0-5-4-9-11-10Z" fill="#B86B3B"/>
+  <path d="M256 74c18 22 18 43 0 62-18-19-18-40 0-62Z" fill="#B86B3B"/>
 </svg>
