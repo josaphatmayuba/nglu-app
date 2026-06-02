@@ -2465,6 +2465,19 @@ function PriceListSettings({ lang }) {
   );
 }
 
+const SalesManagementScreen = ({ lang, speciesFilter }) => (
+  <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%" }}>
+    <div>
+      <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Gestion de vente" : "Sales management"}</div>
+      <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em" }}>
+        {lang === "fr" ? <>Gestion de vente, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>produits et prix</span></> : <>Sales management, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>products and prices</span></>}
+      </h1>
+    </div>
+    <SaleInventorySettings lang={lang} speciesFilter={speciesFilter}/>
+    <PriceListSettings lang={lang}/>
+  </div>
+);
+
 const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesFilter, onSpeciesFilter }) => {
   const [selected, setSelected] = React.useState(enabledSpecies && enabledSpecies.length ? enabledSpecies : SPECIES.map((s) => s.id));
   const [saving, setSaving] = React.useState(false);
@@ -2555,10 +2568,8 @@ const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesF
         </div>
       </section>
       <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
-      <SaleInventorySettings lang={lang} speciesFilter={speciesFilter}/>
-      <PriceListSettings lang={lang}/>
     </div>
   );
 };
 
-export { HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };
+export { HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };

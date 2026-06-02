@@ -11,7 +11,7 @@ import { Identification } from "./identification";
 import { QuickEntryDrawer, Toast } from "./quickentry";
 import {
   HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
-  AlertsScreen, PosScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
+  AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
@@ -62,6 +62,7 @@ const ROUTE_SLUGS = {
   production: "production",
   alerts: "alertes",
   pos: "pos",
+  "sales-management": "gestion-vente",
   finances: "finances",
   reports: "rapports",
   employees: "employes",
@@ -178,6 +179,7 @@ function App() {
     production: { title: t(lang, "production"), subtitle: lang === "fr" ? "Lait, œufs, croissance" : "Milk, eggs, growth",     breadcrumb: lang === "fr" ? "FERME · PRODUCTION" : "FARM · PRODUCTION" },
     alerts:     { title: t(lang, "alerts"),     subtitle: lang === "fr" ? "Alertes intelligentes" : "Smart alerts",            breadcrumb: lang === "fr" ? "FERME · ALERTES" : "FARM · ALERTS" },
     pos:        { title: t(lang, "pos"),        subtitle: lang === "fr" ? "Ventes FarmOS" : "FarmOS sales",                    breadcrumb: lang === "fr" ? "FERME · POS" : "FARM · POS" },
+    "sales-management": { title: t(lang, "salesManagement"), subtitle: lang === "fr" ? "Produits vendables et prix POS" : "Sellable products and POS prices", breadcrumb: lang === "fr" ? "FERME · GESTION DE VENTE" : "FARM · SALES MANAGEMENT" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
     employees:  { title: t(lang, "employees"),  subtitle: lang === "fr" ? "Équipe & présences" : "Team & shifts",               breadcrumb: lang === "fr" ? "FERME · ÉQUIPE" : "FARM · TEAM" },
@@ -201,6 +203,7 @@ function App() {
       case "production": return <ProductionScreen {...props}/>;
       case "alerts":     return <AlertsScreen {...props}/>;
       case "pos":        return <PosScreen {...props}/>;
+      case "sales-management": return <SalesManagementScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
@@ -361,6 +364,7 @@ const FarmTweaks = ({ tweaks, setTweak }) => (
           { id: "repro", fr: "Reproduction", en: "Repro" },
           { id: "production", fr: "Production", en: "Production" },
           { id: "alerts", fr: "Alertes", en: "Alerts" },
+          { id: "sales-management", fr: "Gestion vente", en: "Sales mgmt" },
           { id: "finances", fr: "Finances", en: "Finances" },
           { id: "reports", fr: "Rapports", en: "Reports" },
         ].map((r) => (

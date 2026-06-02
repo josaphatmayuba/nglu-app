@@ -19,6 +19,7 @@ const NAV = [
   { id: "production",icon: "chart",     labelKey: "production" },
   { id: "alerts",    icon: "bell",      labelKey: "alerts", critical: true },
   { id: "pos",       icon: "cart",      labelKey: "pos" },
+  { id: "sales-management", icon: "settings", labelKey: "salesManagement" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
 ];
