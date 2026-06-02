@@ -34,6 +34,46 @@ export class UpdateFarmosSpeciesSettingsDto {
   enabled_species: FarmosSpecies[];
 }
 
+export class UpsertFarmosPriceDto {
+  @ApiPropertyOptional({ example: "production", enum: ["animal", "production", "stock", "other"] })
+  @IsOptional()
+  @IsString()
+  sale_source?: string | null;
+
+  @ApiPropertyOptional({ enum: FARMOS_SPECIES })
+  @IsOptional()
+  @IsString()
+  @IsIn(FARMOS_SPECIES as unknown as string[])
+  species?: FarmosSpecies | null;
+
+  @ApiProperty({ example: "eggs" })
+  @IsString()
+  @IsNotEmpty()
+  product_type: string;
+
+  @ApiPropertyOptional({ example: "oeufs" })
+  @IsOptional()
+  @IsString()
+  unit?: string | null;
+
+  @ApiProperty({ example: 0.25 })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unit_price: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  currency_id?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
 export class CreateAnimalDto {
   @ApiPropertyOptional({ example: "BQ-2024-0118" })
   @IsOptional()

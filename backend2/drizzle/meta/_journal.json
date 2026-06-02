@@ -330,6 +330,13 @@
       "when": 1780182000000,
       "tag": "0066_farmos_animals_room_type",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1780185600000,
+      "tag": "0067_farmos_price_list",
+      "breakpoints": true
     }
   ]
 }

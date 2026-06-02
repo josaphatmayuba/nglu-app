@@ -97,6 +97,9 @@ const KIND_INVALIDATES = {
   deleteSemenStraw:       ["semenStraws"],
   createLookup:           ["lookups"],
   deleteLookup:           ["lookups"],
+  createPrice:            ["priceList"],
+  updatePrice:            ["priceList"],
+  deletePrice:            ["priceList"],
   createDisease:          ["diseases"],
 };
 
@@ -182,6 +185,10 @@ export const api = {
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
+  listPrices: () => cachedList("priceList", "/prices")(),
+  createPrice: (body) => jsonMutate("createPrice", "/prices", { method: "POST", body: JSON.stringify(body) }),
+  updatePrice: (id, body) => jsonMutate("updatePrice", `/prices/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deletePrice: (id) => jsonMutate("deletePrice", `/prices/${id}`, { method: "DELETE" }),
   listAnimals:    cachedList("animals", "/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),

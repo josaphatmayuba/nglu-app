@@ -3,7 +3,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -21,6 +21,7 @@ import type {
   UpdateMedicineDto,
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
+  UpsertFarmosPriceDto,
 } from "./dto/farmos.dto";
 import { FARMOS_SPECIES, type FarmosSpecies } from "./dto/farmos.dto";
 
@@ -110,6 +111,61 @@ export class FarmosService {
 
     await this.publishFarmosUpdate("updateFarmosSettings", ["lookups"], "updated", "enabled_species", orgId);
     return this.getSettings(orgId);
+  }
+
+  async listPrices(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosPriceList)
+      .where(and(eq(farmosPriceList.organizationId, orgId), eq(farmosPriceList.isActive, 1)))
+      .orderBy(farmosPriceList.saleSource, farmosPriceList.productType, farmosPriceList.species);
+  }
+
+  async createPrice(input: UpsertFarmosPriceDto, orgId: number) {
+    const [res] = await this.db.insert(farmosPriceList).values({
+      organizationId: orgId,
+      saleSource: input.sale_source ?? "production",
+      species: input.species ?? null,
+      productType: input.product_type,
+      unit: input.unit ?? null,
+      unitPrice: String(input.unit_price),
+      currencyId: input.currency_id ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createPrice", ["priceList"], "created", res.id, orgId);
+    return this.getPrice(res.id, orgId);
+  }
+
+  async updatePrice(id: number, input: UpsertFarmosPriceDto, orgId: number) {
+    await this.getPrice(id, orgId);
+    await this.db.update(farmosPriceList).set({
+      saleSource: input.sale_source ?? "production",
+      species: input.species ?? null,
+      productType: input.product_type,
+      unit: input.unit ?? null,
+      unitPrice: String(input.unit_price),
+      currencyId: input.currency_id ?? null,
+      notes: input.notes ?? null,
+    }).where(and(eq(farmosPriceList.id, id), eq(farmosPriceList.organizationId, orgId)));
+    await this.publishFarmosUpdate("updatePrice", ["priceList"], "updated", id, orgId);
+    return this.getPrice(id, orgId);
+  }
+
+  async deletePrice(id: number, orgId: number) {
+    await this.getPrice(id, orgId);
+    await this.db.update(farmosPriceList).set({ isActive: 0 }).where(and(eq(farmosPriceList.id, id), eq(farmosPriceList.organizationId, orgId)));
+    await this.publishFarmosUpdate("deletePrice", ["priceList"], "deleted", id, orgId);
+    return { message: "Prix supprimé." };
+  }
+
+  private async getPrice(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosPriceList)
+      .where(and(eq(farmosPriceList.id, id), eq(farmosPriceList.organizationId, orgId), eq(farmosPriceList.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Prix introuvable.");
+    return row;
   }
 
   async createFarmosStaff(

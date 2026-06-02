@@ -1220,10 +1220,30 @@ function buildPosProductionItems(logs, sales, speciesFilter) {
     .sort((a, b) => String(b.latestDate).localeCompare(String(a.latestDate)));
 }
 
+function priceValue(row) {
+  return Number(row?.unitPrice ?? row?.unit_price ?? 0);
+}
+
+function findPosPrice(prices, item) {
+  const source = item.source || "production";
+  const unit = normalizeSaleUnit(item.unit);
+  const candidates = (prices || []).filter((p) => {
+    const saleSource = p.saleSource || p.sale_source || "production";
+    const productType = p.productType || p.product_type;
+    if (saleSource !== source) return false;
+    if (productType !== item.productType) return false;
+    if (p.unit && normalizeSaleUnit(p.unit) !== unit) return false;
+    return true;
+  });
+  return candidates.find((p) => p.species === item.species)
+    || candidates.find((p) => !p.species)
+    || null;
+}
+
 function PosSaleModal({ lang, item, onClose, onSaved }) {
   const today = new Date().toISOString().slice(0, 10);
   const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(Math.min(1, item.available || 1)) : "");
-  const [unitPrice, setUnitPrice] = React.useState("");
+  const [unitPrice, setUnitPrice] = React.useState(item?.unitPrice ? String(item.unitPrice) : "");
   const [buyer, setBuyer] = React.useState("");
   const [saleDate, setSaleDate] = React.useState(today);
   const [notes, setNotes] = React.useState("");
@@ -1324,6 +1344,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
   const [animals, setAnimals] = React.useState([]);
   const [logs, setLogs] = React.useState([]);
   const [sales, setSales] = React.useState([]);
+  const [prices, setPrices] = React.useState([]);
   const [query, setQuery] = React.useState("");
   const [modalItem, setModalItem] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
@@ -1332,12 +1353,13 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
 
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listAnimals(), api.listProductionLogs(), api.listSales()])
-      .then(([a, p, s]) => {
+    Promise.all([api.listAnimals(), api.listProductionLogs(), api.listSales(), api.listPrices()])
+      .then(([a, p, s, pr]) => {
         if (cancel) return;
         setAnimals(Array.isArray(a) ? a : []);
         setLogs(Array.isArray(p) ? p : []);
         setSales(Array.isArray(s) ? s : []);
+        setPrices(Array.isArray(pr) ? pr : []);
       })
       .catch((e) => console.warn("POS load failed:", e.message));
     return () => { cancel = true; };
@@ -1362,17 +1384,21 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
     if (speciesFilter && a.species !== speciesFilter) return false;
     if (!q) return true;
     return [a.name, a.externalId, a.external_id, a.lot, a.species].filter(Boolean).join(" ").toLowerCase().includes(q);
-  }).map((a) => ({
-    id: `animal-${a.id}`,
-    source: "animal",
-    animalId: a.id,
-    species: a.species,
-    productType: "animal",
-    title: a.name || a.externalId || a.external_id || a.lot || `#${a.id}`,
-    subtitle: [a.lot, a.race, a.barn].filter(Boolean).join(" - "),
-    available: Number(a.count) > 0 ? Number(a.count) : 1,
-    unit: "tete",
-  }));
+  }).map((a) => {
+    const item = {
+      id: `animal-${a.id}`,
+      source: "animal",
+      animalId: a.id,
+      species: a.species,
+      productType: "animal",
+      title: a.name || a.externalId || a.external_id || a.lot || `#${a.id}`,
+      subtitle: [a.lot, a.race, a.barn].filter(Boolean).join(" - "),
+      available: Number(a.count) > 0 ? Number(a.count) : 1,
+      unit: "tete",
+    };
+    const price = findPosPrice(prices, item);
+    return { ...item, unitPrice: price ? priceValue(price) : "" };
+  });
 
   const productionRows = buildPosProductionItems(logs, sales, speciesFilter)
     .filter((it) => {
@@ -1383,7 +1409,11 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
       ...it,
       title: `${saleProductLabel(it.productType, lang)}${it.species && speciesById(it.species) ? ` - ${lang === "fr" ? speciesById(it.species).fr : speciesById(it.species).en}` : ""}`,
       subtitle: it.latestDate ? `${lang === "fr" ? "Production recente" : "Recent production"} - ${it.latestDate}` : "",
-    }));
+    }))
+    .map((item) => {
+      const price = findPosPrice(prices, item);
+      return { ...item, unitPrice: price ? priceValue(price) : "" };
+    });
 
   const candidates = animals.filter((a) => {
     const status = String(a.status || "").toLowerCase();
@@ -1436,6 +1466,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
             <span className="tag">{item.source === "animal" ? (lang === "fr" ? "Animal" : "Animal") : saleProductLabel(item.productType, lang)}</span>
             <span className="tag">{Number(item.available || 0).toLocaleString("fr-CA")} {item.unit}</span>
+            {item.unitPrice !== "" && <span className="tag">{Number(item.unitPrice).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $/{item.unit}</span>}
           </div>
         </div>
         <button className="btn btn-primary" onClick={() => setModalItem(item)} style={{ flexShrink: 0 }}>
@@ -2084,6 +2115,124 @@ const LocationsManager = ({ lang, enabledSpecies }) => {
   );
 };
 
+const PRICE_PRODUCT_OPTIONS = [
+  { product_type: "eggs", sale_source: "production", unit: "oeufs", fr: "Oeufs", en: "Eggs" },
+  { product_type: "milk", sale_source: "production", unit: "L", fr: "Lait", en: "Milk" },
+  { product_type: "fish", sale_source: "production", unit: "kg", fr: "Poisson", en: "Fish" },
+  { product_type: "meat", sale_source: "production", unit: "kg", fr: "Viande", en: "Meat" },
+  { product_type: "wool", sale_source: "production", unit: "kg", fr: "Laine", en: "Wool" },
+  { product_type: "animal", sale_source: "animal", unit: "tete", fr: "Animal / lot", en: "Animal / batch" },
+];
+
+function PriceListSettings({ lang }) {
+  const empty = { id: null, sale_source: "production", species: "", product_type: "eggs", unit: "oeufs", unit_price: "", notes: "" };
+  const [prices, setPrices] = React.useState([]);
+  const [form, setForm] = React.useState(empty);
+  const [saving, setSaving] = React.useState(false);
+  const [message, setMessage] = React.useState(null);
+  const load = React.useCallback(() => {
+    api.listPrices().then((rows) => setPrices(Array.isArray(rows) ? rows : [])).catch((e) => setMessage({ type: "err", text: e.message }));
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+  const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
+  const chooseProduct = (productType) => {
+    const opt = PRICE_PRODUCT_OPTIONS.find((o) => o.product_type === productType) || PRICE_PRODUCT_OPTIONS[0];
+    setForm((prev) => ({ ...prev, product_type: opt.product_type, sale_source: opt.sale_source, unit: opt.unit }));
+  };
+  const save = async () => {
+    const price = Number(form.unit_price);
+    if (!form.product_type || !Number.isFinite(price) || price < 0) {
+      setMessage({ type: "err", text: lang === "fr" ? "Produit et prix requis." : "Product and price required." });
+      return;
+    }
+    setSaving(true); setMessage(null);
+    const payload = {
+      sale_source: form.sale_source || "production",
+      species: form.species || null,
+      product_type: form.product_type,
+      unit: form.unit || null,
+      unit_price: price,
+      notes: form.notes || null,
+    };
+    try {
+      if (form.id) await api.updatePrice(form.id, payload);
+      else await api.createPrice(payload);
+      setForm(empty);
+      load();
+      setMessage({ type: "ok", text: lang === "fr" ? "Prix enregistre." : "Price saved." });
+    } catch (e) {
+      setMessage({ type: "err", text: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const edit = (row) => setForm({
+    id: row.id,
+    sale_source: row.saleSource || row.sale_source || "production",
+    species: row.species || "",
+    product_type: row.productType || row.product_type || "eggs",
+    unit: row.unit || "",
+    unit_price: String(row.unitPrice ?? row.unit_price ?? ""),
+    notes: row.notes || "",
+  });
+  const remove = async (row) => {
+    if (!window.confirm(lang === "fr" ? "Supprimer ce prix ?" : "Delete this price?")) return;
+    await api.deletePrice(row.id);
+    load();
+  };
+
+  return (
+    <section className="card" style={{ marginTop: 20, maxWidth: 980, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div>
+        <div className="overline">{lang === "fr" ? "Prix de vente POS" : "POS sale prices"}</div>
+        <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
+          {lang === "fr" ? "Ces prix remplissent automatiquement le POS." : "These prices auto-fill the POS."}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr .8fr .8fr auto", gap: 8, alignItems: "end" }}>
+        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Produit" : "Product"}
+          <select className="input" value={form.product_type} onChange={(e) => chooseProduct(e.target.value)} style={{ width: "100%", marginTop: 4 }}>
+            {PRICE_PRODUCT_OPTIONS.map((o) => <option key={o.product_type} value={o.product_type}>{lang === "fr" ? o.fr : o.en}</option>)}
+          </select>
+        </label>
+        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Espece" : "Species"}
+          <select className="input" value={form.species} onChange={(e) => set("species", e.target.value)} style={{ width: "100%", marginTop: 4 }}>
+            <option value="">{lang === "fr" ? "Generique" : "Generic"}</option>
+            {SPECIES.map((s) => <option key={s.id} value={s.id}>{lang === "fr" ? s.fr : s.en}</option>)}
+          </select>
+        </label>
+        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Unite" : "Unit"}
+          <input className="input" value={form.unit} onChange={(e) => set("unit", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+        </label>
+        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix" : "Price"}
+          <input className="input" type="number" min="0" step="0.01" value={form.unit_price} onChange={(e) => set("unit_price", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+        </label>
+        <button className="btn btn-primary" disabled={saving} onClick={save}>
+          <Icon name="check" size={13} color="currentColor"/>
+          {form.id ? (lang === "fr" ? "Modifier" : "Update") : (lang === "fr" ? "Ajouter" : "Add")}
+        </button>
+      </div>
+      {message && <div style={{ fontSize: 12, color: message.type === "err" ? "var(--rust-700)" : "var(--solidite-700)" }}>{message.text}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+        {prices.map((row) => {
+          const product = row.productType || row.product_type;
+          const sp = row.species ? speciesById(row.species) : null;
+          return (
+            <div key={row.id} style={{ border: "1px solid var(--border-1)", borderRadius: 8, padding: 10, display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{saleProductLabel(product, lang)}{sp ? ` - ${lang === "fr" ? sp.fr : sp.en}` : ""}</div>
+                <div className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>{Number(row.unitPrice ?? row.unit_price ?? 0).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $ / {row.unit || "-"}</div>
+              </div>
+              <button className="btn btn-sm" onClick={() => edit(row)}><Icon name="edit" size={12} color="currentColor"/></button>
+              <button className="btn btn-sm btn-ghost" onClick={() => remove(row)}><Icon name="trash" size={12} color="var(--oxblood-700)"/></button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesFilter, onSpeciesFilter }) => {
   const [selected, setSelected] = React.useState(enabledSpecies && enabledSpecies.length ? enabledSpecies : SPECIES.map((s) => s.id));
   const [saving, setSaving] = React.useState(false);
@@ -2174,6 +2323,7 @@ const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesF
         </div>
       </section>
       <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
+      <PriceListSettings lang={lang}/>
     </div>
   );
 };

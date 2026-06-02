@@ -39,6 +39,7 @@ import {
   UpdateMedicineDto,
   UpdateSemenStrawDto,
   UpdateTreatmentDto,
+  UpsertFarmosPriceDto,
 } from "./dto/farmos.dto";
 import { FarmosService } from "./farmos.service";
 
@@ -55,6 +56,7 @@ const FARMOS_REALTIME_TABLES = [
   "vetExams",
   "mortalityEvents",
   "lookups",
+  "priceList",
   "staff",
   "semenStraws",
 ];
@@ -85,6 +87,34 @@ export class FarmosController {
   @Put("settings/species")
   updateSpeciesSettings(@CurrentOrg() orgId: number, @Body() body: UpdateFarmosSpeciesSettingsDto) {
     return this.farmos.updateSpeciesSettings(orgId, body.enabled_species);
+  }
+
+  @ApiOperation({ summary: "List FarmOS POS price list." })
+  @Permissions("readAll-farmos")
+  @Get("prices")
+  listPrices(@CurrentOrg() orgId: number) {
+    return this.farmos.listPrices(orgId);
+  }
+
+  @ApiOperation({ summary: "Create FarmOS POS price." })
+  @Permissions("update-farmos")
+  @Post("prices")
+  createPrice(@CurrentOrg() orgId: number, @Body() body: UpsertFarmosPriceDto) {
+    return this.farmos.createPrice(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update FarmOS POS price." })
+  @Permissions("update-farmos")
+  @Put("prices/:id")
+  updatePrice(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Body() body: UpsertFarmosPriceDto) {
+    return this.farmos.updatePrice(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete FarmOS POS price." })
+  @Permissions("update-farmos")
+  @Delete("prices/:id")
+  deletePrice(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deletePrice(id, orgId);
   }
 
   @ApiOperation({ summary: "Fallback realtime version for FarmOS clients when SSE is unavailable." })

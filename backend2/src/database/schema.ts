@@ -1127,6 +1127,21 @@ export const farmosSales = mysqlTable("farmos_sales", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+export const farmosPriceList = mysqlTable("farmos_price_list", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  saleSource: varchar("sale_source", { length: 30 }).default("production").notNull(),
+  species: varchar("species", { length: 50 }),
+  productType: varchar("product_type", { length: 50 }).notNull(),
+  unit: varchar("unit", { length: 30 }),
+  unitPrice: decimal("unit_price", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosExpenses = mysqlTable("farmos_expenses", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
