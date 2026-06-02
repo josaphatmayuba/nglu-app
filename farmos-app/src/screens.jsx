@@ -2280,7 +2280,7 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
         {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
           <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving || !configuredPrice}>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !unit || !unitPrice}>
             <Icon name="check" size={13} color="currentColor"/>
             {saving ? "..." : (lang === "fr" ? "Mettre en vente" : "List for sale")}
           </button>
