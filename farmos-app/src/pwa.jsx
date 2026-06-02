@@ -9,11 +9,18 @@ export function PwaUpdateBanner({ lang = "fr" }) {
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker,
   } = useRegisterSW({
+    immediate: true,
     onRegisteredSW(swUrl, reg) {
       // Vérifie une nouvelle version toutes les heures.
-      if (reg) setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+      if (!reg) return;
+      reg.update().catch(() => {});
+      setInterval(() => reg.update().catch(() => {}), 60 * 1000);
     },
   });
+
+  React.useEffect(() => {
+    if (needRefresh) updateServiceWorker(true);
+  }, [needRefresh, updateServiceWorker]);
 
   const close = () => { setNeedRefresh(false); setOfflineReady(false); };
 
