@@ -1245,11 +1245,11 @@ function animalListingNote(animalId) {
 }
 
 function findLinkedAnimalListingPrice(prices, animalId) {
-  return (prices || []).find((p) => {
+  return (prices || []).filter((p) => {
     const saleSource = p.saleSource || p.sale_source || "production";
     const productType = p.productType || p.product_type;
     return saleSource === "animal" && productType === "animal" && String(p.notes || "").includes(animalListingNote(animalId));
-  });
+  }).sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0] || null;
 }
 
 function findAnimalListingPrice(prices, item) {
@@ -2404,9 +2404,18 @@ function SaleInventorySettings({ lang, speciesFilter }) {
           </div>
         </div>
         {item.source === "animal" && (
-          <button className="btn btn-sm" disabled={busyId === item.animalId} onClick={() => removeFromSale(item)}>
-            {busyId === item.animalId ? "..." : (lang === "fr" ? "Retirer" : "Remove")}
-          </button>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button className="btn btn-sm" onClick={() => {
+              const animal = animals.find((a) => a.id === item.animalId);
+              if (animal) setListingAnimal(animal);
+            }}>
+              <Icon name="edit" size={12} color="currentColor"/>
+              {lang === "fr" ? "Modifier prix" : "Edit price"}
+            </button>
+            <button className="btn btn-sm" disabled={busyId === item.animalId} onClick={() => removeFromSale(item)}>
+              {busyId === item.animalId ? "..." : (lang === "fr" ? "Retirer" : "Remove")}
+            </button>
+          </div>
         )}
       </div>
     );
