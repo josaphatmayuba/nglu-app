@@ -1436,7 +1436,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [modalItem, setModalItem] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
-  const refresh = useDataRefresh(["animals", "productionLogs", "sales"]);
+  const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
 
   React.useEffect(() => {
     let cancel = false;
@@ -2235,10 +2235,9 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
         unit_price: price,
         notes: listingNote,
       };
-      if (linkedPrice?.id) await api.updatePrice(linkedPrice.id, payload);
-      else await api.createPrice(payload);
+      const savedPrice = linkedPrice?.id ? await api.updatePrice(linkedPrice.id, payload) : await api.createPrice(payload);
       await api.updateAnimal(animal.id, { status: "available_sale" });
-      onSaved && onSaved();
+      onSaved && onSaved(savedPrice);
     } catch (e) {
       setError(e.message || "Erreur");
     } finally {
@@ -2353,9 +2352,12 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   });
   const visibleCandidates = candidates.slice(0, candidateLimit);
 
-  const handleListingSaved = () => {
+  const handleListingSaved = (savedPrice) => {
     if (listingAnimal?.id) {
       setAnimals((prev) => prev.map((a) => (a.id === listingAnimal.id ? { ...a, status: "available_sale" } : a)));
+    }
+    if (savedPrice?.id) {
+      setPrices((prev) => [savedPrice, ...prev.filter((p) => p.id !== savedPrice.id)]);
     }
     setListingAnimal(null);
     window.dispatchEvent(new CustomEvent("farmos:animal-created"));
