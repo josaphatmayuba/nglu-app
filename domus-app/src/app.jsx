@@ -6,6 +6,7 @@ import {
 import { useAuthToken, clearToken } from "./auth.jsx";
 import { Dashboard } from "./screens/dashboard.jsx";
 import { Biens } from "./screens/biens.jsx";
+import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
 
 // Navigation : organisée en sections (bureau). `daily` = items de la bottom-nav mobile.
@@ -42,8 +43,8 @@ const SCREENS = {
   baux: () => <Placeholder title="Baux" story="SCRUM-247" />,
   contrats: () => <Placeholder title="Contrats & signature" story="SCRUM-247" />,
   onboarding: () => <Placeholder title="Onboarding locataire" story="SCRUM-246" />,
-  loyers: () => <Placeholder title="Loyers & paiements" story="SCRUM-248" />,
-  paiement: () => <Placeholder title="Paiement & quittance" story="SCRUM-248" />,
+  loyers: (nav) => <Loyers go={nav} />,
+  paiement: (nav) => <Paiement go={nav} />,
   maintenance: () => <Placeholder title="Maintenance" story="SCRUM-263" />,
   portail: () => <Placeholder title="Espace locataire" story="SCRUM-249" />,
   reglages: () => <Placeholder title="Réglages" story="SCRUM-250" />,
