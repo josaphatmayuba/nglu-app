@@ -893,7 +893,10 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
     window.addEventListener("farmos:production-created", onCreated);
     return () => window.removeEventListener("farmos:production-created", onCreated);
   }, []);
-  const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(l.logDate || l.log_date, dateRange));
+  const productTypeOf = (l) => l.productType || l.product_type || "";
+  const logDateOf = (l) => l.logDate || l.log_date || "";
+  const animalIdOf = (l) => l.animalId ?? l.animal_id ?? "all";
+  const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(logDateOf(l), dateRange));
   const filteredLogs = periodLogs.slice(0, 12);
   const visibleSpecies = enabledSpecies && enabledSpecies.length ? SPECIES.filter((s) => enabledSpecies.includes(s.id)) : SPECIES;
   const productTypesForSpecies = (s) => {
@@ -902,11 +905,11 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   };
   const deriveSpeciesProduction = (s) => {
     const wanted = productTypesForSpecies(s);
-    const rows = periodLogs.filter((l) => l.species === s.id && wanted.includes(l.productType || l.product_type));
+    const rows = periodLogs.filter((l) => l.species === s.id && wanted.includes(productTypeOf(l)));
     const sourceRows = rows.length ? rows : periodLogs.filter((l) => l.species === s.id);
     const byDate = new Map();
     sourceRows.forEach((l) => {
-      const d = String(l.logDate || l.log_date || "").slice(0, 10) || "—";
+      const d = String(logDateOf(l) || "").slice(0, 10) || "—";
       byDate.set(d, (byDate.get(d) || 0) + Number(l.quantity || 0));
     });
     const values = Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-12);
@@ -915,7 +918,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
     const lastUnit = [...sourceRows].reverse().find((l) => l.unit)?.unit || "";
     return {
       total,
-      unit: lastUnit || (total > 0 ? s.productUnit : ""),
+      unit: lastUnit,
       trend,
       hasData: sourceRows.length > 0,
       delta: trend.length > 1 && trend[0] > 0 ? ((trend[trend.length - 1] - trend[0]) / trend[0]) * 100 : null,
@@ -937,17 +940,15 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
 
   // KPIs production : agrégats live des production_logs (date la plus récente
   // disponible). Pas de delta (pas d'historique mois-1 facile à comparer ici).
-  const sumProduct = (productType) => periodLogs
-    .filter((l) => {
-      return (l.productType || l.product_type) === productType;
-    })
+  const sumProduct = (productType, speciesId) => periodLogs
+    .filter((l) => productTypeOf(l) === productType && (!speciesId || l.species === speciesId))
     .reduce((s, l) => s + Number(l.quantity || 0), 0);
   // Lait: somme du jour (AM+PM) ou hier si rien aujourd'hui.
-  const milkToday = sumProduct("milk");
+  const milkToday = sumProduct("milk", "cow");
   // Œufs idem
-  const eggsToday = sumProduct("eggs");
+  const eggsToday = sumProduct("eggs", "chicken");
   // GMQ porcs (g/j): moyenne des derniers logs growth/weight pour porc.
-  const growthLogs = periodLogs.filter((l) => (l.productType === "growth" || l.productType === "weight") && l.species === "pig").slice(0, 20);
+  const growthLogs = periodLogs.filter((l) => ["growth", "weight"].includes(productTypeOf(l)) && l.species === "pig").slice(0, 20);
   const gmqAvg = growthLogs.length
     ? Math.round(growthLogs.reduce((s, l) => s + Number(l.quantity || 0), 0) / growthLogs.length)
     : 0;
@@ -955,11 +956,11 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   const fishBiomass = (() => {
     const byPond = new Map();
     periodLogs
-      .filter((l) => l.species === "fish" && l.productType === "biomass")
+      .filter((l) => l.species === "fish" && productTypeOf(l) === "biomass")
       .forEach((l) => {
-        const key = l.animalId ?? "all";
+        const key = animalIdOf(l);
         const prev = byPond.get(key);
-        const d = l.logDate || l.log_date;
+        const d = logDateOf(l);
         if (!prev || (d && String(d) > String(prev.d || ""))) byPond.set(key, { qty: Number(l.quantity || 0), d });
       });
     return Array.from(byPond.values()).reduce((s, x) => s + x.qty, 0);
@@ -994,7 +995,6 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
           const production = deriveSpeciesProduction(s);
           const score = deriveSpeciesScore(s, production);
           const liveCount = live.animals.filter((a) => a.species === s.id).reduce((sum, a) => sum + (Number(a.count) > 0 ? Number(a.count) : 1), 0);
-          const displayCount = live.animals.length ? liveCount : s.count;
           return (
           <div key={s.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1003,7 +1003,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? s.fr : s.en}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{displayCount.toLocaleString("fr-CA")} {s.countingUnit}</div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{liveCount.toLocaleString("fr-CA")} {s.countingUnit}</div>
               </div>
               <FarmScore {...score} size="sm"/>
             </div>
