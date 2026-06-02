@@ -529,6 +529,9 @@ export class FarmosService {
 
   async createSale(input: CreateSaleDto, orgId: number) {
     const animal = input.animal_id ? await this.getAnimal(input.animal_id, orgId) : null;
+    if (!animal) {
+      await this.assertProductionSaleAvailable(input, orgId);
+    }
     const [res] = await this.db.insert(farmosSales).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
@@ -569,6 +572,52 @@ export class FarmosService {
       .update(farmosAnimals)
       .set({ count: currentCount > 0 ? 0 : animal.count, status: "sold" })
       .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+  }
+
+  private async assertProductionSaleAvailable(input: CreateSaleDto, orgId: number) {
+    const productType = input.product_type;
+    if (!productType || !["eggs", "milk", "meat", "wool", "fish"].includes(productType)) return;
+
+    const targetUnit = this.normalizeSaleUnit(input.unit);
+    const qty = Number(input.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    const logConditions = [
+      eq(farmosProductionLogs.organizationId, orgId),
+      eq(farmosProductionLogs.isActive, 1),
+      eq(farmosProductionLogs.productType, productType),
+    ];
+    if (input.species) logConditions.push(eq(farmosProductionLogs.species, input.species));
+
+    const saleConditions = [
+      eq(farmosSales.organizationId, orgId),
+      eq(farmosSales.isActive, 1),
+      eq(farmosSales.productType, productType),
+      isNull(farmosSales.animalId),
+    ];
+    if (input.species) saleConditions.push(eq(farmosSales.species, input.species));
+
+    const [logs, sales] = await Promise.all([
+      this.db.select({ quantity: farmosProductionLogs.quantity, unit: farmosProductionLogs.unit }).from(farmosProductionLogs).where(and(...logConditions)),
+      this.db.select({ quantity: farmosSales.quantity, unit: farmosSales.unit }).from(farmosSales).where(and(...saleConditions)),
+    ]);
+
+    const matchesUnit = (unit: string | null | undefined) => !targetUnit || this.normalizeSaleUnit(unit) === targetUnit;
+    const produced = logs.filter((row) => matchesUnit(row.unit)).reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const sold = sales.filter((row) => matchesUnit(row.unit)).reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const available = Math.max(0, produced - sold);
+
+    if (qty > available) {
+      throw new BadRequestException(`Quantite disponible insuffisante. Disponible: ${available}.`);
+    }
+  }
+
+  private normalizeSaleUnit(unit: string | null | undefined) {
+    return String(unit || "")
+      .trim()
+      .toLowerCase()
+      .replaceAll("œ", "oe")
+      .replaceAll("å“", "oe");
   }
 
   async deleteSale(id: number, orgId: number) {

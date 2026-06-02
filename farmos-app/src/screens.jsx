@@ -1163,19 +1163,28 @@ function saleProductLabel(productType, lang) {
   return row ? row[lang] : productType || (lang === "fr" ? "Produit" : "Product");
 }
 
+function normalizeSaleUnit(unit) {
+  return String(unit || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("œ", "oe")
+    .replaceAll("å“", "oe");
+}
+
 function saleUnitFor(productType, fallback) {
   return fallback || SALE_PRODUCT_LABELS[productType]?.unit || "";
 }
 
-function buildPosProductionItems(logs, speciesFilter) {
+function buildPosProductionItems(logs, sales, speciesFilter) {
   const groups = new Map();
+  const keyFor = (species, productType, unit) => `${species || "all"}:${productType}:${normalizeSaleUnit(unit)}`;
   (logs || []).forEach((log) => {
     const species = log.species;
     const productType = log.productType || log.product_type;
     if (!SELLABLE_PRODUCTION_TYPES.has(productType)) return;
     if (speciesFilter && species !== speciesFilter) return;
     const unit = saleUnitFor(productType, log.unit);
-    const key = `${species || "all"}:${productType}:${unit}`;
+    const key = keyFor(species, productType, unit);
     const qty = Number(log.quantity || 0);
     if (!Number.isFinite(qty) || qty <= 0) return;
     const current = groups.get(key) || {
@@ -1193,7 +1202,22 @@ function buildPosProductionItems(logs, speciesFilter) {
     if (d > current.latestDate) current.latestDate = d;
     groups.set(key, current);
   });
-  return Array.from(groups.values()).sort((a, b) => String(b.latestDate).localeCompare(String(a.latestDate)));
+  (sales || []).forEach((sale) => {
+    const productType = sale.productType || sale.product_type;
+    if (!SELLABLE_PRODUCTION_TYPES.has(productType)) return;
+    const species = sale.species;
+    if (speciesFilter && species !== speciesFilter) return;
+    const unit = saleUnitFor(productType, sale.unit);
+    const key = keyFor(species, productType, unit);
+    const current = groups.get(key);
+    if (!current) return;
+    const qty = Number(sale.quantity || 0);
+    if (Number.isFinite(qty) && qty > 0) current.available -= qty;
+  });
+  return Array.from(groups.values())
+    .map((item) => ({ ...item, available: Math.max(0, item.available) }))
+    .filter((item) => item.available > 0)
+    .sort((a, b) => String(b.latestDate).localeCompare(String(a.latestDate)));
 }
 
 function PosSaleModal({ lang, item, onClose, onSaved }) {
@@ -1298,6 +1322,7 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
 const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const [animals, setAnimals] = React.useState([]);
   const [logs, setLogs] = React.useState([]);
+  const [sales, setSales] = React.useState([]);
   const [query, setQuery] = React.useState("");
   const [modalItem, setModalItem] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
@@ -1306,11 +1331,12 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
 
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listAnimals(), api.listProductionLogs()])
-      .then(([a, p]) => {
+    Promise.all([api.listAnimals(), api.listProductionLogs(), api.listSales()])
+      .then(([a, p, s]) => {
         if (cancel) return;
         setAnimals(Array.isArray(a) ? a : []);
         setLogs(Array.isArray(p) ? p : []);
+        setSales(Array.isArray(s) ? s : []);
       })
       .catch((e) => console.warn("POS load failed:", e.message));
     return () => { cancel = true; };
@@ -1347,7 +1373,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
     unit: "tete",
   }));
 
-  const productionRows = buildPosProductionItems(logs, speciesFilter)
+  const productionRows = buildPosProductionItems(logs, sales, speciesFilter)
     .filter((it) => {
       if (!q) return true;
       return [it.species, it.productType, it.unit].filter(Boolean).join(" ").toLowerCase().includes(q);
