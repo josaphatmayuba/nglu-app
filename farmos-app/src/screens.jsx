@@ -761,6 +761,17 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const ai90 = filteredEvents.filter((g) => /insemin|ai|saill/i.test(String(g.ai || g.eventType || "")) && inWindow(g.start, 90));
   const ok90 = ai90.filter((g) => g.complete || /success|confirmed|pregnant/i.test(String(g.outcome || ""))).length;
   const fertilityRate = ai90.length > 0 ? Math.round((ok90 / ai90.length) * 100) : null;
+  const heatChartData = Array.from({ length: 14 }, (_, i) => {
+    const daysAgo = 13 - i;
+    const d = new Date(now - daysAgo * DAY).toISOString().slice(0, 10);
+    const count = allGestations.filter((g) =>
+      (!speciesFilter || g.species === speciesFilter) &&
+      g.start === d &&
+      /heat|chaleur/i.test(String(g.ai || g.eventType || ""))
+    ).length;
+    return { daysAgo, count };
+  });
+  const heatChartMax = Math.max(1, ...heatChartData.map((x) => x.count));
 
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
@@ -850,13 +861,13 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       <div className="card">
         <div className="bilang" style={{ marginBottom: 12 }}>
           <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Détection des chaleurs · 14 jours" : "Heat detection · 14 days"}</h3>
-          <span className="sec">{lang === "fr" ? "podomètres + IA" : "pedometers + AI"}</span>
+          <span className="sec">{lang === "fr" ? "événements enregistrés" : "recorded events"}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4, alignItems: "end", height: 100 }}>
-          {[2, 3, 2, 4, 5, 3, 4, 6, 5, 7, 8, 6, 5, 4].map((v, i) => (
+          {heatChartData.map((v, i) => (
             <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-              <div style={{ width: "100%", height: `${v * 10}px`, background: i >= 11 ? "var(--oxblood-700)" : "var(--pertinence-500)", borderRadius: "2px 2px 0 0" }}/>
-              <span className="mono" style={{ fontSize: 9, color: "var(--fg-3)" }}>{13 - i}</span>
+              <div title={`${v.count}`} style={{ width: "100%", height: `${v.count > 0 ? Math.max(4, (v.count / heatChartMax) * 86) : 0}px`, background: i >= 11 ? "var(--oxblood-700)" : "var(--pertinence-500)", borderRadius: "2px 2px 0 0" }}/>
+              <span className="mono" style={{ fontSize: 9, color: "var(--fg-3)" }}>{v.daysAgo}</span>
             </div>
           ))}
         </div>
