@@ -1322,7 +1322,8 @@ function matchesSaleQuery(item, query) {
 function PosSaleModal({ lang, item, onClose, onSaved }) {
   const today = new Date().toISOString().slice(0, 10);
   const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(Math.min(1, item.available || 1)) : "");
-  const [unitPrice, setUnitPrice] = React.useState(item?.unitPrice ? String(item.unitPrice) : "");
+  const configuredPrice = item?.unitPrice !== "" && item?.unitPrice != null && Number.isFinite(Number(item.unitPrice));
+  const [unitPrice] = React.useState(configuredPrice ? String(item.unitPrice) : "");
   const [buyer, setBuyer] = React.useState("");
   const [saleDate, setSaleDate] = React.useState(today);
   const [notes, setNotes] = React.useState("");
@@ -1336,6 +1337,10 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
   const sp = speciesById(item.species);
 
   const save = async () => {
+    if (!configuredPrice) {
+      setError(lang === "fr" ? "Prix non configure. Va dans Gestion de vente pour fixer le prix avant de vendre." : "Price is not configured. Set it in Sales management before selling.");
+      return;
+    }
     if (!qty || qty <= 0 || !price || price < 0) {
       setError(lang === "fr" ? "Quantite et prix requis." : "Quantity and price required.");
       return;
@@ -1388,8 +1393,10 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Quantite" : "Quantity"}
             <input className="input" type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
           </label>
-          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire" : "Unit price"}
-            <input className="input" type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire configure" : "Configured unit price"}
+            <input className="input" type="number" value={unitPrice} readOnly disabled
+              placeholder={lang === "fr" ? "A configurer dans Gestion de vente" : "Configure in Sales management"}
+              style={{ width: "100%", marginTop: 4, background: "var(--bg-sunken)", color: configuredPrice ? "var(--ink-950)" : "var(--rust-700)" }}/>
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Acheteur" : "Buyer"}
             <input className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
@@ -2274,7 +2281,7 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
         {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
           <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !configuredPrice}>
             <Icon name="check" size={13} color="currentColor"/>
             {saving ? "..." : (lang === "fr" ? "Mettre en vente" : "List for sale")}
           </button>
