@@ -868,13 +868,23 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 // ─── PRODUCTION ──────────────────────────────────────────────────────────
 const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const [logs, setLogs] = React.useState([]);
+  const [live, setLive] = React.useState({ animals: [], treatments: [], sales: [], expenses: [] });
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("7d"));
-  const refresh = useDataRefresh(["productionLogs"]);
+  const refresh = useDataRefresh(["animals", "productionLogs", "sales", "expenses", "treatments"]);
   React.useEffect(() => {
     let cancel = false;
-    api.listProductionLogs()
-      .then((rows) => { if (!cancel && Array.isArray(rows)) setLogs(rows); })
+    Promise.all([api.listProductionLogs(), api.getDashboardSnapshot()])
+      .then(([rows, snapshot]) => {
+        if (cancel) return;
+        setLogs(Array.isArray(rows) ? rows : []);
+        setLive({
+          animals: Array.isArray(snapshot?.animals) ? snapshot.animals : [],
+          treatments: Array.isArray(snapshot?.treatments) ? snapshot.treatments : [],
+          sales: Array.isArray(snapshot?.sales) ? snapshot.sales : [],
+          expenses: Array.isArray(snapshot?.expenses) ? snapshot.expenses : [],
+        });
+      })
       .catch(() => {});
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
@@ -886,6 +896,44 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   const periodLogs = logs.filter((l) => (!speciesFilter || l.species === speciesFilter) && inDateRange(l.logDate || l.log_date, dateRange));
   const filteredLogs = periodLogs.slice(0, 12);
   const visibleSpecies = enabledSpecies && enabledSpecies.length ? SPECIES.filter((s) => enabledSpecies.includes(s.id)) : SPECIES;
+  const productTypesForSpecies = (s) => {
+    if (s.productPrimary === "growth") return s.id === "fish" ? ["biomass", "fish", "growth", "weight"] : ["growth", "weight"];
+    return [s.productPrimary];
+  };
+  const deriveSpeciesProduction = (s) => {
+    const wanted = productTypesForSpecies(s);
+    const rows = periodLogs.filter((l) => l.species === s.id && wanted.includes(l.productType || l.product_type));
+    const sourceRows = rows.length ? rows : periodLogs.filter((l) => l.species === s.id);
+    const byDate = new Map();
+    sourceRows.forEach((l) => {
+      const d = String(l.logDate || l.log_date || "").slice(0, 10) || "—";
+      byDate.set(d, (byDate.get(d) || 0) + Number(l.quantity || 0));
+    });
+    const values = Array.from(byDate.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v).slice(-12);
+    const trend = values.length ? values : [0, 0, 0, 0, 0, 0];
+    const total = sourceRows.reduce((sum, l) => sum + Number(l.quantity || 0), 0);
+    const lastUnit = [...sourceRows].reverse().find((l) => l.unit)?.unit || "";
+    return {
+      total,
+      unit: lastUnit || (total > 0 ? s.productUnit : ""),
+      trend,
+      hasData: sourceRows.length > 0,
+      delta: trend.length > 1 && trend[0] > 0 ? ((trend[trend.length - 1] - trend[0]) / trend[0]) * 100 : null,
+    };
+  };
+  const deriveSpeciesScore = (s, production) => {
+    const animals = live.animals.filter((a) => a.species === s.id);
+    const total = animals.length || 1;
+    const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+    const sante = animals.length ? Math.max(0, Math.round(((total - sick) / total) * 100)) : 0;
+    const prod = production.hasData ? Math.max(0, Math.min(100, Math.round(60 + Math.min(40, production.trend.filter((v) => v > 0).length * 6)))) : 0;
+    const sales = live.sales.filter((x) => x.species === s.id && inDateRange(x.saleDate || x.sale_date, dateRange));
+    const expenses = live.expenses.filter((x) => (x.species === s.id || !x.species) && inDateRange(x.expenseDate || x.expense_date, dateRange));
+    const rev = sales.reduce((sum, x) => sum + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
+    const exp = expenses.reduce((sum, x) => sum + Number(x.amount || 0), 0);
+    const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 0;
+    return { sante, prod, finance };
+  };
 
   // KPIs production : agrégats live des production_logs (date la plus récente
   // disponible). Pas de delta (pas d'historique mois-1 facile à comparer ici).
@@ -942,7 +990,12 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
 
       {/* Per-species production cards */}
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
-        {visibleSpecies.filter(s => !speciesFilter || s.id === speciesFilter).slice(0, 6).map((s) => (
+        {visibleSpecies.filter(s => !speciesFilter || s.id === speciesFilter).slice(0, 6).map((s) => {
+          const production = deriveSpeciesProduction(s);
+          const score = deriveSpeciesScore(s, production);
+          const liveCount = live.animals.filter((a) => a.species === s.id).reduce((sum, a) => sum + (Number(a.count) > 0 ? Number(a.count) : 1), 0);
+          const displayCount = live.animals.length ? liveCount : s.count;
+          return (
           <div key={s.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: s.accentBg, color: s.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -950,18 +1003,22 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? s.fr : s.en}</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{s.count.toLocaleString("fr-CA")} {s.countingUnit}</div>
+                <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{displayCount.toLocaleString("fr-CA")} {s.countingUnit}</div>
               </div>
-              <FarmScore sante={84} prod={92} finance={78} size="sm"/>
+              <FarmScore {...score} size="sm"/>
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span className="serif tnum" style={{ fontSize: 30, fontWeight: 500, color: "var(--ink-950)", letterSpacing: "-0.02em" }}>{s.productValue}</span>
-              <span className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>{s.productUnit}</span>
-              <span className="mono" style={{ fontSize: 11, color: "var(--solidite-700)", marginLeft: "auto" }}>+{((s.productTrend[s.productTrend.length-1] - s.productTrend[0]) / s.productTrend[0] * 100).toFixed(1)}%</span>
+              <span className="serif tnum" style={{ fontSize: 30, fontWeight: 500, color: "var(--ink-950)", letterSpacing: "-0.02em" }}>{production.hasData ? fmt(Math.round(production.total)) : "—"}</span>
+              <span className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>{production.unit || (lang === "fr" ? "aucune donnée" : "no data")}</span>
+              {production.delta != null && (
+                <span className="mono" style={{ fontSize: 11, color: production.delta >= 0 ? "var(--solidite-700)" : "var(--rust-700)", marginLeft: "auto" }}>
+                  {production.delta >= 0 ? "+" : ""}{production.delta.toFixed(1)}%
+                </span>
+              )}
             </div>
-            <Sparkline data={s.productTrend} color={s.accent} height={48}/>
+            <Sparkline data={production.trend} color={s.accent} height={48}/>
           </div>
-        ))}
+        );})}
       </div>
 
       {filteredLogs.length > 0 && (
