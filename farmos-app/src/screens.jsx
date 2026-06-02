@@ -1240,6 +1240,28 @@ function findPosPrice(prices, item) {
     || null;
 }
 
+function animalListingNote(animalId) {
+  return `animal:${animalId}`;
+}
+
+function findLinkedAnimalListingPrice(prices, animalId) {
+  return (prices || []).find((p) => {
+    const saleSource = p.saleSource || p.sale_source || "production";
+    const productType = p.productType || p.product_type;
+    return saleSource === "animal" && productType === "animal" && String(p.notes || "").includes(animalListingNote(animalId));
+  });
+}
+
+function findAnimalListingPrice(prices, item) {
+  const linked = findLinkedAnimalListingPrice(prices, item.animalId);
+  if (linked) return linked;
+  return (prices || []).find((p) => {
+    const saleSource = p.saleSource || p.sale_source || "production";
+    const productType = p.productType || p.product_type;
+    return saleSource === "animal" && productType === "animal" && p.species === item.species && !String(p.notes || "").includes("animal:");
+  }) || null;
+}
+
 function buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang }) {
   const animalRows = (animals || []).filter((a) => {
     const status = String(a.status || "").toLowerCase();
@@ -1256,12 +1278,13 @@ function buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang }) {
       productType: "animal",
       title: a.name || a.externalId || a.external_id || a.lot || `#${a.id}`,
       subtitle: [a.lot, a.race, a.barn].filter(Boolean).join(" - "),
-      available: Number(a.count) > 0 ? Number(a.count) : 1,
       unit: "tete",
       speciesLabel: sp ? (lang === "fr" ? sp.fr : sp.en) : a.species,
     };
-    const price = findPosPrice(prices, item);
-    return { ...item, unitPrice: price ? priceValue(price) : "" };
+    const price = findAnimalListingPrice(prices, item);
+    const unit = price?.unit || "tete";
+    const available = normalizeSaleUnit(unit) === "lot" ? 1 : (Number(a.count) > 0 ? Number(a.count) : 1);
+    return { ...item, unit, available, unitPrice: price ? priceValue(price) : "" };
   });
 
   const productionRows = buildPosProductionItems(logs, sales, speciesFilter)
@@ -2160,6 +2183,107 @@ const PRICE_PRODUCT_OPTIONS = [
   { product_type: "animal", sale_source: "animal", unit: "tete", fr: "Animal / lot", en: "Animal / batch" },
 ];
 
+function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
+  const linkedPrice = React.useMemo(() => animal ? findLinkedAnimalListingPrice(prices, animal.id) : null, [animal, prices]);
+  const defaultPrice = React.useMemo(() => {
+    if (!animal) return null;
+    return findAnimalListingPrice(prices, {
+      animalId: animal.id,
+      species: animal.species,
+      productType: "animal",
+      source: "animal",
+      unit: "tete",
+    });
+  }, [animal, prices]);
+  const [unit, setUnit] = React.useState((linkedPrice || defaultPrice)?.unit || (Number(animal?.count || 0) > 1 ? "tete" : "tete"));
+  const [unitPrice, setUnitPrice] = React.useState((linkedPrice || defaultPrice) ? String(priceValue(linkedPrice || defaultPrice)) : "");
+  const [notes, setNotes] = React.useState(linkedPrice?.notes ? String(linkedPrice.notes).replace(animalListingNote(animal?.id), "").replace(/^ · /, "") : "");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  if (!animal) return null;
+  const sp = speciesById(animal.species);
+  const title = animal.name || animal.externalId || animal.external_id || animal.lot || `#${animal.id}`;
+  const listingNote = [animalListingNote(animal.id), notes.trim()].filter(Boolean).join(" · ");
+  const unitOptions = [
+    { id: "tete", fr: "Par tete", en: "Per head" },
+    { id: "lot", fr: "Par lot complet", en: "Whole batch" },
+    { id: "kg", fr: "Par kg", en: "Per kg" },
+    { id: "unite", fr: "Par unite", en: "Per unit" },
+  ];
+
+  const save = async () => {
+    const price = Number(unitPrice);
+    if (!unit || !Number.isFinite(price) || price < 0) {
+      setError(lang === "fr" ? "Methode et prix unitaire requis." : "Method and unit price required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        sale_source: "animal",
+        species: animal.species || null,
+        product_type: "animal",
+        unit,
+        unit_price: price,
+        notes: listingNote,
+      };
+      if (linkedPrice?.id) await api.updatePrice(linkedPrice.id, payload);
+      else await api.createPrice(payload);
+      await api.updateAnimal(animal.id, { status: "available_sale" });
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: sp?.accentBg || "var(--ink-50)", color: sp?.accent || "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {sp ? <AnimalGlyph kind={sp.glyph} size={20} color="currentColor"/> : <Icon name="cart" size={18} color="currentColor"/>}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{lang === "fr" ? "Configurer la mise en vente" : "Configure listing"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Methode de vente" : "Sale method"}
+            <select className="input" value={unit} onChange={(e) => setUnit(e.target.value)} style={{ width: "100%", marginTop: 4 }}>
+              {unitOptions.map((o) => <option key={o.id} value={o.id}>{lang === "fr" ? o.fr : o.en}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire" : "Unit price"}
+            <input className="input" type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)", gridColumn: "1 / -1" }}>{lang === "fr" ? "Notes de vente" : "Sale notes"}
+            <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%", marginTop: 4, minHeight: 70, resize: "vertical" }}/>
+          </label>
+        </div>
+
+        <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: "var(--bg-sunken)", fontSize: 12, color: "var(--fg-2)" }}>
+          {lang === "fr"
+            ? "Cette configuration sera utilisee automatiquement par la caisse POS pour cet animal ou ce lot."
+            : "This configuration will be used automatically by the POS register for this animal or batch."}
+        </div>
+        {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button className="btn" onClick={onClose} disabled={saving}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            <Icon name="check" size={13} color="currentColor"/>
+            {saving ? "..." : (lang === "fr" ? "Mettre en vente" : "List for sale")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SaleInventorySettings({ lang, speciesFilter }) {
   const [animals, setAnimals] = React.useState([]);
   const [logs, setLogs] = React.useState([]);
@@ -2170,6 +2294,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   const [availableLimit, setAvailableLimit] = React.useState(24);
   const [candidateLimit, setCandidateLimit] = React.useState(24);
   const [busyId, setBusyId] = React.useState(null);
+  const [listingAnimal, setListingAnimal] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
 
@@ -2221,18 +2346,13 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   });
   const visibleCandidates = candidates.slice(0, candidateLimit);
 
-  const markForSale = async (animal) => {
-    setBusyId(animal.id);
-    try {
-      await api.updateAnimal(animal.id, { status: "available_sale" });
-      setAnimals((prev) => prev.map((a) => (a.id === animal.id ? { ...a, status: "available_sale" } : a)));
-      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
-      setReloadKey((k) => k + 1);
-    } catch (e) {
-      window.alert(e.message);
-    } finally {
-      setBusyId(null);
+  const handleListingSaved = () => {
+    if (listingAnimal?.id) {
+      setAnimals((prev) => prev.map((a) => (a.id === listingAnimal.id ? { ...a, status: "available_sale" } : a)));
     }
+    setListingAnimal(null);
+    window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+    setReloadKey((k) => k + 1);
   };
 
   const removeFromSale = async (item) => {
@@ -2338,9 +2458,9 @@ function SaleInventorySettings({ lang, speciesFilter }) {
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
                   <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[a.lot, a.race, a.status].filter(Boolean).join(" - ")}</div>
                 </div>
-                <button className="btn btn-sm" disabled={busyId === a.id} onClick={() => markForSale(a)}>
+                <button className="btn btn-sm" disabled={busyId === a.id} onClick={() => setListingAnimal(a)}>
                   <Icon name="plus" size={12} color="currentColor"/>
-                  {busyId === a.id ? "..." : (lang === "fr" ? "A vendre" : "For sale")}
+                  {lang === "fr" ? "Configurer" : "Configure"}
                 </button>
               </div>
             );
@@ -2352,6 +2472,15 @@ function SaleInventorySettings({ lang, speciesFilter }) {
           )}
         </div>
       </div>
+      {listingAnimal && (
+        <SaleListingModal
+          lang={lang}
+          animal={listingAnimal}
+          prices={prices}
+          onClose={() => setListingAnimal(null)}
+          onSaved={handleListingSaved}
+        />
+      )}
     </section>
   );
 }
