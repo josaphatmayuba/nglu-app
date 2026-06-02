@@ -1346,6 +1346,9 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
   const [sales, setSales] = React.useState([]);
   const [prices, setPrices] = React.useState([]);
   const [query, setQuery] = React.useState("");
+  const [sourceFilter, setSourceFilter] = React.useState("all");
+  const [availableLimit, setAvailableLimit] = React.useState(24);
+  const [candidateLimit, setCandidateLimit] = React.useState(24);
   const [modalItem, setModalItem] = React.useState(null);
   const [busyId, setBusyId] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -1376,6 +1379,11 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
       window.removeEventListener("farmos:production-created", reload);
     };
   }, []);
+
+  React.useEffect(() => {
+    setAvailableLimit(24);
+    setCandidateLimit(24);
+  }, [query, sourceFilter, speciesFilter]);
 
   const q = query.trim().toLowerCase();
   const animalRows = animals.filter((a) => {
@@ -1415,18 +1423,43 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
       return { ...item, unitPrice: price ? priceValue(price) : "" };
     });
 
+  const availableRowsAll = [...animalRows, ...productionRows].filter((item) => {
+    if (sourceFilter === "animal") return item.source === "animal";
+    if (sourceFilter === "production") return item.source !== "animal";
+    return true;
+  });
+  const visibleAvailableRows = availableRowsAll.slice(0, availableLimit);
+
   const candidates = animals.filter((a) => {
     const status = String(a.status || "").toLowerCase();
     if (["available_sale", "for_sale", "a_vendre", "sold"].includes(status)) return false;
     if (speciesFilter && a.species !== speciesFilter) return false;
     if (!q) return true;
     return [a.name, a.externalId, a.external_id, a.lot, a.species].filter(Boolean).join(" ").toLowerCase().includes(q);
-  }).slice(0, 8);
+  });
+  const visibleCandidates = candidates.slice(0, candidateLimit);
 
   const markForSale = async (animal) => {
     setBusyId(animal.id);
     try {
       await api.updateAnimal(animal.id, { status: "available_sale" });
+      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeFromSale = async (item) => {
+    if (item.source !== "animal" || !item.animalId) return;
+    setBusyId(item.animalId);
+    try {
+      await api.updateAnimal(item.animalId, { status: "healthy" });
+      setAnimals((prev) => prev.map((animal) => (
+        animal.id === item.animalId ? { ...animal, status: "healthy" } : animal
+      )));
       window.dispatchEvent(new CustomEvent("farmos:animal-created"));
       setReloadKey((k) => k + 1);
     } catch (e) {
@@ -1469,13 +1502,26 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
             {item.unitPrice !== "" && <span className="tag">{Number(item.unitPrice).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $/{item.unit}</span>}
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setModalItem(item)} style={{ flexShrink: 0 }}>
-          <Icon name="cart" size={13} color="currentColor"/>
-          {lang === "fr" ? "Vendre" : "Sell"}
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {item.source === "animal" && (
+            <button className="btn btn-sm" disabled={busyId === item.animalId} onClick={() => removeFromSale(item)}>
+              {busyId === item.animalId ? "..." : (lang === "fr" ? "Retirer" : "Remove")}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setModalItem(item)}>
+            <Icon name="cart" size={13} color="currentColor"/>
+            {lang === "fr" ? "Vendre" : "Sell"}
+          </button>
+        </div>
       </div>
     );
   };
+
+  const sourceOptions = [
+    { id: "all", fr: "Tous", en: "All" },
+    { id: "production", fr: "Productions", en: "Production" },
+    { id: "animal", fr: "Animaux", en: "Animals" },
+  ];
 
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
@@ -1486,23 +1532,46 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
             {lang === "fr" ? <>POS FarmOS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>vente terrain</span></> : <>FarmOS POS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>field sales</span></>}
           </h1>
         </div>
-        <input className="input" value={query} onChange={(e) => setQuery(e.target.value)}
-          placeholder={lang === "fr" ? "Rechercher article, lot, espece..." : "Search item, batch, species..."}
-          style={{ width: 300, maxWidth: "100%" }}/>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <input className="input" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder={lang === "fr" ? "Rechercher article, lot, espece..." : "Search item, batch, species..."}
+            style={{ width: 300, maxWidth: "100%" }}/>
+          {query && (
+            <button className="btn btn-sm" onClick={() => setQuery("")}>
+              {lang === "fr" ? "Effacer" : "Clear"}
+            </button>
+          )}
+        </div>
       </div>
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} enabledSpecies={enabledSpecies} compact/>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {sourceOptions.map((option) => (
+          <button
+            key={option.id}
+            className={`btn btn-sm ${sourceFilter === option.id ? "btn-primary" : ""}`}
+            onClick={() => setSourceFilter(option.id)}
+          >
+            {lang === "fr" ? option.fr : option.en}
+          </button>
+        ))}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 16 }}>
         <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20 }}>{lang === "fr" ? "Disponible a vendre" : "Available to sell"}</h3>
-            <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{animalRows.length + productionRows.length}</span>
+            <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{availableRowsAll.length}</span>
           </div>
-          {[...animalRows, ...productionRows].length === 0 ? (
+          {availableRowsAll.length === 0 ? (
             <EmptyState icon="cart" title={lang === "fr" ? "Aucun article disponible" : "No item available"} hint={lang === "fr" ? "Marque des animaux a vendre ou enregistre une production vendable." : "Mark animals for sale or record sellable production."}/>
           ) : (
-            [...animalRows, ...productionRows].map(renderItem)
+            visibleAvailableRows.map(renderItem)
+          )}
+          {availableRowsAll.length > visibleAvailableRows.length && (
+            <button className="btn" onClick={() => setAvailableLimit((n) => n + 24)}>
+              {lang === "fr" ? `Afficher plus (${availableRowsAll.length - visibleAvailableRows.length})` : `Show more (${availableRowsAll.length - visibleAvailableRows.length})`}
+            </button>
           )}
         </section>
 
@@ -1513,7 +1582,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
           </div>
           {candidates.length === 0 ? (
             <EmptyState icon="layers" title={lang === "fr" ? "Aucun animal a preparer" : "No animal to prepare"} hint={lang === "fr" ? "Les animaux deja vendus ou deja a vendre sont exclus." : "Already sold or for-sale animals are hidden."}/>
-          ) : candidates.map((a) => {
+          ) : visibleCandidates.map((a) => {
             const sp = speciesById(a.species);
             const title = a.name || a.externalId || a.external_id || a.lot || `#${a.id}`;
             return (
@@ -1532,6 +1601,11 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
               </div>
             );
           })}
+          {candidates.length > visibleCandidates.length && (
+            <button className="btn" onClick={() => setCandidateLimit((n) => n + 24)}>
+              {lang === "fr" ? `Afficher plus (${candidates.length - visibleCandidates.length})` : `Show more (${candidates.length - visibleCandidates.length})`}
+            </button>
+          )}
         </section>
       </div>
 
