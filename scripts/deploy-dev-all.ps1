@@ -1,6 +1,6 @@
 #requires -Version 5.1
 <#
-Déploie en une passe : backend2 → migrations BD dev → farmos-app dist.
+Déploie en une passe : backend2 → migrations BD dev → farmos-app dist → domus-app dist.
 Idempotent : ré-applique sans danger (les ALTER échouent silencieusement si la
 colonne/table existe déjà — voir comment Drizzle gère les redos).
 
@@ -19,6 +19,7 @@ param(
   [switch]$SkipBackend,
   [switch]$SkipMigrations,
   [switch]$SkipFarmos,
+  [switch]$SkipDomus,
   [switch]$SkipBuild
 )
 
@@ -100,6 +101,20 @@ if (-not $SkipFarmos) {
   $ErrorActionPreference = $prev
 }
 
+# ── 4. Domus app (Vite SPA) ──────────────────────────────────────────────
+if (-not $SkipDomus) {
+  Section "Deploying domus-app"
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  if ($SkipBuild) {
+    & "$repoRoot\scripts\deploy-dev-domus-aws.ps1" -SkipBuild -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  } else {
+    & "$repoRoot\scripts\deploy-dev-domus-aws.ps1" -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  }
+  $ErrorActionPreference = $prev
+}
+
 Section "All done"
 Write-Host "Backend:  https://dev.ongdngolu.org/api/health"
 Write-Host "FarmOS:   https://dev.ongdngolu.org/farmos/"
+Write-Host "Domus:    https://dev.ongdngolu.org/domus/"
