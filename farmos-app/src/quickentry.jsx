@@ -896,9 +896,16 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     }
     const selectedAnimal = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
     const selectedDisease = diseasesForSpecies.find((d) => d.name_fr === form.reason || d.nameFr === form.reason || String(d.id) === String(form.reason));
-    if (!liveAnimals || !selectedAnimal || !selectedDisease || !selectedDisease.id) {
-      onSaved && onSaved({ kind, severity: "info", message: lang === "fr" ? "Démo : traitement enregistré localement (animal/maladie non liés)." : "Demo: treatment saved locally (no animal/disease link)." });
-      onClose();
+    if (!liveAnimals) {
+      onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Les animaux ne sont pas charges. Impossible d'enregistrer le traitement." : "Animals are not loaded. Treatment cannot be saved." });
+      return;
+    }
+    if (!selectedAnimal || !toNumericId(selectedAnimal)) {
+      onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis un animal ou un lot existant en base avant d'enregistrer." : "Select an existing database animal or batch before saving." });
+      return;
+    }
+    if (!selectedDisease || !selectedDisease.id) {
+      onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis ou ajoute une maladie liee a l'espece avant d'enregistrer." : "Select or add a disease linked to the species before saving." });
       return;
     }
     const selectedMed = (liveMeds || []).find((m) => String(m.id) === String(form.med));
