@@ -1248,7 +1248,7 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
     setSaving(true);
     setError("");
     try {
-      await api.createSale({
+      const salePayload = {
         sale_source: item.source,
         animal_id: item.animalId || null,
         species: item.species || null,
@@ -1260,10 +1260,11 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
         buyer: buyer.trim() || null,
         sale_date: saleDate,
         notes: notes.trim() || null,
-      });
+      };
+      const result = await api.createSale(salePayload);
       window.dispatchEvent(new CustomEvent("farmos:sale-created"));
       window.dispatchEvent(new CustomEvent("farmos:animal-created"));
-      onSaved && onSaved();
+      onSaved && onSaved({ ...salePayload, id: result?.id || `local-${Date.now()}` });
     } catch (e) {
       setError(e.message || "Erreur");
     } finally {
@@ -1405,6 +1406,23 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
     }
   };
 
+  const handleSaleSaved = (sale) => {
+    if (sale?.sale_source === "production") {
+      setSales((prev) => [{ ...sale, productType: sale.product_type, animalId: sale.animal_id }, ...prev]);
+    }
+    if (sale?.sale_source === "animal" && sale.animal_id) {
+      const soldQty = Number(sale.quantity || 0);
+      setAnimals((prev) => prev.map((animal) => {
+        if (animal.id !== sale.animal_id) return animal;
+        const current = Number(animal.count || 0);
+        if (current > soldQty) return { ...animal, count: Math.max(0, current - soldQty) };
+        return { ...animal, count: current > 0 ? 0 : animal.count, status: "sold" };
+      }));
+    }
+    setModalItem(null);
+    setReloadKey((k) => k + 1);
+  };
+
   const renderItem = (item) => {
     const sp = speciesById(item.species);
     return (
@@ -1486,7 +1504,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
         </section>
       </div>
 
-      {modalItem && <PosSaleModal lang={lang} item={modalItem} onClose={() => setModalItem(null)} onSaved={() => { setModalItem(null); setReloadKey((k) => k + 1); }}/>}
+      {modalItem && <PosSaleModal lang={lang} item={modalItem} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
     </div>
   );
 };
