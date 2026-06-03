@@ -193,24 +193,37 @@ const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.
   );
 };
 
-// ─── Brand mark: stylized bovine head ────────────────────────────────────
+// ─── Brand mark: cow head in a circle with wheat + grass (FarmOS) ────────
 const Brand = ({ size = 28, color = "#ECF1EC", accent = "#D7AA45" }) => (
   <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    <circle cx="32" cy="33" r="25" fill={color} opacity="0.12"/>
-    <path d="M12 30c3-12 10-21 20-25 10 4 17 13 20 25" stroke={color} strokeWidth="3.8" strokeLinecap="round"/>
-    <path d="M19 24c-6-2-11 0-14 5 4 4 9 6 16 4 4-1 7-4 10-8-5 2-8 1-12-1Z" fill={color}/>
-    <path d="M45 24c6-2 11 0 14 5-4 4-9 6-16 4-4-1-7-4-10-8 5 2 8 1 12-1Z" fill={color}/>
-    <path d="M25 20c2-7 6-11 12-11s10 4 12 11c2 9 7 13 9 22 2 9-5 17-17 19-5 1-8-3-13-3s-8 4-13 3C3 59-4 51-2 42c2-9 7-13 9-22 2-7 6-11 12-11s10 4 12 11Z" fill={color} transform="translate(13 0) scale(0.72 0.72)"/>
-    <path d="M25 25c-4 10-4 22-1 32-6-5-10-13-10-22 0-6 4-9 11-10Z" fill={color}/>
-    <path d="M39 25c4 10 4 22 1 32 6-5 10-13 10-22 0-6-4-9-11-10Z" fill={color}/>
-    <path d="M28 49c3 2 9 2 12 0" stroke={color} strokeWidth="3" strokeLinecap="round"/>
-    <path d="M27 43c0-4 4-6 9-6s9 2 9 6c0 5-4 8-9 8s-9-3-9-8Z" fill={color}/>
-    <path d="M31 43c-2 2-2 4 0 6M41 43c2 2 2 4 0 6" stroke="#0E2418" strokeWidth="2.4" strokeLinecap="round"/>
-    <path d="M27 33c4 0 7 3 8 7-4 0-8-3-10-7h2Z" fill="#0E2418" opacity="0.9"/>
-    <path d="M45 33c-4 0-7 3-8 7 4 0 8-3 10-7h-2Z" fill="#0E2418" opacity="0.9"/>
-    <circle cx="29.5" cy="36" r="1.3" fill={color}/>
-    <circle cx="42.5" cy="36" r="1.3" fill={color}/>
-    <path d="M28 10c3 3 4 6 2 10-3-1-5-4-5-7 0-2 1-3 3-3ZM44 10c-3 3-4 6-2 10 3-1 5-4 5-7 0-2-1-3-3-3ZM36 5c4 5 4 10 0 15-4-5-4-10 0-15Z" fill={accent}/>
+    {/* outer ring */}
+    <circle cx="32" cy="32" r="29" stroke={color} strokeWidth="2.4"/>
+
+    {/* top wheat sprig + flanking arcs (accent) */}
+    <path d="M22 16C25 12.5 28.5 11 31 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
+    <path d="M42 16C39 12.5 35.5 11 33 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
+    <path d="M32 18.5V10.5" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
+    <path d="M32 11.5C34.2 12 35.4 14 34.6 16.2C32.4 15.7 31.2 13.7 32 11.5Z" fill={accent}/>
+    <path d="M32 11.5C29.8 12 28.6 14 29.4 16.2C31.6 15.7 32.8 13.7 32 11.5Z" fill={accent}/>
+
+    {/* ears */}
+    <path d="M19.5 27C11.5 22.5 6.5 27.5 10.5 33C15 31.5 18 29.5 21.5 27.5Z" fill={color}/>
+    <path d="M44.5 27C52.5 22.5 57.5 27.5 53.5 33C49 31.5 46 29.5 42.5 27.5Z" fill={color}/>
+
+    {/* head / face */}
+    <path d="M20.5 28C19.5 21.5 25 18 32 18C39 18 44.5 21.5 43.5 28C42.8 33 41.5 37 37.5 41C38.5 45 35.5 47.5 32 47.5C28.5 47.5 25.5 45 26.5 41C22.5 37 21.2 33 20.5 28Z" fill={color}/>
+
+    {/* eyes + muzzle details (negative space) */}
+    <path d="M25.5 29C27.5 28 29.5 29 29.5 31C27.5 32 25.5 31 25.5 29Z" fill="#0E2418"/>
+    <path d="M38.5 29C36.5 28 34.5 29 34.5 31C36.5 32 38.5 31 38.5 29Z" fill="#0E2418"/>
+    <path d="M28 40.5C30.5 39 33.5 39 36 40.5" stroke="#0E2418" strokeWidth="1.6" strokeLinecap="round"/>
+    <circle cx="29.5" cy="38" r="1.2" fill="#0E2418"/>
+    <circle cx="34.5" cy="38" r="1.2" fill="#0E2418"/>
+
+    {/* grass at the base */}
+    <path d="M16 54C17.5 48 21 45.5 25.5 46C22.5 48.5 20 51 18.5 55Z" fill={color}/>
+    <path d="M48 54C46.5 48 43 45.5 38.5 46C41.5 48.5 44 51 45.5 55Z" fill={color}/>
+    <path d="M29.5 55.5C29.5 51 31 48.5 33.5 49.5C32.5 52 31.5 53.5 31.5 56Z" fill={color}/>
   </svg>
 );
 

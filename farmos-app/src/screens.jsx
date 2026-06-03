@@ -1243,6 +1243,45 @@ function saleUnitFor(productType, fallback) {
   return fallback || SALE_PRODUCT_LABELS[productType]?.unit || "";
 }
 
+// Conditionnements œufs : à l'unité ou par plateau. `eggs` = nb d'œufs par
+// conditionnement (sert à décrémenter le stock en œufs). `unitTokens` = libellés
+// d'unité reconnus dans la liste de prix (Gestion de vente) pour ce plateau.
+const EGG_PACKAGINGS = [
+  { key: "unit",   eggs: 1,  fr: "À l'unité",  en: "Per egg",     unitTokens: ["oeufs", "oeuf"] },
+  { key: "tray12", eggs: 12, fr: "Plateau 12", en: "Tray of 12",  unitTokens: ["plateau 12", "plateau12", "plateau de 12"] },
+  { key: "tray30", eggs: 30, fr: "Plateau 30", en: "Tray of 30",  unitTokens: ["plateau 30", "plateau30", "plateau de 30"] },
+];
+
+// Cherche un prix configuré pour un conditionnement donné (par tokens d'unité).
+function packagingPrice(prices, item, pk) {
+  const tokens = pk.unitTokens.map(normalizeSaleUnit);
+  const candidates = (prices || []).filter((p) => {
+    const saleSource = p.saleSource || p.sale_source || "production";
+    const productType = p.productType || p.product_type;
+    if (saleSource !== "production" || productType !== "eggs") return false;
+    return tokens.includes(normalizeSaleUnit(p.unit));
+  });
+  const row = candidates.find((p) => p.species === item.species) || candidates.find((p) => !p.species);
+  return row ? priceValue(row) : null;
+}
+
+// Liste des conditionnements applicables à un article, avec prix résolu.
+// Pour les œufs : à l'unité + plateaux. Sinon : un seul conditionnement « unité ».
+function packagingsFor(item, prices, lang) {
+  if (item.productType === "eggs" && item.source !== "animal") {
+    const perEgg = item.unitPrice !== "" && item.unitPrice != null && Number.isFinite(Number(item.unitPrice))
+      ? Number(item.unitPrice) : null;
+    return EGG_PACKAGINGS.map((pk) => {
+      const configured = pk.key === "unit" ? perEgg : packagingPrice(prices, item, pk);
+      // Repli : si pas de prix plateau configuré, on dérive du prix à l'unité.
+      const price = configured != null ? configured : (perEgg != null ? perEgg * pk.eggs : null);
+      return { key: pk.key, eggs: pk.eggs, label: lang === "fr" ? pk.fr : pk.en, price, isConfigured: configured != null };
+    });
+  }
+  const p = item.unitPrice !== "" && item.unitPrice != null && Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null;
+  return [{ key: "unit", eggs: 1, label: item.unit || "", price: p, isConfigured: p != null, generic: true }];
+}
+
 function buildPosProductionItems(logs, sales, speciesFilter) {
   const groups = new Map();
   const keyFor = (species, productType, unit) => `${species || "all"}:${productType}:${normalizeSaleUnit(unit)}`;
@@ -1387,11 +1426,13 @@ function matchesSaleQuery(item, query) {
   ].filter(Boolean).join(" ").toLowerCase().includes(q);
 }
 
-function PosSaleModal({ lang, item, onClose, onSaved }) {
+function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
   const today = new Date().toISOString().slice(0, 10);
+  const packagings = React.useMemo(() => packagingsFor(item || {}, prices, lang), [item, prices, lang]);
+  const [packKey, setPackKey] = React.useState(packagings[0]?.key || "unit");
+  const pack = packagings.find((p) => p.key === packKey) || packagings[0];
+  const eggsPerPack = pack?.eggs || 1;
   const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(Math.min(1, item.available || 1)) : "");
-  const configuredPrice = item?.unitPrice !== "" && item?.unitPrice != null && Number.isFinite(Number(item.unitPrice));
-  const [unitPrice] = React.useState(configuredPrice ? String(item.unitPrice) : "");
   const [buyer, setBuyer] = React.useState("");
   const [saleDate, setSaleDate] = React.useState(today);
   const [notes, setNotes] = React.useState("");
@@ -1399,9 +1440,12 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
   const [error, setError] = React.useState("");
   if (!item) return null;
 
-  const qty = Number(quantity || 0);
-  const price = Number(unitPrice || 0);
-  const total = Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0;
+  const configuredPrice = pack && pack.price != null && Number.isFinite(Number(pack.price));
+  const packs = Number(quantity || 0);                 // nb de conditionnements (plateaux ou unités)
+  const stockQty = packs * eggsPerPack;                // quantité décrémentée du stock (en œufs/unités)
+  const price = Number(pack?.price || 0);              // prix par conditionnement
+  const total = Number.isFinite(packs) && Number.isFinite(price) ? packs * price : 0;
+  const isPack = eggsPerPack > 1;                       // conditionnement plateau
   const sp = speciesById(item.species);
 
   const save = async () => {
@@ -1409,29 +1453,33 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
       setError(lang === "fr" ? "Prix non configure. Va dans Gestion de vente pour fixer le prix avant de vendre." : "Price is not configured. Set it in Sales management before selling.");
       return;
     }
-    if (!qty || qty <= 0 || !price || price < 0) {
+    if (!packs || packs <= 0 || !price || price < 0) {
       setError(lang === "fr" ? "Quantite et prix requis." : "Quantity and price required.");
       return;
     }
-    if (item.available && qty > item.available) {
+    if (item.available && stockQty > item.available) {
       setError(lang === "fr" ? "Quantite superieure au disponible." : "Quantity exceeds available stock.");
       return;
     }
     setSaving(true);
     setError("");
     try {
+      // On enregistre la vente en œufs (stock) avec un prix unitaire effectif,
+      // pour que le stock se décrémente correctement et que le total reste juste.
+      const effectiveUnitPrice = isPack ? (total / stockQty) : price;
+      const packNote = isPack ? `${packs} × ${pack.label} (${stockQty} ${item.unit || "oeufs"})` : null;
       const salePayload = {
         sale_source: item.source,
         animal_id: item.animalId || null,
         species: item.species || null,
         product_type: item.productType,
-        quantity: qty,
+        quantity: stockQty,
         unit: item.unit || null,
-        unit_price: price,
+        unit_price: effectiveUnitPrice,
         total_amount: total,
         buyer: buyer.trim() || null,
         sale_date: saleDate,
-        notes: notes.trim() || null,
+        notes: [notes.trim() || null, packNote].filter(Boolean).join(" · ") || null,
       };
       const result = await api.createSale(salePayload);
       window.dispatchEvent(new CustomEvent("farmos:sale-created"));
@@ -1457,12 +1505,48 @@ function PosSaleModal({ lang, item, onClose, onSaved }) {
           </div>
         </div>
 
+        {packagings.length > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "var(--fg-2)", marginBottom: 6 }}>{lang === "fr" ? "Conditionnement" : "Packaging"}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {packagings.map((pk) => {
+                const on = pk.key === packKey;
+                return (
+                  <button key={pk.key} type="button" onClick={() => setPackKey(pk.key)}
+                    style={{
+                      flex: "1 1 0", minWidth: 96, padding: "8px 10px", borderRadius: 8, cursor: "pointer", textAlign: "left",
+                      border: on ? "1.5px solid var(--forest-600)" : "1px solid var(--border-1)",
+                      background: on ? "var(--forest-50)" : "var(--paper)",
+                    }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-950)" }}>{pk.label}</div>
+                    <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>
+                      {pk.price != null ? `${Number(pk.price).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $` : (lang === "fr" ? "prix à définir" : "set price")}
+                      {pk.eggs > 1 ? ` · ${pk.eggs} ${item.unit || "oeufs"}` : ""}
+                      {pk.price != null && !pk.isConfigured ? (lang === "fr" ? " · auto" : " · auto") : ""}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {pack && !pack.isConfigured && isPack && (
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 6 }}>
+                {lang === "fr"
+                  ? "Prix dérivé du prix à l'unité. Pour un prix de plateau dédié, ajoute une ligne « Plateau 12/30 » dans Gestion de vente."
+                  : "Price derived from per-egg price. Add a \"Tray 12/30\" line in Sales management for a dedicated tray price."}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Quantite" : "Quantity"}
-            <input className="input" type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{isPack ? (lang === "fr" ? "Nombre de plateaux" : "Number of trays") : (lang === "fr" ? "Quantite" : "Quantity")}
+            <input className="input" type="number" min="0" step={isPack ? "1" : "0.01"} value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+            {isPack && packs > 0 && (
+              <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)", marginTop: 3 }}>= {stockQty} {item.unit || "oeufs"}</span>
+            )}
           </label>
-          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire configure" : "Configured unit price"}
-            <input className="input" type="number" value={unitPrice} readOnly disabled
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{isPack ? (lang === "fr" ? "Prix par plateau" : "Price per tray") : (lang === "fr" ? "Prix unitaire configure" : "Configured unit price")}
+            <input className="input" type="number" value={pack?.price != null ? pack.price : ""} readOnly disabled
               placeholder={lang === "fr" ? "A configurer dans Gestion de vente" : "Configure in Sales management"}
               style={{ width: "100%", marginTop: 4, background: "var(--bg-sunken)", color: configuredPrice ? "var(--ink-950)" : "var(--rust-700)" }}/>
           </label>
@@ -1669,7 +1753,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
         </div>
       </section>
 
-      {modalItem && <PosSaleModal lang={lang} item={modalItem} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
+      {modalItem && <PosSaleModal lang={lang} item={modalItem} prices={prices} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
     </div>
   );
 };
@@ -2659,6 +2743,25 @@ function PriceListSettings({ lang }) {
           {form.id ? (lang === "fr" ? "Modifier" : "Update") : (lang === "fr" ? "Ajouter" : "Add")}
         </button>
       </div>
+      {form.product_type === "eggs" && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Conditionnement :" : "Packaging:"}</span>
+          {[
+            { unit: "oeufs", label: lang === "fr" ? "À l'unité" : "Per egg" },
+            { unit: "Plateau 12", label: "Plateau 12" },
+            { unit: "Plateau 30", label: "Plateau 30" },
+          ].map((p) => (
+            <button key={p.unit} type="button" className="btn btn-sm"
+              onClick={() => set("unit", p.unit)}
+              style={form.unit === p.unit ? { borderColor: "var(--forest-600)", background: "var(--forest-50)" } : undefined}>
+              {p.label}
+            </button>
+          ))}
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>
+            {lang === "fr" ? "→ le prix « Plateau » s'applique à la caisse." : "→ the \"Tray\" price applies at the register."}
+          </span>
+        </div>
+      )}
       {message && <div style={{ fontSize: 12, color: message.type === "err" ? "var(--rust-700)" : "var(--solidite-700)" }}>{message.text}</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
         {prices.map((row) => {

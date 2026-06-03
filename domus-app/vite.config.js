@@ -39,9 +39,24 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
         navigateFallback: "/domus/index.html",
-        // Ne jamais intercepter l'API : les appels doivent toucher le réseau.
+        // La navigation ne doit jamais retomber sur l'API.
         navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [],
+        // Lecture hors ligne : on garde la dernière réponse connue des GET API.
+        // NetworkFirst = réseau d'abord (données fraîches), sinon cache (offline).
+        runtimeCaching: [
+          {
+            urlPattern: ({ url, request }) => request.method === "GET"
+              && url.pathname.startsWith("/api/")
+              && !url.pathname.startsWith("/api/events"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "domus-api-cache",
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       devOptions: { enabled: false },
     }),

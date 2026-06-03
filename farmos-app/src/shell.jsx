@@ -3,7 +3,7 @@
 import React from "react";
 import { Icon, AnimalGlyph, Brand } from "./icons";
 import { SPECIES, t } from "./data";
-import { api } from "./api";
+import { api, adaptAnimal } from "./api";
 import { NetStatusPill } from "./offline-status";
 
 const NAV = [
@@ -252,9 +252,205 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
 };
 
 // ─── Top bar: title + species pills (when filter is null) + actions ──────
+// ── Recherche globale (palette ⌘K) ──────────────────────────────────────────
+// Cherche dans les pages + les animaux + les médicaments, et navigue.
+// Ouverture : clic sur la barre du topbar, ou ⌘K / Ctrl+K. Esc ferme.
+const SEARCH_PAGES = [...NAV, ...NAV_SECONDARY];
+
+function speciesLabel(id, lang) {
+  const s = SPECIES.find((x) => x.id === id);
+  return s ? (lang === "fr" ? s.frSing : s.enSing) : (id || "");
+}
+
+function GlobalSearch({ lang }) {
+  const [open, setOpen] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const [animals, setAnimals] = React.useState([]);
+  const [medicines, setMedicines] = React.useState([]);
+  const [active, setActive] = React.useState(0);
+  const inputRef = React.useRef(null);
+  const loadedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    const onOpen = () => setOpen(true);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("farmos:search-open", onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("farmos:search-open", onOpen);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    setQ("");
+    setActive(0);
+    const id = setTimeout(() => inputRef.current && inputRef.current.focus(), 30);
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      api.listAnimals().then((r) => setAnimals(Array.isArray(r) ? r.map(adaptAnimal) : [])).catch(() => {});
+      api.listMedicines().then((r) => setMedicines(Array.isArray(r) ? r : [])).catch(() => {});
+    }
+    return () => clearTimeout(id);
+  }, [open]);
+
+  const go = (route) => {
+    window.dispatchEvent(new CustomEvent("farmos:nav", { detail: route }));
+    setOpen(false);
+  };
+  const openAnimal = (a) => {
+    try { window.__farmosSelectAnimal = a.id; } catch {}
+    go("animals");
+  };
+
+  const groups = React.useMemo(() => {
+    const query = q.trim().toLowerCase();
+    const out = [];
+    const pages = SEARCH_PAGES
+      .map((p) => ({ ...p, label: t(lang, p.labelKey) }))
+      .filter((p) => !query || String(p.label).toLowerCase().includes(query))
+      .slice(0, query ? 6 : SEARCH_PAGES.length);
+    if (pages.length) {
+      out.push({
+        key: "pages",
+        title: "Pages",
+        items: pages.map((p) => ({
+          key: "page-" + p.id,
+          icon: p.icon,
+          label: p.label,
+          sub: lang === "fr" ? "Ouvrir la page" : "Open page",
+          onSelect: () => go(p.id),
+        })),
+      });
+    }
+    if (query) {
+      const matchAnimal = (a) => [a.name, a.id, a.tag, a.externalId, a.lot, a.race, a.breed]
+        .some((v) => String(v || "").toLowerCase().includes(query));
+      const aItems = animals.filter(matchAnimal).slice(0, 6).map((a) => ({
+        key: "animal-" + a.id,
+        icon: "layers",
+        label: a.name || a.tag || a.externalId || String(a.id),
+        sub: [a.tag || a.externalId, a.lot, speciesLabel(a.species, lang)].filter(Boolean).join(" · "),
+        onSelect: () => openAnimal(a),
+      }));
+      if (aItems.length) out.push({ key: "animals", title: lang === "fr" ? "Animaux" : "Animals", items: aItems });
+
+      const mItems = medicines
+        .filter((m) => String(m.name || "").toLowerCase().includes(query))
+        .slice(0, 5)
+        .map((m) => ({
+          key: "med-" + (m.id ?? m.name),
+          icon: "pill",
+          label: m.name,
+          sub: [
+            m.quantity != null ? `${m.quantity} ${m.unit || ""}`.trim() : null,
+            m.kind === "feed" ? (lang === "fr" ? "Aliment" : "Feed") : (lang === "fr" ? "Médicament" : "Medicine"),
+          ].filter(Boolean).join(" · "),
+          onSelect: () => go(m.kind === "feed" ? "feed" : "medicines"),
+        }));
+      if (mItems.length) out.push({ key: "medicines", title: lang === "fr" ? "Médicaments" : "Medicines", items: mItems });
+    }
+    return out;
+  }, [q, lang, animals, medicines]);
+
+  const flat = React.useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  React.useEffect(() => { if (active > flat.length - 1) setActive(0); }, [flat.length, active]);
+
+  const onInputKey = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, flat.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); flat[active] && flat[active].onSelect(); }
+  };
+
+  if (!open) return null;
+
+  let runningIndex = -1;
+  return (
+    <div
+      onClick={() => setOpen(false)}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "rgba(14,36,24,0.45)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "12vh 16px 16px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(620px, 100%)", maxHeight: "70vh", display: "flex", flexDirection: "column",
+          background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 16,
+          boxShadow: "0 24px 70px -20px rgba(14,36,24,0.55)", overflow: "hidden",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border-1)" }}>
+          <Icon name="search" size={18} color="var(--ink-500)"/>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setActive(0); }}
+            onKeyDown={onInputKey}
+            placeholder={lang === "fr" ? "Rechercher animal, lot, médicament, page…" : "Search animal, batch, medicine, page…"}
+            style={{ border: 0, background: "transparent", flex: 1, outline: "none", fontFamily: "var(--font-sans)", fontSize: 15, color: "var(--fg-1)" }}
+          />
+          <kbd style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-3)", background: "var(--bg-sunken)", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border-1)" }}>Esc</kbd>
+        </div>
+
+        <div style={{ overflow: "auto", padding: 8 }}>
+          {flat.length === 0 ? (
+            <div style={{ padding: "28px 16px", textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
+              {q.trim()
+                ? (lang === "fr" ? `Aucun résultat pour « ${q.trim()} »` : `No results for "${q.trim()}"`)
+                : (lang === "fr" ? "Tapez pour rechercher un animal, un lot, un médicament…" : "Type to search an animal, batch, medicine…")}
+            </div>
+          ) : groups.map((g) => (
+            <div key={g.key} style={{ marginBottom: 6 }}>
+              <div className="overline" style={{ padding: "6px 10px 4px", color: "var(--ink-500)" }}>{g.title}</div>
+              {g.items.map((it) => {
+                runningIndex += 1;
+                const idx = runningIndex;
+                const on = idx === active;
+                return (
+                  <button
+                    key={it.key}
+                    onMouseEnter={() => setActive(idx)}
+                    onClick={it.onSelect}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+                      padding: "9px 10px", border: 0, borderRadius: 10, cursor: "pointer",
+                      background: on ? "var(--bg-sunken)" : "transparent",
+                    }}
+                  >
+                    <span style={{ width: 30, height: 30, borderRadius: 8, background: "var(--paper)", border: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <Icon name={it.icon} size={15} color="var(--ink-700)"/>
+                    </span>
+                    <span style={{ minWidth: 0, flex: 1 }}>
+                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: "var(--ink-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</span>
+                      {it.sub && <span style={{ display: "block", fontSize: 11.5, color: "var(--fg-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.sub}</span>}
+                    </span>
+                    {on && <Icon name="chevRight" size={14} color="var(--ink-500)"/>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter, right, breadcrumb, isMobile, isTablet, onHamburger, onQuickEntry }) => {
   const compact = isMobile || isTablet;
   return (
+  <>
+  <GlobalSearch lang={lang}/>
   <header style={{
     height: isMobile ? 56 : 64, borderBottom: "1px solid var(--border-1)",
     background: "var(--bg-app)", padding: isMobile ? "0 14px" : "0 20px",
@@ -282,24 +478,25 @@ const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter,
 
     {!isMobile && (
       <div style={{ flex: 1, display: "flex", justifyContent: "center", minWidth: 0 }}>
-        <div className="topbar-search" style={{ minWidth: isTablet ? 0 : 280, maxWidth: 480, flex: 1, height: isTablet ? 36 : 40 }}>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("farmos:search-open"))}
+          className="topbar-search"
+          style={{ minWidth: isTablet ? 0 : 280, maxWidth: 480, flex: 1, height: isTablet ? 36 : 40, cursor: "text", textAlign: "left" }}
+        >
           <Icon name="search" size={15} color="var(--ink-500)"/>
-          <input
-            placeholder={isTablet
+          <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-sans)", fontSize: 13, color: "var(--fg-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {isTablet
               ? (lang === "fr" ? "Rechercher…" : "Search…")
               : (lang === "fr" ? "Rechercher animal, lot, médicament, alerte…" : "Search animal, batch, medicine, alert…")}
-            style={{
-              border: 0, background: "transparent", flex: 1, outline: "none", minWidth: 0,
-              fontFamily: "var(--font-sans)", fontSize: 13, color: "var(--fg-1)",
-            }}
-          />
+          </span>
           {!isTablet && (
             <kbd style={{
               fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--fg-3)",
               background: "var(--bg-sunken)", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--border-1)",
             }}>⌘K</kbd>
           )}
-        </div>
+        </button>
       </div>
     )}
 
@@ -340,6 +537,7 @@ const Topbar = ({ title, subtitle, lang, onLang, speciesFilter, onSpeciesFilter,
       </>
     )}
   </header>
+  </>
   );
 };
 

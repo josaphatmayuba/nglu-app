@@ -254,6 +254,11 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   moveInNotes: text("move_in_notes"),
   terms: text("terms"),
   status: varchar("status", { length: 255 }).default("draft").notNull(),
+  // Taxe par bail (incluse/informative) — calculée sur le loyer au paiement.
+  taxName: varchar("tax_name", { length: 255 }),
+  taxType: varchar("tax_type", { length: 20 }),
+  taxValue: decimal("tax_value", { precision: 15, scale: 4 }),
+  taxApplyMode: varchar("tax_apply_mode", { length: 20 }).default("never").notNull(),
   // Period (next_invoice_date value) we last sent an overdue reminder for, to send once per period.
   lastOverdueReminderDate: date("last_overdue_reminder_date", { mode: "string" }),
   createdAt: timestamp("created_at"),
@@ -271,6 +276,9 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   method: varchar("method", { length: 255 }).default("cash").notNull(),
   reference: varchar("reference", { length: 255 }),
   notes: text("notes"),
+  // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
+  taxAmount: decimal("tax_amount", { precision: 15, scale: 2 }),
+  taxName: varchar("tax_name", { length: 255 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

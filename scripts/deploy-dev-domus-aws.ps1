@@ -78,7 +78,10 @@ sudo chmod -R u+w domus-app 2>/dev/null || true
 mkdir -p domus-app/dist
 # Empty the dist dir contents without deleting the dir itself (preserve bind-mount inode).
 sudo find domus-app/dist -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-sudo tar -xzf '$remoteArtifact'
+sudo tar --warning=no-unknown-keyword -xzf '$remoteArtifact'
+# tar via sudo writes root-owned files; make them readable by nginx.
+sudo chown -R admin:admin domus-app/dist
+sudo chmod -R a+rX domus-app/dist
 curl -fsSI https://dev.ongdngolu.org/domus/ >/dev/null
 rm -f '$remoteArtifact'
 echo 'domus-app dev deployed'

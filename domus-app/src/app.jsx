@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
+import { outboxCount } from "./outbox.js";
+import { t, useLang } from "./i18n.js";
 import { Dashboard } from "./screens/dashboard.jsx";
 import { Biens } from "./screens/biens.jsx";
 import { CarteBiens } from "./screens/carte.jsx";
@@ -65,6 +67,7 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   const device = useDeviceMode();
   const realtimeOnline = useRealtimeStatus();
+  const [lang, setLang] = useLang();
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
@@ -93,12 +96,12 @@ export default function App() {
         </div>
         {NAV.map((s) => (
           <div key={s.sec}>
-            <div className="nav-sec">{s.sec}</div>
+            <div className="nav-sec">{t(s.sec)}</div>
             {s.items.map((i) => {
               const Icon = i.icon;
               return (
                 <button key={i.key} className={`navlink ${view === i.key ? "active" : ""}`} onClick={() => go(i.key)}>
-                  <Icon size={16} /> {i.label}
+                  <Icon size={16} /> {t(i.label)}
                 </button>
               );
             })}
@@ -108,9 +111,13 @@ export default function App() {
           <div className="avatar">AK</div>
           <div style={{ fontSize: 12, lineHeight: 1.2 }}>
             <div style={{ fontWeight: 500 }}>A. Kalala</div>
-            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>Gestionnaire</div>
+            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>{t("Gestionnaire")}</div>
           </div>
-          <button className="navlink" style={{ width: "auto", marginLeft: "auto", padding: 8 }} title="Se deconnecter" onClick={clearToken}>
+          <button className="lang-toggle" style={{ marginLeft: "auto" }} title="Langue / Language"
+            onClick={() => setLang(lang === "fr" ? "en" : "fr")}>
+            {lang === "fr" ? "EN" : "FR"}
+          </button>
+          <button className="navlink" style={{ width: "auto", padding: 8 }} title={t("Se deconnecter")} onClick={clearToken}>
             <LogOut size={16} />
           </button>
         </div>
@@ -118,15 +125,18 @@ export default function App() {
 
       <main className="main">
         <div className="topbar">
-          <div className="eyebrow">Domus - Gestion locative</div>
-          <RealtimePill online={realtimeOnline} style={{ marginLeft: "auto" }} />
+          <div className="eyebrow">{t("Domus - Gestion locative")}</div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <OutboxPill />
+            <RealtimePill online={realtimeOnline} />
+          </div>
         </div>
         <DateRangeBar />
 
         <div className="mobhead mob-only">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div className="brand-logo" style={{ width: 32, height: 32 }}><Building2 size={16} color="#fff" /></div>
-            <span className="mh-title">{TITLES[view]}</span>
+            <span className="mh-title">{t(TITLES[view])}</span>
           </div>
           <RealtimePill online={realtimeOnline} compact />
           <div className="avatar">AK</div>
@@ -139,7 +149,7 @@ export default function App() {
         {DAILY.map((k) => {
           const item = NAV.flatMap((s) => s.items).find((i) => i.key === k);
           const Icon = k === "dashboard" ? Home : item.icon;
-          const label = k === "dashboard" ? "Accueil" : k === "locataires" ? "Locat." : k === "maintenance" ? "Maint." : item.label;
+          const label = k === "dashboard" ? t("Accueil") : k === "locataires" ? t("Locataires") : k === "maintenance" ? t("Maintenance") : t(item.label);
           return (
             <button key={k} className={view === k ? "active" : ""} onClick={() => go(k)}>
               <Icon size={20} /> <span>{label}</span>
@@ -147,7 +157,7 @@ export default function App() {
           );
         })}
         <button className={MORE.includes(view) ? "active" : ""} onClick={() => setMoreOpen(true)}>
-          <Menu size={20} /> <span>Plus</span>
+          <Menu size={20} /> <span>{t("Plus")}</span>
         </button>
       </nav>
 
@@ -155,13 +165,13 @@ export default function App() {
         <div className="scrim" onClick={() => setMoreOpen(false)} />
         <div className="panel">
           <div className="grip" />
-          <div className="nav-sec" style={{ color: "var(--ink-400)" }}>Tout le reste</div>
+          <div className="nav-sec" style={{ color: "var(--ink-400)" }}>{t("Tout le reste")}</div>
           {MORE.map((k) => {
             const item = NAV.flatMap((s) => s.items).find((i) => i.key === k);
             const Icon = item.icon;
             return (
               <div key={k} className="mrow" onClick={() => go(k)}>
-                <Icon size={20} /> {item.label}
+                <Icon size={20} /> {t(item.label)}
               </div>
             );
           })}
@@ -172,8 +182,33 @@ export default function App() {
   );
 }
 
+function useOutboxCount() {
+  const [n, setN] = useState(() => outboxCount());
+  useEffect(() => {
+    const refresh = () => setN(outboxCount());
+    window.addEventListener("domus-outbox-changed", refresh);
+    window.addEventListener("domus-outbox-synced", refresh);
+    return () => {
+      window.removeEventListener("domus-outbox-changed", refresh);
+      window.removeEventListener("domus-outbox-synced", refresh);
+    };
+  }, []);
+  return n;
+}
+
+function OutboxPill() {
+  const count = useOutboxCount();
+  if (!count) return null;
+  return (
+    <div className="rt-pill outbox-pill" title={`${count} modification(s) en attente de synchronisation (hors ligne)`}>
+      <CloudUpload size={13} />
+      <span>{count} {t("en attente")}</span>
+    </div>
+  );
+}
+
 function RealtimePill({ online, compact = false, style }) {
-  const label = online ? "Direct" : "Hors ligne";
+  const label = online ? t("Direct") : t("Hors ligne");
   return (
     <div
       className={`rt-pill ${online ? "rt-on" : "rt-off"}`}

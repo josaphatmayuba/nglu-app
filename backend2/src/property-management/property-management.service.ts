@@ -11,6 +11,7 @@ import {
   appSettings,
   currencies,
   customers,
+  emailTemplates,
   realEstateLeases,
   realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
@@ -38,6 +39,7 @@ import {
   CreatePropertyDto,
   CreateRentPaymentDto,
   CreateTenantDto,
+  UpdateTenantDto,
   CreateUnitDto,
   GenerateTenantOnboardingDto,
   SaveTenantOnboardingDto,
@@ -195,6 +197,99 @@ export class PropertyManagementService {
 
   async createTenant(input: CreateTenantDto, orgId: number) {
     return this.createTenantRecord(input, orgId);
+  }
+
+  async updateTenant(id: number, input: UpdateTenantDto, orgId: number) {
+    const existing = await this.findTenant(id, orgId);
+    if (!existing) {
+      throw new NotFoundException("Locataire introuvable.");
+    }
+
+    // Champs de base sur le customer (uniquement ceux fournis).
+    const customerSet: Record<string, unknown> = { updatedAt: sql`CURRENT_TIMESTAMP` };
+    if (input.firstName !== undefined) customerSet.firstName = input.firstName;
+    if (input.lastName !== undefined) customerSet.lastName = input.lastName;
+    if (input.email !== undefined) customerSet.email = input.email || null;
+    if (input.phone !== undefined) customerSet.phone = input.phone;
+    if (input.address !== undefined) customerSet.address = input.address;
+    await this.db
+      .update(customers)
+      .set(customerSet)
+      .where(and(eq(customers.id, id), eq(customers.organizationId, orgId)));
+
+    // Détails locataire (uniquement les champs fournis).
+    const detail: Record<string, unknown> = { updatedAt: sql`CURRENT_TIMESTAMP` };
+    if (input.birth_date !== undefined) detail.birthDate = input.birth_date;
+    if (input.sex !== undefined) detail.sex = input.sex;
+    if (input.nationality !== undefined) detail.nationality = input.nationality;
+    if (input.marital_status !== undefined) detail.maritalStatus = input.marital_status;
+    if (input.origin_province !== undefined) detail.originProvince = input.origin_province ?? "";
+    if (input.phone2 !== undefined) detail.phone2 = input.phone2 ?? null;
+    if (input.contacted_person !== undefined) detail.contactedPerson = input.contacted_person;
+    if (input.contacted_person_phone_number !== undefined) detail.contactedPersonPhoneNumber = input.contacted_person_phone_number;
+    if (input.prossional_status !== undefined) detail.professionalStatus = input.prossional_status;
+    if (input.main_activity !== undefined) detail.mainActivity = input.main_activity;
+    if (input.entity_name !== undefined) detail.entityName = input.entity_name;
+    if (input.entity_address !== undefined) detail.entityAddress = input.entity_address ?? "";
+    if (input.hiring_date !== undefined) detail.hiringDate = input.hiring_date ?? null;
+    if (input.contract_type !== undefined) detail.contractType = input.contract_type;
+    if (input.monthly_pay !== undefined) detail.monthlyPay = this.money(input.monthly_pay);
+    if (input.salary_currency_id !== undefined) detail.salaryCurrencyId = input.salary_currency_id ?? null;
+    if (input.other_monthly_income !== undefined)
+      detail.otherMonthlyIncome = input.other_monthly_income == null ? null : this.money(input.other_monthly_income);
+    if (input.old_address !== undefined) detail.oldAddress = input.old_address;
+    if (input.old_lessor !== undefined) detail.oldLessor = input.old_lessor;
+    if (input.moving_reason !== undefined) detail.movingReason = input.moving_reason;
+    if (input.occupant_number !== undefined) detail.occupantNumber = input.occupant_number;
+    if (input.partenair_name !== undefined) detail.partenairName = input.partenair_name ?? null;
+    if (input.partenair_number !== undefined) detail.partenairNumber = input.partenair_number ?? null;
+    if (input.child_number !== undefined) detail.childNumber = input.child_number ?? 0;
+    if (input.child_age !== undefined) detail.childAges = input.child_age?.length ? JSON.stringify(input.child_age) : null;
+
+    const detailRows = await this.db
+      .select({ id: tenantDetails.id })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, id));
+    if (detailRows.length) {
+      await this.db.update(tenantDetails).set(detail).where(eq(tenantDetails.customerId, id));
+    } else {
+      // Cas défensif : le locataire n'a pas (encore) de ligne tenant_details.
+      await this.db.insert(tenantDetails).values({
+        customerId: id,
+        birthDate: input.birth_date ?? "1970-01-01",
+        sex: input.sex ?? "M",
+        nationality: input.nationality ?? "",
+        maritalStatus: input.marital_status ?? "",
+        originProvince: input.origin_province ?? "",
+        phone2: input.phone2 ?? null,
+        contactedPerson: input.contacted_person ?? "",
+        contactedPersonPhoneNumber: input.contacted_person_phone_number ?? "",
+        professionalStatus: input.prossional_status ?? "",
+        mainActivity: input.main_activity ?? "",
+        entityName: input.entity_name ?? "",
+        entityAddress: input.entity_address ?? "",
+        hiringDate: input.hiring_date ?? null,
+        contractType: input.contract_type ?? "",
+        monthlyPay: this.money(input.monthly_pay),
+        salaryCurrencyId: input.salary_currency_id ?? null,
+        otherMonthlyIncome:
+          input.other_monthly_income === undefined || input.other_monthly_income === null
+            ? null
+            : this.money(input.other_monthly_income),
+        oldAddress: input.old_address ?? null,
+        oldLessor: input.old_lessor ?? null,
+        movingReason: input.moving_reason ?? null,
+        occupantNumber: input.occupant_number ?? 1,
+        partenairName: input.partenair_name ?? null,
+        partenairNumber: input.partenair_number ?? null,
+        childNumber: input.child_number ?? 0,
+        childAges: input.child_age?.length ? JSON.stringify(input.child_age) : null,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+    }
+
+    return this.findTenant(id, orgId);
   }
 
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
@@ -453,15 +548,15 @@ export class PropertyManagementService {
         sex: input.sex,
         nationality: input.nationality,
         maritalStatus: input.marital_status,
-        originProvince: input.origin_province,
+        originProvince: input.origin_province ?? "",
         phone2: input.phone2 ?? null,
         contactedPerson: input.contacted_person,
         contactedPersonPhoneNumber: input.contacted_person_phone_number,
         professionalStatus: input.prossional_status,
         mainActivity: input.main_activity,
         entityName: input.entity_name,
-        entityAddress: input.entity_address,
-        hiringDate: input.hiring_date,
+        entityAddress: input.entity_address ?? "",
+        hiringDate: input.hiring_date ?? null,
         contractType: input.contract_type,
         monthlyPay: this.money(input.monthly_pay),
         salaryCurrencyId: input.salary_currency_id ?? null,
@@ -771,6 +866,10 @@ export class PropertyManagementService {
       moveInNotes: input.moveInNotes ?? null,
       terms: input.terms ?? null,
       status: input.status ?? "draft",
+      taxName: input.taxName ?? null,
+      taxType: input.taxType ?? null,
+      taxValue: input.taxValue !== undefined && input.taxValue !== null ? String(input.taxValue) : null,
+      taxApplyMode: input.taxApplyMode ?? "never",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -808,6 +907,9 @@ export class PropertyManagementService {
           "moveInNotes",
           "terms",
           "status",
+          "taxName",
+          "taxType",
+          "taxApplyMode",
         ]),
         ...(input.startDate !== undefined ? { startDate: this.requiredDate(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: this.date(input.endDate) } : {}),
@@ -817,6 +919,7 @@ export class PropertyManagementService {
         ...(input.moveInMeterReading !== undefined
           ? { moveInMeterReading: input.moveInMeterReading === null ? null : this.money(input.moveInMeterReading) }
           : {}),
+        ...(input.taxValue !== undefined ? { taxValue: input.taxValue === null ? null : String(input.taxValue) } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateLeases.id, id), eq(realEstateLeases.organizationId, orgId)));
@@ -868,6 +971,8 @@ export class PropertyManagementService {
         method: realEstateRentPayments.method,
         reference: realEstateRentPayments.reference,
         notes: realEstateRentPayments.notes,
+        taxAmount: realEstateRentPayments.taxAmount,
+        taxName: realEstateRentPayments.taxName,
         currencyId: realEstateRentPayments.currencyId,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
@@ -920,6 +1025,10 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    // Taxe par bail (incluse/informative) : on enregistre la part de taxe
+    // contenue dans le paiement, sans changer le montant payé.
+    const taxAmt = this.computeInclusiveTax(Number(input.amount), lease as any);
+
     const [paymentResult] = await this.db.insert(realEstateRentPayments).values({
       organizationId: orgId,
       leaseId: lease.id,
@@ -930,11 +1039,34 @@ export class PropertyManagementService {
       method: input.method ?? "cash",
       reference: input.reference ?? null,
       notes: input.notes || "Payment for rent",
+      taxAmount: taxAmt != null ? this.money(taxAmt) : null,
+      taxName: taxAmt != null ? ((lease as any).taxName ?? null) : null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
     const paymentId = Number(paymentResult.insertId);
+
+    // Comptabilisation de la part de taxe (type dédié "Real Estate Tax").
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional();
+      if (taxType) {
+        await this.db.insert(transactions).values({
+          date: new Date(input.paymentDate),
+          debitId: taxType.debitAccountId,
+          creditId: taxType.creditAccountId,
+          particulars: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})`,
+          amount: taxAmt,
+          currencyId: paymentCurrencyId ?? null,
+          type: "Real Estate Tax",
+          relatedId: String(lease.id),
+          status: "true",
+          createdAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        });
+      }
+    }
+
     await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
       propertyId: lease.propertyId,
@@ -998,8 +1130,8 @@ export class PropertyManagementService {
     if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
 
     const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
-    const subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
-    const html = `
+    let subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
+    let html = `
       <p>Bonjour ${tenantName},</p>
       <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
       <p><strong>Montant du:</strong> ${lease.rentAmount}</p>
@@ -1007,6 +1139,24 @@ export class PropertyManagementService {
       <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
       <p>Cordialement,<br>L'équipe de gestion immobilière</p>
     `;
+
+    // Message configurable (Réglages → Messages) : si un template "payment_reminder"
+    // actif existe, on l'utilise avec substitution des placeholders.
+    const tpl = await this.db
+      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.eventType, "payment_reminder"), eq(emailTemplates.status, "true")))
+      .limit(1);
+    if (tpl.length) {
+      const fill = (s: string | null) =>
+        String(s || "")
+          .replace(/\{tenantName\}/g, tenantName)
+          .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
+          .replace(/\{reference\}/g, lease.reference || "")
+          .replace(/\{amount\}/g, String(lease.rentAmount ?? ""));
+      if (tpl[0].subject) subject = fill(tpl[0].subject);
+      if (tpl[0].body) html = fill(tpl[0].body);
+    }
 
     const result = await this.emails.send({
       to: lease.tenantEmail,
@@ -1317,6 +1467,10 @@ export class PropertyManagementService {
         moveInNotes: realEstateLeases.moveInNotes,
         terms: realEstateLeases.terms,
         status: realEstateLeases.status,
+        taxName: realEstateLeases.taxName,
+        taxType: realEstateLeases.taxType,
+        taxValue: realEstateLeases.taxValue,
+        taxApplyMode: realEstateLeases.taxApplyMode,
         propertyName: leaseProperty.name,
         propertyAddress: leaseProperty.address,
         unitName: leaseUnit.name,
@@ -1340,6 +1494,19 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
+  }
+
+  private async getRealEstateTaxTypeOptional() {
+    const rows = await this.db
+      .select({
+        id: transactionTypes.id,
+        debitAccountId: transactionTypes.debitAccountId,
+        creditAccountId: transactionTypes.creditAccountId,
+      })
+      .from(transactionTypes)
+      .where(and(eq(transactionTypes.name, "Real Estate Tax"), eq(transactionTypes.isActive, true)))
+      .limit(1);
+    return rows[0] || null;
   }
 
   private async getRentPaymentType() {
@@ -1499,6 +1666,26 @@ export class PropertyManagementService {
       child_number: childNumber,
       child_age: childAges.map((age) => Number(age)),
     } as CreateTenantDto;
+  }
+
+  // Part de taxe contenue dans un paiement de loyer (taxe incluse/informative).
+  // percent → tax = montant - montant/(1+taux/100) ; fixed → min(valeur, montant).
+  // Renvoie null si la taxe du bail n'est pas en mode "auto" ou si invalide.
+  private computeInclusiveTax(
+    amount: number,
+    lease: { taxApplyMode?: string | null; taxType?: string | null; taxValue?: string | number | null },
+  ): number | null {
+    if (!lease || lease.taxApplyMode !== "auto") return null;
+    const value = Number(lease.taxValue);
+    if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(amount) || amount <= 0) return null;
+    if (lease.taxType === "percent") {
+      const tax = amount - amount / (1 + value / 100);
+      return Math.round(tax * 100) / 100;
+    }
+    if (lease.taxType === "fixed") {
+      return Math.round(Math.min(value, amount) * 100) / 100;
+    }
+    return null;
   }
 
   private hashToken(token: string) {

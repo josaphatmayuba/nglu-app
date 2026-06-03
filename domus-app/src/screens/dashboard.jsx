@@ -1,23 +1,45 @@
+import { useState } from "react";
 import {
   TrendingUp, DoorOpen, Wallet, AlertTriangle, RefreshCw, UserCheck,
-  Smartphone, UserPlus, Wrench, Building, ChevronRight,
+  Smartphone, UserPlus, Wrench, Building, ChevronRight, Search,
 } from "lucide-react";
 import { api } from "../api.js";
-import { useApi, money } from "../data.js";
+import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
+import { groupAmountsByCurrency, normalizeCurrencyModule, useApi } from "../data.js";
+import { useRealtimeReload } from "../realtime.js";
+import { Metric, MetricsGrid, MoneyStack } from "./ui.jsx";
 
 export function Dashboard({ go }) {
-  const { data, loading, error } = useApi(() => api.dashboard(), []);
+  const { data, loading, error, reload } = useApi(loadDashboardModule, []);
+  useRealtimeReload(reload, ["properties", "units", "leases", "payments", "maintenance", "tenants"]);
+  const dateRange = useDateRange();
+  const [q, setQ] = useState("");
+
+  // Recherche globale : lance le catalogue Biens en transmettant le terme.
+  const runSearch = () => {
+    const term = q.trim();
+    try { if (term) sessionStorage.setItem("domus-search", term); } catch {}
+    go("biens");
+  };
 
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
 
-  const d = data || {};
+  const d = data?.dashboard || {};
+  const leases = filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange);
+  const leaseIds = new Set(leases.map((lease) => lease.id));
+  const payments = filterPayments(Array.isArray(data?.payments) ? data.payments : [], dateRange)
+    .filter((payment) => leaseIds.has(payment.leaseId));
+  const currency = normalizeCurrencyModule(data?.currencies, data?.setting);
+  const activeLeases = leases.filter((lease) => (lease.status || "active") === "active");
+  const monthlyRentRows = groupAmountsByCurrency(activeLeases, (lease) => lease.rentAmount, currency.defaultCurrencySymbol);
+  const collectedRows = groupAmountsByCurrency(payments, (payment) => payment.amount, currency.defaultCurrencySymbol);
   const occupancy = d.units ? Math.round((d.occupiedUnits / d.units) * 100) : 0;
 
   return (
     <>
       {/* ─────────── ACCUEIL SIMPLE (mobile) ─────────── */}
-      <div className="mob-home" style={{ display: "grid", gap: 16 }}>
+      <div className="mob-home">
         <div className="card" style={{ padding: 16 }}>
           <div className="eyebrow" style={{ marginBottom: 4 }}>À faire aujourd'hui</div>
           <Row icon={<AlertTriangle size={16} color="#be123c" />} bg="#ffe4e6"
@@ -37,13 +59,13 @@ export function Dashboard({ go }) {
             <Wrench size={24} color="#d97706" /><div className="lab">Déclarer<br />une panne</div>
           </a>
           <a className="card actile" onClick={() => go("biens")}>
-            <Building size={24} color="#475569" /><div className="lab">Voir<br />les biens</div>
+            <Building size={24} color="#475569" /><div className="lab">Voir<br />proprietes</div>
           </a>
         </div>
 
         <div className="grid g2 keep">
-          <Kpi label="Loyers du mois" value={money(d.monthlyRent)} sub={`${occupancy}% occupé`} />
-          <Kpi label="Encaissé (cumul)" value={money(d.collectedRent)} sub={`${d.activeLeases || 0} baux actifs`} />
+          <Kpi label="Loyers du mois" value={<MoneyStack rows={monthlyRentRows} fallbackSymbol={currency.defaultCurrencySymbol} />} sub={`${occupancy}% occupé`} />
+          <Kpi label="Encaissé (cumul)" value={<MoneyStack rows={collectedRows} fallbackSymbol={currency.defaultCurrencySymbol} />} sub={`${d.activeLeases || 0} baux actifs`} />
         </div>
       </div>
 
@@ -54,22 +76,31 @@ export function Dashboard({ go }) {
             <div className="eyebrow">Vue d'ensemble</div>
             <h2 className="title">Votre parc locatif</h2>
           </div>
-          <button className="btn btn-primary" onClick={() => go("baux")}>+ Nouveau bail</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <label className="immo-search">
+              <Search size={16} />
+              <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                placeholder="Rechercher propriete, locataire..." />
+            </label>
+            <button className="btn btn-primary" onClick={() => go("baux")}>+ Nouveau bail</button>
+          </div>
         </div>
 
-        <div className="grid g4" style={{ marginBottom: 16 }}>
-          <Kpi label="Biens" value={d.properties ?? 0} sub={`${d.units ?? 0} unités`} icon={<Building size={16} color="#6366f1" />} />
-          <Kpi label="Occupation" value={`${occupancy} %`} sub={`${d.occupiedUnits ?? 0} / ${d.units ?? 0} unités`} icon={<DoorOpen size={16} color="#6366f1" />} />
-          <Kpi label="Loyers actifs (mois)" value={money(d.monthlyRent)} sub={`${d.activeLeases ?? 0} baux actifs`} icon={<Wallet size={16} color="#6366f1" />} />
-          <Kpi label="Maintenance ouverte" value={d.openMaintenance ?? 0} sub="interventions" icon={<Wrench size={16} color="#6366f1" />} ring={d.openMaintenance > 0} />
-        </div>
+        <MetricsGrid>
+          <Metric tone="brand" icon={<Building size={20} />} label="Proprietes" value={d.properties ?? 0} helper={`${d.units ?? 0} lots`} />
+          <Metric tone="green" icon={<DoorOpen size={20} />} label="Occupation" value={`${occupancy} %`}
+            helper={<><span className="immo-progress"><span style={{ width: `${occupancy}%` }} /></span>{`${d.occupiedUnits ?? 0} / ${d.units ?? 0} unites`}</>} />
+          <Metric tone="amber" icon={<Wallet size={20} />} label="Loyers du mois" value={<MoneyStack rows={monthlyRentRows} fallbackSymbol={currency.defaultCurrencySymbol} />} helper={`${d.activeLeases ?? 0} baux actifs`} />
+          <Metric tone="red" icon={<Wrench size={20} />} label="Maintenance ouverte" value={d.openMaintenance ?? 0}
+            valueColor={d.openMaintenance > 0 ? "#dc2626" : undefined} helper="interventions" />
+        </MetricsGrid>
 
         <div className="grid g3">
           <div className="card" style={{ padding: 20, gridColumn: "span 2" }}>
             <h3 className="font-display" style={{ fontWeight: 600, fontSize: 15, marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
               <RefreshCw size={16} color="#6366f1" /> Encaissé cumulé
             </h3>
-            <div className="kpi-value" style={{ fontSize: 30 }}>{money(d.collectedRent)}</div>
+            <div className="kpi-value" style={{ fontSize: 30 }}><MoneyStack rows={collectedRows} fallbackSymbol={currency.defaultCurrencySymbol} /></div>
             <p className="muted" style={{ fontSize: 13 }}>
               Total des paiements de loyer enregistrés. Le détail par échéance arrive avec l'écran Loyers (SCRUM-248).
             </p>
@@ -85,6 +116,17 @@ export function Dashboard({ go }) {
       </div>
     </>
   );
+}
+
+async function loadDashboardModule() {
+  const [dashboard, leases, payments, currencies, setting] = await Promise.all([
+    api.dashboard(),
+    api.leases(),
+    api.payments(),
+    api.currencies(),
+    api.setting(),
+  ]);
+  return { dashboard, leases, payments, currencies, setting };
 }
 
 function Row({ icon, bg, title, sub, onClick, last }) {

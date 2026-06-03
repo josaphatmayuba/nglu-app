@@ -6,6 +6,8 @@
 //
 // Le token est lu depuis localStorage `access-token` — partagé en same-origin avec
 // le CRM (/admin et /domus), comme FarmOS le fait sous /farmos.
+import { enqueue, flushOutbox, isNetworkError } from "./outbox.js";
+
 const NATIVE =
   typeof window !== "undefined" &&
   (window.Capacitor?.isNativePlatform?.() === true ||
@@ -21,14 +23,26 @@ function authHeaders() {
 
 async function jsonFetch(path, init = {}) {
   const { base = BASE, ...fetchInit } = init;
-  const res = await fetch(`${base}${path}`, {
-    ...fetchInit,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(fetchInit.headers || {}),
-    },
-  });
+  const url = `${base}${path}`;
+  const method = (fetchInit.method || "GET").toUpperCase();
+  let res;
+  try {
+    res = await fetch(url, {
+      ...fetchInit,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(fetchInit.headers || {}),
+      },
+    });
+  } catch (err) {
+    // Hors ligne : on met les écritures en file d'attente pour rejeu au retour réseau.
+    if (method !== "GET" && isNetworkError(err)) {
+      enqueue({ url, method, body: fetchInit.body || null });
+      return { _queued: true };
+    }
+    throw err;
+  }
   if (!res.ok) {
     // 401 = token invalide/expiré → purge auth et bascule sur l'écran de connexion.
     if (res.status === 401 && typeof window !== "undefined") {
@@ -66,11 +80,16 @@ export const api = {
 
   tenants: () => get("/tenants"),
   createTenant: (b) => post("/tenants", b),
+  updateTenant: (id, b) => put(`/tenants/${id}`, b),
+  // Suppression = soft-delete (status=false) via l'API customer partagée du CRM.
+  deleteTenant: (id) => jsonFetch(`/customer/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status: "false" }) }),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
   validateOnboarding: (id) => post(`/onboarding/${id}/validate`),
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
+  sendOnboardingSms: (b) => jsonFetch("/send-sms", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  sendOnboardingEmail: (b) => jsonFetch("/property-management/onboarding/send-email", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
 
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),
@@ -110,7 +129,35 @@ export const api = {
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   deleteContract: (id) => del(`/contracts/${id}`),
 
+  // Messages / notifications configurables (table email_templates partagée).
+  messageTemplates: () => jsonFetch("/email-templates", { method: "GET", base: API_ROOT }),
+  createMessageTemplate: (b) => jsonFetch("/email-templates", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  updateMessageTemplate: (id, b) => jsonFetch(`/email-templates/${id}`, { method: "PUT", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  deleteMessageTemplate: (id) => jsonFetch(`/email-templates/${id}`, { method: "DELETE", base: API_ROOT }),
+
   contractTemplates: () => get("/contract-templates"),
+  contractTemplate: (id) => get(`/contract-templates/${id}`),
+  createContractTemplate: (b) => post("/contract-templates", b),
+  updateContractTemplate: (id, b) => put(`/contract-templates/${id}`, b),
+  activateContractTemplate: (id) => patch(`/contract-templates/${id}/activate`),
+  deleteContractTemplate: (id) => del(`/contract-templates/${id}`),
 };
+
+// ── Rejeu de la file d'attente hors ligne ──
+function replayQueued(entry) {
+  return fetch(entry.url, {
+    method: entry.method,
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: entry.body || undefined,
+  });
+}
+export function syncOutbox() {
+  return flushOutbox(replayQueued);
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { syncOutbox(); });
+  // Tentative au démarrage (au cas où des écritures seraient restées en file).
+  setTimeout(() => syncOutbox(), 1500);
+}
 
 export { BASE, NATIVE, API_ROOT };

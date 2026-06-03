@@ -47,6 +47,7 @@ import {
   UpdateLeaseDto,
   UpdateMaintenanceDto,
   UpdatePropertyDto,
+  UpdateTenantDto,
   UpdateUnitDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
@@ -87,6 +88,14 @@ export class PropertyManagementController {
   @Post("tenants")
   createTenant(@Body() body: CreateTenantDto, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.createTenant(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a tenant customer and extended details" })
+  @ApiOkResponse({ description: "Updated tenant" })
+  @Permissions("update-propertyManagement")
+  @Put("tenants/:id")
+  updateTenant(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTenantDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.updateTenant(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })

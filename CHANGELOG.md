@@ -12,6 +12,8 @@ This project follows:
 
 ### Fixed
 
+- Domus: les actions contrat utilisent maintenant un vrai PDF `jsPDF` avec signatures bailleur/locataire; l'aperçu de contrat depuis les baux affiche aussi les signatures.
+- Domus: alignement des criteres de donnees immobilier avec le CRM: filtre de periode par defaut sur "Tout", exclusion des soft-deleted/inactifs, unites rattachees aux biens actifs, et paiements rattaches aux baux visibles.
 - FarmOS: le tableau de bord charge maintenant ses donnees via `GET /api/farmos/dashboard` au lieu de declencher plusieurs requetes liste cote navigateur.
   - Evite la cascade de rechargements causee par les evenements `farmos:cache-updated` de chaque table.
   - Le client realtime FarmOS attend maintenant un token avant d'ouvrir SSE/polling, et ne lance plus le polling en parallele d'une connexion SSE saine.
@@ -21,6 +23,8 @@ This project follows:
 - FarmOS: ajout d'une migration PWA qui desinscrit une seule fois les anciens service workers FarmOS pouvant encore intercepter `/api/farmos/*` et nettoyer leurs caches API.
 
 ### Added
+
+- Domus: configuration signature bailleur dans Reglages (eIDAS, tablette, cursif, image) — partagee avec le CRM via `landlordSignature`.
 
 - SCRUM-247: Domus — ecran Contrats & signature (liste, KPIs, detail papier, journal d'audit, envoi/lien, modèles).
   - Creation depuis un bail, impression/PDF, renvoi pour signature, filtre periode global.
