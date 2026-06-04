@@ -10,8 +10,17 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-06-04
+
+### Security
+
+- Mise a jour de `drizzle-orm` 0.38.4 -> 0.45.2 : correction de la faille d'injection SQL via des identifiants SQL mal echappes (GHSA, severite haute). `drizzle-kit` 0.30.1 -> 0.31.10. Verifie : build NestJS OK, migrations au boot OK, health 200, requetes drizzle live OK.
+
 ### Fixed
 
+- Domus (baux): menu d'actions « ... » aligne sur le CRM (4 etats: signe, en attente de signature, sans contrat, expire) et epure (sans « Exporter CSV » ni « Copier la reference »); « Renouveler » seulement si le bail finit dans <= 4 mois ou est expire; « Resilier » seulement si le contrat est signe; ouverture automatique vers le haut/bas selon la place; fermeture au clic en dehors ou sur Echap; « Voir les paiements » et « Tickets maintenance » deplaces dans le detail du bail.
+- Domus: paiement de loyer bloque tant que le contrat du bail n'est pas signe; duree de bail inclusive (12 mois et non 11); filtre de periode par defaut sur « Annee »; message d'erreur API lisible (message NestJS au lieu du JSON brut); couleur distincte des biens Loue/Libre.
+- Deploy: `deploy-dev-domus-aws.ps1` — le `git pull` distant est rendu non fatal pour ne plus interrompre la livraison de la dist locale (le serveur servait un vieux bundle).
 - Domus: les actions contrat utilisent maintenant un vrai PDF `jsPDF` avec signatures bailleur/locataire; l'aperçu de contrat depuis les baux affiche aussi les signatures.
 - Domus: alignement des criteres de donnees immobilier avec le CRM: filtre de periode par defaut sur "Tout", exclusion des soft-deleted/inactifs, unites rattachees aux biens actifs, et paiements rattaches aux baux visibles.
 - FarmOS: le tableau de bord charge maintenant ses donnees via `GET /api/farmos/dashboard` au lieu de declencher plusieurs requetes liste cote navigateur.
@@ -24,6 +33,10 @@ This project follows:
 
 ### Added
 
+- Domus: caution / depot de garantie — cycle complet encaissement + restitution avec retenue pour degats, comptabilisee en passif « Tenant Deposits » (debit Caisse/Banque). Nouvelle table `real_estate_security_deposits` (migration 0068, a creer a la main en prod via `scripts/sql/0068_security_deposits_apply.sql`) et endpoints `GET /deposits`, `POST /leases/:id/deposit`, `POST /leases/:id/deposit/return`.
+- Domus (loyers): suivi des arrieres et du solde reel par bail gerant les paiements partiels — « reste a payer », barre de couverture fractionnaire, avance « couvert jusqu'a <mois> », metrique « Arrieres (reste du) » par devise.
+- Domus: moyens de paiement supplementaires (Bancaire, Carte, Cheque) avec mapping comptable du compte debite selon le moyen (Caisse/Banque/Mobile Money); numero de recu auto et telephone locataire pre-rempli.
+- CRM: colonne devise et symbole par paiement dans l'ecran Transactions.
 - BatiPro: ajout du socle applicatif Construction sous `/batipro/` avec auth CRM partagee, PWA Vite, dashboard chantier, navigation CRM, routage nginx et permissions initiales.
   - Ajout des tables/API CRUD projets, taches, materiaux et equipes avec soft-delete, realtime et script de deploiement dev.
 
