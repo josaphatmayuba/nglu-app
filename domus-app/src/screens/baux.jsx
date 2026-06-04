@@ -84,7 +84,7 @@ function leaseInfo(l) {
   const statusText = isExpired ? "Expiré" : daysLeft !== null && daysLeft <= 60 ? `À renouveler ${daysLeft}j` : "Actif";
 
   return {
-    variant, tone, statusText, start, end, years, elapsedMonths, progress,
+    variant, tone, statusText, start, end, years, elapsedMonths, progress, daysLeft, isExpired,
     reference: `#${l.reference || `LEASE-${l.id}`}`,
     propertyLabel: [l.propertyAddress || l.propertyName, l.unitName].filter(Boolean).join(" · ") || "—",
   };
@@ -349,6 +349,7 @@ export function Baux({ go } = {}) {
                       variant={menuVariant}
                       contract={contract}
                       dir={menuDir}
+                      renewable={info.isExpired || (info.daysLeft != null && info.daysLeft <= 120)}
                       statusText={statusPill.text}
                       deposit={deposit}
                       depositDue={depositDue}
@@ -457,7 +458,7 @@ export function Baux({ go } = {}) {
         />
       )}
       {detailLease && (
-        <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} />
+        <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
       )}
       {contractPreview && (
         <ContractPreviewModal contract={contractPreview} onClose={() => setContractPreview(null)} />
@@ -495,6 +496,7 @@ function LeaseActionsMenu({
   variant = "signed",
   contract,
   dir = "down",
+  renewable = false,
   statusText,
   deposit,
   depositDue = 0,
@@ -559,15 +561,10 @@ function LeaseActionsMenu({
         <>
           <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
           <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat signé</button>
-          <button disabled={disabled} onClick={onDownloadContract}><FileDown size={15} /> Télécharger PDF</button>
-          <button onClick={onExportCsv}><FileSpreadsheet size={15} /> Exporter CSV</button>
           <hr />
-          <button onClick={onPayments}><Receipt size={15} /> Voir les paiements</button>
-          <button onClick={onMaintenance}><Wrench size={15} /> Tickets maintenance</button>
-          <hr />
-          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
-          <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>
+          {renewable && <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>}
+          {/* Résilier uniquement si le contrat est signé. */}
           <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> Résilier le bail</button>
         </>
       )}
@@ -579,7 +576,6 @@ function LeaseActionsMenu({
           <button disabled={disabled} onClick={onResend}><Send size={15} /> Renvoyer le lien</button>
           <button onClick={copySigningLink}><Link2 size={15} /> Copier le lien de signature</button>
           <hr />
-          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
           <button disabled={disabled} className="danger" onClick={onCancelSend}><Trash2 size={15} /> Annuler l'envoi</button>
         </>
@@ -590,11 +586,7 @@ function LeaseActionsMenu({
           <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
           <button disabled={disabled} className="highlight" onClick={onContract}><FileSignature size={15} /> Générer le contrat</button>
           <hr />
-          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
           <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
-          <button onClick={onPayments}><Receipt size={15} /> Voir les paiements</button>
-          <hr />
-          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> Résilier le bail</button>
         </>
       )}
 
@@ -602,10 +594,8 @@ function LeaseActionsMenu({
         <>
           <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
           <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat archivé</button>
-          <button disabled={disabled} onClick={onDownloadContract}><FileDown size={15} /> Télécharger PDF</button>
-          <button onClick={onExportCsv}><FileSpreadsheet size={15} /> Exporter CSV</button>
           <hr />
-          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
+          {/* Bail expiré → renouvellement toujours proposé. */}
           <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> Renouveler (nouveau bail)</button>
         </>
       )}
@@ -903,7 +893,7 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
   );
 }
 
-function LeaseDetailModal({ lease, info, onClose }) {
+function LeaseDetailModal({ lease, info, onClose, go }) {
   const rows = [
     ["Reference", info.reference],
     ["Locataire", tenantName(lease)],
@@ -941,6 +931,12 @@ function LeaseDetailModal({ lease, info, onClose }) {
           <div className="domus-detail-notes">
             {lease.terms && <p><strong>Conditions</strong>{lease.terms}</p>}
             {lease.moveInNotes && <p><strong>Notes d'entree</strong>{lease.moveInNotes}</p>}
+          </div>
+        )}
+        {go && (
+          <div className="domus-detail-actions">
+            <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>
+            <button className="immo-btn" onClick={() => { onClose(); go("maintenance"); }}><Wrench size={15} /> Tickets maintenance</button>
           </div>
         )}
       </div>

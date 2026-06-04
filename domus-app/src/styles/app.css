@@ -893,6 +893,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-lease-actions-head.expired span { color:#71717a; }
 .immo-lease-actions-menu button.highlight { color:#4338ca; font-weight:700; }
 .immo-lease-actions-menu button.highlight:hover { background:#eef2ff; color:#3730a3; }
+.domus-detail-actions { display:flex; flex-wrap:wrap; gap:10px; border-top:1px solid #ececf0; margin-top:16px; padding-top:16px; }
 /* Caution sur la carte de bail */
 .immo-lease-deposit { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px dashed #ececf0; margin-top:12px; padding-top:12px; }
 .immo-lease-deposit-label { display:inline-flex; align-items:center; gap:5px; color:#71717a; font-size:12px; font-weight:600; margin-right:auto; }
