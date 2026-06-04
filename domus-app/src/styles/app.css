@@ -1010,3 +1010,66 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-onboarding-actions button.primary{background:#4f46e5;border-color:#4f46e5;color:#fff;}
 .domus-onboarding-actions button.danger{border-color:#fecaca;color:#dc2626;}
 .shell[data-layout="mobile"] .domus-onboarding-card{padding:18px;}.shell[data-layout="mobile"] .domus-onboarding-strip{grid-template-columns:1fr;}
+
+/* ── Page publique d'inscription locataire (Domus, hors auth) ── */
+.onb-page{background:radial-gradient(1200px 600px at 50% -200px,#e0e7ff 0%,transparent 60%),linear-gradient(180deg,#eef1fb 0%,#f5f7fc 100%);min-height:100vh;padding:32px 16px 132px;display:flex;justify-content:center;align-items:flex-start;}
+.onb-shell{max-width:840px;width:100%;}
+.domus-spin{animation:domus-spin 1s linear infinite;color:#4f46e5;}
+@keyframes domus-spin{to{transform:rotate(360deg);}}
+
+/* États plein écran (chargement / erreur / merci) */
+.onb-state{align-items:center;background:#fff;border:1px solid #e6e8f0;border-radius:20px;box-shadow:0 24px 60px -34px rgba(49,46,129,.5);display:flex;flex-direction:column;gap:8px;margin:8vh auto 0;max-width:460px;padding:48px 32px;text-align:center;}
+.onb-state h1{font-size:22px;margin:0;}
+.onb-success-ring{align-items:center;background:#dcfce7;border-radius:999px;display:inline-flex;height:88px;justify-content:center;width:88px;}
+
+/* Hero dégradé iris */
+.onb-hero{background:linear-gradient(135deg,#4f46e5 0%,#6366f1 50%,#7c3aed 100%);border-radius:22px;box-shadow:0 24px 60px -30px rgba(79,70,229,.7);color:#fff;overflow:hidden;padding:30px 32px;position:relative;}
+.onb-hero::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 70%);pointer-events:none;}
+.onb-hero h1{font-size:26px;font-weight:700;letter-spacing:-.01em;margin:16px 0 6px;}
+.onb-hero p{color:rgba(255,255,255,.82);font-size:14px;line-height:1.5;margin:0;max-width:560px;}
+.onb-progress{align-items:center;display:flex;gap:12px;margin-top:20px;}
+.onb-progress-track{background:rgba(255,255,255,.25);border-radius:999px;flex:1;height:8px;overflow:hidden;}
+.onb-progress-fill{background:#fff;border-radius:999px;height:100%;transition:width .35s ease;}
+.onb-progress-label{color:#fff;font-size:12px;font-weight:700;white-space:nowrap;}
+
+/* Marque Domus */
+.onb-brand{align-items:center;display:inline-flex;gap:10px;}
+.onb-brand-logo{align-items:center;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:12px;box-shadow:0 6px 16px -6px rgba(79,70,229,.8);display:inline-flex;height:42px;justify-content:center;width:42px;}
+.onb-brand-name{font-size:19px;font-weight:700;}
+.onb-brand.on-dark .onb-brand-logo{background:rgba(255,255,255,.16);box-shadow:none;}
+.onb-brand.on-dark .onb-brand-name{color:#fff;}
+
+/* Corps : cartes de section */
+.onb-body{display:flex;flex-direction:column;gap:16px;margin-top:18px;}
+.onb-card{background:#fff;border:1px solid #ebedf3;border-radius:16px;box-shadow:0 10px 30px -24px rgba(24,24,27,.45);padding:22px 24px;}
+.onb-card-head{align-items:center;border-bottom:1px solid #f1f2f6;display:flex;gap:13px;margin-bottom:18px;padding-bottom:14px;}
+.onb-card-icon{align-items:center;border-radius:12px;display:inline-flex;flex:none;height:42px;justify-content:center;width:42px;}
+.onb-card-icon.tone-iris{background:#eef2ff;color:#4f46e5;}
+.onb-card-icon.tone-violet{background:#f5f3ff;color:#7c3aed;}
+.onb-card-icon.tone-rose{background:#fff1f2;color:#e11d48;}
+.onb-card-icon.tone-amber{background:#fffbeb;color:#d97706;}
+.onb-card-icon.tone-emerald{background:#ecfdf5;color:#059669;}
+.onb-card-heading h3{color:#18181b;font-size:15px;font-weight:700;margin:0;}
+.onb-card-heading p{color:#8a8a93;font-size:12.5px;margin:2px 0 0;}
+.onb-card-body{display:flex;flex-direction:column;gap:18px;}
+
+.onb-check{align-items:center;background:#f9fafe;border:1px solid #e8eaf3;border-radius:10px;color:#27272a;cursor:pointer;display:flex;font-size:14px;font-weight:600;gap:10px;padding:12px 14px;}
+.onb-check input{accent-color:#4f46e5;height:17px;width:17px;}
+
+.onb-alert{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;color:#b91c1c;font-size:13.5px;font-weight:600;padding:13px 16px;}
+.onb-secure{align-items:center;color:#9a9aa3;display:flex;font-size:12.5px;gap:7px;justify-content:center;margin:6px 0 0;}
+
+/* Barre d'action collante en bas */
+.onb-actions{align-items:center;backdrop-filter:blur(10px);background:rgba(255,255,255,.86);border:1px solid #e6e8f0;border-radius:16px;bottom:18px;box-shadow:0 18px 44px -22px rgba(24,24,27,.5);display:flex;gap:12px;margin-top:18px;padding:14px 18px;position:sticky;}
+.onb-save-status{color:#8a8a93;font-size:12.5px;margin-right:auto;}
+.onb-actions .btn{min-height:42px;}
+
+@media (max-width:640px){
+  .onb-page{padding:18px 12px 128px;}
+  .onb-hero{border-radius:18px;padding:22px 20px;}
+  .onb-hero h1{font-size:22px;}
+  .onb-card{border-radius:14px;padding:18px 16px;}
+  .onb-actions{flex-wrap:wrap;}
+  .onb-save-status{flex-basis:100%;margin:0 0 4px;}
+  .onb-actions .btn{flex:1;}
+}

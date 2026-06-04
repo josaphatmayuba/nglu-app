@@ -29,6 +29,8 @@ import {
   CalendarClock,
   Wrench,
   Layers,
+  HardHat,
+  KeyRound,
 } from "lucide-react";
 
 const AVAILABLE_APPS = [
@@ -41,6 +43,8 @@ const AVAILABLE_APPS = [
   { key: "property", name: "Immobilier", path: "/admin/property-management", icon: Building2, gradient: "from-teal-400 to-teal-600" },
   { key: "hr", name: "RH", path: "/admin/hr", icon: Briefcase, gradient: "from-purple-400 to-purple-600" },
   { key: "farmos", name: "FarmOS", path: "/farmos/", icon: Layers, gradient: "from-green-500 to-emerald-700", external: true },
+  { key: "batipro", name: "BatiPro", path: "/batipro/", icon: HardHat, gradient: "from-blue-700 to-amber-500", external: true },
+  { key: "domus", name: "Domus", path: "/domus/", icon: KeyRound, gradient: "from-indigo-500 to-violet-700", external: true },
   { key: "accounting", name: "Comptabilité", path: "/admin/accounting", icon: Wallet, gradient: "from-amber-400 to-amber-600" },
   { key: "reports", name: "Rapports", path: "/admin/reports", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
   { key: "settings", name: "Paramètres", path: "/admin/app-settings", icon: Settings, gradient: "from-zinc-500 to-zinc-700" },

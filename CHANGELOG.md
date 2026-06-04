@@ -24,6 +24,9 @@ This project follows:
 
 ### Added
 
+- BatiPro: ajout du socle applicatif Construction sous `/batipro/` avec auth CRM partagee, PWA Vite, dashboard chantier, navigation CRM, routage nginx et permissions initiales.
+  - Ajout des tables/API CRUD projets, taches, materiaux et equipes avec soft-delete, realtime et script de deploiement dev.
+
 - Domus: configuration signature bailleur dans Reglages (eIDAS, tablette, cursif, image) — partagee avec le CRM via `landlordSignature`.
 
 - SCRUM-247: Domus — ecran Contrats & signature (liste, KPIs, detail papier, journal d'audit, envoi/lien, modèles).

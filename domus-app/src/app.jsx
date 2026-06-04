@@ -17,6 +17,7 @@ import { Baux } from "./screens/baux.jsx";
 import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
+import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
@@ -61,8 +62,36 @@ const SCREENS = {
   reglages: (_nav, device) => <Reglages device={device} />,
 };
 
+// Route publique d'inscription locataire (/domus/onboarding/tenant?token=...) —
+// sans auth. URL propre servie via le fallback SPA nginx ; on tolère aussi un
+// éventuel ancien lien par hash (#/onboarding?token=) par robustesse.
+function useOnboardingRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, search, hash } = window.location;
+    if (/\/onboarding\/tenant\/?$/.test(pathname || "")) {
+      return new URLSearchParams(search || "").get("token") || "";
+    }
+    const m = (hash || "").match(/^#\/onboarding(?:\?(.*))?$/);
+    if (m) return new URLSearchParams(m[1] || "").get("token") || "";
+    return null;
+  };
+  const [token, setToken] = useState(read);
+  useEffect(() => {
+    const on = () => setToken(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return token;
+}
+
 export default function App() {
   const token = useAuthToken();
+  const onboardingToken = useOnboardingRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
   const device = useDeviceMode();
@@ -71,10 +100,13 @@ export default function App() {
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
-    if (!token) return undefined;
+    if (!token || onboardingToken !== null) return undefined;
     startRealtimeClient();
     return () => stopRealtimeClient();
-  }, [token]);
+  }, [token, onboardingToken]);
+
+  // Page publique d'onboarding : prioritaire sur l'authentification.
+  if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
 
   if (!token) return <LoginScreen />;
 

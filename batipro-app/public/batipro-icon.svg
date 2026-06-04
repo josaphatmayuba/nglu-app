@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="BatiPro">
+  <rect width="128" height="128" rx="24" fill="#172554"/>
+  <path d="M26 92h76v10H26z" fill="#f8fafc"/>
+  <path d="M36 82h56V48L64 28 36 48z" fill="#f59e0b"/>
+  <path d="M48 82V58h32v24" fill="#172554"/>
+  <path d="M31 52 64 24l33 28" fill="none" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M83 35h11v19" fill="none" stroke="#f8fafc" stroke-width="7" stroke-linecap="round"/>
+</svg>

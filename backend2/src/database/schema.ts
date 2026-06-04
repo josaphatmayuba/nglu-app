@@ -1078,6 +1078,69 @@ export const farmosMedicines = mysqlTable("farmos_medicines", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+export const batiproProjects = mysqlTable("batipro_projects", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  code: varchar("code", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  client: varchar("client", { length: 255 }),
+  manager: varchar("manager", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Planifie").notNull(),
+  progress: int("progress").default(0).notNull(),
+  budget: decimal("budget", { precision: 14, scale: 2 }).default("0").notNull(),
+  spent: decimal("spent", { precision: 14, scale: 2 }).default("0").notNull(),
+  startDate: date("start_date", { mode: "string" }),
+  dueDate: date("due_date", { mode: "string" }),
+  location: varchar("location", { length: 255 }),
+  risk: varchar("risk", { length: 30 }).default("Faible").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproTasks = mysqlTable("batipro_tasks", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }),
+  label: varchar("label", { length: 255 }).notNull(),
+  owner: varchar("owner", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Planifie").notNull(),
+  taskDate: date("task_date", { mode: "string" }),
+  priority: varchar("priority", { length: 30 }).default("Normale").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproMaterials = mysqlTable("batipro_materials", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  unit: varchar("unit", { length: 40 }).default("unite").notNull(),
+  stock: decimal("stock", { precision: 14, scale: 2 }).default("0").notNull(),
+  minStock: decimal("min_stock", { precision: 14, scale: 2 }).default("0").notNull(),
+  reserved: decimal("reserved", { precision: 14, scale: 2 }).default("0").notNull(),
+  supplier: varchar("supplier", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproCrews = mysqlTable("batipro_crews", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  people: int("people").default(0).notNull(),
+  site: varchar("site", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Disponible").notNull(),
+  lead: varchar("lead", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosDiseases = mysqlTable("farmos_diseases", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }),

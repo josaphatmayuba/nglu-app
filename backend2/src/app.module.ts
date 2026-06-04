@@ -6,6 +6,7 @@ import { AccountsModule } from "./accounts/accounts.module";
 import { AppSettingsModule } from "./app-settings/app-settings.module";
 import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
+import { BatiproModule } from "./batipro/batipro.module";
 import { CompatModule } from "./compat/compat.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { CurrenciesModule } from "./currencies/currencies.module";
@@ -50,6 +51,7 @@ import { UsersModule } from "./users/users.module";
     DatabaseModule,
     AuditModule,
     AuthModule,
+    BatiproModule,
     AccountsModule,
     AppSettingsModule,
     DashboardModule,

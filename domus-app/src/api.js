@@ -143,6 +143,46 @@ export const api = {
   deleteContractTemplate: (id) => del(`/contract-templates/${id}`),
 };
 
+// ── Onboarding public (page locataire Domus, sans authentification) ──
+// Le backend renvoie un lien vers la page CRM (APP_URL/onboarding/tenant?token=).
+// Domus possède sa PROPRE page publique : on réécrit le lien vers une URL propre
+// sous /domus/. nginx assure le fallback SPA (`@dev_domus_spa`/`@prod_domus_spa`
+// → /domus/index.html) pour ce deep-link, donc pas besoin de routage par hash.
+export const ONBOARDING_PATH = "/domus/onboarding/tenant";
+export function domusOnboardingUrl(backendUrl) {
+  try {
+    const u = new URL(backendUrl);
+    const token = u.searchParams.get("token");
+    if (!token) return backendUrl || "";
+    return `${u.origin}${ONBOARDING_PATH}?token=${encodeURIComponent(token)}`;
+  } catch {
+    return backendUrl || "";
+  }
+}
+
+// Appels publics (pas de token d'auth, pas de file d'attente hors ligne) que la
+// page d'onboarding Domus utilise — mêmes endpoints que la page tenant du CRM.
+async function publicFetch(path, init = {}) {
+  const url = `${API_ROOT}${path}`;
+  const res = await fetch(url, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+export const publicApi = {
+  onboarding: (token) => publicFetch(`/tenant-onboarding?token=${encodeURIComponent(token)}`),
+  saveOnboarding: (token, values) =>
+    publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+  submitOnboarding: (token, values) =>
+    publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+};
+
 // ── Rejeu de la file d'attente hors ligne ──
 function replayQueued(entry) {
   return fetch(entry.url, {

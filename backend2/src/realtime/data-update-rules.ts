@@ -6,7 +6,8 @@ export type DataUpdateEntity =
   | "payment"
   | "maintenance"
   | "tenantOnboarding"
-  | "farmos";
+  | "farmos"
+  | "batipro";
 
 export type DataUpdateRule = {
   module: string;
@@ -240,6 +241,38 @@ export const DATA_UPDATE_RULES: Record<DataUpdateEntity, DataUpdateRule> = {
     tags: ["farmos"],
     pages: ["/farmos/"],
     dataLoaders: ["farmos-app/src/api.js"],
+  },
+  batipro: {
+    module: "batipro",
+    endpoints: [
+      "GET /batipro/dashboard",
+      "GET /batipro/projects",
+      "POST /batipro/projects",
+      "PUT /batipro/projects/:id",
+      "DELETE /batipro/projects/:id",
+      "GET /batipro/tasks",
+      "POST /batipro/tasks",
+      "PUT /batipro/tasks/:id",
+      "DELETE /batipro/tasks/:id",
+      "GET /batipro/materials",
+      "POST /batipro/materials",
+      "PUT /batipro/materials/:id",
+      "DELETE /batipro/materials/:id",
+      "GET /batipro/crews",
+      "POST /batipro/crews",
+      "PUT /batipro/crews/:id",
+      "DELETE /batipro/crews/:id",
+    ],
+    permissions: [
+      "readAll-batipro",
+      "readSingle-batipro",
+      "create-batipro",
+      "update-batipro",
+      "delete-batipro",
+    ],
+    tags: ["batipro", "projects", "tasks", "materials", "crews", "dashboard"],
+    pages: ["/batipro/"],
+    dataLoaders: ["batipro-app/src/api.js", "batipro-app/src/app.jsx"],
   },
 };
 

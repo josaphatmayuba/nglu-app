@@ -4,7 +4,7 @@ import {
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
   ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet,
 } from "lucide-react";
-import { api } from "../api.js";
+import { api, domusOnboardingUrl } from "../api.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -59,7 +59,8 @@ function isPendingOnboarding(record, now = Date.now()) {
   return true;
 }
 function onboardingUrl(record) {
-  return record?.url || record?.onboardingUrl || "";
+  // Le backend renvoie le lien CRM ; on le réécrit vers la page publique Domus.
+  return domusOnboardingUrl(record?.url || record?.onboardingUrl || "");
 }
 function onboardingDisplayName(record) {
   const data = parseOnboardingData(record);
@@ -534,7 +535,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
-  const url = result ? (result.url || result.onboardingUrl || "") : "";
+  const url = result ? domusOnboardingUrl(result.url || result.onboardingUrl || "") : "";
 
   const generate = async () => {
     setBusy(true);

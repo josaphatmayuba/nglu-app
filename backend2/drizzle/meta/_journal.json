@@ -337,6 +337,20 @@
       "when": 1780185600000,
       "tag": "0067_farmos_price_list",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1780189200000,
+      "tag": "0068_grant_batipro_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1780192800000,
+      "tag": "0069_create_batipro_tables",
+      "breakpoints": true
     }
   ]
 }
