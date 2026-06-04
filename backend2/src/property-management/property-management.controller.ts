@@ -40,6 +40,8 @@ import {
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  CollectDepositDto,
+  ReturnDepositDto,
   CreateTenantDto,
   CreateUnitDto,
   GenerateTenantOnboardingDto,
@@ -279,6 +281,27 @@ export class PropertyManagementController {
   @HttpCode(200)
   deleteLease(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.propertyManagementService.deleteLease(id, orgId);
+  }
+
+  @ApiOperation({ summary: "List security deposits (held + returned)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("deposits")
+  deposits(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listDeposits(orgId);
+  }
+
+  @ApiOperation({ summary: "Collect a security deposit (records a liability accounting transaction)" })
+  @Permissions("create-propertyManagement")
+  @Post("leases/:id/deposit")
+  collectDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: CollectDepositDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.collectDeposit(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Return a security deposit with optional damage deduction" })
+  @Permissions("update-propertyManagement")
+  @Post("leases/:id/deposit/return")
+  returnDeposit(@Param("id", ParseIntPipe) id: number, @Body() body: ReturnDepositDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.returnDeposit(id, body, orgId);
   }
 
   @ApiOperation({ summary: "List rent payments" })

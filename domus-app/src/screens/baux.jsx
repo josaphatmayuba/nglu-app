@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Check,
   Copy,
@@ -7,21 +7,25 @@ import {
   FileCheck,
   FileDown,
   FilePlus,
+  FileSignature,
   FileSpreadsheet,
   FileText,
+  Link2,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   Receipt,
   Search,
+  Send,
+  Shield,
   Trash2,
   Wrench,
   X,
 } from "lucide-react";
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
-import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup } from "../contractUtils.js";
+import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } from "../contractUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -115,18 +119,46 @@ export function Baux({ go } = {}) {
   const units = filterUnits(Array.isArray(data?.units) ? data.units : [], properties);
   const tenants = filterTenants(Array.isArray(data?.tenants) ? data.tenants : [], dateRange);
   const contracts = Array.isArray(data?.contracts) ? data.contracts : [];
+  const deposits = Array.isArray(data?.deposits) ? data.deposits : [];
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [menuDir, setMenuDir] = useState("down");
   const [leaseModal, setLeaseModal] = useState(null);
+  const [depositModal, setDepositModal] = useState(null);
   const [detailLease, setDetailLease] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
 
+  // Fermer le menu « … » au clic en dehors ou sur Échap.
+  useEffect(() => {
+    if (openMenuId == null) return;
+    const onDown = (e) => {
+      if (!e.target.closest?.(".immo-card-actions")) setOpenMenuId(null);
+    };
+    const onKey = (e) => { if (e.key === "Escape") setOpenMenuId(null); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenuId]);
+
   const enriched = useMemo(() => leases.map((l) => ({ lease: l, info: leaseInfo(l) })), [leases]);
+  // Caution détenue (status="held") par bail, sinon la dernière (restituée).
+  const depositByLease = useMemo(() => {
+    const map = new Map();
+    [...deposits]
+      .sort((a, b) => (a.status === "held" ? -1 : 1) - (b.status === "held" ? -1 : 1) || (b.id || 0) - (a.id || 0))
+      .forEach((d) => {
+        if (d?.leaseId != null && !map.has(String(d.leaseId))) map.set(String(d.leaseId), d);
+      });
+    return map;
+  }, [deposits]);
   const contractsByLease = useMemo(() => {
     const map = new Map();
     const priority = { signed: 5, viewed: 4, sent: 3, draft: 2 };
@@ -206,11 +238,32 @@ export function Baux({ go } = {}) {
             const contract = contractsByLease.get(String(lease.id)) || null;
             const cchip = contractChip(contract, info.variant === "expired");
             const contractBusy = busyAction === `contract-${lease.id}`;
+            // Le bail ne « démarre » pas tant que le locataire n'a pas signé :
+            // si le contrat n'est pas signé (et le bail non expiré), on affiche
+            // « Non signé » (ambre) au lieu de « Actif ».
+            const signed = contract?.status === "signed";
+            const pendingSignature = !signed && info.variant !== "expired";
+            const cardVariant = pendingSignature ? "pendingSignature" : info.variant;
+            // Variante du menu d'actions, calquée sur le CRM (leaseMenuVariant) :
+            // expiré → contrat archivé ; pas de contrat → à générer ;
+            // contrat signé → signé ; sinon → en attente de signature.
+            const menuVariant = info.variant === "expired"
+              ? "expired"
+              : !contract
+                ? "noContract"
+                : signed
+                  ? "signed"
+                  : "pendingSignature";
+            const statusPill = pendingSignature
+              ? { tone: "warning", text: "Non signé" }
+              : { tone: info.tone, text: info.statusText };
             const openContract = () => handleContractPreview(lease, contractsByLease, setContractPreview, setBusyAction, setActionError, reload);
+            const deposit = depositByLease.get(String(lease.id)) || null;
+            const depositDue = toNumber(lease.securityDeposit);
             return (
-            <article key={lease.id} className={`immo-lease-card ${info.variant}`}>
+            <article key={lease.id} className={`immo-lease-card ${cardVariant}`}>
               <div className="immo-lease-card-head">
-                <span className={`immo-pill ${info.tone}`}>{info.statusText}</span>
+                <span className={`immo-pill ${statusPill.tone}`}>{statusPill.text}</span>
                 <button
                   type="button"
                   className={`immo-contract-chip as-button ${cchip.tone}`}
@@ -244,6 +297,25 @@ export function Baux({ go } = {}) {
                 </div>
               </div>
 
+              {(depositDue > 0 || deposit) && (
+                <div className="immo-lease-deposit">
+                  <span className="immo-lease-deposit-label"><Shield size={13} /> Caution</span>
+                  {deposit?.status === "held" ? (
+                    <>
+                      <span className="immo-pill success">Reçue · {money(deposit.amount, lease.currencySymbol || "$")}</span>
+                      <button className="immo-deposit-link" onClick={() => setDepositModal({ mode: "return", lease, deposit })}>Restituer</button>
+                    </>
+                  ) : deposit?.status === "returned" ? (
+                    <span className="immo-pill muted">Restituée{toNumber(deposit.deductionAmount) > 0 ? ` · retenue ${money(deposit.deductionAmount, lease.currencySymbol || "$")}` : ""}</span>
+                  ) : (
+                    <>
+                      <span className="immo-pill warning">Due · {money(depositDue, lease.currencySymbol || "$")}</span>
+                      <button className="immo-deposit-link" onClick={() => setDepositModal({ mode: "collect", lease, amount: depositDue })}>Encaisser</button>
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="immo-lease-card-foot">
                 <div>
                   <strong className={info.variant === "expired" ? "" : ""}>
@@ -259,7 +331,14 @@ export function Baux({ go } = {}) {
                   <button
                     className={`immo-flat-icon ${openMenuId === lease.id ? "active" : ""}`}
                     title="Actions"
-                    onClick={() => setOpenMenuId((id) => (id === lease.id ? null : lease.id))}
+                    onClick={(e) => {
+                      // Détection auto du sens d'ouverture : assez de place dessous → bas, sinon haut.
+                      if (openMenuId !== lease.id) {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setMenuDir(window.innerHeight - r.bottom < 460 ? "up" : "down");
+                      }
+                      setOpenMenuId((id) => (id === lease.id ? null : lease.id));
+                    }}
                   >
                     <MoreHorizontal size={16} />
                   </button>
@@ -267,6 +346,14 @@ export function Baux({ go } = {}) {
                     <LeaseActionsMenu
                       lease={lease}
                       info={info}
+                      variant={menuVariant}
+                      contract={contract}
+                      dir={menuDir}
+                      statusText={statusPill.text}
+                      deposit={deposit}
+                      depositDue={depositDue}
+                      onCollectDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "collect", lease, amount: depositDue }); }}
+                      onReturnDeposit={() => { setOpenMenuId(null); setDepositModal({ mode: "return", lease, deposit }); }}
                       busy={busyAction}
                       onDetail={() => {
                         setDetailLease({ lease, info });
@@ -283,6 +370,14 @@ export function Baux({ go } = {}) {
                       onExportCsv={() => {
                         downloadLeaseCsv(lease, info);
                         setOpenMenuId(null);
+                      }}
+                      onResend={() => {
+                        setOpenMenuId(null);
+                        handleResendContract(contract, setBusyAction, setActionError, reload);
+                      }}
+                      onCancelSend={() => {
+                        setOpenMenuId(null);
+                        handleCancelContract(contract, setBusyAction, setActionError, reload);
                       }}
                       onPayments={() => {
                         go?.("loyers");
@@ -313,6 +408,19 @@ export function Baux({ go } = {}) {
             );
           })}
         </div>
+      )}
+
+      {depositModal && (
+        <DepositModal
+          state={depositModal}
+          onClose={() => setDepositModal(null)}
+          onDone={async (msg) => {
+            setDepositModal(null);
+            setActionError("");
+            await reload();
+            if (msg) setActionError("");
+          }}
+        />
       )}
 
       {leaseModal && (
@@ -360,26 +468,45 @@ export function Baux({ go } = {}) {
 }
 
 async function loadLeaseModule() {
-  const [leases, properties, units, tenants, contracts, currencies, setting] = await Promise.all([
+  const [leases, properties, units, tenants, contracts, deposits, currencies, setting] = await Promise.all([
     api.leases(),
     api.properties(),
     api.units(),
     api.tenants(),
     api.contracts(),
+    api.deposits().catch(() => []),
     api.currencies(),
     api.setting(),
   ]);
-  return { leases, properties, units, tenants, contracts, currencies, setting };
+  return { leases, properties, units, tenants, contracts, deposits, currencies, setting };
 }
+
+// Libellés d'en-tête du menu, calqués sur le CRM (LeaseContextMenu).
+const LEASE_MENU_HEAD = {
+  signed: "Bail signé",
+  noContract: "Sans contrat",
+  pendingSignature: "En attente signature",
+  expired: "Bail expiré",
+};
 
 function LeaseActionsMenu({
   lease,
   info,
+  variant = "signed",
+  contract,
+  dir = "down",
+  statusText,
+  deposit,
+  depositDue = 0,
+  onCollectDeposit,
+  onReturnDeposit,
   busy,
   onDetail,
   onContract,
   onDownloadContract,
   onExportCsv,
+  onResend,
+  onCancelSend,
   onPayments,
   onMaintenance,
   onEdit,
@@ -387,31 +514,212 @@ function LeaseActionsMenu({
   onDelete,
   onClose,
 }) {
+  const disabled = Boolean(busy);
   const copyReference = async () => {
     try {
       await navigator.clipboard?.writeText?.(info.reference.replace(/^#/, ""));
     } catch {}
     onClose?.();
   };
+  const copySigningLink = async () => {
+    const link = signingUrlFromContract(contract);
+    if (!link) {
+      window.alert("Envoyez d'abord le contrat pour obtenir un lien de signature.");
+    } else {
+      try {
+        await navigator.clipboard?.writeText?.(link);
+      } catch {
+        window.prompt("Copiez le lien de signature :", link);
+      }
+    }
+    onClose?.();
+  };
 
   return (
-    <div className="immo-lease-actions-menu">
-      <div className="immo-lease-actions-head">
+    <div className={`immo-lease-actions-menu ${dir}`}>
+      <div className={`immo-lease-actions-head ${variant}`}>
         <strong>{tenantName(lease)}</strong>
-        <span>Bail signe · {info.variant === "expired" ? "Expire" : "Actif"}</span>
+        <span>{LEASE_MENU_HEAD[variant] || "Bail"} · {statusText || (info.variant === "expired" ? "Expiré" : "Actif")}</span>
       </div>
-      <button onClick={onDetail}><Eye size={15} /> Voir detail du bail</button>
-      <button disabled={Boolean(busy)} onClick={onContract}><FileCheck size={15} /> Voir contrat signe</button>
-      <button disabled={Boolean(busy)} onClick={onDownloadContract}><FileDown size={15} /> Telecharger PDF</button>
-      <button onClick={onExportCsv}><FileSpreadsheet size={15} /> Exporter CSV</button>
-      <hr />
-      <button onClick={onPayments}><Receipt size={15} /> Voir les paiements</button>
-      <button onClick={onMaintenance}><Wrench size={15} /> Tickets maintenance</button>
-      <hr />
-      <button onClick={copyReference}><Copy size={15} /> Copier la reference</button>
-      <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
-      <button disabled={Boolean(busy)} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>
-      <button disabled={Boolean(busy)} className="danger" onClick={onDelete}><Trash2 size={15} /> Resilier le bail</button>
+
+      {(depositDue > 0 || deposit) && (
+        <>
+          {deposit?.status === "held" ? (
+            <button className="highlight" onClick={onReturnDeposit}><Shield size={15} /> Restituer la caution</button>
+          ) : deposit?.status === "returned" ? (
+            <button disabled><Shield size={15} /> Caution restituée</button>
+          ) : (
+            <button className="highlight" onClick={onCollectDeposit}><Shield size={15} /> Encaisser la caution</button>
+          )}
+          <hr />
+        </>
+      )}
+
+      {variant === "signed" && (
+        <>
+          <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
+          <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat signé</button>
+          <button disabled={disabled} onClick={onDownloadContract}><FileDown size={15} /> Télécharger PDF</button>
+          <button onClick={onExportCsv}><FileSpreadsheet size={15} /> Exporter CSV</button>
+          <hr />
+          <button onClick={onPayments}><Receipt size={15} /> Voir les paiements</button>
+          <button onClick={onMaintenance}><Wrench size={15} /> Tickets maintenance</button>
+          <hr />
+          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
+          <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
+          <button disabled={disabled} onClick={onRenew}><RefreshCw size={15} /> Renouveler</button>
+          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> Résilier le bail</button>
+        </>
+      )}
+
+      {variant === "pendingSignature" && (
+        <>
+          <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
+          <button disabled={disabled} onClick={onContract}><FileText size={15} /> Aperçu du contrat</button>
+          <button disabled={disabled} onClick={onResend}><Send size={15} /> Renvoyer le lien</button>
+          <button onClick={copySigningLink}><Link2 size={15} /> Copier le lien de signature</button>
+          <hr />
+          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
+          <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
+          <button disabled={disabled} className="danger" onClick={onCancelSend}><Trash2 size={15} /> Annuler l'envoi</button>
+        </>
+      )}
+
+      {variant === "noContract" && (
+        <>
+          <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
+          <button disabled={disabled} className="highlight" onClick={onContract}><FileSignature size={15} /> Générer le contrat</button>
+          <hr />
+          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
+          <button onClick={onEdit}><Pencil size={15} /> Modifier le bail</button>
+          <button onClick={onPayments}><Receipt size={15} /> Voir les paiements</button>
+          <hr />
+          <button disabled={disabled} className="danger" onClick={onDelete}><Trash2 size={15} /> Résilier le bail</button>
+        </>
+      )}
+
+      {variant === "expired" && (
+        <>
+          <button onClick={onDetail}><Eye size={15} /> Voir détail du bail</button>
+          <button disabled={disabled} onClick={onContract}><FileCheck size={15} /> Voir contrat archivé</button>
+          <button disabled={disabled} onClick={onDownloadContract}><FileDown size={15} /> Télécharger PDF</button>
+          <button onClick={onExportCsv}><FileSpreadsheet size={15} /> Exporter CSV</button>
+          <hr />
+          <button onClick={copyReference}><Copy size={15} /> Copier la référence</button>
+          <button disabled={disabled} className="highlight" onClick={onRenew}><RefreshCw size={15} /> Renouveler (nouveau bail)</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+const DEPOSIT_METHODS = [
+  ["cash", "Espèces"], ["bank", "Bancaire"], ["card", "Carte"], ["cheque", "Chèque"], ["mpesa", "M-Pesa / Mobile"],
+];
+
+// Modale caution : encaissement (mode "collect") ou restitution avec retenue (mode "return").
+function DepositModal({ state, onClose, onDone }) {
+  const { mode, lease, deposit } = state;
+  const symbol = lease?.currencySymbol || "$";
+  const held = Number(deposit?.amount) || 0;
+  const [amount, setAmount] = useState(String(mode === "collect" ? (state.amount || lease?.securityDeposit || "") : held));
+  const [method, setMethod] = useState(mode === "collect" ? "cash" : "bank");
+  const [date, setDate] = useState(todayISO());
+  const [deduction, setDeduction] = useState("0");
+  const [reason, setReason] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const dedNum = Math.min(Math.max(0, Number(deduction) || 0), held);
+  const refund = Math.round((held - dedNum) * 100) / 100;
+
+  const submit = async () => {
+    if (busy) return;
+    setBusy(true); setErr("");
+    try {
+      if (mode === "collect") {
+        await api.collectDeposit(lease.id, {
+          paymentDate: date, amount: Number(amount), method,
+          notes: notes || null,
+          ...(lease.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
+        });
+        onDone(`Caution de ${money(Number(amount), symbol)} encaissée`);
+      } else {
+        await api.returnDeposit(lease.id, {
+          returnDate: date, deductionAmount: dedNum, deductionReason: reason || null,
+          returnMethod: method, notes: notes || null,
+        });
+        onDone(`Caution restituée (${money(refund, symbol)})`);
+      }
+    } catch (e) {
+      setErr(e.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-layer">
+      <div className="modal-scrim" onClick={onClose} />
+      <div className="modal-card domus-deposit-modal">
+        <div className="modal-head">
+          <div className="domus-modal-title">
+            <span className="domus-modal-title-icon"><Shield size={20} /></span>
+            <div>
+              <h2>{mode === "collect" ? "Encaisser la caution" : "Restituer la caution"}</h2>
+              <p>{tenantName(lease)} · {[lease.propertyName || lease.propertyAddress, lease.unitName].filter(Boolean).join(" · ") || "—"}</p>
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+        </div>
+
+        <div className="domus-property-form">
+          {mode === "collect" ? (
+            <section className="domus-form-section">
+              <div className="domus-property-form-grid">
+                <label className="immo-field"><span>Montant</span>
+                  <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+                <label className="immo-field"><span>Date</span>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+              </div>
+              <label className="immo-field"><span>Moyen de paiement</span>
+                <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                  {DEPOSIT_METHODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select></label>
+              <label className="immo-field"><span>Note (optionnel)</span>
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Référence, remarque…" /></label>
+            </section>
+          ) : (
+            <section className="domus-form-section">
+              <div className="immo-pay-row"><span>Caution détenue</span><strong>{money(held, symbol)}</strong></div>
+              <div className="domus-property-form-grid">
+                <label className="immo-field"><span>Retenue (dégâts)</span>
+                  <input type="number" min="0" max={held} value={deduction} onChange={(e) => setDeduction(e.target.value)} /></label>
+                <label className="immo-field"><span>Date de restitution</span>
+                  <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+              </div>
+              <label className="immo-field"><span>Motif de la retenue</span>
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Réparation mur, nettoyage…" /></label>
+              <label className="immo-field"><span>Moyen de restitution</span>
+                <select value={method} onChange={(e) => setMethod(e.target.value)}>
+                  {DEPOSIT_METHODS.filter(([k]) => k !== "mpesa").map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select></label>
+              <div className="immo-pay-row" style={{ marginTop: 8 }}>
+                <span>Montant restitué</span><strong style={{ color: "#16a34a" }}>{money(refund, symbol)}</strong>
+              </div>
+            </section>
+          )}
+          {err && <div className="api-error" style={{ margin: "0 18px 14px" }}>{err}</div>}
+        </div>
+
+        <div className="modal-foot">
+          <button className="immo-btn" onClick={onClose} disabled={busy}>Annuler</button>
+          <button className="immo-btn primary" onClick={submit} disabled={busy || (mode === "collect" && !(Number(amount) > 0))}>
+            {busy ? "…" : <><Check size={16} /> {mode === "collect" ? "Encaisser" : "Restituer"}</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -831,6 +1139,48 @@ async function handleRenewLease(lease, setBusyAction, setActionError, reload) {
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de renouveler le bail.");
+  } finally {
+    setBusyAction("");
+  }
+}
+
+async function handleResendContract(contract, setBusyAction, setActionError, reload) {
+  if (!contract?.id) {
+    setActionError("Aucun contrat à renvoyer.");
+    return;
+  }
+  setBusyAction(`resend-${contract.id}`);
+  setActionError("");
+  try {
+    const res = await api.sendContract(contract.id);
+    const link = res?.signingUrl || signingUrlFromContract({ ...contract, ...res });
+    if (link) {
+      try {
+        await navigator.clipboard?.writeText?.(link);
+      } catch {}
+    }
+    await reload();
+  } catch (e) {
+    setActionError(e.message || "Impossible de renvoyer le lien de signature.");
+  } finally {
+    setBusyAction("");
+  }
+}
+
+async function handleCancelContract(contract, setBusyAction, setActionError, reload) {
+  if (!contract?.id) {
+    setActionError("Aucun envoi à annuler.");
+    return;
+  }
+  const ok = window.confirm("Annuler l'envoi du contrat ? Le locataire ne pourra plus le signer via ce lien.");
+  if (!ok) return;
+  setBusyAction(`cancel-${contract.id}`);
+  setActionError("");
+  try {
+    await api.deleteContract(contract.id);
+    await reload();
+  } catch (e) {
+    setActionError(e.message || "Impossible d'annuler l'envoi.");
   } finally {
     setBusyAction("");
   }

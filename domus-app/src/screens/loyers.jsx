@@ -15,9 +15,18 @@ const METHODS = [
   { key: "mpesa", label: "M-Pesa", color: "#ef4444", short: "M-P", mobile: true },
   { key: "airtel", label: "Airtel", color: "#dc2626", short: "A", mobile: true },
   { key: "orange", label: "Orange", color: "#f59e0b", short: "O", mobile: true },
+  { key: "bank", label: "Bancaire", color: "#2563eb", short: "BQ" },
+  { key: "card", label: "Carte", color: "#0d9488", short: "CB" },
+  { key: "cheque", label: "Chèque", color: "#7c3aed", short: "CH" },
 ];
 const tenantName = (r) => [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire";
 const today = () => new Date().toISOString().slice(0, 10);
+// N° de reçu auto-généré (modifiable) : REC-AAMMJJ-HHMM.
+const genReceiptRef = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `REC-${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+};
 
 const MONTHS_FR = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
 const PAY_AVATARS = ["av-indigo", "av-orange", "av-violet", "av-blue", "av-rose", "av-green"];
@@ -78,6 +87,8 @@ export function buildLeaseCards(leases, payments) {
       const rent = Number(l.rentAmount) || 0;
       const totalPaid = list.reduce((s, p) => s + Number(p.amount || 0), 0);
       const monthsCovered = rent > 0 ? Math.floor((totalPaid + 0.0001) / rent) : list.length;
+      // Couverture fractionnaire : un paiement partiel (ex. 50 sur 100) remplit une demi-case.
+      const monthsCoveredFloat = rent > 0 ? totalPaid / rent : monthsCovered;
 
       // Nombre de mois échus AVANT le mois courant (depuis le début du bail).
       let elapsedPast = 0;
@@ -89,6 +100,21 @@ export function buildLeaseCards(leases, payments) {
       // late = un mois passé encore non couvert · pending = passés couverts mais pas le mois courant · ok = tout couvert.
       const status = monthsCovered >= elapsedPast + 1 ? "ok" : monthsCovered >= elapsedPast ? "pending" : "late";
 
+      // Solde réel : total exigible (mois courant inclus) − total déjà versé.
+      // Gère les paiements partiels : 2 mois dus à 100, 50 versé → reste 150.
+      const monthsDue = elapsedPast + 1;
+      const totalDue = monthsDue * rent;
+      const balance = Math.max(0, Math.round((totalDue - totalPaid) * 100) / 100);
+      const credit = Math.max(0, Math.round((totalPaid - totalDue) * 100) / 100); // avance éventuelle
+      const monthsBehind = Math.max(0, monthsDue - monthsCovered); // mois entiers encore dus
+      const monthsAhead = Math.max(0, monthsCovered - monthsDue);  // mois payés d'avance
+      // Mois jusqu'auquel le loyer est couvert (dernier mois plein payé).
+      let coveredUntil = null;
+      if (l.startDate && monthsCovered > 0) {
+        const s = new Date(l.startDate);
+        coveredUntil = new Date(s.getFullYear(), s.getMonth() + monthsCovered - 1, 1);
+      }
+
       return {
         lease: l,
         name: tenantName(l),
@@ -98,6 +124,15 @@ export function buildLeaseCards(leases, payments) {
         symbol: l.currencySymbol || latest?.currencySymbol || "$",
         paidMonths,
         monthsCovered,
+        monthsCoveredFloat,
+        monthsDue,
+        totalDue,
+        balance,
+        credit,
+        monthsBehind,
+        monthsAhead,
+        coveredUntil,
+        totalPaid,
         latest,
         status,
       };
@@ -112,7 +147,10 @@ const STATUS_META = {
 };
 
 function TenantPayCard({ card, index, onPay }) {
-  const { name, unit, paidMonths, monthsCovered, status = "ok", latest, rent, symbol, lease } = card;
+  const { name, unit, paidMonths, monthsCovered, monthsCoveredFloat, status = "ok", latest, rent, symbol, lease, balance = 0, credit = 0, monthsBehind = 0, monthsAhead = 0, coveredUntil = null } = card;
+  const coveredUntilLabel = coveredUntil
+    ? coveredUntil.toLocaleDateString("fr-FR", { month: "long", year: "numeric" })
+    : null;
   const meta = STATUS_META[status] || STATUS_META.ok;
   const actionable = status !== "ok";
   // Frise ancrée sur le début du bail → se remplit de gauche à droite dans le temps.
@@ -123,16 +161,15 @@ function TenantPayCard({ card, index, onPay }) {
 
   const thisMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   // vert = payé (couvert par les montants) · jaune = mois courant en attente · rouge = mois passé impayé · gris = futur.
-  // Pour un bail, on colore par COUVERTURE (de gauche à droite) : la case se met au vert
-  // dès que le total payé couvre ce mois — d'où la mise à jour après « Régler le retard ».
-  const segStatus = (d, i) => {
-    const paid = (lease && monthsCovered != null) ? i < monthsCovered : paidMonths.has(monthKey(d));
-    if (paid) return "paid";
-    if (!lease) return "";
+  // Pour un bail, on colore par COUVERTURE FRACTIONNAIRE (de gauche à droite) : un paiement
+  // partiel remplit la case proportionnellement (ex. 50 sur 100 → demi-case verte).
+  const segMeta = (d, i) => {
+    const coveredFloat = lease && monthsCoveredFloat != null ? monthsCoveredFloat : (paidMonths.has(monthKey(d)) ? i + 1 : i);
+    const fill = Math.max(0, Math.min(1, coveredFloat - i));
     const m = new Date(d.getFullYear(), d.getMonth(), 1);
-    if (m > thisMonth) return "";
-    if (m.getTime() === thisMonth.getTime()) return "pending";
-    return "late";
+    let base = "";
+    if (lease) base = m > thisMonth ? "" : m.getTime() === thisMonth.getTime() ? "pending" : "late";
+    return { fill, base };
   };
   const segTitle = { paid: "payé", pending: "en attente", late: "en retard", "": "à venir" };
 
@@ -155,12 +192,32 @@ function TenantPayCard({ card, index, onPay }) {
         </strong>
       </div>
       <div className="immo-pay-row"><span>Montant mensuel</span><strong>{money(rent ?? latest?.amount, symbol)}</strong></div>
+      {actionable && balance > 0 && (
+        <div className="immo-pay-row">
+          <span>Reste à payer{monthsBehind > 1 ? ` · ${monthsBehind} mois` : ""}</span>
+          <strong style={{ color: status === "late" ? "#dc2626" : "#d97706" }}>{money(balance, symbol)}</strong>
+        </div>
+      )}
+      {status === "ok" && credit > 0 && (
+        <div className="immo-pay-row">
+          <span>Avance{monthsAhead > 0 ? ` · ${monthsAhead} mois` : ""}</span>
+          <strong style={{ color: "#16a34a" }}>{money(credit, symbol)}</strong>
+        </div>
+      )}
+      {status === "ok" && monthsAhead > 0 && coveredUntilLabel && (
+        <div className="immo-pay-row"><span>Couvert jusqu'à</span><strong style={{ color: "#16a34a", textTransform: "capitalize" }}>{coveredUntilLabel}</strong></div>
+      )}
       <div className="immo-pay-bar">
         {slots.map((d, i) => {
-          const st = segStatus(d, i);
+          const { fill, base } = segMeta(d, i);
+          const full = fill >= 0.999;
+          const cls = full ? "paid" : base;
+          const title = full ? "payé" : fill > 0 ? `partiel ${Math.round(fill * 100)}%` : segTitle[base];
           return (
-            <div key={i} className={`immo-pay-seg ${st}`}
-              title={`${MONTHS_FR[d.getMonth()]} ${d.getFullYear()} — ${segTitle[st]}`} />
+            <div key={i} className={`immo-pay-seg ${cls}`}
+              title={`${MONTHS_FR[d.getMonth()]} ${d.getFullYear()} — ${title}`}>
+              {!full && fill > 0 && <span className="immo-pay-seg-fill" style={{ width: `${Math.round(fill * 100)}%` }} />}
+            </div>
           );
         })}
       </div>
@@ -179,7 +236,10 @@ function TenantPayCard({ card, index, onPay }) {
 
 // Mini-modale d'encaissement rapide depuis une carte en retard.
 function QuickPayModal({ card, onClose, onPaid }) {
-  const [amount, setAmount] = useState(String(card.rent ?? card.latest?.amount ?? ""));
+  const fullBalance = Number(card.balance) || 0;
+  const monthRent = Number(card.rent ?? card.latest?.amount) || 0;
+  // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
+  const [amount, setAmount] = useState(String(fullBalance || monthRent || ""));
   const [method, setMethod] = useState("mpesa");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -218,8 +278,31 @@ function QuickPayModal({ card, onClose, onPaid }) {
         <div className="immo-modal-body">
           <div className="immo-pay-row"><span>Locataire</span><strong>{card.name}</strong></div>
           <div className="immo-pay-row"><span>Logement</span><strong>{card.unit || "—"}</strong></div>
+          {fullBalance > 0 && (
+            <div className="immo-pay-row">
+              <span>Solde dû{card.monthsBehind > 1 ? ` (${card.monthsBehind} mois)` : ""}</span>
+              <strong style={{ color: "#dc2626" }}>{money(fullBalance, card.symbol)}</strong>
+            </div>
+          )}
           <label className="immo-field-label">Montant</label>
+          {(fullBalance > 0 || monthRent > 0) && (
+            <div className="immo-quickpay-chips">
+              {fullBalance > 0 && (
+                <button type="button" className={Number(amount) === fullBalance ? "active" : ""} onClick={() => setAmount(String(fullBalance))}>
+                  Tout le solde · {money(fullBalance, card.symbol)}
+                </button>
+              )}
+              {monthRent > 0 && (
+                <button type="button" className={Number(amount) === monthRent ? "active" : ""} onClick={() => setAmount(String(monthRent))}>
+                  1 mois · {money(monthRent, card.symbol)}
+                </button>
+              )}
+            </div>
+          )}
           <input className="immo-input" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          {fullBalance > 0 && Number(amount) > 0 && Number(amount) < fullBalance && (
+            <p className="immo-quickpay-note">Paiement partiel — il restera {money(fullBalance - Number(amount), card.symbol)} à régler.</p>
+          )}
           <label className="immo-field-label">Moyen de paiement</label>
           <div className="immo-method-grid">
             {METHODS.map((m) => (
@@ -293,6 +376,18 @@ export function Loyers({ go }) {
   }, [leases, rows]);
   const lateCount = cards.filter((c) => c.status === "late").length;
   const pendingCount = cards.filter((c) => c.status === "pending").length;
+  // Total des arriérés (reste à payer cumulé), groupé par devise.
+  const arrearsByCurrency = useMemo(() => {
+    const map = new Map();
+    cards.forEach((c) => {
+      const bal = Number(c.balance) || 0;
+      if (bal <= 0) return;
+      const sym = c.symbol || currency.defaultCurrencySymbol || "$";
+      map.set(sym, (map.get(sym) || 0) + bal);
+    });
+    return [...map.entries()].map(([symbol, amount]) => ({ symbol, amount }));
+  }, [cards, currency.defaultCurrencySymbol]);
+  const hasArrears = arrearsByCurrency.length > 0;
 
   // Recherche : filtre cartes (locataire/unité) et lignes (locataire/logement/méthode).
   const shownCards = useMemo(() => {
@@ -369,10 +464,13 @@ export function Loyers({ go }) {
         </div>
         <div className="immo-metric-card">
           <div className="immo-metric-head"><div className="immo-metric-icon immo-tone-red"><BellRing size={20} /></div></div>
-          <div className="immo-metric-label">Rappels d'impayes</div>
+          <div className="immo-metric-label">Arriérés (reste dû)</div>
+          <div className="immo-metric-value" style={{ color: hasArrears ? "#dc2626" : undefined }}>
+            {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
+          </div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
             onClick={() => api.runOverdueReminders().then(() => alert("Rappels lancés")).catch((e) => alert(e.message))}>
-            <BellRing size={16} /> Lancer maintenant
+            <BellRing size={16} /> Relancer les impayés
           </button>
         </div>
       </div>
@@ -469,7 +567,10 @@ export function Paiement({ go }) {
   });
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("mpesa");
-  const [reference, setReference] = useState("");
+  // Numéro mobile money (pré-rempli avec le téléphone du locataire) et
+  // numéro de reçu (auto-généré) — deux champs distincts selon la méthode.
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [receiptRef, setReceiptRef] = useState(genReceiptRef);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
   const [err, setErr] = useState(null);
@@ -482,6 +583,11 @@ export function Paiement({ go }) {
     if (!lease || step !== 2) return;
     setAmount((prev) => (prev ? prev : String(lease.rentAmount ?? "")));
   }, [lease, step]);
+
+  // Le numéro mobile money du locataire est déjà connu → pré-rempli.
+  useEffect(() => {
+    setMobileNumber(lease?.tenantPhone || "");
+  }, [lease?.id, lease?.tenantPhone]);
 
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
@@ -501,7 +607,7 @@ export function Paiement({ go }) {
         paymentDate: today(),
         amount: Number(amount),
         method: methodMeta?.label || method,
-        reference: reference || null,
+        reference: (methodMeta?.mobile ? mobileNumber : receiptRef) || null,
         ...(lease?.currencyId ? { currencyId: Number(lease.currencyId) } : {}),
       });
       setDone(payment || { amount, method: methodMeta?.label });
@@ -515,7 +621,7 @@ export function Paiement({ go }) {
 
   const reset = () => {
     setStep(1); setLeaseId(null); setAmount(""); setMethod("mpesa");
-    setReference(""); setDone(null); setErr(null);
+    setMobileNumber(""); setReceiptRef(genReceiptRef()); setDone(null); setErr(null);
   };
 
   return (
@@ -569,10 +675,17 @@ export function Paiement({ go }) {
             ))}
           </div>
           <div className="kpi-label" style={{ margin: "14px 0 6px" }}>
-            {methodMeta?.mobile ? "Numéro mobile money" : "Référence (reçu)"}
+            {methodMeta?.mobile ? "Numéro mobile money" : "N° de reçu"}
           </div>
-          <input value={reference} onChange={(e) => setReference(e.target.value)}
-            placeholder={methodMeta?.mobile ? "+243 …" : "REC-001"} style={inputStyle} />
+          <input
+            value={methodMeta?.mobile ? mobileNumber : receiptRef}
+            onChange={(e) => (methodMeta?.mobile ? setMobileNumber(e.target.value) : setReceiptRef(e.target.value))}
+            placeholder={methodMeta?.mobile ? "+243 …" : "REC-…"} style={inputStyle} />
+          <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+            {methodMeta?.mobile
+              ? "Numéro du locataire (pré-rempli) — modifiable."
+              : "Numéro du reçu remis au locataire (généré automatiquement) — modifiable."}
+          </div>
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button className="btn" onClick={() => setStep(1)}><ArrowLeft size={16} /></button>
             <button className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}
@@ -594,7 +707,7 @@ export function Paiement({ go }) {
               <div className="font-display" style={{ fontWeight: 700, fontSize: 16 }}>Demande envoyée</div>
               <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
                 Demande <b>{methodMeta.label}</b> de <b>{money(amount, lease?.currencySymbol || "$")}</b>
-                {reference ? <> au <span style={{ fontFamily: "monospace" }}>{reference}</span></> : null}. En attente de validation du locataire…
+                {mobileNumber ? <> au <span style={{ fontFamily: "monospace" }}>{mobileNumber}</span></> : null}. En attente de validation du locataire…
               </p>
               <div className="grad-dark" style={{ borderRadius: 16, padding: 14, textAlign: "left", color: "#fff", margin: "14px 0", fontFamily: "monospace", fontSize: 12, lineHeight: 1.5 }}>
                 *150*1#<br />DOMUS demande {money(amount, lease?.currencySymbol || "CDF")}<br />

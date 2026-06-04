@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
-  MessageSquare, Plus, Pencil, Trash2, X,
+  MessageSquare, Plus, Pencil, Trash2, X, Sparkles,
 } from "lucide-react";
 import { api } from "../api.js";
 import {
@@ -191,6 +191,47 @@ const MESSAGE_EVENTS = [
 const eventLabel = (ev) => (MESSAGE_EVENTS.find(([v]) => v === ev) || [, ev || "—"])[1];
 const emptyMessage = { name: "", eventType: "tenant_onboarding", subject: "", body: "" };
 
+// Exemples prêts à l'emploi, repris du wording utilisé dans le CRM
+// (email d'inscription + rappel de retard) et adaptés aux placeholders Domus :
+// {firstName} {tenantName} {url} {reference} {amount}.
+// ⚠️ Le même texte sert d'EMAIL et de SMS : on garde donc du texte brut, court
+// et d'un seul bloc (pas de HTML ni de longs sauts de ligne qui gonflent un SMS).
+const DEFAULT_MESSAGES = [
+  {
+    name: "Lien d'inscription locataire",
+    eventType: "tenant_onboarding",
+    subject: "Votre lien d'inscription locataire",
+    body:
+      "Bonjour {firstName}, complétez votre dossier locataire Domus via ce lien : {url}. " +
+      "Merci de le faire dès que possible. — Votre gestionnaire",
+  },
+  {
+    name: "Confirmation de bail",
+    eventType: "lease_created",
+    subject: "Votre bail {reference} est confirmé",
+    body:
+      "Bonjour {tenantName}, votre bail {reference} est confirmé (loyer mensuel : {amount}). " +
+      "Consultez et signez votre contrat ici : {url}. Merci de votre confiance. — Votre gestionnaire",
+  },
+  {
+    name: "Quittance / paiement reçu",
+    eventType: "payment_received",
+    subject: "Paiement reçu — bail {reference}",
+    body:
+      "Bonjour {tenantName}, nous confirmons la réception de votre paiement de {amount} " +
+      "pour le bail {reference}. Votre quittance est disponible. Merci ! — Votre gestionnaire",
+  },
+  {
+    name: "Rappel de loyer en retard",
+    eventType: "payment_reminder",
+    subject: "Rappel : loyer en retard — bail {reference}",
+    body:
+      "Bonjour {tenantName}, le loyer du bail {reference} ({amount}) est en retard. " +
+      "Merci de régulariser dès que possible afin d'éviter l'annulation de votre contrat de location. " +
+      "Pour tout règlement ou question, contactez-nous. Merci de votre compréhension. — Votre gestionnaire",
+  },
+];
+
 function MessagesCard() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -237,22 +278,56 @@ function MessagesCard() {
       setMsg({ type: "err", text: e.message });
     }
   };
+  const seedExamples = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const existing = new Set(rows.map((r) => r.eventType));
+      const toCreate = DEFAULT_MESSAGES.filter((m) => !existing.has(m.eventType));
+      for (const m of toCreate) {
+        // eslint-disable-next-line no-await-in-loop
+        await api.createMessageTemplate(m);
+      }
+      await load();
+      setMsg({ type: "ok", text: `${toCreate.length} exemple(s) genere(s). Vous pouvez les modifier.` });
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const hasMissingDefaults = DEFAULT_MESSAGES.some((m) => !rows.some((r) => r.eventType === m.eventType));
 
   return (
     <section className="card settings-card">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <h3 style={{ margin: 0 }}><MessageSquare size={17} /> Messages &amp; notifications</h3>
-        <button className="btn btn-sm" onClick={() => setEditing({ ...emptyMessage })}><Plus size={14} /> Nouveau message</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {hasMissingDefaults && (
+            <button className="btn btn-sm" onClick={seedExamples} disabled={busy} title="Crée des modèles d'exemple prêts à l'emploi">
+              <Sparkles size={14} /> Générer des exemples
+            </button>
+          )}
+          <button className="btn btn-sm" onClick={() => setEditing({ ...emptyMessage })}><Plus size={14} /> Nouveau message</button>
+        </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes (inscription, bail, paiement, retard). Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"}.
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »).
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
 
       <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
         {loading && <div className="muted" style={{ fontSize: 13 }}>Chargement…</div>}
-        {!loading && rows.length === 0 && <div className="muted" style={{ fontSize: 13 }}>Aucun message configure. Cliquez « Nouveau message ».</div>}
+        {!loading && rows.length === 0 && (
+          <div className="muted" style={{ fontSize: 13, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10, padding: "6px 0" }}>
+            <span>Aucun message configuré. Générez les exemples prêts à l'emploi, puis personnalisez-les.</span>
+            <button className="btn btn-sm btn-primary" onClick={seedExamples} disabled={busy}>
+              <Sparkles size={14} /> {busy ? "Génération…" : "Générer des exemples"}
+            </button>
+          </div>
+        )}
         {rows.map((t) => (
           <div key={t.id} className="currency-row" style={{ alignItems: "flex-start" }}>
             <div style={{ flex: 1, minWidth: 0 }}>

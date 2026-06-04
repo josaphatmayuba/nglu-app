@@ -8,6 +8,20 @@
 // le CRM (/admin et /domus), comme FarmOS le fait sous /farmos.
 import { enqueue, flushOutbox, isNetworkError } from "./outbox.js";
 
+// Message d'erreur lisible : on extrait le `message` du corps NestJS au lieu
+// d'afficher le JSON brut. message peut être une chaîne ou un tableau (validation).
+function cleanApiError(res, body) {
+  try {
+    const parsed = JSON.parse(body);
+    const msg = parsed?.message ?? parsed?.error;
+    if (Array.isArray(msg) && msg.length) return msg.join(" · ");
+    if (typeof msg === "string" && msg.trim()) return msg;
+  } catch {}
+  const text = (body || "").trim();
+  if (text && !text.startsWith("{") && !text.startsWith("<")) return text.slice(0, 200);
+  return `Erreur ${res.status} — ${res.statusText || "requête refusée"}`;
+}
+
 const NATIVE =
   typeof window !== "undefined" &&
   (window.Capacitor?.isNativePlatform?.() === true ||
@@ -54,7 +68,7 @@ async function jsonFetch(path, init = {}) {
       window.dispatchEvent(new CustomEvent("domus:auth-changed"));
     }
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+    throw new Error(cleanApiError(res, body));
   }
   // 204/empty → null
   const text = await res.text();
@@ -123,6 +137,11 @@ export const api = {
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
 
+  // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
+  deposits: () => get("/deposits"),
+  collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
+  returnDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit/return`, b),
+
   contracts: () => get("/contracts"),
   contract: (id) => get(`/contracts/${id}`),
   createContract: (b) => post("/contracts", b),
@@ -170,7 +189,7 @@ async function publicFetch(path, init = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`API ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+    throw new Error(cleanApiError(res, body));
   }
   const text = await res.text();
   return text ? JSON.parse(text) : null;

@@ -90,7 +90,8 @@ export function DateRangeProvider({ children }) {
   const stored = loadStored();
   const [preset, setPresetState] = useState(() => {
     const id = stored?.preset;
-    return DATE_PRESETS.some((p) => p.id === id) ? id : "all";
+    // Par défaut : « Année » (filtre annuel) si aucune préférence stockée.
+    return DATE_PRESETS.some((p) => p.id === id) ? id : "year";
   });
   const [customFrom, setCustomFrom] = useState(() => stored?.customFrom || todayISO());
   const [customTo, setCustomTo] = useState(() => stored?.customTo || todayISO());

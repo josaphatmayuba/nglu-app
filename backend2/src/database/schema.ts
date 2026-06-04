@@ -283,6 +283,32 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Caution / dépôt de garantie : cycle complet (détenu → restitué) avec retenue.
+// Séparé de real_estate_rent_payments pour ne pas être compté comme du loyer.
+export const realEstateSecurityDeposits = mysqlTable("real_estate_security_deposits", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  returnTransactionId: bigint("return_transaction_id", { mode: "number" }),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  method: varchar("method", { length: 255 }).default("cash").notNull(),
+  paymentDate: date("payment_date", { mode: "string" }).notNull(),
+  // held = détenue · returned = restituée (totalement ou après retenue).
+  status: varchar("status", { length: 50 }).default("held").notNull(),
+  deductionAmount: decimal("deduction_amount", { precision: 15, scale: 2 }),
+  deductionReason: varchar("deduction_reason", { length: 500 }),
+  returnedAmount: decimal("returned_amount", { precision: 15, scale: 2 }),
+  returnMethod: varchar("return_method", { length: 255 }),
+  returnDate: date("return_date", { mode: "string" }),
+  reference: varchar("reference", { length: 255 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance_requests", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

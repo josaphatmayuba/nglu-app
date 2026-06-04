@@ -334,6 +334,68 @@ export class CreateRentPaymentDto {
   currencyId?: number;
 }
 
+export class CollectDepositDto {
+  @ApiProperty({ example: "2026-06-04" })
+  @IsDateString()
+  paymentDate: string;
+
+  @ApiProperty({ example: 1800, description: "Montant de la caution encaissée." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash", description: "cash → débit Caisse · bank/card/cheque → débit Banque." })
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise. Par défaut celle du bail, puis appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "CAU-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class ReturnDepositDto {
+  @ApiProperty({ example: "2027-06-04" })
+  @IsDateString()
+  returnDate: string;
+
+  @ApiPropertyOptional({ example: 0, default: 0, description: "Retenue pour dégâts/réparations, déduite de la caution." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  deductionAmount?: number;
+
+  @ApiPropertyOptional({ example: "Réparation mur + nettoyage" })
+  @IsOptional()
+  @IsString()
+  deductionReason?: string | null;
+
+  @ApiPropertyOptional({ example: "bank", default: "bank", description: "Moyen de restitution (crédit Caisse/Banque)." })
+  @IsOptional()
+  @IsString()
+  returnMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
 export class CreateMaintenanceDto {
   @ApiProperty({ example: 1 })
   @Type(() => Number)

@@ -616,7 +616,11 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 
 .immo-property-grid { display:grid; gap:18px; grid-template-columns:repeat(3,minmax(0,1fr)); }
 .immo-property-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; min-width:0; overflow:hidden; }
+.immo-property-card.menu-open { overflow:visible; }
 .immo-property-media { height:160px; overflow:hidden; position:relative; background:linear-gradient(135deg,#34d399 0%,#0f9f8a 100%); }
+.immo-property-card.menu-open .immo-property-media { overflow:visible; }
+/* Loué / occupé = bleu (distinct du vert « Libre/disponible »). */
+.immo-property-card.leased .immo-property-media { background:linear-gradient(135deg,#38bdf8 0%,#2563eb 100%); }
 .immo-property-card.late .immo-property-media { background:linear-gradient(135deg,#fbbf24 0%,#f97316 100%); }
 .immo-property-card.maintenance .immo-property-media { background:linear-gradient(135deg,#a78bfa 0%,#6366f1 100%); }
 .immo-status-chip { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:7px; color:#047857; display:inline-flex; font-size:12px; font-weight:700; gap:6px; left:14px; padding:4px 8px; position:absolute; top:14px; z-index:2; }
@@ -636,6 +640,72 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-property-rent { align-items:baseline; display:inline-flex; flex-shrink:0; gap:3px; text-align:right; }
 .immo-property-rent strong { color:#09090b; font-size:14px; font-weight:800; }
 .immo-property-rent span { color:#71717a; font-size:10px; }
+
+.immo-property-context-menu {
+  background:#fff;
+  border:1px solid #e4e4e7;
+  border-radius:12px;
+  box-shadow:0 18px 50px rgba(15,23,42,.16);
+  color:#3f3f46;
+  display:grid;
+  gap:0;
+  min-width:240px;
+  overflow:hidden;
+  padding:8px 0;
+  position:absolute;
+  right:14px;
+  top:52px;
+  z-index:50;
+}
+.immo-property-context-menu .immo-menu-head {
+  border-bottom:1px solid #f4f4f5;
+  padding:10px 14px 12px;
+}
+.immo-property-context-menu .immo-menu-head strong {
+  color:#18181b;
+  display:block;
+  font-size:14px;
+  font-weight:800;
+}
+.immo-property-context-menu .immo-menu-head span {
+  color:#047857;
+  display:block;
+  font-size:12px;
+  margin-top:3px;
+}
+.immo-property-context-menu .immo-menu-head.pendingSignature span { color:#d97706; }
+.immo-property-context-menu button {
+  align-items:center;
+  background:transparent;
+  border:0;
+  border-radius:0;
+  color:#52525b;
+  cursor:pointer;
+  display:flex;
+  font:600 14px 'Inter',sans-serif;
+  gap:11px;
+  min-height:40px;
+  padding:0 14px;
+  text-align:left;
+  width:100%;
+}
+.immo-property-context-menu button:hover {
+  background:#f8fafc;
+  color:#18181b;
+}
+.immo-property-context-menu button.highlight {
+  color:#4f46e5;
+  font-weight:800;
+}
+.immo-property-context-menu button.highlight:hover {
+  background:#eef2ff;
+  color:#4338ca;
+}
+.immo-property-context-menu button.danger { color:#dc2626; }
+.immo-property-context-menu .immo-menu-separator {
+  border-top:1px solid #f4f4f5;
+  margin:6px 0;
+}
 
 .immo-property-list-table { background:#fff; border:1px solid #e4e4e7; border-radius:12px; overflow:hidden; }
 .immo-property-list-table table { border-collapse:collapse; width:100%; }
@@ -804,7 +874,11 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-card-actions { align-items:center; display:inline-flex; gap:7px; position:relative; }
 .immo-flat-icon { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:8px; color:#52525b; cursor:pointer; display:inline-flex; height:34px; justify-content:center; width:34px; }
 .immo-flat-icon:hover, .immo-flat-icon.active { background:#fafafa; border-color:#c7d2fe; color:#18181b; box-shadow:0 0 0 3px #eef2ff; }
-.immo-lease-actions-menu { background:#fff; border:1px solid #e4e4e7; border-radius:12px; box-shadow:0 24px 60px -24px rgba(15,23,42,.45); color:#334155; display:grid; font-size:14px; gap:0; min-width:275px; padding:10px 0; position:absolute; right:0; top:42px; z-index:30; text-align:left; }
+/* Le sens d'ouverture (.up / .down) est décidé au clic selon la place dispo,
+   avec un scroll interne de sécurité si le menu est trop long. */
+.immo-lease-actions-menu { background:#fff; border:1px solid #e4e4e7; border-radius:12px; box-shadow:0 24px 60px -24px rgba(15,23,42,.45); color:#334155; display:grid; font-size:14px; gap:0; min-width:275px; padding:10px 0; position:absolute; right:0; max-height:min(64vh,440px); overflow-y:auto; z-index:30; text-align:left; }
+.immo-lease-actions-menu.down { top:42px; bottom:auto; }
+.immo-lease-actions-menu.up { bottom:42px; top:auto; }
 .immo-lease-actions-head { border-bottom:1px solid #f4f4f5; display:grid; gap:3px; padding:10px 14px 12px; }
 .immo-lease-actions-head strong { color:#18181b; font-size:14px; font-weight:800; }
 .immo-lease-actions-head span { color:#059669; font-size:12px; font-weight:600; }
@@ -814,6 +888,23 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-lease-actions-menu button.danger { color:#ef4444; }
 .immo-lease-actions-menu button.danger:hover { background:#fef2f2; color:#dc2626; }
 .immo-lease-actions-menu hr { border:0; border-top:1px solid #f4f4f5; margin:6px 0; }
+.immo-lease-actions-head.pendingSignature span { color:#d97706; }
+.immo-lease-actions-head.noContract span { color:#dc2626; }
+.immo-lease-actions-head.expired span { color:#71717a; }
+.immo-lease-actions-menu button.highlight { color:#4338ca; font-weight:700; }
+.immo-lease-actions-menu button.highlight:hover { background:#eef2ff; color:#3730a3; }
+/* Caution sur la carte de bail */
+.immo-lease-deposit { display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px dashed #ececf0; margin-top:12px; padding-top:12px; }
+.immo-lease-deposit-label { display:inline-flex; align-items:center; gap:5px; color:#71717a; font-size:12px; font-weight:600; margin-right:auto; }
+.immo-deposit-link { background:none; border:0; color:#4f46e5; cursor:pointer; font:700 12px 'Inter',sans-serif; padding:2px 4px; }
+.immo-deposit-link:hover { text-decoration:underline; }
+/* Modale caution */
+.domus-deposit-modal { max-width:520px; width:min(520px,calc(100vw - 32px)); }
+.domus-deposit-modal .immo-field { display:flex; flex-direction:column; gap:5px; margin:0 0 12px; }
+.domus-deposit-modal .immo-field > span { color:#52525b; font-size:12px; font-weight:600; }
+.domus-deposit-modal .immo-field input, .domus-deposit-modal .immo-field select { border:1px solid #d4d4d8; border-radius:9px; font:500 14px 'Inter',sans-serif; padding:9px 11px; width:100%; }
+.domus-deposit-modal .immo-field input:focus, .domus-deposit-modal .immo-field select:focus { border-color:#4f46e5; outline:none; }
+.domus-deposit-modal .modal-foot { display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #ececf0; padding:14px 18px; }
 .domus-action-modal { max-width:720px; width:min(720px,calc(100vw - 32px)); }
 .domus-detail-grid { display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); padding:20px 24px; }
 .domus-detail-grid div { background:#fafafa; border:1px solid #f4f4f5; border-radius:10px; display:grid; gap:5px; min-width:0; padding:12px; }
@@ -858,10 +949,18 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-pay-row > span { color:#71717a; }
 .immo-pay-row strong { color:#18181b; font-weight:800; }
 .immo-pay-bar { display:flex; gap:4px; margin-top:12px; }
-.immo-pay-seg { flex:1; height:34px; border-radius:5px; background:#eef0f4; }
+.immo-pay-seg { position:relative; overflow:hidden; flex:1; height:34px; border-radius:5px; background:#eef0f4; }
 .immo-pay-seg.paid { background:linear-gradient(180deg,#34d399,#10b981); }
 .immo-pay-seg.pending { background:linear-gradient(180deg,#fcd34d,#f59e0b); }
 .immo-pay-seg.late { background:linear-gradient(180deg,#f87171,#ef4444); }
+/* Remplissage partiel : portion verte (payée) par-dessus le fond du mois impayé. */
+.immo-pay-seg-fill { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(180deg,#34d399,#10b981); border-radius:5px 0 0 5px; }
+/* Encaissement rapide : raccourcis de montant + note de paiement partiel. */
+.immo-quickpay-chips { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.immo-quickpay-chips button { background:#f4f4f5; border:1px solid #e4e4e7; border-radius:999px; color:#3f3f46; cursor:pointer; font:600 12px 'Inter',sans-serif; padding:6px 12px; }
+.immo-quickpay-chips button:hover { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+.immo-quickpay-chips button.active { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+.immo-quickpay-note { color:#d97706; font-size:12px; margin:6px 0 0; }
 .immo-pay-bar-labels { display:flex; justify-content:space-between; font-size:10px; color:#a1a1aa; margin-top:6px; }
 
 .immo-cal-grid { display:grid; gap:12px; grid-template-columns:repeat(4,minmax(0,1fr)); }

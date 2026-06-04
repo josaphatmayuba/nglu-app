@@ -12,11 +12,13 @@ import {
   currencies,
   customers,
   emailTemplates,
+  realEstateContracts,
   realEstateLeases,
   realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
   realEstateProperties,
   realEstateRentPayments,
+  realEstateSecurityDeposits,
   realEstateUnits,
   roles,
   subAccounts,
@@ -38,6 +40,8 @@ import {
   CreateMaintenanceDto,
   CreatePropertyDto,
   CreateRentPaymentDto,
+  CollectDepositDto,
+  ReturnDepositDto,
   CreateTenantDto,
   UpdateTenantDto,
   CreateUnitDto,
@@ -1001,8 +1005,14 @@ export class PropertyManagementService {
 
   async createPayment(input: CreateRentPaymentDto, orgId: number) {
     const lease = await this.getLeaseOrThrow(input.leaseId, orgId);
+    // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
+    // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
+    await this.ensureLeaseContractSigned(input.leaseId);
     const rentPaymentType = await this.getRentPaymentType();
-    const debitId = input.paymentAccountId ?? rentPaymentType.debitAccountId;
+    // Le compte débité (où arrive l'argent) dépend du moyen de paiement :
+    // Espèces → Cash, Bancaire/Carte/Chèque → Banque, Mobile money → Mobile Money.
+    const debitId = input.paymentAccountId
+      ?? (await this.resolvePaymentDebitAccount(input.method, rentPaymentType.debitAccountId));
     await this.ensureExists(subAccounts, debitId, "Payment account not found.");
 
     // Currency precedence: explicit input → lease's currency → app default
@@ -1075,6 +1085,215 @@ export class PropertyManagementService {
     return this.findPayment(paymentId);
   }
 
+  // ─── Caution / dépôt de garantie ────────────────────────────────────────────
+  async listDeposits(orgId: number) {
+    return this.db
+      .select()
+      .from(realEstateSecurityDeposits)
+      .where(and(
+        eq(realEstateSecurityDeposits.organizationId, orgId),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .orderBy(desc(realEstateSecurityDeposits.id));
+  }
+
+  private async getTransactionTypeByName(name: string) {
+    const rows = await this.db
+      .select({
+        id: transactionTypes.id,
+        debitAccountId: transactionTypes.debitAccountId,
+        creditAccountId: transactionTypes.creditAccountId,
+      })
+      .from(transactionTypes)
+      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true)))
+      .limit(1);
+    if (!rows.length) throw new BadRequestException(`Transaction type "${name}" is missing.`);
+    return rows[0];
+  }
+
+  // true si le moyen renvoie vers la banque (virement/carte/chèque), false → caisse.
+  private isBankMethod(method?: string | null) {
+    const m = (method || "").toLowerCase().replace(/[éèê]/g, "e");
+    return /(banc|bank|carte|card|cheque|virement)/.test(m);
+  }
+
+  async collectDeposit(leaseId: number, input: CollectDepositDto, orgId: number) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+
+    // Une seule caution active détenue par bail.
+    const existing = await this.db
+      .select({ id: realEstateSecurityDeposits.id })
+      .from(realEstateSecurityDeposits)
+      .where(and(
+        eq(realEstateSecurityDeposits.leaseId, leaseId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .limit(1);
+    if (existing.length) {
+      throw new BadRequestException("Une caution est déjà détenue pour ce bail.");
+    }
+
+    // Caution = passif : on débite Caisse/Banque, on crédite « Tenant Deposits ».
+    // Comptes résolus directement (robuste même si les types ne sont pas seedés).
+    const bank = this.isBankMethod(input.method);
+    const debitId = bank ? 2 : 1; // 2=Bank, 1=Cash
+    const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const currencyId =
+      (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+
+    const [txResult] = await this.db.insert(transactions).values({
+      date: new Date(input.paymentDate),
+      debitId,
+      creditId,
+      particulars: input.notes || `Caution reçue — bail ${lease.reference || lease.id}`,
+      amount: input.amount,
+      currencyId: currencyId ?? null,
+      type: this.isBankMethod(input.method) ? "BNQ - Security Deposit Receipt" : "CAI - Security Deposit Receipt",
+      relatedId: String(lease.id),
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const [depResult] = await this.db.insert(realEstateSecurityDeposits).values({
+      organizationId: orgId,
+      leaseId: lease.id,
+      currencyId: currencyId ?? null,
+      transactionId: Number(txResult.insertId),
+      amount: this.money(input.amount)!,
+      method: input.method ?? "cash",
+      paymentDate: this.requiredDate(input.paymentDate),
+      status: "held",
+      reference: input.reference ?? null,
+      notes: input.notes ?? null,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    await this.publishPaymentUpdate("created", Number(depResult.insertId), {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    return this.findDeposit(Number(depResult.insertId));
+  }
+
+  async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number) {
+    const lease = await this.getLeaseOrThrow(leaseId, orgId);
+    const rows = await this.db
+      .select()
+      .from(realEstateSecurityDeposits)
+      .where(and(
+        eq(realEstateSecurityDeposits.leaseId, leaseId),
+        eq(realEstateSecurityDeposits.status, "held"),
+        eq(realEstateSecurityDeposits.isActive, 1),
+      ))
+      .orderBy(desc(realEstateSecurityDeposits.id))
+      .limit(1);
+    if (!rows.length) throw new BadRequestException("Aucune caution détenue à restituer pour ce bail.");
+    const deposit = rows[0];
+
+    const held = Number(deposit.amount);
+    const deduction = Math.min(Math.max(0, Number(input.deductionAmount ?? 0)), held);
+    const returned = Math.round((held - deduction) * 100) / 100;
+
+    // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
+    // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
+    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const refundCredit = this.isBankMethod(input.returnMethod) ? 2 : 1; // 2=Bank, 1=Cash
+    const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+
+    let returnTransactionId: number | null = null;
+    if (returned > 0) {
+      const [txResult] = await this.db.insert(transactions).values({
+        date: new Date(input.returnDate),
+        debitId: tenantDeposits,
+        creditId: refundCredit,
+        particulars: input.notes || `Caution restituée — bail ${lease.reference || lease.id}`,
+        amount: returned,
+        currencyId: currencyId ?? null,
+        type: "Security Deposit Return",
+        relatedId: String(lease.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      returnTransactionId = Number(txResult.insertId);
+    }
+    // Retenue pour dégâts : le passif est soldé (débit) contre un revenu/compensation
+    // de maintenance (crédit Maintenance expense → réduit la charge).
+    if (deduction > 0) {
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance");
+      await this.db.insert(transactions).values({
+        date: new Date(input.returnDate),
+        debitId: tenantDeposits,
+        creditId: maintenance,
+        particulars: input.deductionReason || `Retenue sur caution (dégâts) — bail ${lease.reference || lease.id}`,
+        amount: deduction,
+        currencyId: currencyId ?? null,
+        type: "Security Deposit Return",
+        relatedId: String(lease.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+    }
+
+    await this.db
+      .update(realEstateSecurityDeposits)
+      .set({
+        status: "returned",
+        returnTransactionId,
+        deductionAmount: deduction > 0 ? this.money(deduction) : null,
+        deductionReason: input.deductionReason ?? null,
+        returnedAmount: this.money(returned),
+        returnMethod: input.returnMethod ?? "bank",
+        returnDate: this.requiredDate(input.returnDate),
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateSecurityDeposits.id, deposit.id));
+
+    await this.publishPaymentUpdate("updated", deposit.id, {
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+    });
+    return this.findDeposit(deposit.id);
+  }
+
+  private async findDeposit(id: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateSecurityDeposits)
+      .where(eq(realEstateSecurityDeposits.id, id))
+      .limit(1);
+    return rows[0];
+  }
+
+  private async getOrCreateLiabilitySubAccount(name: string) {
+    return this.getOrCreateSubAccount(name, 2); // 2 = Liability
+  }
+
+  private async getOrCreateExpenseSubAccount(name: string) {
+    return this.getOrCreateSubAccount(name, 6); // 6 = Expense
+  }
+
+  private async getOrCreateSubAccount(name: string, accountId: number): Promise<number> {
+    const existing = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(eq(subAccounts.name, name))
+      .limit(1);
+    if (existing.length) return existing[0].id;
+    const [result] = await this.db.insert(subAccounts).values({
+      name,
+      accountId,
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    } as any);
+    return Number((result as any).insertId);
+  }
+
   private async advanceLeaseInvoiceDateIfCovered(
     lease: typeof realEstateLeases.$inferSelect,
     orgId: number,
@@ -1115,12 +1334,14 @@ export class PropertyManagementService {
         leaseId: realEstateLeases.id,
         reference: realEstateLeases.reference,
         rentAmount: realEstateLeases.rentAmount,
+        currencySymbol: currencies.currencySymbol,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
         tenantEmail: customers.email,
       })
       .from(realEstateLeases)
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(eq(realEstateLeases.id, leaseId))
       .limit(1);
 
@@ -1130,11 +1351,13 @@ export class PropertyManagementService {
     if (!lease.tenantEmail) throw new BadRequestException("Email du locataire introuvable.");
 
     const tenantName = [lease.tenantFirstName, lease.tenantLastName].filter(Boolean).join(" ") || "Locataire";
+    // {amount} inclut la devise (ex. « 620000 FC ») — comme le rappel automatique.
+    const rentDisplay = `${lease.rentAmount ?? ""}${lease.currencySymbol ? ` ${lease.currencySymbol}` : ""}`.trim();
     let subject = `Rappel de paiement de loyer — Bail #${lease.reference}`;
     let html = `
       <p>Bonjour ${tenantName},</p>
       <p>Nous vous rappelons que votre loyer pour le bail <strong>#${lease.reference}</strong> est en retard.</p>
-      <p><strong>Montant du:</strong> ${lease.rentAmount}</p>
+      <p><strong>Montant du:</strong> ${rentDisplay}</p>
       <p>Merci de régulariser ce paiement au plus tôt possible.</p>
       <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
       <p>Cordialement,<br>L'équipe de gestion immobilière</p>
@@ -1153,7 +1376,7 @@ export class PropertyManagementService {
           .replace(/\{tenantName\}/g, tenantName)
           .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
           .replace(/\{reference\}/g, lease.reference || "")
-          .replace(/\{amount\}/g, String(lease.rentAmount ?? ""));
+          .replace(/\{amount\}/g, rentDisplay);
       if (tpl[0].subject) subject = fill(tpl[0].subject);
       if (tpl[0].body) html = fill(tpl[0].body);
     }
@@ -1476,6 +1699,7 @@ export class PropertyManagementService {
         unitName: leaseUnit.name,
         tenantFirstName: customers.firstName,
         tenantLastName: customers.lastName,
+        tenantPhone: customers.phone,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })
@@ -1494,6 +1718,63 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
+  }
+
+  // Le contrat du bail doit être signé par le locataire avant tout paiement.
+  private async ensureLeaseContractSigned(leaseId: number) {
+    const [contract] = await this.db
+      .select({ status: realEstateContracts.status })
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.leaseId, leaseId), ne(realEstateContracts.status, "deleted")))
+      .orderBy(desc(realEstateContracts.id))
+      .limit(1);
+    if (!contract || contract.status !== "signed") {
+      throw new BadRequestException(
+        "Le contrat doit être signé par le locataire avant d'enregistrer un paiement.",
+      );
+    }
+  }
+
+  // Le compte d'actif débité dépend du moyen de paiement, pour que la compta
+  // (Balance / Bilan) ventile Caisse / Banque / Mobile Money au lieu de tout
+  // mettre dans « Cash ». Repli sur le compte par défaut du type "Rent Payment".
+  private async resolvePaymentDebitAccount(
+    method: string | null | undefined,
+    fallbackId: number,
+  ): Promise<number> {
+    const m = (method || "")
+      .toLowerCase()
+      .replace(/[éèê]/g, "e"); // é è ê → e (espèce, chèque)
+    const has = (...keys: string[]) => keys.some((k) => m.includes(k));
+    if (has("banc", "carte", "cheque", "virement", "bank")) {
+      return this.getOrCreateAssetSubAccount("Bank");
+    }
+    if (has("pesa", "airtel", "orange", "mobile", "mtn", "momo")) {
+      return this.getOrCreateAssetSubAccount("Mobile Money");
+    }
+    if (has("espece", "cash", "liquide")) {
+      return this.getOrCreateAssetSubAccount("Cash");
+    }
+    return fallbackId;
+  }
+
+  // get-or-create d'un sous-compte d'actif par nom (idempotent, sans seeder).
+  private async getOrCreateAssetSubAccount(name: string): Promise<number> {
+    const ASSET = 1;
+    const rows = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(eq(subAccounts.name, name))
+      .limit(1);
+    if (rows.length) return rows[0].id;
+    const [result] = await this.db.insert(subAccounts).values({
+      name,
+      accountId: ASSET,
+      status: "true",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return Number((result as any).insertId);
   }
 
   private async getRealEstateTaxTypeOptional() {

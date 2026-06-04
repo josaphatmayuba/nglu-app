@@ -6,7 +6,9 @@ import {
   Building2,
   Check,
   CreditCard,
+  DollarSign,
   Edit3,
+  FileText,
   Grid3X3,
   Home,
   Info,
@@ -20,6 +22,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  UserPlus,
   Users,
   Wallet,
   X,
@@ -355,29 +358,57 @@ async function loadPropertiesModule() {
 
 function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const hasTenant = property.rawStatus === "occupied" && property.tenant && property.tenant !== "A assigner";
   const mediaClass = property.paymentStatus === "late"
     ? "late"
     : property.rawStatus === "maintenance"
       ? "maintenance"
-      : "available";
+      : property.rawStatus === "occupied"
+        ? "leased"
+        : "available";
   const statusClass = property.paymentStatus === "late"
     ? "late"
     : property.rawStatus === "maintenance"
       ? "maintenance"
       : "";
   const watermark = property.type === "Maison" ? <Home size={48} /> : <Building2 size={48} />;
+
+  const handleMenuAction = (action) => {
+    setMenuOpen(false);
+    if (action === "edit") onEdit?.();
+    if (action === "assign") go?.("locataires");
+    if (action === "payments") go?.("loyers");
+    if (action === "lease") go?.("baux");
+    if (action === "delete") onDelete?.();
+  };
+
   return (
-    <article className={`immo-property-card ${mediaClass}`}>
+    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`}>
       <div className="immo-property-media">
         <span className={`immo-status-chip ${statusClass}`}>{property.status}</span>
         <button className="immo-icon-button" title="Options" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></button>
         {menuOpen && (
-          <div className="property-menu" style={{ position: "absolute", right: 14, top: 52, zIndex: 5 }}>
-            <button onClick={onEdit}><Edit3 size={14} /> Modifier</button>
-            <button onClick={() => go?.("locataires")}>Assigner locataire</button>
-            <button onClick={() => go?.("loyers")}>Paiements</button>
-            <button onClick={() => go?.("baux")}>Bail</button>
-            <button className="danger" onClick={onDelete}><Trash2 size={14} /> Supprimer</button>
+          <div className="property-menu immo-property-context-menu">
+            <div className={`immo-menu-head ${hasTenant ? "pendingSignature" : ""}`}>
+              <strong>{property.name}</strong>
+              <span>{property.code}</span>
+            </div>
+            <button className="highlight" onClick={() => handleMenuAction("edit")}><Edit3 size={16} /> Modifier l'unite</button>
+            {!hasTenant && (
+              <>
+                <div className="immo-menu-separator" />
+                <button onClick={() => handleMenuAction("assign")}><UserPlus size={16} /> Assigner locataire</button>
+              </>
+            )}
+            {hasTenant && (
+              <>
+                <div className="immo-menu-separator" />
+                <button onClick={() => handleMenuAction("payments")}><DollarSign size={16} /> Voir paiements</button>
+                <button onClick={() => handleMenuAction("lease")}><FileText size={16} /> Voir bail</button>
+              </>
+            )}
+            <div className="immo-menu-separator" />
+            <button className="danger" onClick={() => handleMenuAction("delete")}><Trash2 size={16} /> Supprimer</button>
           </div>
         )}
         <span className="immo-property-watermark">{watermark}</span>
