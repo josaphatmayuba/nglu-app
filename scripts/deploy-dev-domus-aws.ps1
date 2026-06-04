@@ -65,9 +65,11 @@ try {
 
 scp -i $KeyPath -o StrictHostKeyChecking=no $artifactPath "${Server}:${remoteArtifact}"
 
+# git pull NON FATAL : sous `set -e`, un pull qui échoue (fichiers non suivis,
+# pas fast-forward) NE DOIT PAS interrompre le deploy de la dist locale.
 $gitPullLine = if ($SkipGitPull) { "" } else { @"
-git fetch origin develop
-git pull --ff-only origin develop
+git fetch origin develop || true
+git pull --ff-only origin develop || echo '[deploy] git pull ignoré (non fast-forward) — on continue avec la dist locale'
 "@ }
 
 $remoteScript = @"
