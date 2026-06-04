@@ -57,7 +57,7 @@ async function bootstrap() {
   const corsOrigins = String(env.corsOrigin).split(",").map((s) => s.trim()).filter(Boolean);
   const NATIVE_ORIGINS = ["capacitor://localhost", "https://localhost", "http://localhost"];
   app.enableCors({
-    origin: (origin, cb) => {
+    origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return cb(null, true);
       if (corsOrigins.includes(origin)) return cb(null, true);
       if (NATIVE_ORIGINS.includes(origin)) return cb(null, true);
