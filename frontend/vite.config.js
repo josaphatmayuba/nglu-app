@@ -1,32 +1,12 @@
 import react from "@vitejs/plugin-react";
-import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "path";
 import { defineConfig } from "vite";
+import { appVersion } from "../scripts/app-version.mjs";
 
 const rootDir = path.resolve(__dirname, "..");
-let baseVersion = "3.2.0";
-try {
-  baseVersion = readFileSync(path.resolve(rootDir, "VERSION"), "utf8").trim();
-} catch {
-  try {
-    baseVersion = readFileSync(path.resolve(__dirname, "VERSION"), "utf8").trim();
-  } catch {
-    // use default
-  }
-}
-
-function git(command, fallback) {
-  try {
-    return execSync(command, { cwd: rootDir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-  } catch {
-    return fallback;
-  }
-}
-
-const commit = git("git rev-parse --short HEAD", "unknown");
-const isDirty = Boolean(git("git status --short --untracked-files=no", ""));
-const buildVersion = `${baseVersion}+${commit}${isDirty ? ".dirty" : ""}`;
+// Version partagée avec PATCH automatique — voir scripts/app-version.mjs.
+const { base: baseVersion, build: buildVersion, commit } = appVersion();
 let changelog = "";
 try {
   changelog = readFileSync(path.resolve(rootDir, "CHANGELOG.md"), "utf8")

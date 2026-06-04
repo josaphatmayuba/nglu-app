@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { versionDefine } from "../scripts/app-version.mjs";
 
 export default defineConfig({
   plugins: [
@@ -43,7 +44,8 @@ export default defineConfig({
   ],
   base: "/batipro/",
   define: {
-    __BUILD_TS__: JSON.stringify(Date.now())
+    __BUILD_TS__: JSON.stringify(Date.now()),
+    ...versionDefine()
   },
   server: {
     proxy: {
