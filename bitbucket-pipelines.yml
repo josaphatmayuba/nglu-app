@@ -85,6 +85,7 @@ pipelines:
                 - $SSH $SERVER "mkdir -p $APP/batipro-app/dist $PROD_APP/nginx"
                 - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-batipro-dev && docker cp $APP/batipro-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-dev/"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
