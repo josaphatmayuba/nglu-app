@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import { addUser, completeMfaLogin } from "../../redux/rtk/features/user/userSlice";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
 import { loadPermissionById } from "../../redux/rtk/features/auth/authSlice";
+import { clearAdminSession, hasValidAdminSession } from "../../utils/authSession";
 import LoginTable from "../Card/LoginTable";
 
 export default function Login() {
@@ -81,7 +82,11 @@ export default function Login() {
   }, [defaultValue]);
 
   useEffect(() => {
-    if (localStorage.getItem("isLogged")) navigate("/admin");
+    if (hasValidAdminSession()) {
+      navigate("/admin");
+      return;
+    }
+    clearAdminSession();
   }, [navigate]);
 
   const companyName = data?.companyName || "NGOLU";

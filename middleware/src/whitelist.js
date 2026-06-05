@@ -15,6 +15,8 @@ module.exports = [
   { method: 'POST', prefix: '/auth/mfa/setup',                auth: true  },
   { method: 'POST', prefix: '/auth/mfa/verify',               auth: true  },
   { method: 'POST', prefix: '/auth/mfa/disable',              auth: true  },
+  // SCRUM-121: gestion des sessions/appareils (GET liste, DELETE révoque)
+  { method: '*',    prefix: '/auth/sessions',                 auth: true  },
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
@@ -107,6 +109,8 @@ module.exports = [
   { method: '*',    prefix: '/weight-unit',                   auth: true  },
   { method: '*',    prefix: '/dimension-unit',                auth: true  },
   { method: '*',    prefix: '/property-management',           auth: true  },
+  { method: '*',    prefix: '/farmos',                         auth: true  },
+  { method: '*',    prefix: '/batipro',                       auth: true  },
   { method: '*',    prefix: '/currency',                      auth: true  },
   { method: '*',    prefix: '/account',                       auth: true  },
   { method: '*',    prefix: '/sub-accounts',                  auth: true  },

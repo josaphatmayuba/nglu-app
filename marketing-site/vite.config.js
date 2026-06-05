@@ -1,10 +1,12 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import { versionDefine } from "../scripts/app-version.mjs";
 
 export default defineConfig({
   plugins: [vue()],
   define: {
     __BUILD_TS__: JSON.stringify(Date.now()),
+    ...versionDefine(),
   },
   server: {
     proxy: {

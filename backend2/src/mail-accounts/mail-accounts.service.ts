@@ -22,6 +22,12 @@ export class MailAccountsService {
   }): Promise<CreateMailboxResult | null> {
     if (!input.firstName || !input.lastName) return null;
     if (!env.stalwart.adminUser || !env.stalwart.adminPass) {
+      // Dev/staging: no Stalwart configured → skip mailbox provisioning silently
+      // so user creation still works. Prod (NODE_ENV=production) must enforce it.
+      if (env.nodeEnv !== "production") {
+        this.logger.warn("Stalwart non configuré — création de boîte mail ignorée (dev).");
+        return null;
+      }
       throw new BadRequestException("Stalwart is not configured for mailbox creation.");
     }
 
@@ -41,6 +47,12 @@ export class MailAccountsService {
     lastName?: string;
   }): Promise<CreateMailboxResult> {
     if (!env.stalwart.adminUser || !env.stalwart.adminPass) {
+      // En dev on autorise mais on signale clairement que ce n'est qu'une
+      // simulation locale (pas de vraie boîte créée).
+      if (env.nodeEnv !== "production") {
+        this.logger.warn("Stalwart non configuré — boîte manuelle simulée (dev).");
+        return { email: `${input.localPart}@${env.stalwart.domain}`, accountId: `dev-stub-${Date.now()}` };
+      }
       throw new BadRequestException("Stalwart is not configured for mailbox creation.");
     }
 

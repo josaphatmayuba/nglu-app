@@ -372,20 +372,10 @@ function Header({ onPress, data, loading }) {
         <div className="flex items-center gap-1 md:gap-2 shrink-0">
           {isLogged && (
             <>
-              {/* Mobile navigation entry point */}
-              <button
-                onClick={() => onPress && onPress()}
-                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition md:hidden"
-                title="Menu CRM"
-                aria-label="Ouvrir le menu CRM"
-              >
-                <LayoutGrid className="w-5 h-5" />
-              </button>
-
-              {/* App switcher desktop shortcut */}
+              {/* App switcher — same grid view on mobile and desktop. */}
               <button
                 onClick={() => setAppSwitcherOpen(true)}
-                className="hidden md:block p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
+                className="p-2 hover:bg-ink-100 rounded-lg text-ink-600 transition"
                 title="Toutes les apps (G)"
                 aria-label="Ouvrir toutes les apps"
               >

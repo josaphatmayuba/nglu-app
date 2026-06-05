@@ -34,6 +34,7 @@ import {
   CreditCard,
   FileText,
   Grid2X2,
+  HardHat,
   Layers,
   Mail,
   Package,
@@ -321,6 +322,24 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           icon: BriefcaseBusiness,
           permit: {
             permissions: ["create-user", "readAll-user"],
+            operator: "or",
+          },
+        },
+        {
+          label: "FarmOS",
+          action: () => { window.location.href = "/farmos/"; },
+          icon: Layers,
+          permit: {
+            permissions: ["readAll-farmos", "create-farmos"],
+            operator: "or",
+          },
+        },
+        {
+          label: "BatiPro",
+          action: () => { window.location.href = "/batipro/"; },
+          icon: HardHat,
+          permit: {
+            permissions: ["readAll-batipro", "create-batipro"],
             operator: "or",
           },
         },

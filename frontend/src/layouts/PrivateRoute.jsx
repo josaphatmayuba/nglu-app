@@ -1,7 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
+import { hasValidAdminSession } from "../utils/authSession";
 
 export default function PrivateRoute() {
-
-    let auth = localStorage.getItem("isLogged");
-    return auth ? <Outlet /> : <Navigate to="/" />;
+    return hasValidAdminSession() ? <Outlet /> : <Navigate to="/admin/auth/login" replace />;
 }

@@ -1,93 +1,229 @@
 image: node:20-alpine
 
+# CI/CD multi-projets NgluApp — deploiement cible.
+#   develop -> dev  (dev.ongdngolu.org, /opt/nglu-app-dev,  projet compose nglu_dev)
+#   master  -> prod (ongdngolu.org,     /opt/nglu-app,      projet compose nglu_prod)
+#
+# Chaque projet a son propre step build+deploy, conditionne sur son dossier
+# (changesets.includePaths) : seul le ou les projets reellement modifies sont
+# rebuild et redeployes. Toucher domus-app/ ne redeploie QUE Domus.
+#
+# Override : pipelines custom "deploy-all-dev" / "deploy-all-prod" (lances a la
+# main depuis Bitbucket) forcent le redeploiement complet si besoin.
+
 definitions:
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
-
-  steps:
-    - step: &audit-security
-        name: Security Audit (npm audit high/critical)
-        image: node:20-alpine
-        script:
-          - echo "=== Backend2 audit ==="
-          - cd backend2 && npm ci --ignore-scripts && npm audit --audit-level=high
-          - cd ..
-          - echo "=== Frontend audit ==="
-          - cd frontend && npm install --legacy-peer-deps --ignore-scripts && npm audit --audit-level=high
-
-    - step: &build-backend2
-        name: Build Backend2
-        image: node:20-alpine
-        caches:
-          - node-backend2
-        script:
-          - cd backend2
-          - npm ci
-          - npm run build
-        artifacts:
-          - backend2/dist/**
-
-    - step: &build-frontend-prod
-        name: Build Frontend (production mode)
-        image: node:20-alpine
-        caches:
-          - node-frontend
-        script:
-          - cd frontend
-          - npm install --legacy-peer-deps
-          - npm run build:prod
-        artifacts:
-          - frontend/dist/**
-
-    - step: &build-frontend-dev
-        name: Build Frontend (development mode)
-        image: node:20-alpine
-        caches:
-          - node-frontend
-        script:
-          - cd frontend
-          - npm install --legacy-peer-deps
-          - npm run build:dev
-        artifacts:
-          - frontend/dist/**
-
-    - step: &deploy-prod
-        name: Deploy to Production (ongdngolu.org)
-        image: alpine
-        script:
-          - apk add --no-cache openssh-client
-          - SERVER=admin@16.54.167.125
-          - APP_DIR=/opt/nglu-app
-          - ssh $SERVER "cd $APP_DIR && git pull origin master"
-          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
-          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
-          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up --build -d"
-          - ssh $SERVER "docker compose -p nglu_prod -f $APP_DIR/docker-compose.prod.yml ps"
-
-    - step: &deploy-dev
-        name: Deploy to Development (dev.ongdngolu.org)
-        image: alpine
-        script:
-          - apk add --no-cache openssh-client
-          - SERVER=admin@16.54.167.125
-          - APP_DIR=/opt/nglu-app-dev
-          - ssh $SERVER "cd $APP_DIR && git pull origin develop"
-          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
-          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
-          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up --build -d"
-          - ssh $SERVER "docker compose -p nglu_dev -f $APP_DIR/docker-compose.dev.yml ps"
+    node-domus: domus-app/node_modules
+    node-farmos: farmos-app/node_modules
+    node-batipro: batipro-app/node_modules
+    node-marketing: marketing-site/node_modules
 
 pipelines:
   branches:
-    master:
-      - step: *audit-security
-      - step: *build-backend2
-      - step: *build-frontend-prod
-      - step: *deploy-prod
-
+    # ════════════════════════════ DEVELOP → DEV ════════════════════════════
     develop:
-      - step: *audit-security
-      - step: *build-backend2
-      - step: *build-frontend-dev
-      - step: *deploy-dev
+      - parallel:
+          - step:
+              name: Backend2 → dev
+              caches: [node-backend2]
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+          - step:
+              name: Frontend → dev
+              caches: [node-frontend]
+              condition: { changesets: { includePaths: ["frontend/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd frontend && npm install --legacy-peer-deps && npm audit --audit-level=high && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/frontend/dist"
+                - scp -o StrictHostKeyChecking=no -r frontend/dist $SERVER:$APP/frontend/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Domus → dev
+              caches: [node-domus]
+              condition: { changesets: { includePaths: ["domus-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/domus-app/dist"
+                - scp -o StrictHostKeyChecking=no -r domus-app/dist $SERVER:$APP/domus-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: FarmOS → dev
+              caches: [node-farmos]
+              condition: { changesets: { includePaths: ["farmos-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/farmos-app/dist"
+                - scp -o StrictHostKeyChecking=no -r farmos-app/dist $SERVER:$APP/farmos-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: BatiPro → dev
+              caches: [node-batipro]
+              condition: { changesets: { includePaths: ["batipro-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/batipro-app/dist"
+                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Marketing → dev
+              caches: [node-marketing]
+              condition: { changesets: { includePaths: ["marketing-site/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
+                - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+    # ════════════════════════════ MASTER → PROD ════════════════════════════
+    # Chaque deploiement prod est en trigger manuel (clic dans Bitbucket).
+    master:
+      - parallel:
+          - step:
+              name: Backend2 → prod (manuel)
+              caches: [node-backend2]
+              trigger: manual
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Frontend → prod (manuel)
+              caches: [node-frontend]
+              trigger: manual
+              condition: { changesets: { includePaths: ["frontend/**"] } }
+              # Prod = dist bind-montee servie par nginx : on NE rebuild PAS l'image (cf. incident prod), simple reload.
+              script:
+                - apk add --no-cache openssh-client
+                - cd frontend && npm install --legacy-peer-deps && npm audit --audit-level=high && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/frontend/dist"
+                - scp -o StrictHostKeyChecking=no -r frontend/dist $SERVER:$APP/frontend/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Domus → prod (manuel)
+              caches: [node-domus]
+              trigger: manual
+              condition: { changesets: { includePaths: ["domus-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/domus-app/dist"
+                - scp -o StrictHostKeyChecking=no -r domus-app/dist $SERVER:$APP/domus-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: FarmOS → prod (manuel)
+              caches: [node-farmos]
+              trigger: manual
+              condition: { changesets: { includePaths: ["farmos-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/farmos-app/dist"
+                - scp -o StrictHostKeyChecking=no -r farmos-app/dist $SERVER:$APP/farmos-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: BatiPro → prod (manuel)
+              caches: [node-batipro]
+              trigger: manual
+              condition: { changesets: { includePaths: ["batipro-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/batipro-app/dist"
+                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Marketing → prod (manuel)
+              caches: [node-marketing]
+              trigger: manual
+              condition: { changesets: { includePaths: ["marketing-site/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
+                - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+  # ═══════════ Override manuel : tout redeployer (Bitbucket → Run pipeline → custom) ═══════════
+  custom:
+    deploy-all-dev:
+      - parallel:
+          - step:
+              name: Backend2 → dev (full)
+              caches: [node-backend2]
+              script:
+                - apk add --no-cache openssh-client
+                - cd backend2 && npm ci && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin develop || echo skip)"
+                - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+          - step:
+              name: Apps statiques → dev (full)
+              script:
+                - apk add --no-cache openssh-client
+                - cd frontend && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - for a in domus-app farmos-app batipro-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - for a in frontend domus-app farmos-app batipro-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+    deploy-all-prod:
+      - parallel:
+          - step:
+              name: Backend2 → prod (full)
+              caches: [node-backend2]
+              script:
+                - apk add --no-cache openssh-client
+                - cd backend2 && npm ci && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin master || echo skip)"
+                - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+          - step:
+              name: Apps statiques → prod (full)
+              script:
+                - apk add --no-cache openssh-client
+                - cd frontend && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - for a in domus-app farmos-app batipro-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - for a in frontend domus-app farmos-app batipro-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"

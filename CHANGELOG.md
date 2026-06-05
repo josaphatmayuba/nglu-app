@@ -10,7 +10,48 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-06-04
+
+### Security
+
+- Mise a jour de `drizzle-orm` 0.38.4 -> 0.45.2 : correction de la faille d'injection SQL via des identifiants SQL mal echappes (GHSA, severite haute). `drizzle-kit` 0.30.1 -> 0.31.10. Verifie : build NestJS OK, migrations au boot OK, health 200, requetes drizzle live OK.
+
+### Fixed
+
+- Domus (baux): menu d'actions « ... » aligne sur le CRM (4 etats: signe, en attente de signature, sans contrat, expire) et epure (sans « Exporter CSV » ni « Copier la reference »); « Renouveler » seulement si le bail finit dans <= 4 mois ou est expire; « Resilier » seulement si le contrat est signe; ouverture automatique vers le haut/bas selon la place; fermeture au clic en dehors ou sur Echap; « Voir les paiements » et « Tickets maintenance » deplaces dans le detail du bail.
+- Domus: paiement de loyer bloque tant que le contrat du bail n'est pas signe; duree de bail inclusive (12 mois et non 11); filtre de periode par defaut sur « Annee »; message d'erreur API lisible (message NestJS au lieu du JSON brut); couleur distincte des biens Loue/Libre.
+- Deploy: `deploy-dev-domus-aws.ps1` — le `git pull` distant est rendu non fatal pour ne plus interrompre la livraison de la dist locale (le serveur servait un vieux bundle).
+- Domus: les actions contrat utilisent maintenant un vrai PDF `jsPDF` avec signatures bailleur/locataire; l'aperçu de contrat depuis les baux affiche aussi les signatures.
+- Domus: alignement des criteres de donnees immobilier avec le CRM: filtre de periode par defaut sur "Tout", exclusion des soft-deleted/inactifs, unites rattachees aux biens actifs, et paiements rattaches aux baux visibles.
+- FarmOS: le tableau de bord charge maintenant ses donnees via `GET /api/farmos/dashboard` au lieu de declencher plusieurs requetes liste cote navigateur.
+  - Evite la cascade de rechargements causee par les evenements `farmos:cache-updated` de chaque table.
+  - Le client realtime FarmOS attend maintenant un token avant d'ouvrir SSE/polling, et ne lance plus le polling en parallele d'une connexion SSE saine.
+- FarmOS: les appels API frontend sont maintenant serialises et les lectures identiques deja en cours sont dedupliquees pour eviter les rafales `429` au chargement des ecrans.
+- FarmOS: Workbox ne revalide plus les endpoints `/api/farmos/*`; le mode offline reste assure par Dexie et l'outbox, sans doubler les appels API.
+- FarmOS: les refresh Dexie de fond (`farmos:cache-updated`) ne relancent plus les ecrans en boucle; les mutations et le realtime continuent de passer par `farmos:data-changed`.
+- FarmOS: ajout d'une migration PWA qui desinscrit une seule fois les anciens service workers FarmOS pouvant encore intercepter `/api/farmos/*` et nettoyer leurs caches API.
+
 ### Added
+
+- Domus: caution / depot de garantie — cycle complet encaissement + restitution avec retenue pour degats, comptabilisee en passif « Tenant Deposits » (debit Caisse/Banque). Nouvelle table `real_estate_security_deposits` (migration 0068, a creer a la main en prod via `scripts/sql/0068_security_deposits_apply.sql`) et endpoints `GET /deposits`, `POST /leases/:id/deposit`, `POST /leases/:id/deposit/return`.
+- Domus (loyers): suivi des arrieres et du solde reel par bail gerant les paiements partiels — « reste a payer », barre de couverture fractionnaire, avance « couvert jusqu'a <mois> », metrique « Arrieres (reste du) » par devise.
+- Domus: moyens de paiement supplementaires (Bancaire, Carte, Cheque) avec mapping comptable du compte debite selon le moyen (Caisse/Banque/Mobile Money); numero de recu auto et telephone locataire pre-rempli.
+- CRM: colonne devise et symbole par paiement dans l'ecran Transactions.
+- BatiPro: ajout du socle applicatif Construction sous `/batipro/` avec auth CRM partagee, PWA Vite, dashboard chantier, navigation CRM, routage nginx et permissions initiales.
+  - Ajout des tables/API CRUD projets, taches, materiaux et equipes avec soft-delete, realtime et script de deploiement dev.
+
+- Domus: configuration signature bailleur dans Reglages (eIDAS, tablette, cursif, image) — partagee avec le CRM via `landlordSignature`.
+
+- SCRUM-247: Domus — ecran Contrats & signature (liste, KPIs, detail papier, journal d'audit, envoi/lien, modèles).
+  - Creation depuis un bail, impression/PDF, renvoi pour signature, filtre periode global.
+  - Panneau des modeles de contrat (lecture seule ; edition dans le CRM admin).
+
+- SCRUM-249: Domus — ecran Espace locataire cable sur l'API (baux, paiements, contrats).
+  - Hero locataire, prochain loyer avec statut, paiement mobile money, aide (maintenance, contact).
+  - Documents (bail + quittances) et historique des paiements, filtre par periode global.
+  - Selecteur gestionnaire pour previsualiser le portail d'un locataire ; pre-selection du bail vers Encaisser.
+
+- Domus: ajout d'un ecran de connexion local partageant la meme session CRM/FarmOS via `access-token`, `role`, `roleId`, `user`, `id`, `email` et `isLogged`.
 
 - SCRUM-227: Immobilier - restauration du suivi admin des liens d'inscription locataire.
   - Les dossiers d'inscription generes apparaissent de nouveau dans l'onglet Locataires avec badges Non rempli, En remplissage, Soumis ou Expire.

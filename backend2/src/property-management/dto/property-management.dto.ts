@@ -260,6 +260,29 @@ export class CreateLeaseDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  // ── Taxe par bail (incluse/informative) ──
+  @ApiPropertyOptional({ example: "TVA", description: "Nom de la taxe appliquée au loyer de ce bail." })
+  @IsOptional()
+  @IsString()
+  taxName?: string | null;
+
+  @ApiPropertyOptional({ enum: ["percent", "fixed"], example: "percent" })
+  @IsOptional()
+  @IsIn(["percent", "fixed"])
+  taxType?: "percent" | "fixed" | null;
+
+  @ApiPropertyOptional({ example: 16, description: "Pourcentage (si percent) ou montant fixe (si fixed)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  taxValue?: number | null;
+
+  @ApiPropertyOptional({ enum: ["auto", "never"], default: "never", description: "auto = part de taxe calculée à chaque paiement ; never = aucune." })
+  @IsOptional()
+  @IsIn(["auto", "never"])
+  taxApplyMode?: "auto" | "never";
 }
 
 export class UpdateLeaseDto extends PartialType(CreateLeaseDto) {}
@@ -309,6 +332,68 @@ export class CreateRentPaymentDto {
   @IsInt()
   @Min(1)
   currencyId?: number;
+}
+
+export class CollectDepositDto {
+  @ApiProperty({ example: "2026-06-04" })
+  @IsDateString()
+  paymentDate: string;
+
+  @ApiProperty({ example: 1800, description: "Montant de la caution encaissée." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount: number;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash", description: "cash → débit Caisse · bank/card/cheque → débit Banque." })
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise. Par défaut celle du bail, puis appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "CAU-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class ReturnDepositDto {
+  @ApiProperty({ example: "2027-06-04" })
+  @IsDateString()
+  returnDate: string;
+
+  @ApiPropertyOptional({ example: 0, default: 0, description: "Retenue pour dégâts/réparations, déduite de la caution." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  deductionAmount?: number;
+
+  @ApiPropertyOptional({ example: "Réparation mur + nettoyage" })
+  @IsOptional()
+  @IsString()
+  deductionReason?: string | null;
+
+  @ApiPropertyOptional({ example: "bank", default: "bank", description: "Moyen de restitution (crédit Caisse/Banque)." })
+  @IsOptional()
+  @IsString()
+  returnMethod?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
 }
 
 export class CreateMaintenanceDto {
@@ -421,10 +506,10 @@ export class CreateTenantDto {
   @IsNotEmpty()
   marital_status: string;
 
-  @ApiProperty({ example: "Kinshasa" })
+  @ApiPropertyOptional({ example: "Kinshasa" })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  origin_province: string;
+  origin_province?: string | null;
 
   @ApiPropertyOptional({ example: "+243820000000" })
   @IsOptional()
@@ -456,14 +541,15 @@ export class CreateTenantDto {
   @IsNotEmpty()
   entity_name: string;
 
-  @ApiProperty({ example: "45 Boulevard du 30 Juin" })
+  @ApiPropertyOptional({ example: "45 Boulevard du 30 Juin" })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  entity_address: string;
+  entity_address?: string | null;
 
-  @ApiProperty({ example: "2021-01-15" })
+  @ApiPropertyOptional({ example: "2021-01-15" })
+  @IsOptional()
   @IsDateString()
-  hiring_date: string;
+  hiring_date?: string | null;
 
   @ApiProperty({ example: "CDI" })
   @IsString()
@@ -539,6 +625,8 @@ export class CreateTenantDto {
   @Min(0, { each: true })
   child_age?: number[];
 }
+
+export class UpdateTenantDto extends PartialType(CreateTenantDto) {}
 
 export class GenerateTenantOnboardingDto {
   @ApiPropertyOptional({ example: "Jean" })

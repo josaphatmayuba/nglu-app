@@ -1,0 +1,709 @@
+/* eslint-disable */
+// Dashboard — adapts entirely based on speciesFilter.
+
+import React from "react";
+import { Icon, AnimalGlyph } from "./icons";
+import { speciesById, t, SPECIES } from "./data";
+import { SpeciesPillBar, KpiCard, Sparkline, FarmScore } from "./shell";
+import { api } from "./api";
+import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
+import { useDataRefresh } from "./use-data-refresh";
+
+function formatLongDate(d, lang) {
+  try {
+    return d.toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { weekday: "long", day: "numeric", month: "long" });
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function deriveDashFinanceKpis(summary) {
+  const totalR = (summary?.revenue || []).reduce((a, b) => a + b, 0);
+  const totalE = (summary?.expense || []).reduce((a, b) => a + b, 0);
+  const currentMonthR = (summary?.revenue || []).slice(-1)[0] || 0;
+  const currentMonthE = (summary?.expense || []).slice(-1)[0] || 0;
+  return { totalR, totalE, currentMonthR, currentMonthE };
+}
+
+function deriveDashAlerts(d, lang) {
+  if (!d.ready) return [];
+  const out = [];
+  const aMap = new Map(d.animals.map((a) => [a.id, a]));
+  // Withdrawals
+  const today = new Date().toISOString().slice(0, 10);
+  d.treatments.forEach((t) => {
+    if (t.status !== "running" || !t.endDate || t.endDate < today) return;
+    if (!t.withdrawalMilkHours && !t.withdrawalMeatDays && !t.withdrawalEggsDays) return;
+    const a = aMap.get(t.animalId);
+    out.push({
+      id: `wd-${t.id}`, kind: "withdrawal", severity: "critical",
+      animal: a?.name || a?.externalId || "—", animalId: a?.externalId || `#${a?.id}`,
+      species: a?.species || "cow",
+      title: lang === "fr" ? "Délai de retrait actif" : "Withdrawal active",
+      subtitle: `${t.medicineName || "Traitement"}${t.withdrawalMilkHours ? ` · lait ${Math.round(t.withdrawalMilkHours / 24)} j` : ""}${t.withdrawalMeatDays ? ` · viande ${t.withdrawalMeatDays} j` : ""}`,
+      date: t.endDate, icon: "shield",
+    });
+  });
+  // Low stock
+  d.medicines.forEach((m) => {
+    if (m.minQuantity == null || Number(m.quantity) >= Number(m.minQuantity)) return;
+    out.push({
+      id: `low-${m.id}`, kind: "stock", severity: Number(m.quantity) < Number(m.minQuantity) / 2 ? "critical" : "high",
+      animal: m.name, animalId: m.kind === "feed" ? "Aliment" : "Médicament", species: "cow",
+      title: lang === "fr" ? `Stock faible · ${m.name}` : `Low stock · ${m.name}`,
+      subtitle: `${Number(m.quantity).toLocaleString("fr-CA")} ${m.unit || ""} restant · seuil ${m.minQuantity}`,
+      date: "—", icon: "wheat",
+    });
+  });
+  return out;
+}
+
+function useDashboardData() {
+  const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs"]);
+  React.useEffect(() => {
+    let cancel = false;
+    api.getDashboardSnapshot()
+      .then((snapshot) => {
+        if (cancel) return;
+        const {
+          animals = [],
+          medicines = [],
+          sales = [],
+          expenses = [],
+          treatments = [],
+          repro = [],
+          vaccinations = [],
+          aiInsights = [],
+          finance = { months: [], revenue: [], expense: [], byCategory: [] },
+          productionLogs = [],
+        } = snapshot || {};
+        const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs].every((x) => Array.isArray(x));
+        if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [reloadKey, refresh]);
+  React.useEffect(() => {
+    const reload = () => setReloadKey((k) => k + 1);
+    const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created"];
+    events.forEach((e) => window.addEventListener(e, reload));
+    return () => events.forEach((e) => window.removeEventListener(e, reload));
+  }, []);
+  return data;
+}
+
+function computeDashboardKpis(d, speciesFilter, lang, dateRange) {
+  if (!d.ready) return null;
+  const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
+  const animals = filterSp(d.animals, (a) => a.species);
+  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+  const total = animals.length;
+  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
+  const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
+  const expMonth = expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
+  const lowStock = d.medicines.filter((m) => m.minQuantity != null && Number(m.quantity) < Number(m.minQuantity)).length;
+  const runningTreatments = d.treatments.filter((t) => t.status === "running").length;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
+  const activeRepro = d.repro.filter((e) => (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
+  return { total, sick, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
+}
+
+const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
+  const species = speciesFilter ? speciesById(speciesFilter) : null;
+  const isAll = !species;
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
+  const live = useDashboardData();
+  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange);
+  const fin = deriveDashFinanceKpis(live.finance);
+  const ALERTS = deriveDashAlerts(live, lang);
+  const aiFiltered = live.aiInsights.map((i) => ({
+    id: i.id, kind: i.kind, icon: i.icon || "sparkle", confidence: i.confidence ?? 80,
+    fr: i.textFr || i.text_fr, en: i.textEn || i.text_en,
+    action: lang === "fr" ? (i.actionLabelFr || i.action_label_fr) : (i.actionLabelEn || i.action_label_en),
+    target: i.actionTarget || i.action_target,
+  }));
+
+  // KPI set (adapts). When live data is ready, prefer it; otherwise show sample.
+  const liveKpis = k ? [
+    { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: [k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total], icon: "layers" },
+    { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
+    { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
+    { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
+    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
+    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
+    { label: lang==="fr"?"Stock faible":"Low stock", value: k.lowStock, unit: lang==="fr"?"réf.":"refs", delta: null, trend: [k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock], icon: "wheat", accent: k.lowStock > 0 ? "var(--rust-700)" : "var(--health-500)" },
+    { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
+  ] : null;
+  const speciesKpis = !isAll && live.ready ? (() => {
+    const animalsSp = live.animals.filter((a) => a.species === species.id);
+    const sickSp = animalsSp.filter((a) => a.status === "sick").length;
+    const runningTreatmentsSp = live.treatments.filter((t) => {
+      const a = live.animals.find((x) => x.id === t.animalId);
+      return a?.species === species.id && t.status === "running";
+    }).length;
+    const vaccUpcomingSp = live.vaccinations.filter((v) => v.species === species.id && v.status !== "done").length;
+    const revSp = (live.sales || [])
+      .filter((s) => s.species === species.id && inDateRange(s.saleDate || s.sale_date, dateRange))
+      .reduce((sum, s) => sum + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
+    return [
+      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: animalsSp.length.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(animalsSp.length), icon: "layers", accent: species.accent },
+      { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
+      { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
+      { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },
+      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: "$", delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
+    ];
+  })() : null;
+  const kpis = isAll ? (liveKpis || []) : (speciesKpis || []);
+
+  // Species-aware filtered lists
+  const alertsFiltered = isAll ? ALERTS : ALERTS.filter(a => a.species === species.id);
+  // Upcoming: derive from live treatments end_date + repro due_date if available.
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const liveUpcoming = live.ready ? (() => {
+    const aMap = new Map(live.animals.map((a) => [a.id, a]));
+    const items = [];
+    live.treatments.forEach((t) => {
+      if (!t.endDate || t.endDate < todayISO) return;
+      const a = aMap.get(t.animalId);
+      if (speciesFilter && a?.species !== speciesFilter) return;
+      items.push({ id: `t-${t.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Fin traitement · " : "Treatment end · ") + (t.medicineName || ""), target: a?.name || a?.externalId || "—", n: 1, due: t.endDate, status: t.endDate === todayISO ? "today" : "scheduled" });
+    });
+    live.repro.forEach((e) => {
+      if (!e.expectedDueDate || e.expectedDueDate < todayISO) return;
+      const a = aMap.get(e.animalId);
+      if (speciesFilter && a?.species !== speciesFilter) return;
+      items.push({ id: `r-${e.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Mise bas · " : "Birthing · ") + (a?.name || a?.externalId || "—"), target: a?.name || "—", n: 1, due: e.expectedDueDate, status: e.expectedDueDate === todayISO ? "today" : "scheduled" });
+    });
+    items.sort((a, b) => a.due.localeCompare(b.due));
+    return items.slice(0, 5);
+  })() : null;
+  const vaccinesUpcoming = liveUpcoming || [];
+
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 20, overflow: "auto", height: "100%" }}>
+      {/* Header strip with species switcher */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div className="overline" style={{ marginBottom: 4 }}>
+              {lang === "fr" ? "Vue d'ensemble · Overview" : "Overview · Vue d'ensemble"}
+            </div>
+            <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 32, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+              {isAll
+                ? (lang === "fr"
+                    ? <>{lang === "fr" ? "Tableau de bord" : "Dashboard"}, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{formatLongDate(new Date(), "fr")}</span></>
+                    : <>Dashboard, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{formatLongDate(new Date(), "en")}</span></>)
+                : (lang === "fr" ? <>{species.fr}, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>aperçu détaillé</span></> : <>{species.en}, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>detailed overview</span></>)
+              }
+            </h1>
+          </div>
+          <FarmScore {...computeFarmScore(live, speciesFilter, dateRange)}/>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter}/>
+          <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+        </div>
+      </div>
+
+      {/* Withdrawal banner when on cow / any species with active withdrawal */}
+      {alertsFiltered.some(a => a.kind === "withdrawal") && (
+        <WithdrawalBanner lang={lang} alerts={alertsFiltered.filter(a => a.kind === "withdrawal")} onNav={onNav}/>
+      )}
+
+      {/* KPI grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+        {kpis.map((k, i) => <KpiCard key={i} {...k}/>)}
+      </div>
+
+      {/* Two-column main area */}
+      <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main)", gap: 16, alignItems: "start" }}>
+        {/* Left column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Production chart */}
+          <ProductionPanel lang={lang} species={species} live={live}/>
+
+          {/* Per-species breakdown (only when all) OR Diseases (when species) */}
+          {isAll ? <SpeciesBreakdown lang={lang} onSelect={onSpeciesFilter} live={live} onAll={() => onNav("animals")}/> : <SpeciesDetailPanel lang={lang} species={species}/>}
+
+          {/* AI Insights */}
+          <AIPanel lang={lang} insights={aiFiltered} onNav={onNav}/>
+        </div>
+
+        {/* Right column: alerts + upcoming */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <AlertsPanel lang={lang} alerts={alertsFiltered} onAll={() => onNav("alerts")}/>
+          <UpcomingPanel lang={lang} vaccines={vaccinesUpcoming} onAll={() => onNav("calendar")}/>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Score de la ferme — calculé sur les vraies données live.
+// - sante:  100 * (animaux sains / total). 80 par défaut si pas encore de data.
+// - prod:   100 - min(80, 10 * traitements actifs / total). Approximation:
+//           si peu de traitements en cours pour la taille du troupeau, prod
+//           est haute. À remplacer par une métrique production réelle quand
+//           on aura un objectif par espèce.
+// - finance: marge (rev - exp) / rev * 100, plafonnée [0..100]. 80 si rev=0.
+function computeFarmScore(live, speciesFilter, dateRange) {
+  if (!live?.ready) return { sante: 0, prod: 0, finance: 0 };
+  const animals = (live.animals || []).filter((a) => !speciesFilter || a.species === speciesFilter);
+  const total = animals.length || 1;
+  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+  const sante = Math.round(((total - sick) / total) * 100);
+  const treatments = (live.treatments || []).filter((t) => {
+    if (!speciesFilter) return t.status === "running";
+    const a = live.animals.find((x) => x.id === t.animalId);
+    return t.status === "running" && a?.species === speciesFilter;
+  });
+  const prodPenalty = Math.min(80, Math.round((10 * treatments.length) / total));
+  const prod = Math.max(0, 100 - prodPenalty);
+  const sales = (live.sales || []).filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = (live.expenses || []).filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
+  const rev = sales.reduce((s, x) => s + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
+  const exp = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
+  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 80;
+  return { sante, prod, finance };
+}
+
+// ─── Withdrawal banner ───────────────────────────────────────────────────
+const WithdrawalBanner = ({ lang, alerts, onNav }) => (
+  <div className="withdrawal-banner" style={{ display: "flex", alignItems: "center", gap: 16, position: "relative" }}>
+    <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, position: "relative", zIndex: 1 }}>
+      <Icon name="shield" size={20} color="#ECF1EC"/>
+    </div>
+    <div style={{ position: "relative", zIndex: 1, flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span className="overline" style={{ color: "rgba(251, 248, 242, 0.85)" }}>{lang === "fr" ? "Délai de retrait · obligatoire" : "Withdrawal period · mandatory"}</span>
+        {alerts.map((a, i) => (
+          <span key={i} className="italic-serif" style={{ fontSize: 13, color: "#F0D6CB" }}>{a.animal}</span>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
+        <span style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em" }}>
+          {lang === "fr" ? "Vente, abattage et collecte bloqués" : "Sale, slaughter and collection blocked"}
+        </span>
+      </div>
+      <div style={{ marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {alerts.map((a, i) => (
+          <span key={i} className="mono" style={{ fontSize: 11.5, color: "#F0D6CB", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 5, height: 5, borderRadius: 999, background: "#F0D6CB" }}/>
+            {a.subtitle}
+          </span>
+        ))}
+      </div>
+    </div>
+    <button className="btn" style={{ background: "rgba(255,255,255,0.12)", color: "#ECF1EC", borderColor: "rgba(255,255,255,0.2)", position: "relative", zIndex: 1, cursor: "pointer" }}
+      onClick={() => onNav && onNav("alerts")}>
+      {lang === "fr" ? "Détails" : "Details"}
+      <Icon name="arrowRight" size={14} color="#ECF1EC"/>
+    </button>
+  </div>
+);
+
+// ─── Production panel with chart ─────────────────────────────────────────
+// Period buckets: week=7 days, month=12 weeks (~3 mo), quarter=6 months, year=12 months.
+const PERIOD_DEFS = {
+  week:    { buckets: 7,  unit: "day",   subtitle: { fr: "7 derniers jours",   en: "Last 7 days" } },
+  month:   { buckets: 12, unit: "week",  subtitle: { fr: "12 dernières semaines", en: "Last 12 weeks" } },
+  quarter: { buckets: 6,  unit: "month", subtitle: { fr: "6 derniers mois",    en: "Last 6 months" } },
+  year:    { buckets: 12, unit: "month", subtitle: { fr: "12 derniers mois",   en: "Last 12 months" } },
+};
+
+function bucketProduction(logs, period, speciesId) {
+  const def = PERIOD_DEFS[period] || PERIOD_DEFS.month;
+  const now = new Date();
+  const labels = [];
+  const buckets = [];
+  for (let i = def.buckets - 1; i >= 0; i--) {
+    const d = new Date(now);
+    if (def.unit === "day") d.setDate(d.getDate() - i);
+    else if (def.unit === "week") d.setDate(d.getDate() - i * 7);
+    else d.setMonth(d.getMonth() - i);
+    buckets.push(d);
+  }
+  const startOfBucket = (d) => {
+    const x = new Date(d);
+    if (def.unit === "day") { x.setHours(0,0,0,0); return x; }
+    if (def.unit === "week") { x.setDate(x.getDate() - x.getDay()); x.setHours(0,0,0,0); return x; }
+    x.setDate(1); x.setHours(0,0,0,0); return x;
+  };
+  const bucketStarts = buckets.map(startOfBucket);
+  const labelFor = (d) => {
+    if (def.unit === "day") return `${d.getDate()}/${d.getMonth()+1}`;
+    if (def.unit === "week") return `S${Math.ceil(d.getDate()/7)} ${d.getMonth()+1}`;
+    return `${d.getFullYear().toString().slice(2)}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  };
+  bucketStarts.forEach((d) => labels.push(labelFor(d)));
+
+  const byKind = {};
+  (logs || []).forEach((row) => {
+    if (speciesId && row.species !== speciesId) return;
+    const iso = row.logDate || row.log_date;
+    if (!iso) return;
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return;
+    let idx = -1;
+    for (let i = bucketStarts.length - 1; i >= 0; i--) {
+      if (t >= bucketStarts[i].getTime()) { idx = i; break; }
+    }
+    if (idx < 0) return;
+    const kind = row.productType || row.product_type || "other";
+    byKind[kind] = byKind[kind] || new Array(def.buckets).fill(0);
+    byKind[kind][idx] += Number(row.quantity ?? 0);
+  });
+
+  const KIND_META = {
+    milk:   { fr: "Lait (L)",         en: "Milk (L)",        color: "var(--pertinence-500)" },
+    eggs:   { fr: "Œufs",             en: "Eggs",            color: "var(--autorite-500)" },
+    wool:   { fr: "Laine (kg)",       en: "Wool (kg)",       color: "var(--clay-700)" },
+    growth: { fr: "Poids moyen (kg)", en: "Avg weight (kg)", color: "var(--health-500)" },
+  };
+  const series = Object.entries(byKind).map(([kind, data]) => {
+    const m = KIND_META[kind] || { fr: kind, en: kind, color: "var(--ink-500)" };
+    return { name: m.fr, en: m.en, color: m.color, data };
+  });
+  return { labels, series };
+}
+
+const ProductionPanel = ({ lang, species, live }) => {
+  const [period, setPeriod] = React.useState("month");
+  const { series, labels } = bucketProduction(live?.productionLogs || [], period, species?.id);
+  const sub = PERIOD_DEFS[period].subtitle[lang === "fr" ? "fr" : "en"];
+  const periods = [
+    { id: "week",    label: t(lang, "week") },
+    { id: "month",   label: t(lang, "month") },
+    { id: "quarter", label: t(lang, "quarter") },
+    { id: "year",    label: t(lang, "year") },
+  ];
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div>
+          <div className="bilang">
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>
+              {lang === "fr" ? "Production" : "Production"}
+            </h3>
+            <span className="sec">{(lang === "fr" ? "production" : "production")} · {sub}</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 4 }}>
+          {periods.map((p) => (
+            <button key={p.id} className="btn btn-sm" onClick={() => setPeriod(p.id)}
+              style={p.id === period ? { background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-900)" } : {}}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {series.length === 0 ? (
+        <div style={{ padding: "32px 0", textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
+          {lang === "fr" ? "Aucune production enregistrée pour cette période" : "No production recorded for this period"}
+        </div>
+      ) : (
+        <ProdChart series={series} lang={lang} labels={labels}/>
+      )}
+      <div style={{ display: "flex", gap: 16, marginTop: 8, flexWrap: "wrap" }}>
+        {series.map((s, i) => (
+          <span key={i} style={{ fontSize: 12, color: "var(--fg-2)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color }}/> {s.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const ProdChart = ({ series, lang, labels }) => {
+  const W = 720, H = 200, PAD_L = 36, PAD_B = 24, PAD_R = 12, PAD_T = 8;
+  const days = labels && labels.length ? labels : ["15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26"];
+  const seriesMaxes = series.map(s => Math.max(...s.data));
+  const seriesMins  = series.map(s => Math.min(...s.data));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block", overflow: "visible" }}>
+      {/* gridlines */}
+      {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
+        <g key={i}>
+          <line x1={PAD_L} x2={W-PAD_R} y1={PAD_T + (H-PAD_T-PAD_B)*g} y2={PAD_T + (H-PAD_T-PAD_B)*g} stroke="var(--border-1)" strokeDasharray="2 4"/>
+          <text x={PAD_L - 6} y={PAD_T + (H-PAD_T-PAD_B)*g + 4} textAnchor="end" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{Math.round((1-g) * 100)}</text>
+        </g>
+      ))}
+      {/* x labels */}
+      {days.map((d, i) => (
+        <text key={i} x={PAD_L + (i/(days.length-1)) * (W-PAD_L-PAD_R)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{d}</text>
+      ))}
+      {/* series */}
+      {series.map((s, si) => {
+        const min = seriesMins[si], max = seriesMaxes[si], range = max - min || 1;
+        const pts = s.data.map((d, i) => ({
+          x: PAD_L + (i/(s.data.length-1)) * (W-PAD_L-PAD_R),
+          y: PAD_T + (H-PAD_T-PAD_B) * (1 - (d - min) / range),
+        }));
+        const path = "M" + pts.map(p => `${p.x},${p.y}`).join(" L");
+        const area = path + ` L${pts[pts.length-1].x},${H-PAD_B} L${pts[0].x},${H-PAD_B} Z`;
+        return (
+          <g key={si}>
+            <path d={area} fill={s.color} opacity={0.12}/>
+            <path d={path} stroke={s.color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+            {pts.map((p, i) => i === pts.length-1 && (
+              <g key={i}>
+                <circle cx={p.x} cy={p.y} r="4" fill={s.color} stroke="var(--paper)" strokeWidth="2"/>
+                <text x={p.x + 8} y={p.y - 6} fontSize="11" fontFamily="var(--font-mono)" fill={s.color}>{s.data[i].toLocaleString("fr-CA")}</text>
+              </g>
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+// ─── Species breakdown grid (when "all") ─────────────────────────────────
+const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
+  // Replace static counts with live animal counts per species when available.
+  const liveCounts = live?.ready ? live.animals.reduce((acc, a) => { acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
+  const liveSick = live?.ready ? live.animals.reduce((acc, a) => { if (a.status && a.status !== "healthy") acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
+  return (
+  <div className="card" style={{ padding: "16px 18px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <div className="bilang">
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Par espèce" : "By species"}</h3>
+        <span className="sec">{lang === "fr" ? "by species" : "par espèce"}</span>
+      </div>
+      <button className="btn btn-sm btn-ghost" onClick={onAll}>
+        {lang === "fr" ? "Tout voir" : "View all"}
+        <Icon name="arrowRight" size={12} color="var(--ink-600)"/>
+      </button>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "var(--cols-5)", gap: 8 }}>
+      {SPECIES.map((s_orig) => {
+        const liveN = liveCounts ? (liveCounts[s_orig.id] ?? 0) : null;
+        const liveSickN = liveSick ? (liveSick[s_orig.id] ?? 0) : null;
+        const s = liveN != null ? { ...s_orig, count: liveN, sick: liveSickN } : s_orig;
+        return (
+        <button key={s.id} onClick={() => onSelect(s.id)} style={{
+          background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 10,
+          padding: "12px 12px 10px", display: "flex", flexDirection: "column", gap: 6, cursor: "pointer",
+          textAlign: "left", transition: "all 120ms var(--ease-out)",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--ink-300)"; e.currentTarget.style.background = "var(--paper)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-1)"; e.currentTarget.style.background = "var(--bg-sunken)"; }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: s.accentBg, color: s.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <AnimalGlyph kind={s.glyph} size={18} color="currentColor"/>
+            </div>
+            {s.sick > 0 && (
+              <span className="tag tag-danger" style={{ fontSize: 10, padding: "1px 6px" }}>
+                {s.sick} {lang==="fr"?"malades":"sick"}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? s.fr : s.en}</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+            <span className="tnum serif" style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--ink-950)" }}>{s.count.toLocaleString("fr-CA")}</span>
+            <span className="mono" style={{ fontSize: 10, color: "var(--fg-3)" }}>{s.countingUnit === "lot" ? (lang==="fr"?"oiseaux":"birds") : s.countingUnit === "bassin" ? "kg" : ""}</span>
+          </div>
+          <Sparkline data={s.productTrend} color={s.accent}/>
+        </button>
+        );
+      })}
+    </div>
+  </div>
+  );
+};
+
+// ─── Species detail panel (when one species selected) ────────────────────
+const SpeciesDetailPanel = ({ lang, species }) => (
+  <div className="card" style={{ padding: "16px 18px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <div className="bilang">
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>
+          {lang === "fr" ? "Module spécifique" : "Species module"} · <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{lang === "fr" ? species.fr : species.en}</span>
+        </h3>
+        <span className="sec">{species.modules.length} {lang === "fr" ? "modules adaptés" : "adapted modules"}</span>
+      </div>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 24 }}>
+      {/* Diseases */}
+      <div>
+        <div className="overline" style={{ color: "var(--health-700)", marginBottom: 8 }}>
+          {lang === "fr" ? "Maladies surveillées" : "Monitored diseases"}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(lang === "fr" ? species.diseases : species.diseasesEn).map((d, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: i === 0 ? "var(--rust-700)" : i === 1 ? "var(--wheat-500)" : "var(--ink-300)" }}/>
+              <span style={{ color: "var(--ink-800)" }}>{d}</span>
+              {i === 0 && <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{Math.floor(species.sick * 0.6)} cas</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Alerts surveilled */}
+      <div>
+        <div className="overline" style={{ color: "var(--pertinence-700)", marginBottom: 8 }}>
+          {lang === "fr" ? "Alertes surveillées" : "Monitored alerts"}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {(lang === "fr" ? species.alerts : species.alertsEn).map((a, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              <Icon name={i === 0 ? "chart" : i === 1 ? "pulse" : i === 2 ? "calendar" : "thermometer"} size={13} color="var(--pertinence-500)"/>
+              <span style={{ color: "var(--ink-800)" }}>{a}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+    <div className="hairline" style={{ marginTop: 14, paddingTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="overline" style={{ width: "100%", marginBottom: 2 }}>{lang === "fr" ? "Champs du dossier animal" : "Animal sheet fields"}</div>
+      {species.fields.map((f, i) => (
+        <span key={i} className="tag" style={{ background: "var(--bg-sunken)" }}>{f}</span>
+      ))}
+    </div>
+  </div>
+);
+
+// ─── AI Insights ─────────────────────────────────────────────────────────
+const AI_INSIGHT_DEST = { predict: "alerts", feed: "stock", repro: "repro", anomaly: "alerts" };
+const AIPanel = ({ lang, insights, onNav }) => (
+  <div className="card" style={{ padding: "16px 18px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--ink-900)", color: "var(--parchment-50)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="sparkle" size={16} color="#D7AA45"/>
+        </div>
+        <div className="bilang">
+          <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Recommandations IA" : "AI recommendations"}</h3>
+          <span className="sec">{lang === "fr" ? "AI insights" : "recommandations"}</span>
+        </div>
+      </div>
+      <span className="tag" style={{ background: "var(--ink-900)", color: "var(--parchment-50)" }}>ChatGPT</span>
+    </div>
+    <div className="rule-lines" style={{ background: "var(--parchment-50)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 14px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {insights.map((ins) => (
+          <div key={ins.id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 6, background: "var(--paper)", border: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icon name={ins.icon} size={14} color="var(--oxblood-700)"/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, color: "var(--ink-800)" }}>{lang === "fr" ? ins.fr : ins.en}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>confiance {ins.confidence}%</span>
+                <span style={{ width: 60, height: 3, borderRadius: 2, background: "var(--ink-100)", overflow: "hidden" }}>
+                  <span style={{ display: "block", width: `${ins.confidence}%`, height: "100%", background: "var(--oxblood-700)" }}/>
+                </span>
+                <button className="btn btn-sm btn-ghost" style={{ marginLeft: "auto", color: "var(--oxblood-700)" }}
+                  onClick={() => onNav && onNav(AI_INSIGHT_DEST[ins.kind] || "alerts")}>
+                  {ins.action}
+                  <Icon name="arrowRight" size={11} color="var(--oxblood-700)"/>
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 10, }}>
+      {lang === "fr"
+        ? "L'assistant cite ses sources. Vérifiez chaque recommandation avant action vétérinaire."
+        : "The assistant cites its sources. Verify every recommendation before veterinary action."}
+    </div>
+  </div>
+);
+
+// ─── Alerts panel ────────────────────────────────────────────────────────
+const AlertsPanel = ({ lang, alerts, onAll }) => (
+  <div className="card" style={{ padding: "14px 16px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <div className="bilang">
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Alertes critiques" : "Critical alerts"}</h3>
+        <span className="sec">{alerts.length}</span>
+      </div>
+      <button className="btn btn-sm btn-ghost" onClick={onAll}>
+        {lang === "fr" ? "Voir tout" : "View all"}
+        <Icon name="arrowRight" size={11} color="var(--ink-600)"/>
+      </button>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {alerts.slice(0, 6).map((a, i, arr) => {
+        const sevColor = a.severity === "critical" ? "var(--rust-700)" : a.severity === "high" ? "var(--wheat-500)" : "var(--sky-500)";
+        return (
+          <div key={a.id} style={{
+            display: "grid", gridTemplateColumns: "8px 1fr auto", columnGap: 10, rowGap: 2,
+            padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none",
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: sevColor, marginTop: 6 }}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{a.title}</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--fg-2)", marginTop: 2 }}>
+                <span className="italic-serif" style={{ fontSize: 12 }}>{a.animal}</span>
+                <span style={{ color: "var(--fg-3)" }}> · {a.subtitle}</span>
+              </div>
+            </div>
+            <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", whiteSpace: "nowrap", alignSelf: "center" }}>{a.date}</span>
+          </div>
+        );
+      })}
+      {alerts.length === 0 && (
+        <div style={{ padding: "20px 0", textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
+          {lang === "fr" ? "Aucune alerte active 🌱" : "No active alerts"}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+// ─── Upcoming actions panel ──────────────────────────────────────────────
+const UpcomingPanel = ({ lang, vaccines, onAll }) => (
+  <div className="card" style={{ padding: "14px 16px" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <div className="bilang">
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "À venir cette semaine" : "Upcoming this week"}</h3>
+        <span className="sec">{lang === "fr" ? "calendrier" : "schedule"}</span>
+      </div>
+      <button className="btn btn-sm btn-ghost" onClick={onAll}>
+        <Icon name="calendar" size={12} color="var(--ink-600)"/>
+        {lang === "fr" ? "Calendrier" : "Calendar"}
+      </button>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {vaccines.map((v) => {
+        const sp = speciesById(v.species);
+        const dot = v.status === "overdue" ? "var(--rust-700)" : v.status === "today" ? "var(--wheat-500)" : "var(--ink-300)";
+        return (
+          <div key={v.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Icon name="syringe" size={15} color="currentColor"/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)" }}>{v.vaccine}</div>
+              <div style={{ fontSize: 11, color: "var(--fg-2)" }}>
+                <AnimalGlyph kind={sp.glyph} size={11} color="var(--fg-2)"/>
+                <span style={{ marginLeft: 4 }}>{v.target}</span>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: dot, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <span style={{ width: 5, height: 5, borderRadius: 999, background: dot }}/>
+                {v.status === "overdue" ? (lang==="fr"?"retard":"overdue") : v.status === "today" ? (lang==="fr"?"aujourd'hui":"today") : v.due.split("-").slice(1).join("-")}
+              </span>
+              <span className="mono" style={{ fontSize: 10, color: "var(--fg-3)" }}>{v.n.toLocaleString("fr-CA")} {lang==="fr"?"animaux":"animals"}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+export { Dashboard };

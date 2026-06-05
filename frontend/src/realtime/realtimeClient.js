@@ -10,6 +10,8 @@
  *   triggering a refresh-needed notification on return.
  */
 
+import { getAccessToken } from "../utils/tokenStore";
+
 const SSE_PATH = "/api/events/me";
 const MAX_BACKOFF_MS = 30_000;
 const INITIAL_BACKOFF_MS = 2_000;
@@ -41,7 +43,12 @@ try {
 }
 
 function token() {
-  return (typeof localStorage !== "undefined" && localStorage.getItem("access-token")) || "";
+  // SCRUM-119 — token admin en mémoire ; fallback localStorage pour le client legacy.
+  return (
+    getAccessToken() ||
+    (typeof localStorage !== "undefined" && localStorage.getItem("access-token")) ||
+    ""
+  );
 }
 
 function connect() {

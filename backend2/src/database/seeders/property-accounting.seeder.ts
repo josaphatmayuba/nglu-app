@@ -112,6 +112,16 @@ export async function seedPropertyAccounting() {
     "Monthly rent due — records the rent receivable from the tenant",
   );
 
+  // Taxe immobilière incluse dans le loyer : la part de taxe est sortie du
+  // revenu locatif et inscrite en passif fiscal (à reverser à l'administration).
+  const taxLiabilityId = await getOrCreate("Tax", ACCOUNT.Liability);
+  await ensureTransactionType(
+    "Real Estate Tax",
+    rentalRevenueId,  // Debit: Rental Revenue (la part taxe n'est pas un revenu net)
+    taxLiabilityId,   // Credit: Tax liability (à reverser)
+    "Tax portion included in rent — moves the tax share from rental revenue to the tax liability account.",
+  );
+
   await ensureTransactionType(
     "CAI - Supplier Cash Payment",
     AP,    // Debit: Accounts Payable (réduction de la dette fournisseur)

@@ -5,7 +5,9 @@ export type DataUpdateEntity =
   | "contract"
   | "payment"
   | "maintenance"
-  | "tenantOnboarding";
+  | "tenantOnboarding"
+  | "farmos"
+  | "batipro";
 
 export type DataUpdateRule = {
   module: string;
@@ -221,6 +223,56 @@ export const DATA_UPDATE_RULES: Record<DataUpdateEntity, DataUpdateRule> = {
       "frontend/src/components/propertyManagement/usePropertyManagementData.js",
       "frontend/src/components/propertyManagement/modules/Tenants/TenantsPanel.jsx",
     ],
+  },
+  farmos: {
+    module: "farmos",
+    endpoints: [
+      "GET /farmos/*",
+      "POST /farmos/*",
+      "PUT/PATCH /farmos/*",
+      "DELETE /farmos/*",
+    ],
+    permissions: [
+      "readAll-farmos",
+      "create-farmos",
+      "update-farmos",
+      "delete-farmos",
+    ],
+    tags: ["farmos"],
+    pages: ["/farmos/"],
+    dataLoaders: ["farmos-app/src/api.js"],
+  },
+  batipro: {
+    module: "batipro",
+    endpoints: [
+      "GET /batipro/dashboard",
+      "GET /batipro/projects",
+      "POST /batipro/projects",
+      "PUT /batipro/projects/:id",
+      "DELETE /batipro/projects/:id",
+      "GET /batipro/tasks",
+      "POST /batipro/tasks",
+      "PUT /batipro/tasks/:id",
+      "DELETE /batipro/tasks/:id",
+      "GET /batipro/materials",
+      "POST /batipro/materials",
+      "PUT /batipro/materials/:id",
+      "DELETE /batipro/materials/:id",
+      "GET /batipro/crews",
+      "POST /batipro/crews",
+      "PUT /batipro/crews/:id",
+      "DELETE /batipro/crews/:id",
+    ],
+    permissions: [
+      "readAll-batipro",
+      "readSingle-batipro",
+      "create-batipro",
+      "update-batipro",
+      "delete-batipro",
+    ],
+    tags: ["batipro", "projects", "tasks", "materials", "crews", "dashboard"],
+    pages: ["/batipro/"],
+    dataLoaders: ["batipro-app/src/api.js", "batipro-app/src/app.jsx"],
   },
 };
 

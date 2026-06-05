@@ -1,0 +1,583 @@
+/* FarmOS Pro — Verdance app styles */
+
+@import url('./farm-tokens.css');
+
+/* ─── Domain-semantic remap of axes ───
+   - WHEAT  → biosec / warning
+   - SKY    → production
+   - SAGE   → success / finance positive / health-positive
+   - CLAY   → brand / CTAs
+   - RUST   → critical (withdrawal, mortality, danger)
+*/
+:root {
+  --health-50:  var(--wheat-50);
+  --health-100: var(--wheat-100);
+  --health-500: var(--wheat-500);
+  --health-700: var(--wheat-700);
+  --health-900: var(--wheat-900);
+
+  --prod-50:  var(--sky-50);
+  --prod-100: var(--sky-100);
+  --prod-500: var(--sky-500);
+  --prod-700: var(--sky-700);
+  --prod-900: var(--sky-900);
+
+  --money-50:  var(--sage-50);
+  --money-100: var(--sage-100);
+  --money-500: var(--sage-500);
+  --money-700: var(--sage-700);
+  --money-900: var(--sage-900);
+
+  --critical:    var(--rust-700);
+  --critical-bg: var(--rust-50);
+
+  --row-h: 44px;
+}
+
+[data-density="compact"] { --row-h: 36px; }
+
+/* ─── DARK MODE ─── */
+[data-theme="dark"] {
+  --bg-app:     #07140D;
+  --bg-surface: #102119;
+  --bg-sunken:  #0B1C13;
+  --paper:      #122319;
+  --fg-1: #ECF1EC;
+  --fg-2: #99B2A2;
+  --fg-3: #6B8A78;
+  --border-1: #1E3D2C;
+  --border-2: #2C5240;
+  --border-strong: #44705A;
+  --forest-50:  #1E3D2C;
+  --forest-100: #1E3D2C;
+  --forest-200: #2C5240;
+  --forest-900: #ECF1EC;
+  --forest-950: #FFFCF6;
+  --bone-50:    #07140D;
+  --bone-100:   #0E2418;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg-app);
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+  overflow: hidden;
+}
+* { box-sizing: border-box; }
+
+button { font-family: var(--font-sans); font-feature-settings: "ss01"; }
+input, textarea, select { font-family: var(--font-sans); }
+
+/* ─── Scrollbars ─── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: rgba(14, 36, 24, 0.18);
+  border-radius: 999px; border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(14, 36, 24, 0.30); border: 2px solid transparent; background-clip: content-box; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(236, 241, 236, 0.18); background-clip: content-box; }
+
+/* ─── Tabular numerals everywhere stats live ─── */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ─── Utility classes ─── */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-1);
+}
+
+.hairline   { border-top: 1px solid var(--border-1); }
+.hairline-b { border-bottom: 1px solid var(--border-1); }
+
+.overline {
+  font-family: var(--font-sans);
+  font-size: var(--fs-overline);
+  letter-spacing: var(--tk-overline);
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--fg-3);
+}
+
+.mono   { font-family: var(--font-mono); }
+.serif, .display { font-family: var(--font-display); }
+.italic-serif {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-style: normal;            /* Bricolage looks better non-italic */
+  letter-spacing: -0.015em;
+}
+
+/* ─── Critical pulse (for withdrawal / danger) ─── */
+@keyframes farm-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(142, 45, 27, 0.40); }
+  50%      { box-shadow: 0 0 0 7px rgba(142, 45, 27, 0); }
+}
+.pulse-critical { animation: farm-pulse 1.8s infinite; }
+
+/* ─── Topographic / contour-line motif (subtle, very faint) ─── */
+.topo-bg {
+  background-color: var(--bone-50);
+  background-image:
+    radial-gradient(ellipse 80% 30% at 50% 110%, rgba(14, 36, 24, 0.05), transparent 60%),
+    repeating-radial-gradient(
+      circle at 30% 120%,
+      transparent 0 18px,
+      rgba(14, 36, 24, 0.035) 18px 19px
+    );
+}
+
+/* ─── Field/grain background (dotted bone with subtle wheat stalk lines) ─── */
+.field-bg {
+  background-image:
+    radial-gradient(rgba(14, 36, 24, 0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* ─── "Pad" lined background — used for AI/notes ─── */
+.rule-lines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 27px,
+    rgba(14, 36, 24, 0.06) 27px,
+    rgba(14, 36, 24, 0.06) 28px
+  );
+}
+
+/* ─── Sparkline polyline ─── */
+.sparkline {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ─── Tags / chips ─── */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--forest-50);
+  color: var(--forest-700);
+  letter-spacing: 0.005em;
+  border: 1px solid var(--forest-100);
+}
+.tag-health  { background: var(--wheat-50);  color: var(--wheat-900);  border-color: var(--wheat-100); }
+.tag-prod    { background: var(--sky-50);    color: var(--sky-900);    border-color: var(--sky-100); }
+.tag-money   { background: var(--sage-50);   color: var(--sage-900);   border-color: var(--sage-100); }
+.tag-danger  { background: var(--rust-50);   color: var(--rust-900);   border-color: var(--rust-100); }
+
+/* ─── Inputs ─── */
+.input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--paper);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--fg-1);
+  outline: none;
+  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.input:focus { border-color: var(--clay-700); box-shadow: var(--shadow-focus); }
+
+/* ─── Buttons ─── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-2);
+  background: var(--paper);
+  color: var(--fg-1);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: all 120ms var(--ease-out);
+  white-space: nowrap;
+}
+.btn:hover {
+  border-color: var(--forest-300);
+  background: var(--bone-100);
+}
+.btn-primary {
+  background: var(--clay-700);
+  color: var(--bone-50);
+  border-color: var(--clay-700);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.10) inset, 0 1px 2px rgba(58, 32, 14, 0.20);
+}
+.btn-primary:hover {
+  background: var(--clay-800);
+  border-color: var(--clay-800);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.btn-ghost:hover { background: var(--forest-50); border-color: transparent; }
+
+.btn-dark {
+  background: var(--forest-900);
+  color: var(--bone-50);
+  border-color: var(--forest-900);
+}
+.btn-dark:hover { background: var(--forest-800); border-color: var(--forest-800); }
+
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+
+/* ─── Sidebar nav ─── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  border: 0;
+  color: rgba(236, 241, 236, 0.65);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background 120ms, color 120ms;
+  letter-spacing: -0.005em;
+}
+.nav-item:hover { background: rgba(255, 255, 255, 0.04); color: #ECF1EC; }
+.nav-item.active {
+  background: rgba(196, 147, 39, 0.12);   /* wheat tint */
+  color: #ECF1EC;
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--wheat-400);
+}
+
+/* ─── Species pill row ─── */
+.species-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 12px;
+  height: 36px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--fg-1);
+  cursor: pointer;
+  transition: all 120ms var(--ease-out);
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+.species-pill:hover { border-color: var(--forest-300); background: var(--bone-100); }
+.species-pill.active {
+  background: var(--forest-900);
+  border-color: var(--forest-900);
+  color: var(--bone-50);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 2px 6px -2px rgba(14, 36, 24, 0.24);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   SIGNATURE: Withdrawal banner — caution-tape stripe header
+   Rust solid background + diagonal wheat/forest stripes along top
+   ──────────────────────────────────────────────────────────────── */
+.withdrawal-banner {
+  background: linear-gradient(180deg, var(--rust-700) 0%, var(--rust-900) 100%);
+  color: var(--bone-50);
+  border-radius: var(--r-md);
+  padding: 18px 20px 16px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 4px 12px -2px rgba(77, 24, 16, 0.30);
+}
+.withdrawal-banner::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--forest-950) 0 14px,
+    var(--wheat-400) 14px 28px
+  );
+}
+.withdrawal-banner::after {
+  content: "";
+  position: absolute;
+  inset: 8px 0 0 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0, transparent 18px,
+    rgba(255, 255, 255, 0.025) 18px, rgba(255, 255, 255, 0.025) 36px
+  );
+  pointer-events: none;
+}
+
+/* ─── Bilingual baseline ─── */
+.bilang { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bilang .sec {
+  font-size: 11.5px;
+  color: var(--fg-3);
+  letter-spacing: 0.01em;
+  font-weight: 500;
+  font-family: var(--font-sans);
+}
+
+/* ─── Status dot ─── */
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+
+/* ─── KPI accent strip (signature: thin colored strip on top of each KPI) ─── */
+.kpi-strip {
+  position: relative;
+  overflow: hidden;
+}
+.kpi-strip::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--kpi-accent, var(--forest-300));
+}
+
+/* ─── Phone frame ─── */
+.phone-frame {
+  width: 320px; height: 640px;
+  background: var(--forest-900);
+  border-radius: 36px;
+  padding: 10px;
+  box-shadow: var(--shadow-3);
+  flex-shrink: 0;
+}
+.phone-screen {
+  width: 100%; height: 100%;
+  background: var(--bg-app);
+  border-radius: 28px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ─── Misc layout helpers ─── */
+.grid { display: grid; }
+.row { display: flex; }
+.col { display: flex; flex-direction: column; }
+.gap-1 { gap: 4px; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
+.gap-5 { gap: 20px; } .gap-6 { gap: 24px; } .gap-8 { gap: 32px; }
+.center { display: flex; align-items: center; justify-content: center; }
+
+/* ─── Hero / page-title strip — subtle topo lines behind the H1 ─── */
+.hero-strip {
+  position: relative;
+  padding-bottom: 4px;
+}
+.hero-strip::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -12px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--clay-700) 0 32px, var(--forest-200) 32px 100%);
+}
+
+/* ─── Score axis box (Santé / Prod / $) — chunkier than legal ─── */
+.score-box {
+  display: inline-flex;
+  border: 1px solid var(--forest-200);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--paper);
+}
+.score-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 14px;
+  min-width: 60px;
+  border-right: 1px solid var(--forest-100);
+}
+.score-cell:last-child { border-right: 0; }
+.score-cell .lbl {
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700;
+  opacity: 0.7;
+}
+.score-cell .val {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Number — display-style hero KPI ─── */
+.num-hero {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--forest-950);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Responsive column helpers — change column count at breakpoints ─── */
+:root {
+  --cols-2: repeat(2, 1fr);
+  --cols-3: repeat(3, 1fr);
+  --cols-4: repeat(4, 1fr);
+  --cols-5: repeat(5, 1fr);
+  --cols-main: 1fr 380px;       /* dashboard right column */
+  --cols-main-15: 1.5fr 1fr;    /* health page two-col */
+  --cols-main-cal: 1fr 360px;   /* calendar two-col */
+  --cols-main-detail: 1fr 480px;/* animals detail drawer */
+  --pad-page: 20px 24px 32px;
+  --tap: 36px;
+}
+
+/* TABLET zone — 769-1180px (iPad portrait/landscape, small laptops) */
+@media (max-width: 1180px) {
+  :root {
+    --cols-5: repeat(3, 1fr);
+    --cols-4: repeat(3, 1fr);
+    --cols-main-detail: 1fr 420px;
+    --pad-page: 18px 20px 28px;
+  }
+}
+
+/* MOBILE zone — ≤768px (phones + iPad small split) */
+@media (max-width: 768px) {
+  :root {
+    --cols-5: repeat(2, 1fr);
+    --cols-4: repeat(2, 1fr);
+    --cols-3: repeat(2, 1fr);
+    --cols-main: 1fr;
+    --cols-main-15: 1fr;
+    --cols-main-cal: 1fr;
+    --cols-main-detail: 1fr;
+    --pad-page: 16px 14px 100px;   /* room for bottom tab bar */
+    --tap: 44px;                    /* ≥ Apple HIG min */
+  }
+  /* Larger tap targets on mobile */
+  .btn { height: 40px; padding: 0 16px; font-size: 14px; }
+  .btn-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+  .species-pill { height: 40px; padding: 6px 14px; font-size: 13.5px; }
+  .input { height: 42px; font-size: 15px; }   /* iOS won't zoom at ≥16px */
+  .nav-item { padding: 12px 12px; font-size: 14.5px; }
+}
+
+@media (max-width: 540px) {
+  :root {
+    --cols-5: repeat(2, 1fr);
+    --cols-4: repeat(2, 1fr);
+    --cols-3: 1fr;
+    --cols-2: 1fr;
+  }
+}
+
+/* Mobile / forced-mobile overflow guards: prevent any flex/grid child from
+   pushing the parent wider than the viewport. Toolbars wrap, wide tables
+   become horizontally scrollable inside their card. */
+@media (max-width: 540px), .layout-force-mobile {
+  /* Generic: keep flex children from forcing their parent wider. */
+  main, main * { min-width: 0; }
+  /* Toolbars (search + buttons in one row) wrap. */
+  .toolbar-row, .filter-row { flex-wrap: wrap !important; }
+  /* Buttons inside wrap toolbars take a sensible min-size. */
+  .toolbar-row > .btn, .filter-row > .btn { flex: 0 0 auto; }
+}
+.layout-force-mobile main,
+.layout-force-mobile main * { min-width: 0; }
+.layout-force-mobile .toolbar-row,
+.layout-force-mobile .filter-row { flex-wrap: wrap !important; }
+
+/* When forced into mobile/tablet preview from a wider viewport,
+   honor a class-level override on the host (set by JS). */
+.layout-force-mobile {
+  --cols-5: repeat(2, 1fr) !important;
+  --cols-4: repeat(2, 1fr) !important;
+  --cols-3: repeat(2, 1fr) !important;
+  --cols-2: 1fr !important;
+  --cols-main: 1fr !important;
+  --cols-main-15: 1fr !important;
+  --cols-main-cal: 1fr !important;
+  --cols-main-detail: 1fr !important;
+  --pad-page: 16px 14px 100px !important;
+  --tap: 44px !important;
+}
+.layout-force-tablet {
+  --cols-5: repeat(3, 1fr) !important;
+  --cols-4: repeat(3, 1fr) !important;
+  --cols-3: repeat(3, 1fr) !important;
+  --cols-main: 1fr !important;
+  --cols-main-15: 1fr !important;
+  --cols-main-cal: 1fr !important;
+  --cols-main-detail: 1fr 380px !important;
+  --pad-page: 18px 20px 28px !important;
+  --tap: 40px !important;
+}
+
+/* ─── Search field in topbar ─── */
+.topbar-search {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--paper);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  padding: 0 14px;
+  height: 40px;
+  transition: border-color 120ms;
+}
+.topbar-search:focus-within { border-color: var(--clay-700); box-shadow: var(--shadow-focus); }
+
+/* ─── Drawer & toast animations ─── */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-up {
+  from { transform: translate(-50%, 16px); opacity: 0; }
+  to   { transform: translate(-50%, 0); opacity: 1; }
+}
+
+/* ─── Form inputs (inside QuickEntryDrawer) ─── */
+.entry-form select.input,
+.entry-form input.input {
+  font-size: 13.5px;
+}
+
+/* ─── RESPONSIVE: mobile layout (<900px) ─── */
+@media (max-width: 900px) {
+  /* Stack KPI grids */
+  [data-mobile="true"] .kpi-grid,
+  [data-mobile="true"] .grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  [data-mobile="true"] .grid-2-balanced {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Phone preview frame full size */
+  .phone-frame {
+    transform: scale(0.95);
+    transform-origin: top left;
+  }
+}
+
+/* Make all <main>-internal screens stack vertically when mobile */
+[data-mobile="true"] [data-screen-label] > div > div > div {
+  /* hint to children — handled via JS prop too */
+}
+

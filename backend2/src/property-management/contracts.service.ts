@@ -734,8 +734,18 @@ export class ContractsService {
 
   private monthsBetween(start: Date | string | null | undefined, end: Date | string | null | undefined): number {
     const startParts = this.dateParts(start);
-    const endParts = this.dateParts(end);
-    if (!startParts || !endParts) return 0;
+    const endRaw = this.dateParts(end);
+    if (!startParts || !endRaw) return 0;
+
+    // La date de fin du bail est INCLUSIVE : il est créé avec
+    // end = début + N mois − 1 jour (ex. 27/05/2026 → 26/05/2027 = 12 mois).
+    // On compte donc jusqu'au lendemain de la date de fin pour obtenir N.
+    const endDate = new Date(Date.UTC(endRaw.year, endRaw.month - 1, endRaw.day + 1));
+    const endParts = {
+      year: endDate.getUTCFullYear(),
+      month: endDate.getUTCMonth() + 1,
+      day: endDate.getUTCDate(),
+    };
 
     const months =
       (endParts.year - startParts.year) * 12 +

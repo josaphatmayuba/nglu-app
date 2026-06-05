@@ -1,11 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Param,
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -54,6 +57,15 @@ class ResetPasswordDto {
   newPassword: string;
 }
 
+// SCRUM-121: shared cookie options so login / mfa / refresh stay in sync.
+const REFRESH_COOKIE_OPTS = {
+  httpOnly: true,
+  sameSite: "none" as const,
+  secure: true,
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+};
+
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
@@ -81,13 +93,7 @@ export class AuthController {
 
     const { refreshToken, user, role, token } = loginResult;
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
 
     return { ...user, role, token };
   }
@@ -108,18 +114,54 @@ export class AuthController {
     return this.authService.logout(id, ctx);
   }
 
-  @ApiOperation({ summary: "Refresh access token using httpOnly cookie" })
+  @ApiOperation({ summary: "Refresh access token using httpOnly cookie (rotates the refresh token)" })
   @ApiCookieAuth("refreshToken")
   @ApiOkResponse({ schema: { example: { token: "new.access.token" } } })
   @Get("refresh-token")
-  refreshToken(@Req() req: Request) {
+  async refreshToken(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token: string | undefined = (req.cookies as Record<string, string>)["refreshToken"];
-    if (!token) throw new Error("No refresh token");
+    if (!token) throw new UnauthorizedException("No refresh token");
     const ctx = {
       ip: (req as unknown as { ip: string }).ip,
       userAgent: (req.headers as Record<string, string>)["user-agent"],
     };
-    return this.authService.refreshAccessToken(token, ctx);
+    // SCRUM-121: rotation — the service returns a fresh refresh token we re-set as the cookie.
+    const { refreshToken, ...rest } = await this.authService.refreshAccessToken(token, ctx);
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
+    return rest;
+  }
+
+  @ApiOperation({ summary: "List the current user's active sessions/devices" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Get("sessions")
+  async listSessions(@Req() req: Request) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
+    const currentFamily = this.authService.familyFromRefreshToken(
+      (req.cookies as Record<string, string>)["refreshToken"],
+    );
+    return this.authService.listSessions(userId, currentFamily);
+  }
+
+  @ApiOperation({ summary: "Revoke one of the current user's sessions/devices" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Delete("sessions/:id")
+  @HttpCode(200)
+  async revokeSession(@Param("id") id: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
+    const ctx = {
+      userId,
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const result = await this.authService.revokeSession(userId, id, ctx);
+    // If the user revoked their own current session, clear the cookie too.
+    const currentFamily = this.authService.familyFromRefreshToken(
+      (req.cookies as Record<string, string>)["refreshToken"],
+    );
+    if (currentFamily === id) res.clearCookie("refreshToken", { path: "/" });
+    return result;
   }
 
   @ApiOperation({ summary: "Request password reset email (always 200)" })
@@ -212,13 +254,7 @@ export class AuthController {
 
     const { refreshToken, user, role, token } = await this.authService.completeMfaLogin(body.mfaToken, ctx);
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
 
     return { ...user, role, token };
   }

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BâtiPro — Construction & chantiers · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        iris:{50:'#eef2ff',100:'#e0e7ff',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca'},
+        amber:{50:'#fffbeb',100:'#fef3c7',300:'#fcd34d',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#ece9e2;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-amber{background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);}
+    .grad-iris{background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 60%,#4f46e5 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#292017 0%,#1c1206 55%,#0c0803 100%);}
+    .text-grad{background:linear-gradient(135deg,#f59e0b,#d97706);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #ece6dd;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;}
+    .navlink{cursor:pointer;}.nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}.nav-active [data-lucide]{color:#fbbf24!important;}
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}.mob-only{display:none;}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:780px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(28,18,6,.55),0 0 0 11px #1c1206,0 0 0 13px #292017;display:flex;flex-direction:column;background:#f8f6f2;}
+    body.mobile .desk-side{display:none;}body.mobile .mob-only{display:flex;}body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .browser-chrome{display:none;}body.mobile .pad{padding:16px!important;}body.mobile .g2,body.mobile .g3,body.mobile .g4{grid-template-columns:1fr!important;}
+    body:not(.mobile) #stage{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(28,18,6,.4);border:1px solid #e2dccd;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:600px;}body:not(.mobile) #scroll{flex:1;background:#f8f6f2;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    /* Mode simple mobile : home orientée actions terrain */
+    .mob-home{display:none;}body.mobile .mob-home{display:block;}body.mobile .desk-only{display:none;}
+    .actile{min-height:84px;}
+  </style>
+</head>
+<body>
+  <div class="max-w-[1320px] mx-auto px-6 pt-8 pb-5 flex items-center gap-4 flex-wrap">
+    <div class="w-11 h-11 rounded-2xl grad-amber flex items-center justify-center shadow-lg shadow-amber-500/30"><i data-lucide="hard-hat" class="text-white w-5 h-5"></i></div>
+    <div><h1 class="font-display text-xl font-700 tracking-tight">Bâti<span class="text-grad">Pro</span></h1><p class="text-ink-500 text-[13px]">Construction &amp; chantiers · app 2/2 — clique les menus</p></div>
+    <span class="chip bg-amber-50 text-amber-700 ml-2">App construction</span>
+    <div class="ml-auto flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+      <button id="btn-desk" onclick="setMode('desk')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5"><i data-lucide="monitor" class="w-4 h-4"></i> Bureau</button>
+      <button id="btn-mob" onclick="setMode('mob')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 text-ink-500"><i data-lucide="smartphone" class="w-4 h-4"></i> Mobile</button>
+    </div>
+  </div>
+
+  <div id="stage"><div id="frame">
+    <div class="browser-chrome flex items-center gap-2 px-4 h-11 bg-ink-100 border-b border-ink-200">
+      <span class="w-3 h-3 rounded-full bg-rose-400"></span><span class="w-3 h-3 rounded-full bg-amber-400"></span><span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+      <div class="ml-3 flex-1 max-w-md h-6 rounded-md bg-white border border-ink-200 flex items-center px-3 text-[11px] text-ink-400"><i data-lucide="lock" class="w-3 h-3 mr-1.5"></i> app.batipro.build</div>
+    </div>
+    <div id="shell">
+      <aside class="desk-side w-60 grad-dark text-white p-4 flex flex-col gap-1 flex-none">
+        <div class="flex items-center gap-2.5 px-2 py-3 mb-1"><div class="w-8 h-8 rounded-xl grad-amber flex items-center justify-center"><i data-lucide="hard-hat" class="w-4 h-4"></i></div><div class="font-display font-600 text-[15px]">BâtiPro</div></div>
+        <a data-nav="dashboard" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord</a>
+        <a data-nav="chantiers" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="hard-hat" class="w-4 h-4"></i> Projets / chantiers</a>
+        <a data-nav="planning" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="gantt-chart" class="w-4 h-4"></i> Planning (Gantt)</a>
+        <a data-nav="plan3d" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="rotate-3d" class="w-4 h-4"></i> Plan 3D &amp; matériaux <span class="chip grad-iris text-white ml-auto !px-1.5 !py-0.5 text-[9px]">IA</span></a>
+        <a data-nav="situations" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="receipt" class="w-4 h-4"></i> Situations &amp; avenants</a>
+        <a data-nav="materiaux" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="package" class="w-4 h-4"></i> Matériaux &amp; achats</a>
+        <a data-nav="soustraitants" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="users" class="w-4 h-4"></i> Sous-traitants</a>
+        <div class="mt-auto flex items-center gap-3 px-2 py-2 rounded-xl"><div class="w-9 h-9 rounded-full grad-amber flex items-center justify-center text-[12px] font-700">JM</div><div class="text-[12px] leading-tight"><div class="font-500">J. Mwepu</div><div class="text-ink-400 text-[11px]">Conducteur travaux</div></div></div>
+      </aside>
+      <div class="mob-only items-center justify-between px-5 pt-9 pb-4 grad-dark text-white flex-none"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl grad-amber flex items-center justify-center"><i data-lucide="hard-hat" class="w-4 h-4"></i></div><span id="mtitle" class="font-display font-600 text-[16px]">Tableau de bord</span></div><div class="w-9 h-9 rounded-full grad-amber flex items-center justify-center text-[12px] font-700">JM</div></div>
+
+      <main id="scroll" class="overflow-y-auto">
+        <!-- DASHBOARD -->
+        <section data-view="dashboard" class="view active pad p-6">
+          <!-- ACCUEIL SIMPLE (mobile) : pensé pour le chef de chantier sur le terrain -->
+          <div class="mob-home space-y-4">
+            <div class="card p-4">
+              <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 flex items-center gap-1.5"><i data-lucide="bell" class="w-3.5 h-3.5 text-rose-500"></i> À traiter aujourd'hui</div>
+              <a data-nav="chantiers" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="calendar-check" class="w-4 h-4 text-amber-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">Inspection béton</div><div class="text-[12px] text-ink-400">Les Cèdres · demain 09 h</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="materiaux" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="package" class="w-4 h-4 text-rose-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">Rupture ciment proche</div><div class="text-[12px] text-ink-400">120 sacs restants · commander</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="situations" class="navlink flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-iris-50 flex items-center justify-center flex-none"><i data-lucide="receipt" class="w-4 h-4 text-iris-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">Situation 3 à valider</div><div class="text-[12px] text-ink-400">590 k$ · main d'œuvre</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <a data-nav="chantiers" class="navlink card actile p-4 grad-amber text-white flex flex-col justify-between"><i data-lucide="camera" class="w-6 h-6"></i><div class="font-600 text-[14px] leading-tight">Photo<br>avancement</div></a>
+              <a data-nav="chantiers" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="users" class="w-6 h-6 text-amber-600"></i><div class="font-600 text-[14px] leading-tight">Pointer<br>les équipes</div></a>
+              <a data-nav="plan3d" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="rotate-3d" class="w-6 h-6 text-iris-600"></i><div class="font-600 text-[14px] leading-tight">Voir le<br>plan 3D</div></a>
+              <a data-nav="materiaux" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="package" class="w-6 h-6 text-ink-600"></i><div class="font-600 text-[14px] leading-tight">Commander<br>matériaux</div></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Avancement moyen</div><div class="font-display text-2xl font-700">57 %</div><div class="text-[11px] text-emerald-600">+6 % ce mois</div></div>
+              <div class="card p-4 ring-1 ring-rose-200 bg-rose-50/40"><div class="text-[12px] text-rose-600">Retards</div><div class="font-display text-2xl font-700 text-rose-600">1</div><div class="text-[11px] text-rose-500">Les Cèdres · +45 j</div></div>
+            </div>
+          </div>
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3 desk-only"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Vue d'ensemble · juin 2026</p><h2 class="font-display text-2xl font-700">Vos chantiers</h2></div><button class="h-9 px-3 rounded-xl grad-amber text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau projet</button></div>
+          <div class="g4 mb-4 desk-only">
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Chantiers actifs</span><i data-lucide="hard-hat" class="w-4 h-4 text-amber-500"></i></div><div class="font-display text-2xl font-700 mt-1">3</div><div class="text-[11px] text-ink-400 mt-1">2 résidentiels · 1 bureaux</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Avancement moyen</span><i data-lucide="trending-up" class="w-4 h-4 text-emerald-500"></i></div><div class="font-display text-2xl font-700 mt-1">57 %</div><div class="text-[11px] text-emerald-600 mt-1">+6 % ce mois</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Budget engagé</span><i data-lucide="wallet" class="w-4 h-4 text-amber-500"></i></div><div class="font-display text-2xl font-700 mt-1">8,3 M$</div><div class="text-[11px] text-ink-400 mt-1">/ 19 M$ contractés</div></div>
+            <div class="card p-4 ring-1 ring-rose-200 bg-rose-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-rose-600 font-500">Retards</span><i data-lucide="alert-triangle" class="w-4 h-4 text-rose-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-rose-600">1</div><div class="text-[11px] text-rose-500 mt-1">Les Cèdres · +45 j</div></div>
+          </div>
+          <div class="g3 desk-only">
+            <div class="card p-5" style="grid-column:span 2"><div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Chantiers en cours</h3><a class="navlink text-[12px] text-amber-600 font-500" data-nav="chantiers">Tout voir</a></div>
+              <div class="flex items-center gap-4 py-3 border-b border-ink-100"><div class="w-11 h-11 rounded-xl grad-amber flex items-center justify-center text-white flex-none"><i data-lucide="building-2" class="w-5 h-5"></i></div><div class="min-w-0 flex-1"><div class="flex items-center gap-2"><span class="font-600 text-[14px] truncate">Résidence Les Cèdres</span><span class="chip bg-amber-100 text-amber-700">Gros œuvre</span></div><div class="mt-2 h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-amber" style="width:62%"></div></div></div><div class="text-right flex-none"><div class="font-display font-700">62 %</div></div></div>
+              <div class="flex items-center gap-4 py-3 border-b border-ink-100"><div class="w-11 h-11 rounded-xl bg-ink-900 flex items-center justify-center text-white flex-none"><i data-lucide="building" class="w-5 h-5"></i></div><div class="min-w-0 flex-1"><div class="flex items-center gap-2"><span class="font-600 text-[14px] truncate">Tour Horizon</span><span class="chip bg-ink-100 text-ink-600">Fondations</span></div><div class="mt-2 h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-iris" style="width:28%"></div></div></div><div class="text-right flex-none"><div class="font-display font-700">28 %</div></div></div>
+              <div class="flex items-center gap-4 py-3"><div class="w-11 h-11 rounded-xl bg-emerald-500 flex items-center justify-center text-white flex-none"><i data-lucide="home" class="w-5 h-5"></i></div><div class="min-w-0 flex-1"><div class="flex items-center gap-2"><span class="font-600 text-[14px] truncate">Villas du Lac</span><span class="chip bg-emerald-100 text-emerald-700">Finitions</span></div><div class="mt-2 h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:81%"></div></div></div><div class="text-right flex-none"><div class="font-display font-700">81 %</div></div></div>
+            </div>
+            <div class="card p-5"><h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4 text-rose-500"></i> À traiter</h3>
+              <div class="flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="calendar-check" class="w-4 h-4 text-amber-600"></i></div><div class="text-[12px]"><div class="font-500">Inspection béton</div><div class="text-ink-400">Les Cèdres · demain 09 h</div></div></div>
+              <div class="flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="package" class="w-4 h-4 text-rose-600"></i></div><div class="text-[12px]"><div class="font-500">Rupture ciment proche</div><div class="text-ink-400">120 sacs restants</div></div></div>
+              <div class="flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-iris-50 flex items-center justify-center flex-none"><i data-lucide="receipt" class="w-4 h-4 text-iris-600"></i></div><div class="text-[12px]"><div class="font-500">Situation 3 à valider</div><div class="text-ink-400">590 k$ · MO</div></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- CHANTIERS -->
+        <section data-view="chantiers" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Projets</p><h2 class="font-display text-2xl font-700">Projets / chantiers</h2></div><button class="h-9 px-3 rounded-xl grad-amber text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau projet</button></div>
+          <div class="g3 mb-6">
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="font-600 text-[14px]">Résidence Les Cèdres</span><span class="chip bg-amber-100 text-amber-700 ml-auto">62 %</span></div><div class="text-[12px] text-ink-500 mb-2">24 logements · Gros œuvre</div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-amber" style="width:62%"></div></div><div class="flex justify-between mt-2.5 text-[11px] text-ink-400"><span>2,6 / 4,2 M$</span><span class="text-rose-500">retard 45 j</span></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="font-600 text-[14px]">Tour Horizon</span><span class="chip bg-ink-100 text-ink-600 ml-auto">28 %</span></div><div class="text-[12px] text-ink-500 mb-2">Bureaux · 8 étages · Fondations</div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-iris" style="width:28%"></div></div><div class="flex justify-between mt-2.5 text-[11px] text-ink-400"><span>3,4 / 12 M$</span><span>5 équipes</span></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="font-600 text-[14px]">Villas du Lac</span><span class="chip bg-emerald-100 text-emerald-700 ml-auto">81 %</span></div><div class="text-[12px] text-ink-500 mb-2">6 villas · Finitions</div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:81%"></div></div><div class="flex justify-between mt-2.5 text-[11px] text-ink-400"><span>2,3 / 2,8 M$</span><span>livraison 30 août</span></div></div>
+          </div>
+          <div class="grad-amber rounded-2xl p-5 text-white mb-4 flex items-end justify-between flex-wrap gap-3"><div><div class="text-[12px] text-white/80 flex items-center gap-1"><i data-lucide="hard-hat" class="w-4 h-4"></i> Chantier sélectionné</div><div class="font-display text-2xl font-700">Résidence Les Cèdres</div><div class="text-[12px] text-white/80">24 logements · R+4 · MO : Ville de Lubumbashi</div></div><div class="text-right"><div class="text-[11px] text-white/80">Avancement</div><div class="font-display text-4xl font-700">62 %</div></div></div>
+          <div class="g3">
+            <div class="card p-4"><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-3 flex items-center gap-1.5"><i data-lucide="list-checks" class="w-3.5 h-3.5"></i> Phases</p><div class="space-y-2.5 text-[12px]">
+              <div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 flex-none"></i><span class="flex-1">Études &amp; permis</span><span class="text-emerald-600 font-600">100 %</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 flex-none"></i><span class="flex-1">Fondations</span><span class="text-emerald-600 font-600">100 %</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="loader" class="w-4 h-4 text-amber-500 flex-none"></i><span class="flex-1 font-600">Gros œuvre</span><span class="text-amber-600 font-600">70 %</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="circle" class="w-4 h-4 text-ink-300 flex-none"></i><span class="flex-1 text-ink-500">Toiture</span><span class="text-ink-400">20 %</span></div>
+              <div class="flex items-center gap-2"><i data-lucide="circle" class="w-4 h-4 text-ink-300 flex-none"></i><span class="flex-1 text-ink-500">Finitions</span><span class="text-ink-400">0 %</span></div>
+            </div></div>
+            <div class="card p-4"><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-3 flex items-center gap-1.5"><i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Budget prévu vs réel</p><div class="space-y-3 text-[12px]">
+              <div><div class="flex justify-between mb-1"><span>Matériaux</span><span class="text-ink-500">980 k / 1,6 M$</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-amber" style="width:61%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>Main d'œuvre</span><span class="text-ink-500">720 k / 1,1 M$</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-amber" style="width:65%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>Sous-traitance</span><span class="text-ink-500">610 k / 900 k$</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-amber" style="width:68%"></div></div></div>
+            </div></div>
+            <div class="card p-4"><div class="flex items-center justify-between mb-3"><p class="text-[11px] uppercase tracking-wide text-ink-400 flex items-center gap-1.5"><i data-lucide="clipboard-list" class="w-3.5 h-3.5"></i> Journal de chantier</p><button class="text-[11px] text-amber-600 font-600 flex items-center gap-1"><i data-lucide="camera" class="w-3.5 h-3.5"></i> Ajouter</button></div><div class="space-y-3 text-[12px]">
+              <div class="flex gap-2.5"><div class="w-1 rounded grad-amber flex-none"></div><div><div class="font-500">12 juin — Coulage dalle niv. 2</div><div class="text-ink-400">14 ouvriers · 2 photos</div></div></div>
+              <div class="flex gap-2.5"><div class="w-1 rounded bg-ink-200 flex-none"></div><div><div class="font-500">11 juin — Livraison acier</div><div class="text-ink-400">8 t · bon n° 2231</div></div></div>
+              <div class="flex gap-2.5"><div class="w-1 rounded bg-ink-200 flex-none"></div><div><div class="font-500">10 juin — Retard ciment</div><div class="text-ink-400">Fournisseur relancé</div></div></div>
+            </div></div>
+          </div>
+        </section>
+
+        <!-- PLANNING GANTT -->
+        <section data-view="planning" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Planning</p><h2 class="font-display text-2xl font-700">Planning — Les Cèdres</h2></div><div class="flex gap-2"><span class="chip bg-emerald-100 text-emerald-700">Terminé</span><span class="chip bg-amber-100 text-amber-700">En cours</span><span class="chip bg-ink-100 text-ink-600">À venir</span></div></div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="grid items-center mb-3 min-w-[640px]" style="grid-template-columns:160px repeat(8,1fr)"><div></div><div class="text-[11px] text-ink-400 text-center">Jan</div><div class="text-[11px] text-ink-400 text-center">Fév</div><div class="text-[11px] text-ink-400 text-center">Mar</div><div class="text-[11px] text-ink-400 text-center">Avr</div><div class="text-[11px] text-ink-400 text-center">Mai</div><div class="text-[11px] font-700 text-amber-600 text-center">Juin</div><div class="text-[11px] text-ink-400 text-center">Juil</div><div class="text-[11px] text-ink-400 text-center">Août</div></div>
+            <div class="space-y-2.5 min-w-[640px]">
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] font-500">Études &amp; permis</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded bg-emerald-500" style="left:0%;width:25%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] font-500">Fondations</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded bg-emerald-500" style="left:25%;width:25%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] font-600">Gros œuvre</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded grad-amber" style="left:50%;width:25%"></div><div class="absolute -top-0.5 h-7 w-0.5 bg-amber-600" style="left:62.5%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] text-ink-500">Toiture</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded bg-ink-300" style="left:62.5%;width:12.5%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] text-ink-500">Second œuvre</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded bg-ink-300" style="left:75%;width:15%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:160px 1fr"><div class="text-[12px] text-ink-500">Finitions / livraison</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute top-0 h-6 rounded bg-ink-300" style="left:88%;width:12%"></div><div class="absolute -top-1 -right-1 w-4 h-4 rotate-45 bg-amber-600"></div></div></div>
+            </div>
+            <div class="flex items-center gap-4 mt-4 text-[11px] text-ink-400"><span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-amber-600"></span> Aujourd'hui</span><span class="flex items-center gap-1"><span class="w-3 h-3 rotate-45 bg-amber-600 inline-block"></span> Jalon livraison</span></div>
+          </div>
+          <div class="g3 mt-4"><div class="card p-4"><div class="text-[12px] text-ink-500">Durée totale</div><div class="font-display text-xl font-700">8 mois</div></div><div class="card p-4 ring-1 ring-rose-200"><div class="text-[12px] text-rose-600">Retard chemin critique</div><div class="font-display text-xl font-700 text-rose-600">+45 jours</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Prochain jalon</div><div class="font-display text-xl font-700">Hors-d'eau</div><div class="text-[11px] text-ink-400">prévu 15 juil.</div></div></div>
+        </section>
+
+        <!-- PLAN 3D -->
+        <section data-view="plan3d" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-iris-500">IA</p><h2 class="font-display text-2xl font-700">Du plan papier à la <span class="text-grad">maquette 3D</span></h2></div><span class="chip grad-iris text-white"><i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Vision IA</span></div>
+          <div class="flex items-center gap-3 mb-4 flex-wrap">
+            <div class="card p-3 flex items-center gap-3 flex-none"><div class="w-16 h-16 rounded-lg bg-ink-900 flex items-center justify-center"><svg viewBox="0 0 60 60" class="w-12 h-12"><rect x="6" y="6" width="48" height="48" fill="none" stroke="#6366f1" stroke-width="1.5"/><line x1="6" y1="26" x2="34" y2="26" stroke="#6366f1" stroke-width="1.5"/><line x1="34" y1="6" x2="34" y2="54" stroke="#6366f1" stroke-width="1.5"/></svg></div><div class="text-[12px]"><div class="font-600">Photo du plan 2D</div><div class="text-ink-400">multi-étages</div></div></div>
+            <div class="flex flex-col items-center text-iris-500 flex-none"><i data-lucide="sparkles" class="w-5 h-5"></i><span class="text-[10px] text-ink-400 mt-0.5">IA · 8 s</span><i data-lucide="arrow-right" class="w-5 h-5 mt-0.5"></i></div>
+            <div class="card p-3 flex items-center gap-3 flex-none ring-1 ring-iris-200"><div class="w-16 h-16 rounded-lg grad-iris flex items-center justify-center"><i data-lucide="box" class="w-8 h-8 text-white"></i></div><div class="text-[12px]"><div class="font-600">Maquette 3D + métré</div><div class="text-emerald-600">générée ✓</div><div class="text-ink-400">3 niveaux</div></div></div>
+            <button class="ml-auto h-10 px-4 rounded-xl bg-ink-900 text-white text-[13px] font-600 flex items-center gap-2 flex-none"><i data-lucide="camera" class="w-4 h-4"></i> Scanner un plan</button>
+          </div>
+          <div class="g3">
+            <div class="card overflow-hidden" style="grid-column:span 2">
+              <div class="flex items-center justify-between px-4 py-2.5 border-b border-ink-100 flex-wrap gap-2">
+                <div class="flex gap-1.5 flex-wrap" id="floorBtns">
+                  <button class="floorbtn chip grad-iris text-white" data-floor="all">Tous les étages</button>
+                  <button class="floorbtn chip bg-ink-100 text-ink-600" data-floor="0">RDC</button>
+                  <button class="floorbtn chip bg-ink-100 text-ink-600" data-floor="1">R+1</button>
+                  <button class="floorbtn chip bg-ink-100 text-ink-600" data-floor="2">R+2</button>
+                </div>
+                <div class="flex gap-1"><button id="b3d-explode" class="chip bg-ink-100 text-ink-600"><i data-lucide="layers" class="w-3.5 h-3.5"></i> Éclatée</button><button id="b3d-rotate" class="chip bg-ink-100 text-ink-600"><i data-lucide="rotate-3d" class="w-3.5 h-3.5"></i> Rotation</button></div>
+              </div>
+              <div id="viewer3d" class="relative" style="height:380px;background:linear-gradient(180deg,#eef2ff,#e6e1d6)"><div class="absolute bottom-2 left-3 text-[10px] text-ink-500 flex items-center gap-1 z-10 pointer-events-none"><i data-lucide="move" class="w-3 h-3"></i> glisser/pincer · <span class="text-emerald-600 font-600">vrai 3D WebGL — marche sur mobile</span></div></div>
+            </div>
+            <div class="card p-4">
+              <p class="text-[11px] uppercase tracking-wide text-ink-400 mb-3 flex items-center gap-1.5"><i data-lucide="layers" class="w-3.5 h-3.5"></i> Matériaux · métré auto</p>
+              <div class="space-y-2.5 text-[12px]">
+                <div class="flex items-center gap-2.5"><span class="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-700 text-white flex-none" style="background:#475569">1</span><div class="flex-1"><div class="font-500">Fondations · béton</div><div class="text-ink-400">320 m³</div></div><span class="font-600">96 k$</span></div>
+                <div class="flex items-center gap-2.5"><span class="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-700 text-white flex-none" style="background:#64748b">2</span><div class="flex-1"><div class="font-500">Murs · blocs</div><div class="text-ink-400">12 400 u</div></div><span class="font-600">148 k$</span></div>
+                <div class="flex items-center gap-2.5"><span class="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-700 text-white flex-none" style="background:#f59e0b">3</span><div class="flex-1"><div class="font-500">Toiture · charpente</div><div class="text-ink-400">480 m²</div></div><span class="font-600">64 k$</span></div>
+                <div class="flex items-center gap-2.5"><span class="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-700 text-white flex-none" style="background:#6366f1">4</span><div class="flex-1"><div class="font-500">Menuiseries · alu</div><div class="text-ink-400">86 ouvertures</div></div><span class="font-600">92 k$</span></div>
+              </div>
+              <div class="border-t border-ink-100 mt-3 pt-3 flex items-center justify-between"><span class="text-[12px] text-ink-500">Devis estimé</span><span class="font-display text-lg font-700">610 k$</span></div>
+              <button class="w-full h-9 rounded-lg grad-iris text-white text-[12px] font-600 mt-3 flex items-center justify-center gap-1.5"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Exporter le métré</button>
+            </div>
+          </div>
+          <div class="g4 mt-6">
+            <div class="card p-4"><div class="w-9 h-9 rounded-xl bg-iris-50 flex items-center justify-center mb-2"><i data-lucide="calculator" class="w-5 h-5 text-iris-600"></i></div><div class="font-600 text-[13px]">Métré &amp; devis instantanés</div><p class="text-[12px] text-ink-500 mt-1">Quantités extraites du plan → bon de commande en 1 clic.</p></div>
+            <div class="card p-4"><div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center mb-2"><i data-lucide="eye" class="w-5 h-5 text-amber-600"></i></div><div class="font-600 text-[13px]">Vendre sur plan</div><p class="text-[12px] text-ink-500 mt-1">Le client visualise en 3D avant les travaux.</p></div>
+            <div class="card p-4"><div class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center mb-2"><i data-lucide="check-check" class="w-5 h-5 text-emerald-600"></i></div><div class="font-600 text-[13px]">Avancement en 3D</div><p class="text-[12px] text-ink-500 mt-1">On coche les matériaux posés → la maquette se remplit.</p></div>
+            <div class="card p-4"><div class="w-9 h-9 rounded-xl bg-rose-50 flex items-center justify-center mb-2"><i data-lucide="shield-alert" class="w-5 h-5 text-rose-600"></i></div><div class="font-600 text-[13px]">Moins de gaspillage</div><p class="text-[12px] text-ink-500 mt-1">Détection d'incohérences, juste quantité commandée.</p></div>
+          </div>
+        </section>
+
+        <!-- SITUATIONS -->
+        <section data-view="situations" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Facturation</p><h2 class="font-display text-2xl font-700">Situations &amp; avenants</h2></div><button class="h-9 px-3 rounded-xl grad-amber text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="file-plus" class="w-4 h-4"></i> Nouvelle situation</button></div>
+          <div class="g3 mb-4"><div class="card p-4"><div class="text-[12px] text-ink-500">Marché initial</div><div class="font-display text-xl font-700">4,00 M$</div></div><div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-700">+ Avenants</div><div class="font-display text-xl font-700 text-amber-700">+0,20 M$</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Facturé à ce jour</div><div class="font-display text-xl font-700">2,48 M$ <span class="text-[12px] text-ink-400 font-400">/ 4,20</span></div></div></div>
+          <h3 class="font-display font-600 text-[15px] mb-2">Situations de travaux</h3>
+          <div class="card overflow-hidden mb-6"><table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Situation</th><th class="text-left font-600 px-4 py-2.5">Période</th><th class="text-left font-600 px-4 py-2.5">Avancement</th><th class="text-left font-600 px-4 py-2.5">Montant</th><th class="text-left font-600 px-4 py-2.5">Statut</th></tr></thead><tbody class="divide-y divide-ink-100">
+            <tr><td class="px-4 py-3 font-500">Situation n° 1</td><td class="px-4 py-3 text-ink-500">Mars 2026</td><td class="px-4 py-3">25 %</td><td class="px-4 py-3">1 050 k$</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Payée</span></td></tr>
+            <tr><td class="px-4 py-3 font-500">Situation n° 2</td><td class="px-4 py-3 text-ink-500">Avril 2026</td><td class="px-4 py-3">45 %</td><td class="px-4 py-3">840 k$</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Payée</span></td></tr>
+            <tr><td class="px-4 py-3 font-500">Situation n° 3</td><td class="px-4 py-3 text-ink-500">Mai 2026</td><td class="px-4 py-3">62 %</td><td class="px-4 py-3">590 k$</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700">En validation MO</span></td></tr>
+          </tbody></table></div>
+          <h3 class="font-display font-600 text-[15px] mb-2">Avenants / ordres de changement</h3>
+          <div class="g2">
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="chip bg-amber-100 text-amber-700">Avenant 01</span><span class="text-emerald-600 font-700 ml-auto">+120 k$</span></div><div class="text-[13px] font-500">Renforcement fondations (sol argileux)</div><div class="text-[12px] text-ink-400 mt-1">Validé · délai +20 j</div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="chip bg-amber-100 text-amber-700">Avenant 02</span><span class="text-emerald-600 font-700 ml-auto">+80 k$</span></div><div class="text-[13px] font-500">Upgrade menuiseries alu (demande MO)</div><div class="text-[12px] text-ink-400 mt-1">En attente de signature</div></div>
+          </div>
+        </section>
+
+        <!-- MATÉRIAUX -->
+        <section data-view="materiaux" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Achats</p><h2 class="font-display text-2xl font-700">Matériaux &amp; achats</h2></div><button class="h-9 px-3 rounded-xl grad-amber text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Bon de commande</button></div>
+          <div class="g4 mb-4"><div class="card p-4"><div class="text-[12px] text-ink-500">Commandes en cours</div><div class="font-display text-xl font-700">6</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">En rupture</div><div class="font-display text-xl font-700 text-rose-600">1</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Livraisons semaine</div><div class="font-display text-xl font-700">3</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Dépenses du mois</div><div class="font-display text-xl font-700">312 k$</div></div></div>
+          <div class="card overflow-hidden"><table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Matériau</th><th class="text-left font-600 px-4 py-2.5">Chantier</th><th class="text-left font-600 px-4 py-2.5">Stock</th><th class="text-left font-600 px-4 py-2.5">Fournisseur</th><th class="text-left font-600 px-4 py-2.5">Statut</th></tr></thead><tbody class="divide-y divide-ink-100">
+            <tr><td class="px-4 py-3 font-500">Ciment CPA 42,5</td><td class="px-4 py-3 text-ink-500">Les Cèdres</td><td class="px-4 py-3">120 / 400 sacs</td><td class="px-4 py-3 text-ink-500">CIMENKAT</td><td class="px-4 py-3"><span class="chip bg-rose-100 text-rose-700">Rupture proche</span></td></tr>
+            <tr><td class="px-4 py-3 font-500">Acier HA Ø12</td><td class="px-4 py-3 text-ink-500">Les Cèdres</td><td class="px-4 py-3">8 t</td><td class="px-4 py-3 text-ink-500">MetalPro</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Livré</span></td></tr>
+            <tr><td class="px-4 py-3 font-500">Blocs 20×20×40</td><td class="px-4 py-3 text-ink-500">Tour Horizon</td><td class="px-4 py-3">2 400 u</td><td class="px-4 py-3 text-ink-500">BlocCo</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700">En transit</span></td></tr>
+          </tbody></table></div>
+        </section>
+
+        <!-- SOUS-TRAITANTS -->
+        <section data-view="soustraitants" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-amber-500">Partenaires</p><h2 class="font-display text-2xl font-700">Sous-traitants</h2></div><button class="h-9 px-3 rounded-xl grad-amber text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Ajouter</button></div>
+          <div class="g3">
+            <div class="card p-4"><div class="flex items-center gap-3 mb-3"><div class="w-10 h-10 rounded-xl bg-ink-900 text-white flex items-center justify-center"><i data-lucide="zap" class="w-5 h-5"></i></div><div><div class="font-600 text-[14px]">ÉlectroPlus SARL</div><div class="text-[12px] text-ink-500">Électricité</div></div></div><div class="flex justify-between text-[12px]"><span class="text-ink-500">Tour Horizon</span><span class="font-600">420 k$</span></div><div class="flex items-center gap-1 mt-2 text-[12px] text-amber-500"><i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400"></i><i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400"></i><i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400"></i><i data-lucide="star" class="w-3.5 h-3.5 fill-amber-400"></i><span class="text-ink-400 ml-1">4,2</span></div></div>
+            <div class="card p-4"><div class="flex items-center gap-3 mb-3"><div class="w-10 h-10 rounded-xl bg-iris-600 text-white flex items-center justify-center"><i data-lucide="droplet" class="w-5 h-5"></i></div><div><div class="font-600 text-[14px]">AquaTech</div><div class="text-[12px] text-ink-500">Plomberie</div></div></div><div class="flex justify-between text-[12px]"><span class="text-ink-500">Les Cèdres</span><span class="font-600">280 k$</span></div><div class="mt-2"><span class="chip bg-emerald-100 text-emerald-700">Contrat actif</span></div></div>
+            <div class="card p-4"><div class="flex items-center gap-3 mb-3"><div class="w-10 h-10 rounded-xl grad-amber text-white flex items-center justify-center"><i data-lucide="paint-roller" class="w-5 h-5"></i></div><div><div class="font-600 text-[14px]">Déco+ Finitions</div><div class="text-[12px] text-ink-500">Peinture</div></div></div><div class="flex justify-between text-[12px]"><span class="text-ink-500">Villas du Lac</span><span class="font-600">150 k$</span></div><div class="mt-2"><span class="chip bg-amber-100 text-amber-700">En cours</span></div></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Feuille "Plus" : tout le reste, hors du chemin quotidien -->
+    <div id="moreSheet" style="display:none;position:absolute;inset:0;z-index:30;">
+      <div onclick="toggleMore()" style="position:absolute;inset:0;background:rgba(12,8,3,.5)"></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:14px 14px 20px" class="space-y-0.5">
+        <div class="w-10 h-1.5 rounded-full bg-ink-200 mx-auto mb-3"></div>
+        <p class="text-[11px] uppercase tracking-wide text-ink-400 px-2 mb-1">Tout le reste</p>
+        <a data-nav="planning" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="gantt-chart" class="w-5 h-5 text-amber-600"></i><span class="text-[14px] font-500">Planning (Gantt)</span></a>
+        <a data-nav="situations" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="receipt" class="w-5 h-5 text-amber-600"></i><span class="text-[14px] font-500">Situations &amp; avenants</span></a>
+        <a data-nav="soustraitants" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="users" class="w-5 h-5 text-amber-600"></i><span class="text-[14px] font-500">Sous-traitants</span></a>
+      </div>
+    </div>
+    <nav class="mob-only h-16 bg-white border-t border-ink-200 items-center justify-around px-2 flex-none">
+      <a data-nav="dashboard" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="home" class="w-5 h-5"></i><span class="text-[10px]">Accueil</span></a>
+      <a data-nav="chantiers" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="hard-hat" class="w-5 h-5"></i><span class="text-[10px]">Chantiers</span></a>
+      <a data-nav="plan3d" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="rotate-3d" class="w-5 h-5"></i><span class="text-[10px]">3D</span></a>
+      <a data-nav="materiaux" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="package" class="w-5 h-5"></i><span class="text-[10px]">Achats</span></a>
+      <button onclick="toggleMore()" class="mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="menu" class="w-5 h-5"></i><span class="text-[10px]">Plus</span></button>
+    </nav>
+  </div></div>
+  <p class="text-center text-[12px] text-ink-400 mt-6 pb-10">BâtiPro — app de construction · maquette · données fictives</p>
+
+  <script>
+    const TITLES={dashboard:'Tableau de bord',chantiers:'Chantiers',planning:'Planning',plan3d:'Plan 3D',situations:'Situations',materiaux:'Matériaux',soustraitants:'Sous-traitants'};
+    function showView(id){
+      document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.dataset.view===id));
+      document.querySelectorAll('[data-nav]').forEach(n=>{const on=n.dataset.nav===id;n.classList.toggle('nav-active',on);if(n.classList.contains('mflex')){n.classList.toggle('text-amber-600',on);n.classList.toggle('text-ink-400',!on);}});
+      const mt=document.getElementById('mtitle');if(mt)mt.textContent=TITLES[id]||'';
+      const ms=document.getElementById('moreSheet');if(ms)ms.style.display='none';
+      const sc=document.getElementById('scroll');if(sc)sc.scrollTop=0;lucide.createIcons();
+      if(id==='plan3d'&&window.initBuilding3D)setTimeout(window.initBuilding3D,30);
+    }
+    function toggleMore(){const s=document.getElementById('moreSheet');s.style.display=s.style.display==='block'?'none':'block';lucide.createIcons();}
+    function setMode(m){document.body.classList.toggle('mobile',m==='mob');const d=document.getElementById('btn-desk'),b=document.getElementById('btn-mob');d.classList.toggle('grad-amber',m==='desk');d.classList.toggle('text-white',m==='desk');d.classList.toggle('text-ink-500',m!=='desk');b.classList.toggle('grad-amber',m==='mob');b.classList.toggle('text-white',m==='mob');b.classList.toggle('text-ink-500',m!=='mob');lucide.createIcons();if(window.resize3d)setTimeout(window.resize3d,360);}
+    document.querySelectorAll('[data-nav]').forEach(n=>n.addEventListener('click',()=>showView(n.dataset.nav)));
+    setMode('desk');showView('dashboard');lucide.createIcons();
+  </script>
+
+  <!-- Vrai moteur 3D (three.js / WebGL) — tactile, marche sur mobile -->
+  <script type="importmap">
+  { "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    let inited=false,renderer,scene,camera,controls,floors=[],roof,exploded=false;
+    const FLOORS=3,FH=1.25,W=6,D=4;
+    function makeFloor(i){
+      const g=new THREE.Group();
+      const block=new THREE.MeshLambertMaterial({color:0xcfd6e2}),slabMat=new THREE.MeshLambertMaterial({color:0x9aa6b8}),winMat=new THREE.MeshLambertMaterial({color:0x6366f1,emissive:0x4338ca,emissiveIntensity:.35});
+      const slab=new THREE.Mesh(new THREE.BoxGeometry(W+0.2,0.18,D+0.2),slabMat);slab.position.y=0.09;g.add(slab);
+      const wallH=FH-0.18,wy=0.18+wallH/2,t=0.16;
+      const front=new THREE.Mesh(new THREE.BoxGeometry(W,wallH,t),block);front.position.set(0,wy,D/2);g.add(front);
+      const back=front.clone();back.position.z=-D/2;g.add(back);
+      const left=new THREE.Mesh(new THREE.BoxGeometry(t,wallH,D),block);left.position.set(-W/2,wy,0);g.add(left);
+      const right=left.clone();right.position.x=W/2;g.add(right);
+      for(const z of [D/2+0.02,-D/2-0.02])for(const x of [-1.7,0,1.7]){const w=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.6,0.06),winMat);w.position.set(x,wy+0.05,z);g.add(w);}
+      g.userData.baseY=i*FH;g.position.y=g.userData.baseY;return g;
+    }
+    function build(){
+      const el=document.getElementById('viewer3d');const w=el.clientWidth||640,h=el.clientHeight||380;
+      scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(42,w/h,0.1,100);camera.position.set(9,7.5,11);
+      renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));renderer.setSize(w,h);el.appendChild(renderer.domElement);
+      scene.add(new THREE.HemisphereLight(0xffffff,0x9aa6b8,1.05));const dir=new THREE.DirectionalLight(0xffffff,1.1);dir.position.set(8,14,6);scene.add(dir);
+      const found=new THREE.Mesh(new THREE.BoxGeometry(W+0.6,0.5,D+0.6),new THREE.MeshLambertMaterial({color:0x64748b}));found.position.y=-0.25;scene.add(found);
+      for(let i=0;i<FLOORS;i++){const f=makeFloor(i);floors.push(f);scene.add(f);}
+      roof=new THREE.Mesh(new THREE.ConeGeometry(W*0.78,1.3,4),new THREE.MeshLambertMaterial({color:0xf59e0b}));roof.rotation.y=Math.PI/4;roof.position.y=FLOORS*FH+0.55;scene.add(roof);
+      controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,FLOORS*FH/2,0);controls.minDistance=6;controls.maxDistance=26;controls.autoRotateSpeed=1.6;controls.update();
+      window.addEventListener('resize',onResize);
+      (function loop(){requestAnimationFrame(loop);controls.update();renderer.render(scene,camera);})();
+    }
+    function onResize(){const el=document.getElementById('viewer3d');if(!el||!renderer)return;const w=el.clientWidth||640,h=el.clientHeight||380;camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}
+    function applyLayout(){const gap=exploded?1.1:0;floors.forEach((f,i)=>f.position.y=f.userData.baseY+i*gap);roof.position.y=FLOORS*FH+0.55+(FLOORS-1)*gap+(exploded?0.4:0);}
+    function setActive(btn,on){btn.classList.toggle('grad-iris',on);btn.classList.toggle('text-white',on);btn.classList.toggle('bg-ink-100',!on);btn.classList.toggle('text-ink-600',!on);}
+    window.resize3d=function(){if(inited)onResize();};
+    window.initBuilding3D=function(){
+      if(inited){onResize();return;}inited=true;build();
+      document.querySelectorAll('.floorbtn').forEach(btn=>{btn.addEventListener('click',()=>{document.querySelectorAll('.floorbtn').forEach(b=>setActive(b,false));setActive(btn,true);const v=btn.dataset.floor;floors.forEach((f,i)=>f.visible=(v==='all'||String(i)===v));roof.visible=(v==='all'||Number(v)===FLOORS-1);});});
+      const ex=document.getElementById('b3d-explode');ex&&ex.addEventListener('click',()=>{exploded=!exploded;applyLayout();setActive(ex,exploded);});
+      const ro=document.getElementById('b3d-rotate');ro&&ro.addEventListener('click',()=>{controls.autoRotate=!controls.autoRotate;setActive(ro,controls.autoRotate);});
+    };
+  </script>
+  <!-- Assistant IA (maquette) -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "BatiPro · NgoluApp", accent: "#f59e0b", accent2: "#b45309",
+    greeting: "Bonjour 👋 Je suis l’assistant IA de BatiPro. Je surveille tes chantiers, budgets, équipes et achats pour t’aider à livrer dans les délais et la marge. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quel chantier dépasse son budget ?", "Optimise l’affectation des équipes", "Quels matériaux commander ?", "Résume l’avancement des chantiers"],
+    reco: [
+      {icon:"🏗️", tag:"Chantier", title:"Ngaliema en dépassement", text:"78 % du budget consommé pour 60 % d’avancement — risque de dépassement. Revois le planning des postes restants."},
+      {icon:"📦", tag:"Achats", title:"Stock ciment sous le seuil", text:"3 j de couverture. Commande maintenant pour ne pas bloquer le coulage prévu."},
+      {icon:"👷", tag:"Équipes", title:"Équipe 2 sous-utilisée", text:"Réaffecte-la cette semaine vers le chantier de Limete qui a pris du retard."},
+      {icon:"💰", tag:"Devis", title:"Marge faible sur Gombe", text:"Le devis Gombe a une marge de 9 % (cible 15 %). Le poste main-d’œuvre est sous-évalué."}
+    ],
+    replies: [
+      {k:["chantier","budget","dépass","retard","avancement"], a:"Le chantier de Ngaliema est ton point de vigilance : 78 % du budget pour 60 % d’avancement. À ce rythme, dépassement estimé de ~12 %. Actions : revoir les quantités du gros œuvre restant et renégocier 1 ou 2 postes fournisseurs."},
+      {k:["équipe","affect","ouvrier","main"], a:"L’équipe 2 est sous-chargée cette semaine alors que Limete a pris du retard. Réaffecte 3 ouvriers de l’équipe 2 vers Limete pour rattraper sans coût supplémentaire."},
+      {k:["matériau","achat","stock","ciment","commande"], a:"À commander en priorité :\n\n• Ciment — 3 j de stock (bloquant pour le coulage)\n• Fer à béton — 6 j\n\nGroupe la commande chez un même fournisseur pour réduire les frais de livraison."},
+      {k:["devis","marge","prix","rentab"], a:"Le devis de Gombe ressort à 9 % de marge contre 15 % cible. Le poste main-d’œuvre est sous-estimé d’environ 1/3. Réévalue-le avant signature, sinon le chantier sera à perte."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
+</body>
+</html>

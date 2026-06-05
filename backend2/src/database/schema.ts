@@ -17,16 +17,39 @@ import {
 } from "drizzle-orm/mysql-core";
 
 // SCRUM-109: sessions table for JTI validation
+// SCRUM-121: familyId links an access-token session to its refresh-token family
+// so revoking a device/session also kills its outstanding access token.
 export const sessions = mysqlTable("sessions", {
   jti:       varchar("jti", { length: 36 }).primaryKey(),
   userId:    bigint("user_id", { mode: "number" }).notNull(),
   roleId:    bigint("role_id", { mode: "number" }).notNull(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  familyId:  varchar("family_id", { length: 36 }),
   ip:        varchar("ip", { length: 100 }),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   revoked:   tinyint("revoked").default(0).notNull(),
+});
+
+// SCRUM-121: refresh-token rotation with reuse detection.
+// Each login starts a "family" (familyId). Every refresh rotates the token:
+// the used row gets rotatedAt + replacedByJti, a new leaf row is created. If a
+// token that was already rotated (beyond the grace window) or revoked is reused,
+// the whole family is revoked and the event is audited (token theft signal).
+export const refreshTokens = mysqlTable("refresh_tokens", {
+  jti:           varchar("jti", { length: 36 }).primaryKey(),
+  familyId:      varchar("family_id", { length: 36 }).notNull(),
+  userId:        bigint("user_id", { mode: "number" }).notNull(),
+  tokenHash:     varchar("token_hash", { length: 255 }).notNull(),
+  userAgent:     text("user_agent"),
+  ip:            varchar("ip", { length: 100 }),
+  createdAt:     timestamp("created_at").defaultNow().notNull(),
+  expiresAt:     timestamp("expires_at").notNull(),
+  rotatedAt:     timestamp("rotated_at"),
+  replacedByJti: varchar("replaced_by_jti", { length: 36 }),
+  revokedAt:     timestamp("revoked_at"),
+  revokedReason: varchar("revoked_reason", { length: 100 }),
 });
 
 export const organizations = mysqlTable("organizations", {
@@ -254,6 +277,11 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   moveInNotes: text("move_in_notes"),
   terms: text("terms"),
   status: varchar("status", { length: 255 }).default("draft").notNull(),
+  // Taxe par bail (incluse/informative) — calculée sur le loyer au paiement.
+  taxName: varchar("tax_name", { length: 255 }),
+  taxType: varchar("tax_type", { length: 20 }),
+  taxValue: decimal("tax_value", { precision: 15, scale: 4 }),
+  taxApplyMode: varchar("tax_apply_mode", { length: 20 }).default("never").notNull(),
   // Period (next_invoice_date value) we last sent an overdue reminder for, to send once per period.
   lastOverdueReminderDate: date("last_overdue_reminder_date", { mode: "string" }),
   createdAt: timestamp("created_at"),
@@ -271,6 +299,35 @@ export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   method: varchar("method", { length: 255 }).default("cash").notNull(),
   reference: varchar("reference", { length: 255 }),
   notes: text("notes"),
+  // Part de taxe contenue dans ce paiement (informative, calculée depuis le bail).
+  taxAmount: decimal("tax_amount", { precision: 15, scale: 2 }),
+  taxName: varchar("tax_name", { length: 255 }),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Caution / dépôt de garantie : cycle complet (détenu → restitué) avec retenue.
+// Séparé de real_estate_rent_payments pour ne pas être compté comme du loyer.
+export const realEstateSecurityDeposits = mysqlTable("real_estate_security_deposits", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  returnTransactionId: bigint("return_transaction_id", { mode: "number" }),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  method: varchar("method", { length: 255 }).default("cash").notNull(),
+  paymentDate: date("payment_date", { mode: "string" }).notNull(),
+  // held = détenue · returned = restituée (totalement ou après retenue).
+  status: varchar("status", { length: 50 }).default("held").notNull(),
+  deductionAmount: decimal("deduction_amount", { precision: 15, scale: 2 }),
+  deductionReason: varchar("deduction_reason", { length: 500 }),
+  returnedAmount: decimal("returned_amount", { precision: 15, scale: 2 }),
+  returnMethod: varchar("return_method", { length: 255 }),
+  returnDate: date("return_date", { mode: "string" }),
+  reference: varchar("reference", { length: 255 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -1018,6 +1075,404 @@ export const messages = mysqlTable("messages", {
   attachmentCount: int("attachment_count").default(0),
   externalMessageId: varchar("external_message_id", { length: 255 }),
   mailbox: varchar("mailbox", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCRUM-193 — FarmOS: schéma de base pour la gestion d'élevage.
+// Multi-organisation (organizationId), soft delete (isActive), timestamps.
+// Espèces supportées : cow, pig, chicken, fish, goat, sheep, rabbit, duck, turkey.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const farmosAnimals = mysqlTable("farmos_animals", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  externalId: varchar("external_id", { length: 100 }),
+  name: varchar("name", { length: 255 }),
+  species: varchar("species", { length: 50 }).notNull(),
+  race: varchar("race", { length: 100 }),
+  sex: varchar("sex", { length: 10 }),
+  dateOfBirth: date("date_of_birth", { mode: "string" }),
+  weight: decimal("weight", { precision: 10, scale: 2 }),
+  weightUnit: varchar("weight_unit", { length: 10 }).default("kg"),
+  count: int("count"),
+  lot: varchar("lot", { length: 100 }),
+  barn: varchar("barn", { length: 100 }),
+  room: varchar("room", { length: 100 }),
+  type: varchar("type", { length: 50 }),
+  status: varchar("status", { length: 20 }).default("healthy").notNull(),
+  withdrawalUntil: date("withdrawal_until", { mode: "string" }),
+  withdrawalKind: varchar("withdrawal_kind", { length: 20 }),
+  lastEvent: varchar("last_event", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosMedicines = mysqlTable("farmos_medicines", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  kind: varchar("kind", { length: 20 }).default("med").notNull(),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).default("0").notNull(),
+  unit: varchar("unit", { length: 30 }),
+  minQuantity: decimal("min_quantity", { precision: 12, scale: 2 }),
+  supplier: varchar("supplier", { length: 255 }),
+  expiryDate: date("expiry_date", { mode: "string" }),
+  notes: text("notes"),
+  species: json("species").$type<string[] | null>(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproProjects = mysqlTable("batipro_projects", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  code: varchar("code", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  client: varchar("client", { length: 255 }),
+  manager: varchar("manager", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Planifie").notNull(),
+  progress: int("progress").default(0).notNull(),
+  budget: decimal("budget", { precision: 14, scale: 2 }).default("0").notNull(),
+  spent: decimal("spent", { precision: 14, scale: 2 }).default("0").notNull(),
+  startDate: date("start_date", { mode: "string" }),
+  dueDate: date("due_date", { mode: "string" }),
+  location: varchar("location", { length: 255 }),
+  risk: varchar("risk", { length: 30 }).default("Faible").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproTasks = mysqlTable("batipro_tasks", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("project_id", { mode: "number" }),
+  label: varchar("label", { length: 255 }).notNull(),
+  owner: varchar("owner", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Planifie").notNull(),
+  taskDate: date("task_date", { mode: "string" }),
+  priority: varchar("priority", { length: 30 }).default("Normale").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproMaterials = mysqlTable("batipro_materials", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  unit: varchar("unit", { length: 40 }).default("unite").notNull(),
+  stock: decimal("stock", { precision: 14, scale: 2 }).default("0").notNull(),
+  minStock: decimal("min_stock", { precision: 14, scale: 2 }).default("0").notNull(),
+  reserved: decimal("reserved", { precision: 14, scale: 2 }).default("0").notNull(),
+  supplier: varchar("supplier", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const batiproCrews = mysqlTable("batipro_crews", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  people: int("people").default(0).notNull(),
+  site: varchar("site", { length: 255 }),
+  status: varchar("status", { length: 40 }).default("Disponible").notNull(),
+  lead: varchar("lead", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosDiseases = mysqlTable("farmos_diseases", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  nameFr: varchar("name_fr", { length: 255 }).notNull(),
+  nameEn: varchar("name_en", { length: 255 }),
+  contagious: tinyint("contagious").default(0).notNull(),
+  severityDefault: varchar("severity_default", { length: 20 }),
+  commonRoute: varchar("common_route", { length: 50 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosTreatments = mysqlTable("farmos_treatments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  medicineId: bigint("medicine_id", { mode: "number" }),
+  diseaseId: bigint("disease_id", { mode: "number" }).notNull(),
+  medicineName: varchar("medicine_name", { length: 255 }),
+  dosage: varchar("dosage", { length: 255 }),
+  route: varchar("route", { length: 50 }),
+  startDate: date("start_date", { mode: "string" }),
+  endDate: date("end_date", { mode: "string" }),
+  vet: varchar("vet", { length: 255 }),
+  withdrawalMeatDays: int("withdrawal_meat_days"),
+  withdrawalMilkHours: int("withdrawal_milk_hours"),
+  withdrawalEggsDays: int("withdrawal_eggs_days"),
+  status: varchar("status", { length: 20 }).default("running").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosSales = mysqlTable("farmos_sales", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }),
+  productType: varchar("product_type", { length: 50 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 30 }),
+  unitPrice: decimal("unit_price", { precision: 15, scale: 2 }),
+  totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  buyer: varchar("buyer", { length: 255 }),
+  saleDate: date("sale_date", { mode: "string" }).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosPriceList = mysqlTable("farmos_price_list", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  saleSource: varchar("sale_source", { length: 30 }).default("production").notNull(),
+  species: varchar("species", { length: 50 }),
+  productType: varchar("product_type", { length: 50 }).notNull(),
+  unit: varchar("unit", { length: 30 }),
+  unitPrice: decimal("unit_price", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosExpenses = mysqlTable("farmos_expenses", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  description: varchar("description", { length: 500 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }),
+  unit: varchar("unit", { length: 30 }),
+  amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  supplier: varchar("supplier", { length: 255 }),
+  expenseDate: date("expense_date", { mode: "string" }).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  relatedAnimalId: bigint("related_animal_id", { mode: "number" }),
+  relatedMedicineId: bigint("related_medicine_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosVaccinations = mysqlTable("farmos_vaccinations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  species: varchar("species", { length: 50 }).notNull(),
+  vaccine: varchar("vaccine", { length: 255 }).notNull(),
+  target: varchar("target", { length: 255 }),
+  animalCount: int("animal_count"),
+  dueDate: date("due_date", { mode: "string" }).notNull(),
+  status: varchar("status", { length: 20 }).default("scheduled").notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosWorkLogs = mysqlTable("farmos_work_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  workDate: date("work_date", { mode: "string" }).notNull(),
+  hours: decimal("hours", { precision: 5, scale: 2 }),
+  notes: text("notes"),
+  tasks: json("tasks").$type<Array<{ task: string; durationMinutes?: number; lot?: string; animalId?: number; notes?: string }> | null>(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosVetExams = mysqlTable("farmos_vet_exams", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }),
+  vet: varchar("vet", { length: 255 }),
+  vetUserId: bigint("vet_user_id", { mode: "number" }),
+  examDate: date("exam_date", { mode: "string" }).notNull(),
+  diagnosis: text("diagnosis"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosMortalityEvents = mysqlTable("farmos_mortality_events", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  eventDate: date("event_date", { mode: "string" }).notNull(),
+  count: int("count").default(1).notNull(),
+  cause: varchar("cause", { length: 255 }),
+  necropsyRequested: tinyint("necropsy_requested").default(0).notNull(),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosAiInsights = mysqlTable("farmos_ai_insights", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  kind: varchar("kind", { length: 50 }).notNull(),
+  icon: varchar("icon", { length: 50 }),
+  confidence: int("confidence"),
+  textFr: text("text_fr").notNull(),
+  textEn: text("text_en"),
+  actionLabelFr: varchar("action_label_fr", { length: 255 }),
+  actionLabelEn: varchar("action_label_en", { length: 255 }),
+  actionTarget: varchar("action_target", { length: 50 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosFeedForecasts = mysqlTable("farmos_feed_forecasts", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  species: varchar("species", { length: 50 }).notNull(),
+  item: varchar("item", { length: 255 }).notNull(),
+  neededKg: decimal("needed_kg", { precision: 12, scale: 2 }).default("0").notNull(),
+  horizonDays: int("horizon_days").default(14).notNull(),
+  confidence: int("confidence"),
+  urgent: tinyint("urgent").default(0).notNull(),
+  source: varchar("source", { length: 50 }).default("ai"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosAnimalPhotos = mysqlTable("farmos_animal_photos", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  filename: varchar("filename", { length: 255 }),
+  contentType: varchar("content_type", { length: 100 }),
+  sizeBytes: int("size_bytes"),
+  dataUrl: text("data_url").notNull(),
+  uploadedBy: bigint("uploaded_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const farmosLookups = mysqlTable("farmos_lookups", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  category: varchar("category", { length: 50 }).notNull(),
+  scopeKey: varchar("scope_key", { length: 50 }),
+  valueFr: varchar("value_fr", { length: 255 }).notNull(),
+  valueEn: varchar("value_en", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosProductionLogs = mysqlTable("farmos_production_logs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }),
+  species: varchar("species", { length: 50 }).notNull(),
+  productType: varchar("product_type", { length: 20 }).notNull(),
+  logDate: date("log_date", { mode: "string" }).notNull(),
+  period: varchar("period", { length: 10 }),
+  quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
+  unit: varchar("unit", { length: 20 }),
+  quality: json("quality"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  eventDate: date("event_date", { mode: "string" }).notNull(),
+  partnerExternalId: varchar("partner_external_id", { length: 100 }),
+  expectedDueDate: date("expected_due_date", { mode: "string" }),
+  offspringCount: int("offspring_count"),
+  outcome: varchar("outcome", { length: 50 }),
+  notes: text("notes"),
+  // Saillie / IA — soit une paillette de la banque, soit un mâle du troupeau.
+  breedingType: varchar("breeding_type", { length: 20 }).default("unknown").notNull(), // ai | natural | unknown
+  sireStrawId: bigint("sire_straw_id", { mode: "number" }),
+  sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+// ─── Banque de semence (insémination artificielle) ──────────────────────
+// Une ligne = une référence de paillette détenue par l'organisation.
+// `strawsRemaining` est décrémenté à chaque event repro de type "ai".
+export const farmosSemenStraws = mysqlTable("farmos_semen_straws", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+
+  // Identification
+  code: varchar("code", { length: 100 }).notNull(),
+  sireName: varchar("sire_name", { length: 255 }).notNull(),
+  sireRegistration: varchar("sire_registration", { length: 100 }),
+  species: varchar("species", { length: 50 }).notNull(), // cow | pig | goat | sheep
+
+  // Origine
+  breed: varchar("breed", { length: 100 }),
+  country: varchar("country", { length: 100 }),
+  region: varchar("region", { length: 100 }),
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  collectionCenter: varchar("collection_center", { length: 255 }),
+  collectionDate: date("collection_date", { mode: "string" }),
+
+  // Qualité / lot
+  batchNumber: varchar("batch_number", { length: 100 }),
+  motilityPct: int("motility_pct"),
+  concentrationMillionPerMl: int("concentration_million_per_ml"),
+  strawsPerDose: int("straws_per_dose").default(1),
+
+  // Traits génétiques (JSON libre)
+  geneticTraits: json("genetic_traits"),
+  notes: text("notes"),
+
+  // Stock
+  strawsTotal: int("straws_total").notNull(),
+  strawsRemaining: int("straws_remaining").notNull(),
+  tankLocation: varchar("tank_location", { length: 100 }),
+  pricePerDose: decimal("price_per_dose", { precision: 12, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+
+  status: varchar("status", { length: 20 }).default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });

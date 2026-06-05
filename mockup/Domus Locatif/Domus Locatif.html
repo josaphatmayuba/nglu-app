@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Domus �?" Gestion locative · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        iris:{50:'#eef2ff',100:'#e0e7ff',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca'},
+        amber:{50:'#fffbeb',100:'#fef3c7',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e8ecf5;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-iris{background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 60%,#4f46e5 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#1e293b 0%,#0f172a 55%,#020617 100%);}
+    .text-grad{background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #e8ecf4;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;}
+    .navlink{cursor:pointer;}.nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}.nav-active [data-lucide]{color:#a5b4fc!important;}
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}.mob-only{display:none;}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:780px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(15,23,42,.55),0 0 0 11px #0b1020,0 0 0 13px #1e293b;display:flex;flex-direction:column;background:#f6f8fc;}
+    body.mobile .desk-side{display:none;}body.mobile .mob-only{display:flex;}body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .browser-chrome{display:none;}body.mobile .pad{padding:16px!important;}body.mobile .g2,body.mobile .g3,body.mobile .g4{grid-template-columns:1fr!important;}
+    body:not(.mobile) #stage{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(15,23,42,.45);border:1px solid #e2e8f0;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:600px;}body:not(.mobile) #scroll{flex:1;background:#f6f8fc;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    /* Mode simple mobile : home orientée actions */
+    .mob-home{display:none;}body.mobile .mob-home{display:block;}body.mobile .desk-only{display:none;}
+    .actile{min-height:84px;}
+
+    /* ?? Look Immobilier CRM (port� depuis PropertyManagement.css) ?? */
+    .immo-header{align-items:flex-start;display:flex;gap:16px;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;}
+    .immo-header h1{color:#09090b;font-size:28px;font-weight:700;line-height:1.15;margin:0;font-family:'Space Grotesk',sans-serif;}
+    .immo-header p{color:#52525b;font-size:14px;margin:6px 0 0;}
+    .immo-header-actions{align-items:center;display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;}
+    .immo-search{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:9px;color:#71717a;display:flex;gap:10px;height:38px;min-width:240px;padding:0 12px;}
+    .immo-search input{border:0;color:#27272a;font-size:14px;min-width:0;outline:0;width:100%;background:transparent;}
+    .immo-btn{align-items:center;border-radius:9px;display:inline-flex;font-size:14px;font-weight:600;gap:8px;height:38px;justify-content:center;background:#fff;border:1px solid #e4e4e7;color:#3f3f46;padding:0 13px;cursor:pointer;}
+    .immo-btn.primary{background:#4f46e5;border-color:#4f46e5;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(79,70,229,.20);padding:0 16px;}
+    .immo-btn.primary:hover{background:#4338ca;border-color:#4338ca;}
+
+    .immo-metrics-grid{display:grid;gap:16px;grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:26px;}
+    .immo-metric-card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;min-height:150px;padding:22px;}
+    .immo-metric-head{align-items:flex-start;display:flex;justify-content:space-between;margin-bottom:14px;}
+    .immo-metric-icon{align-items:center;border-radius:9px;display:flex;height:44px;justify-content:center;width:44px;}
+    .immo-tone-brand{background:#eef2ff;color:#4f46e5;}.immo-tone-green{background:#ecfdf5;color:#059669;}
+    .immo-tone-amber{background:#fffbeb;color:#f97316;}.immo-tone-red{background:#fef2f2;color:#dc2626;}
+    .immo-trend{background:#ecfdf5;border-radius:7px;color:#047857;font-size:12px;font-weight:700;padding:3px 8px;}
+    .immo-trend.danger{background:#fef2f2;color:#dc2626;}
+    .immo-metric-label{color:#52525b;font-size:13px;font-weight:600;margin-bottom:6px;}
+    .immo-metric-value{color:#09090b;font-size:28px;font-weight:800;line-height:1.15;font-family:'Space Grotesk',sans-serif;}
+    .immo-metric-helper{color:#71717a;font-size:13px;margin-top:10px;}
+    .immo-progress{background:#f4f4f5;border-radius:999px;display:block;height:6px;overflow:hidden;width:100%;}
+    .immo-progress span{background:#10b981;border-radius:inherit;display:block;height:100%;}
+
+    .immo-tabs{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:9px;display:flex;gap:6px;margin-bottom:22px;overflow-x:auto;padding:5px;}
+    .immo-tabs button{align-items:center;background:transparent;border:0;border-radius:7px;color:#52525b;display:inline-flex;font-size:14px;font-weight:600;gap:8px;height:34px;padding:0 13px;white-space:nowrap;cursor:pointer;}
+    .immo-tabs button.active{background:#eef2ff;color:#4f46e5;}
+    .immo-tabs button .count{color:#a1a1aa;}.immo-tabs button.active .count{color:#818cf8;}
+
+    .immo-filters{align-items:center;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .immo-filter-group,.immo-view-switch{align-items:center;display:flex;flex-wrap:wrap;gap:8px;}
+    .immo-filter-group>span,.immo-view-switch>span{color:#52525b;font-size:13px;font-weight:600;}
+    .immo-filter-group button,.immo-view-switch button{background:#fff;border:1px solid #e4e4e7;border-radius:7px;color:#3f3f46;height:30px;padding:0 12px;cursor:pointer;font-size:13px;font-weight:600;}
+    .immo-view-switch button{align-items:center;display:flex;padding:0 8px;}
+    .immo-filter-group button.active,.immo-view-switch button.active{background:#eef2ff;border-color:#e0e7ff;color:#4f46e5;}
+
+    .immo-property-grid{display:grid;gap:18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+    .immo-property-card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;min-width:0;overflow:hidden;}
+    .immo-property-media{height:160px;overflow:hidden;position:relative;background:linear-gradient(135deg,#34d399 0%,#0f9f8a 100%);}
+    .immo-property-card.late .immo-property-media{background:linear-gradient(135deg,#fbbf24 0%,#f97316 100%);}
+    .immo-property-card.maintenance .immo-property-media{background:linear-gradient(135deg,#a78bfa 0%,#6366f1 100%);}
+    .immo-status-chip{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:7px;color:#047857;display:inline-flex;font-size:12px;font-weight:700;gap:6px;left:14px;padding:4px 8px;position:absolute;top:14px;z-index:2;}
+    .immo-status-chip::before{background:currentColor;border-radius:999px;content:"";height:6px;width:6px;}
+    .immo-status-chip.late{color:#dc2626;}.immo-status-chip.maintenance{color:#d97706;}
+    .immo-icon-button{align-items:center;background:#fff;border:0;border-radius:8px;color:#52525b;display:flex;height:32px;justify-content:center;position:absolute;right:14px;top:14px;width:32px;z-index:2;cursor:pointer;}
+    .immo-property-watermark{color:rgba(255,255,255,.55);left:50%;position:absolute;top:50%;transform:translate(-50%,-50%);}
+    .immo-property-code{bottom:16px;color:#fff;font-size:12px;font-weight:800;left:14px;letter-spacing:.04em;position:absolute;text-transform:uppercase;}
+    .immo-property-body{padding:18px;}
+    .immo-property-body h3{color:#09090b;font-size:16px;font-weight:800;margin:0 0 4px;}
+    .immo-property-body p{color:#71717a;font-size:13px;margin:0;}
+    .immo-property-meta{color:#71717a;display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;}
+    .immo-property-meta span{align-items:center;display:inline-flex;gap:5px;}
+    .immo-property-footer{align-items:center;border-top:1px solid #f4f4f5;display:flex;gap:12px;justify-content:space-between;margin-top:16px;padding-top:14px;}
+    .immo-property-tenant{align-items:center;display:flex;gap:9px;min-width:0;}
+    .immo-property-tenant-text .name{color:#27272a;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .immo-property-rent{align-items:baseline;display:inline-flex;flex-shrink:0;gap:3px;text-align:right;}
+    .immo-property-rent strong{color:#09090b;font-size:14px;font-weight:800;}
+    .immo-property-rent span{color:#71717a;font-size:10px;}
+
+    .immo-tenant-grid{display:grid;gap:18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+    .immo-tenant-card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;min-height:200px;padding:22px;position:relative;}
+    .immo-tenant-card.late{border-color:#fecaca;}
+    .immo-letter-avatar{align-items:center;border-radius:999px;color:#fff;display:inline-flex;font-weight:800;justify-content:center;font-size:18px;height:52px;left:22px;position:absolute;top:22px;width:52px;}
+    .immo-tenant-main{min-height:96px;padding-left:66px;}
+    .immo-tenant-main h3{color:#09090b;font-size:18px;font-weight:800;margin:1px 0 3px;}
+    .immo-tenant-main p{color:#52525b;font-size:13px;margin:1px 0;}
+    .immo-mini-badge{border-radius:6px;display:inline-flex;font-size:12px;font-weight:700;margin-top:6px;padding:3px 7px;}
+    .immo-mini-badge.success{background:#dcfce7;color:#047857;}.immo-mini-badge.danger{background:#fee2e2;color:#dc2626;}
+    .immo-mini-badge.warning{background:#fef3c7;color:#b45309;}.immo-mini-badge.neutral{background:#f4f4f5;color:#3f3f46;}
+    .immo-tenant-divider{border-top:1px solid #f4f4f5;margin:16px 0 13px;}
+    .immo-tenant-lease{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#52525b;}
+    .immo-tenant-lease strong{color:#09090b;}.immo-tenant-lease .danger{color:#dc2626;}
+
+    .immo-row-card{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:12px;display:grid;gap:14px;grid-template-columns:auto minmax(0,1fr) auto;padding:16px;}
+    .immo-avatar{align-items:center;background:#f4f4f5;border-radius:10px;color:#52525b;display:flex;height:42px;justify-content:center;width:42px;}
+    .immo-avatar.brand{background:#eef2ff;color:#4f46e5;}.immo-avatar.green{background:#ecfdf5;color:#059669;}.immo-avatar.amber{background:#fffbeb;color:#d97706;}.immo-avatar.red{background:#fef2f2;color:#dc2626;}
+    .immo-row-card h4{color:#09090b;font-size:15px;font-weight:800;margin:0;}
+    .immo-row-card p{color:#71717a;font-size:13px;margin:4px 0 0;}
+    .immo-row-meta{color:#52525b;display:grid;font-size:13px;gap:3px;justify-items:end;text-align:right;}
+
+    .immo-recent{background:#fff;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;}
+    .immo-recent>header{align-items:center;border-bottom:1px solid #f4f4f5;display:flex;gap:12px;justify-content:space-between;padding:14px 18px;}
+    .immo-recent>header h3{color:#09090b;font-size:15px;font-weight:800;margin:0;}
+    .immo-recent table{border-collapse:collapse;font-size:13px;width:100%;}
+    .immo-recent thead{background:#fafafa;}
+    .immo-recent th{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.04em;padding:11px 16px;text-align:left;text-transform:uppercase;}
+    .immo-recent td{border-top:1px solid #f4f4f5;color:#3f3f46;padding:12px 16px;vertical-align:middle;}
+    .immo-recent td.danger{color:#dc2626;font-weight:700;}
+
+    .mini-avatar{align-items:center;border-radius:999px;color:#fff;display:inline-flex;font-weight:800;justify-content:center;font-size:12px;height:30px;width:30px;}
+    .av-indigo{background:linear-gradient(135deg,#6366f1,#4338ca);}.av-orange{background:linear-gradient(135deg,#f59e0b,#f97316);}
+    .av-violet{background:linear-gradient(135deg,#8b5cf6,#6d28d9);}.av-blue{background:linear-gradient(135deg,#38bdf8,#2563eb);}
+    .av-rose{background:linear-gradient(135deg,#f43f5e,#be123c);}.av-green{background:linear-gradient(135deg,#10b981,#047857);}
+    body.mobile .immo-metrics-grid,body.mobile .immo-property-grid,body.mobile .immo-tenant-grid{grid-template-columns:repeat(2,1fr)!important;}
+
+    /* ── Cartes de bail (LeaseGridView) ── */
+    .immo-lease-grid{display:grid;gap:22px;grid-template-columns:repeat(3,minmax(0,1fr));}
+    .immo-lease-card{background:#fff;border:1px solid #e4e4e7;border-left-width:4px;border-radius:12px;padding:24px;position:relative;transition:box-shadow .16s;}
+    .immo-lease-card:hover{box-shadow:0 14px 32px rgba(15,23,42,.08);}
+    .immo-lease-card.signed{border-left-color:#10b981;}.immo-lease-card.noContract{border-left-color:#ef4444;}
+    .immo-lease-card.pendingSignature{border-left-color:#f59e0b;}.immo-lease-card.expired{border-left-color:#a1a1aa;opacity:.75;}
+    .immo-lease-card.expired .immo-lease-card-foot strong{color:#a1a1aa;text-decoration:line-through;}
+    .immo-lease-card-head,.immo-lease-card-foot,.immo-lease-progress>div{align-items:center;display:flex;justify-content:space-between;}
+    .immo-pill{align-items:center;border-radius:7px;display:inline-flex;font-size:12px;font-weight:800;gap:6px;padding:4px 9px;}
+    .immo-pill::before{content:"";width:6px;height:6px;border-radius:999px;background:currentColor;}
+    .immo-pill.success{background:#dcfce7;color:#047857;}.immo-pill.warning{background:#fffbeb;color:#d97706;}.immo-pill.danger{background:#fef2f2;color:#dc2626;}
+    .immo-contract-chip{align-items:center;border-radius:7px;display:inline-flex;font-size:12px;font-weight:800;gap:7px;padding:5px 9px;}
+    .immo-contract-chip.success{background:#dcfce7;color:#047857;}.immo-contract-chip.warning{background:#fffbeb;color:#d97706;}.immo-contract-chip.muted{background:#f4f4f5;color:#71717a;}
+    .immo-lease-person{align-items:center;display:flex;gap:12px;margin-top:24px;min-width:0;}
+    .immo-lease-avatar{align-items:center;border-radius:999px;color:#fff;display:inline-flex;flex:0 0 54px;font-weight:800;height:54px;justify-content:center;width:54px;font-size:15px;}
+    .immo-lease-avatar.indigo{background:linear-gradient(135deg,#6366f1,#4338ca);}.immo-lease-avatar.orange{background:linear-gradient(135deg,#f59e0b,#ea580c);}
+    .immo-lease-avatar.violet{background:linear-gradient(135deg,#a855f7,#4f46e5);}
+    .immo-lease-person strong{color:#09090b;display:block;font-size:18px;font-weight:800;}
+    .immo-lease-person>div{min-width:0;}
+    .immo-lease-person>div>span{color:#71717a;display:block;font-size:13px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .immo-lease-progress{border-top:1px solid #f4f4f5;margin-top:22px;padding-top:22px;}
+    .immo-lease-progress>div{color:#71717a;font-size:12px;margin-bottom:8px;}
+    .immo-lease-progress>div:last-child{font-size:11px;margin:8px 0 0;}
+    .immo-lease-progress .mono{font-family:ui-monospace,Menlo,monospace;color:#52525b;}
+    .immo-lease-progress strong.success{color:#059669;}.immo-lease-progress strong.warning{color:#d97706;}
+    .immo-lease-card-foot{border-top:1px solid #f4f4f5;gap:12px;margin-top:24px;padding-top:24px;}
+    .immo-lease-card-foot strong{color:#09090b;display:block;font-size:24px;font-weight:900;}
+    .immo-lease-card-foot strong span{color:#71717a;font-size:13px;font-weight:600;margin-left:2px;}
+    .immo-lease-card-foot small{align-items:center;display:inline-flex;font-size:12px;font-weight:700;gap:5px;margin-top:4px;color:#059669;}
+    .immo-card-actions{align-items:center;display:inline-flex;gap:7px;}
+    .immo-flat-icon{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:8px;color:#52525b;cursor:pointer;display:inline-flex;height:34px;justify-content:center;width:34px;}
+    body.mobile .immo-lease-grid{grid-template-columns:1fr!important;}
+
+    /* ── Paiements : toggle vues + cartes par locataire + frise mensuelle ── */
+    .immo-seg-toggle{display:inline-flex;gap:4px;background:#fff;border:1px solid #e4e4e7;border-radius:9px;padding:4px;}
+    .immo-seg-toggle button{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;border-radius:7px;height:32px;padding:0 12px;font-size:13px;font-weight:600;color:#52525b;cursor:pointer;}
+    .immo-seg-toggle button.active{background:#eef2ff;color:#4f46e5;}
+    .immo-pay-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+    .immo-pay-grid{display:grid;gap:18px;grid-template-columns:repeat(3,minmax(0,1fr));}
+    .immo-pay-card{background:#fff;border:1px solid #e4e4e7;border-radius:12px;padding:18px;}
+    .immo-pay-card.late{border-color:#fecaca;}
+    .immo-pay-card.pending{border-color:#fde68a;}
+    .immo-pay-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;}
+    .immo-pay-tenant{display:flex;align-items:center;gap:12px;min-width:0;}
+    .immo-pay-tenant .name{font-weight:800;color:#18181b;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .immo-pay-tenant .unit{color:#71717a;font-size:12px;}
+    .immo-pay-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin-bottom:6px;}
+    .immo-pay-row>span{color:#71717a;}
+    .immo-pay-row strong{color:#18181b;font-weight:800;}
+    .immo-pay-bar{display:flex;gap:4px;margin-top:12px;}
+    .immo-pay-seg{flex:1;height:34px;border-radius:5px;background:#eef0f4;}
+    .immo-pay-seg.paid{background:linear-gradient(180deg,#34d399,#10b981);}
+    .immo-pay-seg.pending{background:linear-gradient(180deg,#fcd34d,#f59e0b);}
+    .immo-pay-seg.late{background:linear-gradient(180deg,#f87171,#ef4444);}
+    .immo-pay-bar-labels{display:flex;justify-content:space-between;font-size:10px;color:#a1a1aa;margin-top:6px;}
+    .immo-cal-grid{display:grid;gap:12px;grid-template-columns:repeat(4,minmax(0,1fr));}
+    .immo-cal-cell{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:14px;min-height:92px;display:flex;flex-direction:column;gap:4px;}
+    .immo-cal-cell.paid{border-color:#a7f3d0;background:#ecfdf5;}
+    .immo-cal-month{font-size:12px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:.04em;}
+    .immo-cal-amount{font-size:18px;font-weight:800;color:#09090b;font-family:'Space Grotesk',sans-serif;margin-top:auto;}
+    .immo-cal-count{font-size:11px;color:#71717a;}
+    body.mobile .immo-pay-grid,body.mobile .immo-cal-grid{grid-template-columns:repeat(2,1fr)!important;}
+
+    /* Modal Nouvelle propriete — port CRM pour Domus */
+    .domus-property-modal-layer{position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;padding:20px;}
+    .domus-property-modal-layer.open{display:flex;}
+    .domus-property-scrim{position:absolute;inset:0;background:rgba(15,23,42,.48);}
+    .domus-property-modal{position:relative;z-index:1;width:min(720px,100%);max-height:min(88vh,760px);overflow:auto;background:#fff;border:1px solid #e4e4e7;border-radius:14px;box-shadow:0 28px 80px -35px rgba(15,23,42,.7);}
+    .domus-property-head{align-items:center;background:#fff;border-bottom:1px solid #f4f4f5;display:flex;gap:12px;justify-content:space-between;padding:20px 24px 16px;position:sticky;top:0;z-index:3;}
+    .domus-property-title{align-items:center;display:flex;gap:12px;min-width:0;}
+    .domus-property-title-icon{align-items:center;background:#eef2ff;border-radius:10px;color:#4f46e5;display:flex;flex:none;height:40px;justify-content:center;width:40px;}
+    .domus-property-title strong{color:#18181b;display:block;font-size:16px;font-weight:700;line-height:1.25;}
+    .domus-property-title span{color:#71717a;display:block;font-size:12px;margin-top:2px;}
+    .domus-close{align-items:center;background:#fff;border:0;border-radius:8px;color:#71717a;cursor:pointer;display:flex;height:32px;justify-content:center;width:32px;}
+    .domus-close:hover{background:#f4f4f5;color:#18181b;}
+    .domus-property-form{display:flex;flex-direction:column;gap:22px;padding:20px 24px 0;}
+    .domus-form-section{display:flex;flex-direction:column;gap:12px;}
+    .domus-form-section h3{align-items:center;color:#71717a;display:flex;font-size:11px;font-weight:800;gap:6px;letter-spacing:.06em;margin:0;text-transform:uppercase;}
+    .domus-form-grid{display:grid;gap:20px;grid-template-columns:repeat(2,minmax(0,1fr));}
+    .domus-field{display:flex;flex-direction:column;gap:7px;min-width:0;}
+    .domus-field label{color:#3f3f46;font-size:13px;font-weight:600;}
+    .domus-field label b{color:#ef4444;font-weight:700;}
+    .domus-field input,.domus-field select,.domus-field textarea{background:#fff;border:1px solid #e4e4e7;border-radius:8px;color:#18181b;font:14px 'Inter',sans-serif;outline:none;width:100%;}
+    .domus-field input,.domus-field select{height:40px;padding:0 12px;}
+    .domus-field textarea{min-height:56px;padding:10px 12px;resize:vertical;}
+    .domus-field input::placeholder,.domus-field textarea::placeholder{color:#a1a1aa;}
+    .domus-field input:disabled{background:#fafafa;color:#a1a1aa;}
+    .domus-field input:focus,.domus-field select:focus,.domus-field textarea:focus{border-color:#4f46e5;box-shadow:0 0 0 3px #e0e7ff;}
+    .domus-field small{color:#71717a;font-size:11px;line-height:1.35;}
+    .domus-radio-cards{display:grid;gap:8px;grid-template-columns:repeat(3,minmax(0,1fr));}
+    .domus-radio-cards button{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:8px;color:#3f3f46;cursor:pointer;display:flex;font:500 13px 'Inter',sans-serif;gap:10px;height:44px;padding:0 14px;}
+    .domus-radio-cards button:hover{background:#fafafa;border-color:#c7d2fe;}
+    .domus-radio-cards i{border:1px solid #d4d4d8;border-radius:999px;height:18px;position:relative;width:18px;}
+    .domus-radio-cards button.active{border-color:#4f46e5;box-shadow:0 0 0 3px #e0e7ff;color:#18181b;}
+    .domus-radio-cards button.active i{border-color:#4f46e5;border-width:2px;}
+    .domus-radio-cards button.active i::after{background:#4f46e5;border-radius:999px;content:"";height:8px;left:3px;position:absolute;top:3px;width:8px;}
+    .domus-units-toggle{align-items:flex-start;background:#eef2ff80;border:1px solid #e0e7ff;border-radius:10px;display:flex;gap:10px;margin:22px 24px 0;padding:12px 14px;}
+    .domus-units-toggle input{accent-color:#4f46e5;height:16px;margin-top:2px;width:16px;}
+    .domus-units-toggle strong{align-items:center;color:#18181b;display:flex;font-size:13px;font-weight:700;gap:6px;}
+    .domus-units-toggle strong svg{color:#4f46e5;}
+    .domus-units-toggle p{color:#71717a;font-size:12px;line-height:1.35;margin:4px 0 0;}
+    .domus-units-list{display:none;flex-direction:column;gap:12px;margin:12px 24px 0;}
+    .domus-units-list.open{display:flex;}
+    .domus-unit-card{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:14px;}
+    .domus-unit-card-head{align-items:center;display:flex;justify-content:space-between;margin-bottom:10px;}
+    .domus-unit-card-head div{align-items:center;color:#18181b;display:flex;font-size:13px;font-weight:700;gap:8px;}
+    .domus-unit-card-head span{align-items:center;background:#eef2ff;border-radius:6px;color:#4338ca;display:flex;font-size:12px;font-weight:800;height:26px;justify-content:center;width:26px;}
+    .domus-unit-card-head button{align-items:center;background:transparent;border:0;border-radius:6px;color:#a1a1aa;display:flex;height:28px;justify-content:center;width:28px;}
+    .domus-unit-grid{align-items:end;display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));}
+    .domus-unit-grid.money{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:10px;}
+    .domus-unit-grid .domus-field label{font-size:12px;}
+    .domus-unit-grid .domus-field input,.domus-unit-grid .domus-field select{height:34px;font-size:13px;}
+    .domus-unit-add{align-items:center;background:#fff;border:2px dashed #e4e4e7;border-radius:10px;color:#52525b;display:flex;font:600 13px 'Inter',sans-serif;gap:8px;height:44px;justify-content:center;width:100%;}
+    .domus-form-info-note{align-items:flex-start;background:#fafafa;border:1px solid #e4e4e7;border-radius:8px;color:#52525b;display:flex;font-size:12px;gap:10px;line-height:1.5;margin:22px 24px 0;padding:12px 14px;}
+    .domus-form-info-note strong{color:#18181b;font-weight:700;}
+    .domus-form-info-note code{background:#fff;border:1px solid #e4e4e7;border-radius:4px;font-size:11px;padding:1px 5px;}
+    .domus-lease-recap{display:grid;gap:10px;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:12px;border-top:1px solid #f4f4f5;padding-top:12px;}
+    .domus-lease-recap>div{display:flex;flex-direction:column;gap:3px;}
+    .domus-lease-recap span{color:#71717a;font-size:11px;}
+    .domus-lease-recap strong{color:#18181b;font-size:13px;font-weight:700;}
+    .domus-lease-recap .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#4338ca;}
+    body.mobile .domus-lease-recap{grid-template-columns:1fr;}
+    .domus-property-footer{align-items:center;background:#fafafa;border-top:1px solid #f4f4f5;display:flex;justify-content:space-between;gap:12px;margin-top:24px;padding:14px 24px;position:sticky;bottom:0;z-index:2;}
+    .domus-property-footer>div{align-items:center;display:flex;gap:10px;}
+    .domus-cancel,.domus-draft,.domus-submit{align-items:center;border-radius:8px;cursor:pointer;display:inline-flex;font:600 13px 'Inter',sans-serif;gap:7px;height:36px;padding:0 13px;}
+    .domus-cancel{background:transparent;border:0;color:#52525b;}
+    .domus-draft{background:#fff;border:1px solid #e4e4e7;color:#3f3f46;}
+    .domus-submit{background:#4f46e5;border:1px solid #4f46e5;box-shadow:0 1px 2px rgba(0,0,0,.05),0 4px 12px rgba(79,70,229,.20);color:#fff;}
+    body.mobile .domus-property-modal-layer{padding:0;align-items:stretch;}
+    body.mobile .domus-property-modal{border-radius:0;max-height:100vh;width:100%;}
+    body.mobile .domus-form-grid,body.mobile .domus-radio-cards,body.mobile .domus-unit-grid.money{grid-template-columns:1fr;}
+    body.mobile .domus-property-head,body.mobile .domus-property-form,body.mobile .domus-property-footer{padding-left:18px;padding-right:18px;}
+    body.mobile .domus-units-toggle,body.mobile .domus-units-list,body.mobile .domus-form-info-note{margin-left:18px;margin-right:18px;}
+    body.mobile .domus-draft{display:none;}
+    body.mobile .domus-property-footer{align-items:stretch;flex-direction:column;}
+    body.mobile .domus-property-footer>div,body.mobile .domus-property-footer button{justify-content:center;width:100%;}
+  </style>
+</head>
+<body>
+  <div class="max-w-[1320px] mx-auto px-6 pt-8 pb-5 flex items-center gap-4 flex-wrap">
+    <div class="w-11 h-11 rounded-2xl grad-iris flex items-center justify-center shadow-lg shadow-iris-500/30"><i data-lucide="building-2" class="text-white w-5 h-5"></i></div>
+    <div><h1 class="font-display text-xl font-700 tracking-tight">Domus</h1><p class="text-ink-500 text-[13px]">Gestion locative · app 1/2 �?" clique les menus</p></div>
+    <span class="chip bg-iris-50 text-iris-600 ml-2">App locative</span>
+    <div class="ml-auto flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+      <button id="btn-desk" onclick="setMode('desk')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5"><i data-lucide="monitor" class="w-4 h-4"></i> Bureau</button>
+      <button id="btn-mob" onclick="setMode('mob')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 text-ink-500"><i data-lucide="smartphone" class="w-4 h-4"></i> Mobile</button>
+    </div>
+  </div>
+
+  <div id="stage"><div id="frame">
+    <div class="browser-chrome flex items-center gap-2 px-4 h-11 bg-ink-100 border-b border-ink-200">
+      <span class="w-3 h-3 rounded-full bg-rose-400"></span><span class="w-3 h-3 rounded-full bg-amber-400"></span><span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+      <div class="ml-3 flex-1 max-w-md h-6 rounded-md bg-white border border-ink-200 flex items-center px-3 text-[11px] text-ink-400"><i data-lucide="lock" class="w-3 h-3 mr-1.5"></i> app.domus.immo</div>
+    </div>
+    <div id="shell">
+      <aside class="desk-side w-60 grad-dark text-white p-4 flex flex-col gap-1 flex-none">
+        <div class="flex items-center gap-2.5 px-2 py-3 mb-1"><div class="w-8 h-8 rounded-xl grad-iris flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4"></i></div><div class="font-display font-600 text-[15px]">Domus</div></div>
+        <p class="text-[10px] uppercase tracking-wider text-ink-400 px-2 mt-1 mb-1">Pilotage</p>
+        <a data-nav="dashboard" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord</a>
+        <p class="text-[10px] uppercase tracking-wider text-ink-400 px-2 mt-3 mb-1">Patrimoine</p>
+        <a data-nav="biens" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="building" class="w-4 h-4"></i> Proprietes</a>
+        <a data-nav="carte" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="map-pin" class="w-4 h-4"></i> Carte des proprietes</a>
+        <a data-nav="locataires" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="users" class="w-4 h-4"></i> Locataires</a>
+        <p class="text-[10px] uppercase tracking-wider text-ink-400 px-2 mt-3 mb-1">Locatif</p>
+        <a data-nav="baux" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="file-signature" class="w-4 h-4"></i> Baux</a>
+        <a data-nav="contrats" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="file-check-2" class="w-4 h-4"></i> Contrats &amp; signature</a>
+        <a data-nav="onboarding" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="user-plus" class="w-4 h-4"></i> Onboarding locataire</a>
+        <a data-nav="loyers" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="wallet" class="w-4 h-4"></i> Loyers &amp; paiements</a>
+        <a data-nav="paiement" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Paiement &amp; quittance</a>
+        <a data-nav="maintenance" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="wrench" class="w-4 h-4"></i> Maintenance</a>
+        <p class="text-[10px] uppercase tracking-wider text-ink-400 px-2 mt-3 mb-1">Espace &amp; config</p>
+        <a data-nav="portail" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="user-round" class="w-4 h-4"></i> Espace locataire</a>
+        <a data-nav="reglages" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="settings" class="w-4 h-4"></i> Réglages</a>
+        <div class="mt-auto flex items-center gap-3 px-2 py-2 rounded-xl"><div class="w-9 h-9 rounded-full grad-iris flex items-center justify-center text-[12px] font-700">AK</div><div class="text-[12px] leading-tight"><div class="font-500">A. Kalala</div><div class="text-ink-400 text-[11px]">Gestionnaire</div></div></div>
+      </aside>
+      <div class="mob-only items-center justify-between px-5 pt-9 pb-4 grad-dark text-white flex-none"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl grad-iris flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4"></i></div><span id="mtitle" class="font-display font-600 text-[16px]">Tableau de bord</span></div><div class="w-9 h-9 rounded-full grad-iris flex items-center justify-center text-[12px] font-700">AK</div></div>
+
+      <main id="scroll" class="overflow-y-auto">
+        <!-- DASHBOARD -->
+        <section data-view="dashboard" class="view active pad p-6">
+          <!-- ACCUEIL SIMPLE (mobile uniquement) : 1 regard = quoi faire, 4 gros boutons -->
+          <div class="mob-home space-y-4">
+            <div class="card p-4">
+              <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 flex items-center gap-1.5"><i data-lucide="sun" class="w-3.5 h-3.5 text-amber-500"></i> �? faire aujourd'hui</div>
+              <a data-nav="loyers" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">3 loyers en retard</div><div class="text-[12px] text-ink-400">4 100 $ · à relancer</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="baux" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="refresh-cw" class="w-4 h-4 text-amber-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">7 baux à renouveler</div><div class="text-[12px] text-ink-400">échéance &lt; 60 jours</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="onboarding" class="navlink flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-iris-50 flex items-center justify-center flex-none"><i data-lucide="user-check" class="w-4 h-4 text-iris-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">1 dossier à valider</div><div class="text-[12px] text-ink-400">Kabongo Marie · Belvédère 5C</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <a data-nav="paiement" class="navlink card actile p-4 grad-iris text-white flex flex-col justify-between"><i data-lucide="smartphone-charging" class="w-6 h-6"></i><div class="font-600 text-[14px] leading-tight">Encaisser<br>un loyer</div></a>
+              <a data-nav="onboarding" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="user-plus" class="w-6 h-6 text-iris-600"></i><div class="font-600 text-[14px] leading-tight">Ajouter<br>un locataire</div></a>
+              <a data-nav="maintenance" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="wrench" class="w-6 h-6 text-amber-600"></i><div class="font-600 text-[14px] leading-tight">Déclarer<br>une panne</div></a>
+              <a data-nav="biens" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="building" class="w-6 h-6 text-ink-600"></i><div class="font-600 text-[14px] leading-tight">Voir<br>proprietes</div></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Encaissé · juin</div><div class="font-display text-2xl font-700">209 k$</div><div class="text-[11px] text-emerald-600">98 % du dû</div></div>
+              <div class="card p-4 ring-1 ring-rose-200 bg-rose-50/40"><div class="text-[12px] text-rose-600">Impayés</div><div class="font-display text-2xl font-700 text-rose-600">4,1 k$</div><div class="text-[11px] text-rose-500">2 locataires</div></div>
+            </div>
+          </div>
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3 desk-only"><div><p class="text-[11px] uppercase tracking-wider text-ink-400">Vue d'ensemble · juin 2026</p><h2 class="font-display text-2xl font-700">Votre parc locatif</h2></div><button class="h-9 px-3 rounded-xl grad-iris text-white text-[13px] font-600 flex items-center gap-2" onclick="openLeaseModal()"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau bail</button></div>
+          <div class="immo-metrics-grid desk-only">
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-brand"><i data-lucide="building-2" class="w-5 h-5"></i></div><span class="immo-trend">+3,2 %</span></div>
+              <div class="immo-metric-label">Valeur du parc</div><div class="immo-metric-value">18,4 M$</div>
+              <div class="immo-metric-helper">+3,2 % / 12 mois</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-green"><i data-lucide="door-open" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Occupation</div><div class="immo-metric-value">94 %</div>
+              <div class="immo-metric-helper"><span class="immo-progress"><span style="width:94%"></span></span>142 / 151 unités</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-amber"><i data-lucide="wallet" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Loyers du mois</div><div class="immo-metric-value">213 k$</div>
+              <div class="immo-metric-helper">+ 1,2 M FC · 98 % encaissé</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-red"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div><span class="immo-trend danger">2 loc.</span></div>
+              <div class="immo-metric-label">Impayés</div><div class="immo-metric-value" style="color:#dc2626">4,1 k$</div>
+              <div class="immo-metric-helper">2 locataires</div>
+            </div>
+          </div>
+          <div class="g3 desk-only">
+            <div class="card p-5" style="grid-column:span 2"><h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="history" class="w-4 h-4 text-iris-500"></i> Derniers paiements</h3>
+              <div class="flex items-center gap-3 py-2.5 border-b border-ink-100"><div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-none"><i data-lucide="check" class="w-4 h-4 text-emerald-600"></i></div><div class="flex-1 text-[13px]"><div class="font-500">Belvédère · 3A �?" Mme Ilunga</div><div class="text-ink-400 text-[12px]">1 juin · M-Pesa</div></div><span class="font-600">1 200 $</span></div>
+              <div class="flex items-center gap-3 py-2.5 border-b border-ink-100"><div class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center flex-none"><i data-lucide="check" class="w-4 h-4 text-emerald-600"></i></div><div class="flex-1 text-[13px]"><div class="font-500">Horizon · Local 12 �?" SARL Atlas</div><div class="text-ink-400 text-[12px]">2 juin · virement</div></div><span class="font-600">3 400 $</span></div>
+              <div class="flex items-center gap-3 py-2.5"><div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i></div><div class="flex-1 text-[13px]"><div class="font-500">Belvédère · B-204 �?" M. Tshisekedi</div><div class="text-rose-500 text-[12px]">en retard · 18 j</div></div><span class="font-600 text-rose-600">1 250 $</span></div>
+            </div>
+            <div class="card p-5"><h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-iris-500"></i> Occupation</h3>
+              <div class="space-y-3 text-[12px]">
+                <div><div class="flex justify-between mb-1"><span>Belvédère</span><span class="text-ink-500">94 %</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-iris" style="width:94%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Kiwele</span><span class="text-ink-500">100 %</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-iris" style="width:100%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Horizon (bureaux)</span><span class="text-ink-500">88 %</span></div><div class="h-1.5 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-iris" style="width:88%"></div></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- BIENS -->
+        <section data-view="biens" class="view pad p-6">
+          <div class="immo-header">
+            <div><h1>Immobilier</h1><p>Proprietes, baux, locataires et paiements de loyer</p></div>
+            <div class="immo-header-actions">
+              <label class="immo-search"><i data-lucide="search" class="w-4 h-4"></i><input placeholder="Rechercher adresse, locataire..."></label>
+              <button class="immo-btn primary" onclick="openPropertyModal()"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle propriete</button>
+            </div>
+          </div>
+          <div class="immo-metrics-grid">
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-brand"><i data-lucide="building-2" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Proprietes</div><div class="immo-metric-value">151</div>
+              <div class="immo-metric-helper">142 louees · 9 vacantes</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-green"><i data-lucide="users" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Taux d'occupation</div><div class="immo-metric-value">142/151</div>
+              <div class="immo-metric-helper"><span class="immo-progress"><span style="width:94%"></span></span></div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-amber"><i data-lucide="credit-card" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Loyers du mois</div><div class="immo-metric-value">213 k$</div>
+              <div class="immo-metric-helper">98 % encaisse</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-red"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Loyers en retard</div><div class="immo-metric-value" style="color:#dc2626">4,1 k$</div>
+              <div class="immo-metric-helper">2 a recouvrer</div>
+            </div>
+          </div>
+          <div class="immo-filters">
+            <div class="immo-filter-group"><span>Type :</span><button class="active">Tous</button><button>Appartement</button><button>Maison</button><button>Bureau</button><button>Commerce</button></div>
+            <div class="immo-view-switch"><span>Vue :</span><button class="active"><i data-lucide="grid-3x3" class="w-4 h-4"></i></button><button><i data-lucide="list" class="w-4 h-4"></i></button><button><i data-lucide="map" class="w-4 h-4"></i></button></div>
+          </div>
+          <div class="immo-property-grid">
+            <article class="immo-property-card available">
+              <div class="immo-property-media">
+                <span class="immo-status-chip">Loue</span>
+                <button class="immo-icon-button"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+                <span class="immo-property-watermark"><i data-lucide="building-2" class="w-12 h-12"></i></span>
+                <span class="immo-property-code">APPARTEMENT - A-102</span>
+              </div>
+              <div class="immo-property-body">
+                <h3>Residence Limete Plaza</h3><p>8 Bd Lumumba</p>
+                <div class="immo-property-meta"><span><i data-lucide="bed-double" class="w-4 h-4"></i>2</span><span><i data-lucide="bath" class="w-4 h-4"></i>1</span><span>90.00m2</span></div>
+                <div class="immo-property-footer">
+                  <div class="immo-property-tenant"><span class="mini-avatar av-indigo">AN</span><div class="immo-property-tenant-text"><span class="name">Aimee Nzuzi</span></div></div>
+                  <div class="immo-property-rent"><strong>$ 650K</strong><span>/mois</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="immo-property-card late">
+              <div class="immo-property-media">
+                <span class="immo-status-chip late">Retard</span>
+                <button class="immo-icon-button"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+                <span class="immo-property-watermark"><i data-lucide="home" class="w-12 h-12"></i></span>
+                <span class="immo-property-code">MAISON - M-04</span>
+              </div>
+              <div class="immo-property-body">
+                <h3>Villa Ngaliema</h3><p>14 Av. de la Paix</p>
+                <div class="immo-property-meta"><span><i data-lucide="bed-double" class="w-4 h-4"></i>3</span><span><i data-lucide="bath" class="w-4 h-4"></i>2</span><span>150.00m2</span></div>
+                <div class="immo-property-footer">
+                  <div class="immo-property-tenant"><span class="mini-avatar av-orange">EK</span><div class="immo-property-tenant-text"><span class="name">Eric Kasongo</span></div></div>
+                  <div class="immo-property-rent"><strong style="color:#dc2626">$ 950K</strong><span>/mois</span></div>
+                </div>
+              </div>
+            </article>
+            <article class="immo-property-card maintenance">
+              <div class="immo-property-media">
+                <span class="immo-status-chip maintenance">Maintenance</span>
+                <button class="immo-icon-button"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button>
+                <span class="immo-property-watermark"><i data-lucide="home" class="w-12 h-12"></i></span>
+                <span class="immo-property-code">MAISON - M-07</span>
+              </div>
+              <div class="immo-property-body">
+                <h3>Villa Bandalungwa Sud</h3><p>17 Av. de la Paix</p>
+                <div class="immo-property-meta"><span><i data-lucide="bed-double" class="w-4 h-4"></i>3</span><span><i data-lucide="bath" class="w-4 h-4"></i>2</span><span>160.00m2</span></div>
+                <div class="immo-property-footer">
+                  <div class="immo-property-tenant"><span class="mini-avatar av-violet">GT</span><div class="immo-property-tenant-text"><span class="name">Grace Tshibanda</span></div></div>
+                  <div class="immo-property-rent"><strong>$ 0</strong><span>/mois</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+        <!-- BAUX -->
+        <section data-view="baux" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-ink-400">Locatif</p><h2 class="font-display text-2xl font-700">Baux</h2></div>
+            <div class="flex items-center gap-2 flex-wrap"><label class="flex items-center gap-2 h-9 px-3 rounded-xl border border-ink-200 bg-white text-[12px]"><i data-lucide="search" class="w-4 h-4 text-ink-400"></i><input placeholder="Rechercher locataire�?�" class="outline-none bg-transparent w-28"></label><button class="h-9 px-3 rounded-xl border border-ink-200 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="download" class="w-4 h-4 text-ink-500"></i> Export CSV</button><button class="h-9 px-3 rounded-xl grad-iris text-white text-[13px] font-600 flex items-center gap-2" onclick="openLeaseModal()"><i data-lucide="file-plus" class="w-4 h-4"></i> Nouveau bail</button></div>
+          </div>
+          <div class="g4 mb-4"><div class="card p-4"><div class="text-[12px] text-ink-500">Baux actifs</div><div class="font-display text-xl font-700">142</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">�? renouveler &lt; 60 j</div><div class="font-display text-xl font-700 text-amber-600">7</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Préavis reçus</div><div class="font-display text-xl font-700">3</div></div><div class="card p-4"><div class="text-[12px] text-ink-500">Brouillons</div><div class="font-display text-xl font-700">2</div></div></div>
+          <!-- toolbar: vues + filtres -->
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="flex gap-1.5"><button data-tabbtn="tableau" data-group="bauxview" class="chip grad-iris text-white"><i data-lucide="table" class="w-3.5 h-3.5"></i> Tableau</button><button data-tabbtn="grille" data-group="bauxview" class="chip bg-ink-100 text-ink-600"><i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> Grille</button><button data-tabbtn="chrono" data-group="bauxview" class="chip bg-ink-100 text-ink-600"><i data-lucide="gantt-chart" class="w-3.5 h-3.5"></i> Chronologie</button></div>
+            <div class="flex gap-1.5 flex-wrap"><button data-filter="all" data-fgroup="baux" class="chip grad-iris text-white">Tous</button><button data-filter="active" data-fgroup="baux" class="chip bg-ink-100 text-ink-600">Actifs</button><button data-filter="renew" data-fgroup="baux" class="chip bg-ink-100 text-ink-600">�? renouveler</button><button data-filter="expired" data-fgroup="baux" class="chip bg-ink-100 text-ink-600">Expirés</button><button data-filter="nocontract" data-fgroup="baux" class="chip bg-ink-100 text-ink-600">Sans contrat</button></div>
+          </div>
+          <!-- PANE: tableau -->
+          <div data-tabpane="tableau" data-group="bauxview" class="card overflow-hidden"><table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Locataire</th><th class="text-left font-600 px-4 py-2.5">Unité</th><th class="text-left font-600 px-4 py-2.5">Loyer</th><th class="text-left font-600 px-4 py-2.5">�?chéance</th><th class="text-left font-600 px-4 py-2.5">Statut</th></tr></thead><tbody class="divide-y divide-ink-100">
+            <tr data-frow="active" data-fgroup="baux"><td class="px-4 py-3"><div class="font-500">Mme Ilunga</div><div class="text-[11px] text-ink-400">#2024-031</div></td><td class="px-4 py-3 text-ink-500">Belvédère · 3A</td><td class="px-4 py-3">1 200 $</td><td class="px-4 py-3 text-ink-500">31 déc. 2026</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Actif</span></td></tr>
+            <tr data-frow="active renew" data-fgroup="baux"><td class="px-4 py-3"><div class="font-500">M. Tshisekedi</div><div class="text-[11px] text-ink-400">#2023-118</div></td><td class="px-4 py-3 text-ink-500">Belvédère · B-204</td><td class="px-4 py-3">1 250 $</td><td class="px-4 py-3 text-amber-600">15 août 2026</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700">�? renouveler</span></td></tr>
+            <tr data-frow="active" data-fgroup="baux"><td class="px-4 py-3"><div class="font-500">SARL Atlas</div><div class="text-[11px] text-ink-400">commercial</div></td><td class="px-4 py-3 text-ink-500">Horizon · Local 12</td><td class="px-4 py-3">3 400 $</td><td class="px-4 py-3 text-ink-500">30 juin 2028</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Actif</span></td></tr>
+            <tr data-frow="expired" data-fgroup="baux"><td class="px-4 py-3"><div class="font-500">Mme Banza</div><div class="text-[11px] text-ink-400">#2025-007</div></td><td class="px-4 py-3 text-ink-500">Kiwele · 2B</td><td class="px-4 py-3">980 $</td><td class="px-4 py-3 text-rose-500">Préavis · 30 j</td><td class="px-4 py-3"><span class="chip bg-rose-100 text-rose-700">Sortie</span></td></tr>
+            <tr data-frow="nocontract" data-fgroup="baux"><td class="px-4 py-3"><div class="font-500">Mme Mwamba</div><div class="text-[11px] text-ink-400">brouillon</div></td><td class="px-4 py-3 text-ink-500">Cèdres · 1B</td><td class="px-4 py-3">1 100 $</td><td class="px-4 py-3 text-ink-400">�?"</td><td class="px-4 py-3"><span class="chip bg-ink-100 text-ink-600">Sans contrat</span></td></tr>
+          </tbody></table></div>
+          <!-- PANE: grille -->
+          <div data-tabpane="grille" data-group="bauxview" class="hidden immo-lease-grid">
+            <article data-frow="active" data-fgroup="baux" class="immo-lease-card signed"><div class="immo-lease-card-head"><span class="immo-pill success">Actif</span><span class="immo-contract-chip success"><i data-lucide="file-check" class="w-3.5 h-3.5"></i> Signe</span></div><div class="immo-lease-person"><span class="immo-lease-avatar indigo">IL</span><div><strong>Mme Ilunga</strong><span>Belvedere &middot; 3A</span></div></div><div class="immo-lease-progress"><div><span class="mono">#LEASE-2024-031</span><span>1 an &middot; 8 mois ecoules</span></div><span class="immo-progress"><span class="success" style="width:68%"></span></span><div><span>31/12/25</span><strong class="success">68% ecoule</strong><span>31/12/26</span></div></div><div class="immo-lease-card-foot"><div><strong>1 200 $<span>/mois</span></strong><small><i data-lucide="check" class="w-3 h-3"></i> 8 paiements a jour</small></div><span class="immo-card-actions"><button class="immo-flat-icon"><i data-lucide="file-text" class="w-4 h-4"></i></button><button class="immo-flat-icon"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></span></div></article>
+            <article data-frow="active renew" data-fgroup="baux" class="immo-lease-card pendingSignature"><div class="immo-lease-card-head"><span class="immo-pill warning">A renouveler 45j</span><span class="immo-contract-chip warning"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Attente signature</span></div><div class="immo-lease-person"><span class="immo-lease-avatar orange">MT</span><div><strong>M. Tshisekedi</strong><span>Belvedere &middot; B-204</span></div></div><div class="immo-lease-progress"><div><span class="mono">#LEASE-2023-118</span><span>1 an &middot; 10 mois ecoules</span></div><span class="immo-progress"><span class="warning" style="width:88%"></span></span><div><span>15/08/25</span><strong class="warning">88% ecoule</strong><span>15/08/26</span></div></div><div class="immo-lease-card-foot"><div><strong>1 250 $<span>/mois</span></strong><small><i data-lucide="check" class="w-3 h-3"></i> 10 paiements a jour</small></div><span class="immo-card-actions"><button class="immo-flat-icon"><i data-lucide="file-text" class="w-4 h-4"></i></button><button class="immo-flat-icon"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></span></div></article>
+            <article data-frow="active" data-fgroup="baux" class="immo-lease-card signed"><div class="immo-lease-card-head"><span class="immo-pill success">Actif</span><span class="immo-contract-chip success"><i data-lucide="file-check" class="w-3.5 h-3.5"></i> Signe</span></div><div class="immo-lease-person"><span class="immo-lease-avatar violet">SA</span><div><strong>SARL Atlas</strong><span>Horizon &middot; Local 12</span></div></div><div class="immo-lease-progress"><div><span class="mono">#LEASE-2028-007</span><span>2 ans &middot; 6 mois ecoules</span></div><span class="immo-progress"><span class="success" style="width:25%"></span></span><div><span>30/06/24</span><strong class="success">25% ecoule</strong><span>30/06/28</span></div></div><div class="immo-lease-card-foot"><div><strong>3 400 $<span>/mois</span></strong><small><i data-lucide="check" class="w-3 h-3"></i> 6 paiements a jour</small></div><span class="immo-card-actions"><button class="immo-flat-icon"><i data-lucide="file-text" class="w-4 h-4"></i></button><button class="immo-flat-icon"><i data-lucide="more-horizontal" class="w-4 h-4"></i></button></span></div></article>
+          </div>
+          <!-- PANE: chronologie -->
+          <div data-tabpane="chrono" data-group="bauxview" class="hidden card p-5 overflow-x-auto">
+            <div class="grid mb-2 min-w-[560px]" style="grid-template-columns:140px repeat(6,1fr)"><div></div><div class="text-[11px] text-ink-400 text-center">2024</div><div class="text-[11px] text-ink-400 text-center">2025</div><div class="text-[11px] font-700 text-iris-600 text-center">2026</div><div class="text-[11px] text-ink-400 text-center">2027</div><div class="text-[11px] text-ink-400 text-center">2028</div><div class="text-[11px] text-ink-400 text-center">2029</div></div>
+            <div class="space-y-2.5 min-w-[560px]">
+              <div class="grid items-center" style="grid-template-columns:140px 1fr"><div class="text-[12px] font-500">Mme Ilunga</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-6 rounded grad-iris" style="left:0%;width:42%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:140px 1fr"><div class="text-[12px] font-500">M. Tshisekedi</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-6 rounded bg-amber-400" style="left:8%;width:30%"></div></div></div>
+              <div class="grid items-center" style="grid-template-columns:140px 1fr"><div class="text-[12px] font-500">SARL Atlas</div><div class="relative h-6 bg-ink-50 rounded"><div class="absolute h-6 rounded bg-emerald-500" style="left:25%;width:50%"></div></div></div>
+            </div>
+            <div class="flex items-center gap-4 mt-3 text-[11px] text-ink-400"><span class="flex items-center gap-1"><span class="w-3 h-3 rounded grad-iris inline-block"></span> En cours</span><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-400 inline-block"></span> �? renouveler</span></div>
+          </div>
+          <!-- renouvellement -->
+          <div class="card p-4 mt-4 flex items-center gap-3 flex-wrap ring-1 ring-amber-200 bg-amber-50/40"><div class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="refresh-cw" class="w-4 h-4 text-amber-600"></i></div><div class="flex-1 min-w-[160px]"><div class="font-600 text-[13px]">7 baux à renouveler (&lt; 60 j)</div><div class="text-[12px] text-ink-500">Le renouvellement clone le bail et génère un nouveau contrat depuis le modèle actif.</div></div><button class="navlink h-9 px-3 rounded-xl grad-iris text-white text-[12px] font-600 flex items-center gap-1.5" data-nav="contrats"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Renouveler</button></div>
+        </section>
+
+        <!-- LOYERS -->
+        <section data-view="loyers" class="view pad p-6">
+          <div class="immo-header"><div><h1>Loyers &amp; paiements</h1><p>Encaissements et suivi des paiements de loyer</p></div><div class="immo-header-actions"><label class="immo-search"><i data-lucide="search" class="w-4 h-4"></i><input placeholder="Rechercher..."></label><button class="immo-btn"><i data-lucide="download" class="w-4 h-4"></i> Export CSV</button><button class="immo-btn primary" data-nav="paiement"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Encaisser</button></div></div>
+          <div class="immo-metrics-grid"><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-green"><i data-lucide="check-circle-2" class="w-5 h-5"></i></div><span class="immo-trend">98 %</span></div><div class="immo-metric-label">Encaisse</div><div class="immo-metric-value" style="color:#059669">209,3 k$</div><div class="immo-metric-helper">98 % de 213,4 k$</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-red"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div><span class="immo-trend danger">2 loc.</span></div><div class="immo-metric-label">Impayes</div><div class="immo-metric-value" style="color:#dc2626">4,1 k$</div><div class="immo-metric-helper">2 locataires</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-amber"><i data-lucide="clock" class="w-5 h-5"></i></div></div><div class="immo-metric-label">En attente</div><div class="immo-metric-value" style="color:#d97706">3</div><div class="immo-metric-helper">echeance a venir</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-brand"><i data-lucide="trending-up" class="w-5 h-5"></i></div></div><div class="immo-metric-label">Taux de recouvrement</div><div class="immo-metric-value">98 %</div><div class="immo-metric-helper">juin 2026</div></div></div>
+          <div class="card p-4 mb-3 flex items-center gap-3 flex-wrap"><div class="w-9 h-9 rounded-xl bg-iris-50 flex items-center justify-center flex-none"><i data-lucide="bell-ring" class="w-4 h-4 text-iris-600"></i></div><div class="flex-1 min-w-[160px]"><div class="font-600 text-[13px]">Rappels d'impayés automatiques</div><div class="text-[12px] text-ink-400">SMS + email envoyés aux retardataires · 1�-/période</div></div><span class="chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Activé</span><button class="h-9 px-3 rounded-xl border border-iris-200 text-iris-600 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="zap" class="w-3.5 h-3.5"></i> Lancer maintenant</button></div>
+          <div class="immo-pay-toolbar"><div class="flex gap-1.5"><button data-tabbtn="liste" data-group="payview" class="chip bg-ink-100 text-ink-600"><i data-lucide="list" class="w-3.5 h-3.5"></i> Liste</button><button data-tabbtn="locataire" data-group="payview" class="chip grad-iris text-white"><i data-lucide="users" class="w-3.5 h-3.5"></i> Par locataire</button><button data-tabbtn="calendrier" data-group="payview" class="chip bg-ink-100 text-ink-600"><i data-lucide="calendar-range" class="w-3.5 h-3.5"></i> Calendrier</button></div><span class="text-[12px] text-ink-400">frise sur 12 mois &middot; vert = paye</span></div>
+          <div data-tabpane="locataire" data-group="payview" class="immo-pay-grid">
+            <div class="immo-pay-card and"><div class="immo-pay-head"><div class="immo-pay-tenant"><span class="mini-avatar av-indigo" style="width:40px;height:40px;font-size:13px;">IL</span><div><div class="name">Mme Ilunga</div><div class="unit">Belvedere &middot; 3A</div></div></div><span class="immo-pill success">A jour</span></div><div class="immo-pay-row"><span>Dernier paiement</span><strong>02 Juin 2026</strong></div><div class="immo-pay-row"><span>Montant mensuel</span><strong>1 200 $</strong></div><div class="immo-pay-bar"><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span></div><div class="immo-pay-bar-labels"><span>Juil 25</span><span>Juin 26</span></div></div>
+            <div class="immo-pay-card late"><div class="immo-pay-head"><div class="immo-pay-tenant"><span class="mini-avatar av-orange" style="width:40px;height:40px;font-size:13px;">MT</span><div><div class="name">M. Tshisekedi</div><div class="unit">Belvedere &middot; B-204</div></div></div><span class="immo-pill danger">En retard</span></div><div class="immo-pay-row"><span>Dernier paiement</span><strong>15 Mai 2026</strong></div><div class="immo-pay-row"><span>Montant mensuel</span><strong>1 250 $</strong></div><div class="immo-pay-bar"><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg late"></span></div><div class="immo-pay-bar-labels"><span>Juil 25</span><span>Juin 26</span></div><button class="immo-btn primary" style="width:100%;justify-content:center;margin-top:14px;" data-nav="paiement"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Payer le loyer</button></div>
+            <div class="immo-pay-card ok"><div class="immo-pay-head"><div class="immo-pay-tenant"><span class="mini-avatar av-violet" style="width:40px;height:40px;font-size:13px;">SA</span><div><div class="name">SARL Atlas</div><div class="unit">Horizon &middot; Local 12</div></div></div><span class="immo-pill success">A jour</span></div><div class="immo-pay-row"><span>Dernier paiement</span><strong>02 Juin 2026</strong></div><div class="immo-pay-row"><span>Montant mensuel</span><strong>3 400 $</strong></div><div class="immo-pay-bar"><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span></div><div class="immo-pay-bar-labels"><span>Juil 25</span><span>Juin 26</span></div></div>
+            <div class="immo-pay-card pending"><div class="immo-pay-head"><div class="immo-pay-tenant"><span class="mini-avatar av-blue" style="width:40px;height:40px;font-size:13px;">PM</span><div><div class="name">Patrick Mutombo</div><div class="unit">Kiwele &middot; 2B</div></div></div><span class="immo-pill warning">En attente</span></div><div class="immo-pay-row"><span>Echeance ce mois</span><strong style="color:#d97706">A regler</strong></div><div class="immo-pay-row"><span>Montant mensuel</span><strong>980 $</strong></div><div class="immo-pay-bar"><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg paid"></span><span class="immo-pay-seg pending"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span><span class="immo-pay-seg"></span></div><div class="immo-pay-bar-labels"><span>Fev 26</span><span>Jan 27</span></div><button class="immo-btn primary" style="width:100%;justify-content:center;margin-top:14px;" data-nav="paiement"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Payer le loyer</button></div>
+          </div>
+          <div data-tabpane="liste" data-group="payview" class="hidden card overflow-hidden"><table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Locataire</th><th class="text-left font-600 px-4 py-2.5">Logement</th><th class="text-left font-600 px-4 py-2.5">Date</th><th class="text-left font-600 px-4 py-2.5">Montant</th></tr></thead><tbody class="divide-y divide-ink-100"><tr><td class="px-4 py-3 font-500">Mme Ilunga</td><td class="px-4 py-3 text-ink-500">Belvedere &middot; 3A</td><td class="px-4 py-3 text-ink-500">02 Juin 2026</td><td class="px-4 py-3 font-600">1 200 $</td></tr><tr><td class="px-4 py-3 font-500">SARL Atlas</td><td class="px-4 py-3 text-ink-500">Horizon &middot; Local 12</td><td class="px-4 py-3 text-ink-500">02 Juin 2026</td><td class="px-4 py-3 font-600">3 400 $</td></tr><tr><td class="px-4 py-3 font-500">M. Tshisekedi</td><td class="px-4 py-3 text-ink-500">Belvedere &middot; B-204</td><td class="px-4 py-3 text-rose-500">en retard 18 j</td><td class="px-4 py-3 font-600 text-rose-600">1 250 $</td></tr></tbody></table></div>
+          <div data-tabpane="calendrier" data-group="payview" class="hidden immo-cal-grid"><div class="immo-cal-cell"><div class="immo-cal-month">Juil 25</div><div class="immo-cal-count">0 paiement(s)</div><div class="immo-cal-amount">-</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Aout 25</div><div class="immo-cal-count">1 paiement(s)</div><div class="immo-cal-amount">1 200 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Sep 25</div><div class="immo-cal-count">1 paiement(s)</div><div class="immo-cal-amount">1 200 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Oct 25</div><div class="immo-cal-count">1 paiement(s)</div><div class="immo-cal-amount">3 400 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Nov 25</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 600 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Dec 25</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 600 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Jan 26</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 600 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Fev 26</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 600 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Mar 26</div><div class="immo-cal-count">3 paiement(s)</div><div class="immo-cal-amount">5 850 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Avr 26</div><div class="immo-cal-count">3 paiement(s)</div><div class="immo-cal-amount">5 850 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Mai 26</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 650 $</div></div><div class="immo-cal-cell paid"><div class="immo-cal-month">Juin 26</div><div class="immo-cal-count">2 paiement(s)</div><div class="immo-cal-amount">4 600 $</div></div></div>
+        </section>
+
+        <!-- PAIEMENT -->
+        <section data-view="paiement" class="view pad p-6">
+          <div class="mb-4"><p class="text-[11px] uppercase tracking-wider text-ink-400">Encaissement · pas à pas</p><h2 class="font-display text-2xl font-700">Encaisser un loyer</h2></div>
+          <!-- STEPPER -->
+          <div class="flex items-center gap-1.5 mb-5 max-w-md">
+            <div class="flex items-center gap-1.5 flex-1"><span data-pdot="1" class="w-7 h-7 rounded-full grad-iris text-white flex items-center justify-center text-[12px] font-700 flex-none">1</span><span class="text-[11px] text-ink-500 hidden sm:inline">Bail</span><span class="flex-1 h-px bg-ink-200"></span></div>
+            <div class="flex items-center gap-1.5 flex-1"><span data-pdot="2" class="w-7 h-7 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center text-[12px] font-700 flex-none">2</span><span class="text-[11px] text-ink-500 hidden sm:inline">Moyen</span><span class="flex-1 h-px bg-ink-200"></span></div>
+            <div class="flex items-center gap-1.5 flex-1"><span data-pdot="3" class="w-7 h-7 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center text-[12px] font-700 flex-none">3</span><span class="text-[11px] text-ink-500 hidden sm:inline">Validation</span><span class="flex-1 h-px bg-ink-200"></span></div>
+            <div class="flex items-center gap-1.5"><span data-pdot="4" class="w-7 h-7 rounded-full bg-ink-100 text-ink-500 flex items-center justify-center text-[12px] font-700 flex-none">4</span><span class="text-[11px] text-ink-500 hidden sm:inline">Quittance</span></div>
+          </div>
+          <div class="max-w-md">
+            <!-- �?TAPE 1 : bail & montant -->
+            <div data-pstep="1" class="pstep">
+              <div class="card p-5">
+                <div class="text-[12px] text-ink-500 mb-1">Bail</div><div class="border border-ink-200 rounded-xl px-3 py-2.5 flex items-center justify-between mb-4"><span class="text-[13px] font-500">Belvédère · 3A �?" Mme Ilunga</span><i data-lucide="chevron-down" class="w-4 h-4 text-ink-400"></i></div>
+                <div class="text-[12px] text-ink-500 mb-1">Période</div><div class="border border-ink-200 rounded-xl px-3 py-2.5 flex items-center justify-between mb-4"><span class="text-[13px] font-500">Loyer · juin 2026</span><i data-lucide="chevron-down" class="w-4 h-4 text-ink-400"></i></div>
+                <div class="text-[12px] text-ink-500 mb-1">Montant</div><div class="border border-ink-200 rounded-xl px-3 py-2.5 mb-2 flex items-baseline gap-1"><span class="font-display text-2xl font-700">1 200</span><span class="text-ink-500">$</span></div>
+                <div class="flex items-center gap-2 text-[11px] text-ink-400 mb-4"><i data-lucide="info" class="w-3.5 h-3.5"></i> Solde du bail à jour · pas d'arriéré</div>
+                <button onclick="pgo(2)" class="w-full h-11 rounded-xl grad-iris text-white font-600 flex items-center justify-center gap-2">Continuer <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+              </div>
+            </div>
+            <!-- �?TAPE 2 : moyen de paiement -->
+            <div data-pstep="2" class="pstep hidden">
+              <div class="card p-5">
+                <div class="flex items-baseline justify-between mb-4"><span class="text-[12px] text-ink-500">�? encaisser</span><span class="font-display text-xl font-700">1 200 $</span></div>
+                <div class="text-[12px] text-ink-500 mb-2">Moyen de paiement</div>
+                <div class="grid grid-cols-3 gap-2 mb-4">
+                  <div data-pm onclick="pmethod(this,'M-Pesa')" class="cursor-pointer border-2 border-iris-500 bg-iris-50 rounded-xl p-3 text-center"><div class="w-8 h-8 rounded-lg bg-red-500 mx-auto flex items-center justify-center text-white text-[10px] font-700">M-P</div><div class="text-[11px] font-600 mt-1.5">M-Pesa</div></div>
+                  <div data-pm onclick="pmethod(this,'Airtel Money')" class="cursor-pointer border border-ink-200 rounded-xl p-3 text-center"><div class="w-8 h-8 rounded-lg bg-red-600 mx-auto flex items-center justify-center text-white text-[10px] font-700">A</div><div class="text-[11px] mt-1.5 text-ink-500">Airtel</div></div>
+                  <div data-pm onclick="pmethod(this,'Orange Money')" class="cursor-pointer border border-ink-200 rounded-xl p-3 text-center"><div class="w-8 h-8 rounded-lg bg-amber-500 mx-auto flex items-center justify-center text-white text-[10px] font-700">O</div><div class="text-[11px] mt-1.5 text-ink-500">Orange</div></div>
+                </div>
+                <div class="text-[12px] text-ink-500 mb-1">Numéro mobile money</div><div class="border border-ink-200 rounded-xl px-3 py-2.5 mb-4 font-mono text-[14px]">+243 81 234 5678</div>
+                <div class="flex gap-2">
+                  <button onclick="pgo(1)" class="h-11 px-4 rounded-xl border border-ink-200 text-[13px] font-600 flex items-center gap-1.5"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>
+                  <button onclick="pgo(3)" class="flex-1 h-11 rounded-xl grad-iris text-white font-600 flex items-center justify-center gap-2"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Demander le paiement</button>
+                </div>
+              </div>
+            </div>
+            <!-- �?TAPE 3 : attente validation USSD -->
+            <div data-pstep="3" class="pstep hidden">
+              <div class="card p-5 text-center">
+                <div class="w-16 h-16 rounded-full bg-iris-50 mx-auto flex items-center justify-center mb-3"><i data-lucide="smartphone-charging" class="w-7 h-7 text-iris-600 animate-pulse"></i></div>
+                <div class="font-display font-700 text-[16px]">Demande envoyée</div>
+                <p class="text-[12px] text-ink-500 mt-1 mb-4">Une demande <span class="font-600 pm-label">M-Pesa</span> de <span class="font-600">1 200 $</span> a été envoyée au <span class="font-mono">+243 81 234 5678</span>. En attente de validation du locataire�?�</p>
+                <!-- ce que voit le locataire -->
+                <div class="grad-dark text-white rounded-2xl p-4 text-left mb-4">
+                  <div class="text-[10px] text-white/50 uppercase tracking-wide mb-1.5 flex items-center gap-1"><i data-lucide="bell" class="w-3 h-3"></i> Sur le téléphone du locataire</div>
+                  <div class="font-mono text-[12px] leading-relaxed">*150*1#<br>DOMUS IMMO demande 1 200,00 USD<br>Loyer juin 2026 · Belvédère 3A<br><span class="text-amber-300">Entrez votre code PIN pour confirmer :</span> �?��?��?��?�</div>
+                </div>
+                <div class="flex items-center justify-center gap-2 text-[12px] text-ink-400 mb-4"><span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span> En attente�?� expire dans 04:52</div>
+                <button onclick="pgo(4)" class="w-full h-11 rounded-xl grad-iris text-white font-600 flex items-center justify-center gap-2"><i data-lucide="check" class="w-4 h-4"></i> Simuler la validation</button>
+                <button onclick="pgo(2)" class="text-[12px] text-ink-400 mt-3">Annuler la demande</button>
+              </div>
+            </div>
+            <!-- �?TAPE 4 : payé + quittance -->
+            <div data-pstep="4" class="pstep hidden">
+              <div class="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-4 flex items-center gap-3 mb-3"><div class="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center flex-none"><i data-lucide="check" class="w-5 h-5 text-white"></i></div><div><div class="font-600 text-[14px] text-emerald-800">Paiement reçu · 1 200 $</div><div class="text-[12px] text-emerald-700">�?criture comptable créée automatiquement</div></div></div>
+              <div class="card p-5">
+                <div class="bg-white rounded-xl border border-ink-200 p-5">
+                  <div class="flex items-center justify-between border-b border-ink-100 pb-3 mb-3"><div class="flex items-center gap-2"><div class="w-7 h-7 rounded-lg grad-iris flex items-center justify-center"><i data-lucide="building-2" class="w-4 h-4 text-white"></i></div><span class="font-display font-700 text-[14px]">Domus</span></div><span class="text-[11px] text-ink-400">N° QIT-2026-0612</span></div>
+                  <div class="text-center my-4"><div class="text-[11px] text-ink-400 uppercase tracking-wide">Quittance de loyer</div><div class="font-display text-3xl font-700 mt-1">1 200 $</div><div class="text-[12px] text-ink-500">Loyer de juin 2026</div></div>
+                  <div class="space-y-1.5 text-[12px] border-t border-ink-100 pt-3"><div class="flex justify-between"><span class="text-ink-500">Locataire</span><span class="font-500">Mme Ilunga</span></div><div class="flex justify-between"><span class="text-ink-500">Logement</span><span class="font-500">Belvédère · 3A</span></div><div class="flex justify-between"><span class="text-ink-500">Méthode</span><span class="font-500 pm-label">M-Pesa</span></div><div class="flex justify-between"><span class="text-ink-500">Date</span><span class="font-500">12 juin 2026</span></div></div>
+                  <div class="flex gap-2 mt-4"><button class="flex-1 h-9 rounded-lg border border-ink-200 text-[12px] font-600 flex items-center justify-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i> PDF</button><button class="flex-1 h-9 rounded-lg border border-ink-200 text-[12px] font-600 flex items-center justify-center gap-1.5"><i data-lucide="send" class="w-3.5 h-3.5"></i> Envoyer</button></div>
+                </div>
+                <button onclick="pgo(1)" class="w-full h-11 rounded-xl grad-iris text-white font-600 flex items-center justify-center gap-2 mt-4"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel encaissement</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PORTAIL -->
+        <section data-view="portail" class="view pad p-6">
+          <div class="grad-iris rounded-2xl p-5 text-white mb-4 flex items-center justify-between flex-wrap gap-3"><div><div class="text-[12px] text-white/80">Espace locataire</div><div class="font-display text-2xl font-700">Bonjour, Mme Ilunga �Y'<</div><div class="text-[12px] text-white/80">Belvédère · Apt 3A</div></div><div class="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-[15px] font-700">IL</div></div>
+          <div class="g3">
+            <div class="card p-5" style="grid-column:span 2"><div class="flex items-center justify-between mb-1"><span class="text-[12px] text-ink-500">Prochain loyer</span><span class="chip bg-amber-100 text-amber-700">dû dans 4 j</span></div><div class="font-display text-3xl font-700">1 200 $</div><div class="text-[12px] text-ink-400 mb-3">�?chéance 1 juillet 2026</div><button class="navlink w-full h-11 rounded-xl grad-iris text-white font-600 flex items-center justify-center gap-2" data-nav="paiement"><i data-lucide="smartphone-charging" class="w-4 h-4"></i> Payer par mobile money</button></div>
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="life-buoy" class="w-4 h-4 text-iris-500"></i> Aide</h3><button class="w-full h-10 rounded-xl border border-ink-200 text-[13px] font-600 flex items-center justify-center gap-2 mb-2"><i data-lucide="wrench" class="w-4 h-4 text-amber-500"></i> Déclarer une panne</button><button class="w-full h-10 rounded-xl border border-ink-200 text-[13px] font-600 flex items-center justify-center gap-2"><i data-lucide="message-circle" class="w-4 h-4 text-iris-500"></i> Contacter le gestionnaire</button></div>
+          </div>
+          <div class="g2 mt-4">
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="folder" class="w-4 h-4 text-ink-500"></i> Mes documents</h3><div class="space-y-2 text-[13px]"><div class="flex items-center gap-3 py-1.5"><i data-lucide="file-signature" class="w-4 h-4 text-iris-500"></i><span class="flex-1">Bail #2024-031</span><i data-lucide="download" class="w-4 h-4 text-ink-400"></i></div><div class="flex items-center gap-3 py-1.5"><i data-lucide="receipt" class="w-4 h-4 text-emerald-500"></i><span class="flex-1">Quittance �?" mai 2026</span><i data-lucide="download" class="w-4 h-4 text-ink-400"></i></div></div></div>
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="history" class="w-4 h-4 text-ink-500"></i> Historique</h3><div class="space-y-2 text-[13px]"><div class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="flex-1">Mai 2026</span><span class="text-ink-400">M-Pesa</span><span class="font-600">1 200 $</span></div><div class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span class="flex-1">Avril 2026</span><span class="text-ink-400">M-Pesa</span><span class="font-600">1 200 $</span></div></div></div>
+          </div>
+        </section>
+
+        <!-- MAINTENANCE -->
+        <section data-view="maintenance" class="view pad p-6">
+          <div class="immo-header">
+            <div><h1>Maintenance</h1><p>Interventions, tickets et couts</p></div>
+            <div class="immo-header-actions">
+              <label class="immo-search"><i data-lucide="search" class="w-4 h-4"></i><input placeholder="Rechercher un ticket..."></label>
+              <button class="immo-btn primary"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle demande</button>
+            </div>
+          </div>
+          <div class="immo-metrics-grid">
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-amber"><i data-lucide="wrench" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Tickets ouverts</div><div class="immo-metric-value">3</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-red"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div><span class="immo-trend danger">Haute</span></div>
+              <div class="immo-metric-label">Urgents</div><div class="immo-metric-value" style="color:#dc2626">1</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-brand"><i data-lucide="loader" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">En cours</div><div class="immo-metric-value">1</div>
+            </div>
+            <div class="immo-metric-card">
+              <div class="immo-metric-head"><div class="immo-metric-icon immo-tone-green"><i data-lucide="check-circle-2" class="w-5 h-5"></i></div></div>
+              <div class="immo-metric-label">Termines</div><div class="immo-metric-value" style="color:#059669">1</div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="flex gap-1.5"><button data-tabbtn="kanban" data-group="maintview" class="chip grad-iris text-white"><i data-lucide="square-kanban" class="w-3.5 h-3.5"></i> Kanban</button><button data-tabbtn="tableau" data-group="maintview" class="chip bg-ink-100 text-ink-600"><i data-lucide="table" class="w-3.5 h-3.5"></i> Tableau</button><button data-tabbtn="calendrier" data-group="maintview" class="chip bg-ink-100 text-ink-600"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> Calendrier</button></div>
+            <div class="flex gap-1.5 flex-wrap"><button data-filter="all" data-fgroup="maint" class="chip grad-iris text-white">Tous</button><button data-filter="urgent" data-fgroup="maint" class="chip bg-ink-100 text-ink-600">Urgent</button><button data-filter="in_progress" data-fgroup="maint" class="chip bg-ink-100 text-ink-600">En cours</button><button data-filter="done" data-fgroup="maint" class="chip bg-ink-100 text-ink-600">Terminé</button></div>
+          </div>
+          <!-- PANE: kanban -->
+          <div data-tabpane="kanban" data-group="maintview" class="g3">
+            <div><div class="flex items-center gap-2 mb-3 text-[12px] font-600 text-rose-600"><span class="w-2 h-2 rounded-full bg-rose-500"></span> �? FAIRE · 2</div>
+              <div data-frow="urgent" data-fgroup="maint" class="card p-4 mb-3"><div class="flex items-center gap-2 mb-1"><span class="chip bg-rose-100 text-rose-700">Haute</span><span class="text-[11px] text-ink-400 ml-auto">Belvédère</span></div><div class="font-500 text-[13px]">Fuite plomberie · Apt 5C</div><div class="text-[12px] text-ink-400 mt-1">Estimé 350 $ · non assignée</div></div>
+              <div data-frow="todo" data-fgroup="maint" class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="chip bg-amber-100 text-amber-700">Moyenne</span><span class="text-[11px] text-ink-400 ml-auto">Kiwele</span></div><div class="font-500 text-[13px]">Porte garage bloquée</div><div class="text-[12px] text-ink-400 mt-1">Estimé 180 $</div></div></div>
+            <div><div class="flex items-center gap-2 mb-3 text-[12px] font-600 text-amber-600"><span class="w-2 h-2 rounded-full bg-amber-500"></span> EN COURS · 1</div>
+              <div data-frow="in_progress" data-fgroup="maint" class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="chip bg-iris-50 text-iris-600">Assignée</span><span class="text-[11px] text-ink-400 ml-auto">Belvédère</span></div><div class="font-500 text-[13px]">Peinture cage d'escalier</div><div class="text-[12px] text-ink-400 mt-1">Déco+ · prévu 14 juin</div></div></div>
+            <div><div class="flex items-center gap-2 mb-3 text-[12px] font-600 text-emerald-600"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> TERMIN�? · 1</div>
+              <div data-frow="done" data-fgroup="maint" class="card p-4 opacity-75"><div class="flex items-center gap-2 mb-1"><span class="chip bg-emerald-100 text-emerald-700">Payé</span><span class="text-[11px] text-ink-400 ml-auto">Horizon</span></div><div class="font-500 text-[13px] line-through">Remplacement chauffe-eau</div><div class="text-[12px] text-ink-400 mt-1">Coût réel 1 240 $</div></div></div>
+          </div>
+          <!-- PANE: tableau -->
+          <div data-tabpane="tableau" data-group="maintview" class="hidden card overflow-hidden"><table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Ticket</th><th class="text-left font-600 px-4 py-2.5">Bien</th><th class="text-left font-600 px-4 py-2.5">Priorité</th><th class="text-left font-600 px-4 py-2.5">Coût</th><th class="text-left font-600 px-4 py-2.5">Statut</th></tr></thead><tbody class="divide-y divide-ink-100">
+            <tr data-frow="urgent" data-fgroup="maint"><td class="px-4 py-3 font-500">Fuite plomberie · 5C</td><td class="px-4 py-3 text-ink-500">Belvédère</td><td class="px-4 py-3"><span class="chip bg-rose-100 text-rose-700">Haute</span></td><td class="px-4 py-3">350 $</td><td class="px-4 py-3"><span class="chip bg-rose-100 text-rose-700">�? faire</span></td></tr>
+            <tr data-frow="todo" data-fgroup="maint"><td class="px-4 py-3 font-500">Porte garage bloquée</td><td class="px-4 py-3 text-ink-500">Kiwele</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700">Moyenne</span></td><td class="px-4 py-3">180 $</td><td class="px-4 py-3"><span class="chip bg-ink-100 text-ink-600">�? faire</span></td></tr>
+            <tr data-frow="in_progress" data-fgroup="maint"><td class="px-4 py-3 font-500">Peinture cage d'escalier</td><td class="px-4 py-3 text-ink-500">Belvédère</td><td class="px-4 py-3"><span class="chip bg-ink-100 text-ink-600">Normale</span></td><td class="px-4 py-3">�?"</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700">En cours</span></td></tr>
+            <tr data-frow="done" data-fgroup="maint"><td class="px-4 py-3 font-500">Remplacement chauffe-eau</td><td class="px-4 py-3 text-ink-500">Horizon</td><td class="px-4 py-3"><span class="chip bg-ink-100 text-ink-600">Normale</span></td><td class="px-4 py-3">1 240 $</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700">Terminé</span></td></tr>
+          </tbody></table></div>
+          <!-- PANE: calendrier -->
+          <div data-tabpane="calendrier" data-group="maintview" class="hidden card p-5">
+            <h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-iris-500"></i> Juin 2026</h3>
+            <div class="grid grid-cols-7 gap-1 text-center text-[11px]">
+              <div class="text-ink-400">L</div><div class="text-ink-400">M</div><div class="text-ink-400">M</div><div class="text-ink-400">J</div><div class="text-ink-400">V</div><div class="text-ink-400">S</div><div class="text-ink-400">D</div>
+              <div class="py-2 text-ink-300">9</div><div class="py-2 text-ink-300">10</div><div class="py-2 rounded bg-iris-100 text-iris-700 font-600">11<div class="text-[9px] font-400">Peinture</div></div><div class="py-2 text-ink-600">12</div><div class="py-2 rounded bg-amber-100 text-amber-700 font-600">13<div class="text-[9px] font-400">Garage</div></div><div class="py-2 text-ink-600">14</div><div class="py-2 text-ink-300">15</div>
+              <div class="py-2 text-ink-600">16</div><div class="py-2 text-ink-600">17</div><div class="py-2 text-ink-600">18</div><div class="py-2 rounded bg-emerald-100 text-emerald-700 font-600">19<div class="text-[9px] font-400">Chauffe-eau</div></div><div class="py-2 text-ink-600">20</div><div class="py-2 text-ink-300">21</div><div class="py-2 text-ink-300">22</div>
+            </div>
+            <div class="flex items-center gap-3 mt-3 text-[11px] text-ink-400"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-iris-100 inline-block"></span> planifié</span><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-100 inline-block"></span> en cours</span><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-100 inline-block"></span> terminé</span></div>
+          </div>
+          <!-- coûts du ticket (CostModal) -->
+          <div class="card p-5 mt-4"><div class="flex items-center justify-between mb-3"><h3 class="font-600 text-[14px] flex items-center gap-2"><i data-lucide="receipt" class="w-4 h-4 text-iris-500"></i> Coûts · Remplacement chauffe-eau</h3><button class="text-[11px] text-iris-600 font-600 flex items-center gap-1"><i data-lucide="plus" class="w-3 h-3"></i> Ajouter un coût (reçu)</button></div>
+            <div class="space-y-2 text-[13px]">
+              <div class="flex items-center gap-3"><i data-lucide="paperclip" class="w-3.5 h-3.5 text-ink-400 flex-none"></i><div class="flex-1"><div class="font-500">Chauffe-eau 200 L</div><div class="text-[11px] text-ink-400">Quincaillerie Centrale · reçu.pdf</div></div><span class="font-600">980 $</span></div>
+              <div class="flex items-center gap-3"><i data-lucide="paperclip" class="w-3.5 h-3.5 text-ink-400 flex-none"></i><div class="flex-1"><div class="font-500">Main d'�"uvre plombier</div><div class="text-[11px] text-ink-400">3 h · facture-2231</div></div><span class="font-600">260 $</span></div>
+            </div>
+            <div class="border-t border-ink-100 mt-3 pt-3 flex items-center justify-between"><span class="text-[12px] text-ink-500">Total ticket</span><span class="font-display text-lg font-700">1 240 $</span></div>
+          </div>
+        </section>
+
+        <!-- CONTRATS & SIGNATURE -->
+        <section data-view="contrats" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-ink-400">Documents légaux</p><h2 class="font-display text-2xl font-700">Contrats &amp; signature</h2></div><button class="h-9 px-3 rounded-xl grad-iris text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="file-plus" class="w-4 h-4"></i> Générer depuis un bail</button></div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Signés</span><i data-lucide="file-check-2" class="w-4 h-4 text-emerald-500"></i></div><div class="font-display text-2xl font-700 mt-1">128</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-amber-700 font-500">En attente de signature</span><i data-lucide="clock" class="w-4 h-4 text-amber-600"></i></div><div class="font-display text-2xl font-700 mt-1 text-amber-700">5</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Brouillons</span><i data-lucide="file-pen" class="w-4 h-4 text-ink-400"></i></div><div class="font-display text-2xl font-700 mt-1">3</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Expirent &lt; 30 j</span><i data-lucide="calendar-x" class="w-4 h-4 text-rose-500"></i></div><div class="font-display text-2xl font-700 mt-1">7</div></div>
+          </div>
+          <div class="g3">
+            <!-- list + detail -->
+            <div class="flex flex-col gap-4" style="grid-column:span 2">
+              <div class="card overflow-hidden">
+                <table class="w-full text-[13px]"><thead class="bg-ink-50 text-ink-500 text-[11px] uppercase tracking-wide"><tr><th class="text-left font-600 px-4 py-2.5">Contrat</th><th class="text-left font-600 px-4 py-2.5">Locataire</th><th class="text-left font-600 px-4 py-2.5">Modèle</th><th class="text-left font-600 px-4 py-2.5">Statut</th></tr></thead><tbody class="divide-y divide-ink-100">
+                  <tr class="bg-iris-50/40"><td class="px-4 py-3 font-500">CTR-2026-118</td><td class="px-4 py-3 text-ink-500">M. Tshisekedi</td><td class="px-4 py-3 text-ink-500">Bail résidentiel</td><td class="px-4 py-3"><span class="chip bg-amber-100 text-amber-700"><i data-lucide="clock" class="w-3 h-3"></i> Envoyé</span></td></tr>
+                  <tr><td class="px-4 py-3 font-500">CTR-2026-031</td><td class="px-4 py-3 text-ink-500">Mme Ilunga</td><td class="px-4 py-3 text-ink-500">Bail résidentiel</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Signé</span></td></tr>
+                  <tr><td class="px-4 py-3 font-500">CTR-2028-007</td><td class="px-4 py-3 text-ink-500">SARL Atlas</td><td class="px-4 py-3 text-ink-500">Bail commercial</td><td class="px-4 py-3"><span class="chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Signé</span></td></tr>
+                  <tr><td class="px-4 py-3 font-500">CTR-2026-142</td><td class="px-4 py-3 text-ink-500">Mme Mwamba</td><td class="px-4 py-3 text-ink-500">Bail résidentiel</td><td class="px-4 py-3"><span class="chip bg-ink-100 text-ink-600"><i data-lucide="file-pen" class="w-3 h-3"></i> Brouillon</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- contract detail (paper) -->
+              <div class="card p-5">
+                <div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><span class="font-600 text-[14px]">CTR-2026-118</span><span class="chip bg-amber-100 text-amber-700">En attente de signature</span></div><div class="flex gap-2"><button class="h-8 px-3 rounded-lg border border-ink-200 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="printer" class="w-3.5 h-3.5"></i> Imprimer</button><button class="h-8 px-3 rounded-lg border border-ink-200 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i> PDF</button><button class="h-8 px-3 rounded-lg grad-iris text-white text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="send" class="w-3.5 h-3.5"></i> Renvoyer pour signature</button></div></div>
+                <div class="grid md:grid-cols-2 gap-4">
+                  <!-- paper preview -->
+                  <div class="bg-white rounded-xl border border-ink-200 p-5 shadow-sm">
+                    <div class="text-center border-b border-ink-100 pb-3 mb-3"><div class="font-display font-700 text-[14px]">CONTRAT DE BAIL</div><div class="text-[11px] text-ink-400">Résidentiel · meublé · 12 mois</div></div>
+                    <div class="space-y-1.5 text-[11.5px] text-ink-600">
+                      <p><span class="text-ink-400">Bailleur :</span> Domus Immo SARL</p>
+                      <p><span class="text-ink-400">Locataire :</span> M. Tshisekedi Jean</p>
+                      <p><span class="text-ink-400">Logement :</span> Belvédère · Apt B-204 (82 m²)</p>
+                      <p><span class="text-ink-400">Loyer :</span> 1 250 $/mois · dépôt 1 250 $</p>
+                      <p><span class="text-ink-400">Durée :</span> 15 août 2026 �?' 14 août 2027</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-ink-100">
+                      <div><div class="text-[10px] text-ink-400 mb-1">Bailleur</div><div class="h-9 rounded bg-ink-50 flex items-center px-2" style="font-family:'Brush Script MT',cursive;font-size:16px;color:#4338ca">Domus</div></div>
+                      <div><div class="text-[10px] text-ink-400 mb-1">Locataire</div><div class="h-9 rounded border border-dashed border-amber-300 bg-amber-50/50 flex items-center justify-center text-[10px] text-amber-600">en attente�?�</div></div>
+                    </div>
+                  </div>
+                  <!-- audit timeline -->
+                  <div>
+                    <p class="text-[11px] uppercase tracking-wide text-ink-400 mb-3 flex items-center gap-1.5"><i data-lucide="history" class="w-3.5 h-3.5"></i> Journal d'audit</p>
+                    <div class="relative pl-5 space-y-4 text-[12px]">
+                      <div class="absolute left-1.5 top-1 bottom-1 w-px bg-ink-200"></div>
+                      <div class="relative"><span class="absolute -left-[14px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span><div class="font-500">Contrat généré</div><div class="text-ink-400">depuis bail #2023-118 · 12 juin 10 h 02</div></div>
+                      <div class="relative"><span class="absolute -left-[14px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span><div class="font-500">Envoyé pour signature</div><div class="text-ink-400">�?' jean.t@email.cd · 12 juin 10 h 05</div></div>
+                      <div class="relative"><span class="absolute -left-[14px] top-1 w-2.5 h-2.5 rounded-full bg-iris-500 ring-4 ring-iris-100"></span><div class="font-500">Consulté par le locataire</div><div class="text-ink-400">IP 41.243�?� · 12 juin 14 h 21</div></div>
+                      <div class="relative"><span class="absolute -left-[14px] top-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-4 ring-amber-100 animate-pulse"></span><div class="font-500 text-amber-700">En attente de signature</div><div class="text-ink-400">relance auto dans 2 j</div></div>
+                    </div>
+                    <div class="mt-4 p-3 rounded-xl bg-iris-50 text-[11.5px] text-iris-700 flex items-start gap-2"><i data-lucide="shield-check" class="w-4 h-4 flex-none mt-0.5"></i> Signature électronique horodatée &amp; liée à un lien sécurisé unique �?" valeur probante.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- templates -->
+            <div class="card p-4">
+              <div class="flex items-center justify-between mb-3"><p class="text-[11px] uppercase tracking-wide text-ink-400 flex items-center gap-1.5"><i data-lucide="files" class="w-3.5 h-3.5"></i> Modèles de contrat</p><button class="text-[11px] text-iris-600 font-600">+ Nouveau</button></div>
+              <div class="space-y-2.5">
+                <div class="border border-ink-200 rounded-xl p-3"><div class="flex items-center gap-2"><span class="font-500 text-[13px]">Bail résidentiel</span><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div><div class="text-[11px] text-ink-400 mt-1">12 variables · MAJ 02/06</div><div class="flex gap-2 mt-2 text-[11px]"><button class="text-iris-600 font-600 flex items-center gap-1"><i data-lucide="pencil" class="w-3 h-3"></i> �?diter</button><button class="text-ink-500 flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i> Dupliquer</button></div></div>
+                <div class="border border-ink-200 rounded-xl p-3"><div class="flex items-center gap-2"><span class="font-500 text-[13px]">Bail commercial</span><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div><div class="text-[11px] text-ink-400 mt-1">15 variables · MAJ 28/05</div><div class="flex gap-2 mt-2 text-[11px]"><button class="text-iris-600 font-600 flex items-center gap-1"><i data-lucide="pencil" class="w-3 h-3"></i> �?diter</button><button class="text-ink-500 flex items-center gap-1"><i data-lucide="copy" class="w-3 h-3"></i> Dupliquer</button></div></div>
+                <div class="border border-ink-200 rounded-xl p-3 opacity-70"><div class="flex items-center gap-2"><span class="font-500 text-[13px]">Bail meublé court séjour</span><span class="chip bg-ink-100 text-ink-500 ml-auto">Inactif</span></div><div class="text-[11px] text-ink-400 mt-1">10 variables</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ONBOARDING LOCATAIRE -->
+        <section data-view="onboarding" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-ink-400">Entrée d'un locataire</p><h2 class="font-display text-2xl font-700">Onboarding locataire</h2></div><button class="h-9 px-3 rounded-xl grad-iris text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="link" class="w-4 h-4"></i> Générer un lien</button></div>
+          <div class="g3">
+            <div class="card p-5" style="grid-column:span 2">
+              <h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="link-2" class="w-4 h-4 text-iris-500"></i> Lien d'onboarding sécurisé</h3>
+              <div class="flex gap-2 mb-3"><div class="flex-1 border border-ink-200 rounded-xl px-3 py-2.5 font-mono text-[12px] text-ink-600 truncate flex items-center">https://domus.immo/onboarding/9fa2-7bd1-c0e4</div><button class="h-10 px-3 rounded-xl border border-ink-200 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="copy" class="w-4 h-4"></i> Copier</button><button class="h-10 px-3 rounded-xl grad-iris text-white text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="mail" class="w-4 h-4"></i> Envoyer</button></div>
+              <p class="text-[11px] text-ink-400">Le candidat remplit ses informations et téléverse ses pièces. �? réception, vous validez le dossier �?' le locataire et son bail sont créés automatiquement.</p>
+              <div class="grid grid-cols-4 gap-2 mt-4 text-center text-[11px]">
+                <div class="p-2 rounded-lg bg-ink-50"><i data-lucide="user" class="w-4 h-4 mx-auto text-iris-500 mb-1"></i> Identité</div>
+                <div class="p-2 rounded-lg bg-ink-50"><i data-lucide="file-text" class="w-4 h-4 mx-auto text-iris-500 mb-1"></i> Pièces</div>
+                <div class="p-2 rounded-lg bg-ink-50"><i data-lucide="shield" class="w-4 h-4 mx-auto text-iris-500 mb-1"></i> Garant</div>
+                <div class="p-2 rounded-lg bg-ink-50"><i data-lucide="check-circle-2" class="w-4 h-4 mx-auto text-iris-500 mb-1"></i> Validation</div>
+              </div>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="info" class="w-4 h-4 text-iris-500"></i> Statistiques</h3>
+              <div class="space-y-2 text-[13px]"><div class="flex justify-between"><span class="text-ink-500">Lien envoyé</span><span class="font-600">2</span></div><div class="flex justify-between"><span class="text-ink-500">En cours</span><span class="font-600">1</span></div><div class="flex justify-between"><span class="text-ink-500">�? valider</span><span class="font-600 text-amber-600">1</span></div><div class="flex justify-between"><span class="text-ink-500">Validés ce mois</span><span class="font-600 text-emerald-600">4</span></div></div>
+            </div>
+          </div>
+          <h3 class="font-display font-600 text-[15px] mt-6 mb-3">Dossiers en cours</h3>
+          <div class="g2">
+            <div class="card p-4 ring-1 ring-amber-200"><div class="flex items-center gap-3 mb-2"><div class="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-[12px] font-700 text-amber-700">KM</div><div class="flex-1"><div class="font-600 text-[14px]">Kabongo Marie</div><div class="text-[12px] text-ink-400">Belvédère · Apt 5C</div></div><span class="chip bg-amber-100 text-amber-700">�? valider</span></div><div class="flex items-center gap-1.5 mb-3"><span class="flex-1 h-1.5 rounded bg-emerald-400"></span><span class="flex-1 h-1.5 rounded bg-emerald-400"></span><span class="flex-1 h-1.5 rounded bg-emerald-400"></span><span class="flex-1 h-1.5 rounded bg-ink-200"></span></div><button class="w-full h-9 rounded-lg grad-iris text-white text-[12px] font-600 flex items-center justify-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Valider le dossier</button></div>
+            <div class="card p-4"><div class="flex items-center gap-3 mb-2"><div class="w-9 h-9 rounded-full bg-iris-100 flex items-center justify-center text-[12px] font-700 text-iris-700">PL</div><div class="flex-1"><div class="font-600 text-[14px]">Pierre Lumbu</div><div class="text-[12px] text-ink-400">Kiwele · Apt 2B</div></div><span class="chip bg-iris-50 text-iris-600">En cours</span></div><div class="flex items-center gap-1.5 mb-3"><span class="flex-1 h-1.5 rounded bg-emerald-400"></span><span class="flex-1 h-1.5 rounded bg-emerald-400"></span><span class="flex-1 h-1.5 rounded bg-ink-200"></span><span class="flex-1 h-1.5 rounded bg-ink-200"></span></div><div class="text-[11px] text-ink-400 text-center">En attente des pièces du garant</div></div>
+          </div>
+        </section>
+
+        <!-- CARTE DES BIENS -->
+        <section data-view="carte" class="view pad p-6">
+          <div class="flex items-end justify-between mb-5 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-ink-400">Patrimoine</p><h2 class="font-display text-2xl font-700">Carte des proprietes</h2></div><div class="flex gap-1.5"><span class="navlink chip bg-ink-100 text-ink-600" data-nav="biens">Cartes</span><span class="chip grad-iris text-white">Carte</span></div></div>
+          <div class="g3">
+            <div class="card overflow-hidden relative" style="grid-column:span 2;height:420px;background:linear-gradient(135deg,#eef2ff,#e2e8f0)">
+              <!-- faux roads -->
+              <svg class="absolute inset-0 w-full h-full" preserveAspectRatio="none"><g stroke="#cbd5e1" stroke-width="6" fill="none" opacity=".7"><path d="M0,120 L600,180"/><path d="M120,0 L260,420"/><path d="M0,300 L600,260"/><path d="M420,0 L520,420"/></g><g stroke="#e2e8f0" stroke-width="2" fill="none"><path d="M0,200 L600,200"/><path d="M300,0 L300,420"/></g></svg>
+              <!-- pins -->
+              <div class="absolute" style="left:18%;top:24%"><div class="flex flex-col items-center"><div class="w-9 h-9 rounded-full grad-iris flex items-center justify-center text-white shadow-lg ring-4 ring-white"><i data-lucide="building" class="w-4 h-4"></i></div><span class="mt-1 chip bg-white text-ink-700 shadow text-[10px]">Belvédère · 94 %</span></div></div>
+              <div class="absolute" style="left:55%;top:42%"><div class="flex flex-col items-center"><div class="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-lg ring-4 ring-white"><i data-lucide="building" class="w-4 h-4"></i></div><span class="mt-1 chip bg-white text-ink-700 shadow text-[10px]">Kiwele · 100 %</span></div></div>
+              <div class="absolute" style="left:72%;top:66%"><div class="flex flex-col items-center"><div class="w-9 h-9 rounded-full bg-ink-800 flex items-center justify-center text-white shadow-lg ring-4 ring-white"><i data-lucide="building-2" class="w-4 h-4"></i></div><span class="mt-1 chip bg-white text-ink-700 shadow text-[10px]">Horizon · 88 %</span></div></div>
+              <div class="absolute" style="left:34%;top:72%"><div class="flex flex-col items-center"><div class="w-9 h-9 rounded-full bg-amber-500 flex items-center justify-center text-white shadow-lg ring-4 ring-white"><i data-lucide="hard-hat" class="w-4 h-4"></i></div><span class="mt-1 chip bg-white text-ink-700 shadow text-[10px]">Les Cèdres · chantier</span></div></div>
+              <div class="absolute bottom-3 left-3 chip bg-white/90 text-ink-500 shadow text-[10px]"><i data-lucide="map" class="w-3 h-3"></i> Lubumbashi · 4 biens</div>
+            </div>
+            <div class="card p-4"><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-3">Biens géolocalisés</p>
+              <div class="space-y-2.5 text-[13px]">
+                <div class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg grad-iris flex items-center justify-center text-white flex-none"><i data-lucide="building" class="w-3.5 h-3.5"></i></span><div class="flex-1"><div class="font-500">Belvédère</div><div class="text-[11px] text-ink-400">Av. Mobutu</div></div><span class="text-[12px] text-emerald-600 font-600">94 %</span></div>
+                <div class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center text-white flex-none"><i data-lucide="building" class="w-3.5 h-3.5"></i></span><div class="flex-1"><div class="font-500">Kiwele</div><div class="text-[11px] text-ink-400">Q. Golf</div></div><span class="text-[12px] text-emerald-600 font-600">100 %</span></div>
+                <div class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-ink-800 flex items-center justify-center text-white flex-none"><i data-lucide="building-2" class="w-3.5 h-3.5"></i></span><div class="flex-1"><div class="font-500">Tour Horizon</div><div class="text-[11px] text-ink-400">Centre-ville</div></div><span class="text-[12px] text-ink-500 font-600">88 %</span></div>
+                <div class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg bg-amber-500 flex items-center justify-center text-white flex-none"><i data-lucide="hard-hat" class="w-3.5 h-3.5"></i></span><div class="flex-1"><div class="font-500">Les Cèdres</div><div class="text-[11px] text-ink-400">en construction</div></div><span class="text-[12px] text-amber-600 font-600">62 %</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- LOCATAIRES -->
+        <section data-view="locataires" class="view pad p-6">
+          <div class="immo-header">
+            <div><h1>Locataires</h1><p>Annuaire des locataires, dossiers et soldes</p></div>
+            <div class="immo-header-actions">
+              <label class="immo-search"><i data-lucide="search" class="w-4 h-4"></i><input placeholder="Nom, unite..."></label>
+              <button class="immo-btn primary"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau locataire</button>
+            </div>
+          </div>
+          <div class="immo-metrics-grid"><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-brand"><i data-lucide="users" class="w-5 h-5"></i></div></div><div class="immo-metric-label">Locataires actifs</div><div class="immo-metric-value">142</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-green"><i data-lucide="user-plus" class="w-5 h-5"></i></div><span class="immo-trend">+4</span></div><div class="immo-metric-label">Nouveaux ce mois</div><div class="immo-metric-value" style="color:#059669">+4</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-amber"><i data-lucide="clock" class="w-5 h-5"></i></div></div><div class="immo-metric-label">Dossiers a valider</div><div class="immo-metric-value" style="color:#d97706">1</div></div><div class="immo-metric-card"><div class="immo-metric-head"><div class="immo-metric-icon immo-tone-red"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div><span class="immo-trend danger">2 loc.</span></div><div class="immo-metric-label">Solde du</div><div class="immo-metric-value" style="color:#dc2626">4,1 k$</div></div></div>
+          <div class="g3">
+            <!-- list -->
+            <div class="flex flex-col gap-2.5">
+              <div class="card p-3 flex items-center gap-3 ring-1 ring-iris-200 bg-iris-50/30"><div class="w-9 h-9 rounded-full grad-iris flex items-center justify-center text-white text-[12px] font-700">IL</div><div class="flex-1"><div class="font-600 text-[13px]">Mme Ilunga Grâce</div><div class="text-[11px] text-ink-400">Belvédère · 3A</div></div><span class="chip bg-emerald-100 text-emerald-700">�? jour</span></div>
+              <div class="card p-3 flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-ink-700 flex items-center justify-center text-white text-[12px] font-700">JT</div><div class="flex-1"><div class="font-600 text-[13px]">M. Tshisekedi Jean</div><div class="text-[11px] text-ink-400">Belvédère · B-204</div></div><span class="chip bg-rose-100 text-rose-700">Retard</span></div>
+              <div class="card p-3 flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-ink-700 flex items-center justify-center text-white text-[12px] font-700">SA</div><div class="flex-1"><div class="font-600 text-[13px]">SARL Atlas</div><div class="text-[11px] text-ink-400">Horizon · Local 12</div></div><span class="chip bg-emerald-100 text-emerald-700">�? jour</span></div>
+              <div class="card p-3 flex items-center gap-3"><div class="w-9 h-9 rounded-full bg-ink-700 flex items-center justify-center text-white text-[12px] font-700">BM</div><div class="flex-1"><div class="font-600 text-[13px]">Mme Banza Marie</div><div class="text-[11px] text-ink-400">Kiwele · 2B</div></div><span class="chip bg-amber-100 text-amber-700">Préavis</span></div>
+            </div>
+            <!-- detailed profile (tenant_details) -->
+            <div class="card p-5" style="grid-column:span 2">
+              <div class="flex items-center gap-3 mb-4"><div class="w-12 h-12 rounded-full grad-iris flex items-center justify-center text-white text-[15px] font-700">IL</div><div class="flex-1"><div class="font-display font-700 text-[16px]">Mme Ilunga Grâce</div><div class="text-[12px] text-ink-500">Locataire depuis janv. 2024 · Belvédère · Apt 3A</div></div><div class="flex gap-2"><button class="h-8 px-3 rounded-lg border border-ink-200 text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="phone" class="w-3.5 h-3.5"></i> Appeler</button><button class="h-8 px-3 rounded-lg grad-iris text-white text-[12px] font-600 flex items-center gap-1.5"><i data-lucide="file-check-2" class="w-3.5 h-3.5"></i> Voir le bail</button></div></div>
+              <div class="g3">
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Identité</p><div class="space-y-1 text-[12px]"><div class="flex justify-between"><span class="text-ink-400">Naissance</span><span>14/07/1990</span></div><div class="flex justify-between"><span class="text-ink-400">Sexe</span><span>F</span></div><div class="flex justify-between"><span class="text-ink-400">Nationalité</span><span>Congolaise</span></div><div class="flex justify-between"><span class="text-ink-400">�?tat civil</span><span>Mariée</span></div><div class="flex justify-between"><span class="text-ink-400">Province</span><span>Haut-Katanga</span></div></div></div>
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Contact</p><div class="space-y-1 text-[12px]"><div class="flex justify-between"><span class="text-ink-400">Tél.</span><span>+243 81 234 5678</span></div><div class="flex justify-between"><span class="text-ink-400">Tél. 2</span><span>+243 99 000 1122</span></div><div class="pt-1 border-t border-ink-100 mt-1"></div><div class="flex justify-between"><span class="text-ink-400">�? contacter</span><span>P. Ilunga</span></div><div class="flex justify-between"><span class="text-ink-400">Tél. urgence</span><span>+243 82 555 0101</span></div></div></div>
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Situation pro</p><div class="space-y-1 text-[12px]"><div class="flex justify-between"><span class="text-ink-400">Statut</span><span>Salariée</span></div><div class="flex justify-between"><span class="text-ink-400">Employeur</span><span>Gécamines</span></div><div class="flex justify-between"><span class="text-ink-400">Activité</span><span>Comptable</span></div><div class="flex justify-between"><span class="text-ink-400">Contrat</span><span>CDI</span></div><div class="flex justify-between"><span class="text-ink-400">Salaire</span><span class="font-600">2 800 $/m</span></div></div></div>
+              </div>
+              <div class="g3 mt-4 pt-4 border-t border-ink-100">
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Foyer</p><div class="space-y-1 text-[12px]"><div class="flex justify-between"><span class="text-ink-400">Occupants</span><span>3</span></div><div class="flex justify-between"><span class="text-ink-400">Enfants</span><span>1 (âge 5)</span></div><div class="flex justify-between"><span class="text-ink-400">Conjoint</span><span>P. Ilunga</span></div></div></div>
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Historique logement</p><div class="space-y-1 text-[12px]"><div class="flex justify-between"><span class="text-ink-400">Ancien bailleur</span><span>Sté Imo</span></div><div class="flex justify-between"><span class="text-ink-400">Motif</span><span>Rapprochement</span></div></div></div>
+                <div><p class="text-[11px] uppercase tracking-wide text-ink-400 mb-2">Solde</p><div class="text-[12px]"><span class="chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> �? jour</span><div class="text-ink-400 mt-1">Dernier paiement 1 juin · M-Pesa</div></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- R�?GLAGES -->
+        <section data-view="reglages" class="view pad p-6">
+          <div class="mb-5"><p class="text-[11px] uppercase tracking-wider text-ink-400">Configuration du module</p><h2 class="font-display text-2xl font-700">Réglages</h2></div>
+          <div class="g2">
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-iris-500"></i> Général</h3><div class="space-y-3 text-[13px]"><div class="flex items-center justify-between"><span class="text-ink-500">Devise par défaut</span><span class="chip bg-ink-100 text-ink-600">USD $</span></div><div class="flex items-center justify-between"><span class="text-ink-500">Langue</span><span class="chip bg-ink-100 text-ink-600">Français</span></div><div class="flex items-center justify-between"><span class="text-ink-500">Cycle de facturation</span><span class="chip bg-ink-100 text-ink-600">Mensuel</span></div><div class="flex items-center justify-between"><span class="text-ink-500">Dépôt de garantie par défaut</span><span class="font-600">1 mois</span></div></div></div>
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="bell-ring" class="w-4 h-4 text-iris-500"></i> Rappels d'impayés</h3><div class="space-y-3 text-[13px]"><div class="flex items-center justify-between"><span class="text-ink-500">Email</span><span class="chip bg-emerald-100 text-emerald-700">Activé</span></div><div class="flex items-center justify-between"><span class="text-ink-500">SMS</span><span class="chip bg-emerald-100 text-emerald-700">Activé</span></div><div class="flex items-center justify-between"><span class="text-ink-500">1er rappel</span><span>J+3 après échéance</span></div><div class="flex items-center justify-between"><span class="text-ink-500">Relance</span><span>tous les 7 j</span></div></div></div>
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="calculator" class="w-4 h-4 text-iris-500"></i> Comptabilité liée</h3><div class="space-y-3 text-[13px]"><div class="flex items-center justify-between"><span class="text-ink-500">Encaissement loyer</span><span class="chip bg-ink-100 text-ink-600">Débit Caisse</span></div><div class="flex items-center justify-between"><span class="text-ink-500">Produit</span><span class="chip bg-ink-100 text-ink-600">Crédit Loyers</span></div><div class="text-[12px] text-ink-400">Chaque paiement génère automatiquement une écriture comptable.</div></div></div>
+            <div class="card p-5"><h3 class="font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="shield" class="w-4 h-4 text-iris-500"></i> Rôles &amp; accès</h3><div class="space-y-2.5 text-[13px]"><div class="flex items-center gap-2"><span class="chip bg-iris-50 text-iris-600">Gestionnaire</span><span class="text-ink-400 text-[12px]">tout</span></div><div class="flex items-center gap-2"><span class="chip bg-iris-50 text-iris-600">Comptable</span><span class="text-ink-400 text-[12px]">loyers, écritures</span></div><div class="flex items-center gap-2"><span class="chip bg-iris-50 text-iris-600">Agent</span><span class="text-ink-400 text-[12px]">biens, maintenance</span></div><div class="flex items-center gap-2"><span class="chip bg-ink-100 text-ink-600">Locataire</span><span class="text-ink-400 text-[12px]">portail uniquement</span></div></div></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Feuille "Plus" : tout le reste, hors du chemin quotidien -->
+    <div id="moreSheet" style="display:none;position:absolute;inset:0;z-index:30;">
+      <div onclick="toggleMore()" style="position:absolute;inset:0;background:rgba(15,23,42,.45)"></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:22px 22px 0 0;padding:14px 14px 20px" class="space-y-0.5">
+        <div class="w-10 h-1.5 rounded-full bg-ink-200 mx-auto mb-3"></div>
+        <p class="text-[11px] uppercase tracking-wide text-ink-400 px-2 mb-1">Tout le reste</p>
+        <a data-nav="baux" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="file-signature" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Baux</span></a>
+        <a data-nav="contrats" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="file-check-2" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Contrats &amp; signature</span></a>
+        <a data-nav="onboarding" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="user-plus" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Onboarding locataire</span></a>
+        <a data-nav="carte" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="map-pin" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Carte des proprietes</span></a>
+        <a data-nav="portail" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="user-round" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Espace locataire</span></a>
+        <a data-nav="reglages" onclick="toggleMore()" class="navlink flex items-center gap-3 px-2 py-3 rounded-xl"><i data-lucide="settings" class="w-5 h-5 text-iris-500"></i><span class="text-[14px] font-500">Réglages</span></a>
+      </div>
+    </div>
+    <nav class="mob-only h-16 bg-white border-t border-ink-200 items-center justify-around px-2 flex-none">
+      <a data-nav="dashboard" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="home" class="w-5 h-5"></i><span class="text-[10px]">Accueil</span></a>
+      <a data-nav="loyers" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="wallet" class="w-5 h-5"></i><span class="text-[10px]">Loyers</span></a>
+      <a data-nav="locataires" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="users" class="w-5 h-5"></i><span class="text-[10px]">Locat.</span></a>
+      <a data-nav="maintenance" class="navlink mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="wrench" class="w-5 h-5"></i><span class="text-[10px]">Maint.</span></a>
+      <button onclick="toggleMore()" class="mflex flex flex-col items-center gap-0.5 text-ink-400"><i data-lucide="menu" class="w-5 h-5"></i><span class="text-[10px]">Plus</span></button>
+    </nav>
+  </div></div>
+  <p class="text-center text-[12px] text-ink-400 mt-6 pb-10">Domus �?" app de gestion locative · maquette · données fictives</p>
+  <div id="propertyModal" class="domus-property-modal-layer" aria-hidden="true">
+    <div class="domus-property-scrim" onclick="closePropertyModal()"></div>
+    <div class="domus-property-modal">
+      <div class="domus-property-head">
+        <div class="domus-property-title">
+          <span class="domus-property-title-icon"><i data-lucide="building-2" class="w-5 h-5"></i></span>
+          <div><strong>Nouvelle propriete</strong><span>Ajoutez un bien a votre portefeuille immobilier</span></div>
+        </div>
+        <button class="domus-close" onclick="closePropertyModal()" aria-label="Fermer"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="domus-property-form">
+        <section class="domus-form-section">
+          <h3><i data-lucide="info" class="w-3.5 h-3.5"></i> Informations generales</h3>
+          <div class="domus-field"><label>Nom <b>*</b></label><input placeholder="ex. Residence Tombalbaye"></div>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Code interne</label><input disabled placeholder="Auto-genere"></div>
+            <div class="domus-field"><label>Type de bien <b>*</b></label><select><option>Immeuble</option><option>Residentiel</option><option>Commercial</option><option>Mixte</option></select></div>
+          </div>
+          <div class="domus-field">
+            <label>Statut initial</label>
+            <div class="domus-radio-cards">
+              <button type="button" class="active"><i></i> Disponible</button>
+              <button type="button"><i></i> Occupe</button>
+              <button type="button"><i></i> Maintenance</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="map-pin" class="w-3.5 h-3.5"></i> Localisation</h3>
+          <div class="domus-field"><label>Adresse</label><input placeholder="ex. 15 Av. Tombalbaye"></div>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Ville</label><input value="Kinshasa"></div>
+            <div class="domus-field"><label>Pays</label><input value="RDC"></div>
+          </div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="layers" class="w-3.5 h-3.5"></i> Caracteristiques</h3>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Nombre d'etages</label><input type="number" value="1"></div>
+            <div class="domus-field"><label>Places de parking</label><input type="number" value="0"></div>
+          </div>
+          <div class="domus-field"><label>Description</label><textarea placeholder="Notes, equipements, particularites du bien..."></textarea></div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="wallet" class="w-3.5 h-3.5"></i> Informations financieres</h3>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Valeur marchande estimee</label><input type="number" placeholder="ex. 480000000"><small>Pour analyse de patrimoine</small></div>
+            <div class="domus-field"><label>Loyer mensuel par defaut</label><input type="number" placeholder="ex. 850000"><small>Herite par defaut sur chaque unite creee</small></div>
+          </div>
+        </section>
+      </div>
+
+      <label class="domus-units-toggle">
+        <input id="propertyUnitsToggle" type="checkbox" onchange="togglePropertyUnits(this.checked)">
+        <div>
+          <strong><i data-lucide="grid-3x3" class="w-3.5 h-3.5"></i> Ajouter des unites maintenant</strong>
+          <p>Definissez les appartements/locaux du bien. Vous pourrez aussi le faire plus tard.</p>
+        </div>
+      </label>
+
+      <div id="propertyUnitsList" class="domus-units-list">
+        <div class="domus-unit-card">
+          <div class="domus-unit-card-head">
+            <div><span>1</span> Unite 1</div>
+            <button type="button" aria-label="Supprimer cette unite"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+          </div>
+          <div class="domus-unit-grid">
+            <div class="domus-field"><label>Nom <b>*</b></label><input placeholder="ex. A-203"></div>
+            <div class="domus-field"><label>Type</label><select><option>Appartement</option><option>Maison</option><option>Bureau</option><option>Commerce</option></select></div>
+            <div class="domus-field"><label>Etage</label><input placeholder="ex. 2 ou RDC"></div>
+            <div class="domus-field"><label>Surface (m2)</label><input type="number" placeholder="120"></div>
+            <div class="domus-field"><label>Chambres</label><input type="number" value="0"></div>
+            <div class="domus-field"><label>Salles de bain</label><input type="number" value="0"></div>
+          </div>
+          <div class="domus-unit-grid money">
+            <div class="domus-field"><label>Loyer mensuel</label><input type="number" placeholder="850000"></div>
+            <div class="domus-field"><label>Caution</label><input type="number" placeholder="1700000"></div>
+          </div>
+        </div>
+        <button type="button" class="domus-unit-add"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une unite</button>
+      </div>
+
+      <div class="domus-form-info-note">
+        <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 flex-none"></i>
+        <span><strong>Le code interne est genere automatiquement</strong> apres creation (format <code>PROP-YYYY-NNN</code>). Vous pourrez ajouter photo et documents juridiques apres la creation.</span>
+      </div>
+
+      <div class="domus-property-footer">
+        <button class="domus-cancel" onclick="closePropertyModal()">Annuler</button>
+        <div>
+          <button class="domus-draft"><i data-lucide="save" class="w-3.5 h-3.5"></i> Brouillon</button>
+          <button class="domus-submit"><i data-lucide="check" class="w-3.5 h-3.5"></i> Creer la propriete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="leaseModal" class="domus-property-modal-layer" aria-hidden="true">
+    <div class="domus-property-scrim" onclick="closeLeaseModal()"></div>
+    <div class="domus-property-modal">
+      <div class="domus-property-head">
+        <div class="domus-property-title">
+          <span class="domus-property-title-icon"><i data-lucide="file-signature" class="w-5 h-5"></i></span>
+          <div><strong>Nouveau bail</strong><span>Associez un locataire a un logement et definissez les conditions</span></div>
+        </div>
+        <button class="domus-close" onclick="closeLeaseModal()" aria-label="Fermer"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="domus-property-form">
+        <section class="domus-form-section">
+          <h3><i data-lucide="users" class="w-3.5 h-3.5"></i> Locataire &amp; logement</h3>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Locataire <b>*</b></label><select><option value="">Selectionner un locataire</option><option>Mme Ilunga Grace</option><option>M. Tshisekedi Jean</option><option>SARL Atlas</option><option>Mme Banza Marie</option><option>Patrick Mutombo</option></select></div>
+            <div class="domus-field"><label>Logement / Unite <b>*</b></label><select onchange="leaseFillRent(this.value)"><option value="">Selectionner une unite</option><option value="1200">Belvedere &middot; 3A &mdash; 1 200 $</option><option value="1250">Belvedere &middot; B-204 &mdash; 1 250 $</option><option value="3400">Horizon &middot; Local 12 &mdash; 3 400 $</option><option value="980">Kiwele &middot; 2B &mdash; 980 $</option><option value="1100">Cedres &middot; 1B &mdash; 1 100 $</option></select></div>
+          </div>
+          <div class="domus-form-info-note"><i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 flex-none"></i><span>Le <strong>loyer</strong> et la <strong>caution</strong> sont pre-remplis depuis l'unite choisie. Vous pouvez les ajuster ci-dessous.</span></div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Type de bail</h3>
+          <div class="domus-field">
+            <div class="domus-radio-cards">
+              <button type="button" class="active" onclick="leasePickType(this)"><i></i> Residentiel</button>
+              <button type="button" onclick="leasePickType(this)"><i></i> Commercial</button>
+              <button type="button" onclick="leasePickType(this)"><i></i> Meuble</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="calendar-range" class="w-3.5 h-3.5"></i> Duree</h3>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Date de debut <b>*</b></label><input type="date" value="2026-07-01"></div>
+            <div class="domus-field"><label>Duree</label><select onchange="leaseCalcEnd(this.value)"><option value="12">12 mois</option><option value="6">6 mois</option><option value="24">24 mois</option><option value="0">Indeterminee</option></select></div>
+          </div>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Date de fin</label><input id="leaseEndDate" type="date" value="2027-06-30"><small>Calculee depuis la duree, modifiable</small></div>
+            <div class="domus-field"><label>Jour d'echeance du loyer</label><select><option>1er du mois</option><option>5 du mois</option><option>10 du mois</option><option>Date anniversaire</option></select></div>
+          </div>
+        </section>
+
+        <section class="domus-form-section">
+          <h3><i data-lucide="wallet" class="w-3.5 h-3.5"></i> Conditions financieres</h3>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Loyer mensuel <b>*</b></label><input id="leaseRent" type="number" placeholder="ex. 1200"><small>En USD ($)</small></div>
+            <div class="domus-field"><label>Depot de garantie</label><input id="leaseDeposit" type="number" placeholder="ex. 1200"><small>1 mois de loyer par defaut</small></div>
+          </div>
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Charges / provisions</label><input type="number" placeholder="ex. 50"><small>Eau, entretien parties communes...</small></div>
+            <div class="domus-field"><label>Moyen de paiement prefere</label><select><option>M-Pesa</option><option>Airtel Money</option><option>Orange Money</option><option>Especes</option><option>Virement</option></select></div>
+          </div>
+        </section>
+      </div>
+
+      <label class="domus-units-toggle">
+        <input id="leaseContractToggle" type="checkbox" checked onchange="toggleLeaseContract(this.checked)">
+        <div>
+          <strong><i data-lucide="file-check" class="w-3.5 h-3.5"></i> Generer le contrat maintenant</strong>
+          <p>Cree le contrat depuis un modele et l'envoie au locataire pour signature electronique. Sinon le bail reste "Sans contrat".</p>
+        </div>
+      </label>
+
+      <div id="leaseContractBox" class="domus-units-list open">
+        <div class="domus-unit-card">
+          <div class="domus-form-grid">
+            <div class="domus-field"><label>Modele de contrat</label><select><option>Bail residentiel</option><option>Bail commercial</option><option>Bail meuble court sejour</option></select></div>
+            <div class="domus-field"><label>Envoi pour signature</label><select><option>Email + SMS</option><option>Email seulement</option><option>Ne pas envoyer (brouillon)</option></select></div>
+          </div>
+          <div class="domus-lease-recap">
+            <div><span>Numero de bail</span><strong class="mono">LEASE-2026-143</strong></div>
+            <div><span>Contrat</span><strong class="mono">CTR-2026-143</strong></div>
+            <div><span>1er loyer du</span><strong>1 juil. 2026</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="domus-form-info-note">
+        <i data-lucide="info" class="w-3.5 h-3.5 mt-0.5 flex-none"></i>
+        <span><strong>Le numero de bail est genere automatiquement</strong> a la creation (format <code>LEASE-YYYY-NNN</code>). Le bail apparaitra dans la liste avec le statut <strong>Actif</strong> (ou <strong>En attente de signature</strong> si un contrat est envoye).</span>
+      </div>
+
+      <div class="domus-property-footer">
+        <button class="domus-cancel" onclick="closeLeaseModal()">Annuler</button>
+        <div>
+          <button class="domus-draft"><i data-lucide="save" class="w-3.5 h-3.5"></i> Brouillon</button>
+          <button class="domus-submit"><i data-lucide="check" class="w-3.5 h-3.5"></i> Creer le bail</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+    const TITLES={dashboard:'Tableau de bord',biens:'Proprietes',carte:'Carte des proprietes',locataires:'Locataires',baux:'Baux',contrats:'Contrats & signature',onboarding:'Onboarding locataire',loyers:'Loyers',paiement:'Paiement',maintenance:'Maintenance',portail:'Espace locataire',reglages:'Réglages'};
+    function showView(id){
+      document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.dataset.view===id));
+      document.querySelectorAll('[data-nav]').forEach(n=>{const on=n.dataset.nav===id;n.classList.toggle('nav-active',on);if(n.classList.contains('mflex')){n.classList.toggle('text-iris-600',on);n.classList.toggle('text-ink-400',!on);}});
+      const mt=document.getElementById('mtitle');if(mt)mt.textContent=TITLES[id]||'';
+      const ms=document.getElementById('moreSheet');if(ms)ms.style.display='none';
+      if(id==='paiement')pgo(1);
+      const sc=document.getElementById('scroll');if(sc)sc.scrollTop=0;lucide.createIcons();
+    }
+    function toggleMore(){const s=document.getElementById('moreSheet');s.style.display=s.style.display==='block'?'none':'block';lucide.createIcons();}
+    function openPropertyModal(){const m=document.getElementById('propertyModal');if(m){m.classList.add('open');m.setAttribute('aria-hidden','false');}lucide.createIcons();}
+    function closePropertyModal(){const m=document.getElementById('propertyModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');}}
+    function togglePropertyUnits(on){const list=document.getElementById('propertyUnitsList');if(list)list.classList.toggle('open',on);lucide.createIcons();}
+    // Modale "Nouveau bail"
+    function openLeaseModal(){const m=document.getElementById('leaseModal');if(m){m.classList.add('open');m.setAttribute('aria-hidden','false');}lucide.createIcons();}
+    function closeLeaseModal(){const m=document.getElementById('leaseModal');if(m){m.classList.remove('open');m.setAttribute('aria-hidden','true');}}
+    function toggleLeaseContract(on){const b=document.getElementById('leaseContractBox');if(b)b.classList.toggle('open',on);lucide.createIcons();}
+    function leasePickType(btn){btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b===btn));}
+    function leaseFillRent(v){if(!v)return;const r=document.getElementById('leaseRent'),d=document.getElementById('leaseDeposit');if(r)r.value=v;if(d)d.value=v;}
+    function leaseCalcEnd(months){const s=document.querySelector('#leaseModal input[type="date"]'),e=document.getElementById('leaseEndDate');if(!s||!e)return;if(months==='0'){e.value='';return;}const d=new Date(s.value);if(isNaN(d))return;d.setMonth(d.getMonth()+Number(months));d.setDate(d.getDate()-1);e.value=d.toISOString().slice(0,10);}
+    // Wizard "Encaisser un loyer" �?" parcours pas à pas
+    function pgo(n){
+      document.querySelectorAll('[data-pstep]').forEach(p=>p.classList.toggle('hidden',p.dataset.pstep!==String(n)));
+      document.querySelectorAll('[data-pdot]').forEach(d=>{const i=Number(d.dataset.pdot),act=i<=n;d.classList.toggle('grad-iris',act);d.classList.toggle('text-white',act);d.classList.toggle('bg-ink-100',!act);d.classList.toggle('text-ink-500',!act);});
+      const sc=document.getElementById('scroll');if(sc)sc.scrollTop=0;lucide.createIcons();
+    }
+    function pmethod(el,name){
+      document.querySelectorAll('[data-pm]').forEach(m=>{m.className='cursor-pointer border border-ink-200 rounded-xl p-3 text-center';});
+      el.className='cursor-pointer border-2 border-iris-500 bg-iris-50 rounded-xl p-3 text-center';
+      document.querySelectorAll('.pm-label').forEach(l=>l.textContent=name);lucide.createIcons();
+    }
+    function setMode(m){document.body.classList.toggle('mobile',m==='mob');const d=document.getElementById('btn-desk'),b=document.getElementById('btn-mob');d.classList.toggle('grad-iris',m==='desk');d.classList.toggle('text-white',m==='desk');d.classList.toggle('text-ink-500',m!=='desk');b.classList.toggle('grad-iris',m==='mob');b.classList.toggle('text-white',m==='mob');b.classList.toggle('text-ink-500',m!=='mob');lucide.createIcons();}
+    document.querySelectorAll('[data-nav]').forEach(n=>n.addEventListener('click',()=>showView(n.dataset.nav)));
+    // View toggles within a screen (grille/tableau/chronologie, kanban/calendrier, grille/liste�?�)
+    document.querySelectorAll('[data-tabbtn]').forEach(btn=>btn.addEventListener('click',()=>{
+      const g=btn.dataset.group,t=btn.dataset.tabbtn;
+      document.querySelectorAll(`[data-tabbtn][data-group="${g}"]`).forEach(b=>{const on=b===btn;b.classList.toggle('grad-iris',on);b.classList.toggle('text-white',on);b.classList.toggle('bg-ink-100',!on);b.classList.toggle('text-ink-600',!on);});
+      document.querySelectorAll(`[data-tabpane][data-group="${g}"]`).forEach(p=>p.classList.toggle('hidden',p.dataset.tabpane!==t));
+      lucide.createIcons();
+    }));
+    // Filter chips (statut) �?" masquent les lignes non concernées
+    document.querySelectorAll('[data-filter]').forEach(btn=>btn.addEventListener('click',()=>{
+      const g=btn.dataset.fgroup,v=btn.dataset.filter;
+      document.querySelectorAll(`[data-filter][data-fgroup="${g}"]`).forEach(b=>{const on=b===btn;b.classList.toggle('grad-iris',on);b.classList.toggle('text-white',on);b.classList.toggle('bg-ink-100',!on);b.classList.toggle('text-ink-600',!on);});
+      document.querySelectorAll(`[data-frow][data-fgroup="${g}"]`).forEach(r=>r.classList.toggle('hidden',!(v==='all'||(r.dataset.frow||'').split(' ').includes(v))));
+    }));
+    setMode('desk');showView('dashboard');lucide.createIcons();
+  </script>
+  <!-- Assistant IA (maquette) -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "Domus · NgoluApp", accent: "#6366f1", accent2: "#4f46e5",
+    greeting: "Bonjour 👋 Je suis l’assistant IA de Domus. Je surveille les loyers, les baux, les biens et la maintenance pour t’aider à optimiser ta gestion locative. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quels loyers sont en retard ?", "Quel bien est le moins rentable ?", "Rédige une relance locataire", "Quand renouveler les baux ?"],
+    reco: [
+      {icon:"🏠", tag:"Loyers", title:"3 loyers en retard", text:"1,4 M FC impayés. Je peux générer une relance groupée — le modèle de courrier est prêt."},
+      {icon:"📑", tag:"Baux", title:"2 baux expirent sous 45 j", text:"Propose le renouvellement maintenant pour éviter une vacance locative."},
+      {icon:"🔧", tag:"Maintenance", title:"Bien de Limete coûteux", text:"4 tickets de maintenance par mois. Un audit ponctuel réduirait les coûts récurrents."},
+      {icon:"📈", tag:"Rendement", title:"Studio Gombe sous-évalué", text:"Loué 12 % sous le prix du marché. Réévalue le loyer au prochain renouvellement."}
+    ],
+    replies: [
+      {k:["loyer","retard","impay","paiement"], a:"3 loyers sont en retard, soit 1,4 M FC :\n\n• Locataire A — 15 j de retard\n• Locataire B — 8 j\n• Locataire C — 5 j\n\nJe te conseille une relance graduée (rappel courtois puis mise en demeure). Je peux rédiger les courriers."},
+      {k:["bail","renouvel","expire","échéance"], a:"2 baux arrivent à échéance dans 45 j. Pour éviter la vacance, contacte les locataires dès maintenant et propose le renouvellement. Je peux préparer les avenants."},
+      {k:["bien","rentab","rendement","rentable"], a:"Le bien le moins rentable est le studio de Gombe : loué 12 % sous le marché et 1 mois de vacance cette année. Une réévaluation au renouvellement améliorerait ton rendement net."},
+      {k:["relance","locataire","courrier","lettre"], a:"Modèle de relance :\n\n« Madame/Monsieur, sauf erreur de notre part, le loyer de [mois] d’un montant de [montant] reste impayé. Merci de régulariser sous 8 jours… »\n\nDonne-moi le locataire et le montant, je personnalise."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
+</body>
+</html>

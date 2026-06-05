@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 function stripHtml(html) {
   var doc = new DOMParser().parseFromString(html, "text/html");
@@ -179,7 +179,8 @@ export default function invoiceGenerator(
   });
 
   //====================== Main table items ===============================
-  doc.autoTable({
+  // jspdf-autotable v5 : autoTable(doc, options) au lieu de doc.autoTable(options).
+  autoTable(doc, {
     startY: Math.max(customerInfoStartY, InvoiceStartY),
     head: [tableHead],
     body: tableBody,
@@ -203,14 +204,14 @@ export default function invoiceGenerator(
     settings.bottomLeftFontSize ? settings.bottomLeftFontSize : 8
   );
   // Calculate Y-coordinate for additional content
-  let startYForAdditionalContent = doc.autoTable.previous.finalY + 10;
+  let startYForAdditionalContent = doc.lastAutoTable.finalY + 10;
   doc.setDrawColor(0);
   doc.setLineWidth(0.1);
   doc.line(
     14,
-    doc.autoTable.previous.finalY,
+    doc.lastAutoTable.finalY,
     pageWidth - 14,
-    doc.autoTable.previous.finalY
+    doc.lastAutoTable.finalY
   );
 
   // left side box width

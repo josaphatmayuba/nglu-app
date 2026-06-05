@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RH — Ressources humaines · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        teal:{50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',300:'#5eead4',400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59'},
+        sky:{50:'#f0f9ff',100:'#e0f2fe',400:'#38bdf8',500:'#0ea5e9',600:'#0284c7'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e7ecec;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-teal{background:linear-gradient(135deg,#14b8a6 0%,#0d9488 55%,#0e7490 100%);}
+    .grad-sky{background:linear-gradient(135deg,#38bdf8 0%,#0ea5e9 60%,#0284c7 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#0f2b29 0%,#0b1f1d 55%,#06100f 100%);}
+    .text-grad{background:linear-gradient(135deg,#14b8a6,#0d9488);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #e3ebea;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;}
+    .navlink{cursor:pointer;}.nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}.nav-active [data-lucide]{color:#2dd4bf!important;}
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}.mob-only{display:none;}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:780px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(6,16,15,.55),0 0 0 11px #0b1f1d,0 0 0 13px #0f2b29;display:flex;flex-direction:column;background:#f6faf9;}
+    body.mobile .desk-side{display:none;}body.mobile .mob-only{display:flex;}body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .browser-chrome{display:none;}body.mobile .pad{padding:16px!important;}body.mobile .g2,body.mobile .g3,body.mobile .g4{grid-template-columns:1fr!important;}
+    body:not(.mobile) #stage{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(6,16,15,.4);border:1px solid #d7e3e1;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:620px;}body:not(.mobile) #scroll{flex:1;background:#f6faf9;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    .mob-home{display:none;}body.mobile .mob-home{display:block;}body.mobile .desk-only{display:none;}
+    .actile{min-height:84px;}
+    .av{display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex:none;}
+  </style>
+</head>
+<body>
+  <div class="max-w-[1320px] mx-auto px-6 pt-8 pb-5 flex items-center gap-4 flex-wrap">
+    <div class="w-11 h-11 rounded-2xl grad-teal flex items-center justify-center shadow-lg shadow-teal-500/30"><i data-lucide="users-round" class="text-white w-5 h-5"></i></div>
+    <div><h1 class="font-display text-xl font-700 tracking-tight"><span class="text-grad">RH</span> NgoluApp</h1><p class="text-ink-500 text-[13px]">Ressources humaines · ONG — clique les menus</p></div>
+    <span class="chip bg-teal-50 text-teal-700 ml-2">Module RH</span>
+    <div class="ml-auto flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+      <button id="btn-desk" onclick="setMode('desk')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 bg-ink-100"><i data-lucide="monitor" class="w-4 h-4"></i> Bureau</button>
+      <button id="btn-mob" onclick="setMode('mob')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 text-ink-500"><i data-lucide="smartphone" class="w-4 h-4"></i> Mobile</button>
+    </div>
+  </div>
+
+  <div id="stage"><div id="frame">
+    <div class="browser-chrome flex items-center gap-2 px-4 h-11 bg-ink-100 border-b border-ink-200">
+      <span class="w-3 h-3 rounded-full bg-rose-400"></span><span class="w-3 h-3 rounded-full bg-amber-400"></span><span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+      <div class="ml-3 flex-1 max-w-md h-6 rounded-md bg-white border border-ink-200 flex items-center px-3 text-[11px] text-ink-400"><i data-lucide="lock" class="w-3 h-3 mr-1.5"></i> ongdngolu.org/admin/rh</div>
+    </div>
+    <div id="shell">
+      <aside class="desk-side w-60 grad-dark text-white p-4 flex flex-col gap-1 flex-none">
+        <div class="flex items-center gap-2.5 px-2 py-3 mb-1"><div class="w-8 h-8 rounded-xl grad-teal flex items-center justify-center"><i data-lucide="users-round" class="w-4 h-4"></i></div><div class="font-display font-600 text-[15px]">RH NgoluApp</div></div>
+        <a data-nav="dashboard" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Équipe</div>
+        <a data-nav="employes" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="users" class="w-4 h-4"></i> Employés</a>
+        <a data-nav="contrats" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="file-text" class="w-4 h-4"></i> Contrats</a>
+        <a data-nav="dossiers" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="folder" class="w-4 h-4"></i> Dossiers &amp; documents</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Temps</div>
+        <a data-nav="presences" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="fingerprint" class="w-4 h-4"></i> Présences &amp; pointage</a>
+        <a data-nav="conges" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="palmtree" class="w-4 h-4"></i> Congés &amp; absences</a>
+        <a data-nav="timesheet" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="timer" class="w-4 h-4"></i> Timesheet (projets)</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Paie &amp; rémunération</div>
+        <a data-nav="paie" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="wallet" class="w-4 h-4"></i> Paie</a>
+        <a data-nav="remuneration" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="banknote" class="w-4 h-4"></i> Rémunération</a>
+        <a data-nav="frais" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="receipt" class="w-4 h-4"></i> Frais &amp; avances</a>
+        <a data-nav="declarations" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="file-check-2" class="w-4 h-4"></i> Déclarations sociales</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Développement</div>
+        <a data-nav="performance" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="target" class="w-4 h-4"></i> Performance</a>
+        <a data-nav="formation" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="graduation-cap" class="w-4 h-4"></i> Formation</a>
+        <a data-nav="recrutement" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="user-plus" class="w-4 h-4"></i> Recrutement</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Structure &amp; pilotage</div>
+        <a data-nav="organigramme" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="network" class="w-4 h-4"></i> Postes &amp; départements</a>
+        <a data-nav="reporting" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="bar-chart-3" class="w-4 h-4"></i> Reporting RH</a>
+        <a data-nav="selfservice" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="circle-user" class="w-4 h-4"></i> Espace employé</a>
+        <div class="mt-auto flex items-center gap-3 px-2 py-2 rounded-xl"><div class="w-9 h-9 rounded-full grad-teal av text-[12px]">AK</div><div class="text-[12px] leading-tight"><div class="font-500">A. Kalala</div><div class="text-ink-400 text-[11px]">Responsable RH</div></div></div>
+      </aside>
+      <div class="mob-only items-center justify-between px-5 pt-9 pb-4 grad-dark text-white flex-none"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl grad-teal flex items-center justify-center"><i data-lucide="users-round" class="w-4 h-4"></i></div><span id="mtitle" class="font-display font-600 text-[16px]">Tableau de bord</span></div><div class="w-9 h-9 rounded-full grad-teal av text-[12px]">AK</div></div>
+
+      <main id="scroll" class="overflow-y-auto">
+        <!-- ════════════ DASHBOARD ════════════ -->
+        <section data-view="dashboard" class="view active pad p-6">
+          <!-- Accueil simple mobile -->
+          <div class="mob-home space-y-4">
+            <div class="card p-4">
+              <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 flex items-center gap-1.5"><i data-lucide="bell" class="w-3.5 h-3.5 text-rose-500"></i> À traiter aujourd'hui</div>
+              <a data-nav="conges" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center flex-none"><i data-lucide="palmtree" class="w-4 h-4 text-teal-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">5 demandes de congé</div><div class="text-[12px] text-ink-400">en attente d'approbation</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="paie" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center flex-none"><i data-lucide="wallet" class="w-4 h-4 text-sky-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">Paie de juin à valider</div><div class="text-[12px] text-ink-400">42 bulletins · 28,4 M FC</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="employes" class="navlink flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="file-clock" class="w-4 h-4 text-amber-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">2 contrats expirent</div><div class="text-[12px] text-ink-400">dans moins de 30 jours</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <a data-nav="presences" class="navlink card actile p-4 grad-teal text-white flex flex-col justify-between"><i data-lucide="fingerprint" class="w-6 h-6"></i><div class="font-600 text-[14px] leading-tight">Pointer<br>la présence</div></a>
+              <a data-nav="conges" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="palmtree" class="w-6 h-6 text-teal-600"></i><div class="font-600 text-[14px] leading-tight">Demander<br>un congé</div></a>
+              <a data-nav="paie" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="receipt" class="w-6 h-6 text-sky-600"></i><div class="font-600 text-[14px] leading-tight">Lancer<br>la paie</div></a>
+              <a data-nav="employes" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="user-plus" class="w-6 h-6 text-ink-600"></i><div class="font-600 text-[14px] leading-tight">Ajouter<br>un employé</div></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Effectif</div><div class="font-display text-2xl font-700">42</div><div class="text-[11px] text-emerald-600">+3 ce trimestre</div></div>
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Présents</div><div class="font-display text-2xl font-700">38<span class="text-ink-400 text-base">/42</span></div><div class="text-[11px] text-ink-400">90 % aujourd'hui</div></div>
+            </div>
+          </div>
+
+          <!-- Bureau -->
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3 desk-only"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Vue d'ensemble · juin 2026</p><h2 class="font-display text-2xl font-700">Ressources humaines</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouvel employé</button></div>
+          <div class="fltbar flex items-center gap-2 flex-wrap mb-4 desk-only" data-scope="rh-dash" data-accent="grad-teal">
+            <div class="inline-flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+            </div>
+            <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+              <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+              <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+            </div>
+            <span class="text-[11px] text-ink-400 ml-1">Période appliquée aux indicateurs</span>
+          </div>
+          <div class="g4 mb-4 desk-only">
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Effectif total</span><i data-lucide="users" class="w-4 h-4 text-teal-500"></i></div><div class="font-display text-2xl font-700 mt-1">42</div><div class="text-[11px] text-emerald-600 mt-1">+3 ce trimestre</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Présents aujourd'hui</span><i data-lucide="fingerprint" class="w-4 h-4 text-sky-500"></i></div><div class="font-display text-2xl font-700 mt-1">38<span class="text-ink-400 text-lg">/42</span></div><div class="text-[11px] text-ink-400 mt-1">2 congés · 2 missions</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-amber-600 font-500">Congés en attente</span><i data-lucide="palmtree" class="w-4 h-4 text-amber-500"></i></div><div class="font-display text-2xl font-700 mt-1">5</div><div class="text-[11px] text-amber-600 mt-1">à approuver</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Masse salariale / mois</span><i data-lucide="wallet" class="w-4 h-4 text-teal-500"></i></div><div class="font-display text-2xl font-700 mt-1">28,4 M FC</div><div class="text-[11px] text-ink-400 mt-1">+ 12,3 k$ (expatriés)</div></div>
+          </div>
+          <div class="g3 desk-only">
+            <div class="card p-5" style="grid-column:span 2"><div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Effectif par département</h3><a class="navlink text-[12px] text-teal-600 font-500" data-nav="organigramme">Organigramme</a></div>
+              <div class="space-y-3 text-[13px]">
+                <div><div class="flex justify-between mb-1"><span class="font-500">Programmes &amp; terrain</span><span class="text-ink-400">16</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:80%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span class="font-500">Logistique</span><span class="text-ink-400">9</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-sky" style="width:45%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span class="font-500">Finances &amp; compta</span><span class="text-ink-400">6</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-teal-400" style="width:30%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span class="font-500">Administration &amp; RH</span><span class="text-ink-400">5</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-sky-400" style="width:25%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span class="font-500">Direction &amp; coordination</span><span class="text-ink-400">6</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-ink-400" style="width:30%"></div></div></div>
+              </div>
+            </div>
+            <div class="card p-5"><h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4 text-rose-500"></i> À traiter</h3>
+              <a data-nav="conges" class="navlink flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center flex-none"><i data-lucide="palmtree" class="w-4 h-4 text-teal-600"></i></div><div class="text-[12px]"><div class="font-500">5 demandes de congé</div><div class="text-ink-400">2 urgentes</div></div></a>
+              <a data-nav="paie" class="navlink flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center flex-none"><i data-lucide="wallet" class="w-4 h-4 text-sky-600"></i></div><div class="text-[12px]"><div class="font-500">Paie de juin à valider</div><div class="text-ink-400">42 bulletins</div></div></a>
+              <a data-nav="employes" class="navlink flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="file-clock" class="w-4 h-4 text-amber-600"></i></div><div class="text-[12px]"><div class="font-500">2 contrats expirent</div><div class="text-ink-400">&lt; 30 jours</div></div></a>
+              <div class="flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-none"><i data-lucide="cake" class="w-4 h-4 text-emerald-600"></i></div><div class="text-[12px]"><div class="font-500">Anniversaire</div><div class="text-ink-400">G. Mbuyi · demain</div></div></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ EMPLOYÉS ════════════ -->
+        <section data-view="employes" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Annuaire</p><h2 class="font-display text-2xl font-700">Employés</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouvel employé</button></div>
+          <div class="flex items-center gap-2 mb-4 flex-wrap">
+            <div class="flex-1 min-w-[180px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-ink-400 text-[13px]"><i data-lucide="search" class="w-4 h-4"></i> Rechercher un employé, poste, matricule…</div>
+            <button class="h-10 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-500 flex items-center gap-1.5"><i data-lucide="filter" class="w-4 h-4"></i> Département</button>
+            <button class="h-10 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-500 flex items-center gap-1.5"><i data-lucide="list" class="w-4 h-4"></i> Liste</button>
+          </div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Actifs</div><div class="font-display text-xl font-700">40</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">En congé</div><div class="font-display text-xl font-700">2</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Nouveaux (30 j)</div><div class="font-display text-xl font-700 text-emerald-600">3</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Contrats &lt; 30 j</div><div class="font-display text-xl font-700 text-amber-600">2</div></div>
+          </div>
+          <div class="g3">
+            <!-- carte employé -->
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl grad-teal av text-[15px]">JM</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">Joseph Mwepu</div><div class="text-[12px] text-ink-500 truncate">Coordinateur programmes</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Programmes &amp; terrain</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDI · matricule NG-014</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 970 112 233</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">1 250 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl grad-sky av text-[15px]">GM</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">Grâce Mbuyi</div><div class="text-[12px] text-ink-500 truncate">Comptable</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Finances &amp; compta</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDI · matricule NG-021</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 815 442 100</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">980 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl av text-[15px]" style="background:#f59e0b">PK</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">Patrick Kabongo</div><div class="text-[12px] text-ink-500 truncate">Logisticien</div></div><span class="chip bg-amber-100 text-amber-700 ml-auto">En congé</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Logistique</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDD · expire 31 juil. 2026</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 998 220 145</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">760 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl av text-[15px]" style="background:#7c3aed">SI</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">Sarah Ilunga</div><div class="text-[12px] text-ink-500 truncate">Chargée de programme</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Programmes &amp; terrain</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDI · matricule NG-018</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 822 909 011</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">1 050 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl av text-[15px]" style="background:#0891b2">DN</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">David Nzuzi</div><div class="text-[12px] text-ink-500 truncate">Chauffeur</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Logistique</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDI · matricule NG-009</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 977 654 321</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">520 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+            <div class="card p-4">
+              <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl av text-[15px]" style="background:#0d9488">AK</div><div class="min-w-0"><div class="font-600 text-[14px] truncate">Anny Kalala</div><div class="text-[12px] text-ink-500 truncate">Responsable RH</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-auto">Actif</span></div>
+              <div class="mt-3 pt-3 border-t border-ink-100 space-y-1.5 text-[12px] text-ink-500">
+                <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5"></i> Administration &amp; RH</div>
+                <div class="flex items-center gap-2"><i data-lucide="badge-check" class="w-3.5 h-3.5"></i> CDI · matricule NG-003</div>
+                <div class="flex items-center gap-2"><i data-lucide="phone" class="w-3.5 h-3.5"></i> +243 810 555 777</div>
+              </div>
+              <div class="mt-3 flex items-center justify-between"><span class="text-[12px] font-600">1 400 000 FC / mois</span><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1">Profil <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ PRÉSENCES ════════════ -->
+        <section data-view="presences" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Pointage · jeudi 5 juin 2026</p><h2 class="font-display text-2xl font-700">Présences &amp; pointage</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="fingerprint" class="w-4 h-4"></i> Pointer maintenant</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Présents</span><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500"></i></div><div class="font-display text-2xl font-700 mt-1">38</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-amber-600">Retards</span><i data-lucide="clock-alert" class="w-4 h-4 text-amber-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-amber-600">3</div></div>
+            <div class="card p-4 ring-1 ring-rose-200 bg-rose-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-rose-600">Absents</span><i data-lucide="user-x" class="w-4 h-4 text-rose-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-rose-600">1</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">En mission</span><i data-lucide="plane" class="w-4 h-4 text-sky-500"></i></div><div class="font-display text-2xl font-700 mt-1">2</div></div>
+          </div>
+          <div class="card p-5">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Feuille de présence du jour</h3><span class="text-[12px] text-ink-400">90 % de présence</span></div>
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="presences" data-accent="grad-teal">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher un employé, un statut…">
+              </div>
+            </div>
+            <div class="divide-y divide-ink-100">
+              <div class="flt-row flex items-center gap-3 py-2.5" data-scope="presences" data-text="joseph mwepu programmes present"><div class="w-9 h-9 rounded-full grad-teal av text-[11px]">JM</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Joseph Mwepu</div><div class="text-[11px] text-ink-400">Programmes</div></div><div class="text-[12px] text-ink-500 text-right"><div>08:02 → —</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-2">Présent</span></div>
+              <div class="flt-row flex items-center gap-3 py-2.5" data-scope="presences" data-text="grace mbuyi finances present"><div class="w-9 h-9 rounded-full grad-sky av text-[11px]">GM</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Grâce Mbuyi</div><div class="text-[11px] text-ink-400">Finances</div></div><div class="text-[12px] text-ink-500 text-right"><div>07:55 → —</div></div><span class="chip bg-emerald-100 text-emerald-700 ml-2">Présent</span></div>
+              <div class="flt-row flex items-center gap-3 py-2.5" data-scope="presences" data-text="sarah ilunga programmes retard"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#7c3aed">SI</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Sarah Ilunga</div><div class="text-[11px] text-ink-400">Programmes</div></div><div class="text-[12px] text-amber-600 text-right"><div>09:18 → —</div></div><span class="chip bg-amber-100 text-amber-700 ml-2">Retard</span></div>
+              <div class="flt-row flex items-center gap-3 py-2.5" data-scope="presences" data-text="david nzuzi logistique mission terrain"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#0891b2">DN</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">David Nzuzi</div><div class="text-[11px] text-ink-400">Logistique</div></div><div class="text-[12px] text-sky-600 text-right"><div>Mission terrain</div></div><span class="chip bg-sky-100 text-sky-700 ml-2">Mission</span></div>
+              <div class="flt-row flex items-center gap-3 py-2.5" data-scope="presences" data-text="rachel tshibanda logistique absent non pointe"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#94a3b8">RT</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Rachel Tshibanda</div><div class="text-[11px] text-ink-400">Logistique</div></div><div class="text-[12px] text-rose-500 text-right"><div>Non pointé</div></div><span class="chip bg-rose-100 text-rose-700 ml-2">Absent</span></div>
+              <div class="flt-empty py-6 text-center text-ink-400 text-[13px]" data-scope="presences" style="display:none">Aucun employé pour ces filtres.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ PAIE ════════════ -->
+        <section data-view="paie" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Période · juin 2026</p><h2 class="font-display text-2xl font-700">Paie</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="play" class="w-4 h-4"></i> Lancer la paie</button></div>
+          <div class="grad-teal rounded-2xl p-5 text-white mb-4 flex items-end justify-between flex-wrap gap-3">
+            <div><div class="text-[12px] text-white/80 flex items-center gap-1"><i data-lucide="wallet" class="w-4 h-4"></i> Net à payer · juin</div><div class="font-display text-3xl font-700">24,1 M FC</div><div class="text-[12px] text-white/80">+ 10,8 k$ (5 expatriés)</div></div>
+            <div class="text-right text-[12px] text-white/85"><div>Brut : 28,4 M FC</div><div>Cotisations CNSS : 3,1 M FC</div><div>IPR (impôt) : 1,2 M FC</div></div>
+          </div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Bulletins</div><div class="font-display text-xl font-700">42</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Validés</div><div class="font-display text-xl font-700 text-emerald-600">0</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">En attente</div><div class="font-display text-xl font-700 text-amber-600">42</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Via mobile money</div><div class="font-display text-xl font-700">31</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Bulletins · juin 2026</h3><button class="text-[12px] text-teal-600 font-500 flex items-center gap-1"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button></div>
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="paie" data-accent="grad-teal">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher un employé, un poste…">
+              </div>
+            </div>
+            <table class="w-full text-[13px] min-w-[560px]">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Employé</th><th class="text-right font-500">Brut</th><th class="text-right font-500">Retenues</th><th class="text-right font-500">Net</th><th class="text-right font-500">Statut</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="flt-row" data-scope="paie" data-text="joseph mwepu coordinateur"><td class="py-2.5"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full grad-teal av text-[10px]">JM</div><div><div class="font-500">Joseph Mwepu</div><div class="text-[11px] text-ink-400">Coordinateur</div></div></div></td><td class="text-right">1 250 000</td><td class="text-right text-ink-400">187 500</td><td class="text-right font-600">1 062 500</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">En attente</span></td></tr>
+                <tr class="flt-row" data-scope="paie" data-text="grace mbuyi comptable"><td class="py-2.5"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full grad-sky av text-[10px]">GM</div><div><div class="font-500">Grâce Mbuyi</div><div class="text-[11px] text-ink-400">Comptable</div></div></div></td><td class="text-right">980 000</td><td class="text-right text-ink-400">147 000</td><td class="text-right font-600">833 000</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">En attente</span></td></tr>
+                <tr class="flt-row" data-scope="paie" data-text="sarah ilunga chargee programme"><td class="py-2.5"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full av text-[10px]" style="background:#7c3aed">SI</div><div><div class="font-500">Sarah Ilunga</div><div class="text-[11px] text-ink-400">Chargée prog.</div></div></div></td><td class="text-right">1 050 000</td><td class="text-right text-ink-400">157 500</td><td class="text-right font-600">892 500</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">En attente</span></td></tr>
+                <tr class="flt-row" data-scope="paie" data-text="david nzuzi chauffeur"><td class="py-2.5"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-full av text-[10px]" style="background:#0891b2">DN</div><div><div class="font-500">David Nzuzi</div><div class="text-[11px] text-ink-400">Chauffeur</div></div></div></td><td class="text-right">520 000</td><td class="text-right text-ink-400">78 000</td><td class="text-right font-600">442 000</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">En attente</span></td></tr>
+                <tr class="flt-empty" data-scope="paie" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucun bulletin pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Retenues = CNSS (5 %) + IPR. Versement par M-Pesa / Airtel Money / virement selon l'employé.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ CONGÉS ════════════ -->
+        <section data-view="conges" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Absences</p><h2 class="font-display text-2xl font-700">Congés &amp; absences</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle demande</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">En attente</div><div class="font-display text-xl font-700 text-amber-600">5</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Approuvés (mois)</div><div class="font-display text-xl font-700 text-emerald-600">8</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">En congé aujourd'hui</div><div class="font-display text-xl font-700">2</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Solde moyen</div><div class="font-display text-xl font-700">11 j</div></div>
+          </div>
+          <div class="g3">
+            <div class="card p-5" style="grid-column:span 2">
+              <h3 class="font-display font-600 text-[15px] mb-3">Demandes à traiter</h3>
+              <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="conges" data-accent="grad-teal">
+                <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                  <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+                </div>
+                <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                  <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                  <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher (employé, type de congé)…">
+                </div>
+              </div>
+              <div class="divide-y divide-ink-100">
+                <div class="flt-row flex items-center gap-3 py-3" data-scope="conges" data-text="patrick kabongo conge annuel"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#f59e0b">PK</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Patrick Kabongo · <span class="text-ink-400 font-400">Congé annuel</span></div><div class="text-[11px] text-ink-400">28 juin → 12 juil. · 10 j ouvrés</div></div><div class="flex gap-1.5"><button class="h-8 px-2.5 rounded-lg bg-emerald-500 text-white text-[12px] font-500 flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5"></i></button><button class="h-8 px-2.5 rounded-lg bg-white border border-ink-200 text-rose-500 text-[12px] flex items-center gap-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button></div></div>
+                <div class="flt-row flex items-center gap-3 py-3" data-scope="conges" data-text="grace mbuyi conge maladie certificat"><div class="w-9 h-9 rounded-full grad-sky av text-[11px]">GM</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Grâce Mbuyi · <span class="text-ink-400 font-400">Congé maladie</span></div><div class="text-[11px] text-ink-400">10 juin → 12 juin · 3 j · certificat joint</div></div><div class="flex gap-1.5"><button class="h-8 px-2.5 rounded-lg bg-emerald-500 text-white text-[12px] font-500 flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5"></i></button><button class="h-8 px-2.5 rounded-lg bg-white border border-ink-200 text-rose-500 text-[12px] flex items-center gap-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button></div></div>
+                <div class="flt-row flex items-center gap-3 py-3" data-scope="conges" data-text="sarah ilunga conge maternite"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#7c3aed">SI</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Sarah Ilunga · <span class="text-ink-400 font-400">Congé maternité</span></div><div class="text-[11px] text-ink-400">1 juil. → 22 sept. · 14 semaines</div></div><div class="flex gap-1.5"><button class="h-8 px-2.5 rounded-lg bg-emerald-500 text-white text-[12px] font-500 flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5"></i></button><button class="h-8 px-2.5 rounded-lg bg-white border border-ink-200 text-rose-500 text-[12px] flex items-center gap-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button></div></div>
+                <div class="flt-empty py-6 text-center text-ink-400 text-[13px]" data-scope="conges" style="display:none">Aucune demande pour ces filtres.</div>
+              </div>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="calendar-days" class="w-4 h-4 text-teal-600"></i> Qui est absent</h3>
+              <div class="space-y-3 text-[12px]">
+                <div class="flex items-center gap-2"><div class="w-7 h-7 rounded-full av text-[10px]" style="background:#f59e0b">PK</div><div><div class="font-500">Patrick Kabongo</div><div class="text-ink-400">Congé annuel · revient 12 juil.</div></div></div>
+                <div class="flex items-center gap-2"><div class="w-7 h-7 rounded-full av text-[10px]" style="background:#0d9488">FM</div><div><div class="font-500">Franck Mukendi</div><div class="text-ink-400">Récupération · 1 jour</div></div></div>
+              </div>
+              <div class="mt-4 pt-3 border-t border-ink-100 text-[12px] text-ink-500">
+                <div class="flex justify-between py-1"><span>Congé annuel</span><span class="font-500 text-ink-700">26 j / an</span></div>
+                <div class="flex justify-between py-1"><span>Maladie</span><span class="font-500 text-ink-700">sur certificat</span></div>
+                <div class="flex justify-between py-1"><span>Maternité</span><span class="font-500 text-ink-700">14 sem.</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ ORGANIGRAMME ════════════ -->
+        <section data-view="organigramme" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Structure</p><h2 class="font-display text-2xl font-700">Postes &amp; départements</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau poste</button></div>
+          <div class="card p-6 mb-5">
+            <div class="flex flex-col items-center">
+              <div class="px-4 py-2.5 rounded-xl grad-dark text-white text-center"><div class="font-600 text-[13px]">Direction nationale</div><div class="text-[11px] text-ink-300">1 poste</div></div>
+              <div class="w-px h-6 bg-ink-200"></div>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full">
+                <div class="px-3 py-2.5 rounded-xl bg-teal-50 border border-teal-200 text-center"><div class="font-600 text-[13px] text-teal-800">Programmes</div><div class="text-[11px] text-teal-600">16 personnes</div></div>
+                <div class="px-3 py-2.5 rounded-xl bg-sky-50 border border-sky-200 text-center"><div class="font-600 text-[13px] text-sky-800">Logistique</div><div class="text-[11px] text-sky-600">9 personnes</div></div>
+                <div class="px-3 py-2.5 rounded-xl bg-ink-50 border border-ink-200 text-center"><div class="font-600 text-[13px]">Finances</div><div class="text-[11px] text-ink-500">6 personnes</div></div>
+                <div class="px-3 py-2.5 rounded-xl bg-ink-50 border border-ink-200 text-center"><div class="font-600 text-[13px]">Admin &amp; RH</div><div class="text-[11px] text-ink-500">5 personnes</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="g2">
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Départements</h3>
+              <div class="divide-y divide-ink-100 text-[13px]">
+                <div class="flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center flex-none"><i data-lucide="target" class="w-4 h-4 text-teal-600"></i></span><div class="flex-1"><div class="font-500">Programmes &amp; terrain</div><div class="text-[11px] text-ink-400">Resp. J. Mwepu</div></div><span class="chip bg-ink-100 text-ink-600">16</span></div>
+                <div class="flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center flex-none"><i data-lucide="truck" class="w-4 h-4 text-sky-600"></i></span><div class="flex-1"><div class="font-500">Logistique</div><div class="text-[11px] text-ink-400">Resp. R. Tshibanda</div></div><span class="chip bg-ink-100 text-ink-600">9</span></div>
+                <div class="flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-none"><i data-lucide="calculator" class="w-4 h-4 text-emerald-600"></i></span><div class="flex-1"><div class="font-500">Finances &amp; compta</div><div class="text-[11px] text-ink-400">Resp. G. Mbuyi</div></div><span class="chip bg-ink-100 text-ink-600">6</span></div>
+                <div class="flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="users-round" class="w-4 h-4 text-amber-600"></i></span><div class="flex-1"><div class="font-500">Administration &amp; RH</div><div class="text-[11px] text-ink-400">Resp. A. Kalala</div></div><span class="chip bg-ink-100 text-ink-600">5</span></div>
+              </div>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Postes (désignations)</h3>
+              <div class="flex flex-wrap gap-2 text-[12px]">
+                <span class="chip bg-teal-50 text-teal-700">Coordinateur programmes</span>
+                <span class="chip bg-teal-50 text-teal-700">Chargé de programme</span>
+                <span class="chip bg-teal-50 text-teal-700">Agent de terrain</span>
+                <span class="chip bg-sky-50 text-sky-700">Logisticien</span>
+                <span class="chip bg-sky-50 text-sky-700">Chauffeur</span>
+                <span class="chip bg-sky-50 text-sky-700">Magasinier</span>
+                <span class="chip bg-emerald-50 text-emerald-700">Comptable</span>
+                <span class="chip bg-emerald-50 text-emerald-700">Caissier</span>
+                <span class="chip bg-amber-50 text-amber-700">Responsable RH</span>
+                <span class="chip bg-amber-50 text-amber-700">Assistant administratif</span>
+                <span class="chip bg-ink-100 text-ink-600">Directeur national</span>
+              </div>
+              <button class="mt-4 h-9 px-3 rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un poste</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ PERFORMANCE ════════════ -->
+        <section data-view="performance" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Évaluations · cycle S1 2026</p><h2 class="font-display text-2xl font-700">Performance</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle évaluation</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Évaluations faites</div><div class="font-display text-xl font-700">26<span class="text-ink-400 text-base">/42</span></div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Note moyenne</div><div class="font-display text-xl font-700 text-teal-600">3,9<span class="text-ink-400 text-base">/5</span></div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Objectifs atteints</div><div class="font-display text-xl font-700 text-emerald-600">72 %</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">À faire</div><div class="font-display text-xl font-700 text-amber-600">16</div></div>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-display font-600 text-[15px] mb-3">Évaluations par employé</h3>
+            <div class="divide-y divide-ink-100">
+              <div class="flex items-center gap-3 py-3"><div class="w-9 h-9 rounded-full grad-teal av text-[11px]">JM</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Joseph Mwepu</div><div class="text-[11px] text-ink-400">Coordinateur programmes</div></div><div class="w-32 hidden sm:block"><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:88%"></div></div></div><span class="font-display font-700 text-[14px] w-10 text-right">4,4</span><span class="chip bg-emerald-100 text-emerald-700 ml-2">Évalué</span></div>
+              <div class="flex items-center gap-3 py-3"><div class="w-9 h-9 rounded-full grad-sky av text-[11px]">GM</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Grâce Mbuyi</div><div class="text-[11px] text-ink-400">Comptable</div></div><div class="w-32 hidden sm:block"><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:80%"></div></div></div><span class="font-display font-700 text-[14px] w-10 text-right">4,0</span><span class="chip bg-emerald-100 text-emerald-700 ml-2">Évalué</span></div>
+              <div class="flex items-center gap-3 py-3"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#0891b2">DN</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">David Nzuzi</div><div class="text-[11px] text-ink-400">Chauffeur</div></div><div class="w-32 hidden sm:block"><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-amber-400" style="width:60%"></div></div></div><span class="font-display font-700 text-[14px] w-10 text-right">3,0</span><span class="chip bg-amber-100 text-amber-700 ml-2">À revoir</span></div>
+              <div class="flex items-center gap-3 py-3"><div class="w-9 h-9 rounded-full av text-[11px]" style="background:#f59e0b">PK</div><div class="flex-1 min-w-0"><div class="font-500 text-[13px]">Patrick Kabongo</div><div class="text-[11px] text-ink-400">Logisticien</div></div><div class="w-32 hidden sm:block"><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-ink-200" style="width:0%"></div></div></div><span class="font-display font-700 text-[14px] w-10 text-right text-ink-300">—</span><span class="chip bg-ink-100 text-ink-500 ml-2">En attente</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ RECRUTEMENT ════════════ -->
+        <section data-view="recrutement" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Pipeline</p><h2 class="font-display text-2xl font-700">Recrutement</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle offre</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Offres ouvertes</div><div class="font-display text-xl font-700">3</div><div class="text-[11px] text-ink-400 mt-1">Agent terrain · Comptable · Chauffeur</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Candidatures</div><div class="font-display text-xl font-700">37</div><div class="text-[11px] text-ink-400 mt-1">12 cette semaine</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Entretiens prévus</div><div class="font-display text-xl font-700 text-sky-600">6</div><div class="text-[11px] text-ink-400 mt-1">cette semaine</div></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="bg-ink-50 rounded-2xl p-3">
+              <div class="flex items-center justify-between mb-2 px-1"><span class="text-[12px] font-600">Candidatures</span><span class="chip bg-white text-ink-500">18</span></div>
+              <div class="space-y-2">
+                <div class="card p-3"><div class="font-500 text-[13px]">Esther Lukusa</div><div class="text-[11px] text-ink-400">Agent de terrain</div></div>
+                <div class="card p-3"><div class="font-500 text-[13px]">Yves Kanku</div><div class="text-[11px] text-ink-400">Comptable</div></div>
+                <div class="card p-3"><div class="font-500 text-[13px]">Bijou Ngalula</div><div class="text-[11px] text-ink-400">Agent de terrain</div></div>
+              </div>
+            </div>
+            <div class="bg-ink-50 rounded-2xl p-3">
+              <div class="flex items-center justify-between mb-2 px-1"><span class="text-[12px] font-600">Présélection</span><span class="chip bg-white text-ink-500">9</span></div>
+              <div class="space-y-2">
+                <div class="card p-3"><div class="font-500 text-[13px]">Aimé Banza</div><div class="text-[11px] text-ink-400">Chauffeur</div></div>
+                <div class="card p-3"><div class="font-500 text-[13px]">Nadège Mwamba</div><div class="text-[11px] text-ink-400">Comptable</div></div>
+              </div>
+            </div>
+            <div class="bg-ink-50 rounded-2xl p-3">
+              <div class="flex items-center justify-between mb-2 px-1"><span class="text-[12px] font-600">Entretien</span><span class="chip bg-sky-100 text-sky-700">6</span></div>
+              <div class="space-y-2">
+                <div class="card p-3"><div class="font-500 text-[13px]">Aimé Banza</div><div class="text-[11px] text-ink-400">Chauffeur · jeu. 10 h</div></div>
+                <div class="card p-3"><div class="font-500 text-[13px]">Esther Lukusa</div><div class="text-[11px] text-ink-400">Agent terrain · ven. 14 h</div></div>
+              </div>
+            </div>
+            <div class="bg-ink-50 rounded-2xl p-3">
+              <div class="flex items-center justify-between mb-2 px-1"><span class="text-[12px] font-600">Offre / embauche</span><span class="chip bg-emerald-100 text-emerald-700">4</span></div>
+              <div class="space-y-2">
+                <div class="card p-3 ring-1 ring-emerald-200"><div class="font-500 text-[13px]">Nadège Mwamba</div><div class="text-[11px] text-emerald-600">Offre envoyée</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ CONTRATS ════════════ -->
+        <section data-view="contrats" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Cycle de vie</p><h2 class="font-display text-2xl font-700">Contrats</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau contrat</button></div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Total contrats</div><div class="font-display text-xl font-700">42</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">CDI</div><div class="font-display text-xl font-700">31</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">CDD / consultance</div><div class="font-display text-xl font-700">11</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">Expirent &lt; 30 j</div><div class="font-display text-xl font-700 text-amber-600">2</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="contrats" data-accent="grad-teal">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]"><i data-lucide="search" class="w-4 h-4 text-ink-400"></i><input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher (employé, type, statut)…"></div>
+            </div>
+            <table class="w-full text-[13px] min-w-[620px]">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Employé</th><th class="text-left font-500">Type</th><th class="text-left font-500">Début</th><th class="text-left font-500">Fin</th><th class="text-right font-500">Statut</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="flt-row" data-scope="contrats" data-text="joseph mwepu cdi actif"><td class="py-2.5 font-500">Joseph Mwepu</td><td><span class="chip bg-emerald-50 text-emerald-700">CDI</span></td><td>01/03/2022</td><td class="text-ink-400">—</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Actif</span></td></tr>
+                <tr class="flt-row" data-scope="contrats" data-text="patrick kabongo cdd expire bientot"><td class="py-2.5 font-500">Patrick Kabongo</td><td><span class="chip bg-sky-50 text-sky-700">CDD</span></td><td>01/02/2026</td><td>31/07/2026</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">Expire &lt; 30 j</span></td></tr>
+                <tr class="flt-row" data-scope="contrats" data-text="sarah ilunga cdi actif"><td class="py-2.5 font-500">Sarah Ilunga</td><td><span class="chip bg-emerald-50 text-emerald-700">CDI</span></td><td>15/09/2023</td><td class="text-ink-400">—</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Actif</span></td></tr>
+                <tr class="flt-row" data-scope="contrats" data-text="yves kanku consultance projet kinshasa"><td class="py-2.5 font-500">Yves Kanku</td><td><span class="chip bg-violet-50 text-violet-700" style="background:#f5f3ff;color:#7c3aed">Consultance</span></td><td>01/05/2026</td><td>31/12/2026</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Actif</span></td></tr>
+                <tr class="flt-empty" data-scope="contrats" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucun contrat pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Avenants, renouvellements et alertes d'échéance (&lt; 30 j) gérés par contrat. Fin de contrat → solde de tout compte.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ DOSSIERS & DOCUMENTS ════════════ -->
+        <section data-view="dossiers" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Dossier du personnel</p><h2 class="font-display text-2xl font-700">Dossiers &amp; documents</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="upload" class="w-4 h-4"></i> Téléverser</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Dossiers complets</div><div class="font-display text-xl font-700 text-emerald-600">35</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">Incomplets</div><div class="font-display text-xl font-700 text-amber-600">7</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Pièces manquantes</div><div class="font-display text-xl font-700">12</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Pièces par employé</h3>
+            <table class="w-full text-[13px] min-w-[680px]">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Employé</th><th class="text-center font-500">CV</th><th class="text-center font-500">Pièce ID</th><th class="text-center font-500">Diplôme</th><th class="text-center font-500">Contrat signé</th><th class="text-center font-500">N° CNSS</th><th class="text-center font-500">Code conduite (PSEA)</th></tr></thead>
+              <tbody class="divide-y divide-ink-100 text-center">
+                <tr><td class="py-2.5 text-left font-500">Joseph Mwepu</td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td></tr>
+                <tr><td class="py-2.5 text-left font-500">Grâce Mbuyi</td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="x-circle" class="w-4 h-4 text-rose-400 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td></tr>
+                <tr><td class="py-2.5 text-left font-500">Patrick Kabongo</td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="x-circle" class="w-4 h-4 text-rose-400 inline"></i></td><td><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td><td><i data-lucide="x-circle" class="w-4 h-4 text-rose-400 inline"></i></td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 text-teal-600"></i> Coffre numérique par employé. Le <b>code de conduite / PSEA</b> signé est requis (conformité bailleur).</p>
+          </div>
+        </section>
+
+        <!-- ════════════ TIMESHEET (projets / bailleurs) ════════════ -->
+        <section data-view="timesheet" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Allocation du temps · juin 2026</p><h2 class="font-display text-2xl font-700">Timesheet — projets &amp; bailleurs</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Rapport bailleur</button></div>
+          <div class="card p-4 mb-4 bg-teal-50/50 border-teal-200"><p class="text-[13px] text-ink-700 flex items-start gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-teal-600 mt-0.5 flex-none"></i> <span>Chaque agent répartit son temps entre les <b>projets/bailleurs</b>. C'est l'équivalent RH de l'analytique comptable — <b>exigé par les bailleurs</b> pour justifier les salaires imputés.</span></p></div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Heures saisies</div><div class="font-display text-xl font-700">6 240 h</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Taux de remplissage</div><div class="font-display text-xl font-700 text-emerald-600">92 %</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">% sur projets</div><div class="font-display text-xl font-700">78 %</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">% fonctionnement</div><div class="font-display text-xl font-700">22 %</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <table class="w-full text-[13px] min-w-[680px]">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Employé</th><th class="text-right font-500">Kongo Central</th><th class="text-right font-500">Kinshasa</th><th class="text-right font-500">Fonctionnement</th><th class="text-right font-500">Total</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Joseph Mwepu</td><td class="text-right">90 h</td><td class="text-right">50 h</td><td class="text-right">20 h</td><td class="text-right font-600">160 h</td></tr>
+                <tr><td class="py-2.5 font-500">Sarah Ilunga</td><td class="text-right">120 h</td><td class="text-right">20 h</td><td class="text-right">20 h</td><td class="text-right font-600">160 h</td></tr>
+                <tr><td class="py-2.5 font-500">Grâce Mbuyi</td><td class="text-right">40 h</td><td class="text-right">40 h</td><td class="text-right">80 h</td><td class="text-right font-600">160 h</td></tr>
+                <tr><td class="py-2.5 font-500">David Nzuzi</td><td class="text-right">60 h</td><td class="text-right">80 h</td><td class="text-right">20 h</td><td class="text-right font-600">160 h</td></tr>
+              </tbody>
+              <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5">Total équipe</td><td class="text-right">2 980 h</td><td class="text-right">1 890 h</td><td class="text-right">1 370 h</td><td class="text-right">6 240 h</td></tr></tfoot>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ RÉMUNÉRATION ════════════ -->
+        <section data-view="remuneration" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Grille &amp; primes</p><h2 class="font-display text-2xl font-700">Rémunération</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="settings-2" class="w-4 h-4"></i> Modifier la grille</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Masse salariale / mois</div><div class="font-display text-xl font-700">28,4 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Prime transport (total)</div><div class="font-display text-xl font-700">2,1 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Indemnité terrain</div><div class="font-display text-xl font-700">1,4 M FC</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Grille salariale par poste / échelon</h3>
+            <table class="w-full text-[13px] min-w-[620px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Poste / échelon</th><th class="text-right font-500">Salaire de base</th><th class="text-right font-500">Indemnités</th><th class="text-right font-500">Total brut</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Coordinateur · A3</td><td class="text-right">1 100 000</td><td class="text-right text-ink-500">150 000</td><td class="text-right font-600">1 250 000</td></tr>
+                <tr><td class="py-2.5 font-500">Chargé de programme · B2</td><td class="text-right">920 000</td><td class="text-right text-ink-500">130 000</td><td class="text-right font-600">1 050 000</td></tr>
+                <tr><td class="py-2.5 font-500">Comptable · B1</td><td class="text-right">870 000</td><td class="text-right text-ink-500">110 000</td><td class="text-right font-600">980 000</td></tr>
+                <tr><td class="py-2.5 font-500">Chauffeur · C1</td><td class="text-right">440 000</td><td class="text-right text-ink-500">80 000</td><td class="text-right font-600">520 000</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Primes &amp; indemnités configurables (transport, logement, terrain, risque). La grille alimente automatiquement la paie.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ FRAIS & AVANCES ════════════ -->
+        <section data-view="frais" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Remboursements &amp; acomptes</p><h2 class="font-display text-2xl font-700">Frais &amp; avances</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle demande</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">À rembourser / valider</div><div class="font-display text-xl font-700 text-amber-600">3</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Avances en cours</div><div class="font-display text-xl font-700">1,2 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Validé ce mois</div><div class="font-display text-xl font-700 text-emerald-600">2,7 M FC</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="frais" data-accent="grad-teal">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]"><i data-lucide="search" class="w-4 h-4 text-ink-400"></i><input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher (employé, type)…"></div>
+            </div>
+            <table class="w-full text-[13px] min-w-[620px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Employé</th><th class="text-left font-500">Type</th><th class="text-right font-500">Montant</th><th class="text-left font-500">Date</th><th class="text-right font-500">Statut</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="flt-row" data-scope="frais" data-date="2026-06-04" data-text="patrick kabongo frais mission terrain"><td class="py-2.5 font-500">Patrick Kabongo</td><td>Frais de mission</td><td class="text-right">320 000</td><td>04/06</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">À valider</span></td></tr>
+                <tr class="flt-row" data-scope="frais" data-date="2026-06-02" data-text="david nzuzi avance sur salaire"><td class="py-2.5 font-500">David Nzuzi</td><td>Avance sur salaire</td><td class="text-right">200 000</td><td>02/06</td><td class="text-right"><span class="chip bg-sky-100 text-sky-700">En cours</span></td></tr>
+                <tr class="flt-row" data-scope="frais" data-date="2026-05-29" data-text="sarah ilunga frais carburant"><td class="py-2.5 font-500">Sarah Ilunga</td><td>Carburant</td><td class="text-right">85 000</td><td>29/05</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Remboursé</span></td></tr>
+                <tr class="flt-empty" data-scope="frais" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucune demande pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ DÉCLARATIONS SOCIALES ════════════ -->
+        <section data-view="declarations" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Cotisations &amp; impôts · juin 2026</p><h2 class="font-display text-2xl font-700">Déclarations sociales &amp; fiscales</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="file-check-2" class="w-4 h-4"></i> Préparer les bordereaux</button></div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">CNSS (sécurité sociale)</div><div class="font-display text-xl font-700 num">3 124 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">INPP (formation prof.)</div><div class="font-display text-xl font-700 num">568 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">ONEM (emploi)</div><div class="font-display text-xl font-700 num">57 000</div></div>
+            <div class="card p-4 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-600">IPR (impôt salaires)</div><div class="font-display text-xl font-700 text-amber-700 num">1 240 000</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <table class="w-full text-[13px] min-w-[600px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Organisme</th><th class="text-right font-500">Base</th><th class="text-right font-500">Taux</th><th class="text-right font-500">Montant</th><th class="text-right font-500">Échéance</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">CNSS — part employeur</td><td class="text-right">20 800 000</td><td class="text-right">13 %</td><td class="text-right">2 704 000</td><td class="text-right text-ink-500">15/07</td></tr>
+                <tr><td class="py-2.5 font-500">CNSS — part salarié</td><td class="text-right">20 800 000</td><td class="text-right">5 %</td><td class="text-right">1 040 000</td><td class="text-right text-ink-500">15/07</td></tr>
+                <tr><td class="py-2.5 font-500">INPP</td><td class="text-right">20 800 000</td><td class="text-right">2 %</td><td class="text-right">416 000</td><td class="text-right text-ink-500">15/07</td></tr>
+                <tr><td class="py-2.5 font-500">ONEM</td><td class="text-right">20 800 000</td><td class="text-right">0,2 %</td><td class="text-right">42 000</td><td class="text-right text-ink-500">15/07</td></tr>
+                <tr><td class="py-2.5 font-500">IPR (impôt sur revenus)</td><td class="text-right">22 000 000</td><td class="text-right">barème</td><td class="text-right text-amber-700">1 240 000</td><td class="text-right text-ink-500">10/07</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Cotisations RDC calculées depuis la paie. Bordereaux CNSS/INPP/ONEM et déclaration IPR à la DGI.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ FORMATION ════════════ -->
+        <section data-view="formation" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Plan de formation 2026</p><h2 class="font-display text-2xl font-700">Formation &amp; compétences</h2></div><button class="h-9 px-3 rounded-xl grad-teal text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle session</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Sessions planifiées</div><div class="font-display text-xl font-700">6</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Agents formés (2026)</div><div class="font-display text-xl font-700 text-emerald-600">23</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Budget formation</div><div class="font-display text-xl font-700">3,5 M FC</div></div>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-display font-600 text-[15px] mb-3">Sessions</h3>
+            <div class="divide-y divide-ink-100 text-[13px]">
+              <div class="flex items-center gap-3 py-3"><span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center flex-none"><i data-lucide="shield" class="w-4 h-4 text-teal-600"></i></span><div class="flex-1"><div class="font-500">Sauvegarde &amp; PSEA</div><div class="text-[11px] text-ink-400">Tout le personnel · 18 juin</div></div><span class="chip bg-sky-100 text-sky-700">Planifiée</span></div>
+              <div class="flex items-center gap-3 py-3"><span class="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center flex-none"><i data-lucide="calculator" class="w-4 h-4 text-teal-600"></i></span><div class="flex-1"><div class="font-500">SYSCOHADA — comptabilité ONG</div><div class="text-[11px] text-ink-400">Équipe finances · 25 juin</div></div><span class="chip bg-sky-100 text-sky-700">Planifiée</span></div>
+              <div class="flex items-center gap-3 py-3"><span class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center flex-none"><i data-lucide="hard-hat" class="w-4 h-4 text-emerald-600"></i></span><div class="flex-1"><div class="font-500">Sécurité terrain &amp; premiers secours</div><div class="text-[11px] text-ink-400">Agents terrain · 12 mai</div></div><span class="chip bg-emerald-100 text-emerald-700">Réalisée</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ REPORTING RH ════════════ -->
+        <section data-view="reporting" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Analytique RH</p><h2 class="font-display text-2xl font-700">Reporting RH</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button></div>
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Effectif</div><div class="font-display text-xl font-700">42</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Turnover (annuel)</div><div class="font-display text-xl font-700">9 %</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Ancienneté moy.</div><div class="font-display text-xl font-700">3,4 ans</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Ratio H / F</div><div class="font-display text-xl font-700">58 / 42</div></div>
+          </div>
+          <div class="g2">
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Effectif par département</h3>
+              <div class="space-y-3 text-[13px]">
+                <div><div class="flex justify-between mb-1"><span>Programmes &amp; terrain</span><span class="text-ink-400">16</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:80%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Logistique</span><span class="text-ink-400">9</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-sky" style="width:45%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Finances &amp; compta</span><span class="text-ink-400">6</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-teal-400" style="width:30%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Administration &amp; RH</span><span class="text-ink-400">5</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-sky-400" style="width:25%"></div></div></div>
+              </div>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Masse salariale par projet</h3>
+              <div class="space-y-3 text-[13px] num">
+                <div><div class="flex justify-between mb-1"><span>Programme Kinshasa</span><span class="text-ink-400">11,4 M</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:40%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Programme Kongo Central</span><span class="text-ink-400">8,6 M</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-teal" style="width:30%"></div></div></div>
+                <div><div class="flex justify-between mb-1"><span>Fonctionnement / structure</span><span class="text-ink-400">8,4 M</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-amber-400" style="width:30%"></div></div></div>
+              </div>
+              <p class="text-[11px] text-ink-400 mt-3">Alimenté par le timesheet → justifie les salaires imputés à chaque bailleur.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ ESPACE EMPLOYÉ (self-service) ════════════ -->
+        <section data-view="selfservice" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-teal-600">Portail · vue agent</p><h2 class="font-display text-2xl font-700">Espace employé (self-service)</h2></div></div>
+          <div class="card p-4 mb-4 bg-teal-50/50 border-teal-200"><p class="text-[13px] text-ink-700 flex items-start gap-2"><i data-lucide="smartphone" class="w-4 h-4 text-teal-600 mt-0.5 flex-none"></i> <span>Ce que voit <b>l'employé</b> sur son téléphone : il consulte sa paie, pose ses congés, soumet sa feuille de temps et ses frais, télécharge ses attestations — <b>en autonomie</b>, sans passer par les RH.</span></p></div>
+
+          <!-- Résumé en haut -->
+          <div class="g4 mb-4">
+            <div class="card p-4"><div class="flex items-center gap-2 text-[11px] text-ink-500"><i data-lucide="wallet" class="w-4 h-4 text-teal-600"></i> Prochaine paie</div><div class="num text-[20px] font-700 mt-1">30 juin</div><div class="text-[11px] text-ink-400">≈ 1 062 500 FC · M-Pesa</div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 text-[11px] text-ink-500"><i data-lucide="palmtree" class="w-4 h-4 text-teal-600"></i> Solde congés</div><div class="num text-[20px] font-700 mt-1">14 j</div><div class="text-[11px] text-ink-400">sur 18 j acquis</div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 text-[11px] text-ink-500"><i data-lucide="clock" class="w-4 h-4 text-amber-600"></i> Timesheet</div><div class="num text-[20px] font-700 mt-1 text-amber-600">S.23 à soumettre</div><div class="text-[11px] text-ink-400">avant vendredi 17h</div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 text-[11px] text-ink-500"><i data-lucide="inbox" class="w-4 h-4 text-teal-600"></i> Demandes en cours</div><div class="num text-[20px] font-700 mt-1">2</div><div class="text-[11px] text-ink-400">1 avance · 1 attestation</div></div>
+          </div>
+
+          <!-- À faire -->
+          <div class="card p-5 mb-4">
+            <h3 class="font-display font-600 text-[14px] mb-3 flex items-center gap-2"><i data-lucide="list-checks" class="w-4 h-4 text-teal-600"></i> À faire cette semaine</h3>
+            <div class="space-y-2 text-[13px]">
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-amber-50 border border-amber-200"><span class="flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-amber-600"></i> Soumettre ma feuille de temps — semaine 23</span><button class="h-8 px-3 rounded-lg grad-teal text-white text-[12px] font-500">Saisir</button></div>
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-white border border-ink-100"><span class="flex items-center gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-teal-600"></i> Valider ma fiche de présence de mai</span><button class="h-8 px-3 rounded-lg bg-white border border-ink-200 text-[12px] font-500">Voir</button></div>
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-white border border-ink-100"><span class="flex items-center gap-2"><i data-lucide="target" class="w-4 h-4 text-teal-600"></i> Auto-évaluation objectifs Q2 — échéance 30 juin</span><button class="h-8 px-3 rounded-lg bg-white border border-ink-200 text-[12px] font-500">Remplir</button></div>
+            </div>
+          </div>
+
+          <!-- Tuiles self-service -->
+          <div class="g3">
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="receipt" class="w-4 h-4 text-teal-600"></i> Mon bulletin</h3>
+              <div class="text-[13px] num"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Net juin</span><span class="font-600">1 062 500 FC</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Versé par</span><span>M-Pesa</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="download" class="w-3.5 h-3.5"></i> Bulletin + historique (12)</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="palmtree" class="w-4 h-4 text-teal-600"></i> Mes congés</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Solde annuel</span><span class="font-600">14 j</span></div><div class="flex justify-between py-1"><span class="text-ink-500">En attente</span><span>0</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl grad-teal text-white text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Demander un congé</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-teal-600"></i> Ma feuille de temps</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Semaine 23</span><span class="font-600 text-amber-600">À soumettre</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Réparti sur</span><span>3 projets</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl grad-teal text-white text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Saisir mes heures</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="banknote" class="w-4 h-4 text-teal-600"></i> Mes frais & avances</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Avance en cours</span><span class="font-600">250 000 FC</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Note de frais</span><span class="text-amber-600">1 en validation</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Nouvelle demande</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="fingerprint" class="w-4 h-4 text-teal-600"></i> Mes présences</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Aujourd'hui</span><span class="font-600 text-teal-600">Pointé 08:02</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Heures du mois</span><span>168 h</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="log-out" class="w-3.5 h-3.5"></i> Pointer la sortie</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="file-badge" class="w-4 h-4 text-teal-600"></i> Mes demandes</h3>
+              <div class="text-[13px] space-y-1.5"><div class="flex items-center justify-between"><span class="flex items-center gap-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5 text-ink-400"></i> Attestation de travail</span><span class="chip bg-teal-100 text-teal-700">Prête</span></div><div class="flex items-center justify-between"><span class="flex items-center gap-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5 text-ink-400"></i> Attestation de salaire</span><span class="chip bg-amber-100 text-amber-700">En cours</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Demander un document</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="target" class="w-4 h-4 text-teal-600"></i> Ma performance</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Objectifs Q2</span><span class="font-600">3 / 5 atteints</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Auto-éval.</span><span class="text-amber-600">À remplir</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Mon évaluation</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="graduation-cap" class="w-4 h-4 text-teal-600"></i> Mes formations</h3>
+              <div class="text-[13px] space-y-1.5"><div class="flex items-center justify-between"><span>PSEA — code de conduite</span><span class="chip bg-teal-100 text-teal-700">Certifié</span></div><div class="flex items-center justify-between"><span>Sécurité terrain</span><span class="chip bg-amber-100 text-amber-700">12 juin</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="award" class="w-3.5 h-3.5"></i> Mes certificats</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="folder" class="w-4 h-4 text-teal-600"></i> Mes documents</h3>
+              <div class="text-[13px] space-y-1.5"><div class="flex items-center gap-2"><i data-lucide="file-text" class="w-3.5 h-3.5 text-ink-400"></i> Contrat de travail</div><div class="flex items-center gap-2"><i data-lucide="file-text" class="w-3.5 h-3.5 text-ink-400"></i> Carte CNSS</div><div class="flex items-center gap-2"><i data-lucide="file-text" class="w-3.5 h-3.5 text-ink-400"></i> Bulletins (12)</div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Déposer un document</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="user-circle" class="w-4 h-4 text-teal-600"></i> Mon profil & paiement</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Mobile money</span><span class="font-600">M-Pesa ••• 412</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Contact urgence</span><span>Renseigné</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Mettre à jour mes infos</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="users" class="w-4 h-4 text-teal-600"></i> Annuaire & équipe</h3>
+              <div class="text-[13px]"><div class="flex justify-between py-1 border-b border-ink-100"><span class="text-ink-500">Mon responsable</span><span class="font-600">A. Kalala</span></div><div class="flex justify-between py-1"><span class="text-ink-500">Mon équipe</span><span>8 collègues</span></div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="search" class="w-3.5 h-3.5"></i> Trouver un collègue</button>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[14px] mb-2 flex items-center gap-2"><i data-lucide="settings" class="w-4 h-4 text-teal-600"></i> Compte & sécurité</h3>
+              <div class="text-[13px] space-y-1.5"><div class="flex items-center gap-2"><i data-lucide="bell" class="w-3.5 h-3.5 text-ink-400"></i> Notifications</div><div class="flex items-center gap-2"><i data-lucide="languages" class="w-3.5 h-3.5 text-ink-400"></i> Langue · Français</div><div class="flex items-center gap-2"><i data-lucide="lock" class="w-3.5 h-3.5 text-ink-400"></i> Mot de passe</div></div>
+              <button class="mt-3 h-9 w-full rounded-xl bg-white border border-ink-200 text-[12px] font-500 flex items-center justify-center gap-1.5"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Paramètres</button>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div></div>
+
+  <p class="text-center text-ink-400 text-[12px] mt-6 mb-10">Mockup RH · NgoluApp — données fictives. Bascule <b>Bureau / Mobile</b> en haut à droite, clique les menus de la barre latérale.</p>
+
+  <script>
+    const TITLES = {
+      dashboard:'Tableau de bord', employes:'Employés', contrats:'Contrats', dossiers:'Dossiers & documents',
+      presences:'Présences', conges:'Congés', timesheet:'Timesheet',
+      paie:'Paie', remuneration:'Rémunération', frais:'Frais & avances', declarations:'Déclarations sociales',
+      performance:'Performance', formation:'Formation', recrutement:'Recrutement',
+      organigramme:'Postes & départements', reporting:'Reporting RH', selfservice:'Espace employé',
+    };
+    function go(nav){
+      document.querySelectorAll('[data-view]').forEach(v=>v.classList.toggle('active', v.dataset.view===nav));
+      document.querySelectorAll('.navlink[data-nav]').forEach(a=>a.classList.toggle('nav-active', a.dataset.nav===nav));
+      const mt=document.getElementById('mtitle'); if(mt) mt.textContent=TITLES[nav]||'';
+      const sc=document.getElementById('scroll'); if(sc) sc.scrollTop=0;
+    }
+    document.querySelectorAll('[data-nav]').forEach(a=>a.addEventListener('click',()=>go(a.dataset.nav)));
+
+    // Filtre réutilisable style Domus (presets de période + recherche)
+    const FLT_TODAY = '2026-06-05';
+    function fltApply(scope){
+      const bar = document.querySelector('.fltbar[data-scope="'+scope+'"]');
+      if (!bar) return;
+      const q = (bar.querySelector('.flt-search')?.value || '').trim().toLowerCase();
+      const from = bar.querySelector('.flt-from')?.value || '';
+      const to = bar.querySelector('.flt-to')?.value || '';
+      let shown = 0;
+      document.querySelectorAll('.flt-row[data-scope="'+scope+'"]').forEach((r)=>{
+        const d = r.dataset.date || '';
+        const okDate = !d || ((!from || d >= from) && (!to || d <= to));
+        const ok = (!q || (r.dataset.text || '').includes(q)) && okDate;
+        r.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      const empty = document.querySelector('.flt-empty[data-scope="'+scope+'"]');
+      if (empty) empty.style.display = shown ? 'none' : '';
+    }
+    function fltPreset(scope, id){
+      const bar = document.querySelector('.fltbar[data-scope="'+scope+'"]');
+      const accent = bar.dataset.accent || 'grad-teal';
+      const FROM = bar.querySelector('.flt-from'), TO = bar.querySelector('.flt-to');
+      const base = new Date(FLT_TODAY + 'T12:00:00');
+      const iso = (x) => x.toISOString().slice(0, 10);
+      const minus = (n) => { const c = new Date(base); c.setDate(c.getDate() - n); return iso(c); };
+      if (FROM && TO){
+        if (id === 'today') { FROM.value = FLT_TODAY; TO.value = FLT_TODAY; }
+        else if (id === '7d') { FROM.value = minus(6); TO.value = FLT_TODAY; }
+        else if (id === '30d') { FROM.value = minus(29); TO.value = FLT_TODAY; }
+        else if (id === 'quarter') { FROM.value = '2026-04-01'; TO.value = FLT_TODAY; }
+        else if (id === 'year') { FROM.value = '2026-01-01'; TO.value = FLT_TODAY; }
+        else { FROM.value = ''; TO.value = ''; }
+      }
+      bar.querySelectorAll('.flt-preset').forEach((b)=>{
+        const on = b.dataset.preset === id;
+        b.classList.toggle(accent, on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('text-ink-500', !on);
+      });
+      fltApply(scope);
+    }
+    document.querySelectorAll('.fltbar').forEach((bar)=>{
+      const scope = bar.dataset.scope;
+      bar.querySelectorAll('.flt-search, .flt-from, .flt-to').forEach((el)=>{
+        el.addEventListener('input', ()=>fltApply(scope));
+        el.addEventListener('change', ()=>fltApply(scope));
+      });
+      bar.querySelectorAll('.flt-preset').forEach((b)=>b.addEventListener('click', ()=>fltPreset(scope, b.dataset.preset)));
+      fltPreset(scope, 'year');
+    });
+
+    function setMode(m){
+      const mob = m==='mob';
+      document.body.classList.toggle('mobile', mob);
+      const d=document.getElementById('btn-desk'), b=document.getElementById('btn-mob');
+      d.classList.toggle('bg-ink-100', !mob); d.classList.toggle('text-ink-500', mob);
+      b.classList.toggle('bg-ink-100', mob);  b.classList.toggle('text-ink-500', !mob);
+      lucide.createIcons();
+    }
+    go('dashboard');
+    lucide.createIcons();
+  </script>
+  <!-- ════════════ Assistant IA (maquette) ════════════ -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "RH · NgoluApp", accent: "#14b8a6", accent2: "#0d9488",
+    greeting: "Bonjour 👋 Je suis l’assistant IA des RH. Je peux analyser les contrats, la paie, les présences et les timesheets pour t’aider à piloter ton équipe. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quels contrats expirent bientôt ?", "Optimise la masse salariale par projet", "Qui n’a pas soumis son timesheet ?", "Rédige une offre d’emploi"],
+    reco: [
+      {icon:"📄", tag:"Contrats", title:"2 CDD expirent sous 30 j", text:"Anticipe le renouvellement ou la clôture (solde de tout compte) pour rester conforme au code du travail."},
+      {icon:"⏱️", tag:"Timesheet", title:"5 feuilles de temps manquantes", text:"Semaine 23 non soumise par 5 employés. Sans timesheet, l’imputation aux bailleurs n’est pas justifiable lors de l’audit."},
+      {icon:"💰", tag:"Paie", title:"Dépassement masse salariale", text:"La masse imputée au projet UNICEF dépasse de 6 % son budget. Vérifie les heures avant de clôturer la paie."},
+      {icon:"🎓", tag:"Conformité", title:"Certifications PSEA à renouveler", text:"8 agents n’ont pas leur certification PSEA à jour — point bloquant lors de l’audit bailleur."}
+    ],
+    replies: [
+      {k:["contrat","expire","cdd","échéance","renouvel"], a:"2 contrats arrivent à échéance dans moins de 30 j :\n\n• 1 CDD chargé de projet — fin 28 juin\n• 1 CDD logisticien — fin 4 juillet\n\nDécide tôt : renouvellement (avenant) ou clôture (préavis + solde de tout compte). Je peux préparer les documents."},
+      {k:["timesheet","temps","feuille","heure"], a:"5 employés n’ont pas soumis la semaine 23. Les timesheets conditionnent la facturation aux bailleurs : relance-les avant vendredi 17 h. Je peux envoyer un rappel automatique."},
+      {k:["paie","salaire","masse","budget"], a:"La masse salariale du mois est cohérente sauf sur le projet UNICEF (+6 % vs budget). Cause probable : heures supplémentaires imputées. Vérifie les pointages avant clôture."},
+      {k:["recrut","offre","embauche","poste"], a:"Voici une trame d’offre :\n\n• Intitulé + lieu + type de contrat\n• Mission (3 lignes)\n• Profil recherché (formation, années d’expérience)\n• Compétences clés + langues\n• Engagement PSEA obligatoire\n\nDonne-moi le poste, je la rédige en entier."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
+</body>
+</html>

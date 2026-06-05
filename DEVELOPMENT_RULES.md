@@ -2,6 +2,17 @@
 
 This file captures project-wide rules that every future task and agent must follow.
 
+## Local Runtime Policy
+
+All local application runtimes must be started through Docker only.
+
+Rules:
+
+- Do not start local app servers directly with `npm run dev`, `vite`, `npm start`, `node`, or any other command that opens a host port outside Docker.
+- Do not expose or use direct local dev URLs such as `http://127.0.0.1:5173/farmos/` for project apps.
+- Use the repo Docker workflow for local validation, for example `docker-compose up`, `docker-compose restart`, `docker-compose ps`, and `docker-compose logs`.
+- Before giving the user a local URL, verify the URL and port exposed by Docker.
+
 ## Jira Task Scope Policy
 
 Every Jira task must be implemented within the requested scope only.

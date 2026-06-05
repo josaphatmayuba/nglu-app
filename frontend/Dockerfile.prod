@@ -4,5 +4,7 @@ FROM nginx:alpine
 COPY frontend/dist/ /usr/share/nginx/html
 # Production marketing landing — baked into the image (no host bind mount).
 COPY marketing-site/dist/ /usr/share/nginx/html-marketing-prod
+# Production FarmOS SPA at /farmos/ — baked into the image.
+COPY farmos-app/dist/ /usr/share/nginx/html-farmos-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)
 EXPOSE 80

@@ -67,6 +67,25 @@ const GetAllTransaction = () => {
       dataIndex: "amount",
       key: "amount",
       responsive: ["md"],
+      render: (amount, record) => {
+        const cur = record?.currencySymbol || record?.currencyName || "";
+        const n = Number(amount);
+        const formatted = Number.isFinite(n) ? n.toLocaleString("fr-FR") : amount;
+        return cur ? `${formatted} ${cur}` : formatted;
+      },
+      renderCsv: (amount, record) => {
+        const cur = record?.currencySymbol || record?.currencyName || "";
+        return cur ? `${amount} ${cur}` : amount;
+      },
+    },
+    {
+      id: 7,
+      title: "Devise",
+      dataIndex: "currencySymbol",
+      key: "currency",
+      responsive: ["lg"],
+      render: (symbol, record) => symbol || record?.currencyName || "—",
+      renderCsv: (symbol, record) => symbol || record?.currencyName || "",
     },
     {
       title: "Type",

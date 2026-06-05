@@ -11,7 +11,7 @@ import { loadPermissionById } from "../redux/rtk/features/auth/authSlice";
 import { loadDashboardStartup } from "../redux/rtk/features/dashboard/dashboardSlice";
 import { loadPropertyManagement } from "../redux/rtk/features/propertyManagement/propertyManagementSlice";
 import { cn } from "../utils/functions";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   startRealtimeClient,
   stopRealtimeClient,
@@ -24,6 +24,8 @@ import { createAuthBroadcastChannel } from "../realtime/authBroadcastChannel";
 import { createDataBroadcastChannel } from "../realtime/dataBroadcastChannel";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { clearAdminSession, hasValidAdminSession } from "../utils/authSession";
+import { AiAssistant } from "../utils/aiAssistant.jsx";
 
 const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
 const DASHBOARD_POLL_INTERVAL_MS = 90_000;
@@ -42,6 +44,8 @@ function dashboardDateRange() {
 }
 
 function AdminLayout() {
+  const isLoginPath = (window.location.pathname || "").startsWith("/admin/auth/login");
+  const hasSession = hasValidAdminSession();
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -165,6 +169,11 @@ function AdminLayout() {
     }
   }, [location.pathname]);
 
+  if (!isLoginPath && !hasSession) {
+    clearAdminSession();
+    return <Navigate to="/admin/auth/login" replace />;
+  }
+
   return (
     <main className="relative h-screen w-screen overflow-hidden flex flex-row bg-ink-50">
       {/* Mobile drawer */}
@@ -286,6 +295,7 @@ function AdminLayout() {
           <AdminRoutes />
         </div>
       </div>
+      <AiAssistant />
     </main>
   );
 }
