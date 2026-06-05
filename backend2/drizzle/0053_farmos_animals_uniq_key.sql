@@ -21,5 +21,3 @@ PREPARE st FROM @add_uniq;
 EXECUTE st;
 --> statement-breakpoint
 DEALLOCATE PREPARE st;
---> statement-breakpoint
-
