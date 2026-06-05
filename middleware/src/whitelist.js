@@ -15,6 +15,8 @@ module.exports = [
   { method: 'POST', prefix: '/auth/mfa/setup',                auth: true  },
   { method: 'POST', prefix: '/auth/mfa/verify',               auth: true  },
   { method: 'POST', prefix: '/auth/mfa/disable',              auth: true  },
+  // SCRUM-121: gestion des sessions/appareils (GET liste, DELETE révoque)
+  { method: '*',    prefix: '/auth/sessions',                 auth: true  },
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
