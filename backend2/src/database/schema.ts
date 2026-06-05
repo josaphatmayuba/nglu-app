@@ -17,16 +17,39 @@ import {
 } from "drizzle-orm/mysql-core";
 
 // SCRUM-109: sessions table for JTI validation
+// SCRUM-121: familyId links an access-token session to its refresh-token family
+// so revoking a device/session also kills its outstanding access token.
 export const sessions = mysqlTable("sessions", {
   jti:       varchar("jti", { length: 36 }).primaryKey(),
   userId:    bigint("user_id", { mode: "number" }).notNull(),
   roleId:    bigint("role_id", { mode: "number" }).notNull(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  familyId:  varchar("family_id", { length: 36 }),
   ip:        varchar("ip", { length: 100 }),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   revoked:   tinyint("revoked").default(0).notNull(),
+});
+
+// SCRUM-121: refresh-token rotation with reuse detection.
+// Each login starts a "family" (familyId). Every refresh rotates the token:
+// the used row gets rotatedAt + replacedByJti, a new leaf row is created. If a
+// token that was already rotated (beyond the grace window) or revoked is reused,
+// the whole family is revoked and the event is audited (token theft signal).
+export const refreshTokens = mysqlTable("refresh_tokens", {
+  jti:           varchar("jti", { length: 36 }).primaryKey(),
+  familyId:      varchar("family_id", { length: 36 }).notNull(),
+  userId:        bigint("user_id", { mode: "number" }).notNull(),
+  tokenHash:     varchar("token_hash", { length: 255 }).notNull(),
+  userAgent:     text("user_agent"),
+  ip:            varchar("ip", { length: 100 }),
+  createdAt:     timestamp("created_at").defaultNow().notNull(),
+  expiresAt:     timestamp("expires_at").notNull(),
+  rotatedAt:     timestamp("rotated_at"),
+  replacedByJti: varchar("replaced_by_jti", { length: 36 }),
+  revokedAt:     timestamp("revoked_at"),
+  revokedReason: varchar("revoked_reason", { length: 100 }),
 });
 
 export const organizations = mysqlTable("organizations", {

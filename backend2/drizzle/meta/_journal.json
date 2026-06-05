@@ -351,6 +351,13 @@
       "when": 1780192800000,
       "tag": "0069_create_batipro_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1780196400000,
+      "tag": "0070_refresh_token_rotation",
+      "breakpoints": true
     }
   ]
 }

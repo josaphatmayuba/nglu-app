@@ -2,15 +2,20 @@ import { randomUUID } from "crypto";
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { roles, sessions, users } from "../database/schema";
+import { refreshTokens, roles, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
 
 const ACCESS_TTL_MS = 15 * 60 * 1000; // 15 min — must match expiresIn
+const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 d — must match expiresIn
+// SCRUM-121: grace window for concurrent refreshes (multi-tab). A token that was
+// already rotated is still accepted within this window without triggering reuse
+// detection, so simultaneous tab refreshes don't log the user out.
+const REFRESH_GRACE_MS = 20 * 1000; // 20 s
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 min lockout after MAX_ATTEMPTS failures
 
@@ -52,12 +57,15 @@ export class AuthService {
   }
 
   // ── Private helper: sign access token + persist session ─────────────────
+  // SCRUM-121: familyId ties this access session to its refresh-token family so
+  // revoking a device also revokes its outstanding access token.
   private async issueAccessToken(
     userId: number,
     roleId: number | undefined,
     roleName: string | undefined,
     organizationId: number | undefined,
     ctx: AuditContext,
+    familyId: string | null = null,
   ): Promise<{ accessToken: string; jti: string }> {
     const jti = randomUUID();
     const accessToken = this.jwtService.sign(
@@ -70,6 +78,7 @@ export class AuthService {
       userId,
       roleId: roleId ?? 0,
       organizationId: organizationId ?? 1,
+      familyId,
       ip: ctx.ip ?? null,
       userAgent: ctx.userAgent ?? null,
       expiresAt,
@@ -77,10 +86,49 @@ export class AuthService {
     return { accessToken, jti };
   }
 
+  // ── SCRUM-121: sign a refresh token and persist its row in the family ──────
+  private async issueRefreshToken(
+    userId: number,
+    roleName: string | undefined,
+    familyId: string,
+    ctx: AuditContext,
+  ): Promise<{ token: string; jti: string }> {
+    const jti = randomUUID();
+    const token = this.jwtService.sign(
+      { sub: userId, role: roleName, jti, family: familyId },
+      { secret: env.refreshSecret, expiresIn: "7d", algorithm: "HS256" },
+    );
+    const tokenHash = await bcrypt.hash(token, 10);
+    await this.db.insert(refreshTokens).values({
+      jti,
+      familyId,
+      userId,
+      tokenHash,
+      userAgent: ctx.userAgent ?? null,
+      ip: ctx.ip ?? null,
+      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+    });
+    return { token, jti };
+  }
+
+  // ── SCRUM-121: revoke an entire refresh-token family + its access sessions ──
+  private async revokeFamily(familyId: string, reason: string) {
+    await this.db
+      .update(refreshTokens)
+      .set({ revokedAt: sql`CURRENT_TIMESTAMP`, revokedReason: reason })
+      .where(and(eq(refreshTokens.familyId, familyId), isNull(refreshTokens.revokedAt)));
+    // Kill outstanding access tokens issued under this family.
+    await this.db
+      .update(sessions)
+      .set({ revoked: 1 })
+      .where(and(eq(sessions.familyId, familyId), eq(sessions.revoked, 0)));
+  }
+
   // ── Periodic cleanup: remove old revoked/expired sessions ─────────────────
   async cleanupSessions() {
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const cutoff = new Date(Date.now() - REFRESH_TTL_MS);
     await this.db.delete(sessions).where(lt(sessions.expiresAt, cutoff));
+    await this.db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, cutoff));
   }
 
   async login(dto: LoginDto, ctx: AuditContext = {}) {
@@ -138,17 +186,14 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
+    // SCRUM-121: each login opens a new refresh-token family (device session).
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(user.id, role?.name, familyId, ctx);
 
-    const refreshToken = this.jwtService.sign(
-      { sub: user.id, role: role?.name },
-      { secret: env.refreshSecret, expiresIn: "7d", algorithm: "HS256" },
-    );
-
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
     await this.db
       .update(users)
-      .set({ refreshToken: refreshTokenHash, isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, user.id));
 
     await this.audit.log("auth.login.ok", `user:${user.id}`, { ...ctx, userId: user.id }, { role: role?.name });
@@ -190,17 +235,14 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
+    // SCRUM-121: each login opens a new refresh-token family (device session).
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(user.id, role?.name, familyId, ctx);
 
-    const refreshToken = this.jwtService.sign(
-      { sub: user.id, role: role?.name },
-      { secret: env.refreshSecret, expiresIn: "7d", algorithm: "HS256" },
-    );
-
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
     await this.db
       .update(users)
-      .set({ refreshToken: refreshTokenHash, isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, user.id));
 
     await this.audit.log("auth.login.ok", `user:${user.id}`, { ...ctx, userId: user.id }, { role: role?.name, mfa: true });
@@ -215,19 +257,29 @@ export class AuthService {
       .set({ isLogin: "false", refreshToken: null, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(users.id, userId));
 
-    // Revoke all active sessions for this user
+    // Revoke all active access sessions for this user
     await this.db
       .update(sessions)
       .set({ revoked: 1 })
       .where(and(eq(sessions.userId, userId), eq(sessions.revoked, 0)));
+
+    // SCRUM-121: revoke all refresh-token families too (every device).
+    await this.db
+      .update(refreshTokens)
+      .set({ revokedAt: sql`CURRENT_TIMESTAMP`, revokedReason: "logout" })
+      .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 
     await this.audit.log("auth.logout", `user:${userId}`, { ...ctx, userId });
 
     return { message: "Logout successfully" };
   }
 
+  // SCRUM-121: rotating refresh with reuse detection.
+  // Returns a NEW refresh token (the caller sets it as the cookie) alongside the
+  // new access token. Reuse of a rotated (beyond grace) or revoked token revokes
+  // the whole family and audits the event.
   async refreshAccessToken(refreshToken: string, ctx: AuditContext = {}) {
-    let payload: { sub: number; role?: string; roleId?: number };
+    let payload: { sub: number; role?: string; jti?: string; family?: string };
 
     try {
       payload = this.jwtService.verify(refreshToken, { secret: env.refreshSecret, algorithms: ["HS256"] });
@@ -236,22 +288,67 @@ export class AuthService {
       throw new UnauthorizedException("Invalid or expired refresh token");
     }
 
-    const [user] = await this.db
-      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, refreshToken: users.refreshToken, status: users.status })
-      .from(users)
-      .where(eq(users.id, payload.sub))
-      .limit(1);
-
-    const tokenValid = user?.refreshToken
-      ? await bcrypt.compare(refreshToken, user.refreshToken)
-      : false;
-
-    if (!user || !tokenValid) {
-      await this.audit.log("auth.refresh.fail", `user:${payload.sub}`, { ...ctx, userId: payload.sub }, { reason: "token_mismatch" });
+    // Legacy refresh tokens (pre-SCRUM-121, no jti) are no longer accepted — the
+    // user simply re-authenticates. Avoids an unverifiable token bypassing rotation.
+    if (!payload.jti || !payload.family) {
+      await this.audit.log("auth.refresh.fail", `user:${payload.sub}`, { ...ctx, userId: payload.sub }, { reason: "legacy_token" });
       throw new UnauthorizedException("Invalid refresh token");
     }
 
+    const [row] = await this.db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.jti, payload.jti))
+      .limit(1);
+
+    // Unknown jti but a family is claimed → treat as theft and burn the family.
+    if (!row) {
+      await this.revokeFamily(payload.family, "reuse_unknown_jti");
+      await this.audit.log("auth.refresh.reuse", `user:${payload.sub}`, { ...ctx, userId: payload.sub }, { family: payload.family, reason: "unknown_jti" });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    // Hash mismatch (jti guessed / tampered) → burn the family.
+    const hashOk = await bcrypt.compare(refreshToken, row.tokenHash);
+    if (!hashOk) {
+      await this.revokeFamily(row.familyId, "hash_mismatch");
+      await this.audit.log("auth.refresh.reuse", `user:${row.userId}`, { ...ctx, userId: row.userId }, { family: row.familyId, reason: "hash_mismatch" });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    // Already revoked (family burned earlier, or logged out) → reject.
+    if (row.revokedAt) {
+      await this.revokeFamily(row.familyId, "reuse_revoked");
+      await this.audit.log("auth.refresh.reuse", `user:${row.userId}`, { ...ctx, userId: row.userId }, { family: row.familyId, reason: "revoked" });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    // Expired token → reject (no family burn; legitimate expiry).
+    if (row.expiresAt.getTime() < Date.now()) {
+      await this.audit.log("auth.refresh.fail", `user:${row.userId}`, { ...ctx, userId: row.userId }, { reason: "expired" });
+      throw new UnauthorizedException("Invalid or expired refresh token");
+    }
+
+    // Reuse of an already-rotated token beyond the grace window → theft signal.
+    if (row.rotatedAt && Date.now() - row.rotatedAt.getTime() > REFRESH_GRACE_MS) {
+      await this.revokeFamily(row.familyId, "reuse_rotated");
+      await this.audit.log("auth.refresh.reuse", `user:${row.userId}`, { ...ctx, userId: row.userId }, { family: row.familyId, reason: "rotated_beyond_grace" });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
+
+    // ── Valid (active, or rotated within grace = concurrent tab). Load user. ──
+    const [user] = await this.db
+      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, status: users.status })
+      .from(users)
+      .where(eq(users.id, row.userId))
+      .limit(1);
+
+    if (!user) {
+      await this.audit.log("auth.refresh.fail", `user:${row.userId}`, { ...ctx, userId: row.userId }, { reason: "user_not_found" });
+      throw new UnauthorizedException("Invalid refresh token");
+    }
     if (user.status !== "true") {
+      await this.revokeFamily(row.familyId, "account_disabled");
       await this.audit.log("auth.refresh.fail", `user:${user.id}`, { ...ctx, userId: user.id }, { reason: "account_disabled" });
       throw new UnauthorizedException("Ce compte est désactivé.");
     }
@@ -262,8 +359,85 @@ export class AuthService {
       .where(eq(roles.id, user.roleId))
       .limit(1);
 
-    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx);
+    // Rotate: mint a new leaf in the same family + a new access token.
+    const { token: newRefreshToken, jti: newJti } = await this.issueRefreshToken(user.id, role?.name, row.familyId, ctx);
+    // Mark the presented token as rotated (only the first rotation records rotatedAt).
+    await this.db
+      .update(refreshTokens)
+      .set({
+        rotatedAt: row.rotatedAt ?? sql`CURRENT_TIMESTAMP`,
+        replacedByJti: newJti,
+      })
+      .where(eq(refreshTokens.jti, row.jti));
 
-    return { token: accessToken, roleId: role?.id, role: role?.name ?? null, organizationId: user.organizationId };
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx, row.familyId);
+
+    return {
+      token: accessToken,
+      refreshToken: newRefreshToken,
+      roleId: role?.id,
+      role: role?.name ?? null,
+      organizationId: user.organizationId,
+    };
+  }
+
+  // ── SCRUM-121: list a user's active sessions (one per refresh-token family) ──
+  async listSessions(userId: number, currentFamilyId: string | null) {
+    const rows = await this.db
+      .select()
+      .from(refreshTokens)
+      .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())))
+      .orderBy(desc(refreshTokens.createdAt));
+
+    // Collapse to one entry per family; the family root row carries device info.
+    const byFamily = new Map<string, typeof rows[number]>();
+    for (const r of rows) {
+      const existing = byFamily.get(r.familyId);
+      // Keep the earliest createdAt as the family origin, track latest activity separately.
+      if (!existing || r.createdAt.getTime() < existing.createdAt.getTime()) {
+        byFamily.set(r.familyId, r);
+      }
+    }
+    const lastUsed = new Map<string, Date>();
+    for (const r of rows) {
+      const t = (r.rotatedAt ?? r.createdAt).getTime();
+      const prev = lastUsed.get(r.familyId);
+      if (!prev || t > prev.getTime()) lastUsed.set(r.familyId, r.rotatedAt ?? r.createdAt);
+    }
+
+    return Array.from(byFamily.values()).map((r) => ({
+      id: r.familyId,
+      userAgent: r.userAgent,
+      ip: r.ip,
+      createdAt: r.createdAt,
+      lastUsedAt: lastUsed.get(r.familyId) ?? r.createdAt,
+      current: currentFamilyId != null && r.familyId === currentFamilyId,
+    }));
+  }
+
+  // ── SCRUM-121: revoke one session/device (must belong to the caller) ──
+  async revokeSession(userId: number, familyId: string, ctx: AuditContext = {}) {
+    const [row] = await this.db
+      .select({ jti: refreshTokens.jti })
+      .from(refreshTokens)
+      .where(and(eq(refreshTokens.familyId, familyId), eq(refreshTokens.userId, userId)))
+      .limit(1);
+    if (!row) {
+      throw new UnauthorizedException("Session introuvable");
+    }
+    await this.revokeFamily(familyId, "user_revoked");
+    await this.audit.log("auth.session.revoke", `user:${userId}`, { ...ctx, userId }, { family: familyId });
+    return { message: "Session révoquée" };
+  }
+
+  /** Decode the family id from a refresh-token cookie, if present and valid. */
+  familyFromRefreshToken(refreshToken: string | undefined): string | null {
+    if (!refreshToken) return null;
+    try {
+      const payload = this.jwtService.verify(refreshToken, { secret: env.refreshSecret, algorithms: ["HS256"] }) as { family?: string };
+      return payload.family ?? null;
+    } catch {
+      return null;
+    }
   }
 }
