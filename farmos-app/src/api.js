@@ -5,6 +5,8 @@
 // Capacitor (Android/iOS) : la WebView a pour origin capacitor://localhost,
 // donc les URLs relatives ne marcheraient pas. On détecte Capacitor et on
 // préfixe avec l'hôte API configuré (FARMOS_API_HOST, sinon dev par défaut).
+import { getToken, restoreSession, clearAuth } from "./auth.jsx";
+
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
@@ -14,7 +16,7 @@ const inFlightReads = new Map();
 let requestQueue = Promise.resolve();
 
 function authHeaders() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = getToken(); // SCRUM-119 — token en mémoire
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -24,7 +26,7 @@ function enqueueRequest(task) {
   return run;
 }
 
-async function doJsonFetch(path, init = {}) {
+async function doJsonFetch(path, init = {}, retried = false) {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -34,12 +36,15 @@ async function doJsonFetch(path, init = {}) {
     },
   });
   if (!res.ok) {
-    // 401 = token invalide ou expiré → on purge l'auth et on laisse le shell
-    // basculer sur l'écran de login (useAuthToken réagit à 'farmos:auth-changed').
+    // 401 = access-token expiré. On tente un refresh silencieux (cookie httpOnly)
+    // et on rejoue la requête une fois. Si ça échoue, on purge et on bascule
+    // sur l'écran de login (useAuthToken réagit à 'farmos:auth-changed').
     if (res.status === 401 && typeof window !== "undefined") {
-      try {
-        ["access-token", "role", "roleId", "user", "id", "isLogged"].forEach((k) => localStorage.removeItem(k));
-      } catch {}
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return doJsonFetch(path, init, true);
+      }
+      clearAuth();
       window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
     }
     const body = await res.text().catch(() => "");

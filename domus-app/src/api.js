@@ -4,9 +4,10 @@
 // Capacitor (Android/iOS) : la WebView a pour origin capacitor://localhost ; les
 // URLs relatives ne marcheraient pas. On détecte le natif et on préfixe l'hôte API.
 //
-// Le token est lu depuis localStorage `access-token` — partagé en same-origin avec
-// le CRM (/admin et /domus), comme FarmOS le fait sous /farmos.
+// SCRUM-119 — le token est lu en mémoire (auth.jsx), pas dans localStorage. La
+// session est partagée same-origin avec le CRM via le cookie refresh httpOnly.
 import { enqueue, flushOutbox, isNetworkError } from "./outbox.js";
+import { readToken, restoreSession, clearToken } from "./auth.jsx";
 
 // Message d'erreur lisible : on extrait le `message` du corps NestJS au lieu
 // d'afficher le JSON brut. message peut être une chaîne ou un tableau (validation).
@@ -31,11 +32,11 @@ const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
 const BASE = `${API_ROOT}/property-management`;
 
 function authHeaders() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = readToken(); // SCRUM-119 — token en mémoire
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function jsonFetch(path, init = {}) {
+async function jsonFetch(path, init = {}, retried = false) {
   const { base = BASE, ...fetchInit } = init;
   const url = `${base}${path}`;
   const method = (fetchInit.method || "GET").toUpperCase();
@@ -58,14 +59,14 @@ async function jsonFetch(path, init = {}) {
     throw err;
   }
   if (!res.ok) {
-    // 401 = token invalide/expiré → purge auth et bascule sur l'écran de connexion.
+    // 401 = access-token expiré. On tente un refresh silencieux (cookie httpOnly)
+    // et on rejoue une fois ; sinon purge auth et bascule sur l'écran de connexion.
     if (res.status === 401 && typeof window !== "undefined") {
-      try {
-        ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) =>
-          localStorage.removeItem(k),
-        );
-      } catch {}
-      window.dispatchEvent(new CustomEvent("domus:auth-changed"));
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return jsonFetch(path, init, true);
+      }
+      clearToken();
     }
     const body = await res.text().catch(() => "");
     throw new Error(cleanApiError(res, body));

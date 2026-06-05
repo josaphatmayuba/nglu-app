@@ -6,6 +6,7 @@ import "./index.css";
 
 import store from "./redux/rtk/app/store";
 import getQuery from "./utils/getQuery";
+import { getAccessToken, setAccessToken, clearAccessToken } from "./utils/tokenStore";
 
 const CHUNK_RELOAD_FLAG = "nglu.chunkReloaded";
 const isChunkLoadError = (err) => {
@@ -35,14 +36,16 @@ axios.interceptors.request.use(async (config) => {
   const isAdminPath = window.location.pathname.includes("/admin");
 
   if (isAdminPath && query.get("query") === "demo") {
-    localStorage.setItem("access-token", query.get("qc"));
+    setAccessToken(query.get("qc"));
     localStorage.setItem("id", query.get("atc"));
     localStorage.setItem("roleId", query.get("bct"));
     localStorage.setItem("role", query.get("tbc"));
     localStorage.setItem("isLogged", query.get(true));
   }
 
-  const token = localStorage.getItem("access-token");
+  // Admin : token en mémoire (SCRUM-119). Fallback localStorage pour le flux
+  // client eCommerce legacy, qui n'a pas de mécanisme de refresh côté serveur.
+  const token = getAccessToken() || localStorage.getItem("access-token");
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -65,7 +68,7 @@ const refreshAccessToken = async () => {
 
     const data = await response.json();
     if (data?.token) {
-      localStorage.setItem("access-token", data.token);
+      setAccessToken(data.token);
       if (data.roleId) localStorage.setItem("roleId", data.roleId);
       if (data.role) localStorage.setItem("role", data.role);
       return data.token;
@@ -84,6 +87,7 @@ const refreshAccessToken = async () => {
 };
 
 const clearSession = () => {
+  clearAccessToken();
   localStorage.removeItem("access-token");
   localStorage.removeItem("id");
   localStorage.removeItem("role");
@@ -123,8 +127,25 @@ axios.interceptors.response.use(
   }
 );
 
-root.render(
-  <Provider store={store}>
-    <App />
-  </Provider>
-);
+// SCRUM-119 — Restauration de session au chargement : l'access-token n'est plus
+// persisté, on le récupère depuis le cookie httpOnly `refreshToken` avant le
+// rendu pour éviter une rafale de 401 au démarrage. Le flux client eCommerce
+// legacy garde son token en localStorage (pas de cookie refresh) : on le laisse.
+const bootstrapSession = async () => {
+  try {
+    if (localStorage.getItem("isLogged") !== "true") return;
+    if (localStorage.getItem("access-token")) return; // session client legacy
+    const token = await refreshAccessToken();
+    if (!token) clearSession();
+  } catch {
+    /* le rendu se fait quoi qu'il arrive */
+  }
+};
+
+bootstrapSession().finally(() => {
+  root.render(
+    <Provider store={store}>
+      <App />
+    </Provider>
+  );
+});

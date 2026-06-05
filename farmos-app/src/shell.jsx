@@ -4,6 +4,7 @@ import React from "react";
 import { Icon, AnimalGlyph, Brand } from "./icons";
 import { SPECIES, t } from "./data";
 import { api, adaptAnimal } from "./api";
+import { clearAuth } from "./auth.jsx";
 import { NetStatusPill } from "./offline-status";
 
 const NAV = [
@@ -78,9 +79,7 @@ const UserChip = ({ showLabels, lang }) => {
     );
   }
   const logout = () => {
-    try {
-      ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k));
-    } catch {}
+    clearAuth(); // SCRUM-119 — purge le token mémoire + les métadonnées localStorage
     window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
   };
   return (

@@ -6,6 +6,7 @@ import {
   successHandler,
 } from "../../../../utils/functions";
 import queryGenerator from "../../../../utils/queryGenarator";
+import { setAccessToken, clearAccessToken } from "../../../../utils/tokenStore";
 
 const initialState = {
   list: null,
@@ -136,7 +137,7 @@ export const addUser = createAsyncThunk("user/addUser", async (values) => {
       return { message: "mfa_required", requireMfa: true, mfaToken: data.mfaToken };
     }
 
-    localStorage.setItem("access-token", data.token);
+    setAccessToken(data.token); // SCRUM-119 — token en mémoire, pas dans localStorage
     localStorage.setItem("role", data.role);
     localStorage.setItem("roleId", data.roleId);
     localStorage.setItem("user", nameRender(data));
@@ -161,7 +162,7 @@ export const completeMfaLogin = createAsyncThunk("user/completeMfaLogin", async 
       data: { mfaToken, code, useRecovery: useRecovery || false },
     });
 
-    localStorage.setItem("access-token", data.token);
+    setAccessToken(data.token); // SCRUM-119 — token en mémoire, pas dans localStorage
     localStorage.setItem("role", data.role);
     localStorage.setItem("roleId", data.roleId);
     localStorage.setItem("user", nameRender(data));
@@ -185,6 +186,7 @@ export const logOut = createAsyncThunk("user/addUser", async () => {
       url: `auth/logout`,
       data: { id },
     });
+    clearAccessToken(); // SCRUM-119
     localStorage.clear();
     window.location.href = "/admin/auth/login";
     return successHandler(data, "LogOut Successfully Done");

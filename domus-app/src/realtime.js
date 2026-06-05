@@ -10,6 +10,7 @@
 // - Indicateur de connexion via useRealtimeStatus() pour la pastille du topbar.
 import { useEffect, useRef, useState } from "react";
 import { API_ROOT } from "./api.js";
+import { readToken } from "./auth.jsx";
 
 const SSE_PATH = `${API_ROOT}/events/me`;
 const INITIAL_BACKOFF_MS = 2_000;
@@ -39,11 +40,7 @@ try {
 }
 
 function token() {
-  try {
-    return localStorage.getItem("access-token") || "";
-  } catch {
-    return "";
-  }
+  return readToken() || ""; // SCRUM-119 — token en mémoire
 }
 
 function setConnected(next) {

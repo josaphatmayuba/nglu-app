@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
 import { startOutboxWorker } from "./offline-outbox";
 import { startFarmosRealtime } from "./farmos-realtime";
+import { bootstrapAuth } from "./auth.jsx";
 import { cleanupLegacyFarmosApiServiceWorker } from "./service-worker-migration";
 
 class ErrorBoundary extends React.Component {
@@ -31,6 +32,9 @@ window.addEventListener("error", (e) => {
 async function boot() {
   const reloadingForSwCleanup = await cleanupLegacyFarmosApiServiceWorker();
   if (reloadingForSwCleanup) return;
+
+  // SCRUM-119 — restaure le token en mémoire (cookie refresh) avant le rendu.
+  await bootstrapAuth();
 
   startOutboxWorker();
   startFarmosRealtime();

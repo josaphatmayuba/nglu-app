@@ -1,4 +1,4 @@
-import { clearAuth } from "./auth.jsx";
+import { clearAuth, getToken, restoreSession } from "./auth.jsx";
 
 const NATIVE =
   typeof window !== "undefined" &&
@@ -8,11 +8,11 @@ export const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
 export const BASE = `${API_ROOT}/batipro`;
 
 function authHeaders() {
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = getToken(); // SCRUM-119 — token en mémoire
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function jsonFetch(path, init = {}) {
+async function jsonFetch(path, init = {}, retried = false) {
   const { base = BASE, ...fetchInit } = init;
   const res = await fetch(`${base}${path}`, {
     ...fetchInit,
@@ -23,7 +23,13 @@ async function jsonFetch(path, init = {}) {
     }
   });
   if (!res.ok) {
+    // 401 = access-token expiré. On tente un refresh silencieux (cookie httpOnly)
+    // et on rejoue une fois ; sinon purge auth et bascule sur l'écran de connexion.
     if (res.status === 401 && typeof window !== "undefined") {
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return jsonFetch(path, init, true);
+      }
       clearAuth();
       window.dispatchEvent(new CustomEvent("batipro:auth-changed"));
     }

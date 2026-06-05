@@ -2,6 +2,8 @@
 // Expected SSE payload from /api/farmos/events:
 // { kind, tables, action, id, updatedAt }
 
+import { getToken } from "./auth.jsx";
+
 const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
@@ -184,11 +186,7 @@ function eventQuery() {
 }
 
 function currentToken() {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
-  } catch {
-    return null;
-  }
+  return getToken(); // SCRUM-119 — token en mémoire
 }
 
 function hasToken() {

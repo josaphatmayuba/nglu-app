@@ -5,12 +5,59 @@ const NATIVE =
   (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.BATIPRO_API_HOST) || "https://dev.ongdngolu.org";
 const LOGIN_URL = (NATIVE ? API_HOST : "") + "/api/auth/login";
+const REFRESH_URL = (NATIVE ? API_HOST : "") + "/api/auth/refresh-token";
+
+// SCRUM-119 — l'access-token vit en mémoire applicative, jamais dans localStorage,
+// pour limiter l'impact d'une faille XSS. La session est restaurée au chargement
+// via le cookie httpOnly `refreshToken` (même backend que le CRM).
+let accessToken = null;
 
 export function getToken() {
-  try { return localStorage.getItem("access-token") || null; } catch { return null; }
+  return accessToken;
+}
+
+function setToken(t) {
+  accessToken = t || null;
+}
+
+// Restaure une session via le cookie refresh httpOnly. Renvoie le token ou null.
+export async function restoreSession() {
+  try {
+    const res = await fetch(REFRESH_URL, { credentials: "include", headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.token) {
+      setToken(data.token);
+      if (data.role) localStorage.setItem("role", data.role);
+      if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
+      localStorage.setItem("isLogged", "true");
+      return data.token;
+    }
+  } catch {}
+  return null;
+}
+
+// Bootstrap au démarrage : consomme un éventuel ?qc= (handoff CRM), sinon tente
+// la restauration via le cookie refresh. À appeler avant le rendu de l'app.
+export async function bootstrapAuth() {
+  try {
+    if (typeof window !== "undefined") {
+      const q = new URLSearchParams(window.location.search).get("qc");
+      if (q) {
+        setToken(q);
+        localStorage.setItem("isLogged", "true");
+        const url = new URL(window.location.href);
+        url.searchParams.delete("qc");
+        window.history.replaceState({}, "", url.toString());
+        return;
+      }
+    }
+  } catch {}
+  if (!accessToken) await restoreSession();
 }
 
 export function clearAuth() {
+  setToken(null);
   try {
     ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k));
   } catch {}
@@ -50,7 +97,7 @@ export function LoginScreen() {
       });
       if (!res.ok) throw new Error(`Connexion refusee (HTTP ${res.status})`);
       const data = await res.json();
-      localStorage.setItem("access-token", data.token || "");
+      setToken(data.token || ""); // SCRUM-119 — token en mémoire
       if (data.role) localStorage.setItem("role", data.role);
       if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
       const display = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || data.username || data.email || "Utilisateur";

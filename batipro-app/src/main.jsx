@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
+import { bootstrapAuth } from "./auth.jsx";
 import "./styles.css";
 
 class ErrorBoundary extends React.Component {
@@ -19,8 +20,11 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <ErrorBoundary>
-    <App />
-  </ErrorBoundary>
-);
+// SCRUM-119 — restaure le token en mémoire (cookie refresh) avant le rendu.
+bootstrapAuth().finally(() => {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+});

@@ -7,6 +7,7 @@
 
 import Dexie from "dexie";
 import { db as cacheDb, replaceCache } from "./offline-db";
+import { getToken } from "./auth.jsx";
 
 // La même base que offline-db.js ne supporte pas l'ajout d'une table après
 // coup sans bumper la version → on bumpe.
@@ -138,7 +139,7 @@ async function rawFetch(method, path, body) {
   const NATIVE = typeof window !== "undefined" && (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
   const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
   const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
-  const token = typeof localStorage !== "undefined" ? localStorage.getItem("access-token") : null;
+  const token = getToken(); // SCRUM-119 — token en mémoire
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
