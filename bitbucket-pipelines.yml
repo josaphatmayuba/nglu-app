@@ -102,7 +102,6 @@ definitions:
     - step: &deploy-dev
         name: Deploy to Development (dev.ongdngolu.org)
         image: alpine
-        deployment: development
         script:
           - apk add --no-cache openssh-client
           - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
@@ -124,7 +123,6 @@ definitions:
     - step: &deploy-prod
         name: Deploy to Production (ongdngolu.org)
         image: alpine
-        deployment: production
         trigger: manual
         script:
           - apk add --no-cache openssh-client
