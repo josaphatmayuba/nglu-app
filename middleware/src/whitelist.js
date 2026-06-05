@@ -108,6 +108,7 @@ module.exports = [
   { method: '*',    prefix: '/dimension-unit',                auth: true  },
   { method: '*',    prefix: '/property-management',           auth: true  },
   { method: '*',    prefix: '/farmos',                         auth: true  },
+  { method: '*',    prefix: '/batipro',                       auth: true  },
   { method: '*',    prefix: '/currency',                      auth: true  },
   { method: '*',    prefix: '/account',                       auth: true  },
   { method: '*',    prefix: '/sub-accounts',                  auth: true  },

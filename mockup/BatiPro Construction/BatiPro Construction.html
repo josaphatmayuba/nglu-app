@@ -328,5 +328,26 @@
       const ro=document.getElementById('b3d-rotate');ro&&ro.addEventListener('click',()=>{controls.autoRotate=!controls.autoRotate;setActive(ro,controls.autoRotate);});
     };
   </script>
+  <!-- Assistant IA (maquette) -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "BatiPro · NgoluApp", accent: "#f59e0b", accent2: "#b45309",
+    greeting: "Bonjour 👋 Je suis l’assistant IA de BatiPro. Je surveille tes chantiers, budgets, équipes et achats pour t’aider à livrer dans les délais et la marge. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quel chantier dépasse son budget ?", "Optimise l’affectation des équipes", "Quels matériaux commander ?", "Résume l’avancement des chantiers"],
+    reco: [
+      {icon:"🏗️", tag:"Chantier", title:"Ngaliema en dépassement", text:"78 % du budget consommé pour 60 % d’avancement — risque de dépassement. Revois le planning des postes restants."},
+      {icon:"📦", tag:"Achats", title:"Stock ciment sous le seuil", text:"3 j de couverture. Commande maintenant pour ne pas bloquer le coulage prévu."},
+      {icon:"👷", tag:"Équipes", title:"Équipe 2 sous-utilisée", text:"Réaffecte-la cette semaine vers le chantier de Limete qui a pris du retard."},
+      {icon:"💰", tag:"Devis", title:"Marge faible sur Gombe", text:"Le devis Gombe a une marge de 9 % (cible 15 %). Le poste main-d’œuvre est sous-évalué."}
+    ],
+    replies: [
+      {k:["chantier","budget","dépass","retard","avancement"], a:"Le chantier de Ngaliema est ton point de vigilance : 78 % du budget pour 60 % d’avancement. À ce rythme, dépassement estimé de ~12 %. Actions : revoir les quantités du gros œuvre restant et renégocier 1 ou 2 postes fournisseurs."},
+      {k:["équipe","affect","ouvrier","main"], a:"L’équipe 2 est sous-chargée cette semaine alors que Limete a pris du retard. Réaffecte 3 ouvriers de l’équipe 2 vers Limete pour rattraper sans coût supplémentaire."},
+      {k:["matériau","achat","stock","ciment","commande"], a:"À commander en priorité :\n\n• Ciment — 3 j de stock (bloquant pour le coulage)\n• Fer à béton — 6 j\n\nGroupe la commande chez un même fournisseur pour réduire les frais de livraison."},
+      {k:["devis","marge","prix","rentab"], a:"Le devis de Gombe ressort à 9 % de marge contre 15 % cible. Le poste main-d’œuvre est sous-estimé d’environ 1/3. Réévalue-le avant signature, sinon le chantier sera à perte."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
 </body>
 </html>

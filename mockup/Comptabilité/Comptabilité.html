@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comptabilité — Compta NgoluApp · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        blue:{50:'#eff6ff',100:'#dbeafe',200:'#bfdbfe',300:'#93c5fd',400:'#60a5fa',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8',800:'#1e40af'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e7ebf1;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-blue{background:linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%);}
+    .grad-emerald{background:linear-gradient(135deg,#34d399 0%,#059669 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#0f1e3d 0%,#0a1530 55%,#050b1c 100%);}
+    .text-grad{background:linear-gradient(135deg,#3b82f6,#1d4ed8);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #e3e8ef;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;}
+    .navlink{cursor:pointer;}.nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}.nav-active [data-lucide]{color:#60a5fa!important;}
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}.mob-only{display:none;}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:780px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(5,11,28,.55),0 0 0 11px #0a1530,0 0 0 13px #0f1e3d;display:flex;flex-direction:column;background:#f5f7fb;}
+    body.mobile .desk-side{display:none;}body.mobile .mob-only{display:flex;}body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .browser-chrome{display:none;}body.mobile .pad{padding:16px!important;}body.mobile .g2,body.mobile .g3,body.mobile .g4{grid-template-columns:1fr!important;}
+    body:not(.mobile) #stage{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(5,11,28,.4);border:1px solid #d7dfea;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:620px;}body:not(.mobile) #scroll{flex:1;background:#f5f7fb;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    .mob-home{display:none;}body.mobile .mob-home{display:block;}body.mobile .desk-only{display:none;}
+    .actile{min-height:84px;}
+    .av{display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;flex:none;}
+    .num{font-variant-numeric:tabular-nums;}
+  </style>
+</head>
+<body>
+  <div class="max-w-[1320px] mx-auto px-6 pt-8 pb-5 flex items-center gap-4 flex-wrap">
+    <div class="w-11 h-11 rounded-2xl grad-blue flex items-center justify-center shadow-lg shadow-blue-500/30"><i data-lucide="book-open-check" class="text-white w-5 h-5"></i></div>
+    <div><h1 class="font-display text-xl font-700 tracking-tight"><span class="text-grad">Compta</span> NgoluApp</h1><p class="text-ink-500 text-[13px]">Comptabilité · ONG — clique les menus</p></div>
+    <span class="chip bg-blue-50 text-blue-700 ml-2">Module compta</span>
+    <div class="ml-auto flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+      <button id="btn-desk" onclick="setMode('desk')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 bg-ink-100"><i data-lucide="monitor" class="w-4 h-4"></i> Bureau</button>
+      <button id="btn-mob" onclick="setMode('mob')" class="px-3 h-8 rounded-lg text-[13px] font-600 flex items-center gap-1.5 text-ink-500"><i data-lucide="smartphone" class="w-4 h-4"></i> Mobile</button>
+    </div>
+  </div>
+
+  <div id="stage"><div id="frame">
+    <div class="browser-chrome flex items-center gap-2 px-4 h-11 bg-ink-100 border-b border-ink-200">
+      <span class="w-3 h-3 rounded-full bg-rose-400"></span><span class="w-3 h-3 rounded-full bg-amber-400"></span><span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+      <div class="ml-3 flex-1 max-w-md h-6 rounded-md bg-white border border-ink-200 flex items-center px-3 text-[11px] text-ink-400"><i data-lucide="lock" class="w-3 h-3 mr-1.5"></i> ongdngolu.org/admin/comptabilite</div>
+    </div>
+    <div id="shell">
+      <aside class="desk-side w-60 grad-dark text-white p-4 flex flex-col gap-1 flex-none">
+        <div class="flex items-center gap-2.5 px-2 py-3 mb-1"><div class="w-8 h-8 rounded-xl grad-blue flex items-center justify-center"><i data-lucide="book-open-check" class="w-4 h-4"></i></div><div class="font-display font-600 text-[15px]">Compta</div></div>
+        <a data-nav="dashboard" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-xl text-ink-300 text-[13px]"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Saisie</div>
+        <a data-nav="journaux" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="book-text" class="w-4 h-4"></i> Journaux</a>
+        <a data-nav="ecritures" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="pen-line" class="w-4 h-4"></i> Écritures</a>
+        <a data-nav="types" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="shapes" class="w-4 h-4"></i> Types de transaction</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Grands livres</div>
+        <a data-nav="grandlivre" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="scroll-text" class="w-4 h-4"></i> Grand livre</a>
+        <a data-nav="plan" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="list-tree" class="w-4 h-4"></i> Plan comptable</a>
+        <a data-nav="tiers" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="contact" class="w-4 h-4"></i> Tiers (clients/fourn.)</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Trésorerie &amp; immo.</div>
+        <a data-nav="tresorerie" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="landmark" class="w-4 h-4"></i> Trésorerie</a>
+        <a data-nav="immo" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="warehouse" class="w-4 h-4"></i> Immobilisations</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">Pilotage</div>
+        <a data-nav="analytique" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="pie-chart" class="w-4 h-4"></i> Analytique (projets)</a>
+        <a data-nav="budget" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="piggy-bank" class="w-4 h-4"></i> Budget</a>
+        <a data-nav="capacite" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="gauge" class="w-4 h-4"></i> Plan de trésorerie</a>
+        <div class="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider text-ink-500">États</div>
+        <a data-nav="etats" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="bar-chart-3" class="w-4 h-4"></i> États financiers</a>
+        <a data-nav="tva" class="navlink flex items-center gap-3 px-3 py-2 rounded-xl text-ink-300 text-[13px]"><i data-lucide="receipt" class="w-4 h-4"></i> TVA &amp; taxes</a>
+        <div class="mt-auto flex items-center gap-3 px-2 py-2 rounded-xl"><div class="w-9 h-9 rounded-full grad-blue av text-[12px]">GM</div><div class="text-[12px] leading-tight"><div class="font-500">G. Mbuyi</div><div class="text-ink-400 text-[11px]">Comptable</div></div></div>
+      </aside>
+      <div class="mob-only items-center justify-between px-5 pt-9 pb-4 grad-dark text-white flex-none"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-xl grad-blue flex items-center justify-center"><i data-lucide="book-open-check" class="w-4 h-4"></i></div><span id="mtitle" class="font-display font-600 text-[16px]">Tableau de bord</span></div><div class="w-9 h-9 rounded-full grad-blue av text-[12px]">GM</div></div>
+
+      <main id="scroll" class="overflow-y-auto">
+        <!-- ════════════ DASHBOARD ════════════ -->
+        <section data-view="dashboard" class="view active pad p-6">
+          <div class="mob-home space-y-4">
+            <div class="card p-4">
+              <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 flex items-center gap-1.5"><i data-lucide="bell" class="w-3.5 h-3.5 text-rose-500"></i> À traiter</div>
+              <a data-nav="ecritures" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-none"><i data-lucide="pen-line" class="w-4 h-4 text-blue-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">7 écritures à valider</div><div class="text-[12px] text-ink-400">brouillons en attente</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="tresorerie" class="navlink flex items-center gap-3 py-2.5 border-b border-ink-100"><span class="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="git-compare" class="w-4 h-4 text-amber-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">Rapprochement banque</div><div class="text-[12px] text-ink-400">3 lignes non pointées</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+              <a data-nav="tva" class="navlink flex items-center gap-3 py-2.5"><span class="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="receipt" class="w-4 h-4 text-rose-600"></i></span><div class="flex-1"><div class="font-600 text-[14px]">TVA à déclarer</div><div class="text-[12px] text-ink-400">avant le 15 juillet</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-ink-300"></i></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <a data-nav="ecritures" class="navlink card actile p-4 grad-blue text-white flex flex-col justify-between"><i data-lucide="pen-line" class="w-6 h-6"></i><div class="font-600 text-[14px] leading-tight">Nouvelle<br>écriture</div></a>
+              <a data-nav="tresorerie" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="landmark" class="w-6 h-6 text-blue-600"></i><div class="font-600 text-[14px] leading-tight">Voir<br>trésorerie</div></a>
+              <a data-nav="etats" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="bar-chart-3" class="w-6 h-6 text-emerald-600"></i><div class="font-600 text-[14px] leading-tight">Bilan &amp;<br>résultat</div></a>
+              <a data-nav="journaux" class="navlink card actile p-4 flex flex-col justify-between"><i data-lucide="book-text" class="w-6 h-6 text-ink-600"></i><div class="font-600 text-[14px] leading-tight">Voir les<br>journaux</div></a>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Trésorerie</div><div class="font-display text-xl font-700 num">41,2 M FC</div><div class="text-[11px] text-ink-400">+ 18,4 k$</div></div>
+              <div class="card p-4"><div class="text-[12px] text-ink-500">Résultat (mois)</div><div class="font-display text-xl font-700 text-emerald-600 num">+6,1 M FC</div><div class="text-[11px] text-emerald-600">excédent</div></div>
+            </div>
+          </div>
+
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3 desk-only"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Exercice 2026 · juin</p><h2 class="font-display text-2xl font-700">Comptabilité</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="pen-line" class="w-4 h-4"></i> Nouvelle écriture</button></div>
+          <div class="fltbar flex items-center gap-2 flex-wrap mb-4 desk-only" data-scope="dashboard">
+            <div class="inline-flex items-center gap-1 bg-white rounded-xl p-1 border border-ink-200">
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+              <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+            </div>
+            <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+              <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+              <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+              <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+            </div>
+            <span class="text-[11px] text-ink-400 ml-1">Période appliquée aux indicateurs</span>
+          </div>
+          <div class="g4 mb-4 desk-only">
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Trésorerie totale</span><i data-lucide="landmark" class="w-4 h-4 text-blue-500"></i></div><div class="font-display text-2xl font-700 mt-1 num">41,2 M FC</div><div class="text-[11px] text-ink-400 mt-1">caisse + banques · +18,4 k$</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Produits (mois)</span><i data-lucide="trending-up" class="w-4 h-4 text-emerald-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-emerald-600 num">22,7 M FC</div><div class="text-[11px] text-ink-400 mt-1">dons, loyers, ventes</div></div>
+            <div class="card p-4"><div class="flex items-center justify-between"><span class="text-[12px] text-ink-500">Charges (mois)</span><i data-lucide="trending-down" class="w-4 h-4 text-rose-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-rose-600 num">16,6 M FC</div><div class="text-[11px] text-ink-400 mt-1">salaires, terrain, logistique</div></div>
+            <div class="card p-4 ring-1 ring-emerald-200 bg-emerald-50/40"><div class="flex items-center justify-between"><span class="text-[12px] text-emerald-700 font-500">Résultat net</span><i data-lucide="scale" class="w-4 h-4 text-emerald-500"></i></div><div class="font-display text-2xl font-700 mt-1 text-emerald-600 num">+6,1 M FC</div><div class="text-[11px] text-emerald-600 mt-1">excédent · marge 27 %</div></div>
+          </div>
+          <div class="g3 desk-only">
+            <div class="card p-5" style="grid-column:span 2"><div class="flex items-center justify-between mb-4"><h3 class="font-display font-600 text-[15px]">Produits vs charges</h3><span class="text-[12px] text-ink-400">6 derniers mois (M FC)</span></div>
+              <div class="flex items-end gap-3 h-40">
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-400" style="height:62%"></div><div class="w-3 rounded-t bg-rose-300" style="height:50%"></div></div><span class="text-[11px] text-ink-400">Jan</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-400" style="height:70%"></div><div class="w-3 rounded-t bg-rose-300" style="height:54%"></div></div><span class="text-[11px] text-ink-400">Fév</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-400" style="height:66%"></div><div class="w-3 rounded-t bg-rose-300" style="height:60%"></div></div><span class="text-[11px] text-ink-400">Mar</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-400" style="height:78%"></div><div class="w-3 rounded-t bg-rose-300" style="height:58%"></div></div><span class="text-[11px] text-ink-400">Avr</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-400" style="height:72%"></div><div class="w-3 rounded-t bg-rose-300" style="height:62%"></div></div><span class="text-[11px] text-ink-400">Mai</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1"><div class="w-full flex items-end justify-center gap-1 h-32"><div class="w-3 rounded-t bg-emerald-500" style="height:84%"></div><div class="w-3 rounded-t bg-rose-400" style="height:61%"></div></div><span class="text-[11px] text-ink-600 font-500">Juin</span></div>
+              </div>
+              <div class="flex gap-4 mt-3 text-[11px]"><span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> Produits</span><span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span> Charges</span></div>
+            </div>
+            <div class="card p-5"><h3 class="font-display font-600 text-[15px] mb-3 flex items-center gap-2"><i data-lucide="bell" class="w-4 h-4 text-rose-500"></i> À traiter</h3>
+              <a data-nav="ecritures" class="navlink flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-none"><i data-lucide="pen-line" class="w-4 h-4 text-blue-600"></i></div><div class="text-[12px]"><div class="font-500">7 écritures à valider</div><div class="text-ink-400">brouillons</div></div></a>
+              <a data-nav="tresorerie" class="navlink flex items-start gap-3 mb-3"><div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center flex-none"><i data-lucide="git-compare" class="w-4 h-4 text-amber-600"></i></div><div class="text-[12px]"><div class="font-500">Rapprochement banque</div><div class="text-ink-400">3 lignes non pointées</div></div></a>
+              <a data-nav="tva" class="navlink flex items-start gap-3"><div class="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center flex-none"><i data-lucide="receipt" class="w-4 h-4 text-rose-600"></i></div><div class="text-[12px]"><div class="font-500">TVA à déclarer</div><div class="text-ink-400">échéance 15 juil.</div></div></a>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ JOURNAUX ════════════ -->
+        <section data-view="journaux" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Saisie · juin 2026</p><h2 class="font-display text-2xl font-700">Journaux</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="pen-line" class="w-4 h-4"></i> Nouvelle écriture</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><i data-lucide="coins" class="w-4 h-4 text-blue-600"></i></span><span class="font-600 text-[14px]">Caisse (CA)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">38 mvts</span></div><div class="text-[12px] text-ink-500">Solde : <b class="text-ink-800 num">2,1 M FC</b></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><i data-lucide="landmark" class="w-4 h-4 text-blue-600"></i></span><span class="font-600 text-[14px]">Banque FC (BQ)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">21 mvts</span></div><div class="text-[12px] text-ink-500">Solde : <b class="text-ink-800 num">39,1 M FC</b></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><i data-lucide="dollar-sign" class="w-4 h-4 text-blue-600"></i></span><span class="font-600 text-[14px]">Banque USD (BU)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">12 mvts</span></div><div class="text-[12px] text-ink-500">Solde : <b class="text-ink-800 num">18,4 k$</b></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center"><i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i></span><span class="font-600 text-[14px]">Ventes (VE)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">26 mvts</span></div><div class="text-[12px] text-ink-500">Cumul : <b class="text-emerald-700 num">22,7 M FC</b></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center"><i data-lucide="trending-down" class="w-4 h-4 text-rose-600"></i></span><span class="font-600 text-[14px]">Achats (AC)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">19 mvts</span></div><div class="text-[12px] text-ink-500">Cumul : <b class="text-rose-700 num">16,6 M FC</b></div></div>
+            <div class="card p-4"><div class="flex items-center gap-2 mb-1"><span class="w-8 h-8 rounded-lg bg-ink-100 flex items-center justify-center"><i data-lucide="shuffle" class="w-4 h-4 text-ink-600"></i></span><span class="font-600 text-[14px]">Opérations div. (OD)</span><span class="chip bg-ink-100 text-ink-600 ml-auto">7 mvts</span></div><div class="text-[12px] text-ink-500">Régularisations &amp; paie</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Dernières écritures — Journal de caisse</h3>
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="journaux">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher un libellé, une pièce…">
+              </div>
+            </div>
+            <table class="w-full text-[13px] min-w-[560px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Date</th><th class="text-left font-500">Pièce</th><th class="text-left font-500">Libellé</th><th class="text-right font-500">Débit</th><th class="text-right font-500">Crédit</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="flt-row" data-scope="journaux" data-date="2026-06-04" data-text="encaissement loyer bail lease-018 ca-0142"><td class="py-2.5">04/06</td><td class="text-ink-500">CA-0142</td><td>Encaissement loyer — bail LEASE-018</td><td class="text-right text-emerald-700">620 000</td><td class="text-right text-ink-300">—</td></tr>
+                <tr class="flt-row" data-scope="journaux" data-date="2026-06-03" data-text="achat carburant mission terrain ca-0141"><td class="py-2.5">03/06</td><td class="text-ink-500">CA-0141</td><td>Achat carburant — mission terrain</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">95 000</td></tr>
+                <tr class="flt-row" data-scope="journaux" data-date="2026-06-03" data-text="don en especes bailleur local ca-0140"><td class="py-2.5">03/06</td><td class="text-ink-500">CA-0140</td><td>Don en espèces — bailleur local</td><td class="text-right text-emerald-700">1 500 000</td><td class="text-right text-ink-300">—</td></tr>
+                <tr class="flt-row" data-scope="journaux" data-date="2026-06-02" data-text="fournitures de bureau ca-0139"><td class="py-2.5">02/06</td><td class="text-ink-500">CA-0139</td><td>Fournitures de bureau</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">48 000</td></tr>
+                <tr class="flt-empty" data-scope="journaux" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucune écriture pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ ÉCRITURES ════════════ -->
+        <section data-view="ecritures" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Saisie en partie double</p><h2 class="font-display text-2xl font-700">Écritures</h2></div></div>
+          <div class="card p-5 mb-5">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Nouvelle écriture</h3><span class="chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Équilibrée</span></div>
+            <div class="g3 mb-3">
+              <label class="text-[12px]"><span class="text-ink-500">Date</span><div class="mt-1 h-9 rounded-lg border border-ink-200 bg-white flex items-center px-3 text-[13px]">05/06/2026</div></label>
+              <label class="text-[12px]"><span class="text-ink-500">Journal</span><div class="mt-1 h-9 rounded-lg border border-ink-200 bg-white flex items-center px-3 text-[13px] justify-between">Caisse (CA) <i data-lucide="chevron-down" class="w-4 h-4 text-ink-400"></i></div></label>
+              <label class="text-[12px]"><span class="text-ink-500">Pièce</span><div class="mt-1 h-9 rounded-lg border border-ink-200 bg-white flex items-center px-3 text-[13px] text-ink-400">CA-0143</div></label>
+            </div>
+            <label class="text-[12px] block mb-3"><span class="text-ink-500">Libellé</span><div class="mt-1 h-9 rounded-lg border border-ink-200 bg-white flex items-center px-3 text-[13px]">Encaissement loyer juin — Joseph Mwepu</div></label>
+            <div class="overflow-x-auto">
+              <table class="w-full text-[13px] min-w-[560px] num">
+                <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Compte</th><th class="text-left font-500">Libellé</th><th class="text-right font-500">Débit</th><th class="text-right font-500">Crédit</th></tr></thead>
+                <tbody class="divide-y divide-ink-100">
+                  <tr><td class="py-2.5"><span class="chip bg-blue-50 text-blue-700">521 · Caisse</span></td><td class="text-ink-500">Encaissement loyer</td><td class="text-right text-emerald-700">620 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5"><span class="chip bg-emerald-50 text-emerald-700">706 · Produits locatifs</span></td><td class="text-ink-500">Loyer juin LEASE-018</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">620 000</td></tr>
+                  <tr class="text-ink-400"><td class="py-2.5"><span class="flex items-center gap-1 text-[12px]"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter une ligne</span></td><td></td><td></td><td></td></tr>
+                </tbody>
+                <tfoot><tr class="border-t border-ink-200 font-600"><td class="py-2.5" colspan="2">Totaux</td><td class="text-right">620 000</td><td class="text-right">620 000</td></tr></tfoot>
+              </table>
+            </div>
+            <div class="flex items-center justify-between mt-3"><span class="text-[12px] text-emerald-600 flex items-center gap-1"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Débit = Crédit · l'écriture peut être enregistrée</span><div class="flex gap-2"><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-500">Brouillon</button><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-1.5"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button></div></div>
+          </div>
+
+          <div class="card p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Liste des écritures</h3><button class="text-[12px] text-blue-600 font-500 flex items-center gap-1"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button></div>
+
+            <!-- Filtre style Domus : presets de période + plage de dates -->
+            <div class="flex flex-col gap-2 mb-4">
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                  <button class="ecr-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+                </div>
+                <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                  <input type="date" id="ecrFrom" class="text-[12px] text-ink-600 bg-transparent outline-none">
+                  <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                  <input type="date" id="ecrTo" class="text-[12px] text-ink-600 bg-transparent outline-none">
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex-1 min-w-[180px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                  <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                  <input id="ecrSearch" placeholder="Rechercher un libellé, une pièce…" class="flex-1 bg-transparent outline-none">
+                </div>
+                <select id="ecrJournal" class="h-10 px-3 rounded-xl bg-white border border-ink-200 text-[13px]">
+                  <option value="">Tous journaux</option>
+                  <option value="CA">Caisse (CA)</option>
+                  <option value="BQ">Banque (BQ)</option>
+                  <option value="VE">Ventes (VE)</option>
+                  <option value="AC">Achats (AC)</option>
+                  <option value="OD">Op. diverses (OD)</option>
+                </select>
+                <select id="ecrStatut" class="h-10 px-3 rounded-xl bg-white border border-ink-200 text-[13px]">
+                  <option value="">Tous statuts</option>
+                  <option value="Validée">Validée</option>
+                  <option value="Brouillon">Brouillon</option>
+                </select>
+              </div>
+            </div>
+
+            <table class="w-full text-[13px] min-w-[620px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Date</th><th class="text-left font-500">Journal</th><th class="text-left font-500">Libellé</th><th class="text-right font-500">Montant</th><th class="text-right font-500">Statut</th></tr></thead>
+              <tbody id="ecrBody" class="divide-y divide-ink-100">
+                <tr class="ecr-row" data-date="2026-06-05" data-journal="CA" data-statut="Validée" data-text="encaissement loyer juin joseph mwepu ca-0143"><td class="py-2.5">05/06</td><td><span class="chip bg-ink-100 text-ink-600">CA</span></td><td>Encaissement loyer juin — J. Mwepu</td><td class="text-right">620 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr class="ecr-row" data-date="2026-06-04" data-journal="BQ" data-statut="Validée" data-text="don recu bailleur local bq-032"><td class="py-2.5">04/06</td><td><span class="chip bg-ink-100 text-ink-600">BQ</span></td><td>Don reçu — bailleur local</td><td class="text-right">1 500 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr class="ecr-row" data-date="2026-06-03" data-journal="AC" data-statut="Validée" data-text="achat carburant terrain ac-018"><td class="py-2.5">03/06</td><td><span class="chip bg-ink-100 text-ink-600">AC</span></td><td>Achat carburant terrain</td><td class="text-right">95 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr class="ecr-row" data-date="2026-06-03" data-journal="OD" data-statut="Brouillon" data-text="paie juin provision salaires od-014"><td class="py-2.5">03/06</td><td><span class="chip bg-ink-100 text-ink-600">OD</span></td><td>Paie juin — provision salaires</td><td class="text-right">16 600 000</td><td class="text-right"><span class="chip bg-amber-100 text-amber-700">Brouillon</span></td></tr>
+                <tr class="ecr-row" data-date="2026-06-02" data-journal="BQ" data-statut="Validée" data-text="virement recu subvention tranche 2 bq-031"><td class="py-2.5">02/06</td><td><span class="chip bg-ink-100 text-ink-600">BQ</span></td><td>Virement reçu — subvention tranche 2</td><td class="text-right">8 000 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr class="ecr-row" data-date="2026-05-30" data-journal="BQ" data-statut="Validée" data-text="frais bancaires bq-029"><td class="py-2.5">30/05</td><td><span class="chip bg-ink-100 text-ink-600">BQ</span></td><td>Frais bancaires</td><td class="text-right">45 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr class="ecr-row" data-date="2026-05-28" data-journal="VE" data-statut="Validée" data-text="vente produits boutique centrale ve-051"><td class="py-2.5">28/05</td><td><span class="chip bg-ink-100 text-ink-600">VE</span></td><td>Vente produits — Boutique Centrale</td><td class="text-right">890 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Validée</span></td></tr>
+                <tr id="ecrEmpty" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucune écriture pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ PLAN COMPTABLE ════════════ -->
+        <section data-view="plan" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">SYSCOHADA · OHADA</p><h2 class="font-display text-2xl font-700">Plan comptable</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau compte</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Actif</div><div class="font-display text-lg font-700 num">62,4 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Passif</div><div class="font-display text-lg font-700 num">21,2 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Produits (cumul)</div><div class="font-display text-lg font-700 text-emerald-600 num">134 M FC</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Charges (cumul)</div><div class="font-display text-lg font-700 text-rose-600 num">98 M FC</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <table class="w-full text-[13px] min-w-[560px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Compte</th><th class="text-left font-500">Intitulé</th><th class="text-left font-500">Type</th><th class="text-right font-500">Solde</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="bg-ink-50/60"><td class="py-2 font-600" colspan="4">Classe 1 — Capitaux propres</td></tr>
+                <tr><td class="py-2.5 font-500">101</td><td>Capital / fonds associatif</td><td><span class="chip bg-blue-50 text-blue-700">Capitaux</span></td><td class="text-right">15 000 000</td></tr>
+                <tr><td class="py-2.5 font-500">120</td><td>Résultat de l'exercice</td><td><span class="chip bg-blue-50 text-blue-700">Capitaux</span></td><td class="text-right text-emerald-700">+6 200 000</td></tr>
+                <tr class="bg-ink-50/60"><td class="py-2 font-600" colspan="4">Classe 4 — Tiers</td></tr>
+                <tr><td class="py-2.5 font-500">401</td><td>Fournisseurs</td><td><span class="chip bg-rose-50 text-rose-700">Passif</span></td><td class="text-right">3 400 000</td></tr>
+                <tr><td class="py-2.5 font-500">411</td><td>Clients / locataires</td><td><span class="chip bg-emerald-50 text-emerald-700">Actif</span></td><td class="text-right">2 150 000</td></tr>
+                <tr class="bg-ink-50/60"><td class="py-2 font-600" colspan="4">Classe 5 — Trésorerie</td></tr>
+                <tr><td class="py-2.5 font-500">521</td><td>Banque FC</td><td><span class="chip bg-emerald-50 text-emerald-700">Actif</span></td><td class="text-right">39 100 000</td></tr>
+                <tr><td class="py-2.5 font-500">571</td><td>Caisse</td><td><span class="chip bg-emerald-50 text-emerald-700">Actif</span></td><td class="text-right">2 100 000</td></tr>
+                <tr class="bg-ink-50/60"><td class="py-2 font-600" colspan="4">Classe 6 & 7 — Charges & produits</td></tr>
+                <tr><td class="py-2.5 font-500">661</td><td>Charges de personnel (salaires)</td><td><span class="chip bg-rose-50 text-rose-700">Charges</span></td><td class="text-right">52 000 000</td></tr>
+                <tr><td class="py-2.5 font-500">706</td><td>Produits locatifs</td><td><span class="chip bg-emerald-50 text-emerald-700">Produits</span></td><td class="text-right">7 400 000</td></tr>
+                <tr><td class="py-2.5 font-500">754</td><td>Dons &amp; subventions</td><td><span class="chip bg-emerald-50 text-emerald-700">Produits</span></td><td class="text-right">118 000 000</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ ÉTATS FINANCIERS ════════════ -->
+        <section data-view="etats" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Exercice 2026 · au 30 juin</p><h2 class="font-display text-2xl font-700">États financiers</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Exporter PDF</button></div>
+          <div class="flex gap-2 mb-4 flex-wrap text-[13px]">
+            <button class="etab chip grad-blue text-white !px-3 !py-1.5" data-etab="resultat">Compte de résultat</button>
+            <button class="etab chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5" data-etab="bilan">Bilan</button>
+            <button class="etab chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5" data-etab="balance">Balance</button>
+            <button class="etab chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5" data-etab="flux">Flux de trésorerie</button>
+          </div>
+
+          <!-- Onglet : Compte de résultat -->
+          <div class="epane" data-epane="resultat">
+            <div class="card p-5 max-w-2xl">
+              <h3 class="font-display font-600 text-[15px] mb-3">Compte de résultat <span class="text-ink-400 text-[12px] font-400">(cumul 2026)</span></h3>
+              <div class="text-[13px] num">
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Dons &amp; subventions</span><span class="text-emerald-700">118 000 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Produits locatifs</span><span class="text-emerald-700">7 400 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Autres produits</span><span class="text-emerald-700">8 600 000</span></div>
+                <div class="flex justify-between py-2 font-600"><span>Total produits</span><span class="text-emerald-700">134 000 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100 mt-2"><span class="text-ink-500">Charges de personnel</span><span class="text-rose-700">52 000 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Activités terrain &amp; logistique</span><span class="text-rose-700">31 000 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Fonctionnement &amp; admin</span><span class="text-rose-700">15 000 000</span></div>
+                <div class="flex justify-between py-2 font-600"><span>Total charges</span><span class="text-rose-700">98 000 000</span></div>
+                <div class="flex justify-between py-2.5 mt-1 rounded-lg bg-emerald-50 px-3 font-700"><span class="text-emerald-800">Résultat (excédent)</span><span class="text-emerald-700">+36 000 000</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Onglet : Bilan -->
+          <div class="epane hidden" data-epane="bilan">
+            <div class="card p-5 max-w-3xl">
+              <h3 class="font-display font-600 text-[15px] mb-3">Bilan <span class="text-ink-400 text-[12px] font-400">(au 30/06/2026)</span></h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px] num">
+                <div>
+                  <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1">Actif</div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Immobilisations</span><span>18 700 000</span></div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Créances (clients/locataires)</span><span>2 150 000</span></div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Trésorerie (caisse + banques)</span><span>41 200 000</span></div>
+                  <div class="flex justify-between py-2 mt-1 rounded-lg bg-blue-50 px-3 font-700"><span class="text-blue-800">Total Actif</span><span>62 050 000</span></div>
+                </div>
+                <div>
+                  <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1">Passif</div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Fonds associatif</span><span>15 000 000</span></div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Résultat de l'exercice</span><span class="text-emerald-700">36 000 000</span></div>
+                  <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Dettes (fournisseurs, etc.)</span><span>11 050 000</span></div>
+                  <div class="flex justify-between py-2 mt-1 rounded-lg bg-blue-50 px-3 font-700"><span class="text-blue-800">Total Passif</span><span>62 050 000</span></div>
+                </div>
+              </div>
+              <div class="mt-3 chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Bilan équilibré · Actif = Passif</div>
+            </div>
+          </div>
+
+          <!-- Onglet : Balance générale (balance des comptes) -->
+          <div class="epane hidden" data-epane="balance">
+            <div class="card p-5 overflow-x-auto">
+              <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Balance générale <span class="text-ink-400 text-[12px] font-400">(au 30/06/2026)</span></h3><button class="text-[12px] text-blue-600 font-500 flex items-center gap-1"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button></div>
+              <table class="w-full text-[13px] min-w-[560px] num">
+                <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Compte</th><th class="text-left font-500">Intitulé</th><th class="text-right font-500">Solde débit</th><th class="text-right font-500">Solde crédit</th></tr></thead>
+                <tbody class="divide-y divide-ink-100">
+                  <tr><td class="py-2.5 font-500">101</td><td>Fonds associatif</td><td class="text-right text-ink-300">—</td><td class="text-right">15 000 000</td></tr>
+                  <tr><td class="py-2.5 font-500">211</td><td>Immobilisations</td><td class="text-right">18 700 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">401</td><td>Fournisseurs</td><td class="text-right text-ink-300">—</td><td class="text-right">3 400 000</td></tr>
+                  <tr><td class="py-2.5 font-500">411</td><td>Clients / locataires</td><td class="text-right">2 150 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">16x</td><td>Autres dettes</td><td class="text-right text-ink-300">—</td><td class="text-right">7 650 000</td></tr>
+                  <tr><td class="py-2.5 font-500">521</td><td>Banque FC</td><td class="text-right">39 100 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">571</td><td>Caisse</td><td class="text-right">2 100 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">661</td><td>Charges de personnel</td><td class="text-right">52 000 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">60-62</td><td>Autres charges</td><td class="text-right">46 000 000</td><td class="text-right text-ink-300">—</td></tr>
+                  <tr><td class="py-2.5 font-500">706</td><td>Produits locatifs</td><td class="text-right text-ink-300">—</td><td class="text-right">7 400 000</td></tr>
+                  <tr><td class="py-2.5 font-500">70x</td><td>Autres produits</td><td class="text-right text-ink-300">—</td><td class="text-right">8 600 000</td></tr>
+                  <tr><td class="py-2.5 font-500">754</td><td>Dons &amp; subventions</td><td class="text-right text-ink-300">—</td><td class="text-right">118 000 000</td></tr>
+                </tbody>
+                <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5" colspan="2">Totaux</td><td class="text-right">160 050 000</td><td class="text-right">160 050 000</td></tr></tfoot>
+              </table>
+              <div class="mt-3 chip bg-emerald-100 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i> Balance équilibrée · Total débit = Total crédit</div>
+            </div>
+          </div>
+
+          <!-- Onglet : Tableau des flux de trésorerie (TAFIRE) -->
+          <div class="epane hidden" data-epane="flux">
+            <div class="card p-5 max-w-2xl">
+              <h3 class="font-display font-600 text-[15px] mb-3">Tableau des flux de trésorerie <span class="text-ink-400 text-[12px] font-400">(cumul 2026)</span></h3>
+              <div class="text-[13px] num">
+                <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1">Activités opérationnelles</div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Résultat de l'exercice</span><span class="text-emerald-700">+36 000 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">+ Dotations aux amortissements</span><span class="text-emerald-700">+4 200 000</span></div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">± Variation du besoin en fonds de roulement</span><span>+1 000 000</span></div>
+                <div class="flex justify-between py-2 font-600"><span>Flux opérationnels</span><span class="text-emerald-700">+41 200 000</span></div>
+                <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 mt-3">Activités d'investissement</div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Acquisitions d'immobilisations</span><span class="text-rose-700">−9 000 000</span></div>
+                <div class="flex justify-between py-2 font-600"><span>Flux d'investissement</span><span class="text-rose-700">−9 000 000</span></div>
+                <div class="text-[11px] uppercase tracking-wide text-ink-400 mb-1 mt-3">Activités de financement</div>
+                <div class="flex justify-between py-1.5 border-b border-ink-100"><span class="text-ink-500">Subventions d'équipement reçues</span><span class="text-emerald-700">+3 000 000</span></div>
+                <div class="flex justify-between py-2 font-600"><span>Flux de financement</span><span class="text-emerald-700">+3 000 000</span></div>
+                <div class="flex justify-between py-2.5 mt-2 rounded-lg bg-blue-50 px-3 font-700"><span class="text-blue-800">Variation de trésorerie</span><span>+35 200 000</span></div>
+                <div class="flex justify-between py-1.5 mt-1"><span class="text-ink-500">Trésorerie d'ouverture</span><span>6 000 000</span></div>
+                <div class="flex justify-between py-1.5 font-600"><span>Trésorerie de clôture</span><span>41 200 000</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════════════ TRÉSORERIE ════════════ -->
+        <section data-view="tresorerie" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Caisse &amp; banques</p><h2 class="font-display text-2xl font-700">Trésorerie</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="git-compare" class="w-4 h-4"></i> Rapprocher</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-5"><div class="flex items-center gap-2 mb-2"><span class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center"><i data-lucide="coins" class="w-4 h-4 text-blue-600"></i></span><span class="font-600 text-[14px]">Caisse</span></div><div class="font-display text-2xl font-700 num">2,1 M FC</div><div class="text-[11px] text-ink-400 mt-1">dernier mvt aujourd'hui</div></div>
+            <div class="card p-5"><div class="flex items-center gap-2 mb-2"><span class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center"><i data-lucide="landmark" class="w-4 h-4 text-blue-600"></i></span><span class="font-600 text-[14px]">Banque FC</span></div><div class="font-display text-2xl font-700 num">39,1 M FC</div><div class="text-[11px] text-amber-600 mt-1">3 lignes à pointer</div></div>
+            <div class="card p-5"><div class="flex items-center gap-2 mb-2"><span class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center"><i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-600"></i></span><span class="font-600 text-[14px]">Banque USD</span></div><div class="font-display text-2xl font-700 num">18,4 k$</div><div class="text-[11px] text-emerald-600 mt-1">rapprochée</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Mouvements — Banque FC</h3><span class="chip bg-amber-100 text-amber-700">3 non pointés</span></div>
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="tresorerie">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher un mouvement…">
+              </div>
+            </div>
+            <table class="w-full text-[13px] min-w-[600px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Date</th><th class="text-left font-500">Libellé</th><th class="text-right font-500">Entrée</th><th class="text-right font-500">Sortie</th><th class="text-right font-500">Pointé</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="flt-row" data-scope="tresorerie" data-date="2026-06-02" data-text="subvention bailleur tranche 2"><td class="py-2.5">02/06</td><td>Subvention bailleur — tranche 2</td><td class="text-right text-emerald-700">8 000 000</td><td class="text-right text-ink-300">—</td><td class="text-right"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td></tr>
+                <tr class="flt-row" data-scope="tresorerie" data-date="2026-05-31" data-text="virement salaires mai"><td class="py-2.5">31/05</td><td>Virement salaires mai</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">16 200 000</td><td class="text-right"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 inline"></i></td></tr>
+                <tr class="flt-row bg-amber-50/50" data-scope="tresorerie" data-date="2026-05-30" data-text="frais bancaires"><td class="py-2.5">30/05</td><td>Frais bancaires</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">45 000</td><td class="text-right"><i data-lucide="circle" class="w-4 h-4 text-amber-400 inline"></i></td></tr>
+                <tr class="flt-row bg-amber-50/50" data-scope="tresorerie" data-date="2026-05-29" data-text="encaissement cheque loyer"><td class="py-2.5">29/05</td><td>Encaissement chèque loyer</td><td class="text-right text-emerald-700">1 240 000</td><td class="text-right text-ink-300">—</td><td class="text-right"><i data-lucide="circle" class="w-4 h-4 text-amber-400 inline"></i></td></tr>
+                <tr class="flt-empty" data-scope="tresorerie" style="display:none"><td colspan="5" class="py-6 text-center text-ink-400">Aucun mouvement pour ces filtres.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ TVA ════════════ -->
+        <section data-view="tva" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Déclaration · juin 2026</p><h2 class="font-display text-2xl font-700">TVA &amp; taxes</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="file-check-2" class="w-4 h-4"></i> Préparer la déclaration</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-5"><div class="text-[12px] text-ink-500">TVA collectée (16 %)</div><div class="font-display text-2xl font-700 text-emerald-600 num">3 632 000</div><div class="text-[11px] text-ink-400 mt-1">sur ventes / prestations</div></div>
+            <div class="card p-5"><div class="text-[12px] text-ink-500">TVA déductible</div><div class="font-display text-2xl font-700 text-rose-600 num">1 410 000</div><div class="text-[11px] text-ink-400 mt-1">sur achats</div></div>
+            <div class="card p-5 ring-1 ring-amber-200 bg-amber-50/40"><div class="text-[12px] text-amber-700">TVA à payer</div><div class="font-display text-2xl font-700 text-amber-700 num">2 222 000</div><div class="text-[11px] text-amber-600 mt-1">échéance 15 juil. 2026</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Détail par taux</h3>
+            <table class="w-full text-[13px] min-w-[520px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Taux</th><th class="text-right font-500">Base HT</th><th class="text-right font-500">TVA</th><th class="text-right font-500">Sens</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5">16 % — standard</td><td class="text-right">22 700 000</td><td class="text-right text-emerald-700">3 632 000</td><td class="text-right"><span class="chip bg-emerald-100 text-emerald-700">Collectée</span></td></tr>
+                <tr><td class="py-2.5">16 % — sur achats</td><td class="text-right">8 812 000</td><td class="text-right text-rose-700">1 410 000</td><td class="text-right"><span class="chip bg-rose-100 text-rose-700">Déductible</span></td></tr>
+                <tr><td class="py-2.5">0 % — exonéré (dons)</td><td class="text-right">118 000 000</td><td class="text-right text-ink-400">—</td><td class="text-right"><span class="chip bg-ink-100 text-ink-500">Exonéré</span></td></tr>
+              </tbody>
+              <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5">Net à payer</td><td class="text-right"></td><td class="text-right text-amber-700">2 222 000</td><td></td></tr></tfoot>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> TVA RDC à 16 %. Les dons/subventions sont exonérés. Déclaration mensuelle à la DGI.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ TYPES DE TRANSACTION (activités) ════════════ -->
+        <section data-view="types" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Paramétrage · le cœur du système</p><h2 class="font-display text-2xl font-700">Types de transaction</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau type</button></div>
+          <div class="card p-4 mb-4 bg-blue-50/50 border-blue-200">
+            <p class="text-[13px] text-ink-700 flex items-start gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-blue-600 mt-0.5 flex-none"></i> <span><b>Toute activité de l'entreprise est saisie via un type de transaction.</b> Chaque type pré‑remplit automatiquement les comptes (débit/crédit), le journal et l'imputation analytique — loyers, dons, ventes, achats, salaires, subventions… On peut en créer autant que d'activités.</span></p>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Types configurés <span class="text-ink-400 text-[12px] font-400">(12 activités)</span></h3><div class="h-8 px-3 rounded-lg bg-ink-50 border border-ink-200 flex items-center gap-2 text-[12px] text-ink-400"><i data-lucide="search" class="w-3.5 h-3.5"></i> Rechercher un type…</div></div>
+            <table class="w-full text-[13px] min-w-[680px]">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Activité (type)</th><th class="text-left font-500">Sens</th><th class="text-left font-500">Compte débit</th><th class="text-left font-500">Compte crédit</th><th class="text-left font-500">Journal</th><th class="text-left font-500">Analytique</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Encaissement loyer</td><td><span class="chip bg-emerald-50 text-emerald-700">Entrée</span></td><td>521 · Banque</td><td>706 · Produits locatifs</td><td>BQ</td><td class="text-ink-500">Immobilier</td></tr>
+                <tr><td class="py-2.5 font-500">Don en espèces</td><td><span class="chip bg-emerald-50 text-emerald-700">Entrée</span></td><td>571 · Caisse</td><td>754 · Dons</td><td>CA</td><td class="text-ink-500">Collecte</td></tr>
+                <tr><td class="py-2.5 font-500">Subvention bailleur</td><td><span class="chip bg-emerald-50 text-emerald-700">Entrée</span></td><td>521 · Banque</td><td>754 · Subventions</td><td>BQ</td><td class="text-ink-500">Par projet</td></tr>
+                <tr><td class="py-2.5 font-500">Vente de produits</td><td><span class="chip bg-emerald-50 text-emerald-700">Entrée</span></td><td>411 · Clients</td><td>701 · Ventes</td><td>VE</td><td class="text-ink-500">Commercial</td></tr>
+                <tr><td class="py-2.5 font-500">Paiement salaires</td><td><span class="chip bg-rose-50 text-rose-700">Sortie</span></td><td>661 · Personnel</td><td>521 · Banque</td><td>OD</td><td class="text-ink-500">RH / projet</td></tr>
+                <tr><td class="py-2.5 font-500">Achat carburant</td><td><span class="chip bg-rose-50 text-rose-700">Sortie</span></td><td>605 · Carburant</td><td>571 · Caisse</td><td>CA</td><td class="text-ink-500">Logistique</td></tr>
+                <tr><td class="py-2.5 font-500">Achat fournitures</td><td><span class="chip bg-rose-50 text-rose-700">Sortie</span></td><td>604 · Fournitures</td><td>401 · Fournisseurs</td><td>AC</td><td class="text-ink-500">Fonctionnement</td></tr>
+                <tr><td class="py-2.5 font-500">Frais bancaires</td><td><span class="chip bg-rose-50 text-rose-700">Sortie</span></td><td>631 · Services bancaires</td><td>521 · Banque</td><td>BQ</td><td class="text-ink-500">Structure</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> À la saisie, choisir le type suffit : l'écriture équilibrée est générée. Idéal pour les opérateurs non‑comptables (caisse, terrain).</p>
+          </div>
+        </section>
+
+        <!-- ════════════ GRAND LIVRE ════════════ -->
+        <section data-view="grandlivre" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Détail par compte</p><h2 class="font-display text-2xl font-700">Grand livre</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button></div>
+          <div class="flex gap-2 mb-4 flex-wrap text-[13px]">
+            <span class="chip grad-blue text-white !px-3 !py-1.5">521 · Banque FC</span>
+            <span class="chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5">571 · Caisse</span>
+            <span class="chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5">411 · Clients</span>
+            <span class="chip bg-white border border-ink-200 text-ink-600 !px-3 !py-1.5">661 · Personnel</span>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <div class="flex items-center justify-between mb-3"><h3 class="font-display font-600 text-[15px]">Compte 521 · Banque FC</h3><span class="text-[12px] text-ink-500">Solde : <b class="text-ink-800 num">39 100 000 FC</b></span></div>
+            <div class="fltbar flex items-center gap-2 flex-wrap mb-4" data-scope="grandlivre">
+              <div class="inline-flex items-center gap-1 bg-ink-50 rounded-xl p-1 border border-ink-200">
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="today">Aujourd'hui</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="7d">7 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="30d">30 j</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="quarter">Trim.</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="year">Année</button>
+                <button class="flt-preset h-8 px-3 rounded-lg text-[12px] font-600 text-ink-500" data-preset="all">Tout</button>
+              </div>
+              <div class="inline-flex items-center gap-2 bg-white rounded-xl px-3 h-10 border border-ink-200">
+                <input type="date" class="flt-from text-[12px] text-ink-600 bg-transparent outline-none">
+                <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-ink-400"></i>
+                <input type="date" class="flt-to text-[12px] text-ink-600 bg-transparent outline-none">
+              </div>
+              <div class="flex-1 min-w-[160px] h-10 rounded-xl bg-white border border-ink-200 flex items-center px-3 gap-2 text-[13px]">
+                <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+                <input class="flt-search flex-1 bg-transparent outline-none" placeholder="Rechercher un libellé, une pièce…">
+              </div>
+            </div>
+            <table class="w-full text-[13px] min-w-[620px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Date</th><th class="text-left font-500">Pièce</th><th class="text-left font-500">Libellé</th><th class="text-right font-500">Débit</th><th class="text-right font-500">Crédit</th><th class="text-right font-500">Solde</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr class="bg-ink-50/60"><td class="py-2" colspan="5">Report à nouveau au 01/06</td><td class="text-right font-600">47 545 000</td></tr>
+                <tr class="flt-row" data-scope="grandlivre" data-date="2026-06-02" data-text="subvention bailleur tranche 2 bq-031"><td class="py-2.5">02/06</td><td class="text-ink-500">BQ-031</td><td>Subvention bailleur — tranche 2</td><td class="text-right text-emerald-700">8 000 000</td><td class="text-right text-ink-300">—</td><td class="text-right">55 545 000</td></tr>
+                <tr class="flt-row" data-scope="grandlivre" data-date="2026-05-29" data-text="encaissement cheque loyer bq-030"><td class="py-2.5">29/05</td><td class="text-ink-500">BQ-030</td><td>Encaissement chèque loyer</td><td class="text-right text-emerald-700">1 240 000</td><td class="text-right text-ink-300">—</td><td class="text-right">56 785 000</td></tr>
+                <tr class="flt-row" data-scope="grandlivre" data-date="2026-05-31" data-text="virement salaires mai od-014"><td class="py-2.5">31/05</td><td class="text-ink-500">OD-014</td><td>Virement salaires mai</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">16 200 000</td><td class="text-right">40 585 000</td></tr>
+                <tr class="flt-row" data-scope="grandlivre" data-date="2026-05-30" data-text="frais bancaires bq-029"><td class="py-2.5">30/05</td><td class="text-ink-500">BQ-029</td><td>Frais bancaires</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">45 000</td><td class="text-right">40 540 000</td></tr>
+                <tr class="flt-row" data-scope="grandlivre" data-date="2026-05-28" data-text="achat equipement terrain bq-028"><td class="py-2.5">28/05</td><td class="text-ink-500">BQ-028</td><td>Achat équipement terrain</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">1 440 000</td><td class="text-right">39 100 000</td></tr>
+                <tr class="flt-empty" data-scope="grandlivre" style="display:none"><td colspan="6" class="py-6 text-center text-ink-400">Aucun mouvement pour ces filtres.</td></tr>
+              </tbody>
+              <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5" colspan="3">Totaux période</td><td class="text-right">9 240 000</td><td class="text-right">17 685 000</td><td class="text-right">39 100 000</td></tr></tfoot>
+            </table>
+          </div>
+        </section>
+
+        <!-- ════════════ TIERS (clients / fournisseurs) ════════════ -->
+        <section data-view="tiers" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Comptes auxiliaires</p><h2 class="font-display text-2xl font-700">Tiers — clients &amp; fournisseurs</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="bell-ring" class="w-4 h-4"></i> Relancer les impayés</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Créances clients</div><div class="font-display text-xl font-700 text-emerald-700 num">2 150 000</div></div>
+            <div class="card p-4 ring-1 ring-rose-200 bg-rose-50/40"><div class="text-[12px] text-rose-600">Dont échu</div><div class="font-display text-xl font-700 text-rose-600 num">640 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Dettes fournisseurs</div><div class="font-display text-xl font-700 text-rose-700 num">3 400 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">À payer &lt; 30 j</div><div class="font-display text-xl font-700 num">1 900 000</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Balance âgée — clients</h3>
+            <table class="w-full text-[13px] min-w-[640px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Tiers</th><th class="text-right font-500">Total dû</th><th class="text-right font-500">Non échu</th><th class="text-right font-500">0–30 j</th><th class="text-right font-500">30–60 j</th><th class="text-right font-500">+60 j</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Joseph Mwepu (loyer)</td><td class="text-right">620 000</td><td class="text-right">620 000</td><td class="text-right text-ink-300">—</td><td class="text-right text-ink-300">—</td><td class="text-right text-ink-300">—</td></tr>
+                <tr><td class="py-2.5 font-500">Boutique Centrale (vente)</td><td class="text-right">890 000</td><td class="text-right">600 000</td><td class="text-right text-amber-600">290 000</td><td class="text-right text-ink-300">—</td><td class="text-right text-ink-300">—</td></tr>
+                <tr><td class="py-2.5 font-500">Patrick Kabongo (loyer)</td><td class="text-right">640 000</td><td class="text-right text-ink-300">—</td><td class="text-right text-ink-300">—</td><td class="text-right text-amber-600">300 000</td><td class="text-right text-rose-600">340 000</td></tr>
+              </tbody>
+              <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5">Total</td><td class="text-right">2 150 000</td><td class="text-right">1 220 000</td><td class="text-right">290 000</td><td class="text-right">300 000</td><td class="text-right text-rose-600">340 000</td></tr></tfoot>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Le <b>lettrage</b> rapproche chaque facture de son paiement ; les soldes +60 j sont signalés pour relance.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ IMMOBILISATIONS ════════════ -->
+        <section data-view="immo" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Registre &amp; amortissements</p><h2 class="font-display text-2xl font-700">Immobilisations</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau bien</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Valeur brute</div><div class="font-display text-xl font-700 num">41 700 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Amort. cumulés</div><div class="font-display text-xl font-700 text-rose-600 num">23 000 000</div></div>
+            <div class="card p-4 ring-1 ring-blue-200 bg-blue-50/40"><div class="text-[12px] text-blue-700">Valeur nette (VNC)</div><div class="font-display text-xl font-700 text-blue-700 num">18 700 000</div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <table class="w-full text-[13px] min-w-[680px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Bien</th><th class="text-left font-500">Acquis</th><th class="text-right font-500">Valeur brute</th><th class="text-left font-500">Durée</th><th class="text-right font-500">Dotation/an</th><th class="text-right font-500">Amort. cumulé</th><th class="text-right font-500">VNC</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Véhicule pickup Toyota</td><td>2023</td><td class="text-right">20 000 000</td><td>5 ans</td><td class="text-right">4 000 000</td><td class="text-right text-rose-700">12 000 000</td><td class="text-right font-600">8 000 000</td></tr>
+                <tr><td class="py-2.5 font-500">Groupe électrogène</td><td>2024</td><td class="text-right">6 500 000</td><td>5 ans</td><td class="text-right">1 300 000</td><td class="text-right text-rose-700">2 600 000</td><td class="text-right font-600">3 900 000</td></tr>
+                <tr><td class="py-2.5 font-500">Ordinateurs (lot)</td><td>2024</td><td class="text-right">4 200 000</td><td>3 ans</td><td class="text-right">1 400 000</td><td class="text-right text-rose-700">2 800 000</td><td class="text-right font-600">1 400 000</td></tr>
+                <tr><td class="py-2.5 font-500">Mobilier de bureau</td><td>2021</td><td class="text-right">11 000 000</td><td>10 ans</td><td class="text-right">1 100 000</td><td class="text-right text-rose-700">5 600 000</td><td class="text-right font-600">5 400 000</td></tr>
+              </tbody>
+              <tfoot><tr class="border-t border-ink-200 font-700"><td class="py-2.5" colspan="2">Total</td><td class="text-right">41 700 000</td><td></td><td class="text-right">7 800 000</td><td class="text-right">23 000 000</td><td class="text-right">18 700 000</td></tr></tfoot>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Dotation d'amortissement passée automatiquement chaque mois (compte 681 → 28x).</p>
+          </div>
+        </section>
+
+        <!-- ════════════ ANALYTIQUE (projets / bailleurs) ════════════ -->
+        <section data-view="analytique" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Suivi par projet / bailleur</p><h2 class="font-display text-2xl font-700">Comptabilité analytique</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Rapport bailleur</button></div>
+          <div class="g3 mb-5">
+            <div class="card p-5"><div class="flex items-center justify-between mb-1"><span class="font-600 text-[14px]">Programme Kongo Central</span><span class="chip bg-blue-50 text-blue-700">72 %</span></div><div class="text-[12px] text-ink-500 mb-2">Bailleur : Fondation X</div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-blue" style="width:72%"></div></div><div class="flex justify-between mt-2 text-[11px] text-ink-400 num"><span>Dépensé 7,6 M</span><span>Budget 10,5 M FC</span></div></div>
+            <div class="card p-5"><div class="flex items-center justify-between mb-1"><span class="font-600 text-[14px]">Programme Kinshasa</span><span class="chip bg-emerald-50 text-emerald-700">48 %</span></div><div class="text-[12px] text-ink-500 mb-2">Bailleur : Union Européenne</div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-emerald" style="width:48%"></div></div><div class="flex justify-between mt-2 text-[11px] text-ink-400 num"><span>Dépensé 9,6 M</span><span>Budget 20 M FC</span></div></div>
+            <div class="card p-5 ring-1 ring-amber-200 bg-amber-50/40"><div class="flex items-center justify-between mb-1"><span class="font-600 text-[14px]">Fonctionnement / structure</span><span class="chip bg-amber-100 text-amber-700">91 %</span></div><div class="text-[12px] text-ink-500 mb-2">Fonds propres</div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-amber-500" style="width:91%"></div></div><div class="flex justify-between mt-2 text-[11px] text-ink-400 num"><span>Dépensé 5,0 M</span><span>Budget 5,5 M FC</span></div></div>
+          </div>
+          <div class="card p-5 overflow-x-auto">
+            <h3 class="font-display font-600 text-[15px] mb-3">Produits &amp; charges par axe analytique</h3>
+            <table class="w-full text-[13px] min-w-[560px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Axe (projet / bailleur)</th><th class="text-right font-500">Produits</th><th class="text-right font-500">Charges</th><th class="text-right font-500">Solde</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Programme Kongo Central</td><td class="text-right text-emerald-700">10 500 000</td><td class="text-right text-rose-700">7 600 000</td><td class="text-right font-600">+2 900 000</td></tr>
+                <tr><td class="py-2.5 font-500">Programme Kinshasa</td><td class="text-right text-emerald-700">20 000 000</td><td class="text-right text-rose-700">9 600 000</td><td class="text-right font-600">+10 400 000</td></tr>
+                <tr><td class="py-2.5 font-500">Activité locative (Domus)</td><td class="text-right text-emerald-700">7 400 000</td><td class="text-right text-rose-700">2 200 000</td><td class="text-right font-600">+5 200 000</td></tr>
+                <tr><td class="py-2.5 font-500">Fonctionnement / structure</td><td class="text-right text-ink-300">—</td><td class="text-right text-rose-700">5 000 000</td><td class="text-right text-rose-600 font-600">−5 000 000</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Chaque écriture porte un axe analytique (via le type de transaction) → reporting par bailleur/projet en un clic.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ BUDGET ════════════ -->
+        <section data-view="budget" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">Suivi budgétaire 2026</p><h2 class="font-display text-2xl font-700">Budget vs réalisé</h2></div><button class="h-9 px-3 rounded-xl grad-blue text-white text-[13px] font-600 flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle ligne</button></div>
+          <div class="g4 mb-5">
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Budget total</div><div class="font-display text-xl font-700 num">160 000 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Réalisé</div><div class="font-display text-xl font-700 text-blue-700 num">98 000 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Disponible</div><div class="font-display text-xl font-700 text-emerald-600 num">62 000 000</div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-500">Consommé</div><div class="font-display text-xl font-700 num">61 %</div></div>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-display font-600 text-[15px] mb-3">Lignes budgétaires</h3>
+            <div class="space-y-4 text-[13px] num">
+              <div><div class="flex justify-between mb-1"><span class="font-500">Charges de personnel</span><span class="text-ink-500">52,0 / 80,0 M · 65 %</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-blue" style="width:65%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span class="font-500">Activités terrain &amp; logistique</span><span class="text-ink-500">31,0 / 50,0 M · 62 %</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-blue" style="width:62%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span class="font-500">Fonctionnement &amp; admin</span><span class="text-rose-600">15,0 / 16,0 M · 94 %</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-rose-500" style="width:94%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span class="font-500">Investissements / équipement</span><span class="text-ink-500">9,0 / 14,0 M · 64 %</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full grad-emerald" style="width:64%"></div></div></div>
+            </div>
+            <p class="text-[11px] text-ink-400 mt-4 flex items-center gap-1.5"><i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-rose-500"></i> « Fonctionnement &amp; admin » à 94 % — proche du dépassement, à surveiller.</p>
+          </div>
+        </section>
+
+        <!-- ════════════ PLAN DE TRÉSORERIE & CAPACITÉ DE FINANCEMENT ════════════ -->
+        <section data-view="capacite" class="view pad p-6">
+          <div class="flex items-end justify-between mb-4 flex-wrap gap-3"><div><p class="text-[11px] uppercase tracking-wider text-blue-600">« A‑t‑on l'argent pour un projet ? »</p><h2 class="font-display text-2xl font-700">Plan de trésorerie &amp; capacité</h2></div><button class="h-9 px-3 rounded-xl bg-white border border-ink-200 text-[13px] font-600 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button></div>
+
+          <!-- Verdict : disponible réel -->
+          <div class="grad-emerald rounded-2xl p-5 text-white mb-4 flex items-end justify-between flex-wrap gap-3">
+            <div><div class="text-[12px] text-white/85 flex items-center gap-1"><i data-lucide="gauge" class="w-4 h-4"></i> Disponible réel — mobilisable sur fonds propres</div><div class="font-display text-3xl font-700 num">17 278 000 FC</div><div class="text-[12px] text-white/85">après déduction des dettes à payer et des fonds bailleurs affectés</div></div>
+            <div class="text-right text-[12px] text-white/90"><div class="chip bg-white/20 text-white"><i data-lucide="check" class="w-3 h-3"></i> Capacité pour un nouveau projet</div><div class="mt-2">+ 18,4 k$ en banque USD (non inclus)</div></div>
+          </div>
+
+          <!-- Le calcul -->
+          <div class="g2 mb-4">
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Du solde brut au disponible réel</h3>
+              <div class="text-[13px] num">
+                <div class="flex justify-between py-2 border-b border-ink-100"><span class="text-ink-600 flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-blue-500"></span> Trésorerie (caisse + banques FC)</span><span class="font-600">41 200 000</span></div>
+                <div class="flex justify-between py-2 border-b border-ink-100"><span class="text-ink-600 flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span> − Dettes à payer (court terme)</span><span class="text-rose-700">−10 622 000</span></div>
+                <div class="flex justify-between py-2 border-b border-ink-100"><span class="text-ink-600 flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span> − Fonds bailleurs affectés (non consommés)</span><span class="text-amber-700">−13 300 000</span></div>
+                <div class="flex justify-between py-2.5 mt-1 rounded-lg bg-emerald-50 px-3 font-700"><span class="text-emerald-800 flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> = Disponible réel (libre)</span><span class="text-emerald-700">17 278 000</span></div>
+              </div>
+              <p class="text-[11px] text-ink-400 mt-3">Détail des dettes : fournisseurs 3,4 M · salaires &amp; charges 5,0 M · TVA DGI 2,2 M.</p>
+            </div>
+            <div class="card p-5">
+              <h3 class="font-display font-600 text-[15px] mb-3">Répartition de la trésorerie</h3>
+              <div class="h-4 rounded-full overflow-hidden flex mb-3">
+                <div class="bg-emerald-500" style="width:42%" title="Libre"></div>
+                <div class="bg-amber-400" style="width:32%" title="Affecté"></div>
+                <div class="bg-rose-400" style="width:26%" title="Engagé"></div>
+              </div>
+              <div class="space-y-2 text-[13px] num">
+                <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span> Libre (mobilisable)</span><span class="font-600">17 278 000</span></div>
+                <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span> Affecté à des projets bailleurs</span><span>13 300 000</span></div>
+                <div class="flex items-center justify-between"><span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span> Engagé (dettes à payer)</span><span>10 622 000</span></div>
+              </div>
+              <div class="mt-3 pt-3 border-t border-ink-100 text-[12px] text-ink-500">
+                <div class="flex justify-between py-1"><span>Programme Kongo Central (reste)</span><span class="num">2 900 000</span></div>
+                <div class="flex justify-between py-1"><span>Programme Kinshasa (reste)</span><span class="num">10 400 000</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prévisionnel -->
+          <div class="card p-5 overflow-x-auto mb-4">
+            <h3 class="font-display font-600 text-[15px] mb-3">Plan de trésorerie prévisionnel <span class="text-ink-400 text-[12px] font-400">(3 mois)</span></h3>
+            <table class="w-full text-[13px] min-w-[620px] num">
+              <thead class="text-ink-400 text-[11px] uppercase tracking-wide"><tr class="border-b border-ink-100"><th class="text-left font-500 py-2">Mois</th><th class="text-right font-500">Solde début</th><th class="text-right font-500">Entrées prévues</th><th class="text-right font-500">Sorties prévues</th><th class="text-right font-500">Solde fin</th></tr></thead>
+              <tbody class="divide-y divide-ink-100">
+                <tr><td class="py-2.5 font-500">Juillet</td><td class="text-right">41 200 000</td><td class="text-right text-emerald-700">+9 500 000</td><td class="text-right text-rose-700">−24 600 000</td><td class="text-right font-600">26 100 000</td></tr>
+                <tr class="bg-amber-50/50"><td class="py-2.5 font-500">Août</td><td class="text-right">26 100 000</td><td class="text-right text-emerald-700">+9 500 000</td><td class="text-right text-rose-700">−22 000 000</td><td class="text-right font-600 text-amber-700">13 600 000</td></tr>
+                <tr><td class="py-2.5 font-500">Septembre</td><td class="text-right">13 600 000</td><td class="text-right text-emerald-700">+9 500 000</td><td class="text-right text-rose-700">−8 000 000</td><td class="text-right font-600">15 100 000</td></tr>
+              </tbody>
+            </table>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Entrées : loyers + tranches de subvention attendues · Sorties : salaires, fournisseurs, activités terrain.</p>
+          </div>
+
+          <!-- Simulateur de projet -->
+          <div class="card p-5 mb-4">
+            <h3 class="font-display font-600 text-[15px] mb-1 flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-4 h-4 text-blue-600"></i> Simulateur — « si je lance un projet de … »</h3>
+            <p class="text-[12px] text-ink-500 mb-3">Faites glisser le coût envisagé : l'effet sur le disponible réel et sur le creux de trésorerie d'août se recalcule en direct.</p>
+            <div class="flex gap-2 flex-wrap mb-3 text-[12px]">
+              <button class="simchip h-8 px-3 rounded-lg bg-white border border-ink-200 font-500" data-v="5000000">5 M</button>
+              <button class="simchip h-8 px-3 rounded-lg bg-white border border-ink-200 font-500" data-v="10000000">10 M</button>
+              <button class="simchip h-8 px-3 rounded-lg bg-white border border-ink-200 font-500" data-v="15000000">15 M</button>
+              <button class="simchip h-8 px-3 rounded-lg bg-white border border-ink-200 font-500" data-v="20000000">20 M</button>
+            </div>
+            <input id="simAmt" type="range" min="0" max="30000000" step="500000" value="10000000" class="w-full accent-blue-600 mb-1">
+            <div class="flex justify-between text-[11px] text-ink-400 mb-3"><span>0</span><span>Coût du projet : <b class="text-ink-700 num" id="simAmtLabel">10 000 000</b> FC</span><span>30 M</span></div>
+            <div class="g3">
+              <div class="rounded-xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Disponible réel après projet</div><div class="font-display text-xl font-700 num text-emerald-700" id="simAfter">7 278 000</div></div>
+              <div class="rounded-xl bg-ink-50 p-3"><div class="text-[11px] text-ink-500">Creux d'août après projet</div><div class="font-display text-xl font-700 num text-ink-800" id="simAug">3 600 000</div></div>
+              <div class="rounded-xl p-3 flex items-center bg-emerald-50 text-emerald-700" id="simVerdictBox"><div><div class="text-[11px] opacity-70">Verdict</div><div class="font-600 text-[13px]" id="simVerdict">—</div></div></div>
+            </div>
+            <p class="text-[11px] text-ink-400 mt-3 flex items-center gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5"></i> Hypothèse : projet financé sur fonds propres (hors fonds bailleurs affectés). Seuil de sécurité trésorerie : 5 M FC.</p>
+          </div>
+
+          <!-- Verdict détaillé -->
+          <div class="card p-5 bg-blue-50/50 border-blue-200">
+            <h3 class="font-display font-600 text-[15px] mb-2 flex items-center gap-2"><i data-lucide="lightbulb" class="w-4 h-4 text-blue-600"></i> Peut‑on financer un nouveau projet ?</h3>
+            <ul class="text-[13px] text-ink-700 space-y-1.5">
+              <li class="flex items-start gap-2"><i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 mt-0.5 flex-none"></i> <span><b>~17,3 M FC</b> mobilisables aujourd'hui sur fonds propres (sans toucher aux fonds bailleurs).</span></li>
+              <li class="flex items-start gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 mt-0.5 flex-none"></i> <span>La trésorerie descend à <b>13,6 M en août</b> : éviter d'engager plus de ~12 M avant la rentrée de subvention de septembre.</span></li>
+              <li class="flex items-start gap-2"><i data-lucide="banknote" class="w-4 h-4 text-blue-600 mt-0.5 flex-none"></i> <span>Au‑delà : prévoir un <b>financement bailleur</b> dédié — les fonds affectés actuels (13,3 M) ne peuvent pas être détournés.</span></li>
+            </ul>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div></div>
+
+  <p class="text-center text-ink-400 text-[12px] mt-6 mb-10">Mockup Comptabilité · NgoluApp — données fictives. Bascule <b>Bureau / Mobile</b> en haut à droite, clique les menus.</p>
+
+  <script>
+    const TITLES = {
+      dashboard:'Tableau de bord', journaux:'Journaux', ecritures:'Écritures', types:'Types de transaction',
+      grandlivre:'Grand livre', plan:'Plan comptable', tiers:'Tiers', tresorerie:'Trésorerie',
+      immo:'Immobilisations', analytique:'Analytique', budget:'Budget', capacite:'Plan de trésorerie',
+      etats:'États financiers', tva:'TVA & taxes',
+    };
+    function go(nav){
+      document.querySelectorAll('[data-view]').forEach(v=>v.classList.toggle('active', v.dataset.view===nav));
+      document.querySelectorAll('.navlink[data-nav]').forEach(a=>a.classList.toggle('nav-active', a.dataset.nav===nav));
+      const mt=document.getElementById('mtitle'); if(mt) mt.textContent=TITLES[nav]||'';
+      const sc=document.getElementById('scroll'); if(sc) sc.scrollTop=0;
+    }
+    document.querySelectorAll('[data-nav]').forEach(a=>a.addEventListener('click',()=>go(a.dataset.nav)));
+
+    // Onglets des États financiers (Compte de résultat / Bilan / Balance)
+    function etab(name){
+      document.querySelectorAll('.epane').forEach(p=>p.classList.toggle('hidden', p.dataset.epane!==name));
+      document.querySelectorAll('.etab').forEach(b=>{
+        const on = b.dataset.etab===name;
+        b.classList.toggle('grad-blue', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('bg-white', !on);
+        b.classList.toggle('border', !on);
+        b.classList.toggle('border-ink-200', !on);
+        b.classList.toggle('text-ink-600', !on);
+      });
+    }
+    document.querySelectorAll('.etab').forEach(b=>b.addEventListener('click',()=>etab(b.dataset.etab)));
+
+    // Simulateur de capacité de financement
+    const SIM_DISPO = 17278000, SIM_AUG = 13600000, SIM_SAFETY = 5000000;
+    const frFmt = (n) => Math.round(n).toLocaleString('fr-FR');
+    function simulate(v){
+      const cost = Math.max(0, Number(v) || 0);
+      const after = SIM_DISPO - cost, augAfter = SIM_AUG - cost;
+      const $ = (id) => document.getElementById(id);
+      $('simAmtLabel').textContent = frFmt(cost);
+      $('simAfter').textContent = frFmt(after);
+      $('simAfter').className = 'font-display text-xl font-700 num ' + (after < 0 ? 'text-rose-600' : 'text-emerald-700');
+      $('simAug').textContent = frFmt(augAfter);
+      $('simAug').className = 'font-display text-xl font-700 num ' + (augAfter < SIM_SAFETY ? 'text-amber-600' : 'text-ink-800');
+      let txt, box;
+      if (after < 0) { txt = "Impossible sur fonds propres — financement bailleur requis"; box = 'bg-rose-50 text-rose-700'; }
+      else if (augAfter < SIM_SAFETY) { txt = "Risqué — trésorerie d'août sous le seuil de sécurité"; box = 'bg-amber-50 text-amber-700'; }
+      else { txt = "OK — finançable sur fonds propres en sécurité"; box = 'bg-emerald-50 text-emerald-700'; }
+      $('simVerdict').textContent = txt;
+      $('simVerdictBox').className = 'rounded-xl p-3 flex items-center ' + box;
+    }
+    const simAmt = document.getElementById('simAmt');
+    if (simAmt){
+      simAmt.addEventListener('input', () => simulate(simAmt.value));
+      document.querySelectorAll('.simchip').forEach(b => b.addEventListener('click', () => { simAmt.value = b.dataset.v; simulate(b.dataset.v); }));
+      simulate(simAmt.value);
+    }
+
+    // Filtre des écritures (style Domus : presets de période + dates + recherche + journal/statut)
+    const ECR_TODAY = '2026-06-05';
+    function ecrFilter(){
+      const g = (id) => document.getElementById(id);
+      const q = (g('ecrSearch').value || '').trim().toLowerCase();
+      const j = g('ecrJournal').value, s = g('ecrStatut').value;
+      const from = g('ecrFrom').value, to = g('ecrTo').value;
+      let shown = 0;
+      document.querySelectorAll('.ecr-row').forEach((tr) => {
+        const d = tr.dataset.date || '';
+        const ok =
+          (!q || (tr.dataset.text || '').includes(q)) &&
+          (!j || tr.dataset.journal === j) &&
+          (!s || tr.dataset.statut === s) &&
+          (!from || d >= from) &&
+          (!to || d <= to);
+        tr.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      const empty = document.getElementById('ecrEmpty');
+      if (empty) empty.style.display = shown ? 'none' : '';
+    }
+    function ecrPreset(id){
+      const g = (x) => document.getElementById(x);
+      const d = new Date(ECR_TODAY + 'T12:00:00');
+      const iso = (x) => x.toISOString().slice(0, 10);
+      const minus = (n) => { const c = new Date(d); c.setDate(c.getDate() - n); return iso(c); };
+      if (id === 'today') { g('ecrFrom').value = ECR_TODAY; g('ecrTo').value = ECR_TODAY; }
+      else if (id === '7d') { g('ecrFrom').value = minus(6); g('ecrTo').value = ECR_TODAY; }
+      else if (id === '30d') { g('ecrFrom').value = minus(29); g('ecrTo').value = ECR_TODAY; }
+      else if (id === 'quarter') { g('ecrFrom').value = '2026-04-01'; g('ecrTo').value = ECR_TODAY; }
+      else if (id === 'year') { g('ecrFrom').value = '2026-01-01'; g('ecrTo').value = ECR_TODAY; }
+      else { g('ecrFrom').value = ''; g('ecrTo').value = ''; }
+      document.querySelectorAll('.ecr-preset').forEach((b) => {
+        const on = b.dataset.preset === id;
+        b.classList.toggle('grad-blue', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('text-ink-500', !on);
+      });
+      ecrFilter();
+    }
+    if (document.getElementById('ecrSearch')){
+      ['ecrSearch', 'ecrJournal', 'ecrStatut', 'ecrFrom', 'ecrTo'].forEach((id) => {
+        const el = document.getElementById(id);
+        el.addEventListener('input', ecrFilter);
+        el.addEventListener('change', ecrFilter);
+      });
+      document.querySelectorAll('.ecr-preset').forEach((b) => b.addEventListener('click', () => ecrPreset(b.dataset.preset)));
+      ecrPreset('year'); // défaut comme Domus
+    }
+
+    // Filtre générique réutilisable (mêmes presets Domus) — Journaux, Grand livre, Trésorerie…
+    function fltApply(scope){
+      const bar = document.querySelector('.fltbar[data-scope="' + scope + '"]');
+      if (!bar) return;
+      const q = (bar.querySelector('.flt-search')?.value || '').trim().toLowerCase();
+      const from = bar.querySelector('.flt-from')?.value || '';
+      const to = bar.querySelector('.flt-to')?.value || '';
+      let shown = 0;
+      document.querySelectorAll('.flt-row[data-scope="' + scope + '"]').forEach((tr) => {
+        const d = tr.dataset.date || '';
+        const ok = (!q || (tr.dataset.text || '').includes(q)) && (!from || d >= from) && (!to || d <= to);
+        tr.style.display = ok ? '' : 'none';
+        if (ok) shown++;
+      });
+      const empty = document.querySelector('.flt-empty[data-scope="' + scope + '"]');
+      if (empty) empty.style.display = shown ? 'none' : '';
+    }
+    function fltPreset(scope, id){
+      const bar = document.querySelector('.fltbar[data-scope="' + scope + '"]');
+      const FROM = bar.querySelector('.flt-from'), TO = bar.querySelector('.flt-to');
+      const d = new Date(ECR_TODAY + 'T12:00:00');
+      const iso = (x) => x.toISOString().slice(0, 10);
+      const minus = (n) => { const c = new Date(d); c.setDate(c.getDate() - n); return iso(c); };
+      if (id === 'today') { FROM.value = ECR_TODAY; TO.value = ECR_TODAY; }
+      else if (id === '7d') { FROM.value = minus(6); TO.value = ECR_TODAY; }
+      else if (id === '30d') { FROM.value = minus(29); TO.value = ECR_TODAY; }
+      else if (id === 'quarter') { FROM.value = '2026-04-01'; TO.value = ECR_TODAY; }
+      else if (id === 'year') { FROM.value = '2026-01-01'; TO.value = ECR_TODAY; }
+      else { FROM.value = ''; TO.value = ''; }
+      bar.querySelectorAll('.flt-preset').forEach((b) => {
+        const on = b.dataset.preset === id;
+        b.classList.toggle('grad-blue', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('text-ink-500', !on);
+      });
+      fltApply(scope);
+    }
+    document.querySelectorAll('.fltbar').forEach((bar) => {
+      const scope = bar.dataset.scope;
+      bar.querySelectorAll('.flt-search, .flt-from, .flt-to').forEach((el) => {
+        el.addEventListener('input', () => fltApply(scope));
+        el.addEventListener('change', () => fltApply(scope));
+      });
+      bar.querySelectorAll('.flt-preset').forEach((b) => b.addEventListener('click', () => fltPreset(scope, b.dataset.preset)));
+      fltPreset(scope, 'year'); // défaut comme Domus
+    });
+
+    function setMode(m){
+      const mob = m==='mob';
+      document.body.classList.toggle('mobile', mob);
+      const d=document.getElementById('btn-desk'), b=document.getElementById('btn-mob');
+      d.classList.toggle('bg-ink-100', !mob); d.classList.toggle('text-ink-500', mob);
+      b.classList.toggle('bg-ink-100', mob);  b.classList.toggle('text-ink-500', !mob);
+      lucide.createIcons();
+    }
+    go('dashboard');
+    lucide.createIcons();
+  </script>
+  <!-- ════════════ Assistant IA (maquette) ════════════ -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "Comptabilité · NgoluApp", accent: "#3b82f6", accent2: "#1d4ed8",
+    greeting: "Bonjour 👋 Je suis l’assistant IA comptable. Je peux lire la trésorerie, les écritures, la TVA et l’analytique pour t’aider à décider. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Avons-nous de quoi financer un projet ?", "Quelles factures sont en retard ?", "Explique mon écart de TVA", "Résume le bilan"],
+    reco: [
+      {icon:"💵", tag:"Trésorerie", title:"Capacité de financement limitée", text:"Disponible réel : 17,3 M FC (après dettes et fonds affectés). Tout projet > 17 M passe en zone risquée dès le creux d’août."},
+      {icon:"🧾", tag:"TVA", title:"TVA déductible non lettrée", text:"3 factures fournisseurs non rapprochées. Régularise avant la déclaration du 15 pour ne pas perdre la déduction."},
+      {icon:"⏳", tag:"Créances", title:"4,2 M FC de créances > 60 j", text:"Une relance ciblée des plus gros clients sécuriserait la trésorerie d’août."},
+      {icon:"📊", tag:"Analytique", title:"Projet Eau en dépassement", text:"Le budget de charges du projet Eau est dépassé de 8 %. Réaffecte ou alerte le bailleur avant la fin du trimestre."}
+    ],
+    replies: [
+      {k:["projet","financ","trésor","argent","capacit","disponible"], a:"Capacité de financement :\n\n• Trésorerie : 41,2 M FC\n• − Dettes court terme : 10,6 M FC\n• − Fonds affectés (bailleurs) : 13,3 M FC\n• = Disponible réel : 17,3 M FC\n\nUn projet jusqu’à ~12 M FC reste sûr. Au-delà de 17 M, le creux d’août te fait passer sous le seuil de sécurité → risqué."},
+      {k:["facture","retard","créance","impay","client"], a:"4,2 M FC de factures clients dépassent 60 j. Les 3 plus gros montants représentent 70 % du total — relance-les en priorité. Je peux générer les lettres de relance."},
+      {k:["tva","taxe","déclaration"], a:"Ton écart de TVA vient de 3 factures fournisseurs dont la TVA déductible n’est pas lettrée. Une fois rapprochées, l’écart se résorbe. Pense à déclarer avant le 15."},
+      {k:["bilan","résultat","compte","actif","passif"], a:"Résumé : l’actif est équilibré (160,05 M FC = 160,05 M FC). Le résultat est positif mais une part de la trésorerie est affectée à des bailleurs : la marge de manœuvre réelle est de 17,3 M FC."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
+</body>
+</html>

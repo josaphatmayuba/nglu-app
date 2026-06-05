@@ -25,6 +25,7 @@ import { createDataBroadcastChannel } from "../realtime/dataBroadcastChannel";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import { clearAdminSession, hasValidAdminSession } from "../utils/authSession";
+import { AiAssistant } from "../utils/aiAssistant.jsx";
 
 const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
 const DASHBOARD_POLL_INTERVAL_MS = 90_000;
@@ -294,6 +295,7 @@ function AdminLayout() {
           <AdminRoutes />
         </div>
       </div>
+      <AiAssistant />
     </main>
   );
 }

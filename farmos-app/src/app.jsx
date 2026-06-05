@@ -18,6 +18,7 @@ import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
 import { api } from "./api";
+import { AiAssistant } from "./aiAssistant.jsx";
 
 const DEFAULTS = {
   lang: "fr",
@@ -277,6 +278,7 @@ function App() {
       <FarmTweaks tweaks={tweaks} setTweak={setTweak}/>
       <PwaUpdateBanner lang={tweaks.lang}/>
       <PwaInstallBanner lang={tweaks.lang}/>
+      <AiAssistant/>
     </div>
   );
 }

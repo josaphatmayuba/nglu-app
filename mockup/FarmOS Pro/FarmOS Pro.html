@@ -22,5 +22,26 @@
   <script type="text/babel" src="src/animals.jsx"></script>
   <script type="text/babel" src="src/screens.jsx"></script>
   <script type="text/babel" src="src/app.jsx"></script>
+  <!-- Assistant IA (maquette) -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "FarmOS · NgoluApp", accent: "#16a34a", accent2: "#15803d",
+    greeting: "Bonjour 👋 Je suis l’assistant IA de FarmOS. Je surveille la santé du troupeau, la reproduction, l’alimentation et la production pour t’aider à améliorer tes résultats d’élevage. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quels animaux sont à surveiller ?", "Optimise la ration alimentaire", "Quand prévoir les vaccinations ?", "Analyse ma production laitière"],
+    reco: [
+      {icon:"🐄", tag:"Reproduction", title:"3 vaches en chaleur", text:"Détectées aujourd’hui. Planifie l’insémination sous 12 h pour maximiser le taux de fécondation."},
+      {icon:"🌾", tag:"Alimentation", title:"Coût de ration trop élevé", text:"La ration dépasse de 7 % l’optimum. Ajuste le ratio fourrage/concentré pour réduire le coût sans baisser la production."},
+      {icon:"💉", tag:"Prophylaxie", title:"Rappel vaccinal lot B", text:"Échéance dans 5 j. Commande les doses dès maintenant pour éviter une rupture."},
+      {icon:"📉", tag:"Production", title:"Baisse de la production laitière", text:"−4 % sur 2 semaines. Vérifie l’abreuvement et le stress thermique du troupeau."}
+    ],
+    replies: [
+      {k:["chaleur","reprod","insémin","animal","animaux","surveil","santé"], a:"À surveiller en priorité :\n\n• 3 vaches en chaleur → inséminer sous 12 h.\n• 2 animaux avec une baisse d’ingestion (à examiner).\n\nUne détection précoce des chaleurs améliore directement ton taux de fécondation et ton intervalle vêlage-vêlage."},
+      {k:["ration","aliment","nourri","fourrage","concentr"], a:"Ta ration coûte 7 % de plus que l’optimum pour le même niveau de production. Piste : augmenter la part de fourrage de qualité et réduire le concentré acheté. Économie estimée sans perte de lait."},
+      {k:["vaccin","prophylax","traitement","rappel","soin"], a:"Prochaine échéance : rappel vaccinal du lot B dans 5 j. Commande les doses maintenant. Pense aussi au protocole antiparasitaire saisonnier qui arrive à terme ce mois-ci."},
+      {k:["lait","production","rendement","laitière"], a:"La production laitière baisse de 4 % sur 2 semaines. Causes fréquentes : abreuvement insuffisant, stress thermique, ou transition alimentaire. Commence par vérifier l’accès à l’eau et la ventilation."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
 </body>
 </html>

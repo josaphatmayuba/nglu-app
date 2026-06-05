@@ -21,6 +21,7 @@ import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
+import { AiAssistant } from "./aiAssistant.jsx";
 
 const NAV = [
   { sec: "Pilotage", items: [{ key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard }] },
@@ -209,6 +210,7 @@ export default function App() {
           })}
         </div>
       </div>
+      <AiAssistant />
     </div>
     </DateRangeProvider>
   );

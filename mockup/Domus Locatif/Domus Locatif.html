@@ -1101,5 +1101,26 @@
     }));
     setMode('desk');showView('dashboard');lucide.createIcons();
   </script>
+  <!-- Assistant IA (maquette) -->
+  <script>
+  window.AIW_CONFIG = {
+    app: "Domus · NgoluApp", accent: "#6366f1", accent2: "#4f46e5",
+    greeting: "Bonjour 👋 Je suis l’assistant IA de Domus. Je surveille les loyers, les baux, les biens et la maintenance pour t’aider à optimiser ta gestion locative. Pose ta question ou ouvre l’onglet Recommandations.",
+    prompts: ["Quels loyers sont en retard ?", "Quel bien est le moins rentable ?", "Rédige une relance locataire", "Quand renouveler les baux ?"],
+    reco: [
+      {icon:"🏠", tag:"Loyers", title:"3 loyers en retard", text:"1,4 M FC impayés. Je peux générer une relance groupée — le modèle de courrier est prêt."},
+      {icon:"📑", tag:"Baux", title:"2 baux expirent sous 45 j", text:"Propose le renouvellement maintenant pour éviter une vacance locative."},
+      {icon:"🔧", tag:"Maintenance", title:"Bien de Limete coûteux", text:"4 tickets de maintenance par mois. Un audit ponctuel réduirait les coûts récurrents."},
+      {icon:"📈", tag:"Rendement", title:"Studio Gombe sous-évalué", text:"Loué 12 % sous le prix du marché. Réévalue le loyer au prochain renouvellement."}
+    ],
+    replies: [
+      {k:["loyer","retard","impay","paiement"], a:"3 loyers sont en retard, soit 1,4 M FC :\n\n• Locataire A — 15 j de retard\n• Locataire B — 8 j\n• Locataire C — 5 j\n\nJe te conseille une relance graduée (rappel courtois puis mise en demeure). Je peux rédiger les courriers."},
+      {k:["bail","renouvel","expire","échéance"], a:"2 baux arrivent à échéance dans 45 j. Pour éviter la vacance, contacte les locataires dès maintenant et propose le renouvellement. Je peux préparer les avenants."},
+      {k:["bien","rentab","rendement","rentable"], a:"Le bien le moins rentable est le studio de Gombe : loué 12 % sous le marché et 1 mois de vacance cette année. Une réévaluation au renouvellement améliorerait ton rendement net."},
+      {k:["relance","locataire","courrier","lettre"], a:"Modèle de relance :\n\n« Madame/Monsieur, sauf erreur de notre part, le loyer de [mois] d’un montant de [montant] reste impayé. Merci de régulariser sous 8 jours… »\n\nDonne-moi le locataire et le montant, je personnalise."}
+    ]
+  };
+  </script>
+  <script src="../_shared/ai-widget.js"></script>
 </body>
 </html>
