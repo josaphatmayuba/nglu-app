@@ -116,8 +116,8 @@ export function LoginScreen() {
   return (
     <main className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand-mark">BP</div>
-        <h1>BatiPro Construction</h1>
+        <div className="brand-mark grad-amber">BP</div>
+        <h1 className="font-display">Bâti<span className="text-grad">Pro</span></h1>
         <p>Connecte-toi avec le meme compte que le CRM.</p>
         <label>
           <span>Identifiant</span>
@@ -128,7 +128,7 @@ export function LoginScreen() {
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </label>
         {error && <div className="login-error">{error}</div>}
-        <button disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
+        <button className="btn btn-amber grad-amber" disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
         <a href="/admin/">Retour au CRM</a>
       </form>
     </main>
