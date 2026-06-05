@@ -5,11 +5,12 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { filterLeases, filterPayments, useDateRange } from "../dateRange.jsx";
-import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
+import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRows, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
 
+// Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
   { key: "cash", label: "Espèces", color: "#475569", short: "FC" },
   { key: "mpesa", label: "M-Pesa", color: "#ef4444", short: "M-P", mobile: true },
@@ -19,6 +20,19 @@ const METHODS = [
   { key: "card", label: "Carte", color: "#0d9488", short: "CB" },
   { key: "cheque", label: "Chèque", color: "#7c3aed", short: "CH" },
 ];
+
+// Construit la liste UI des moyens de paiement à partir de la config backend
+// (/payment-method). Réutilise les jolis styles de METHODS pour les noms connus
+// (M-Pesa, Airtel…), dérive couleur/abréviation/flag mobile pour les autres.
+// Repli sur METHODS si rien n'est actif (app utilisable même sans config).
+function uiMethodsFrom(raw) {
+  const rows = paymentMethodRows(raw).filter((m) => m.active);
+  if (!rows.length) return METHODS;
+  return rows.map((m) => {
+    const known = METHODS.find((d) => d.label.toLowerCase() === m.name.toLowerCase());
+    return known || { key: String(m.id), label: m.name, color: m.color, short: m.short, mobile: m.mobile };
+  });
+}
 const tenantName = (r) => [r.tenantFirstName, r.tenantLastName].filter(Boolean).join(" ") || "Locataire";
 const today = () => new Date().toISOString().slice(0, 10);
 // N° de reçu auto-généré (modifiable) : REC-AAMMJJ-HHMM.
@@ -235,20 +249,22 @@ function TenantPayCard({ card, index, onPay }) {
 }
 
 // Mini-modale d'encaissement rapide depuis une carte en retard.
-function QuickPayModal({ card, onClose, onPaid }) {
+function QuickPayModal({ card, methods = METHODS, onClose, onPaid }) {
   const fullBalance = Number(card.balance) || 0;
   const monthRent = Number(card.rent ?? card.latest?.amount) || 0;
   // Pré-rempli avec le SOLDE réel (gère les retards cumulés + partiels) ; à défaut, un mois.
   const [amount, setAmount] = useState(String(fullBalance || monthRent || ""));
-  const [method, setMethod] = useState("mpesa");
+  const [method, setMethod] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+
+  const activeKey = method ?? methods[0]?.key;
 
   const submit = async () => {
     if (busy) return;
     setBusy(true); setErr(null);
     try {
-      const m = METHODS.find((x) => x.key === method);
+      const m = methods.find((x) => x.key === activeKey);
       await api.createPayment({
         leaseId: card.lease.id,
         paymentDate: today(),
@@ -305,8 +321,8 @@ function QuickPayModal({ card, onClose, onPaid }) {
           )}
           <label className="immo-field-label">Moyen de paiement</label>
           <div className="immo-method-grid">
-            {METHODS.map((m) => (
-              <button key={m.key} type="button" className={`immo-method ${method === m.key ? "active" : ""}`} onClick={() => setMethod(m.key)}>
+            {methods.map((m) => (
+              <button key={m.key} type="button" className={`immo-method ${activeKey === m.key ? "active" : ""}`} onClick={() => setMethod(m.key)}>
                 <span className="immo-method-badge" style={{ background: m.color }}>{m.short}</span>
                 {m.label}
               </button>
@@ -327,13 +343,14 @@ function QuickPayModal({ card, onClose, onPaid }) {
 
 // ─────────────────────────── LOYERS (liste) ───────────────────────────
 async function loadPaymentsModule() {
-  const [payments, leases, currencies, setting] = await Promise.all([
+  const [payments, leases, currencies, setting, paymentMethods] = await Promise.all([
     api.payments(),
     api.leases(),
     api.currencies(),
     api.setting(),
+    api.paymentMethods().catch(() => []),
   ]);
-  return { payments, leases, currencies, setting };
+  return { payments, leases, currencies, setting, paymentMethods };
 }
 
 export function Loyers({ go }) {
@@ -350,6 +367,7 @@ export function Loyers({ go }) {
       .filter((payment) => leaseIds.has(payment.leaseId));
   }, [data?.payments, dateRange, leases]);
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
+  const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
 
   const total = useMemo(() => rows.reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
   const totalByCurrency = useMemo(
@@ -537,7 +555,7 @@ export function Loyers({ go }) {
         </div>
       )}
 
-      {payTarget && <QuickPayModal card={payTarget} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
+      {payTarget && <QuickPayModal card={payTarget} methods={methods} onClose={() => setPayTarget(null)} onPaid={handlePaid} />}
       {flash && <div className="immo-toast"><Check size={16} /> {flash}</div>}
     </>
   );
@@ -545,8 +563,19 @@ export function Loyers({ go }) {
 
 // ───────────────────── PAIEMENT (wizard Encaisser) ─────────────────────
 export function Paiement({ go }) {
-  const { data: leases, loading, error, reload } = useApi(() => api.leases(), []);
+  const { data, loading, error, reload } = useApi(
+    async () => {
+      const [leases, paymentMethods] = await Promise.all([
+        api.leases(),
+        api.paymentMethods().catch(() => []),
+      ]);
+      return { leases, paymentMethods };
+    },
+    [],
+  );
   useRealtimeReload(reload, ["leases", "payments"]);
+  const leases = data?.leases;
+  const methods = useMemo(() => uiMethodsFrom(data?.paymentMethods), [data?.paymentMethods]);
   const active = (Array.isArray(leases) ? leases : []).filter((l) => (l.status || "active") === "active");
 
   const [step, setStep] = useState(() => {
@@ -566,7 +595,7 @@ export function Paiement({ go }) {
     }
   });
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("mpesa");
+  const [method, setMethod] = useState(null);
   // Numéro mobile money (pré-rempli avec le téléphone du locataire) et
   // numéro de reçu (auto-généré) — deux champs distincts selon la méthode.
   const [mobileNumber, setMobileNumber] = useState("");
@@ -576,7 +605,8 @@ export function Paiement({ go }) {
   const [err, setErr] = useState(null);
 
   const lease = active.find((l) => String(l.id) === String(leaseId)) || null;
-  const methodMeta = METHODS.find((m) => m.key === method);
+  const activeKey = method ?? methods[0]?.key;
+  const methodMeta = methods.find((m) => m.key === activeKey) || methods[0] || null;
 
   // Pré-sélection depuis l'espace locataire (montant + étape 2).
   useEffect(() => {
@@ -620,7 +650,7 @@ export function Paiement({ go }) {
   };
 
   const reset = () => {
-    setStep(1); setLeaseId(null); setAmount(""); setMethod("mpesa");
+    setStep(1); setLeaseId(null); setAmount(""); setMethod(null);
     setMobileNumber(""); setReceiptRef(genReceiptRef()); setDone(null); setErr(null);
   };
 
@@ -665,12 +695,12 @@ export function Paiement({ go }) {
             style={inputStyle} />
           <div className="kpi-label" style={{ margin: "14px 0 8px" }}>Moyen de paiement</div>
           <div className="grid g4 keep" style={{ gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-            {METHODS.map((m) => (
+            {methods.map((m) => (
               <button key={m.key} onClick={() => setMethod(m.key)}
-                style={{ ...tileStyle, ...(method === m.key ? tileOn : {}) }}>
+                style={{ ...tileStyle, ...(activeKey === m.key ? tileOn : {}) }}>
                 <span style={{ width: 30, height: 30, borderRadius: 8, background: m.color, color: "#fff",
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, margin: "0 auto" }}>{m.short}</span>
-                <div style={{ fontSize: 11, marginTop: 6, fontWeight: method === m.key ? 600 : 400 }}>{m.label}</div>
+                <div style={{ fontSize: 11, marginTop: 6, fontWeight: activeKey === m.key ? 600 : 400 }}>{m.label}</div>
               </button>
             ))}
           </div>

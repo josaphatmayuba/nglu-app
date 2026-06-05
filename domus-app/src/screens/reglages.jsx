@@ -1,19 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
-  MessageSquare, Plus, Pencil, Trash2, X, Sparkles,
+  MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard,
 } from "lucide-react";
 import { api } from "../api.js";
 import {
   DEVICE_MODES, useApi, decodeCurrencyText, cleanCurrencySymbol, buildCurrencyOptions,
+  paymentMethodRows,
 } from "../data.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { LandlordSignatureCard } from "./landlordSignature.jsx";
 
 async function loadConfig() {
   // status=all → toutes les devises (actives + inactives) pour la liste « Devises supportees ».
-  const [setting, currencies] = await Promise.all([api.setting(), api.allCurrencies()]);
-  return { setting, currencies };
+  const [setting, currencies, paymentMethods, subAccounts] = await Promise.all([
+    api.setting(),
+    api.allCurrencies(),
+    api.paymentMethods().catch(() => []),
+    api.subAccounts().catch(() => []),
+  ]);
+  return { setting, currencies, paymentMethods, subAccounts };
 }
 
 function currencyList(raw) {
@@ -43,6 +49,8 @@ export function Reglages({ device }) {
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
 
+  const activeMethods = paymentMethodRows(data?.paymentMethods).filter((m) => m.active);
+
   return (
     <div className="settings-layout">
       <div className="immo-header">
@@ -60,8 +68,8 @@ export function Reglages({ device }) {
         </div>
         <div className="settings-mini">
           <WalletCards size={20} />
-          <b>Mobile money actif</b>
-          <span>M-Pesa, Airtel, Orange</span>
+          <b>{activeMethods.length} moyen(s) de paiement</b>
+          <span>{activeMethods.map((m) => m.name).slice(0, 4).join(", ") || "Aucun configuré"}</span>
         </div>
         <div className="settings-mini">
           <Smartphone size={20} />
@@ -72,6 +80,7 @@ export function Reglages({ device }) {
 
       <SettingsGroup label="Devises & facturation">
         <CurrenciesCard initial={data?.currencies} onChanged={reload} />
+        <PaymentMethodsCard initial={data?.paymentMethods} subAccounts={data?.subAccounts} onChanged={reload} />
         <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
       </SettingsGroup>
 
@@ -192,6 +201,118 @@ function CurrenciesCard({ initial, onChanged }) {
           </div>
         ))}
         {filtered.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 13 }}>Aucune devise.</div>}
+      </div>
+    </section>
+  );
+}
+
+// Catégories proposées à l'utilisateur → sous-compte comptable cible.
+// Mobile money / banque / carte / chèque sont rattachés au sous-compte « Bank »
+// (équivalent de trésorerie hors caisse) ; espèces au sous-compte « Cash ».
+const PM_CATEGORIES = [
+  { value: "cash", label: "Espèces", sub: "Cash" },
+  { value: "mobile", label: "Mobile money", sub: "Bank" },
+  { value: "bank", label: "Banque / virement", sub: "Bank" },
+  { value: "card", label: "Carte", sub: "Bank" },
+  { value: "cheque", label: "Chèque", sub: "Bank" },
+];
+
+function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
+  const [rows, setRows] = useState(() => paymentMethodRows(initial));
+  const [name, setName] = useState("");
+  const [cat, setCat] = useState("mobile");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => { setRows(paymentMethodRows(initial)); }, [initial]);
+
+  // Résout l'id du sous-compte par nom (Cash / Bank) ; repli 1 (Cash) / 2 (Bank).
+  const subId = (subName) => {
+    const list = Array.isArray(subAccounts) ? subAccounts : [];
+    const found = list.find((s) => String(s?.name || "").toLowerCase() === subName.toLowerCase());
+    return found?.id ?? (subName.toLowerCase() === "cash" ? 1 : 2);
+  };
+
+  const add = async () => {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const cm = PM_CATEGORIES.find((c) => c.value === cat) || PM_CATEGORIES[0];
+      await api.createPaymentMethod({ methodName: n, subAccountId: subId(cm.sub) });
+      setName("");
+      setMsg({ type: "ok", text: `« ${n} » ajouté.` });
+      onChanged?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (m) => {
+    if (m.locked && m.active) return; // la méthode par défaut (Cash) reste active
+    const next = m.active ? "false" : "true";
+    setRows((prev) => prev.map((x) => (x.id === m.id ? { ...x, active: !x.active } : x)));
+    try {
+      await api.setPaymentMethodStatus(m.id, next);
+      onChanged?.();
+    } catch (e) {
+      setRows((prev) => prev.map((x) => (x.id === m.id ? { ...x, active: m.active } : x)));
+      setMsg({ type: "err", text: e.message });
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><CreditCard size={17} /> Moyens de paiement</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        Méthodes proposées à l'encaissement (espèces, mobile money, banque…). Partagées avec le CRM. Le badge « mobile » affiche un champ numéro lors du paiement.
+      </p>
+
+      <div className="pm-add">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="Nom (ex. M-Pesa, Airtel, Orange…)"
+        />
+        <select value={cat} onChange={(e) => setCat(e.target.value)}>
+          {PM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+        <button className="btn btn-sm btn-primary" onClick={add} disabled={busy || !name.trim()}>
+          <Plus size={14} /> Ajouter
+        </button>
+      </div>
+
+      {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
+
+      <div style={{ marginTop: 10, border: "1px solid var(--ink-200, #e4e4e7)", borderRadius: 10, overflow: "hidden" }}>
+        {rows.map((m) => (
+          <div key={m.id} className="currency-row">
+            <span className="currency-badge" style={{ background: m.color, color: "#fff" }}>{m.short}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                {m.name}
+                {m.mobile && <span className="chip chip-iris" style={{ fontSize: 10 }}>mobile</span>}
+              </div>
+              <div className="muted" style={{ fontSize: 11 }}>{m.subAccount || "—"}{m.locked ? " · par défaut" : ""}</div>
+            </div>
+            <span className={`chip ${m.active ? "chip-emerald" : "chip-ink"}`} style={{ marginRight: 6 }}>{m.active ? "Actif" : "Inactif"}</span>
+            <button
+              type="button"
+              className={`switch ${m.active ? "on" : ""}`}
+              onClick={() => toggle(m)}
+              disabled={m.locked && m.active}
+              title={m.locked ? "Méthode par défaut" : "Activer / désactiver"}
+              aria-label="Basculer"
+            >
+              <span />
+            </button>
+          </div>
+        ))}
+        {rows.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 13 }}>Aucun moyen de paiement. Ajoutez-en un ci-dessus.</div>}
       </div>
     </section>
   );

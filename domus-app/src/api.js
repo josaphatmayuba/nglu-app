@@ -90,6 +90,13 @@ export const api = {
   setCurrencyStatus: (id, status) => jsonFetch(`/currency/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status }) }),
   bulkCurrencyStatus: (ids, status) => jsonFetch("/currency/bulk-status", { method: "PATCH", base: API_ROOT, body: JSON.stringify({ ids, status }) }),
 
+  // Moyens de paiement configurables (table paymentMethod partagée avec le CRM).
+  paymentMethods: () => jsonFetch("/payment-method?query=all", { method: "GET", base: API_ROOT }),
+  createPaymentMethod: (b) => jsonFetch("/payment-method", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  updatePaymentMethod: (id, b) => jsonFetch(`/payment-method/${id}`, { method: "PUT", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  setPaymentMethodStatus: (id, status) => jsonFetch(`/payment-method/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status }) }),
+  subAccounts: () => jsonFetch("/sub-accounts", { method: "GET", base: API_ROOT }),
+
   dashboard: () => get("/dashboard"),
 
   tenants: () => get("/tenants"),

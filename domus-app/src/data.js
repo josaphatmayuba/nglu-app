@@ -207,3 +207,43 @@ export function moneyExact(n, currency = "CDF") {
   const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
   return `${symbol} ${v.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}`;
 }
+
+// ── Moyens de paiement configurables (table paymentMethod partagée avec le CRM) ──
+// Le backend ne stocke que methodName + sous-compte ; l'UI Domus dérive une
+// couleur, une abréviation et le flag « mobile money » (qui affiche le champ
+// numéro au lieu du n° de reçu) à partir du nom et du sous-compte.
+const PM_PALETTE = ["#475569", "#ef4444", "#f59e0b", "#2563eb", "#0d9488", "#7c3aed", "#db2777", "#0891b2"];
+const PM_MOBILE_HINTS = ["mpesa", "m-pesa", "airtel", "orange", "mobile", "momo", "mtn", "wave", "vodacom", "money"];
+
+export function derivePaymentStyle(name, subAccount = "", index = 0) {
+  const label = String(name || "Méthode").trim();
+  const hay = `${label} ${subAccount || ""}`.toLowerCase();
+  const letters = label.replace(/[^A-Za-zÀ-ÿ0-9]/g, "");
+  return {
+    color: PM_PALETTE[index % PM_PALETTE.length],
+    short: (letters.slice(0, 2) || "··").toUpperCase(),
+    mobile: PM_MOBILE_HINTS.some((h) => hay.includes(h)),
+  };
+}
+
+// Normalise la réponse /payment-method (tableau direct ou { getAllPaymentMethod }).
+export function paymentMethodRows(raw) {
+  const list = Array.isArray(raw?.getAllPaymentMethod)
+    ? raw.getAllPaymentMethod
+    : Array.isArray(raw) ? raw : [];
+  return list
+    .map((m, i) => {
+      const name = String(m.methodName || "").trim() || "Méthode";
+      const subAccount = m.subAccount?.name || "";
+      return {
+        id: m.id,
+        name,
+        subAccount,
+        instruction: m.instruction || "",
+        active: m.status === "true" || m.status === true || m.status === 1,
+        locked: m.id === 1, // id 1 protégé côté backend (pas de suppression/renommage)
+        ...derivePaymentStyle(name, subAccount, i),
+      };
+    })
+    .filter((m) => m.id != null);
+}
