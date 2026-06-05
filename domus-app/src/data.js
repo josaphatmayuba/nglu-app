@@ -212,17 +212,128 @@ export function moneyExact(n, currency = "CDF") {
 // Le backend ne stocke que methodName + sous-compte ; l'UI Domus dérive une
 // couleur, une abréviation et le flag « mobile money » (qui affiche le champ
 // numéro au lieu du n° de reçu) à partir du nom et du sous-compte.
+//
+// Catalogue mondial de moyens de paiement, proposé à l'ajout (datalist).
+// cat → sous-compte comptable : "cash" = Cash ; tout le reste = Bank.
+export const PAYMENT_PRESETS = [
+  {
+    group: "Espèces, banque & carte",
+    items: [
+      { name: "Espèces", cat: "cash" },
+      { name: "Virement bancaire", cat: "bank" },
+      { name: "Dépôt bancaire", cat: "bank" },
+      { name: "Chèque", cat: "cheque" },
+      { name: "Carte Visa", cat: "card" },
+      { name: "Carte Mastercard", cat: "card" },
+      { name: "American Express", cat: "card" },
+      { name: "UnionPay", cat: "card" },
+      { name: "Verve", cat: "card" },
+    ],
+  },
+  {
+    group: "Mobile money — RDC & Afrique centrale",
+    items: [
+      { name: "M-Pesa", cat: "mobile" },
+      { name: "Airtel Money", cat: "mobile" },
+      { name: "Orange Money", cat: "mobile" },
+      { name: "Africell Money", cat: "mobile" },
+      { name: "Illicocash", cat: "mobile" },
+      { name: "Maxicash", cat: "mobile" },
+      { name: "Pepele Mobile", cat: "mobile" },
+      { name: "EquityBCDC", cat: "bank" },
+    ],
+  },
+  {
+    group: "Mobile money — Afrique de l'Est",
+    items: [
+      { name: "Tigo Pesa", cat: "mobile" },
+      { name: "T-Kash", cat: "mobile" },
+      { name: "HaloPesa", cat: "mobile" },
+      { name: "MTN Mobile Money", cat: "mobile" },
+      { name: "Equitel", cat: "mobile" },
+    ],
+  },
+  {
+    group: "Mobile money — Afrique de l'Ouest",
+    items: [
+      { name: "MTN MoMo", cat: "mobile" },
+      { name: "Moov Money", cat: "mobile" },
+      { name: "Wave", cat: "mobile" },
+      { name: "Free Money", cat: "mobile" },
+      { name: "T-Money", cat: "mobile" },
+      { name: "Vodafone Cash", cat: "mobile" },
+      { name: "AirtelTigo Money", cat: "mobile" },
+    ],
+  },
+  {
+    group: "Mobile money — Afrique australe & Nigéria",
+    items: [
+      { name: "EcoCash", cat: "mobile" },
+      { name: "OneMoney", cat: "mobile" },
+      { name: "OPay", cat: "mobile" },
+      { name: "PalmPay", cat: "mobile" },
+      { name: "Paga", cat: "mobile" },
+    ],
+  },
+  {
+    group: "Portefeuilles & paiement en ligne",
+    items: [
+      { name: "PayPal", cat: "wallet" },
+      { name: "Apple Pay", cat: "wallet" },
+      { name: "Google Pay", cat: "wallet" },
+      { name: "Samsung Pay", cat: "wallet" },
+      { name: "Skrill", cat: "wallet" },
+      { name: "Wise", cat: "wallet" },
+      { name: "Payoneer", cat: "wallet" },
+      { name: "Revolut", cat: "wallet" },
+      { name: "Stripe", cat: "wallet" },
+      { name: "Alipay", cat: "wallet" },
+      { name: "WeChat Pay", cat: "wallet" },
+    ],
+  },
+  {
+    group: "Mobile money & wallets — Asie",
+    items: [
+      { name: "bKash", cat: "mobile" },
+      { name: "Nagad", cat: "mobile" },
+      { name: "Rocket", cat: "mobile" },
+      { name: "Paytm", cat: "mobile" },
+      { name: "PhonePe", cat: "mobile" },
+      { name: "UPI", cat: "mobile" },
+      { name: "GCash", cat: "mobile" },
+      { name: "Maya", cat: "mobile" },
+      { name: "OVO", cat: "mobile" },
+      { name: "GoPay", cat: "mobile" },
+      { name: "DANA", cat: "mobile" },
+      { name: "TrueMoney", cat: "mobile" },
+      { name: "ZaloPay", cat: "mobile" },
+    ],
+  },
+];
+
+const PM_ALL_PRESETS = PAYMENT_PRESETS.flatMap((g) => g.items);
+export const PAYMENT_PRESET_NAMES = [...new Set(PM_ALL_PRESETS.map((i) => i.name))];
+export const PAYMENT_PRESET_BY_NAME = Object.fromEntries(PM_ALL_PRESETS.map((i) => [i.name.toLowerCase(), i]));
+
 const PM_PALETTE = ["#475569", "#ef4444", "#f59e0b", "#2563eb", "#0d9488", "#7c3aed", "#db2777", "#0891b2"];
-const PM_MOBILE_HINTS = ["mpesa", "m-pesa", "airtel", "orange", "mobile", "momo", "mtn", "wave", "vodacom", "money"];
+// Noms du catalogue marqués « mobile » → flag fiable, plus quelques indices
+// génériques pour les noms personnalisés saisis à la main.
+const PM_MOBILE_NAMES = new Set(PM_ALL_PRESETS.filter((i) => i.cat === "mobile").map((i) => i.name.toLowerCase()));
+const PM_MOBILE_HINTS = [
+  "mpesa", "m-pesa", "pesa", "airtel", "orange", "mobile", "momo", "mtn", "moov",
+  "wave", "vodacom", "vodafone", "money", "ecocash", "gcash", "bkash", "nagad",
+  "paytm", "phonepe", "tigo", "wallet",
+];
 
 export function derivePaymentStyle(name, subAccount = "", index = 0) {
   const label = String(name || "Méthode").trim();
-  const hay = `${label} ${subAccount || ""}`.toLowerCase();
+  const norm = label.toLowerCase();
+  const hay = `${norm} ${String(subAccount || "").toLowerCase()}`;
   const letters = label.replace(/[^A-Za-zÀ-ÿ0-9]/g, "");
   return {
     color: PM_PALETTE[index % PM_PALETTE.length],
     short: (letters.slice(0, 2) || "··").toUpperCase(),
-    mobile: PM_MOBILE_HINTS.some((h) => hay.includes(h)),
+    mobile: PM_MOBILE_NAMES.has(norm) || PM_MOBILE_HINTS.some((h) => hay.includes(h)),
   };
 }
 
@@ -239,6 +350,7 @@ export function paymentMethodRows(raw) {
         id: m.id,
         name,
         subAccount,
+        ownerAccount: m.ownerAccount || "",
         instruction: m.instruction || "",
         active: m.status === "true" || m.status === true || m.status === 1,
         locked: m.id === 1, // id 1 protégé côté backend (pas de suppression/renommage)

@@ -6,7 +6,7 @@ import {
 import { api } from "../api.js";
 import {
   DEVICE_MODES, useApi, decodeCurrencyText, cleanCurrencySymbol, buildCurrencyOptions,
-  paymentMethodRows,
+  paymentMethodRows, PAYMENT_PRESETS, PAYMENT_PRESET_NAMES, PAYMENT_PRESET_BY_NAME,
 } from "../data.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { LandlordSignatureCard } from "./landlordSignature.jsx";
@@ -207,15 +207,23 @@ function CurrenciesCard({ initial, onChanged }) {
 }
 
 // Catégories proposées à l'utilisateur → sous-compte comptable cible.
-// Mobile money / banque / carte / chèque sont rattachés au sous-compte « Bank »
-// (équivalent de trésorerie hors caisse) ; espèces au sous-compte « Cash ».
+// Mobile money / banque / carte / portefeuille / chèque sont rattachés au
+// sous-compte « Bank » (trésorerie hors caisse) ; espèces au sous-compte « Cash ».
 const PM_CATEGORIES = [
   { value: "cash", label: "Espèces", sub: "Cash" },
   { value: "mobile", label: "Mobile money", sub: "Bank" },
   { value: "bank", label: "Banque / virement", sub: "Bank" },
   { value: "card", label: "Carte", sub: "Bank" },
+  { value: "wallet", label: "Portefeuille / en ligne", sub: "Bank" },
   { value: "cheque", label: "Chèque", sub: "Bank" },
 ];
+
+// Résout l'id du sous-compte par nom (Cash / Bank) ; repli 1 (Cash) / 2 (Bank).
+function resolveSubId(subAccounts, subName) {
+  const list = Array.isArray(subAccounts) ? subAccounts : [];
+  const found = list.find((s) => String(s?.name || "").toLowerCase() === subName.toLowerCase());
+  return found?.id ?? (subName.toLowerCase() === "cash" ? 1 : 2);
+}
 
 function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
   const [rows, setRows] = useState(() => paymentMethodRows(initial));
@@ -223,14 +231,15 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
   const [cat, setCat] = useState("mobile");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   useEffect(() => { setRows(paymentMethodRows(initial)); }, [initial]);
 
-  // Résout l'id du sous-compte par nom (Cash / Bank) ; repli 1 (Cash) / 2 (Bank).
-  const subId = (subName) => {
-    const list = Array.isArray(subAccounts) ? subAccounts : [];
-    const found = list.find((s) => String(s?.name || "").toLowerCase() === subName.toLowerCase());
-    return found?.id ?? (subName.toLowerCase() === "cash" ? 1 : 2);
+  // Saisie du nom : si elle correspond à un moyen du catalogue, on pré-règle la catégorie.
+  const onName = (v) => {
+    setName(v);
+    const preset = PAYMENT_PRESET_BY_NAME[v.trim().toLowerCase()];
+    if (preset) setCat(preset.cat);
   };
 
   const add = async () => {
@@ -240,7 +249,7 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
     setMsg(null);
     try {
       const cm = PM_CATEGORIES.find((c) => c.value === cat) || PM_CATEGORIES[0];
-      await api.createPaymentMethod({ methodName: n, subAccountId: subId(cm.sub) });
+      await api.createPaymentMethod({ methodName: n, subAccountId: resolveSubId(subAccounts, cm.sub) });
       setName("");
       setMsg({ type: "ok", text: `« ${n} » ajouté.` });
       onChanged?.();
@@ -264,19 +273,49 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
     }
   };
 
+  const openEdit = (m) => setEditing({
+    id: m.id,
+    methodName: m.name,
+    ownerAccount: m.ownerAccount || "",
+    instruction: m.instruction || "",
+    cat: m.mobile ? "mobile" : (m.subAccount?.toLowerCase() === "cash" ? "cash" : "bank"),
+  });
+
+  const saveEdit = async (form) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const cm = PM_CATEGORIES.find((c) => c.value === form.cat) || PM_CATEGORIES[0];
+      await api.updatePaymentMethod(form.id, {
+        methodName: form.methodName.trim(),
+        subAccountId: resolveSubId(subAccounts, cm.sub),
+        ownerAccount: form.ownerAccount?.trim() || null,
+        instruction: form.instruction?.trim() || null,
+      });
+      setEditing(null);
+      setMsg({ type: "ok", text: "Moyen de paiement mis à jour." });
+      onChanged?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="card settings-card">
       <h3><CreditCard size={17} /> Moyens de paiement</h3>
       <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
-        Méthodes proposées à l'encaissement (espèces, mobile money, banque…). Partagées avec le CRM. Le badge « mobile » affiche un champ numéro lors du paiement.
+        Méthodes proposées à l'encaissement (espèces, mobile money, banque, cartes, portefeuilles…). Partagées avec le CRM. Le badge « mobile » affiche un champ numéro lors du paiement.
       </p>
 
       <div className="pm-add">
         <input
+          list="pm-presets"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => onName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && add()}
-          placeholder="Nom (ex. M-Pesa, Airtel, Orange…)"
+          placeholder="Choisir ou saisir (M-Pesa, Airtel Money, Orange Money, MTN MoMo, Wave…)"
         />
         <select value={cat} onChange={(e) => setCat(e.target.value)}>
           {PM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -285,6 +324,16 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
           <Plus size={14} /> Ajouter
         </button>
       </div>
+      <datalist id="pm-presets">
+        {PAYMENT_PRESETS.map((g) => (
+          <optgroup key={g.group} label={g.group}>
+            {g.items.map((it) => <option key={it.name} value={it.name} />)}
+          </optgroup>
+        ))}
+      </datalist>
+      <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+        {PAYMENT_PRESET_NAMES.length}+ moyens préconfigurés (mobile money mondial, cartes, portefeuilles). Saisissez un nom libre pour un moyen non listé.
+      </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
 
@@ -297,9 +346,14 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
                 {m.name}
                 {m.mobile && <span className="chip chip-iris" style={{ fontSize: 10 }}>mobile</span>}
               </div>
-              <div className="muted" style={{ fontSize: 11 }}>{m.subAccount || "—"}{m.locked ? " · par défaut" : ""}</div>
+              <div className="muted" style={{ fontSize: 11 }}>
+                {m.subAccount || "—"}{m.ownerAccount ? ` · ${m.ownerAccount}` : ""}{m.locked ? " · par défaut" : ""}
+              </div>
             </div>
             <span className={`chip ${m.active ? "chip-emerald" : "chip-ink"}`} style={{ marginRight: 6 }}>{m.active ? "Actif" : "Inactif"}</span>
+            {!m.locked && (
+              <button type="button" className="btn btn-sm" onClick={() => openEdit(m)} title="Configurer"><Pencil size={13} /></button>
+            )}
             <button
               type="button"
               className={`switch ${m.active ? "on" : ""}`}
@@ -314,7 +368,66 @@ function PaymentMethodsCard({ initial, subAccounts, onChanged }) {
         ))}
         {rows.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 13 }}>Aucun moyen de paiement. Ajoutez-en un ci-dessus.</div>}
       </div>
+
+      {editing && (
+        <PaymentMethodEditor value={editing} busy={busy} onClose={() => setEditing(null)} onSave={saveEdit} />
+      )}
     </section>
+  );
+}
+
+function PaymentMethodEditor({ value, busy, onClose, onSave }) {
+  const [form, setForm] = useState(value);
+  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
+  return (
+    <div className="modal-layer">
+      <div className="modal-scrim" onClick={() => !busy && onClose()} />
+      <div className="modal-card domus-template-modal">
+        <div className="modal-head">
+          <div className="domus-modal-title">
+            <span className="domus-modal-title-icon"><CreditCard size={20} /></span>
+            <div>
+              <h2>Configurer le moyen de paiement</h2>
+              <p>Nom, compte destinataire et instructions affichées au paiement</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+        </div>
+        <div className="domus-template-form">
+          <div className="domus-property-form-grid">
+            <label className="domus-property-field">
+              <span>Nom <b>*</b></span>
+              <input list="pm-presets" value={form.methodName} onChange={(e) => set({ methodName: e.target.value })} placeholder="ex. M-Pesa" />
+            </label>
+            <label className="domus-property-field">
+              <span>Catégorie</span>
+              <select value={form.cat} onChange={(e) => set({ cat: e.target.value })}>
+                {PM_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="domus-property-field">
+            <span>Compte / numéro destinataire</span>
+            <input value={form.ownerAccount} onChange={(e) => set({ ownerAccount: e.target.value })} placeholder="+243 970 000 000 ou n° de compte / IBAN" />
+          </label>
+          <label className="domus-property-field">
+            <span>Instructions <em style={{ color: "#94a3b8", fontWeight: 400 }}>(affichées au locataire)</em></span>
+            <textarea
+              className="domus-template-body"
+              value={form.instruction}
+              onChange={(e) => set({ instruction: e.target.value })}
+              placeholder={"Ex. Composer *150*1# puis confirmer le paiement avec votre code secret."}
+            />
+          </label>
+        </div>
+        <div className="domus-modal-footer">
+          <button type="button" className="domus-modal-cancel" onClick={onClose} disabled={busy}>Annuler</button>
+          <button type="button" className="domus-modal-submit" onClick={() => onSave(form)} disabled={busy || !form.methodName.trim()}>
+            <Check size={14} /> {busy ? "Enregistrement..." : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
