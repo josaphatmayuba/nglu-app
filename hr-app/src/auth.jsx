@@ -93,14 +93,14 @@ export function LoginScreen() {
   return (
     <main className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <div className="brand-mark">RH</div>
-        <h1>Ressources Humaines</h1>
-        <p>Connexion avec le compte CRM.</p>
-        <label><span>Identifiant</span><input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} /></label>
-        <label><span>Mot de passe</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <div className="brand-mark grad-accent">RH</div>
+        <h1 className="font-display">RH <span className="text-grad">NgoluApp</span></h1>
+        <p>Connecte-toi avec le même compte que le CRM.</p>
+        <label><span>Identifiant</span><input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></label>
+        <label><span>Mot de passe</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
         {error && <div className="login-error">{error}</div>}
-        <button disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
-        <a href="/admin/">Retour CRM</a>
+        <button className="btn btn-accent grad-accent" disabled={submitting || !username || !password}>{submitting ? "Connexion..." : "Se connecter"}</button>
+        <a href="/admin/">Retour au CRM</a>
       </form>
     </main>
   );
