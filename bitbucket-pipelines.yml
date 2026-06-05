@@ -48,7 +48,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/frontend/dist"
                 - scp -o StrictHostKeyChecking=no -r frontend/dist $SERVER:$APP/frontend/
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Domus → dev
@@ -60,7 +60,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/domus-app/dist"
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist $SERVER:$APP/domus-app/
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: FarmOS → dev
@@ -72,7 +72,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/farmos-app/dist"
                 - scp -o StrictHostKeyChecking=no -r farmos-app/dist $SERVER:$APP/farmos-app/
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: BatiPro → dev
@@ -84,7 +84,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/batipro-app/dist"
                 - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Marketing → dev
@@ -96,7 +96,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
                 - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Chaque deploiement prod est en trigger manuel (clic dans Bitbucket).
@@ -204,7 +204,7 @@ pipelines:
                 - for a in domus-app farmos-app batipro-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - for a in frontend domus-app farmos-app batipro-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
-                - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
     deploy-all-prod:
       - parallel:
