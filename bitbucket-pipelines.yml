@@ -1,11 +1,22 @@
 image: node:20-alpine
 
+# CI/CD multi-projets NgluApp.
+#   develop -> dev  (dev.ongdngolu.org,  /opt/nglu-app-dev,  projet compose nglu_dev)
+#   master  -> prod (ongdngolu.org,      /opt/nglu-app,      projet compose nglu_prod)
+# Projets buildes/deployes : backend2 (NestJS), frontend (CRM /admin),
+#   domus-app (/domus/), farmos-app (/farmos/), batipro-app (/batipro/), marketing-site.
+
 definitions:
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
+    node-domus: domus-app/node_modules
+    node-farmos: farmos-app/node_modules
+    node-batipro: batipro-app/node_modules
+    node-marketing: marketing-site/node_modules
 
   steps:
+    # ───────────────────────── Audit ─────────────────────────
     - step: &audit-security
         name: Security Audit (npm audit high/critical)
         image: node:20-alpine
@@ -16,11 +27,10 @@ definitions:
           - echo "=== Frontend audit ==="
           - cd frontend && npm install --legacy-peer-deps --ignore-scripts && npm audit --audit-level=high
 
+    # ───────────────────────── Builds ────────────────────────
     - step: &build-backend2
         name: Build Backend2
-        image: node:20-alpine
-        caches:
-          - node-backend2
+        caches: [node-backend2]
         script:
           - cd backend2
           - npm ci
@@ -29,10 +39,8 @@ definitions:
           - backend2/dist/**
 
     - step: &build-frontend-prod
-        name: Build Frontend (production mode)
-        image: node:20-alpine
-        caches:
-          - node-frontend
+        name: Build Frontend (production)
+        caches: [node-frontend]
         script:
           - cd frontend
           - npm install --legacy-peer-deps
@@ -41,10 +49,8 @@ definitions:
           - frontend/dist/**
 
     - step: &build-frontend-dev
-        name: Build Frontend (development mode)
-        image: node:20-alpine
-        caches:
-          - node-frontend
+        name: Build Frontend (development)
+        caches: [node-frontend]
         script:
           - cd frontend
           - npm install --legacy-peer-deps
@@ -52,42 +58,110 @@ definitions:
         artifacts:
           - frontend/dist/**
 
-    - step: &deploy-prod
-        name: Deploy to Production (ongdngolu.org)
-        image: alpine
+    - step: &build-domus
+        name: Build Domus
+        caches: [node-domus]
         script:
-          - apk add --no-cache openssh-client
-          - SERVER=admin@16.54.167.125
-          - APP_DIR=/opt/nglu-app
-          - ssh $SERVER "cd $APP_DIR && git pull origin master"
-          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
-          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
-          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up --build -d"
-          - ssh $SERVER "docker compose -p nglu_prod -f $APP_DIR/docker-compose.prod.yml ps"
+          - cd domus-app
+          - npm install --legacy-peer-deps
+          - npm run build
+        artifacts:
+          - domus-app/dist/**
 
+    - step: &build-farmos
+        name: Build FarmOS
+        caches: [node-farmos]
+        script:
+          - cd farmos-app
+          - npm install --legacy-peer-deps
+          - npm run build
+        artifacts:
+          - farmos-app/dist/**
+
+    - step: &build-batipro
+        name: Build BatiPro
+        caches: [node-batipro]
+        script:
+          - cd batipro-app
+          - npm install --legacy-peer-deps
+          - npm run build
+        artifacts:
+          - batipro-app/dist/**
+
+    - step: &build-marketing
+        name: Build Marketing
+        caches: [node-marketing]
+        script:
+          - cd marketing-site
+          - npm install --legacy-peer-deps
+          - npm run build
+        artifacts:
+          - marketing-site/dist/**
+
+    # ───────────────────────── Deploy DEV ────────────────────
     - step: &deploy-dev
         name: Deploy to Development (dev.ongdngolu.org)
         image: alpine
+        deployment: development
         script:
           - apk add --no-cache openssh-client
-          - SERVER=admin@16.54.167.125
-          - APP_DIR=/opt/nglu-app-dev
-          - ssh $SERVER "cd $APP_DIR && git pull origin develop"
-          - scp -r frontend/dist $SERVER:$APP_DIR/frontend/
-          - scp -r backend2/dist $SERVER:$APP_DIR/backend2/
-          - ssh $SERVER "cd $APP_DIR && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up --build -d"
-          - ssh $SERVER "docker compose -p nglu_dev -f $APP_DIR/docker-compose.dev.yml ps"
+          - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+          # Met a jour les configs (compose/nginx) sans bloquer si le working tree n'est pas FF.
+          - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore, on continue avec la dist livree')"
+          # Apps statiques (dist bind-montee, servie par nginx) : on rafraichit chaque dist.
+          - for app in frontend domus-app farmos-app batipro-app marketing-site; do
+              echo "=== deploy $app -> dev ===";
+              $SSH $SERVER "mkdir -p $APP/$app/dist";
+              scp -o StrictHostKeyChecking=no -r $app/dist $SERVER:$APP/$app/;
+            done
+          # Backend : dist + restart conteneur (rebuild image avec les deps a jour).
+          - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+          - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+          - $SSH $SERVER "docker exec nglu_dev_frontend nginx -s reload || true"
+          - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+    # ───────────────────────── Deploy PROD ───────────────────
+    - step: &deploy-prod
+        name: Deploy to Production (ongdngolu.org)
+        image: alpine
+        deployment: production
+        trigger: manual
+        script:
+          - apk add --no-cache openssh-client
+          - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+          - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore, on continue avec la dist livree')"
+          - for app in frontend domus-app farmos-app batipro-app marketing-site; do
+              echo "=== deploy $app -> prod ===";
+              $SSH $SERVER "mkdir -p $APP/$app/dist";
+              scp -o StrictHostKeyChecking=no -r $app/dist $SERVER:$APP/$app/;
+            done
+          - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+          # Backend : rebuild image (deps a jour). Frontend/apps statiques = dist bind-montee,
+          # servie en direct par nginx → on NE rebuild PAS l'image (cf. incident prod), simple reload.
+          - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+          - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+          - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
 pipelines:
   branches:
-    master:
-      - step: *audit-security
-      - step: *build-backend2
-      - step: *build-frontend-prod
-      - step: *deploy-prod
-
     develop:
       - step: *audit-security
-      - step: *build-backend2
-      - step: *build-frontend-dev
+      - parallel:
+          - step: *build-backend2
+          - step: *build-frontend-dev
+          - step: *build-domus
+          - step: *build-farmos
+          - step: *build-batipro
+          - step: *build-marketing
       - step: *deploy-dev
+
+    master:
+      - step: *audit-security
+      - parallel:
+          - step: *build-backend2
+          - step: *build-frontend-prod
+          - step: *build-domus
+          - step: *build-farmos
+          - step: *build-batipro
+          - step: *build-marketing
+      - step: *deploy-prod
