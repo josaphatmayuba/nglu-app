@@ -18,6 +18,8 @@ definitions:
     node-domus: domus-app/node_modules
     node-farmos: farmos-app/node_modules
     node-batipro: batipro-app/node_modules
+    node-hr: hr-app/node_modules
+    node-comptabilite: comptabilite-app/node_modules
     node-marketing: marketing-site/node_modules
 
 pipelines:
@@ -86,6 +88,34 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-batipro-dev && docker cp $APP/batipro-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-dev/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: HR → dev
+              caches: [node-hr]
+              condition: { changesets: { includePaths: ["hr-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/hr-app/dist $PROD_APP/nginx"
+                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-dev && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-dev/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Comptabilite → dev
+              caches: [node-comptabilite]
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist $PROD_APP/nginx"
+                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-dev && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-dev/"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
@@ -172,6 +202,34 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
+              name: HR → prod (manuel)
+              caches: [node-hr]
+              trigger: manual
+              condition: { changesets: { includePaths: ["hr-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/hr-app/dist"
+                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-prod && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-prod/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Comptabilite → prod (manuel)
+              caches: [node-comptabilite]
+              trigger: manual
+              condition: { changesets: { includePaths: ["comptabilite-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist"
+                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-prod && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-prod/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
               name: Marketing → prod (manuel)
               caches: [node-marketing]
               trigger: manual
@@ -203,9 +261,9 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:dev && cd ..
-                - for a in domus-app farmos-app batipro-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - for a in domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - for a in frontend domus-app farmos-app batipro-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
+                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
     deploy-all-prod:
@@ -225,7 +283,7 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - for a in domus-app farmos-app batipro-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - for a in domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - for a in frontend domus-app farmos-app batipro-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
+                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
