@@ -77,14 +77,15 @@ pipelines:
           - step:
               name: BatiPro → dev
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/batipro-app/dist"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/batipro-app/dist $PROD_APP/nginx"
                 - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: Marketing → dev
