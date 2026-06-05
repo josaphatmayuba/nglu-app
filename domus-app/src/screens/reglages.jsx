@@ -28,6 +28,15 @@ function currencyList(raw) {
   })).filter((c) => c.id != null);
 }
 
+function SettingsGroup({ label, cols = 1, children }) {
+  return (
+    <div className="settings-group">
+      <h2 className="settings-group-label">{label}</h2>
+      <div className="settings-grid" data-cols={cols}>{children}</div>
+    </div>
+  );
+}
+
 export function Reglages({ device }) {
   const { data, loading, error, reload } = useApi(loadConfig, []);
 
@@ -35,7 +44,7 @@ export function Reglages({ device }) {
   if (error) return <ApiError error={error} />;
 
   return (
-    <>
+    <div className="settings-layout">
       <div className="immo-header">
         <div>
           <h1>Reglages</h1>
@@ -61,25 +70,32 @@ export function Reglages({ device }) {
         </div>
       </div>
 
-      {device && (
-        <section className="card settings-card device-settings-card">
-          <h3><Smartphone size={17} /> Apercu device</h3>
-          <div className="device-segmented">
-            {DEVICE_MODES.map((mode) => (
-              <button key={mode.value} className={device.forcedMode === mode.value ? "active" : ""} onClick={() => device.setForcedMode(mode.value)}>
-                {mode.label}
-              </button>
-            ))}
-          </div>
-          <div className="setting-row"><span>Mode applique</span><b>{device.mode}</b></div>
-        </section>
-      )}
+      <SettingsGroup label="Devises & facturation">
+        <CurrenciesCard initial={data?.currencies} onChanged={reload} />
+        <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
+      </SettingsGroup>
 
-      <CurrenciesCard initial={data?.currencies} onChanged={reload} />
-      <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
-      <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
-      <MessagesCard />
-    </>
+      <SettingsGroup label="Contrats & communication" cols={2}>
+        <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
+        <MessagesCard />
+      </SettingsGroup>
+
+      {device && (
+        <SettingsGroup label="Affichage & application">
+          <section className="card settings-card device-settings-card">
+            <h3><Smartphone size={17} /> Apercu device</h3>
+            <div className="device-segmented">
+              {DEVICE_MODES.map((mode) => (
+                <button key={mode.value} className={device.forcedMode === mode.value ? "active" : ""} onClick={() => device.setForcedMode(mode.value)}>
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+            <div className="setting-row"><span>Mode applique</span><b>{device.mode}</b></div>
+          </section>
+        </SettingsGroup>
+      )}
+    </div>
   );
 }
 
