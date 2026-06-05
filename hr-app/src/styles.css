@@ -29,6 +29,9 @@ button, input, select, textarea { font: inherit; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--ink-300); border-radius: 4px; }
 
+/* Taille par défaut des icônes SVG inline (surchargée par contexte ci-dessous). */
+.ic { width: 16px; height: 16px; flex: none; }
+
 .grad-accent { background: linear-gradient(135deg,#14b8a6 0%,#0d9488 55%,#0e7490 100%); }
 .grad-sky    { background: linear-gradient(135deg,#38bdf8 0%,#0ea5e9 60%,#0284c7 100%); }
 .grad-dark   { background: radial-gradient(120% 120% at 0% 0%,#0f2b29 0%,#0b1f1d 55%,#06100f 100%); }

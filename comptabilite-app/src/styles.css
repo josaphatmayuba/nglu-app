@@ -27,6 +27,9 @@ button, input, select, textarea { font: inherit; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--ink-300); border-radius: 4px; }
 
+/* Taille par défaut des icônes SVG inline (surchargée par contexte ci-dessous). */
+.ic { width: 16px; height: 16px; flex: none; }
+
 .grad-accent  { background: linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%); }
 .grad-emerald { background: linear-gradient(135deg,#34d399 0%,#059669 100%); }
 .grad-dark    { background: radial-gradient(120% 120% at 0% 0%,#0f1e3d 0%,#0a1530 55%,#050b1c 100%); }
@@ -178,8 +181,8 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 /* mini bar chart (dashboard) */
 .barchart { display: flex; align-items: flex-end; gap: 12px; height: 160px; }
 .barchart .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.barchart .bars { width: 100%; height: 128px; display: flex; align-items: flex-end; justify-content: center; gap: 4px; }
-.barchart .bars i { width: 12px; border-radius: 4px 4px 0 0; display: block; }
+.barchart .bars { width: 100%; height: 128px; display: flex; align-items: flex-end; justify-content: center; gap: 6px; }
+.barchart .bars i { width: 18px; max-width: 30%; border-radius: 5px 5px 0 0; display: block; }
 
 /* stacked répartition bar */
 .stack { height: 16px; border-radius: 999px; overflow: hidden; display: flex; }
