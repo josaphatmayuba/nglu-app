@@ -561,10 +561,14 @@ function Employes({ staff, setModal }) {
       <PageHead eyebrow="Annuaire" title="Employés" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
       <div className="searchbar">
         <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employé, poste, matricule…" /></label>
-        <select className={`pillbtn ${dept ? "on" : ""}`} value={dept} onChange={(e) => setDept(e.target.value)} title="Filtrer par département">
-          <option value="">Tous les départements</option>
-          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
+        <Autocomplete
+          className={`pill-auto ${dept ? "on" : ""}`}
+          value={dept}
+          onChange={setDept}
+          placeholder="Tous les départements"
+          title="Filtrer par département"
+          options={[{ value: "", label: "Tous les départements" }, ...depts.map((d) => ({ value: d, label: d }))]}
+        />
         <button type="button" className="pillbtn" onClick={() => setView(view === "grid" ? "list" : "grid")} title="Changer l'affichage"><Icon name={view === "grid" ? "list" : "dashboard"} /> {view === "grid" ? "Liste" : "Grille"}</button>
         <button type="button" className="pillbtn" onClick={exportEmployes} title="Exporter en CSV"><Icon name="download" /> Exporter</button>
       </div>
@@ -1165,7 +1169,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
           {modal.kind === "award" && !action && <Field label="Description" value={form.description} onChange={(v) => set("description", v)} />}
           {modal.kind === "salary" && !action && (
             <>
-              <label className="field"><span>Employé</span><select value={form.userId} onChange={(e) => set("userId", e.target.value)}>{staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}</select></label>
+              <div className="field"><span>Employé</span><Autocomplete value={form.userId} onChange={(v) => set("userId", v)} options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} /></div>
               <Field label="Montant (FC)" type="number" value={form.salary} onChange={(v) => set("salary", v)} required />
               <Field label="Date" type="date" value={form.salaryStartDate} onChange={(v) => set("salaryStartDate", v)} required />
               <Field label="Compte crédit" type="number" value={form.paymentAccountId} onChange={(v) => set("paymentAccountId", v)} />
@@ -1179,15 +1183,123 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     </div>
   );
 }
+function normalizeOptions(options = []) {
+  return options.map((opt) => typeof opt === "object" ? opt : { value: opt, label: opt });
+}
+
+function Autocomplete({ value, onChange, options = [], placeholder = "Selectionner", required = false, className = "", title }) {
+  const items = React.useMemo(() => normalizeOptions(options), [options]);
+  const selected = items.find((item) => String(item.value) === String(value ?? ""));
+  const [query, setQuery] = React.useState(selected?.label || "");
+  const [open, setOpen] = React.useState(false);
+  const [active, setActive] = React.useState(0);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    const next = items.find((item) => String(item.value) === String(value ?? ""));
+    setQuery(next?.label || "");
+  }, [value, items]);
+
+  React.useEffect(() => {
+    const close = (event) => {
+      if (ref.current && !ref.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle || selected?.label === query) return items;
+    return items.filter((item) => String(item.label).toLowerCase().includes(needle));
+  }, [items, query, selected]);
+
+  const choose = (item) => {
+    onChange(item.value);
+    setQuery(item.label || "");
+    setOpen(false);
+    setActive(0);
+  };
+
+  const onKeyDown = (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setOpen(true);
+      setActive((i) => Math.min(i + 1, Math.max(filtered.length - 1, 0)));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (event.key === "Enter" && open && filtered[active]) {
+      event.preventDefault();
+      choose(filtered[active]);
+    } else if (event.key === "Escape") {
+      setOpen(false);
+      setQuery(selected?.label || "");
+    }
+  };
+
+  const onBlur = () => {
+    window.setTimeout(() => {
+      if (!ref.current?.contains(document.activeElement)) {
+        const exact = items.find((item) => item.label.toLowerCase() === query.trim().toLowerCase());
+        if (exact) choose(exact);
+        else setQuery(selected?.label || "");
+      }
+    }, 80);
+  };
+
+  return (
+    <div className={`autocomplete ${className}`} ref={ref} title={title}>
+      <input
+        type="text"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        required={required}
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+          setActive(0);
+          if (!event.target.value) onChange("");
+        }}
+      />
+      <button type="button" className="autocomplete-toggle" tabIndex={-1} onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen((v) => !v)}>
+        <Icon name="chevronRight" />
+      </button>
+      {open && (
+        <div className="autocomplete-menu" role="listbox">
+          {filtered.length === 0 && <div className="autocomplete-empty">Aucun resultat</div>}
+          {filtered.map((item, index) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={String(item.value) === String(value ?? "")}
+              className={`autocomplete-option ${index === active ? "active" : ""}`}
+              key={`${item.value}-${item.label}`}
+              onMouseEnter={() => setActive(index)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(item)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, type = "text", required = false, options = [] }) {
   if (type === "textarea") {
     return <label className="field wide"><span>{label}</span><textarea required={required} value={value} onChange={(e) => onChange(e.target.value)} rows={3} /></label>;
   }
   if (type === "select") {
-    return <label className="field"><span>{label}</span><select required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">SÃ©lectionner</option>{options.map((opt) => {
-      const item = typeof opt === "object" ? opt : { value: opt, label: opt };
-      return <option key={item.value} value={item.value}>{item.label}</option>;
-    })}</select></label>;
+    return <div className="field"><span>{label}</span><Autocomplete required={required} value={value} onChange={onChange} options={options} /></div>;
   }
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
