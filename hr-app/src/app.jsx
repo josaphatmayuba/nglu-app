@@ -91,7 +91,6 @@ const NAV = [
   { id: "timesheet", label: "Timesheet (projets)", icon: "timer" },
   { section: "Paie & rémunération" },
   { id: "paie", label: "Paie", icon: "wallet" },
-  { id: "remuneration", label: "Rémunération", icon: "banknote" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
   { id: "declarations", label: "Déclarations sociales", icon: "fileCheck" },
   { section: "Développement" },
@@ -662,7 +661,6 @@ function App() {
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
     paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} />,
-    remuneration: <Remuneration data={data} staff={staff} masse={masse} setModal={setModal} />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
@@ -1125,18 +1123,6 @@ function Timesheet({ data, staff, setModal }) {
         </table></div>
         {rows.length === 0 && <EmptyState title="Aucune saisie timesheet en base" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet et un bailleur." />}
       </div>
-    </>
-  );
-}
-
-/* Remuneration */
-function Remuneration({ data, staff, masse, setModal }) {
-  const rows = data.salaries || [];
-  return (
-    <>
-      <PageHead eyebrow="Historique salaires" title="Remuneration" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
-      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} /><Mini label="Lignes historique" value={rows.length} /><Mini label="Employes salaries" value={new Set(rows.map((s) => s.userId).filter(Boolean)).size} /></div>
-      <div className="card pad table-card tbl-scroll"><h3 className="block-title font-display">Historique des salaires en base</h3><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th></tr></thead><tbody>{rows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateOnly(s.salaryStartDate || s.startDate) || "-"}</td><td>{dateOnly(s.salaryEndDate || s.endDate) || "-"}</td><td className="muted">{s.salaryComment || s.comment || ""}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucun historique de salaire en base" />}</div>
     </>
   );
 }
