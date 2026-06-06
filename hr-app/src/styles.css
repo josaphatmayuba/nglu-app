@@ -110,6 +110,8 @@ button, input, select, textarea { font: inherit; }
 /* KPI */
 .kpi-label { font-size: 12px; color: var(--ink-500); }
 .kpi-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
+.money-lines { display: grid; gap: 2px; line-height: 1.12; }
+.money-lines span { display: block; white-space: nowrap; }
 .kpi-sub { font-size: 11px; color: var(--ink-400); margin-top: 4px; }
 .kpi-sub.up { color: var(--emerald-600); }
 .kpi-sub.down { color: var(--rose-500); }

@@ -372,6 +372,13 @@
       "when": 1780203600000,
       "tag": "0072_hr_timesheets",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1780207200000,
+      "tag": "0073_hr_money_currency_ids",
+      "breakpoints": true
     }
   ]
 }

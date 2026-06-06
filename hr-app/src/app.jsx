@@ -117,6 +117,26 @@ const nf = new Intl.NumberFormat("fr-FR");
 const fc = (v, sym) => `${nf.format(Math.round(Number(v || 0)))} ${sym || CUR}`;
 const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const salarySym = (u) => symbolFor(u?.currentSalaryCurrencyId, CURRENCIES, CUR);
+const moneyLineText = (amount, sym) => `${nf.format(Math.round(Number(amount || 0)))} ${sym || CUR}`;
+function moneyLinesFrom(rows, amountOf, symbolOf = () => CUR) {
+  const totals = new Map();
+  for (const row of rows || []) {
+    const amount = Number(amountOf(row) || 0);
+    if (!amount) continue;
+    const sym = symbolOf(row) || CUR;
+    totals.set(sym, (totals.get(sym) || 0) + amount);
+  }
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([sym, amount]) => ({ sym, amount, text: moneyLineText(amount, sym) }));
+}
+const salaryMoneyLines = (staff) => moneyLinesFrom(staff, (u) => u.currentSalary, salarySym);
+const moneySymbolFor = (row) => symbolFor(row?.currencyId, CURRENCIES, CUR);
+function MoneyLines({ lines, empty = `0 ${CUR}` }) {
+  const rows = (lines || []).filter((line) => Number(line.amount || 0) !== 0);
+  if (!rows.length) return <span>{empty}</span>;
+  return <span className="money-lines">{rows.map((line) => <span key={line.sym}>{line.text}</span>)}</span>;
+}
 const currencyValue = (c) => c?.id ?? c?.currencyId ?? "";
 const currencySymbolText = (c) => c?.currencyCode || c?.currencySymbol || c?.symbol || c?.currencyName || CUR;
 const currencyOptions = () => CURRENCIES.map((c) => {
@@ -571,10 +591,10 @@ function App() {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({ userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null, reference: form.reference || null, notes: form.notes || null }));
         if (kind === "hrDocument") await api.createHrDocument(cleanPayload({ userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null, fileUrl: form.fileUrl || null, note: form.note || null }));
-        if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({ userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), requestDate: form.requestDate, description: form.description || null }));
-        if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), dueDate: form.dueDate || null, note: form.note || null }));
+        if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({ userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), requestDate: form.requestDate, description: form.description || null }));
+        if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), dueDate: form.dueDate || null, note: form.note || null }));
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
-        if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), note: form.note || null }));
+        if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), currencyId: toNum(form.currencyId), note: form.note || null }));
         if (kind === "timesheet") await api.createTimesheet(cleanPayload({ userId: Number(form.userId), workDate: form.workDate, period: form.period || null, project: form.project, donor: form.donor || null, activity: form.activity || null, hours: Number(form.hours || 0), note: form.note || null }));
         if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
         setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
@@ -754,7 +774,7 @@ function Dashboard({ data, staff, masse, go, setModal }) {
         <KPI label="Effectif total" value={total} icon="users" />
         <KPI label="En congé aujourd'hui" value={leavesToday} icon="palmtree" />
         <KPI label="Congés en attente" value={pendingLeaves} sub={pendingLeaves ? "A approuver" : ""} tone={pendingLeaves ? "warn" : undefined} icon="palmtree" />
-        <KPI label="Masse salariale / mois" value={fcM(masse)} icon="wallet" />
+        <KPI label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} icon="wallet" />
       </div>
       <div className="g3">
         <section className="card pad span2">
@@ -1023,7 +1043,7 @@ function Paie({ data, staff, masse, setModal }) {
       <div className="g3" style={{ marginBottom: 16 }}>
         <Mini label="Lignes historique" value={rows.length} />
         <Mini label="Employes salaries" value={employeeCount} />
-        <Mini label="Masse salariale / mois" value={fcM(masse)} />
+        <Mini label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} />
       </div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
@@ -1115,7 +1135,7 @@ function Remuneration({ data, staff, masse, setModal }) {
   return (
     <>
       <PageHead eyebrow="Historique salaires" title="Remuneration" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
-      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Masse salariale / mois" value={fcM(masse)} /><Mini label="Lignes historique" value={rows.length} /><Mini label="Employes salaries" value={new Set(rows.map((s) => s.userId).filter(Boolean)).size} /></div>
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} /><Mini label="Lignes historique" value={rows.length} /><Mini label="Employes salaries" value={new Set(rows.map((s) => s.userId).filter(Boolean)).size} /></div>
       <div className="card pad table-card tbl-scroll"><h3 className="block-title font-display">Historique des salaires en base</h3><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th></tr></thead><tbody>{rows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateOnly(s.salaryStartDate || s.startDate) || "-"}</td><td>{dateOnly(s.salaryEndDate || s.endDate) || "-"}</td><td className="muted">{s.salaryComment || s.comment || ""}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucun historique de salaire en base" />}</div>
     </>
   );
@@ -1125,12 +1145,12 @@ function Remuneration({ data, staff, masse, setModal }) {
 function Frais({ data, staff, setModal }) {
   const rows = data.expenseRequests || [];
   const pending = rows.filter((r) => isPending(r.status));
-  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalLines = moneyLinesFrom(rows, (r) => r.amount, moneySymbolFor);
   return (
     <>
       <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => setModal({ kind: "expenseRequest" })} />
-      <div className="g3" style={{ marginBottom: 18 }}><KPI label="A valider" value={pending.length} tone={pending.length ? "warn" : undefined} /><Mini label="Demandes" value={rows.length} /><Mini label="Montant total" value={fc(total)} valueClass="" /></div>
-      <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th>Type</th><th className="r">Montant</th><th>Date</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((f) => <tr key={f.id}><td style={{ fontWeight: 500 }}>{personName(staff, f.userId)}</td><td>{f.type || "Frais"}</td><td className="r">{fc(f.amount)}</td><td>{dateOnly(f.requestDate) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(f.status)}>{statusLabel(f.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucune demande de frais en base" />}</div>
+      <div className="g3" style={{ marginBottom: 18 }}><KPI label="A valider" value={pending.length} tone={pending.length ? "warn" : undefined} /><Mini label="Demandes" value={rows.length} /><Mini label="Montant total" value={<MoneyLines lines={totalLines} />} valueClass="" /></div>
+      <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th>Type</th><th className="r">Montant</th><th>Date</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((f) => <tr key={f.id}><td style={{ fontWeight: 500 }}>{personName(staff, f.userId)}</td><td>{f.type || "Frais"}</td><td className="r">{fc(f.amount, moneySymbolFor(f))}</td><td>{dateOnly(f.requestDate) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(f.status)}>{statusLabel(f.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucune demande de frais en base" />}</div>
     </>
   );
 }
@@ -1138,12 +1158,12 @@ function Frais({ data, staff, setModal }) {
 /* Declarations */
 function Declarations({ data, setModal }) {
   const rows = data.socialDeclarations || [];
-  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalLines = moneyLinesFrom(rows, (r) => r.amount, moneySymbolFor);
   return (
     <>
       <PageHead eyebrow="Cotisations & impots" title="Declarations sociales & fiscales" action="Nouvelle declaration" actionIcon="fileCheck" onAction={() => setModal({ kind: "socialDeclaration" })} />
-      <div className="g3" style={{ marginBottom: 16 }}><Mini label="Declarations" value={rows.length} /><Mini label="Montant total" value={fc(total)} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
-      <div className="card pad table-card tbl-scroll"><table className="tbl num" style={{ minWidth: 600 }}><thead><tr><th>Organisme</th><th>Periode</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Echeance</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{d.organism || "-"}</td><td>{d.period || "-"}</td><td className="r">{fc(d.baseAmount)}</td><td className="r">{d.rate || "-"}</td><td className="r">{fc(d.amount)}</td><td className="r muted">{dateOnly(d.dueDate) || "-"}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucune declaration sociale en base" />}</div>
+      <div className="g3" style={{ marginBottom: 16 }}><Mini label="Declarations" value={rows.length} /><Mini label="Montant total" value={<MoneyLines lines={totalLines} />} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
+      <div className="card pad table-card tbl-scroll"><table className="tbl num" style={{ minWidth: 600 }}><thead><tr><th>Organisme</th><th>Periode</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Echeance</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{d.organism || "-"}</td><td>{d.period || "-"}</td><td className="r">{fc(d.baseAmount, moneySymbolFor(d))}</td><td className="r">{d.rate || "-"}</td><td className="r">{fc(d.amount, moneySymbolFor(d))}</td><td className="r muted">{dateOnly(d.dueDate) || "-"}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucune declaration sociale en base" />}</div>
     </>
   );
 }
@@ -1165,11 +1185,11 @@ function Performance({ data, staff, setModal }) {
 /* Formation */
 function Formation({ data, setModal }) {
   const rows = data.trainingSessions || [];
-  const budget = rows.reduce((s, r) => s + Number(r.budget || 0), 0);
+  const budgetLines = moneyLinesFrom(rows, (r) => r.budget, moneySymbolFor);
   return (
     <>
       <PageHead eyebrow="Plan de formation" title="Formation & competences" action="Nouvelle session" onAction={() => setModal({ kind: "trainingSession" })} />
-      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Sessions" value={rows.length} /><Mini label="Planifiees" value={rows.filter((r) => isApproved(r.status)).length} valueClass="" /><Mini label="Budget" value={fc(budget)} /></div>
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Sessions" value={rows.length} /><Mini label="Planifiees" value={rows.filter((r) => isApproved(r.status)).length} valueClass="" /><Mini label="Budget" value={<MoneyLines lines={budgetLines} />} /></div>
       <div className="card pad"><h3 className="block-title font-display">Sessions en base</h3>{rows.length === 0 && <EmptyState title="Aucune session de formation en base" />}{rows.map((f) => <div className="row" key={f.id}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name="graduationCap" /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{f.title || "Formation"}</div><div className="tiny">{[f.audience, dateOnly(f.sessionDate)].filter(Boolean).join(" - ")}</div></div><span className={"chip " + chipForStatus(f.status)}>{statusLabel(f.status)}</span></div>)}</div>
     </>
   );
@@ -1211,11 +1231,13 @@ function Organigramme({ departments, designations, canMutate, onNew }) {
 function Reporting({ data, staff, masse }) {
   const total = staff.length;
   const deptMax = Math.max(1, ...data.departments.map((d) => Number(d.count || 0)));
-  const exportRows = () => exportCsv("reporting-rh.csv", ["Indicateur", "Valeur"], [["Effectif", total], ["Masse salariale", masse], ["Departements", data.departments.length], ["Contrats", data.contracts.length], ["Conges en attente", data.leaveRequests.filter((l) => isPending(l.status)).length]]);
+  const salaryLines = salaryMoneyLines(staff);
+  const salaryText = salaryLines.length ? salaryLines.map((line) => line.text).join(" | ") : `0 ${CUR}`;
+  const exportRows = () => exportCsv("reporting-rh.csv", ["Indicateur", "Valeur"], [["Effectif", total], ["Masse salariale", salaryText], ["Departements", data.departments.length], ["Contrats", data.contracts.length], ["Conges en attente", data.leaveRequests.filter((l) => isPending(l.status)).length]]);
   return (
     <>
       <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={exportRows} ghost />
-      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Effectif" value={total} /><Mini label="Departements" value={data.departments.length} /><Mini label="Masse salariale" value={fcM(masse)} /><Mini label="Contrats" value={data.contracts.length} /></div>
+      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Effectif" value={total} /><Mini label="Departements" value={data.departments.length} /><Mini label="Masse salariale" value={<MoneyLines lines={salaryLines} />} /><Mini label="Contrats" value={data.contracts.length} /></div>
       <div className="g2"><div className="card pad"><h3 className="block-title font-display">Effectif par departement</h3>{data.departments.length === 0 && <EmptyState title="Aucun departement en base" />}{data.departments.map((d) => <div key={d.id || d.name} style={{ marginBottom: 12, fontSize: 13 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span>{d.name}</span><span className="muted">{d.count}</span></div><Bar pct={Math.max(5, Math.round((Number(d.count || 0) / deptMax) * 100))} cls={d.color === "sky" ? "grad-sky" : d.color === "teal" ? "grad-accent" : d.color} /></div>)}</div><div className="card pad"><h3 className="block-title font-display">Sources BD</h3><div className="kv"><div><span>Employes</span><span>{staff.length}</span></div><div><span>Conges</span><span>{data.leaveRequests.length}</span></div><div><span>Frais</span><span>{data.expenseRequests.length}</span></div><div><span>Formations</span><span>{data.trainingSessions.length}</span></div></div></div></div>
     </>
   );

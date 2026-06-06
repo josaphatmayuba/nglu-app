@@ -239,6 +239,11 @@ export class CreateHrExpenseRequestDto {
   @Min(0)
   amount: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
+
   @IsDateString()
   requestDate: string;
 
@@ -281,6 +286,11 @@ export class CreateHrSocialDeclarationDto {
   @IsNumber()
   @Min(0)
   amount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
 
   @IsOptional()
   @IsDateString()
@@ -350,6 +360,11 @@ export class CreateHrTrainingSessionDto {
   @IsNumber()
   @Min(0)
   budget?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
 
   @IsOptional()
   @IsString()
