@@ -264,9 +264,12 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .icon-btn { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--ink-200); background: #fff; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn .ic { width: 16px; height: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.form-section { grid-column: 1 / -1; border-top: 1px solid var(--ink-100); color: var(--ink-400); font-size: 11px; font-weight: 700; letter-spacing: .06em; margin-top: 4px; padding-top: 12px; text-transform: uppercase; }
 .field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-600); }
 .field.wide { grid-column: 1 / -1; }
 .field input, .field select, .field textarea { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
+.field input[readonly] { background: var(--ink-50); color: var(--ink-500); }
+.field small { color: var(--ink-400); font-size: 11px; font-weight: 500; line-height: 1.35; }
 .field textarea { padding-top: 10px; resize: vertical; line-height: 1.4; }
 .phone-input, .money-input { align-items: center; background: #fff; border: 1px solid var(--ink-200); border-radius: 8px; overflow: hidden; }
 .phone-input { display: flex; gap: 8px; min-height: 42px; padding: 0 10px; }
@@ -282,6 +285,12 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .money-input input:focus, .money-input select:focus { border: 0; box-shadow: none; outline: none; }
 .money-input select { border-right: 1px solid var(--ink-200); font-weight: 700; padding: 0 8px; }
 .money-input select { border-left: 1px solid var(--ink-200); border-right: 0; color: var(--teal-700); text-align: center; }
+.generated-input { display: grid; grid-template-columns: minmax(0, 1fr) 94px; border: 1px solid var(--ink-200); border-radius: 8px; overflow: hidden; background: #fff; }
+.generated-input:focus-within { border-color: var(--teal-400); box-shadow: 0 0 0 3px rgba(20,184,166,.12); }
+.generated-input input { border: 0; border-radius: 0; box-shadow: none; min-height: 40px; }
+.generated-input input:focus { border: 0; box-shadow: none; outline: none; }
+.generated-input button { border: 0; border-left: 1px solid var(--ink-200); background: var(--ink-50); color: var(--teal-700); cursor: pointer; font-size: 12px; font-weight: 700; }
+.generated-input button:hover { background: var(--teal-100); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ── Mobile bottom nav + plus sheet ────────────────────────────────────── */

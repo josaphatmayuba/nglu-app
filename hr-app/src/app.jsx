@@ -308,6 +308,36 @@ function newEmployees(staff, days = 30) {
 function cleanPayload(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== ""));
 }
+function slugName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.+|\.+$/g, "");
+}
+function generatedEmailFor(firstName, lastName) {
+  const local = [slugName(firstName), slugName(lastName)].filter(Boolean).join(".");
+  return local ? `${local}@ongdngolu.org` : "";
+}
+function generatedUsernameFor(firstName, lastName) {
+  return [slugName(firstName), slugName(lastName)].filter(Boolean).join(".");
+}
+function generateInitialPassword() {
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const all = letters + digits;
+  const pick = (chars) => chars[Math.floor(Math.random() * chars.length)];
+  return Array.from({ length: 10 }, () => pick(all)).join("") + pick(letters) + pick(digits);
+}
+function isValidInitialPassword(value) {
+  const text = String(value || "");
+  return text.length >= 12 && text.length <= 64 && /[a-zA-Z]/.test(text) && /\d/.test(text);
+}
+function canManageUserStatus() {
+  const role = String(getUser().role || "").toLowerCase();
+  return ["admin", "super-admin", "super admin"].includes(role);
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -350,6 +380,68 @@ Object.assign(ACTION_FORMS, {
   performanceReview: { title: "Nouvelle Ã©valuation", submit: "Enregistrer", success: "Ã‰valuation enregistrÃ©e.", defaults: { userId: "", managerId: "", cycle: "S1 2026", score: "", objectives: "", comments: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "managerId", label: "Manager", type: "select", optionKey: "staff" }, { key: "cycle", label: "Cycle", required: true }, { key: "score", label: "Score / 5", type: "number" }, { key: "objectives", label: "Objectifs", type: "textarea" }, { key: "comments", label: "Commentaires", type: "textarea" }] },
   trainingSession: { title: "Session de formation", submit: "Planifier", success: "Formation enregistrÃ©e.", defaults: { title: "", audience: "Toute l'Ã©quipe", sessionDate: TODAY, budget: 0, note: "" }, fields: [{ key: "title", label: "Titre", required: true }, { key: "audience", label: "Public" }, { key: "sessionDate", label: "Date", type: "date" }, { key: "budget", label: "Budget", type: "number" }, { key: "note", label: "Note", type: "textarea" }] },
   recruitmentOffer: { title: "Nouvelle offre", submit: "Publier", success: "Offre de recrutement enregistrÃ©e.", defaults: { role: "", departmentId: "", deadline: TODAY, description: "" }, fields: [{ key: "role", label: "Poste Ã  recruter", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "deadline", label: "Date limite", type: "date" }, { key: "description", label: "Description", type: "textarea" }] },
+});
+
+Object.assign(ACTION_FORMS, {
+  employee: {
+    title: "Nouvel employe",
+    submit: "Creer",
+    success: "Employe cree dans la base.",
+    defaults: { firstName: "", lastName: "", username: "", password: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "RDC" },
+    fields: [
+      { kind: "section", label: "Identite" },
+      { key: "firstName", label: "Prenom", required: true },
+      { key: "lastName", label: "Nom", required: true },
+      { key: "username", label: "Identifiant", required: true, help: "Peut etre ajuste si necessaire." },
+      { key: "password", label: "Mot de passe initial", type: "password", required: true, generated: true, help: "Min 12 caracteres, avec au moins une lettre et un chiffre." },
+      { key: "email", label: "Email", type: "email", readOnly: true, help: "Genere automatiquement avec le prenom et le nom." },
+      { key: "phone", label: "Telephone" },
+      { kind: "section", label: "Informations RH" },
+      { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true },
+      { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" },
+      { key: "designationId", label: "Poste", type: "select", optionKey: "designations" },
+      { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" },
+      { key: "employeeId", label: "Matricule" },
+      { key: "joinDate", label: "Date d'embauche", type: "date" },
+      { key: "bloodGroup", label: "Groupe sanguin" },
+      { kind: "section", label: "Adresse" },
+      { key: "street", label: "Rue", wide: true },
+      { key: "city", label: "Ville" },
+      { key: "state", label: "Province / Etat" },
+      { key: "zipCode", label: "Code postal" },
+      { key: "country", label: "Pays" },
+    ],
+  },
+  editEmployee: {
+    title: "Modifier employe",
+    submit: "Enregistrer",
+    success: "Employe modifie dans la base.",
+    defaults: { id: "", firstName: "", lastName: "", username: "", password: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" },
+    fields: [
+      { kind: "section", label: "Identite" },
+      { key: "firstName", label: "Prenom", required: true },
+      { key: "lastName", label: "Nom", required: true },
+      { key: "username", label: "Identifiant", required: true },
+      { key: "password", label: "Changer mot de passe", type: "password", help: "Laisser vide pour garder l'ancien mot de passe." },
+      { key: "email", label: "Email", type: "email" },
+      { key: "phone", label: "Telephone" },
+      { key: "status", label: "Statut", type: "select", options: [{ value: "true", label: "Actif" }, { value: "false", label: "Inactif" }], requiresStatusPermission: true },
+      { kind: "section", label: "Informations RH" },
+      { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true },
+      { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" },
+      { key: "designationId", label: "Poste", type: "select", optionKey: "designations" },
+      { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" },
+      { key: "employeeId", label: "Matricule" },
+      { key: "joinDate", label: "Date d'embauche", type: "date" },
+      { key: "bloodGroup", label: "Groupe sanguin" },
+      { kind: "section", label: "Adresse" },
+      { key: "street", label: "Rue", wide: true },
+      { key: "city", label: "Ville" },
+      { key: "state", label: "Province / Etat" },
+      { key: "zipCode", label: "Code postal" },
+      { key: "country", label: "Pays" },
+    ],
+  },
 });
 
 function KPI({ label, value, sub, subClass = "", icon, tone }) {
@@ -467,21 +559,25 @@ function App() {
         return;
       }
       if (kind === "employee") {
+        const email = form.email || generatedEmailFor(form.firstName, form.lastName);
+        const password = form.password || generateInitialPassword();
+        if (!isValidInitialPassword(password)) throw new Error("Le mot de passe doit contenir 12 a 64 caracteres, au moins une lettre et un chiffre.");
         await api.createUser(cleanPayload({
-          firstName: form.firstName, lastName: form.lastName, username: form.username, password: form.password,
-          roleId: Number(form.roleId), email: form.email, phone: form.phone, departmentId: toNum(form.departmentId),
+          firstName: form.firstName, lastName: form.lastName, username: form.username, password,
+          roleId: Number(form.roleId), email, phone: form.phone, departmentId: toNum(form.departmentId),
           designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
           bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
           state: form.state, zipCode: form.zipCode, country: form.country,
         }));
       }
       if (kind === "editEmployee") {
+        if (form.password && !isValidInitialPassword(form.password)) throw new Error("Le mot de passe doit contenir 12 a 64 caracteres, au moins une lettre et un chiffre.");
         await api.updateUser(Number(form.id), cleanPayload({
-          firstName: form.firstName, lastName: form.lastName, username: form.username,
+          firstName: form.firstName, lastName: form.lastName, username: form.username, password: form.password,
           roleId: Number(form.roleId), email: form.email, phone: form.phone, departmentId: toNum(form.departmentId),
           designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
           bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
-          state: form.state, zipCode: form.zipCode, country: form.country, status: form.status,
+          state: form.state, zipCode: form.zipCode, country: form.country, status: canManageUserStatus() ? form.status : undefined,
         }));
       }
       if (kind === "designation") await api.createDesignation({ name: form.name });
@@ -1104,9 +1200,23 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const [form, setForm] = React.useState(() => {
     const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
     if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
+    if (modal.kind === "employee") {
+      if (!base.password) base.password = generateInitialPassword();
+      base.email = generatedEmailFor(base.firstName, base.lastName);
+      if (!base.username) base.username = generatedUsernameFor(base.firstName, base.lastName);
+    }
     return base;
   });
-  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const set = (k, v) => setForm((c) => {
+    const next = { ...c, [k]: v };
+    if (modal.kind === "employee" && (k === "firstName" || k === "lastName")) {
+      const previousGeneratedUsername = generatedUsernameFor(c.firstName, c.lastName);
+      const nextGeneratedUsername = generatedUsernameFor(next.firstName, next.lastName);
+      next.email = generatedEmailFor(next.firstName, next.lastName);
+      if (!c.username || c.username === previousGeneratedUsername) next.username = nextGeneratedUsername;
+    }
+    return next;
+  });
   const opts = {
     staff: staff.map((u) => ({ value: u.id, label: fullName(u) })),
     roles: (data.roles || []).map((r) => ({ value: r.id, label: r.name })),
@@ -1129,9 +1239,24 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
         <div className="modal-head"><div><h2 className="font-display">{titleFor(modal.kind)}</h2><p>RH NgoluApp</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
           {action && action.fields.map((field) => {
+            if (field.kind === "section") return <div key={field.label} className="form-section">{field.label}</div>;
+            if (field.requiresStatusPermission && !canManageUserStatus()) return null;
             const options = field.optionKey ? opts[field.optionKey] || [] : field.options;
             if (field.key === "currencyId") return null;
             if (field.key === "phone") return <PhoneField key={field.key} label={field.label} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} required={field.required} />;
+            if (field.generated && field.key === "password") {
+              return (
+                <GeneratedPasswordField
+                  key={field.key}
+                  label={field.label}
+                  value={form[field.key] ?? ""}
+                  onChange={(v) => set(field.key, v)}
+                  onGenerate={() => set(field.key, generateInitialPassword())}
+                  required={field.required}
+                  help={field.help}
+                />
+              );
+            }
             if (isMoneyField(field)) {
               return (
                 <MoneyField
@@ -1307,6 +1432,19 @@ function PhoneField({ label, value, onChange, required = false }) {
   );
 }
 
+function GeneratedPasswordField({ label, value, onChange, onGenerate, required = false, help }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <div className="generated-input">
+        <input required={required} type="text" value={value ?? ""} onChange={(e) => onChange(e.target.value)} />
+        <button type="button" onClick={onGenerate}>Generer</button>
+      </div>
+      {help && <small>{help}</small>}
+    </label>
+  );
+}
+
 function MoneyField({ label, value, currencyId, currencyOptions: options = [], onAmountChange, onCurrencyChange, required = false }) {
   const rows = options.length ? options : [{ value: "", label: CUR, symbol: CUR }];
   return (
@@ -1324,14 +1462,14 @@ function MoneyField({ label, value, currencyId, currencyOptions: options = [], o
   );
 }
 
-function Field({ label, value, onChange, type = "text", required = false, options = [] }) {
+function Field({ label, value, onChange, type = "text", required = false, options = [], readOnly = false, help, wide = false }) {
   if (type === "textarea") {
-    return <label className="field wide"><span>{label}</span><textarea required={required} value={value} onChange={(e) => onChange(e.target.value)} rows={3} /></label>;
+    return <label className="field wide"><span>{label}</span><textarea required={required} value={value} onChange={(e) => onChange(e.target.value)} rows={3} />{help && <small>{help}</small>}</label>;
   }
   if (type === "select") {
-    return <div className="field"><span>{label}</span><Autocomplete required={required} value={value} onChange={onChange} options={options} /></div>;
+    return <div className={`field ${wide ? "wide" : ""}`}><span>{label}</span><Autocomplete required={required} value={value} onChange={onChange} options={options} />{help && <small>{help}</small>}</div>;
   }
-  return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
+  return <label className={`field ${wide ? "wide" : ""}`}><span>{label}</span><input required={required} readOnly={readOnly} type={type} value={value} onChange={(e) => onChange(e.target.value)} />{help && <small>{help}</small>}</label>;
 }
 function titleFor(kind) {
   if (ACTION_FORMS[kind]) return ACTION_FORMS[kind].title;
