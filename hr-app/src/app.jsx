@@ -1,4 +1,8 @@
 import React from "react";
+import PhoneInputBase, { formatPhoneNumberIntl } from "react-phone-number-input";
+import flags from "react-phone-number-input/flags";
+import fr from "react-phone-number-input/locale/fr.json";
+import "react-phone-number-input/style.css";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
@@ -113,19 +117,6 @@ const nf = new Intl.NumberFormat("fr-FR");
 const fc = (v, sym) => `${nf.format(Math.round(Number(v || 0)))} ${sym || CUR}`;
 const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const salarySym = (u) => symbolFor(u?.currentSalaryCurrencyId, CURRENCIES, CUR);
-const PHONE_COUNTRIES = [
-  { code: "CD", dial: "+243", flag: "🇨🇩", label: "RDC" },
-  { code: "CA", dial: "+1", flag: "🇨🇦", label: "Canada" },
-  { code: "US", dial: "+1", flag: "🇺🇸", label: "USA" },
-  { code: "FR", dial: "+33", flag: "🇫🇷", label: "France" },
-  { code: "BE", dial: "+32", flag: "🇧🇪", label: "Belgique" },
-  { code: "RW", dial: "+250", flag: "🇷🇼", label: "Rwanda" },
-  { code: "BI", dial: "+257", flag: "🇧🇮", label: "Burundi" },
-  { code: "TZ", dial: "+255", flag: "🇹🇿", label: "Tanzanie" },
-  { code: "UG", dial: "+256", flag: "🇺🇬", label: "Ouganda" },
-  { code: "ZA", dial: "+27", flag: "🇿🇦", label: "Afrique du Sud" },
-];
-const DEFAULT_PHONE_COUNTRY = PHONE_COUNTRIES[0];
 const currencyValue = (c) => c?.id ?? c?.currencyId ?? "";
 const currencySymbolText = (c) => c?.currencyCode || c?.currencySymbol || c?.symbol || c?.currencyName || CUR;
 const currencyOptions = () => CURRENCIES.map((c) => {
@@ -134,17 +125,6 @@ const currencyOptions = () => CURRENCIES.map((c) => {
   return { value, label: `${c.currencyName || c.name || symbol} (${symbol})`, symbol };
 }).filter((c) => c.value !== "");
 const defaultCurrencyId = () => DEFAULT_CURRENCY_ID || currencyValue(CURRENCIES[0]) || "";
-const digitsOnly = (value) => String(value || "").replace(/\D/g, "");
-function splitPhone(value) {
-  const raw = String(value || "").trim();
-  const country = PHONE_COUNTRIES.find((item) => raw.startsWith(item.dial)) || DEFAULT_PHONE_COUNTRY;
-  const local = raw.startsWith(country.dial) ? raw.slice(country.dial.length) : raw;
-  return { country, local: digitsOnly(local) };
-}
-function normalizePhone(country, local) {
-  const digits = digitsOnly(local);
-  return digits ? `${country.dial}${digits}` : "";
-}
 
 // Toast léger — fait répondre les boutons sans endpoint dédié.
 const DEMO = "Action de démonstration — à connecter au backend.";
@@ -204,8 +184,7 @@ const dateOnly = (v) => v ? String(v).slice(0, 10) : "";
 const displayPhone = (u) => {
   const raw = typeof u === "string" ? u : u?.phone;
   if (!String(raw || "").trim()) return "Telephone non renseigne";
-  const { country, local } = splitPhone(raw);
-  return local ? `${country.dial} ${local}` : String(raw).trim();
+  return formatPhoneNumberIntl(String(raw).trim()) || String(raw).trim();
 };
 const EMPTY_DATA = {
   staff: [],
@@ -1273,31 +1252,21 @@ function Autocomplete({ value, onChange, options = [], placeholder = "Selectionn
 }
 
 function PhoneField({ label, value, onChange, required = false }) {
-  const parts = splitPhone(value);
-  const selectValue = parts.country.code;
-  const setPhone = (country, local) => onChange(normalizePhone(country, local));
   return (
-    <label className="field">
+    <label className="field phone-field">
       <span>{label}</span>
-      <div className="phone-input">
-        <select
-          aria-label="Indicatif pays"
-          value={selectValue}
-          onChange={(e) => setPhone(PHONE_COUNTRIES.find((c) => c.code === e.target.value) || DEFAULT_PHONE_COUNTRY, parts.local)}
-        >
-          {PHONE_COUNTRIES.map((country) => (
-            <option key={country.code} value={country.code}>{country.flag} {country.dial}</option>
-          ))}
-        </select>
-        <input
-          required={required}
-          type="tel"
-          inputMode="tel"
-          value={parts.local}
-          placeholder="812 345 678"
-          onChange={(e) => setPhone(parts.country, e.target.value)}
-        />
-      </div>
+      <PhoneInputBase
+        international
+        countryCallingCodeEditable={false}
+        defaultCountry="CD"
+        flags={flags}
+        labels={fr}
+        value={value || undefined}
+        onChange={(v) => onChange(v || "")}
+        placeholder="Numero de telephone"
+        className="phone-input"
+        required={required}
+      />
     </label>
   );
 }

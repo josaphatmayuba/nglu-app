@@ -265,13 +265,19 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .field.wide { grid-column: 1 / -1; }
 .field input, .field select, .field textarea { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
 .field textarea { padding-top: 10px; resize: vertical; line-height: 1.4; }
-.phone-input, .money-input { align-items: center; background: #fff; border: 1px solid var(--ink-200); border-radius: 8px; display: grid; overflow: hidden; }
-.phone-input { grid-template-columns: 104px minmax(0, 1fr); }
+.phone-input, .money-input { align-items: center; background: #fff; border: 1px solid var(--ink-200); border-radius: 8px; overflow: hidden; }
+.phone-input { display: flex; gap: 8px; min-height: 42px; padding: 0 10px; }
 .money-input { grid-template-columns: minmax(0, 1fr) 90px; }
 .phone-input:focus-within, .money-input:focus-within { border-color: var(--teal-400); box-shadow: 0 0 0 3px rgba(20,184,166,.12); }
-.phone-input input, .phone-input select, .money-input input, .money-input select { border: 0; border-radius: 0; box-shadow: none; min-height: 40px; width: 100%; }
-.phone-input input:focus, .phone-input select:focus, .money-input input:focus, .money-input select:focus { border: 0; box-shadow: none; outline: none; }
-.phone-input select, .money-input select { border-right: 1px solid var(--ink-200); font-weight: 700; padding: 0 8px; }
+.phone-input .PhoneInputInput { background: transparent; border: 0; box-shadow: none; color: var(--ink-900); min-height: 40px; outline: 0; width: 100%; }
+.phone-input .PhoneInputCountry { margin: 0; }
+.phone-input .PhoneInputCountryIcon { border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); height: 19px; width: 26px; }
+.phone-input .PhoneInputCountryIcon img { display: block; }
+.phone-input .PhoneInputCountrySelectArrow { color: var(--ink-500); }
+.money-input { display: grid; }
+.money-input input, .money-input select { border: 0; border-radius: 0; box-shadow: none; min-height: 40px; width: 100%; }
+.money-input input:focus, .money-input select:focus { border: 0; box-shadow: none; outline: none; }
+.money-input select { border-right: 1px solid var(--ink-200); font-weight: 700; padding: 0 8px; }
 .money-input select { border-left: 1px solid var(--ink-200); border-right: 0; color: var(--teal-700); text-align: center; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
