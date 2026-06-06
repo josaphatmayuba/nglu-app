@@ -91,6 +91,13 @@ The public marketing site and CRM must stay separated:
 - `https://ongdngolu.org/crm` is the CRM entry point.
 - Do not move the CRM back to the domain root.
 
+## Data Entry UX Policy
+
+- Phone fields must use an international phone input with a visible country indicator and dialing code. Default to Congo DRC (`+243`) when no country is known, and store the normalized international value whenever the backend accepts it.
+- Money fields must never be plain number inputs. Any salary, rent, amount, fee, budget, price, income, payment, deposit, or balance field must show the currency beside the amount through a currency selector or adjacent currency code/symbol.
+- Currency values must come from the database/configuration (`currency` + `setting`) where available. Do not hardcode business amounts or fake currencies in frontend data files.
+- Money displays must include the currency code/symbol everywhere, including cards, tables, modals, exports, tenant files, HR profiles, and summaries.
+
 ## Frontend Dev Deployment Policy
 
 This section exists because of two past deployment incidents:

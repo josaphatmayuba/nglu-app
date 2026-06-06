@@ -107,11 +107,44 @@ const MOB_LABEL = { dashboard: "Accueil", employes: "Équipe", presences: "Point
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 // Devise résolue depuis la BD (GET /setting + /currency), comme le CRM.
 let CUR = "CDF";
+let DEFAULT_CURRENCY_ID = "";
 let CURRENCIES = []; // liste pour résoudre la devise propre à chaque employé
 const nf = new Intl.NumberFormat("fr-FR");
 const fc = (v, sym) => `${nf.format(Math.round(Number(v || 0)))} ${sym || CUR}`;
 const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const salarySym = (u) => symbolFor(u?.currentSalaryCurrencyId, CURRENCIES, CUR);
+const PHONE_COUNTRIES = [
+  { code: "CD", dial: "+243", flag: "🇨🇩", label: "RDC" },
+  { code: "CA", dial: "+1", flag: "🇨🇦", label: "Canada" },
+  { code: "US", dial: "+1", flag: "🇺🇸", label: "USA" },
+  { code: "FR", dial: "+33", flag: "🇫🇷", label: "France" },
+  { code: "BE", dial: "+32", flag: "🇧🇪", label: "Belgique" },
+  { code: "RW", dial: "+250", flag: "🇷🇼", label: "Rwanda" },
+  { code: "BI", dial: "+257", flag: "🇧🇮", label: "Burundi" },
+  { code: "TZ", dial: "+255", flag: "🇹🇿", label: "Tanzanie" },
+  { code: "UG", dial: "+256", flag: "🇺🇬", label: "Ouganda" },
+  { code: "ZA", dial: "+27", flag: "🇿🇦", label: "Afrique du Sud" },
+];
+const DEFAULT_PHONE_COUNTRY = PHONE_COUNTRIES[0];
+const currencyValue = (c) => c?.id ?? c?.currencyId ?? "";
+const currencySymbolText = (c) => c?.currencyCode || c?.currencySymbol || c?.symbol || c?.currencyName || CUR;
+const currencyOptions = () => CURRENCIES.map((c) => {
+  const value = currencyValue(c);
+  const symbol = currencySymbolText(c);
+  return { value, label: `${c.currencyName || c.name || symbol} (${symbol})`, symbol };
+}).filter((c) => c.value !== "");
+const defaultCurrencyId = () => DEFAULT_CURRENCY_ID || currencyValue(CURRENCIES[0]) || "";
+const digitsOnly = (value) => String(value || "").replace(/\D/g, "");
+function splitPhone(value) {
+  const raw = String(value || "").trim();
+  const country = PHONE_COUNTRIES.find((item) => raw.startsWith(item.dial)) || DEFAULT_PHONE_COUNTRY;
+  const local = raw.startsWith(country.dial) ? raw.slice(country.dial.length) : raw;
+  return { country, local: digitsOnly(local) };
+}
+function normalizePhone(country, local) {
+  const digits = digitsOnly(local);
+  return digits ? `${country.dial}${digits}` : "";
+}
 
 // Toast léger — fait répondre les boutons sans endpoint dédié.
 const DEMO = "Action de démonstration — à connecter au backend.";
@@ -168,7 +201,12 @@ const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
 const toNum = (v) => v === "" || v == null ? undefined : Number(v);
 const dateOnly = (v) => v ? String(v).slice(0, 10) : "";
-const displayPhone = (u) => u?.phone?.trim?.() || "Telephone non renseigne";
+const displayPhone = (u) => {
+  const raw = typeof u === "string" ? u : u?.phone;
+  if (!String(raw || "").trim()) return "Telephone non renseigne";
+  const { country, local } = splitPhone(raw);
+  return local ? `${country.dial} ${local}` : String(raw).trim();
+};
 const EMPTY_DATA = {
   staff: [],
   designations: [],
@@ -379,7 +417,11 @@ function App() {
       .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
-        if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
+        if (setting.value && curList) {
+          DEFAULT_CURRENCY_ID = setting.value.currencyId ?? setting.value.currency?.id ?? defaultCurrencyId();
+          CUR = defaultSymbol(setting.value, curList, CUR);
+          forceCur((n) => n + 1);
+        }
         const staffRows = Array.isArray(overview.value?.staff) ? overview.value.staff : [];
         const next = {
           staff: staffRows,
@@ -946,7 +988,7 @@ function Declarations({ data, setModal }) {
     <>
       <PageHead eyebrow="Cotisations & impots" title="Declarations sociales & fiscales" action="Nouvelle declaration" actionIcon="fileCheck" onAction={() => setModal({ kind: "socialDeclaration" })} />
       <div className="g3" style={{ marginBottom: 16 }}><Mini label="Declarations" value={rows.length} /><Mini label="Montant total" value={fc(total)} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
-      <div className="card pad table-card tbl-scroll"><table className="tbl num" style={{ minWidth: 600 }}><thead><tr><th>Organisme</th><th>Periode</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Echeance</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{d.organism || "-"}</td><td>{d.period || "-"}</td><td className="r">{nf.format(Number(d.baseAmount || 0))}</td><td className="r">{d.rate || "-"}</td><td className="r">{fc(d.amount)}</td><td className="r muted">{dateOnly(d.dueDate) || "-"}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucune declaration sociale en base" />}</div>
+      <div className="card pad table-card tbl-scroll"><table className="tbl num" style={{ minWidth: 600 }}><thead><tr><th>Organisme</th><th>Periode</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Echeance</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{d.organism || "-"}</td><td>{d.period || "-"}</td><td className="r">{fc(d.baseAmount)}</td><td className="r">{d.rate || "-"}</td><td className="r">{fc(d.amount)}</td><td className="r muted">{dateOnly(d.dueDate) || "-"}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucune declaration sociale en base" />}</div>
     </>
   );
 }
@@ -1042,9 +1084,14 @@ function SelfService({ data, setModal }) {
 
 /* Modal creation */
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
-  const [form, setForm] = React.useState(() => ({ ...defaults(modal.kind, staff), ...(modal.initial || {}) }));
-  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const action = ACTION_FORMS[modal.kind];
+  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession"].includes(modal.kind);
+  const [form, setForm] = React.useState(() => {
+    const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
+    if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
+    return base;
+  });
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const opts = {
     staff: staff.map((u) => ({ value: u.id, label: fullName(u) })),
     roles: (data.roles || []).map((r) => ({ value: r.id, label: r.name })),
@@ -1052,23 +1099,47 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     designations: (data.designations || []).map((d) => ({ value: d.id, label: d.name })),
     shifts: (data.shifts || []).map((s) => ({ value: s.id, label: `${s.name} (${(s.startTime || "").slice(0, 5)}-${(s.endTime || "").slice(0, 5)})` })),
     awards: (data.awards || []).map((a) => ({ value: a.id, label: a.name })),
-    currencies: CURRENCIES.map((c) => ({ value: c.id, label: `${c.currencyName || c.name || c.currencyCode} (${c.currencySymbol || c.symbol || c.currencyCode})` })),
+    currencies: currencyOptions(),
+  };
+  const isMoneyField = (field) => {
+    if (!field) return false;
+    if (field.key === "salary") return true;
+    if (["expenseRequest", "socialDeclaration"].includes(modal.kind) && ["amount", "baseAmount"].includes(field.key)) return true;
+    if (modal.kind === "trainingSession" && field.key === "budget") return true;
+    return false;
   };
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
         <div className="modal-head"><div><h2 className="font-display">{titleFor(modal.kind)}</h2><p>RH NgoluApp</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
-          {action && action.fields.map((field) => (
-            <Field key={field.key} {...field} options={field.optionKey ? opts[field.optionKey] || [] : field.options} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} />
-          ))}
+          {action && action.fields.map((field) => {
+            const options = field.optionKey ? opts[field.optionKey] || [] : field.options;
+            if (field.key === "currencyId") return null;
+            if (field.key === "phone") return <PhoneField key={field.key} label={field.label} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} required={field.required} />;
+            if (isMoneyField(field)) {
+              return (
+                <MoneyField
+                  key={field.key}
+                  label={field.label}
+                  value={form[field.key] ?? ""}
+                  currencyId={form.currencyId || defaultCurrencyId()}
+                  currencyOptions={opts.currencies}
+                  required={field.required}
+                  onAmountChange={(v) => set(field.key, v)}
+                  onCurrencyChange={(v) => set("currencyId", v)}
+                />
+              );
+            }
+            return <Field key={field.key} {...field} options={options} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} />;
+          })}
           {modal.kind === "employee" && !action && (
             <>
               <Field label="Prénom" value={form.firstName} onChange={(v) => set("firstName", v)} required />
               <Field label="Nom" value={form.lastName} onChange={(v) => set("lastName", v)} required />
               <Field label="Poste" value={form.designationName} onChange={(v) => set("designationName", v)} required />
               <Field label="Département" value={form.departmentName} onChange={(v) => set("departmentName", v)} required />
-              <Field label="Salaire mensuel" type="number" value={form.salary} onChange={(v) => set("salary", v)} />
+              <MoneyField label="Salaire mensuel" value={form.salary} currencyId={form.currencyId || defaultCurrencyId()} currencyOptions={opts.currencies} onAmountChange={(v) => set("salary", v)} onCurrencyChange={(v) => set("currencyId", v)} />
             </>
           )}
           {!action && !["employee", "salary"].includes(modal.kind) && <Field label="Nom" value={form.name} onChange={(v) => set("name", v)} required />}
@@ -1077,7 +1148,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
           {modal.kind === "salary" && !action && (
             <>
               <div className="field"><span>Employé</span><Autocomplete value={form.userId} onChange={(v) => set("userId", v)} options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} /></div>
-              <Field label="Montant (FC)" type="number" value={form.salary} onChange={(v) => set("salary", v)} required />
+              <MoneyField label="Montant" value={form.salary} currencyId={form.currencyId || defaultCurrencyId()} currencyOptions={opts.currencies} required onAmountChange={(v) => set("salary", v)} onCurrencyChange={(v) => set("currencyId", v)} />
               <Field label="Date" type="date" value={form.salaryStartDate} onChange={(v) => set("salaryStartDate", v)} required />
               <Field label="Compte crédit" type="number" value={form.paymentAccountId} onChange={(v) => set("paymentAccountId", v)} />
               <Field label="Commentaire" value={form.salaryComment} onChange={(v) => set("salaryComment", v)} />
@@ -1198,6 +1269,53 @@ function Autocomplete({ value, onChange, options = [], placeholder = "Selectionn
         </div>
       )}
     </div>
+  );
+}
+
+function PhoneField({ label, value, onChange, required = false }) {
+  const parts = splitPhone(value);
+  const selectValue = parts.country.code;
+  const setPhone = (country, local) => onChange(normalizePhone(country, local));
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <div className="phone-input">
+        <select
+          aria-label="Indicatif pays"
+          value={selectValue}
+          onChange={(e) => setPhone(PHONE_COUNTRIES.find((c) => c.code === e.target.value) || DEFAULT_PHONE_COUNTRY, parts.local)}
+        >
+          {PHONE_COUNTRIES.map((country) => (
+            <option key={country.code} value={country.code}>{country.flag} {country.dial}</option>
+          ))}
+        </select>
+        <input
+          required={required}
+          type="tel"
+          inputMode="tel"
+          value={parts.local}
+          placeholder="812 345 678"
+          onChange={(e) => setPhone(parts.country, e.target.value)}
+        />
+      </div>
+    </label>
+  );
+}
+
+function MoneyField({ label, value, currencyId, currencyOptions: options = [], onAmountChange, onCurrencyChange, required = false }) {
+  const rows = options.length ? options : [{ value: "", label: CUR, symbol: CUR }];
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <div className="money-input">
+        <input required={required} type="number" min="0" step="0.01" value={value ?? ""} onChange={(e) => onAmountChange(e.target.value)} />
+        <select value={currencyId ?? ""} onChange={(e) => onCurrencyChange(e.target.value)} aria-label="Devise">
+          {rows.map((option) => (
+            <option key={option.value || option.symbol || option.label} value={option.value}>{option.symbol || option.label}</option>
+          ))}
+        </select>
+      </div>
+    </label>
   );
 }
 

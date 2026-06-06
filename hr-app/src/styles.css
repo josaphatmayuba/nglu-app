@@ -265,6 +265,14 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .field.wide { grid-column: 1 / -1; }
 .field input, .field select, .field textarea { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
 .field textarea { padding-top: 10px; resize: vertical; line-height: 1.4; }
+.phone-input, .money-input { align-items: center; background: #fff; border: 1px solid var(--ink-200); border-radius: 8px; display: grid; overflow: hidden; }
+.phone-input { grid-template-columns: 104px minmax(0, 1fr); }
+.money-input { grid-template-columns: minmax(0, 1fr) 90px; }
+.phone-input:focus-within, .money-input:focus-within { border-color: var(--teal-400); box-shadow: 0 0 0 3px rgba(20,184,166,.12); }
+.phone-input input, .phone-input select, .money-input input, .money-input select { border: 0; border-radius: 0; box-shadow: none; min-height: 40px; width: 100%; }
+.phone-input input:focus, .phone-input select:focus, .money-input input:focus, .money-input select:focus { border: 0; box-shadow: none; outline: none; }
+.phone-input select, .money-input select { border-right: 1px solid var(--ink-200); font-weight: 700; padding: 0 8px; }
+.money-input select { border-left: 1px solid var(--ink-200); border-right: 0; color: var(--teal-700); text-align: center; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ── Mobile bottom nav + plus sheet ────────────────────────────────────── */
