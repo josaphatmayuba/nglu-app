@@ -132,6 +132,42 @@ function Toaster() {
   if (!msg) return null;
   return <div className="toast">{msg}</div>;
 }
+function ActionFeed() {
+  const [items, setItems] = React.useState([]);
+  React.useEffect(() => {
+    const on = (e) => {
+      const message = e.detail || DEMO;
+      const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      setItems((cur) => [{ id: `${Date.now()}-${Math.random()}`, message, time }, ...cur].slice(0, 3));
+    };
+    window.addEventListener("hr:toast", on);
+    return () => window.removeEventListener("hr:toast", on);
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="action-feed" aria-live="polite">
+      {items.map((item) => (
+        <div className="action-feed-item" key={item.id}>
+          <span className="row-ic"><Icon name="checkCircle" /></span>
+          <span>{item.message}</span>
+          <time>{item.time}</time>
+        </div>
+      ))}
+    </div>
+  );
+}
+// Export CSV réel — télécharge les données affichées, sans backend.
+function exportCsv(filename, headers, rows) {
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map((r) => r.map(esc).join(";")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 600);
+  notify(`Export « ${filename} » téléchargé.`);
+}
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username || u.email || `Employé #${u.id}`;
 const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
@@ -222,27 +258,77 @@ function App() {
   }, []);
   React.useEffect(() => load(), [load]);
 
-  const canMutate = apiStatus === "api";
   const me = getUser();
   const myInitials = initials(me.name);
   const myRole = me.role || "Ressources humaines";
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
 
+  function saveLocal(kind, form) {
+    const id = Date.now();
+    setData((cur) => {
+      if (kind === "employee") {
+        const firstName = form.firstName?.trim() || "Nouvel";
+        const lastName = form.lastName?.trim() || "Employé";
+        const departmentName = form.departmentName?.trim() || "Administration & RH";
+        const designationName = form.designationName?.trim() || "Agent";
+        return {
+          ...cur,
+          staff: [
+            ...cur.staff,
+            {
+              id,
+              firstName,
+              lastName,
+              username: `${firstName[0] || "n"}${lastName}`.toLowerCase(),
+              designation: { name: designationName },
+              department: { name: departmentName },
+              currentSalary: Number(form.salary || 0),
+              status: "true",
+            },
+          ],
+          departments: cur.departments.map((d) => d.name === departmentName ? { ...d, count: Number(d.count || 0) + 1 } : d),
+        };
+      }
+      if (kind === "designation") return { ...cur, designations: [...cur.designations, { id, name: form.name }] };
+      if (kind === "shift") return { ...cur, shifts: [...cur.shifts, { id, name: form.name, startTime: form.startTime, endTime: form.endTime, workHour: 8 }] };
+      if (kind === "award") return { ...cur, awards: [...cur.awards, { id, name: form.name, description: form.description || "" }] };
+      if (kind === "salary") {
+        const salary = Number(form.salary || 0);
+        return {
+          ...cur,
+          salaries: [{ id, userId: Number(form.userId), salary, startDate: form.salaryStartDate, comment: form.salaryComment || "Paie RH" }, ...cur.salaries],
+          staff: cur.staff.map((u) => Number(u.id) === Number(form.userId) ? { ...u, currentSalary: salary } : u),
+        };
+      }
+      return cur;
+    });
+    setModal(null);
+    notify(`${titleFor(kind)} enregistré en mode local.`);
+  }
+
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      if (kind === "designation") await api.createDesignation({ name: form.name });
-      if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
-      if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
-      if (kind === "salary") await api.createSalary({
-        userId: Number(form.userId), salary: Number(form.salary), salaryStartDate: form.salaryStartDate,
-        salaryComment: form.salaryComment || null, paymentAccountId: Number(form.paymentAccountId || 2),
-      });
-      setModal(null); load();
-    } catch (err) { setError(err.message || String(err)); }
+      if (apiStatus === "api" && kind !== "employee") {
+        if (kind === "designation") await api.createDesignation({ name: form.name });
+        if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
+        if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
+        if (kind === "salary") await api.createSalary({
+          userId: Number(form.userId), salary: Number(form.salary), salaryStartDate: form.salaryStartDate,
+          salaryComment: form.salaryComment || null, paymentAccountId: Number(form.paymentAccountId || 2),
+        });
+        setModal(null); load(); notify(`${titleFor(kind)} enregistré avec l'API.`);
+      } else {
+        saveLocal(kind, form);
+      }
+    } catch {
+      saveLocal(kind, form);
+      notify("API dev indisponible, action conservée localement.");
+    }
     finally { setBusy(false); }
   }
 
+  const canMutate = true;
   const staff = data.staff.filter((s) => s.status !== "false");
   const masse = staff.reduce((s, u) => s + Number(u.currentSalary || 0), 0);
   const ctx = { data, staff, masse, go, canMutate, setModal };
@@ -255,7 +341,7 @@ function App() {
     presences: <Presences staff={staff} />,
     conges: <Conges />,
     timesheet: <Timesheet />,
-    paie: <Paie staff={staff} masse={masse} canMutate={canMutate} onNew={() => setModal({ kind: "salary" })} />,
+    paie: <Paie staff={staff} masse={masse} />,
     remuneration: <Remuneration masse={masse} />,
     frais: <Frais />,
     declarations: <Declarations />,
@@ -304,6 +390,7 @@ function App() {
             <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Démo locale"}</span>
           </div>
           {error && <div className="inline-error">{error}</div>}
+          <ActionFeed />
           {views[route]}
         </div>
       </main>
@@ -342,12 +429,12 @@ function App() {
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
-function Dashboard({ data, staff, masse, go }) {
+function Dashboard({ data, staff, masse, go, setModal }) {
   const total = staff.length || 42;
   const presents = Math.max(0, total - fbAbsents.length - 1);
   return (
     <>
-      <PageHead eyebrow="Vue d'ensemble · juin 2026" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => go("employes")} />
+      <PageHead eyebrow="Vue d'ensemble · juin 2026" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <KPI label="Effectif total" value={total} sub="+3 ce trimestre" subClass="up" icon="users" />
         <KPI label="Présents aujourd'hui" value={<>{presents}<span style={{ color: "var(--ink-400)", fontSize: 18 }}>/{total}</span></>} sub="2 congés · 2 missions" icon="fingerprint" />
@@ -388,24 +475,59 @@ function Todo({ icon, tone, title, sub, onClick }) {
 }
 
 /* ── Employés ──────────────────────────────────────────────────────────── */
-function Employes({ staff, go }) {
+function Employes({ staff, setModal }) {
   const enConge = 2, nouveaux = 3, expirent = 2;
+  const [q, setQ] = React.useState("");
+  const [dept, setDept] = React.useState("");
+  const [view, setView] = React.useState("grid");
+  const depts = [...new Set(staff.map((u) => u.department?.name).filter(Boolean))];
+  const matricule = (u) => `NG-${String(u.id).padStart(3, "0")}`;
+  const filtered = staff.filter((u) => {
+    const okDept = !dept || u.department?.name === dept;
+    const hay = `${fullName(u)} ${u.designation?.name || ""} ${u.department?.name || ""} ${matricule(u)}`.toLowerCase();
+    const okQ = !q.trim() || hay.includes(q.trim().toLowerCase());
+    return okDept && okQ;
+  });
+  const exportEmployes = () => exportCsv(
+    "employes.csv",
+    ["Matricule", "Nom", "Poste", "Département", "Statut", `Salaire (${CUR})`],
+    filtered.map((u) => [matricule(u), fullName(u), u.designation?.name || "", u.department?.name || "", u.status === "false" ? "Inactif" : "Actif", Math.round(Number(u.currentSalary || 0))])
+  );
   return (
     <>
-      <PageHead eyebrow="Annuaire" title="Employés" action="Nouvel employé" actionIcon="userPlus" onAction={() => go("organigramme")} />
+      <PageHead eyebrow="Annuaire" title="Employés" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
       <div className="searchbar">
-        <div className="search-input"><Icon name="search" /> Rechercher un employé, poste, matricule…</div>
-        <button type="button" className="pillbtn" onClick={() => notify()}><Icon name="filter" /> Département</button>
-        <button type="button" className="pillbtn" onClick={() => notify()}><Icon name="list" /> Liste</button>
+        <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employé, poste, matricule…" /></label>
+        <select className={`pillbtn ${dept ? "on" : ""}`} value={dept} onChange={(e) => setDept(e.target.value)} title="Filtrer par département">
+          <option value="">Tous les départements</option>
+          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <button type="button" className="pillbtn" onClick={() => setView(view === "grid" ? "list" : "grid")} title="Changer l'affichage"><Icon name={view === "grid" ? "list" : "dashboard"} /> {view === "grid" ? "Liste" : "Grille"}</button>
+        <button type="button" className="pillbtn" onClick={exportEmployes} title="Exporter en CSV"><Icon name="download" /> Exporter</button>
       </div>
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actifs" value={staff.length} />
+        <Mini label={q || dept ? "Résultats" : "Actifs"} value={filtered.length} />
         <Mini label="En congé" value={enConge} />
         <Mini label="Nouveaux (30 j)" value={nouveaux} valueClass="" />
         <Mini label="Contrats < 30 j" value={expirent} />
       </div>
+      {view === "list" ? (
+        <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
+          <thead><tr><th>Employé</th><th>Poste</th><th>Département</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
+          <tbody>{filtered.map((u) => { const name = fullName(u); return (
+            <tr key={u.id}>
+              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)}</div></div></div></td>
+              <td>{u.designation?.name || "—"}</td>
+              <td className="muted">{u.department?.name || "—"}</td>
+              <td className="r num">{fc(u.currentSalary, salarySym(u))}</td>
+              <td className="r"><span className="chip emerald">{u.status === "false" ? "Inactif" : "Actif"}</span></td>
+            </tr>
+          ); })}</tbody>
+        </table></div></div>
+      ) : (
       <div className="emp-grid">
-        {staff.map((u) => {
+        {filtered.length === 0 && <div className="muted" style={{ gridColumn: "1/-1", textAlign: "center", padding: 24 }}>Aucun employé ne correspond à la recherche.</div>}
+        {filtered.map((u) => {
           const name = fullName(u);
           return (
             <div className="card pad" key={u.id}>
@@ -430,24 +552,31 @@ function Employes({ staff, go }) {
           );
         })}
       </div>
+      )}
     </>
   );
 }
 
 /* ── Présences ─────────────────────────────────────────────────────────── */
 function Presences() {
+  const [checked, setChecked] = React.useState(false);
+  const presents = checked ? 39 : 38;
+  const punch = () => {
+    setChecked(true);
+    notify("Pointage enregistré pour aujourd'hui.");
+  };
   return (
     <>
-      <PageHead eyebrow="Pointage · jeudi 5 juin 2026" title="Présences & pointage" action="Pointer maintenant" actionIcon="fingerprint" onAction={() => notify()} />
+      <PageHead eyebrow="Pointage · jeudi 5 juin 2026" title="Présences & pointage" action={checked ? "Pointage enregistré" : "Pointer maintenant"} actionIcon={checked ? "checkCircle" : "fingerprint"} onAction={punch} ghost={checked} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <KPI label="Présents" value="38" icon="checkCircle" />
+        <KPI label="Présents" value={presents} icon="checkCircle" />
         <KPI label="Retards" value="3" tone="warn" icon="clock" />
         <KPI label="Absents" value="1" tone="danger" icon="userX" />
         <KPI label="En mission" value="2" icon="plane" />
       </div>
       <div className="card pad">
         <div className="section-head"><h3 className="font-display">Feuille de présence du jour</h3><span className="tiny">90 % de présence</span></div>
-        {fbPresences.map((p, i) => (
+        {(checked ? [{ name: "Moi", dept: "Ressources humaines", time: "Pointé maintenant", status: "Présent", chip: "emerald", av: "#14b8a6" }, ...fbPresences] : fbPresences).map((p, i) => (
           <div className="row" key={i}>
             <Avatar name={p.name} color={p.av} size={36} />
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div><div className="tiny">{p.dept}</div></div>
@@ -462,11 +591,21 @@ function Presences() {
 
 /* ── Congés ────────────────────────────────────────────────────────────── */
 function Conges() {
+  const [requests, setRequests] = React.useState(fbConges);
+  const addRequest = () => {
+    setRequests((cur) => [{ name: "Nouvelle demande", type: "Congé annuel", detail: "En attente de validation RH", av: "#14b8a6" }, ...cur]);
+    notify("Nouvelle demande de congé ajoutée.");
+  };
+  const decide = (index, accepted) => {
+    const req = requests[index];
+    setRequests((cur) => cur.filter((_, i) => i !== index));
+    notify(`${req?.name || "Demande"} ${accepted ? "approuvée" : "refusée"}.`);
+  };
   return (
     <>
-      <PageHead eyebrow="Absences" title="Congés & absences" action="Nouvelle demande" onAction={() => notify()} />
+      <PageHead eyebrow="Absences" title="Congés & absences" action="Nouvelle demande" onAction={addRequest} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <KPI label="En attente" value={fbConges.length} tone="warn" />
+        <KPI label="En attente" value={requests.length} tone="warn" />
         <Mini label="Approuvés (mois)" value="8" valueClass="" />
         <Mini label="En congé aujourd'hui" value="2" />
         <Mini label="Solde moyen" value="11 j" />
@@ -474,13 +613,14 @@ function Conges() {
       <div className="g3">
         <section className="card pad span2">
           <h3 className="block-title font-display">Demandes à traiter</h3>
-          {fbConges.map((c, i) => (
+          {requests.length === 0 && <div className="muted" style={{ fontSize: 13 }}>Aucune demande en attente.</div>}
+          {requests.map((c, i) => (
             <div className="row" key={i}>
               <Avatar name={c.name} color={c.av} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{c.name} · <span className="muted" style={{ fontWeight: 400 }}>{c.type}</span></div><div className="tiny">{c.detail}</div></div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button type="button" className="btn" style={{ height: 32, padding: "0 10px", background: "var(--emerald-500)", color: "#fff" }} onClick={() => notify("Demande approuvée (démo).")}><Icon name="check" /></button>
-                <button type="button" className="btn btn-ghost" style={{ height: 32, padding: "0 10px", color: "var(--rose-500)" }} onClick={() => notify("Demande refusée (démo).")}><Icon name="x" /></button>
+                <button type="button" className="btn" style={{ height: 32, padding: "0 10px", background: "var(--emerald-500)", color: "#fff" }} onClick={() => decide(i, true)}><Icon name="check" /></button>
+                <button type="button" className="btn btn-ghost" style={{ height: 32, padding: "0 10px", color: "var(--rose-500)" }} onClick={() => decide(i, false)}><Icon name="x" /></button>
               </div>
             </div>
           ))}
@@ -505,11 +645,21 @@ function Conges() {
 }
 
 /* ── Paie ──────────────────────────────────────────────────────────────── */
-function Paie({ staff, masse, canMutate, onNew }) {
+function Paie({ staff, masse }) {
+  const [launched, setLaunched] = React.useState(false);
   const net = Math.round(masse * 0.85);
+  const exportBulletins = () => exportCsv(
+    "bulletins-juin-2026.csv",
+    ["Employé", "Poste", `Brut (${CUR})`, `Retenues (${CUR})`, `Net (${CUR})`, "Statut"],
+    staff.map((u) => { const brut = Number(u.currentSalary || 0); const ret = Math.round(brut * 0.15); return [fullName(u), u.designation?.name || "", brut, ret, brut - ret, "En attente"]; })
+  );
+  const launchPayroll = () => {
+    setLaunched(true);
+    notify(`${staff.length} bulletins de paie validés pour juin 2026.`);
+  };
   return (
     <>
-      <PageHead eyebrow="Période · juin 2026" title="Paie" action="Lancer la paie" actionIcon="play" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow="Période · juin 2026" title="Paie" action={launched ? "Paie lancée" : "Lancer la paie"} actionIcon={launched ? "checkCircle" : "play"} onAction={launchPayroll} ghost={launched} />
       <div className="banner grad-accent">
         <div>
           <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="wallet" /> Net à payer · juin</div>
@@ -522,12 +672,12 @@ function Paie({ staff, masse, canMutate, onNew }) {
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Bulletins" value={staff.length} />
-        <Mini label="Validés" value="0" valueClass="" />
-        <KPI label="En attente" value={staff.length} tone="warn" />
+        <Mini label="Validés" value={launched ? staff.length : 0} valueClass="" />
+        <KPI label="En attente" value={launched ? 0 : staff.length} tone={launched ? undefined : "warn"} />
         <Mini label="Via mobile money" value={Math.round(staff.length * 0.74)} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Bulletins · juin 2026</h3><button type="button" className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Bulletins · juin 2026</h3><button type="button" className="link" onClick={exportBulletins}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 560 }}>
             <thead><tr><th>Employé</th><th className="r">Brut</th><th className="r">Retenues</th><th className="r">Net</th><th className="r">Statut</th></tr></thead>
@@ -541,7 +691,7 @@ function Paie({ staff, masse, canMutate, onNew }) {
                     <td className="r num">{nf.format(brut)}</td>
                     <td className="r num muted">{nf.format(ret)}</td>
                     <td className="r num" style={{ fontWeight: 600 }}>{nf.format(brut - ret)}</td>
-                    <td className="r"><span className="chip amber">En attente</span></td>
+                    <td className="r"><span className={`chip ${launched ? "emerald" : "amber"}`}>{launched ? "Validé" : "En attente"}</span></td>
                   </tr>
                 );
               })}
@@ -556,9 +706,12 @@ function Paie({ staff, masse, canMutate, onNew }) {
 
 /* ── Contrats ──────────────────────────────────────────────────────────── */
 function Contrats() {
+  const [q, setQ] = React.useState("");
+  const filtered = fbContrats.filter((c) => !q.trim() || `${c.name} ${c.type} ${c.status}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const exportContrats = () => exportCsv("contrats.csv", ["Employé", "Type", "Début", "Fin", "Statut"], filtered.map((c) => [c.name, c.type, c.start, c.end, c.status]));
   return (
     <>
-      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => notify()} />
+      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => notify("Nouveau contrat préparé dans le registre local.")} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Total contrats" value="42" />
         <Mini label="CDI" value="31" />
@@ -566,12 +719,15 @@ function Contrats() {
         <KPI label="Expirent < 30 j" value="2" tone="warn" />
       </div>
       <div className="card pad table-card">
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher (employé, type, statut)…</div></div>
+        <div className="searchbar">
+          <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employé, type, statut)…" /></label>
+          <button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button>
+        </div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 620 }}>
             <thead><tr><th>Employé</th><th>Type</th><th>Début</th><th>Fin</th><th className="r">Statut</th></tr></thead>
             <tbody>
-              {fbContrats.map((c, i) => (
+              {filtered.map((c, i) => (
                 <tr key={i}>
                   <td style={{ fontWeight: 500 }}>{c.name}</td>
                   <td><span className={`chip ${c.chip}`}>{c.type}</span></td>
@@ -595,7 +751,7 @@ function Dossiers() {
   const keys = ["cv", "id", "dip", "ctr", "cnss", "psea"];
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => notify("Téléversement ajouté à la file des dossiers RH.")} ghost />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Dossiers complets" value="35" valueClass="" />
         <KPI label="Incomplets" value="7" tone="warn" />
@@ -628,7 +784,7 @@ function Timesheet() {
   const sum = (k) => fbTimesheet.reduce((s, r) => s + r[k], 0);
   return (
     <>
-      <PageHead eyebrow="Allocation du temps · juin 2026" title="Timesheet — projets & bailleurs" action="Rapport bailleur" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Allocation du temps · juin 2026" title="Timesheet — projets & bailleurs" action="Rapport bailleur" actionIcon="download" onAction={() => exportCsv("timesheet-bailleur-juin-2026.csv", ["Employé", "Kongo Central", "Kinshasa", "Fonctionnement", "Total"], fbTimesheet.map((r) => [r.name, r.kc, r.kin, r.fct, tot(r)]))} ghost />
       <div className="note"><Icon name="lightbulb" /> <span>Chaque agent répartit son temps entre les <b>projets/bailleurs</b>. C'est l'équivalent RH de l'analytique comptable — <b>exigé par les bailleurs</b> pour justifier les salaires imputés.</span></div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Heures saisies" value="6 240 h" /><Mini label="Taux de remplissage" value="92 %" valueClass="" />
@@ -653,7 +809,7 @@ function Timesheet() {
 function Remuneration({ masse }) {
   return (
     <>
-      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Modifier la grille" actionIcon="settings" onAction={() => notify()} />
+      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Modifier la grille" actionIcon="settings" onAction={() => notify("Grille salariale ouverte en édition locale.")} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Masse salariale / mois" value={fcM(masse)} />
         <Mini label="Prime transport (total)" value="2,1 M FC" />
@@ -679,7 +835,7 @@ function Remuneration({ masse }) {
 function Frais() {
   return (
     <>
-      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => notify()} />
+      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => notify("Nouvelle demande de frais ajoutée à la validation.")} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <KPI label="À rembourser / valider" value="3" tone="warn" />
         <Mini label="Avances en cours" value="1,2 M FC" />
@@ -706,7 +862,7 @@ function Frais() {
 function Declarations() {
   return (
     <>
-      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => notify()} />
+      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => notify("Bordereaux sociaux préparés pour juin 2026.")} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="CNSS (sécurité sociale)" value="3 124 000" />
         <Mini label="INPP (formation prof.)" value="568 000" />
@@ -732,7 +888,7 @@ function Declarations() {
 function Performance() {
   return (
     <>
-      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => notify()} />
+      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => notify("Nouvelle évaluation créée en brouillon.")} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Évaluations faites" value={<>26<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/42</span></>} />
         <Mini label="Note moyenne" value={<>3,9<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/5</span></>} valueClass="" />
@@ -759,7 +915,7 @@ function Performance() {
 function Formation() {
   return (
     <>
-      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => notify()} />
+      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => notify("Nouvelle session de formation planifiée.")} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Sessions planifiées" value="6" />
         <Mini label="Agents formés (2026)" value="23" valueClass="" />
@@ -789,7 +945,7 @@ function Recrutement() {
   ];
   return (
     <>
-      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => notify()} />
+      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => notify("Nouvelle offre ajoutée au pipeline recrutement.")} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <div className="card pad"><div className="kpi-label">Offres ouvertes</div><div className="font-display kpi-value">3</div><div className="tiny" style={{ marginTop: 4 }}>Agent terrain · Comptable · Chauffeur</div></div>
         <div className="card pad"><div className="kpi-label">Candidatures</div><div className="font-display kpi-value">37</div><div className="tiny" style={{ marginTop: 4 }}>12 cette semaine</div></div>
@@ -860,7 +1016,7 @@ function Reporting() {
   const proj = [{ l: "Programme Kinshasa", v: "11,4 M", p: 40, c: "grad-accent" }, { l: "Programme Kongo Central", v: "8,6 M", p: 30, c: "grad-accent" }, { l: "Fonctionnement / structure", v: "8,4 M", p: 30, c: "amber" }];
   return (
     <>
-      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={() => exportCsv("reporting-rh-juin-2026.csv", ["Indicateur", "Valeur"], [["Effectif", 42], ["Turnover annuel", "9 %"], ["Ancienneté moyenne", "3,4 ans"], ["Ratio H/F", "58 / 42"]])} ghost />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Effectif" value="42" /><Mini label="Turnover (annuel)" value="9 %" />
         <Mini label="Ancienneté moy." value="3,4 ans" /><Mini label="Ratio H / F" value="58 / 42" />
@@ -908,7 +1064,7 @@ function SelfService() {
           <div className="card pad" key={t.title}>
             <h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={t.icon} style={{ color: "var(--teal-600)" }} /> {t.title}</h3>
             <div className="kv">{t.rows.map(([k, v], i) => <div key={i}><span className="muted">{k}</span><span style={{ fontWeight: 500 }}>{v}</span></div>)}</div>
-            <button type="button" className={`tile-btn ${t.accent ? "accent" : ""}`} onClick={() => notify()}><Icon name={t.bicon} /> {t.btn}</button>
+            <button type="button" className={`tile-btn ${t.accent ? "accent" : ""}`} onClick={() => notify(`${t.btn} traité dans l'espace employé.`)}><Icon name={t.bicon} /> {t.btn}</button>
           </div>
         ))}
       </div>
@@ -925,7 +1081,16 @@ function RecordModal({ modal, staff, busy, error, onSave, onClose }) {
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
         <div className="modal-head"><div><h2 className="font-display">{titleFor(modal.kind)}</h2><p>RH NgoluApp</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
-          {modal.kind !== "salary" && <Field label="Nom" value={form.name} onChange={(v) => set("name", v)} required />}
+          {modal.kind === "employee" && (
+            <>
+              <Field label="Prénom" value={form.firstName} onChange={(v) => set("firstName", v)} required />
+              <Field label="Nom" value={form.lastName} onChange={(v) => set("lastName", v)} required />
+              <Field label="Poste" value={form.designationName} onChange={(v) => set("designationName", v)} required />
+              <Field label="Département" value={form.departmentName} onChange={(v) => set("departmentName", v)} required />
+              <Field label="Salaire mensuel" type="number" value={form.salary} onChange={(v) => set("salary", v)} />
+            </>
+          )}
+          {!["employee", "salary"].includes(modal.kind) && <Field label="Nom" value={form.name} onChange={(v) => set("name", v)} required />}
           {modal.kind === "shift" && <><Field label="Début" type="time" value={form.startTime} onChange={(v) => set("startTime", v)} required /><Field label="Fin" type="time" value={form.endTime} onChange={(v) => set("endTime", v)} required /></>}
           {modal.kind === "award" && <Field label="Description" value={form.description} onChange={(v) => set("description", v)} />}
           {modal.kind === "salary" && (
@@ -948,9 +1113,10 @@ function Field({ label, value, onChange, type = "text", required = false }) {
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 function titleFor(kind) {
-  return kind === "shift" ? "Nouvel horaire" : kind === "award" ? "Nouvelle reconnaissance" : kind === "salary" ? "Nouvelle paie" : "Nouveau poste";
+  return kind === "employee" ? "Nouvel employé" : kind === "shift" ? "Nouvel horaire" : kind === "award" ? "Nouvelle reconnaissance" : kind === "salary" ? "Nouvelle paie" : "Nouveau poste";
 }
 function defaults(kind, staff) {
+  if (kind === "employee") return { firstName: "", lastName: "", designationName: "Agent de terrain", departmentName: "Programmes & terrain", salary: 0 };
   if (kind === "shift") return { name: "", startTime: "08:00", endTime: "17:00" };
   if (kind === "award") return { name: "", description: "" };
   if (kind === "salary") return { userId: staff[0]?.id || "", salary: 0, salaryStartDate: new Date().toISOString().slice(0, 10), salaryComment: "", paymentAccountId: 2 };
