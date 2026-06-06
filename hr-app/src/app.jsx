@@ -395,8 +395,8 @@ function Employes({ staff, go }) {
       <PageHead eyebrow="Annuaire" title="Employés" action="Nouvel employé" actionIcon="userPlus" onAction={() => go("organigramme")} />
       <div className="searchbar">
         <div className="search-input"><Icon name="search" /> Rechercher un employé, poste, matricule…</div>
-        <button className="pillbtn"><Icon name="filter" /> Département</button>
-        <button className="pillbtn"><Icon name="list" /> Liste</button>
+        <button type="button" className="pillbtn" onClick={() => notify()}><Icon name="filter" /> Département</button>
+        <button type="button" className="pillbtn" onClick={() => notify()}><Icon name="list" /> Liste</button>
       </div>
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Actifs" value={staff.length} />
@@ -527,7 +527,7 @@ function Paie({ staff, masse, canMutate, onNew }) {
         <Mini label="Via mobile money" value={Math.round(staff.length * 0.74)} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Bulletins · juin 2026</h3><button className="link"><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Bulletins · juin 2026</h3><button type="button" className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 560 }}>
             <thead><tr><th>Employé</th><th className="r">Brut</th><th className="r">Retenues</th><th className="r">Net</th><th className="r">Statut</th></tr></thead>
