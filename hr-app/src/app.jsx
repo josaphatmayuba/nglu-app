@@ -172,6 +172,29 @@ const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(" ").trim
 const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
 const toNum = (v) => v === "" || v == null ? undefined : Number(v);
+const dateOnly = (v) => v ? String(v).slice(0, 10) : "";
+const displayPhone = (u) => u?.phone?.trim?.() || "Telephone non renseigne";
+const employeeForm = (u) => ({
+  id: u.id,
+  firstName: u.firstName || "",
+  lastName: u.lastName || "",
+  username: u.username || "",
+  roleId: u.roleId || u.role?.id || "",
+  email: u.email || "",
+  phone: u.phone || "",
+  departmentId: u.departmentId || u.department?.id || "",
+  designationId: u.designationId || u.designation?.id || "",
+  shiftId: u.shiftId || "",
+  employeeId: u.employeeId || "",
+  joinDate: dateOnly(u.joinDate),
+  bloodGroup: u.bloodGroup || "",
+  street: u.street || "",
+  city: u.city || "",
+  state: u.state || "",
+  zipCode: u.zipCode || "",
+  country: u.country || "",
+  status: u.status || "true",
+});
 function cleanPayload(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== ""));
 }
@@ -201,6 +224,7 @@ const ACTION_FORMS = {
 /* ── Petits composants réutilisables ───────────────────────────────────── */
 Object.assign(ACTION_FORMS, {
   employee: { title: "Nouvel employÃ©", submit: "CrÃ©er", success: "EmployÃ© crÃ©Ã© dans la base.", defaults: { firstName: "", lastName: "", username: "", password: "ChangeMe123!", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "" }, fields: [{ key: "firstName", label: "PrÃ©nom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "password", label: "Mot de passe initial", type: "password", required: true }, { key: "roleId", label: "RÃ´le", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "TÃ©lÃ©phone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }] },
+  editEmployee: { title: "Modifier employe", submit: "Enregistrer", success: "Employe modifie dans la base.", defaults: { id: "", firstName: "", lastName: "", username: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" }, fields: [{ key: "firstName", label: "Prenom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "Telephone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }, { key: "bloodGroup", label: "Groupe sanguin" }, { key: "street", label: "Adresse" }, { key: "city", label: "Ville" }, { key: "country", label: "Pays" }] },
   designation: { title: "Nouveau poste", submit: "CrÃ©er", success: "Poste crÃ©Ã© dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du poste", required: true }] },
   shift: { title: "Nouvel horaire", submit: "CrÃ©er", success: "Horaire crÃ©Ã© dans la base.", defaults: { name: "", startTime: "08:00", endTime: "17:00" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "startTime", label: "DÃ©but", type: "time", required: true }, { key: "endTime", label: "Fin", type: "time", required: true }] },
   award: { title: "Nouvelle rÃ©compense", submit: "CrÃ©er", success: "RÃ©compense crÃ©Ã©e dans la base.", defaults: { name: "", description: "" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "description", label: "Description", type: "textarea" }] },
@@ -335,6 +359,15 @@ function App() {
           state: form.state, zipCode: form.zipCode, country: form.country,
         }));
       }
+      if (kind === "editEmployee") {
+        await api.updateUser(Number(form.id), cleanPayload({
+          firstName: form.firstName, lastName: form.lastName, username: form.username,
+          roleId: Number(form.roleId), email: form.email, phone: form.phone, departmentId: toNum(form.departmentId),
+          designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
+          bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
+          state: form.state, zipCode: form.zipCode, country: form.country, status: form.status,
+        }));
+      }
       if (kind === "designation") await api.createDesignation({ name: form.name });
       if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
       if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
@@ -352,7 +385,7 @@ function App() {
       }));
       if (kind === "closeAccount") {
         const leaveReason = form.note?.trim() ? `${form.reason} — ${form.note.trim()}` : form.reason;
-        await api.updateUser(Number(form.userId), { status: "false", leaveDate: new Date().toISOString().slice(0, 10), leaveReason });
+        await api.closeUser(Number(form.userId), { status: "false", leaveDate: new Date().toISOString().slice(0, 10), leaveReason });
       }
       setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistré avec l'API.`);
     } catch (err) {
@@ -454,7 +487,15 @@ function App() {
         </div>
       )}
 
-      {modal && <RecordModal modal={modal} data={data} staff={staff} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      {modal && (modal.kind === "employeeProfile"
+        ? <EmployeeProfileModal
+            user={modal.user}
+            onClose={() => setModal(null)}
+            onEdit={() => setModal({ kind: "editEmployee", initial: employeeForm(modal.user) })}
+            onCloseAccount={() => setModal({ kind: "closeAccount", initial: { userId: modal.user.id } })}
+          />
+        : <RecordModal modal={modal} data={data} staff={staff} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />
+      )}
       <Toaster />
       <AiAssistant />
     </div>
@@ -549,11 +590,11 @@ function Employes({ staff, setModal }) {
         <Mini label="Contrats < 30 j" value={expirent} />
       </div>
       {view === "list" ? (
-        <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
+        <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 760 }}>
           <thead><tr><th>Employé</th><th>Poste</th><th>Département</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
           <tbody>{filtered.map((u) => { const name = fullName(u); return (
             <tr key={u.id}>
-              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)}</div></div></div></td>
+              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)} · {displayPhone(u)}</div><EmployeeActions user={u} setModal={setModal} /></div></div></td>
               <td>{u.designation?.name || "—"}</td>
               <td className="muted">{u.department?.name || "—"}</td>
               <td className="r num">{fc(u.currentSalary, salarySym(u))}</td>
@@ -577,12 +618,14 @@ function Employes({ staff, setModal }) {
                 <span className="chip emerald" style={{ marginLeft: "auto" }}>{u.status === "false" ? "Inactif" : "Actif"}</span>
               </div>
               <div className="emp-meta">
+                <div><Icon name="phone" /> {displayPhone(u)}</div>
                 <div><Icon name="building2" /> {u.department?.name || "Département"}</div>
                 <div><Icon name="badgeCheck" /> {u.designation?.name ? "CDI" : "Contrat"} · matricule NG-{String(u.id).padStart(3, "0")}</div>
                 <div><Icon name="phone" /> +243 ··· ·· ··</div>
               </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>{fc(u.currentSalary, salarySym(u))} / mois</span>
+                <EmployeeActions user={u} setModal={setModal} />
                 <span style={{ fontSize: 12, color: "var(--teal-600)", fontWeight: 500, display: "flex", alignItems: "center", gap: 2 }}>Profil <Icon name="chevronRight" style={{ width: 14, height: 14 }} /></span>
               </div>
             </div>
@@ -595,6 +638,70 @@ function Employes({ staff, setModal }) {
 }
 
 /* ── Présences ─────────────────────────────────────────────────────────── */
+function EmployeeActions({ user, setModal }) {
+  const [open, setOpen] = React.useState(false);
+  const openModal = (next) => {
+    setOpen(false);
+    setModal(next);
+  };
+  return (
+    <div className="emp-actions">
+      <button type="button" className="emp-action-trigger" onClick={() => setOpen((v) => !v)}>
+        Actions <Icon name="chevronRight" style={{ width: 14, height: 14 }} />
+      </button>
+      {open && (
+        <div className="emp-action-menu">
+          <button type="button" onClick={() => openModal({ kind: "employeeProfile", user })}><Icon name="circleUser" /> Visualiser</button>
+          <button type="button" onClick={() => openModal({ kind: "editEmployee", initial: employeeForm(user) })}><Icon name="edit" /> Modifier</button>
+          <button type="button" className="danger" onClick={() => openModal({ kind: "closeAccount", initial: { userId: user.id } })}><Icon name="xCircle" /> Fermer le compte</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmployeeProfileModal({ user, onClose, onEdit, onCloseAccount }) {
+  const name = fullName(user);
+  const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card employee-profile-card">
+        <div className="modal-head">
+          <div>
+            <h2 className="font-display">{name}</h2>
+            <p>{user.designation?.name || "Poste non assigne"} · {user.department?.name || "Departement non assigne"}</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="employee-profile-head">
+          <Avatar name={name} color={colorFor(name)} size={54} sq />
+          <div>
+            <div className="chip emerald">{user.status === "false" ? "Inactif" : "Actif"}</div>
+            <div className="tiny" style={{ marginTop: 6 }}>NG-{String(user.id).padStart(3, "0")}</div>
+          </div>
+        </div>
+        <div className="employee-profile-grid">
+          {row("Telephone", displayPhone(user))}
+          {row("Email", user.email)}
+          {row("Identifiant", user.username)}
+          {row("Role", user.role?.name)}
+          {row("Departement", user.department?.name)}
+          {row("Poste", user.designation?.name)}
+          {row("Date d'embauche", dateOnly(user.joinDate))}
+          {row("Salaire", `${fc(user.currentSalary, salarySym(user))} / mois`)}
+          {row("Adresse", [user.street, user.city, user.country].filter(Boolean).join(", "))}
+          {row("Motif de depart", user.leaveReason)}
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          <button type="button" className="btn btn-ghost" onClick={onEdit}><Icon name="edit" /> Modifier</button>
+          <button type="button" className="btn btn-accent grad-accent" onClick={onCloseAccount}><Icon name="xCircle" /> Fermer le compte</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Presences() {
   const [checked, setChecked] = React.useState(false);
   const presents = checked ? 39 : 38;
