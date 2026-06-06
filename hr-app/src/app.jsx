@@ -505,7 +505,7 @@ function App() {
     presences: <Presences staff={staff} />,
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet />,
-    paie: <Paie staff={staff} masse={masse} setModal={setModal} />,
+    paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} />,
     remuneration: <Remuneration data={data} staff={staff} masse={masse} setModal={setModal} />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
@@ -865,22 +865,40 @@ function Conges({ data, staff, setModal }) {
 }
 
 /* Paie */
-function Paie({ staff, masse, setModal }) {
-  const exportSalaries = () => exportCsv(
+function Paie({ data, staff, masse, setModal }) {
+  const rows = data.salaries || [];
+  const employeeCount = new Set(rows.map((s) => s.userId).filter(Boolean)).size;
+  const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
+  const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
+  const comment = (s) => s.salaryComment || s.comment || "";
+  const exportHistory = () => exportCsv(
+    "historique-salaires.csv",
+    ["Employe", "Salaire", "Devise", "Debut", "Fin", "Commentaire", "Enregistre le"],
+    rows.map((s) => [personName(staff, s.userId), Math.round(Number(s.salary || 0)), symbolFor(s.currencyId, CURRENCIES, CUR), dateStart(s), dateEnd(s), comment(s), dateOnly(s.createdAt)])
+  );
+  const exportCurrent = () => exportCsv(
     "salaires-actuels.csv",
     ["Employe", "Poste", "Salaire", "Devise", "Statut"],
     staff.map((u) => [fullName(u), u.designation?.name || "", Math.round(Number(u.currentSalary || 0)), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
   );
   return (
     <>
-      <PageHead eyebrow="Historique DB" title="Paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
+      <PageHead eyebrow="Historique des salaires" title="Paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
       <div className="g3" style={{ marginBottom: 16 }}>
-        <Mini label="Employes actifs" value={staff.length} />
+        <Mini label="Lignes historique" value={rows.length} />
+        <Mini label="Employes salaries" value={employeeCount} />
         <Mini label="Masse salariale / mois" value={fcM(masse)} />
-        <Mini label="Salaires renseignes" value={staff.filter((u) => Number(u.currentSalary || 0) > 0).length} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Salaires actuels en base</h3><button type="button" className="link" onClick={exportSalaries}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 760 }}>
+          <thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th><th className="r">Enregistre le</th></tr></thead>
+          <tbody>{rows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateStart(s) || "-"}</td><td>{dateEnd(s) || "-"}</td><td className="muted">{comment(s) || "-"}</td><td className="r muted">{dateOnly(s.createdAt) || "-"}</td></tr>)}</tbody>
+        </table></div>
+        {rows.length === 0 && <EmptyState title="Aucun historique de salaire en base" detail="Clique sur Nouveau salaire pour creer la premiere ligne d'historique." />}
+      </div>
+      <div className="card pad table-card" style={{ marginTop: 16 }}>
+        <div className="section-head"><h3 className="font-display">Salaires actuels</h3><button type="button" className="link" onClick={exportCurrent}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
           <thead><tr><th>Employe</th><th>Poste</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
           <tbody>{staff.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
