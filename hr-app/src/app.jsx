@@ -3,12 +3,7 @@ import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 import { defaultSymbol, symbolFor } from "./currency.js";
-import {
-  fallback, AV_COLORS, presences as fbPresences, conges as fbConges, absents as fbAbsents,
-  contrats as fbContrats, dossiers as fbDossiers, timesheet as fbTimesheet, grille as fbGrille,
-  frais as fbFrais, declarations as fbDeclarations, performances as fbPerf, formations as fbFormations,
-  recrutement as fbRecrutement
-} from "./data.js";
+import { AV_COLORS } from "./data.js";
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -174,6 +169,42 @@ const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).char
 const toNum = (v) => v === "" || v == null ? undefined : Number(v);
 const dateOnly = (v) => v ? String(v).slice(0, 10) : "";
 const displayPhone = (u) => u?.phone?.trim?.() || "Telephone non renseigne";
+const EMPTY_DATA = {
+  staff: [],
+  designations: [],
+  departments: [],
+  shifts: [],
+  awards: [],
+  salaries: [],
+  roles: [],
+  leaveRequests: [],
+  contracts: [],
+  documents: [],
+  expenseRequests: [],
+  socialDeclarations: [],
+  performanceReviews: [],
+  trainingSessions: [],
+  recruitmentOffers: [],
+};
+const DEPARTMENT_COLORS = ["teal", "sky", "emerald", "amber", "ink"];
+const arrayFrom = (value, key) => {
+  if (Array.isArray(value)) return value;
+  if (key && Array.isArray(value?.[key])) return value[key];
+  return [];
+};
+const isPending = (status) => ["pending", "en_attente", "submitted"].includes(String(status || "").toLowerCase());
+const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true"].includes(String(status || "").toLowerCase());
+const chipForStatus = (status) => isPending(status) ? "amber" : isApproved(status) ? "emerald" : String(status || "").toLowerCase() === "rejected" ? "rose" : "ink";
+const statusLabel = (status) => status ? String(status) : "Non renseigne";
+const personName = (staff, userId) => fullName((staff || []).find((u) => String(u.id) === String(userId)) || { id: userId });
+const daysUntil = (date) => {
+  if (!date) return null;
+  const diff = new Date(dateOnly(date)).getTime() - new Date(TODAY).getTime();
+  return Number.isFinite(diff) ? Math.ceil(diff / 86400000) : null;
+};
+function EmptyState({ title = "Aucune donnee", detail = "Les donnees seront affichees des qu'elles existent dans la base." }) {
+  return <div className="muted" style={{ textAlign: "center", padding: 24, fontSize: 13 }}>{title}<div className="tiny" style={{ marginTop: 4 }}>{detail}</div></div>;
+}
 const employeeForm = (u) => ({
   id: u.id,
   firstName: u.firstName || "",
@@ -196,32 +227,47 @@ const employeeForm = (u) => ({
   status: u.status || "true",
 });
 function enrichDepartments(departments, staff) {
-  const source = Array.isArray(departments) && departments.length ? departments : fallback.departments;
-  const fallbackByName = new Map(fallback.departments.map((d) => [String(d.name).toLowerCase(), d]));
-  const fallbackById = new Map(fallback.departments.map((d) => [String(d.id), d]));
-  const countById = new Map();
-  const countByName = new Map();
+  const map = new Map();
 
   for (const user of staff || []) {
     const deptId = user.departmentId ?? user.department?.id;
     const deptName = user.department?.name;
-    if (deptId != null) countById.set(String(deptId), (countById.get(String(deptId)) || 0) + 1);
-    if (deptName) {
-      const key = String(deptName).toLowerCase();
-      countByName.set(key, (countByName.get(key) || 0) + 1);
-    }
+    if (deptId == null && !deptName) continue;
+    const key = deptId != null ? `id:${deptId}` : `name:${String(deptName).toLowerCase()}`;
+    const cur = map.get(key) || { id: deptId ?? key, name: deptName || `Departement #${deptId}`, count: 0 };
+    cur.count += 1;
+    if (deptName) cur.name = deptName;
+    map.set(key, cur);
   }
 
-  return source.map((dept, index) => {
-    const key = String(dept.name || "").toLowerCase();
-    const fallbackDept = fallbackById.get(String(dept.id)) || fallbackByName.get(key) || fallback.departments[index] || {};
-    return {
-      ...fallbackDept,
-      ...dept,
-      count: countById.get(String(dept.id)) ?? countByName.get(key) ?? Number(dept.count || fallbackDept.count || 0),
-      color: dept.color || fallbackDept.color || ["teal", "sky", "emerald", "amber", "ink"][index % 5],
-      head: dept.head || fallbackDept.head || "Direction",
-    };
+  for (const dept of departments || []) {
+    const key = dept.id != null ? `id:${dept.id}` : `name:${String(dept.name || "").toLowerCase()}`;
+    const cur = map.get(key) || { count: 0 };
+    map.set(key, { ...cur, ...dept, count: cur.count || Number(dept.count || 0) });
+  }
+
+  return [...map.values()]
+    .filter((dept) => dept.name)
+    .map((dept, index) => ({ ...dept, color: dept.color || DEPARTMENT_COLORS[index % DEPARTMENT_COLORS.length] }));
+}
+function currentLeaves(leaves) {
+  return (leaves || []).filter((leave) => {
+    const start = dateOnly(leave.startDate);
+    const end = dateOnly(leave.endDate);
+    const status = String(leave.status || "").toLowerCase();
+    return start && end && start <= TODAY && end >= TODAY && status !== "rejected";
+  });
+}
+function expiringContracts(contracts, horizon = 30) {
+  return (contracts || []).filter((contract) => {
+    const days = daysUntil(contract.endDate);
+    return days != null && days >= 0 && days <= horizon;
+  });
+}
+function newEmployees(staff, days = 30) {
+  return (staff || []).filter((user) => {
+    const joined = daysUntil(user.joinDate);
+    return joined != null && joined <= 0 && joined >= -days;
   });
 }
 function cleanPayload(obj) {
@@ -265,7 +311,7 @@ Object.assign(ACTION_FORMS, {
   hrContract: { title: "Nouveau contrat RH", submit: "Enregistrer", success: "Contrat RH enregistrÃ©.", defaults: { userId: "", contractType: "CDI", startDate: TODAY, endDate: "", reference: "", notes: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "contractType", label: "Type", type: "select", options: ["CDI", "CDD", "Consultance", "Stage", "Volontariat"], required: true }, { key: "startDate", label: "DÃ©but", type: "date", required: true }, { key: "endDate", label: "Fin", type: "date" }, { key: "reference", label: "RÃ©fÃ©rence" }, { key: "notes", label: "Notes", type: "textarea" }] },
   hrDocument: { title: "Ajouter un document", submit: "Enregistrer", success: "Document RH enregistrÃ©.", defaults: { userId: "", documentType: "Contrat signÃ©", reference: "", fileUrl: "", note: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "documentType", label: "Type", type: "select", options: ["CV", "PiÃ¨ce ID", "DiplÃ´me", "Contrat signÃ©", "NÂ° CNSS", "Code conduite / PSEA", "Attestation"], required: true }, { key: "reference", label: "RÃ©fÃ©rence" }, { key: "fileUrl", label: "Lien fichier" }, { key: "note", label: "Note", type: "textarea" }] },
   expenseRequest: { title: "Nouvelle demande de frais", submit: "Soumettre", success: "Demande de frais enregistrÃ©e.", defaults: { userId: "", type: "Remboursement", amount: 0, requestDate: TODAY, description: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "type", label: "Type", type: "select", options: ["Remboursement", "Avance", "Transport", "Mission", "Communication", "Autre"], required: true }, { key: "amount", label: "Montant", type: "number", required: true }, { key: "requestDate", label: "Date", type: "date", required: true }, { key: "description", label: "Description", type: "textarea" }] },
-  socialDeclaration: { title: "DÃ©claration sociale", submit: "PrÃ©parer", success: "DÃ©claration sociale enregistrÃ©e.", defaults: { period: "2026-06", organism: "CNSS", baseAmount: 0, rate: "", amount: 0, dueDate: TODAY, note: "" }, fields: [{ key: "period", label: "PÃ©riode", required: true }, { key: "organism", label: "Organisme", type: "select", options: ["CNSS", "INPP", "ONEM", "DGI / IPR", "Autre"], required: true }, { key: "baseAmount", label: "Base", type: "number" }, { key: "rate", label: "Taux" }, { key: "amount", label: "Montant", type: "number" }, { key: "dueDate", label: "Ã‰chÃ©ance", type: "date" }, { key: "note", label: "Note", type: "textarea" }] },
+  socialDeclaration: { title: "DÃ©claration sociale", submit: "PrÃ©parer", success: "DÃ©claration sociale enregistrÃ©e.", defaults: { period: "", organism: "", baseAmount: 0, rate: "", amount: 0, dueDate: "", note: "" }, fields: [{ key: "period", label: "PÃ©riode", required: true }, { key: "organism", label: "Organisme", type: "select", options: ["CNSS", "INPP", "ONEM", "DGI / IPR", "Autre"], required: true }, { key: "baseAmount", label: "Base", type: "number" }, { key: "rate", label: "Taux" }, { key: "amount", label: "Montant", type: "number" }, { key: "dueDate", label: "Ã‰chÃ©ance", type: "date" }, { key: "note", label: "Note", type: "textarea" }] },
   performanceReview: { title: "Nouvelle Ã©valuation", submit: "Enregistrer", success: "Ã‰valuation enregistrÃ©e.", defaults: { userId: "", managerId: "", cycle: "S1 2026", score: "", objectives: "", comments: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "managerId", label: "Manager", type: "select", optionKey: "staff" }, { key: "cycle", label: "Cycle", required: true }, { key: "score", label: "Score / 5", type: "number" }, { key: "objectives", label: "Objectifs", type: "textarea" }, { key: "comments", label: "Commentaires", type: "textarea" }] },
   trainingSession: { title: "Session de formation", submit: "Planifier", success: "Formation enregistrÃ©e.", defaults: { title: "", audience: "Toute l'Ã©quipe", sessionDate: TODAY, budget: 0, note: "" }, fields: [{ key: "title", label: "Titre", required: true }, { key: "audience", label: "Public" }, { key: "sessionDate", label: "Date", type: "date" }, { key: "budget", label: "Budget", type: "number" }, { key: "note", label: "Note", type: "textarea" }] },
   recruitmentOffer: { title: "Nouvelle offre", submit: "Publier", success: "Offre de recrutement enregistrÃ©e.", defaults: { role: "", departmentId: "", deadline: TODAY, description: "" }, fields: [{ key: "role", label: "Poste Ã  recruter", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "deadline", label: "Date limite", type: "date" }, { key: "description", label: "Description", type: "textarea" }] },
@@ -315,8 +361,8 @@ function AppShell() {
 
 function App() {
   const [route, setRoute] = React.useState("dashboard");
-  const [data, setData] = React.useState({ ...fallback });
-  const [apiStatus, setApiStatus] = React.useState("local");
+  const [data, setData] = React.useState({ ...EMPTY_DATA });
+  const [apiStatus, setApiStatus] = React.useState("empty");
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -334,29 +380,29 @@ function App() {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
-        const staffRows = overview.value?.staff?.length ? overview.value.staff : fallback.staff;
+        const staffRows = Array.isArray(overview.value?.staff) ? overview.value.staff : [];
         const next = {
           staff: staffRows,
-          designations: overview.value?.designations || fallback.designations,
-          departments: enrichDepartments(overview.value?.departments, staffRows),
-          shifts: Array.isArray(shifts.value) && shifts.value.length ? shifts.value : fallback.shifts,
-          awards: awards.value?.getAllAward || (Array.isArray(awards.value) ? awards.value : null) || fallback.awards,
-          salaries: salaries.value?.getAllSalaryHistory || fallback.salaries,
-          roles: roles.value?.getAllRole || (Array.isArray(roles.value) ? roles.value : []),
-          leaveRequests: leaves.value?.getAllHrLeaveRequest || (Array.isArray(leaves.value) ? leaves.value : []) || [],
-          contracts: contracts.value?.getAllHrContract || (Array.isArray(contracts.value) ? contracts.value : []) || [],
-          documents: documents.value?.getAllHrDocument || (Array.isArray(documents.value) ? documents.value : []) || [],
-          expenseRequests: expenses.value?.getAllHrExpenseRequest || (Array.isArray(expenses.value) ? expenses.value : []) || [],
-          socialDeclarations: declarations.value?.getAllHrSocialDeclaration || (Array.isArray(declarations.value) ? declarations.value : []) || [],
-          performanceReviews: reviews.value?.getAllHrPerformanceReview || (Array.isArray(reviews.value) ? reviews.value : []) || [],
-          trainingSessions: trainings.value?.getAllHrTrainingSession || (Array.isArray(trainings.value) ? trainings.value : []) || [],
-          recruitmentOffers: offers.value?.getAllHrRecruitmentOffer || (Array.isArray(offers.value) ? offers.value : []) || [],
+          designations: Array.isArray(overview.value?.designations) ? overview.value.designations : [],
+          departments: enrichDepartments(Array.isArray(overview.value?.departments) ? overview.value.departments : [], staffRows),
+          shifts: Array.isArray(shifts.value) ? shifts.value : [],
+          awards: arrayFrom(awards.value, "getAllAward"),
+          salaries: arrayFrom(salaries.value, "getAllSalaryHistory"),
+          roles: arrayFrom(roles.value, "getAllRole"),
+          leaveRequests: arrayFrom(leaves.value, "getAllHrLeaveRequest"),
+          contracts: arrayFrom(contracts.value, "getAllHrContract"),
+          documents: arrayFrom(documents.value, "getAllHrDocument"),
+          expenseRequests: arrayFrom(expenses.value, "getAllHrExpenseRequest"),
+          socialDeclarations: arrayFrom(declarations.value, "getAllHrSocialDeclaration"),
+          performanceReviews: arrayFrom(reviews.value, "getAllHrPerformanceReview"),
+          trainingSessions: arrayFrom(trainings.value, "getAllHrTrainingSession"),
+          recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
         setData(next);
-        setApiStatus(ok ? "api" : "local");
+        setApiStatus(ok ? "api" : "empty");
       })
-      .catch(() => setApiStatus("local"));
+      .catch(() => { setData({ ...EMPTY_DATA }); setApiStatus("empty"); });
   }, []);
   React.useEffect(() => load(), [load]);
 
@@ -439,15 +485,15 @@ function App() {
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet />,
     paie: <Paie staff={staff} masse={masse} setModal={setModal} />,
-    remuneration: <Remuneration masse={masse} setModal={setModal} />,
+    remuneration: <Remuneration data={data} staff={staff} masse={masse} setModal={setModal} />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
     formation: <Formation {...ctx} />,
     recrutement: <Recrutement {...ctx} />,
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
-    reporting: <Reporting />,
-    selfservice: <SelfService setModal={setModal} />,
+    reporting: <Reporting data={data} staff={staff} masse={masse} />,
+    selfservice: <SelfService data={data} setModal={setModal} />,
   };
 
   return (
@@ -484,7 +530,7 @@ function App() {
       <main className="main">
         <div className="content">
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-            <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Démo locale"}</span>
+            <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Aucune donnée locale"}</span>
           </div>
           {error && <div className="inline-error">{error}</div>}
           <ActionFeed />
@@ -535,21 +581,28 @@ function App() {
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 function Dashboard({ data, staff, masse, go, setModal }) {
-  const total = staff.length || 42;
-  const presents = Math.max(0, total - fbAbsents.length - 1);
+  const total = staff.length;
+  const pendingLeaves = (data.leaveRequests || []).filter((l) => isPending(l.status)).length;
+  const leavesToday = currentLeaves(data.leaveRequests).length;
+  const contractsSoon = expiringContracts(data.contracts).length;
   const deptMax = Math.max(1, ...data.departments.map((d) => Number(d.count || 0)));
+  const todos = [
+    pendingLeaves ? { icon: "palmtree", tone: "teal", title: `${pendingLeaves} demandes de congé`, sub: "A traiter", onClick: () => go("conges") } : null,
+    contractsSoon ? { icon: "fileText", tone: "amber", title: `${contractsSoon} contrats expirent`, sub: "< 30 jours", onClick: () => go("contrats") } : null,
+  ].filter(Boolean);
   return (
     <>
-      <PageHead eyebrow="Vue d'ensemble · juin 2026" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
+      <PageHead eyebrow="Vue d'ensemble" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <KPI label="Effectif total" value={total} sub="+3 ce trimestre" subClass="up" icon="users" />
-        <KPI label="Présents aujourd'hui" value={<>{presents}<span style={{ color: "var(--ink-400)", fontSize: 18 }}>/{total}</span></>} sub="2 congés · 2 missions" icon="fingerprint" />
-        <KPI label="Congés en attente" value={fbConges.length} sub="à approuver" tone="warn" icon="palmtree" />
-        <KPI label="Masse salariale / mois" value={fcM(masse)} sub="+ 12,3 k$ (expatriés)" icon="wallet" />
+        <KPI label="Effectif total" value={total} icon="users" />
+        <KPI label="En congé aujourd'hui" value={leavesToday} icon="palmtree" />
+        <KPI label="Congés en attente" value={pendingLeaves} sub={pendingLeaves ? "A approuver" : ""} tone={pendingLeaves ? "warn" : undefined} icon="palmtree" />
+        <KPI label="Masse salariale / mois" value={fcM(masse)} icon="wallet" />
       </div>
       <div className="g3">
         <section className="card pad span2">
           <div className="section-head"><h3 className="font-display">Effectif par département</h3><button className="link" onClick={() => go("organigramme")}>Organigramme</button></div>
+          {data.departments.length === 0 && <EmptyState title="Aucun departement en base" />}
           {data.departments.map((d) => (
             <div key={d.id} style={{ marginBottom: 12, fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{d.name}</span><span className="muted">{d.count}</span></div>
@@ -559,10 +612,8 @@ function Dashboard({ data, staff, masse, go, setModal }) {
         </section>
         <section className="card pad">
           <h3 className="block-title font-display"><Icon name="bell" style={{ color: "var(--rose-500)" }} /> À traiter</h3>
-          <Todo icon="palmtree" tone="teal" title={`${fbConges.length} demandes de congé`} sub="2 urgentes" onClick={() => go("conges")} />
-          <Todo icon="wallet" tone="sky" title="Paie de juin à valider" sub="42 bulletins" onClick={() => go("paie")} />
-          <Todo icon="fileText" tone="amber" title="2 contrats expirent" sub="< 30 jours" onClick={() => go("contrats")} />
-          <Todo icon="cake" tone="emerald" title="Anniversaire" sub="G. Mbuyi · demain" />
+          {todos.length === 0 && <EmptyState title="Aucune action RH en attente" detail="Les alertes apparaissent quand des donnees existent en base." />}
+          {todos.map((todo) => <Todo key={todo.title} {...todo} />)}
         </section>
       </div>
     </>
@@ -581,8 +632,10 @@ function Todo({ icon, tone, title, sub, onClick }) {
 }
 
 /* ── Employés ──────────────────────────────────────────────────────────── */
-function Employes({ staff, setModal }) {
-  const enConge = 2, nouveaux = 3, expirent = 2;
+function Employes({ data, staff, setModal }) {
+  const enConge = currentLeaves(data.leaveRequests).length;
+  const nouveaux = newEmployees(staff).length;
+  const expirent = expiringContracts(data.contracts).length;
   const [q, setQ] = React.useState("");
   const [dept, setDept] = React.useState("");
   const [view, setView] = React.useState("grid");
@@ -652,8 +705,7 @@ function Employes({ staff, setModal }) {
               <div className="emp-meta">
                 <div><Icon name="phone" /> {displayPhone(u)}</div>
                 <div><Icon name="building2" /> {u.department?.name || "Département"}</div>
-                <div><Icon name="badgeCheck" /> {u.designation?.name ? "CDI" : "Contrat"} · matricule NG-{String(u.id).padStart(3, "0")}</div>
-                <div><Icon name="phone" /> +243 ··· ·· ··</div>
+                <div><Icon name="badgeCheck" /> {u.employeeId || `NG-${String(u.id).padStart(3, "0")}`}</div>
               </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>{fc(u.currentSalary, salarySym(u))} / mois</span>
@@ -735,514 +787,260 @@ function EmployeeProfileModal({ user, onClose, onEdit, onCloseAccount }) {
 }
 
 function Presences() {
-  const [checked, setChecked] = React.useState(false);
-  const presents = checked ? 39 : 38;
-  const punch = () => {
-    setChecked(true);
-    notify("Pointage enregistré pour aujourd'hui.");
-  };
   return (
     <>
-      <PageHead eyebrow="Pointage · jeudi 5 juin 2026" title="Présences & pointage" action={checked ? "Pointage enregistré" : "Pointer maintenant"} actionIcon={checked ? "checkCircle" : "fingerprint"} onAction={punch} ghost={checked} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <KPI label="Présents" value={presents} icon="checkCircle" />
-        <KPI label="Retards" value="3" tone="warn" icon="clock" />
-        <KPI label="Absents" value="1" tone="danger" icon="userX" />
-        <KPI label="En mission" value="2" icon="plane" />
-      </div>
+      <PageHead eyebrow="Pointage" title="Presences & pointage" />
       <div className="card pad">
-        <div className="section-head"><h3 className="font-display">Feuille de présence du jour</h3><span className="tiny">90 % de présence</span></div>
-        {(checked ? [{ name: "Moi", dept: "Ressources humaines", time: "Pointé maintenant", status: "Présent", chip: "emerald", av: "#14b8a6" }, ...fbPresences] : fbPresences).map((p, i) => (
-          <div className="row" key={i}>
-            <Avatar name={p.name} color={p.av} size={36} />
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div><div className="tiny">{p.dept}</div></div>
-            <div style={{ fontSize: 12, textAlign: "right" }} className={p.chip === "amber" ? "" : "muted"}><span style={p.chip === "amber" ? { color: "var(--amber-600)" } : p.chip === "sky" ? { color: "var(--sky-600)" } : p.chip === "rose" ? { color: "var(--rose-500)" } : undefined}>{p.time}</span></div>
-            <span className={`chip ${p.chip}`} style={{ marginLeft: 8 }}>{p.status}</span>
-          </div>
-        ))}
+        <div className="section-head"><h3 className="font-display">Feuille de presence</h3></div>
+        <EmptyState title="Module de pointage non connecte a la base" detail="Aucune presence n'est affichee tant qu'un endpoint BD n'alimente pas ce module." />
       </div>
     </>
   );
 }
 
-/* ── Congés ────────────────────────────────────────────────────────────── */
-function Conges({ setModal }) {
-  const [requests, setRequests] = React.useState(fbConges);
-  const addRequest = () => {
-    return setModal({ kind: "leaveRequest" });
-  };
-  const decide = (index, accepted) => {
-    const req = requests[index];
-    setRequests((cur) => cur.filter((_, i) => i !== index));
-    notify(`${req?.name || "Demande"} ${accepted ? "approuvée" : "refusée"}.`);
-  };
+/* Conges */
+function Conges({ data, staff, setModal }) {
+  const requests = data.leaveRequests || [];
+  const pending = requests.filter((r) => isPending(r.status));
+  const approved = requests.filter((r) => isApproved(r.status));
+  const today = currentLeaves(requests);
+  const addRequest = () => setModal({ kind: "leaveRequest" });
+  const detail = (r) => [dateOnly(r.startDate), dateOnly(r.endDate)].filter(Boolean).join(" -> ") || "Dates non renseignees";
   return (
     <>
-      <PageHead eyebrow="Absences" title="Congés & absences" action="Nouvelle demande" onAction={addRequest} />
+      <PageHead eyebrow="Absences" title="Conges & absences" action="Nouvelle demande" onAction={addRequest} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <KPI label="En attente" value={requests.length} tone="warn" />
-        <Mini label="Approuvés (mois)" value="8" valueClass="" />
-        <Mini label="En congé aujourd'hui" value="2" />
-        <Mini label="Solde moyen" value="11 j" />
+        <KPI label="En attente" value={pending.length} tone={pending.length ? "warn" : undefined} />
+        <Mini label="Approuves" value={approved.length} valueClass="" />
+        <Mini label="En conge aujourd'hui" value={today.length} />
+        <Mini label="Total demandes" value={requests.length} />
       </div>
       <div className="g3">
         <section className="card pad span2">
-          <h3 className="block-title font-display">Demandes à traiter</h3>
-          {requests.length === 0 && <div className="muted" style={{ fontSize: 13 }}>Aucune demande en attente.</div>}
-          {requests.map((c, i) => (
-            <div className="row" key={i}>
-              <Avatar name={c.name} color={c.av} size={36} />
-              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{c.name} · <span className="muted" style={{ fontWeight: 400 }}>{c.type}</span></div><div className="tiny">{c.detail}</div></div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button type="button" className="btn" style={{ height: 32, padding: "0 10px", background: "var(--emerald-500)", color: "#fff" }} onClick={() => decide(i, true)}><Icon name="check" /></button>
-                <button type="button" className="btn btn-ghost" style={{ height: 32, padding: "0 10px", color: "var(--rose-500)" }} onClick={() => decide(i, false)}><Icon name="x" /></button>
+          <h3 className="block-title font-display">Demandes en base</h3>
+          {requests.length === 0 && <EmptyState title="Aucune demande de conge en base" />}
+          {requests.map((c) => {
+            const name = personName(staff, c.userId);
+            return (
+              <div className="row" key={c.id || [c.userId, c.startDate, c.endDate].filter(Boolean).join("-")}>
+                <Avatar name={name} color={colorFor(name)} size={36} />
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{name} - <span className="muted" style={{ fontWeight: 400 }}>{c.type || "Conge"}</span></div><div className="tiny">{detail(c)}{c.reason ? " - " + c.reason : ""}</div></div>
+                <span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
         <section className="card pad">
-          <h3 className="block-title font-display"><Icon name="calendarDays" style={{ color: "var(--teal-600)" }} /> Qui est absent</h3>
-          {fbAbsents.map((a, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <Avatar name={a.name} color={a.av} size={30} />
-              <div style={{ fontSize: 12 }}><div style={{ fontWeight: 500 }}>{a.name}</div><div className="muted">{a.detail}</div></div>
-            </div>
-          ))}
-          <div className="kv" style={{ marginTop: 8, paddingTop: 10, borderTop: "1px solid var(--ink-100)", color: "var(--ink-500)" }}>
-            <div><span>Congé annuel</span><span style={{ color: "var(--ink-700)", fontWeight: 500 }}>26 j / an</span></div>
-            <div><span>Maladie</span><span style={{ color: "var(--ink-700)", fontWeight: 500 }}>sur certificat</span></div>
-            <div><span>Maternité</span><span style={{ color: "var(--ink-700)", fontWeight: 500 }}>14 sem.</span></div>
-          </div>
+          <h3 className="block-title font-display"><Icon name="calendarDays" style={{ color: "var(--teal-600)" }} /> Absents aujourd'hui</h3>
+          {today.length === 0 && <EmptyState title="Aucun absent aujourd'hui" detail="Selon les demandes de conge en base." />}
+          {today.map((a) => {
+            const name = personName(staff, a.userId);
+            return <div key={a.id || name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><Avatar name={name} color={colorFor(name)} size={30} /><div style={{ fontSize: 12 }}><div style={{ fontWeight: 500 }}>{name}</div><div className="muted">{a.type || "Conge"} - retour {dateOnly(a.endDate) || "non renseigne"}</div></div></div>;
+          })}
         </section>
       </div>
     </>
   );
 }
 
-/* ── Paie ──────────────────────────────────────────────────────────────── */
+/* Paie */
 function Paie({ staff, masse, setModal }) {
-  const net = Math.round(masse * 0.85);
-  const exportBulletins = () => exportCsv(
-    "bulletins-juin-2026.csv",
-    ["Employé", "Poste", `Brut (${CUR})`, `Retenues (${CUR})`, `Net (${CUR})`, "Statut"],
-    staff.map((u) => { const brut = Number(u.currentSalary || 0); const ret = Math.round(brut * 0.15); return [fullName(u), u.designation?.name || "", brut, ret, brut - ret, "En attente"]; })
+  const exportSalaries = () => exportCsv(
+    "salaires-actuels.csv",
+    ["Employe", "Poste", "Salaire", "Devise", "Statut"],
+    staff.map((u) => [fullName(u), u.designation?.name || "", Math.round(Number(u.currentSalary || 0)), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
   );
   return (
     <>
       <PageHead eyebrow="Historique DB" title="Paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
-      <div className="banner grad-accent">
-        <div>
-          <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="wallet" /> Net à payer · juin</div>
-          <div className="font-display num" style={{ fontSize: 30, fontWeight: 700 }}>{fcM(net)}</div>
-          <div style={{ fontSize: 12, opacity: .85 }}>+ 10,8 k$ (5 expatriés)</div>
-        </div>
-        <div style={{ textAlign: "right", fontSize: 12, opacity: .9 }}>
-          <div>Brut : {fcM(masse)}</div><div>Cotisations CNSS : 3,1 M FC</div><div>IPR (impôt) : 1,2 M FC</div>
-        </div>
-      </div>
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label="Bulletins" value={staff.length} />
-        <Mini label="Historique salaires" value={staff.length} valueClass="" />
-        <KPI label="À vérifier" value={staff.length} tone="warn" />
-        <Mini label="Via mobile money" value={Math.round(staff.length * 0.74)} />
+      <div className="g3" style={{ marginBottom: 16 }}>
+        <Mini label="Employes actifs" value={staff.length} />
+        <Mini label="Masse salariale / mois" value={fcM(masse)} />
+        <Mini label="Salaires renseignes" value={staff.filter((u) => Number(u.currentSalary || 0) > 0).length} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Bulletins · juin 2026</h3><button type="button" className="link" onClick={exportBulletins}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
-        <div className="tbl-scroll">
-          <table className="tbl" style={{ minWidth: 560 }}>
-            <thead><tr><th>Employé</th><th className="r">Brut</th><th className="r">Retenues</th><th className="r">Net</th><th className="r">Statut</th></tr></thead>
-            <tbody>
-              {staff.map((u) => {
-                const brut = Number(u.currentSalary || 0); const ret = Math.round(brut * 0.15);
-                const name = fullName(u);
-                return (
-                  <tr key={u.id}>
-                    <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.designation?.name || ""}</div></div></div></td>
-                    <td className="r num">{nf.format(brut)}</td>
-                    <td className="r num muted">{nf.format(ret)}</td>
-                    <td className="r num" style={{ fontWeight: 600 }}>{nf.format(brut - ret)}</td>
-                    <td className="r"><span className="chip amber">Historique</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Retenues = CNSS (5 %) + IPR. Versement par M-Pesa / Airtel Money / virement selon l'employé.</p>
+        <div className="section-head"><h3 className="font-display">Salaires actuels en base</h3><button type="button" className="link" onClick={exportSalaries}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
+          <thead><tr><th>Employe</th><th>Poste</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
+          <tbody>{staff.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
+        </table></div>
+        {staff.length === 0 && <EmptyState title="Aucun employe en base" />}
       </div>
     </>
   );
 }
 
-/* ── Contrats ──────────────────────────────────────────────────────────── */
-function Contrats({ setModal }) {
+/* Contrats */
+function Contrats({ data, staff, setModal }) {
   const [q, setQ] = React.useState("");
-  const filtered = fbContrats.filter((c) => !q.trim() || `${c.name} ${c.type} ${c.status}`.toLowerCase().includes(q.trim().toLowerCase()));
-  const exportContrats = () => exportCsv("contrats.csv", ["Employé", "Type", "Début", "Fin", "Statut"], filtered.map((c) => [c.name, c.type, c.start, c.end, c.status]));
+  const rows = data.contracts || [];
+  const filtered = rows.filter((c) => !q.trim() || [personName(staff, c.userId), c.contractType, c.reference, c.status].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+  const soon = expiringContracts(rows);
+  const exportContrats = () => exportCsv("contrats.csv", ["Employe", "Type", "Debut", "Fin", "Statut"], filtered.map((c) => [personName(staff, c.userId), c.contractType || "", dateOnly(c.startDate), dateOnly(c.endDate), statusLabel(c.status)]));
   return (
     <>
       <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => setModal({ kind: "hrContract" })} />
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label="Total contrats" value="42" />
-        <Mini label="CDI" value="31" />
-        <Mini label="CDD / consultance" value="11" />
-        <KPI label="Expirent < 30 j" value="2" tone="warn" />
-      </div>
+      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Total contrats" value={rows.length} /><Mini label="Actifs" value={rows.filter((c) => isApproved(c.status)).length} /><Mini label="Sans date fin" value={rows.filter((c) => !c.endDate).length} /><KPI label="Expirent < 30 j" value={soon.length} tone={soon.length ? "warn" : undefined} /></div>
       <div className="card pad table-card">
-        <div className="searchbar">
-          <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employé, type, statut)…" /></label>
-          <button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button>
-        </div>
-        <div className="tbl-scroll">
-          <table className="tbl" style={{ minWidth: 620 }}>
-            <thead><tr><th>Employé</th><th>Type</th><th>Début</th><th>Fin</th><th className="r">Statut</th></tr></thead>
-            <tbody>
-              {filtered.map((c, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 500 }}>{c.name}</td>
-                  <td><span className={`chip ${c.chip}`}>{c.type}</span></td>
-                  <td>{c.start}</td>
-                  <td className="muted">{c.end}</td>
-                  <td className="r"><span className={`chip ${c.sChip}`}>{c.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Avenants, renouvellements et alertes d'échéance (&lt; 30 j) gérés par contrat. Fin de contrat → solde de tout compte.</p>
+        <div className="searchbar"><label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employe, type, statut)..." /></label><button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button></div>
+        <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th>Type</th><th>Debut</th><th>Fin</th><th className="r">Statut</th></tr></thead><tbody>{filtered.map((c) => <tr key={c.id}><td style={{ fontWeight: 500 }}>{personName(staff, c.userId)}</td><td><span className="chip ink">{c.contractType || "Contrat"}</span></td><td>{dateOnly(c.startDate) || "-"}</td><td className="muted">{dateOnly(c.endDate) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span></td></tr>)}</tbody></table></div>
+        {filtered.length === 0 && <EmptyState title="Aucun contrat en base" />}
       </div>
     </>
   );
 }
 
-/* ── Dossiers ──────────────────────────────────────────────────────────── */
-function Dossiers({ setModal }) {
-  const cols = ["CV", "Pièce ID", "Diplôme", "Contrat signé", "N° CNSS", "Code conduite (PSEA)"];
-  const keys = ["cv", "id", "dip", "ctr", "cnss", "psea"];
+/* Dossiers */
+function Dossiers({ data, staff, setModal }) {
+  const rows = data.documents || [];
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <Mini label="Dossiers complets" value="35" valueClass="" />
-        <KPI label="Incomplets" value="7" tone="warn" />
-        <Mini label="Pièces manquantes" value="12" />
-      </div>
-      <div className="card pad table-card">
-        <h3 className="block-title font-display">Pièces par employé</h3>
-        <div className="tbl-scroll">
-          <table className="tbl" style={{ minWidth: 680 }}>
-            <thead><tr><th>Employé</th>{cols.map((c) => <th key={c} className="c">{c}</th>)}</tr></thead>
-            <tbody>
-              {fbDossiers.map((d, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 500 }}>{d.name}</td>
-                  {keys.map((k) => <td key={k} className="c"><Icon name={d[k] ? "checkCircle" : "xCircle"} style={{ width: 16, height: 16, color: d[k] ? "var(--emerald-500)" : "var(--rose-500)", display: "inline" }} /></td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="shield" style={{ width: 13, height: 13, color: "var(--teal-600)" }} /> Coffre numérique par employé. Le <b>code de conduite / PSEA</b> signé est requis (conformité bailleur).</p>
-      </div>
+      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Televerser" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Documents" value={rows.length} /><Mini label="Employes avec document" value={new Set(rows.map((d) => d.userId).filter(Boolean)).size} /><Mini label="Recus" value={rows.filter((d) => isApproved(d.status)).length} /></div>
+      <div className="card pad table-card"><h3 className="block-title font-display">Documents en base</h3><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 680 }}><thead><tr><th>Employe</th><th>Type</th><th>Reference</th><th>Fichier</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{personName(staff, d.userId)}</td><td>{d.documentType || "Document"}</td><td className="muted">{d.reference || "-"}</td><td>{d.fileUrl ? <a className="link" href={d.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : "-"}</td><td className="r"><span className={"chip " + chipForStatus(d.status)}>{statusLabel(d.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucun document en base" />}</div>
     </>
   );
 }
 
-/* ── Timesheet ─────────────────────────────────────────────────────────── */
+/* Timesheet */
 function Timesheet() {
-  const tot = (r) => r.kc + r.kin + r.fct;
-  const sum = (k) => fbTimesheet.reduce((s, r) => s + r[k], 0);
   return (
     <>
-      <PageHead eyebrow="Allocation du temps · juin 2026" title="Timesheet — projets & bailleurs" action="Rapport bailleur" actionIcon="download" onAction={() => exportCsv("timesheet-bailleur-juin-2026.csv", ["Employé", "Kongo Central", "Kinshasa", "Fonctionnement", "Total"], fbTimesheet.map((r) => [r.name, r.kc, r.kin, r.fct, tot(r)]))} ghost />
-      <div className="note"><Icon name="lightbulb" /> <span>Chaque agent répartit son temps entre les <b>projets/bailleurs</b>. C'est l'équivalent RH de l'analytique comptable — <b>exigé par les bailleurs</b> pour justifier les salaires imputés.</span></div>
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label="Heures saisies" value="6 240 h" /><Mini label="Taux de remplissage" value="92 %" valueClass="" />
-        <Mini label="% sur projets" value="78 %" /><Mini label="% fonctionnement" value="22 %" />
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <table className="tbl" style={{ minWidth: 680 }}>
-          <thead><tr><th>Employé</th><th className="r">Kongo Central</th><th className="r">Kinshasa</th><th className="r">Fonctionnement</th><th className="r">Total</th></tr></thead>
-          <tbody>
-            {fbTimesheet.map((r, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{r.name}</td><td className="r">{r.kc} h</td><td className="r">{r.kin} h</td><td className="r">{r.fct} h</td><td className="r" style={{ fontWeight: 600 }}>{tot(r)} h</td></tr>
-            ))}
-          </tbody>
-          <tfoot><tr><td>Total équipe</td><td className="r">{sum("kc")} h</td><td className="r">{sum("kin")} h</td><td className="r">{sum("fct")} h</td><td className="r">6 240 h</td></tr></tfoot>
-        </table>
-      </div>
+      <PageHead eyebrow="Allocation du temps" title="Timesheet - projets & bailleurs" />
+      <div className="card pad"><div className="section-head"><h3 className="font-display">Timesheet</h3></div><EmptyState title="Module timesheet non connecte a la base" detail="Aucune heure n'est inventee cote PWA. Il faut une table/API timesheet pour afficher ce module." /></div>
     </>
   );
 }
 
-/* ── Rémunération ──────────────────────────────────────────────────────── */
-function Remuneration({ masse, setModal }) {
+/* Remuneration */
+function Remuneration({ data, staff, masse, setModal }) {
+  const rows = data.salaries || [];
   return (
     <>
-      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <Mini label="Masse salariale / mois" value={fcM(masse)} />
-        <Mini label="Prime transport (total)" value="2,1 M FC" />
-        <Mini label="Indemnité terrain" value="1,4 M FC" />
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <h3 className="block-title font-display">Grille salariale par poste / échelon</h3>
-        <table className="tbl num" style={{ minWidth: 620 }}>
-          <thead><tr><th>Poste / échelon</th><th className="r">Salaire de base</th><th className="r">Indemnités</th><th className="r">Total brut</th></tr></thead>
-          <tbody>
-            {fbGrille.map((g, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{g.poste}</td><td className="r">{nf.format(g.base)}</td><td className="r muted">{nf.format(g.ind)}</td><td className="r" style={{ fontWeight: 600 }}>{nf.format(g.brut)}</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Primes & indemnités configurables (transport, logement, terrain, risque). La grille alimente automatiquement la paie.</p>
-      </div>
+      <PageHead eyebrow="Historique salaires" title="Remuneration" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Masse salariale / mois" value={fcM(masse)} /><Mini label="Lignes historique" value={rows.length} /><Mini label="Employes salaries" value={new Set(rows.map((s) => s.userId).filter(Boolean)).size} /></div>
+      <div className="card pad table-card tbl-scroll"><h3 className="block-title font-display">Historique des salaires en base</h3><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th></tr></thead><tbody>{rows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateOnly(s.salaryStartDate || s.startDate) || "-"}</td><td>{dateOnly(s.salaryEndDate || s.endDate) || "-"}</td><td className="muted">{s.salaryComment || s.comment || ""}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucun historique de salaire en base" />}</div>
     </>
   );
 }
 
-/* ── Frais & avances ───────────────────────────────────────────────────── */
-function Frais({ setModal }) {
+/* Frais */
+function Frais({ data, staff, setModal }) {
+  const rows = data.expenseRequests || [];
+  const pending = rows.filter((r) => isPending(r.status));
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
     <>
       <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => setModal({ kind: "expenseRequest" })} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <KPI label="À rembourser / valider" value="3" tone="warn" />
-        <Mini label="Avances en cours" value="1,2 M FC" />
-        <Mini label="Validé ce mois" value="2,7 M FC" valueClass="" />
-      </div>
-      <div className="card pad table-card">
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher (employé, type)…</div></div>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 620 }}>
-            <thead><tr><th>Employé</th><th>Type</th><th className="r">Montant</th><th>Date</th><th className="r">Statut</th></tr></thead>
-            <tbody>
-              {fbFrais.map((f, i) => (
-                <tr key={i}><td style={{ fontWeight: 500 }}>{f.name}</td><td>{f.type}</td><td className="r">{nf.format(f.amount)}</td><td>{f.date}</td><td className="r"><span className={`chip ${f.chip}`}>{f.status}</span></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <div className="g3" style={{ marginBottom: 18 }}><KPI label="A valider" value={pending.length} tone={pending.length ? "warn" : undefined} /><Mini label="Demandes" value={rows.length} /><Mini label="Montant total" value={fc(total)} valueClass="" /></div>
+      <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th>Type</th><th className="r">Montant</th><th>Date</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((f) => <tr key={f.id}><td style={{ fontWeight: 500 }}>{personName(staff, f.userId)}</td><td>{f.type || "Frais"}</td><td className="r">{fc(f.amount)}</td><td>{dateOnly(f.requestDate) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(f.status)}>{statusLabel(f.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucune demande de frais en base" />}</div>
     </>
   );
 }
 
-/* ── Déclarations sociales ─────────────────────────────────────────────── */
-function Declarations({ setModal }) {
+/* Declarations */
+function Declarations({ data, setModal }) {
+  const rows = data.socialDeclarations || [];
+  const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   return (
     <>
-      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => setModal({ kind: "socialDeclaration" })} />
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label="CNSS (sécurité sociale)" value="3 124 000" />
-        <Mini label="INPP (formation prof.)" value="568 000" />
-        <Mini label="ONEM (emploi)" value="57 000" />
-        <KPI label="IPR (impôt salaires)" value="1 240 000" tone="warn" />
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <table className="tbl num" style={{ minWidth: 600 }}>
-          <thead><tr><th>Organisme</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Échéance</th></tr></thead>
-          <tbody>
-            {fbDeclarations.map((d, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{d.org}</td><td className="r">{nf.format(d.base)}</td><td className="r">{d.taux}</td><td className="r" style={d.warn ? { color: "var(--amber-700)" } : undefined}>{nf.format(d.montant)}</td><td className="r muted">{d.ech}</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Cotisations RDC calculées depuis la paie. Bordereaux CNSS/INPP/ONEM et déclaration IPR à la DGI.</p>
-      </div>
+      <PageHead eyebrow="Cotisations & impots" title="Declarations sociales & fiscales" action="Nouvelle declaration" actionIcon="fileCheck" onAction={() => setModal({ kind: "socialDeclaration" })} />
+      <div className="g3" style={{ marginBottom: 16 }}><Mini label="Declarations" value={rows.length} /><Mini label="Montant total" value={fc(total)} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
+      <div className="card pad table-card tbl-scroll"><table className="tbl num" style={{ minWidth: 600 }}><thead><tr><th>Organisme</th><th>Periode</th><th className="r">Base</th><th className="r">Taux</th><th className="r">Montant</th><th className="r">Echeance</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{d.organism || "-"}</td><td>{d.period || "-"}</td><td className="r">{nf.format(Number(d.baseAmount || 0))}</td><td className="r">{d.rate || "-"}</td><td className="r">{fc(d.amount)}</td><td className="r muted">{dateOnly(d.dueDate) || "-"}</td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="Aucune declaration sociale en base" />}</div>
     </>
   );
 }
 
-/* ── Performance ───────────────────────────────────────────────────────── */
-function Performance({ setModal }) {
+/* Performance */
+function Performance({ data, staff, setModal }) {
+  const rows = data.performanceReviews || [];
+  const scored = rows.filter((r) => r.score != null);
+  const avg = scored.length ? (scored.reduce((s, r) => s + Number(r.score || 0), 0) / scored.length).toFixed(1).replace(".", ",") : "-";
   return (
     <>
-      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => setModal({ kind: "performanceReview" })} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Évaluations faites" value={<>26<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/42</span></>} />
-        <Mini label="Note moyenne" value={<>3,9<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/5</span></>} valueClass="" />
-        <Mini label="Objectifs atteints" value="72 %" valueClass="" />
-        <KPI label="À faire" value="16" tone="warn" />
-      </div>
-      <div className="card pad">
-        <h3 className="block-title font-display">Évaluations par employé</h3>
-        {fbPerf.map((p, i) => (
-          <div className="row" key={i}>
-            <Avatar name={p.name} color={colorFor(p.name)} size={36} />
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div><div className="tiny">{p.role}</div></div>
-            <div style={{ width: 120 }} className="desk-only"><Bar pct={p.pct} cls={p.bar} /></div>
-            <span className="font-display" style={{ fontWeight: 700, fontSize: 14, width: 40, textAlign: "right", color: p.score == null ? "var(--ink-300)" : undefined }}>{p.score != null ? p.score.toFixed(1).replace(".", ",") : "—"}</span>
-            <span className={`chip ${p.chip}`} style={{ marginLeft: 8 }}>{p.status}</span>
-          </div>
-        ))}
-      </div>
+      <PageHead eyebrow="Evaluations" title="Performance" action="Nouvelle evaluation" onAction={() => setModal({ kind: "performanceReview" })} />
+      <div className="g4 kpis" style={{ marginBottom: 18 }}><Mini label="Evaluations" value={rows.length} /><Mini label="Note moyenne" value={avg} valueClass="" /><Mini label="Scores renseignes" value={scored.length} /><KPI label="En attente" value={rows.filter((r) => isPending(r.status)).length} tone="warn" /></div>
+      <div className="card pad"><h3 className="block-title font-display">Evaluations en base</h3>{rows.length === 0 && <EmptyState title="Aucune evaluation en base" />}{rows.map((p) => { const name = personName(staff, p.userId); const pct = Math.max(0, Math.min(100, Number(p.score || 0) * 20)); return <div className="row" key={p.id}><Avatar name={name} color={colorFor(name)} size={36} /><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{name}</div><div className="tiny">{p.cycle || "Cycle non renseigne"}</div></div><div style={{ width: 120 }} className="desk-only"><Bar pct={pct} cls="grad-accent" /></div><span className="font-display" style={{ fontWeight: 700, fontSize: 14, width: 40, textAlign: "right" }}>{p.score ?? "-"}</span><span className={"chip " + chipForStatus(p.status)} style={{ marginLeft: 8 }}>{statusLabel(p.status)}</span></div>; })}</div>
     </>
   );
 }
 
-/* ── Formation ─────────────────────────────────────────────────────────── */
-function Formation({ setModal }) {
+/* Formation */
+function Formation({ data, setModal }) {
+  const rows = data.trainingSessions || [];
+  const budget = rows.reduce((s, r) => s + Number(r.budget || 0), 0);
   return (
     <>
-      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => setModal({ kind: "trainingSession" })} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <Mini label="Sessions planifiées" value="6" />
-        <Mini label="Agents formés (2026)" value="23" valueClass="" />
-        <Mini label="Budget formation" value="3,5 M FC" />
-      </div>
-      <div className="card pad">
-        <h3 className="block-title font-display">Sessions</h3>
-        {fbFormations.map((f, i) => (
-          <div className="row" key={i}>
-            <span className="row-ic" style={{ background: f.chip === "emerald" ? "var(--emerald-100)" : "var(--teal-100)", color: f.chip === "emerald" ? "var(--emerald-600)" : "var(--teal-600)" }}><Icon name={f.icon} /></span>
-            <div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{f.title}</div><div className="tiny">{f.who}</div></div>
-            <span className={`chip ${f.chip}`}>{f.status}</span>
-          </div>
-        ))}
-      </div>
+      <PageHead eyebrow="Plan de formation" title="Formation & competences" action="Nouvelle session" onAction={() => setModal({ kind: "trainingSession" })} />
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Sessions" value={rows.length} /><Mini label="Planifiees" value={rows.filter((r) => isApproved(r.status)).length} valueClass="" /><Mini label="Budget" value={fc(budget)} /></div>
+      <div className="card pad"><h3 className="block-title font-display">Sessions en base</h3>{rows.length === 0 && <EmptyState title="Aucune session de formation en base" />}{rows.map((f) => <div className="row" key={f.id}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name="graduationCap" /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{f.title || "Formation"}</div><div className="tiny">{[f.audience, dateOnly(f.sessionDate)].filter(Boolean).join(" - ")}</div></div><span className={"chip " + chipForStatus(f.status)}>{statusLabel(f.status)}</span></div>)}</div>
     </>
   );
 }
 
-/* ── Recrutement (kanban) ──────────────────────────────────────────────── */
-function Recrutement({ setModal }) {
-  const cols = [
-    { title: "Candidatures", count: 18, chip: "ink", items: fbRecrutement.candidatures },
-    { title: "Présélection", count: 9, chip: "ink", items: fbRecrutement.preselection },
-    { title: "Entretien", count: 6, chip: "sky", items: fbRecrutement.entretien },
-    { title: "Offre / embauche", count: 4, chip: "emerald", items: fbRecrutement.offre },
-  ];
+/* Recrutement */
+function Recrutement({ data, setModal }) {
+  const rows = data.recruitmentOffers || [];
   return (
     <>
       <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => setModal({ kind: "recruitmentOffer" })} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <div className="card pad"><div className="kpi-label">Offres ouvertes</div><div className="font-display kpi-value">3</div><div className="tiny" style={{ marginTop: 4 }}>Agent terrain · Comptable · Chauffeur</div></div>
-        <div className="card pad"><div className="kpi-label">Candidatures</div><div className="font-display kpi-value">37</div><div className="tiny" style={{ marginTop: 4 }}>12 cette semaine</div></div>
-        <div className="card pad"><div className="kpi-label">Entretiens prévus</div><div className="font-display kpi-value" style={{ color: "var(--sky-600)" }}>6</div><div className="tiny" style={{ marginTop: 4 }}>cette semaine</div></div>
-      </div>
-      <div className="kanban">
-        {cols.map((col) => (
-          <div className="kanban-col" key={col.title}>
-            <div className="kanban-head"><span>{col.title}</span><span className={`chip ${col.chip}`}>{col.count}</span></div>
-            {col.items.map((it, i) => (
-              <div className="kanban-card" key={i} style={it.ok ? { boxShadow: "inset 0 0 0 1px var(--emerald-500)" } : undefined}>
-                <div style={{ fontWeight: 500, fontSize: 13 }}>{it.name}</div>
-                <div className="tiny" style={it.ok ? { color: "var(--emerald-600)" } : undefined}>{it.role}</div>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Offres" value={rows.length} /><Mini label="Ouvertes" value={rows.filter((r) => isApproved(r.status)).length} /><Mini label="Avec deadline" value={rows.filter((r) => r.deadline).length} /></div>
+      <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 620 }}><thead><tr><th>Role</th><th>Departement</th><th>Deadline</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td style={{ fontWeight: 500 }}>{r.role || "Offre"}</td><td>{r.department?.name || r.departmentId || "-"}</td><td>{dateOnly(r.deadline) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(r.status)}>{statusLabel(r.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucune offre de recrutement en base" />}</div>
     </>
   );
 }
 
-/* ── Organigramme ──────────────────────────────────────────────────────── */
+/* Organigramme */
 function Organigramme({ departments, designations, canMutate, onNew }) {
   const tones = { teal: { bg: "var(--teal-50)", bd: "var(--teal-200)", fg: "var(--teal-800)", sub: "var(--teal-600)" }, sky: { bg: "var(--sky-50)", bd: "var(--sky-400)", fg: "var(--sky-700)", sub: "var(--sky-600)" }, emerald: { bg: "var(--emerald-100)", bd: "var(--emerald-500)", fg: "var(--emerald-700)", sub: "var(--emerald-600)" }, amber: { bg: "var(--amber-50)", bd: "var(--amber-400)", fg: "var(--amber-700)", sub: "var(--amber-600)" }, ink: { bg: "var(--ink-50)", bd: "var(--ink-200)", fg: "var(--ink-700)", sub: "var(--ink-500)" } };
   const palette = ["accent-soft", "sky-soft", "emerald", "amber", "ink"];
+  const total = departments.reduce((s, d) => s + Number(d.count || 0), 0);
   return (
     <>
-      <PageHead eyebrow="Structure" title="Postes & départements" action="Nouveau poste" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow="Structure" title="Postes & departements" action="Nouveau poste" onAction={onNew} disabled={!canMutate} />
       <div className="card pad" style={{ marginBottom: 18 }}>
-        <div className="org-top">
-          <div className="org-node grad-dark" style={{ color: "#fff" }}><div style={{ fontWeight: 600, fontSize: 13 }}>Direction nationale</div><div style={{ fontSize: 11, color: "var(--ink-300)" }}>1 poste</div></div>
-          <div className="org-line" />
-          <div className="org-children">
-            {departments.slice(0, 4).map((d) => {
-              const t = tones[d.color] || tones.ink;
-              return <div key={d.id} className="org-node" style={{ background: t.bg, border: `1px solid ${t.bd}` }}><div style={{ fontWeight: 600, fontSize: 13, color: t.fg }}>{d.name.split(" ")[0]}</div><div style={{ fontSize: 11, color: t.sub }}>{d.count} personnes</div></div>;
-            })}
-          </div>
-        </div>
+        <div className="org-top"><div className="org-node grad-dark" style={{ color: "#fff" }}><div style={{ fontWeight: 600, fontSize: 13 }}>Structure RH</div><div style={{ fontSize: 11, color: "var(--ink-300)" }}>{total} personnes</div></div><div className="org-line" /><div className="org-children">{departments.slice(0, 4).map((d) => { const t = tones[d.color] || tones.ink; return <div key={d.id || d.name} className="org-node" style={{ background: t.bg, border: "1px solid " + t.bd }}><div style={{ fontWeight: 600, fontSize: 13, color: t.fg }}>{d.name}</div><div style={{ fontSize: 11, color: t.sub }}>{d.count} personnes</div></div>; })}</div></div>
+        {departments.length === 0 && <EmptyState title="Aucun departement en base" />}
       </div>
       <div className="g2">
-        <div className="card pad">
-          <h3 className="block-title font-display">Départements</h3>
-          {departments.map((d) => (
-            <div className="row" key={d.id}>
-              <span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span>
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div><div className="tiny">Resp. {d.head}</div></div>
-              <span className="chip ink">{d.count}</span>
-            </div>
-          ))}
-        </div>
-        <div className="card pad">
-          <h3 className="block-title font-display">Postes (désignations)</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {designations.map((d, i) => <span key={d.id} className={`chip ${palette[i % palette.length]}`}>{d.name}</span>)}
-          </div>
-          <button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Ajouter un poste</button>
-        </div>
+        <div className="card pad"><h3 className="block-title font-display">Departements</h3>{departments.length === 0 && <EmptyState title="Aucun departement en base" />}{departments.map((d) => <div className="row" key={d.id || d.name}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div></div><span className="chip ink">{d.count}</span></div>)}</div>
+        <div className="card pad"><h3 className="block-title font-display">Postes</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{designations.map((d, i) => <span key={d.id} className={"chip " + palette[i % palette.length]}>{d.name}</span>)}</div>{designations.length === 0 && <EmptyState title="Aucun poste en base" />}<button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Ajouter un poste</button></div>
       </div>
     </>
   );
 }
 
-/* ── Reporting RH ──────────────────────────────────────────────────────── */
-function Reporting() {
-  const dep = [{ l: "Programmes & terrain", v: 16, p: 80, c: "grad-accent" }, { l: "Logistique", v: 9, p: 45, c: "grad-sky" }, { l: "Finances & compta", v: 6, p: 30, c: "teal" }, { l: "Administration & RH", v: 5, p: 25, c: "sky" }];
-  const proj = [{ l: "Programme Kinshasa", v: "11,4 M", p: 40, c: "grad-accent" }, { l: "Programme Kongo Central", v: "8,6 M", p: 30, c: "grad-accent" }, { l: "Fonctionnement / structure", v: "8,4 M", p: 30, c: "amber" }];
+/* Reporting */
+function Reporting({ data, staff, masse }) {
+  const total = staff.length;
+  const deptMax = Math.max(1, ...data.departments.map((d) => Number(d.count || 0)));
+  const exportRows = () => exportCsv("reporting-rh.csv", ["Indicateur", "Valeur"], [["Effectif", total], ["Masse salariale", masse], ["Departements", data.departments.length], ["Contrats", data.contracts.length], ["Conges en attente", data.leaveRequests.filter((l) => isPending(l.status)).length]]);
   return (
     <>
-      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={() => exportCsv("reporting-rh-juin-2026.csv", ["Indicateur", "Valeur"], [["Effectif", 42], ["Turnover annuel", "9 %"], ["Ancienneté moyenne", "3,4 ans"], ["Ratio H/F", "58 / 42"]])} ghost />
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label="Effectif" value="42" /><Mini label="Turnover (annuel)" value="9 %" />
-        <Mini label="Ancienneté moy." value="3,4 ans" /><Mini label="Ratio H / F" value="58 / 42" />
-      </div>
-      <div className="g2">
-        <div className="card pad">
-          <h3 className="block-title font-display">Effectif par département</h3>
-          {dep.map((d, i) => <div key={i} style={{ marginBottom: 12, fontSize: 13 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span>{d.l}</span><span className="muted">{d.v}</span></div><Bar pct={d.p} cls={d.c} /></div>)}
-        </div>
-        <div className="card pad">
-          <h3 className="block-title font-display">Masse salariale par projet</h3>
-          {proj.map((d, i) => <div key={i} style={{ marginBottom: 12, fontSize: 13 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span>{d.l}</span><span className="muted num">{d.v}</span></div><Bar pct={d.p} cls={d.c} /></div>)}
-          <p className="tiny" style={{ marginTop: 8 }}>Alimenté par le timesheet → justifie les salaires imputés à chaque bailleur.</p>
-        </div>
-      </div>
+      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={exportRows} ghost />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Effectif" value={total} /><Mini label="Departements" value={data.departments.length} /><Mini label="Masse salariale" value={fcM(masse)} /><Mini label="Contrats" value={data.contracts.length} /></div>
+      <div className="g2"><div className="card pad"><h3 className="block-title font-display">Effectif par departement</h3>{data.departments.length === 0 && <EmptyState title="Aucun departement en base" />}{data.departments.map((d) => <div key={d.id || d.name} style={{ marginBottom: 12, fontSize: 13 }}><div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span>{d.name}</span><span className="muted">{d.count}</span></div><Bar pct={Math.max(5, Math.round((Number(d.count || 0) / deptMax) * 100))} cls={d.color === "sky" ? "grad-sky" : d.color === "teal" ? "grad-accent" : d.color} /></div>)}</div><div className="card pad"><h3 className="block-title font-display">Sources BD</h3><div className="kv"><div><span>Employes</span><span>{staff.length}</span></div><div><span>Conges</span><span>{data.leaveRequests.length}</span></div><div><span>Frais</span><span>{data.expenseRequests.length}</span></div><div><span>Formations</span><span>{data.trainingSessions.length}</span></div></div></div></div>
     </>
   );
 }
 
-/* ── Espace employé (self-service) ─────────────────────────────────────── */
-function SelfService({ setModal }) {
-  const tiles = [
-    { icon: "receipt", title: "Mon bulletin", rows: [["Net juin", "1 062 500 FC"], ["Versé par", "M-Pesa"]], btn: "Bulletin + historique (12)", bicon: "download", request: "Télécharger mon bulletin" },
-    { icon: "palmtree", title: "Mes congés", rows: [["Solde annuel", "14 j"], ["En attente", "0"]], btn: "Demander un congé", bicon: "plus", accent: true, request: "Demander un congé" },
-    { icon: "timer", title: "Ma feuille de temps", rows: [["Semaine 23", "À soumettre"], ["Réparti sur", "3 projets"]], btn: "Saisir mes heures", bicon: "edit", accent: true, request: "Saisir mes heures" },
-    { icon: "banknote", title: "Mes frais & avances", rows: [["Avance en cours", "250 000 FC"], ["Note de frais", "1 en validation"]], btn: "Nouvelle demande", bicon: "plus", request: "Nouvelle demande de frais" },
-    { icon: "fingerprint", title: "Mes présences", rows: [["Aujourd'hui", "Pointé 08:02"], ["Heures du mois", "168 h"]], btn: "Pointer la sortie", bicon: "logout", request: "Pointer la sortie" },
-    { icon: "target", title: "Ma performance", rows: [["Objectifs Q2", "3 / 5 atteints"], ["Auto-éval.", "À remplir"]], btn: "Mon évaluation", bicon: "edit", request: "Remplir mon évaluation" },
-    { icon: "graduationCap", title: "Mes formations", rows: [["PSEA — code de conduite", "Certifié"], ["Sécurité terrain", "12 juin"]], btn: "Mes certificats", bicon: "award", request: "Demander mes certificats" },
-    { icon: "folder", title: "Mes documents", rows: [["Contrat de travail", ""], ["Carte CNSS", ""], ["Bulletins", "12"]], btn: "Déposer un document", bicon: "upload", request: "Déposer un document" },
-    { icon: "circleUser", title: "Mon profil & paiement", rows: [["Mobile money", "M-Pesa ••• 412"], ["Contact urgence", "Renseigné"]], btn: "Mettre à jour mes infos", bicon: "edit", request: "Mettre à jour mes infos" },
+/* Self service */
+function SelfService({ data, setModal }) {
+  const actions = [
+    { icon: "palmtree", title: "Demander un conge", kind: "leaveRequest" },
+    { icon: "receipt", title: "Nouvelle demande de frais", kind: "expenseRequest" },
+    { icon: "folder", title: "Deposer un document", kind: "hrDocument" },
   ];
   return (
     <>
-      <PageHead eyebrow="Portail · vue agent" title="Espace employé (self-service)" />
-      <div className="note"><Icon name="phone" /> <span>Ce que voit <b>l'employé</b> sur son téléphone : il consulte sa paie, pose ses congés, soumet sa feuille de temps et ses frais, télécharge ses attestations — <b>en autonomie</b>.</span></div>
-      <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <div className="card pad"><div className="kpi-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="wallet" style={{ width: 14, height: 14, color: "var(--teal-600)" }} /> Prochaine paie</div><div className="num" style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>30 juin</div><div className="tiny">≈ 1 062 500 FC · M-Pesa</div></div>
-        <div className="card pad"><div className="kpi-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="palmtree" style={{ width: 14, height: 14, color: "var(--teal-600)" }} /> Solde congés</div><div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>14 j</div><div className="tiny">sur 18 j acquis</div></div>
-        <div className="card pad"><div className="kpi-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="clock" style={{ width: 14, height: 14, color: "var(--amber-600)" }} /> Timesheet</div><div style={{ fontSize: 16, fontWeight: 700, marginTop: 4, color: "var(--amber-600)" }}>S.23 à soumettre</div><div className="tiny">avant vendredi 17h</div></div>
-        <div className="card pad"><div className="kpi-label" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="inbox" style={{ width: 14, height: 14, color: "var(--teal-600)" }} /> Demandes en cours</div><div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>2</div><div className="tiny">1 avance · 1 attestation</div></div>
-      </div>
-      <div className="g3">
-        {tiles.map((t) => (
-          <div className="card pad" key={t.title}>
-            <h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={t.icon} style={{ color: "var(--teal-600)" }} /> {t.title}</h3>
-            <div className="kv">{t.rows.map(([k, v], i) => <div key={i}><span className="muted">{k}</span><span style={{ fontWeight: 500 }}>{v}</span></div>)}</div>
-            <button type="button" className={`tile-btn ${t.accent ? "accent" : ""}`} onClick={() => setModal({ kind: "selfService", initial: { request: t.request, details: "" } })}><Icon name={t.bicon} /> {t.btn}</button>
-          </div>
-        ))}
-      </div>
+      <PageHead eyebrow="Portail agent" title="Espace employe" />
+      <div className="g3" style={{ marginBottom: 16 }}><Mini label="Mes demandes conges" value={data.leaveRequests.length} /><Mini label="Mes frais" value={data.expenseRequests.length} /><Mini label="Mes documents" value={data.documents.length} /></div>
+      <div className="g3">{actions.map((a) => <div className="card pad" key={a.kind}><h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={a.icon} style={{ color: "var(--teal-600)" }} /> {a.title}</h3><button type="button" className="tile-btn accent" onClick={() => setModal({ kind: a.kind })}><Icon name="plus" /> Creer dans la base</button></div>)}</div>
     </>
   );
 }
 
-/* ── Modal création ────────────────────────────────────────────────────── */
+/* Modal creation */
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const [form, setForm] = React.useState(() => ({ ...defaults(modal.kind, staff), ...(modal.initial || {}) }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
