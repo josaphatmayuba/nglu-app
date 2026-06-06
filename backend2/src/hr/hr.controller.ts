@@ -15,6 +15,7 @@ import {
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
+  hrTimesheets,
   salaryHistories,
   shifts,
 } from "../database/schema";
@@ -31,6 +32,7 @@ import {
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
+  CreateHrTimesheetDto,
   CreateSalaryHistoryDto,
   CreateShiftDto,
   UpdateAwardDto,
@@ -45,6 +47,7 @@ import {
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
   UpdateHrTrainingSessionDto,
+  UpdateHrTimesheetDto,
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
 } from "./dto/hr.dto";
@@ -270,6 +273,22 @@ export class HrTrainingSessionController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrTrainingSessions, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-timesheets")
+@Controller("hr/timesheets")
+export class HrTimesheetController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listTimesheets(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findTimesheet(id); }
+  @Post() create(@Body() body: CreateHrTimesheetDto) { return this.service.createTimesheet(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrTimesheets, id); }
 }
 
 @ApiBearerAuth()

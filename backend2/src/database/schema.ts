@@ -660,6 +660,22 @@ export const hrRecruitmentOffers = mysqlTable("hr_recruitment_offers", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrTimesheets = mysqlTable("hr_timesheets", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  workDate: date("workDate", { mode: "string" }).notNull(),
+  period: varchar("period", { length: 30 }),
+  project: varchar("project", { length: 180 }).notNull(),
+  donor: varchar("donor", { length: 180 }),
+  activity: varchar("activity", { length: 255 }),
+  hours: double("hours").default(0).notNull(),
+  status: varchar("status", { length: 30 }).default("submitted").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const colors = mysqlTable("colors", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

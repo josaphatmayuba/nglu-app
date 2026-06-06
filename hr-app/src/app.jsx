@@ -219,6 +219,7 @@ const EMPTY_DATA = {
   socialDeclarations: [],
   performanceReviews: [],
   trainingSessions: [],
+  timesheets: [],
   recruitmentOffers: [],
 };
 const DEPARTMENT_COLORS = ["teal", "sky", "emerald", "amber", "ink"];
@@ -444,6 +445,25 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+Object.assign(ACTION_FORMS, {
+  timesheet: {
+    title: "Nouvelle saisie timesheet",
+    submit: "Enregistrer",
+    success: "Timesheet enregistre en base.",
+    defaults: { userId: "", workDate: TODAY, period: TODAY.slice(0, 7), project: "", donor: "", activity: "", hours: 0, note: "" },
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "workDate", label: "Date", type: "date", required: true },
+      { key: "period", label: "Periode" },
+      { key: "project", label: "Projet", required: true },
+      { key: "donor", label: "Bailleur" },
+      { key: "hours", label: "Heures", type: "number", required: true },
+      { key: "activity", label: "Activite", wide: true },
+      { key: "note", label: "Note", type: "textarea" },
+    ],
+  },
+});
+
 function KPI({ label, value, sub, subClass = "", icon, tone }) {
   return (
     <div className={`card pad ${tone === "warn" ? "warn" : tone === "danger" ? "danger" : ""}`}>
@@ -501,9 +521,9 @@ function App() {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
-      api.performanceReviews(), api.trainingSessions(), api.recruitmentOffers()
+      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, offers]) => {
+      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -527,6 +547,7 @@ function App() {
           socialDeclarations: arrayFrom(declarations.value, "getAllHrSocialDeclaration"),
           performanceReviews: arrayFrom(reviews.value, "getAllHrPerformanceReview"),
           trainingSessions: arrayFrom(trainings.value, "getAllHrTrainingSession"),
+          timesheets: arrayFrom(timesheets.value, "getAllHrTimesheet"),
           recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
@@ -545,7 +566,7 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "recruitmentOffer"];
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "recruitmentOffer"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({ userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null, reference: form.reference || null, notes: form.notes || null }));
@@ -554,6 +575,7 @@ function App() {
         if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), dueDate: form.dueDate || null, note: form.note || null }));
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
         if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), note: form.note || null }));
+        if (kind === "timesheet") await api.createTimesheet(cleanPayload({ userId: Number(form.userId), workDate: form.workDate, period: form.period || null, project: form.project, donor: form.donor || null, activity: form.activity || null, hours: Number(form.hours || 0), note: form.note || null }));
         if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
         setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
         return;
@@ -618,7 +640,7 @@ function App() {
     dossiers: <Dossiers {...ctx} />,
     presences: <Presences staff={staff} />,
     conges: <Conges {...ctx} />,
-    timesheet: <Timesheet />,
+    timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
     paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} />,
     remuneration: <Remuneration data={data} staff={staff} masse={masse} setModal={setModal} />,
     frais: <Frais {...ctx} />,
@@ -1056,11 +1078,33 @@ function Dossiers({ data, staff, setModal }) {
 }
 
 /* Timesheet */
-function Timesheet() {
+function Timesheet({ data, staff, setModal }) {
+  const rows = data.timesheets || [];
+  const totalHours = rows.reduce((sum, row) => sum + Number(row.hours || 0), 0);
+  const pending = rows.filter((row) => isPending(row.status)).length;
+  const projectCount = new Set(rows.map((row) => row.project).filter(Boolean)).size;
+  const exportTimesheets = () => exportCsv(
+    "timesheets.csv",
+    ["Employe", "Date", "Periode", "Projet", "Bailleur", "Activite", "Heures", "Statut", "Note"],
+    rows.map((row) => [personName(staff, row.userId), dateOnly(row.workDate), row.period || "", row.project || "", row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
+  );
   return (
     <>
-      <PageHead eyebrow="Allocation du temps" title="Timesheet - projets & bailleurs" />
-      <div className="card pad"><div className="section-head"><h3 className="font-display">Timesheet</h3></div><EmptyState title="Module timesheet non connecte a la base" detail="Aucune heure n'est inventee cote PWA. Il faut une table/API timesheet pour afficher ce module." /></div>
+      <PageHead eyebrow="Allocation du temps" title="Timesheet - projets & bailleurs" action="Nouvelle saisie" actionIcon="plus" onAction={() => setModal({ kind: "timesheet" })} />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label="Lignes en base" value={rows.length} />
+        <Mini label="Heures saisies" value={nf.format(totalHours)} />
+        <Mini label="Projets" value={projectCount} />
+        <KPI label="A valider" value={pending} tone={pending ? "warn" : undefined} />
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Saisies timesheet en base</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 840 }}>
+          <thead><tr><th>Employe</th><th>Date</th><th>Periode</th><th>Projet</th><th>Bailleur</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.workDate) || "-"}</td><td>{row.period || "-"}</td><td>{row.project || "-"}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
+        </table></div>
+        {rows.length === 0 && <EmptyState title="Aucune saisie timesheet en base" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet et un bailleur." />}
+      </div>
     </>
   );
 }

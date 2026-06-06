@@ -362,6 +362,46 @@ export class UpdateHrTrainingSessionDto extends PartialType(CreateHrTrainingSess
   status?: string;
 }
 
+export class CreateHrTimesheetDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsDateString()
+  workDate: string;
+
+  @IsOptional()
+  @IsString()
+  period?: string | null;
+
+  @IsString()
+  @IsNotEmpty()
+  project: string;
+
+  @IsOptional()
+  @IsString()
+  donor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  activity?: string | null;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  hours: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+}
+
+export class UpdateHrTimesheetDto extends PartialType(CreateHrTimesheetDto) {
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
 export class CreateHrRecruitmentOfferDto {
   @IsString()
   @IsNotEmpty()

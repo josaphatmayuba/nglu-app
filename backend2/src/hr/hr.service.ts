@@ -17,6 +17,7 @@ import {
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
+  hrTimesheets,
   roles,
   salaryHistories,
   shifts,
@@ -37,6 +38,7 @@ import {
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
+  CreateHrTimesheetDto,
   CreateSalaryHistoryDto,
   CreateShiftDto,
   UpdateAwardDto,
@@ -51,6 +53,7 @@ import {
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
   UpdateHrTrainingSessionDto,
+  UpdateHrTimesheetDto,
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
 } from "./dto/hr.dto";
@@ -421,6 +424,25 @@ export class HrService {
   async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto) {
     await this.findTrainingSession(id);
     return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id));
+  }
+
+  listTimesheets(q: Record<string, string>) {
+    return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet");
+  }
+
+  findTimesheet(id: number) {
+    return this.findOne(hrTimesheets, id, "Timesheet not found.");
+  }
+
+  async createTimesheet(input: CreateHrTimesheetDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrTimesheets, input, (id) => this.findTimesheet(id));
+  }
+
+  async updateTimesheet(id: number, input: UpdateHrTimesheetDto) {
+    await this.findTimesheet(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    return this.updateRecord(hrTimesheets, id, input, () => this.findTimesheet(id));
   }
 
   listRecruitmentOffers(q: Record<string, string>) {
