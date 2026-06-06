@@ -15,6 +15,7 @@ This project follows:
 - HR: les suppressions des tables avec `status` passent en suppression logique (`status=false`) et les listes masquent les enregistrements inactifs par defaut.
 - HR app: nettoyage du flux d'enregistrement pour retirer les appels API HR dupliques/inatteignables, et alignement de `closeUser` sur `PUT /user/:id` afin de conserver `leaveDate` et `leaveReason`.
 - HR app: affichage du telephone reel dans l'annuaire employes et ajout des actions Visualiser, Modifier et Fermer le compte depuis chaque employe.
+- HR: ajout de la migration Drizzle `0071_hr_modules` pour creer automatiquement les tables RH manquantes (`hr_leave_requests`, contrats, documents, frais, declarations, performance, formations, recrutement) lors du deploy Bitbucket.
 
 ### Added
 
