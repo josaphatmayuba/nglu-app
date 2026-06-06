@@ -462,6 +462,13 @@ function Plan3D() {
     { i: 3, c: "#f59e0b", name: "Toiture · charpente", q: "480 m²", price: "64 k$" },
     { i: 4, c: "#6366f1", name: "Menuiseries · alu", q: "86 ouvertures", price: "92 k$" },
   ];
+  const [floor, setFloor] = React.useState(null); // null = tous les étages
+  const [exploded, setExploded] = React.useState(false);
+  const [rotated, setRotated] = React.useState(false);
+  const chipBtn = { cursor: "pointer", border: 0, font: "inherit" };
+  const Tab = ({ on, onClick, children }) => (
+    <button type="button" className={`chip ${on ? "iris-solid grad-iris" : "ink"}`} style={chipBtn} onClick={onClick}>{children}</button>
+  );
   return (
     <>
       <div className="topbar">
@@ -471,17 +478,19 @@ function Plan3D() {
       <div className="g3">
         <div className="card span2" style={{ overflow: "hidden" }}>
           <div style={{ display: "flex", gap: 6, padding: "12px 14px", borderBottom: "1px solid var(--ink-100)", flexWrap: "wrap" }}>
-            <span className="chip iris-solid grad-iris">Tous les étages</span>
-            <span className="chip ink">RDC</span><span className="chip ink">R+1</span><span className="chip ink">R+2</span>
+            <Tab on={floor === null} onClick={() => setFloor(null)}>Tous les étages</Tab>
+            <Tab on={floor === 0} onClick={() => setFloor(0)}>RDC</Tab>
+            <Tab on={floor === 1} onClick={() => setFloor(1)}>R+1</Tab>
+            <Tab on={floor === 2} onClick={() => setFloor(2)}>R+2</Tab>
             <span style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <span className="chip ink"><Icon name="box" /> Éclatée</span>
-              <span className="chip ink"><Icon name="rotate3d" /> Rotation</span>
+              <Tab on={exploded} onClick={() => setExploded((e) => !e)}><Icon name="box" /> Éclatée</Tab>
+              <Tab on={rotated} onClick={() => setRotated((r) => !r)}><Icon name="rotate3d" /> Rotation</Tab>
             </span>
           </div>
           <div className="viewer3d">
-            <IsoBuilding />
+            <IsoBuilding floor={floor} exploded={exploded} rotated={rotated} />
             <div style={{ position: "absolute", bottom: 8, left: 12, fontSize: 10, color: "var(--ink-500)", display: "flex", alignItems: "center", gap: 4 }}>
-              <Icon name="rotate3d" className="ic" style={{ width: 12, height: 12 }} /> aperçu maquette · <span style={{ color: "var(--emerald-600)", fontWeight: 600 }}>3 niveaux</span>
+              <Icon name="rotate3d" className="ic" style={{ width: 12, height: 12 }} /> aperçu maquette · <span style={{ color: "var(--emerald-600)", fontWeight: 600 }}>{floor === null ? "3 niveaux" : ["RDC", "R+1", "R+2"][floor]}</span>
             </div>
           </div>
         </div>
@@ -510,21 +519,26 @@ function Plan3D() {
     </>
   );
 }
-function IsoBuilding() {
+function IsoBuilding({ floor = null, exploded = false, rotated = false }) {
+  const gap = exploded ? 52 : 34;       // écartement vertical des niveaux
+  const base = 150;                      // y du RDC (i=0)
+  const op = (i) => (floor === null || floor === i ? 1 : 0.14);
+  const yt = base - 2 * gap;             // niveau supérieur (R+2)
+  const roofY = yt - 6;
   return (
-    <svg viewBox="0 0 200 200" style={{ width: 220, height: 220 }} aria-hidden="true">
-      {[0, 1, 2].map((i) => {
-        const y = 120 - i * 34;
+    <svg viewBox="0 0 200 210" style={{ width: 232, height: 248, transform: rotated ? "rotateY(180deg)" : "none", transition: "transform .55s cubic-bezier(.4,0,.2,1)" }} aria-hidden="true">
+      <polygon points={`60,${roofY} 100,${roofY - 22} 140,${roofY} 100,${roofY + 22}`} fill="#f59e0b" stroke="#d97706" strokeWidth="1.5" opacity={floor === null || floor === 2 ? 1 : 0.14} style={{ transition: "opacity .35s" }} />
+      {[2, 1, 0].map((i) => {
+        const y = base - i * gap;
         return (
-          <g key={i}>
+          <g key={i} opacity={op(i)} style={{ transition: "opacity .35s" }}>
             <polygon points={`60,${y} 100,${y - 22} 140,${y} 100,${y + 22}`} fill="#cfd6e2" stroke="#94a3b8" strokeWidth="1.5" />
             <polygon points={`60,${y} 100,${y + 22} 100,${y + 44} 60,${y + 22}`} fill="#9aa6b8" stroke="#64748b" strokeWidth="1.5" />
             <polygon points={`140,${y} 100,${y + 22} 100,${y + 44} 140,${y + 22}`} fill="#b6c0d0" stroke="#64748b" strokeWidth="1.5" />
-            <rect x="72" y={y + 8} width="9" height="9" fill="#6366f1" transform={`skewY(28)`} opacity="0.85" />
+            <rect x="72" y={y + 8} width="9" height="9" fill="#6366f1" transform="skewY(28)" opacity="0.85" />
           </g>
         );
       })}
-      <polygon points="60,18 100,-4 140,18 100,40" fill="#f59e0b" stroke="#d97706" strokeWidth="1.5" transform="translate(0,18)" />
     </svg>
   );
 }

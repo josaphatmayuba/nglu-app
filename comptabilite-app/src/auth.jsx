@@ -44,6 +44,14 @@ export function clearAuth() {
   try { ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k)); } catch {}
 }
 
+// Utilisateur connecté (nom + rôle) depuis localStorage — alimenté au login /
+// restauré via le cookie refresh. Plus de nom codé en dur dans l'UI.
+export function getUser() {
+  let name = "", role = "";
+  try { name = localStorage.getItem("user") || ""; role = localStorage.getItem("role") || ""; } catch {}
+  return { name: name || "Utilisateur", role: role || "" };
+}
+
 export function useAuthToken() {
   const [token, updateToken] = React.useState(getToken);
   React.useEffect(() => {
@@ -78,6 +86,11 @@ export function LoginScreen() {
       const data = await res.json();
       setToken(data.token || "");
       localStorage.setItem("isLogged", "true");
+      const display = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || data.username || data.email || "Utilisateur";
+      localStorage.setItem("user", display);
+      if (data.id != null) localStorage.setItem("id", String(data.id));
+      if (data.role) localStorage.setItem("role", String(data.role));
+      if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
       window.dispatchEvent(new CustomEvent("comptabilite:auth-changed"));
     } catch (err) {
       setError(err.message || String(err));

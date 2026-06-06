@@ -37,6 +37,8 @@ async function jsonFetch(path, init = {}, retried = false) {
 }
 
 export const api = {
+  setting: () => jsonFetch("/setting"),
+  currencies: () => jsonFetch("/currency?query=all"),
   overview: () => jsonFetch("/hr/staff-overview"),
   shifts: () => jsonFetch("/shift?query=all"),
   awards: () => jsonFetch("/award?query=all"),

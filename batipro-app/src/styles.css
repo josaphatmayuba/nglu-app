@@ -25,6 +25,9 @@ button, input, select, textarea { font: inherit; }
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-thumb { background: var(--ink-300); border-radius: 4px; }
 
+/* Taille par défaut des icônes SVG inline (surchargée par contexte ci-dessous). */
+.ic { width: 16px; height: 16px; flex: none; }
+
 .grad-amber { background: linear-gradient(135deg,#f59e0b 0%,#d97706 100%); }
 .grad-iris  { background: linear-gradient(135deg,#6366f1 0%,#8b5cf6 60%,#4f46e5 100%); }
 .grad-dark  { background: radial-gradient(120% 120% at 0% 0%,#292017 0%,#1c1206 55%,#0c0803 100%); }

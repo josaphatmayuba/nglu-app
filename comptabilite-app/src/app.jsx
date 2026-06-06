@@ -1,6 +1,8 @@
 import React from "react";
 import { api } from "./api.js";
-import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
+import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
+import { AiAssistant } from "./aiAssistant.jsx";
+import { defaultSymbol } from "./currency.js";
 import {
   fallback, journaux as fbJournaux, journalCaisse, ecritures as fbEcritures, planComptable,
   types as fbTypes, grandLivreAccounts, grandLivre as fbGrandLivre, tresorerieComptes, tresorerieMvts,
@@ -92,10 +94,34 @@ const MOB_PRIMARY = ["dashboard", "ecritures", "tresorerie", "etats"];
 const MOB_LABEL = { dashboard: "Accueil", ecritures: "Saisie", tresorerie: "Trésor.", etats: "États" };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
-const nf = new Intl.NumberFormat("fr-FR");
-const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M FC`;
+// Devise résolue depuis la BD (GET /setting + /currency), mise à jour au runtime.
+let CUR = "CDF";
+const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
+const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
 const dash = (v) => (v ? nf.format(v) : "—");
+const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
+
+// Toast léger — fait répondre tous les boutons sans endpoint dédié.
+const DEMO = "Action de démonstration — à connecter au backend.";
+function notify(msg) { try { window.dispatchEvent(new CustomEvent("compta:toast", { detail: msg || DEMO })); } catch {} }
+function Toaster() {
+  const [msg, setMsg] = React.useState(null);
+  React.useEffect(() => {
+    let t;
+    const on = (e) => { setMsg(e.detail); clearTimeout(t); t = setTimeout(() => setMsg(null), 2600); };
+    window.addEventListener("compta:toast", on);
+    return () => { window.removeEventListener("compta:toast", on); clearTimeout(t); };
+  }, []);
+  if (!msg) return null;
+  return <div className="toast">{msg}</div>;
+}
+
+// Classement produit / charge d'une transaction (comme le CRM).
+const txRev = (t) => /revenue|produit|vente|sales|don|subvention|loyer|rental|locatif/i.test(`${t.credit?.name || t.creditAccountName || ""}`);
+const txExp = (t) => /charge|expense|salaire|salary|achat|purchase|frais|cost|carburant|maintenance|fourniture/i.test(`${t.debit?.name || t.debitAccountName || ""}`);
+const monthKey = (d) => String(d || "").slice(0, 7);
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -153,10 +179,13 @@ function App() {
   const [moreOpen, setMoreOpen] = React.useState(false);
   const isMobile = useIsMobile();
 
+  const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
-    Promise.allSettled([api.transactions(), api.accounts(), api.mainAccounts(), api.trialBalance(), api.balanceSheet(), api.incomeStatement()])
-      .then(([tx, acc, ma, tb, bs, is]) => {
+    Promise.allSettled([api.transactions(), api.accounts(), api.mainAccounts(), api.trialBalance(), api.balanceSheet(), api.incomeStatement(), api.setting(), api.currencies()])
+      .then(([tx, acc, ma, tb, bs, is, setting, currencies]) => {
         const txs = tx.value?.getAllTransaction || (Array.isArray(tx.value) ? tx.value : null);
+        const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
+        if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
         setData({
           transactions: txs?.length ? txs : fallback.transactions,
           accounts: Array.isArray(acc.value) && acc.value.length ? acc.value : fallback.accounts,
@@ -170,6 +199,9 @@ function App() {
       .catch(() => setApiStatus("local"));
   }, []);
   React.useEffect(() => load(), [load]);
+  const me = getUser();
+  const myInitials = initialsOf(me.name);
+  const myRole = me.role || "Comptabilité";
 
   const canMutate = apiStatus === "api";
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
@@ -189,7 +221,7 @@ function App() {
 
   const newEntry = () => setModal({ kind: "transaction" });
   const views = {
-    dashboard: <Dashboard is={data.incomeStatement} go={go} onNew={newEntry} canMutate={canMutate} />,
+    dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types />,
@@ -218,8 +250,8 @@ function App() {
             : <button key={item.id} className={`navlink ${route === item.id ? "active" : ""}`} onClick={() => go(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}
         </nav>
         <div className="user-chip">
-          <span className="user-avatar grad-accent">GM</span>
-          <div><div className="user-name">G. Mbuyi</div><div className="user-role">Comptable</div></div>
+          <span className="user-avatar grad-accent">{myInitials}</span>
+          <div><div className="user-name">{me.name}</div><div className="user-role">{myRole}</div></div>
           <button className="user-logout" title="Se déconnecter" onClick={clearAuth}><Icon name="logout" /></button>
         </div>
       </aside>
@@ -229,7 +261,7 @@ function App() {
           <span className="brand-icon grad-accent"><Icon name="bookOpenCheck" /></span>
           <span className="mob-title font-display">{TITLES[route]}</span>
         </div>
-        <span className="user-avatar grad-accent">GM</span>
+        <span className="user-avatar grad-accent">{myInitials}</span>
       </div>
 
       <main className="main">
@@ -263,35 +295,58 @@ function App() {
       )}
 
       {modal && <RecordModal modal={modal} accounts={data.accounts} mainAccounts={data.mainAccounts} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      <Toaster />
+      <AiAssistant />
     </div>
   );
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
-function Dashboard({ is, go, onNew, canMutate }) {
-  const rev = Number(is.totalRevenue || 0), exp = Math.abs(Number(is.totalExpense || 0));
+function Dashboard({ is, transactions, go, onNew, canMutate }) {
+  const txs = transactions || [];
+  const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.amount || 0), 0);
+  const exp = Math.abs(Number(is.totalExpense || 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.amount || 0), 0);
   const profit = Number(is.profit ?? rev - exp);
-  const months = [["Jan", 62, 50], ["Fév", 70, 54], ["Mar", 66, 60], ["Avr", 78, 58], ["Mai", 72, 62], ["Juin", 84, 61]];
+  const brouillons = txs.filter((t) => /brouillon|draft|false/i.test(`${t.status ?? ""}`)).length;
+  const MN = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+
+  // 6 derniers mois calculés depuis les transactions réelles.
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    let p = 0, c = 0;
+    txs.forEach((t) => { if (monthKey(t.date) === key) { const a = Number(t.amount || 0); if (txRev(t)) p += a; else if (txExp(t)) c += a; } });
+    months.push({ label: MN[d.getMonth()], p, c, now: i === 0 });
+  }
+  const max = Math.max(1, ...months.map((x) => Math.max(x.p, x.c)));
+  const hasData = months.some((x) => x.p || x.c);
+
   return (
     <>
-      <PageHead eyebrow="Exercice 2026 · juin" title="Comptabilité" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow={`Exercice ${now.getFullYear()}`} title="Comptabilité" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <KPI label="Trésorerie totale" value="41,2 M FC" sub="caisse + banques · +18,4 k$" icon="landmark" />
-        <KPI label="Produits (mois)" value="22,7 M FC" sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
-        <KPI label="Charges (mois)" value="16,6 M FC" sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
-        <KPI label="Résultat net" value="+6,1 M FC" sub="excédent · marge 27 %" valueClass="pos" icon="scale" tone="good" />
+        <KPI label="Produits" value={mM(rev)} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
+        <KPI label="Charges" value={mM(exp)} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
+        <KPI label="Résultat net" value={`${profit >= 0 ? "+" : "−"}${mM(Math.abs(profit))}`} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
+        <KPI label="Écritures" value={txs.length} sub={`${brouillons} brouillon(s)`} icon="penLine" />
       </div>
       <div className="g3">
         <section className="card pad span2">
-          <div className="section-head"><h3 className="font-display">Produits vs charges</h3><span className="tiny">6 derniers mois (M FC)</span></div>
-          <div className="barchart">
-            {months.map(([m, p, c], i) => (
-              <div className="col" key={m}>
-                <div className="bars"><i style={{ height: `${p}%`, background: i === 5 ? "var(--emerald-500)" : "var(--emerald-400)" }} /><i style={{ height: `${c}%`, background: i === 5 ? "var(--rose-400)" : "var(--rose-300)" }} /></div>
-                <span className="tiny" style={i === 5 ? { color: "var(--ink-600)", fontWeight: 500 } : undefined}>{m}</span>
-              </div>
-            ))}
-          </div>
+          <div className="section-head"><h3 className="font-display">Produits vs charges</h3><span className="tiny">6 derniers mois ({CUR})</span></div>
+          {hasData ? (
+            <div className="barchart">
+              {months.map((mo, i) => (
+                <div className="col" key={i}>
+                  <div className="bars"><i style={{ height: `${Math.round((mo.p / max) * 100)}%`, background: mo.now ? "var(--emerald-500)" : "var(--emerald-400)" }} /><i style={{ height: `${Math.round((mo.c / max) * 100)}%`, background: mo.now ? "var(--rose-400)" : "var(--rose-300)" }} /></div>
+                  <span className="tiny" style={mo.now ? { color: "var(--ink-600)", fontWeight: 500 } : undefined}>{mo.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted" style={{ fontSize: 13, padding: "24px 0" }}>Pas encore d'écritures sur la période — le graphique se remplira au fil des saisies.</p>
+          )}
           <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 11 }}>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--emerald-500)" }} /> Produits</span>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "var(--rose-400)" }} /> Charges</span>
@@ -299,9 +354,9 @@ function Dashboard({ is, go, onNew, canMutate }) {
         </section>
         <section className="card pad">
           <h3 className="block-title font-display"><Icon name="bell" style={{ color: "var(--rose-500)" }} /> À traiter</h3>
-          <Todo icon="penLine" tone="accent" title="7 écritures à valider" sub="brouillons" onClick={() => go("ecritures")} />
-          <Todo icon="gitCompare" tone="amber" title="Rapprochement banque" sub="3 lignes non pointées" onClick={() => go("tresorerie")} />
-          <Todo icon="receipt" tone="rose" title="TVA à déclarer" sub="échéance 15 juil." onClick={() => go("tva")} />
+          <Todo icon="penLine" tone="accent" title={`${brouillons} écriture(s) à valider`} sub="brouillons" onClick={() => go("ecritures")} />
+          <Todo icon="gitCompare" tone="amber" title="Rapprochement banque" sub="lignes à pointer" onClick={() => go("tresorerie")} />
+          <Todo icon="receipt" tone="rose" title="TVA à déclarer" sub="échéance mensuelle" onClick={() => go("tva")} />
         </section>
       </div>
     </>
@@ -321,25 +376,34 @@ function Todo({ icon, tone, title, sub, onClick }) {
 
 /* ── Journaux ──────────────────────────────────────────────────────────── */
 function Journaux({ transactions, onNew, canMutate }) {
+  const txs = transactions || [];
   const entree = (t) => ["CA", "BQ", "VE", "BU"].includes(t);
-  const rows = (transactions || []).slice(0, 6).map((t) => ({
+  const rows = txs.slice(0, 8).map((t) => ({
     date: String(t.date || "").slice(5).split("-").reverse().join("/"),
     piece: t.type ? `${t.type}-${String(t.id).padStart(4, "0")}` : "—",
     label: t.particulars, debit: entree(t.type) ? t.amount : null, credit: entree(t.type) ? null : t.amount,
   }));
   const list = rows.length ? rows : journalCaisse;
+  // Journaux agrégés en temps réel depuis les écritures.
+  const JMETA = { CA: { name: "Caisse (CA)", icon: "coins", tone: "accent" }, BQ: { name: "Banque (BQ)", icon: "landmark", tone: "accent" }, VE: { name: "Ventes (VE)", icon: "trendingUp", tone: "emerald" }, AC: { name: "Achats (AC)", icon: "trendingDown", tone: "rose" }, OD: { name: "Opérations diverses (OD)", icon: "shuffle", tone: "ink" } };
+  const agg = {};
+  txs.forEach((t) => { const k = JMETA[t.type] ? t.type : "OD"; (agg[k] = agg[k] || { count: 0, sum: 0 }).count++; agg[k].sum += Number(t.amount || 0); });
+  const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, sum: agg[k].sum }));
+  const cards = real.length ? real : fbJournaux.map((j) => ({ code: j.code, name: j.name, icon: j.icon, tone: j.tone, count: j.mvts, valStr: j.val }));
+  const toneBg = { emerald: "var(--emerald-100)", rose: "var(--rose-100)", ink: "var(--ink-100)" };
+  const toneFg = { emerald: "var(--emerald-600)", rose: "var(--rose-600)", ink: "var(--ink-600)" };
   return (
     <>
-      <PageHead eyebrow="Saisie · juin 2026" title="Journaux" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
+      <PageHead eyebrow="Saisie" title="Journaux" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="g3" style={{ marginBottom: 18 }}>
-        {fbJournaux.map((j) => (
+        {cards.map((j) => (
           <div className="card pad" key={j.code}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span className="row-ic" style={{ width: 32, height: 32, background: j.tone === "emerald" ? "var(--emerald-100)" : j.tone === "rose" ? "var(--rose-100)" : j.tone === "ink" ? "var(--ink-100)" : "var(--blue-100)", color: j.tone === "emerald" ? "var(--emerald-600)" : j.tone === "rose" ? "var(--rose-600)" : j.tone === "ink" ? "var(--ink-600)" : "var(--blue-600)" }}><Icon name={j.icon} /></span>
+              <span className="row-ic" style={{ width: 32, height: 32, background: toneBg[j.tone] || "var(--blue-100)", color: toneFg[j.tone] || "var(--blue-600)" }}><Icon name={j.icon} /></span>
               <span style={{ fontWeight: 600, fontSize: 14 }}>{j.name}</span>
-              <span className="chip ink" style={{ marginLeft: "auto" }}>{j.mvts} mvts</span>
+              <span className="chip ink" style={{ marginLeft: "auto" }}>{j.count} mvts</span>
             </div>
-            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>{j.label && `${j.label} : `}<b className={`num ${j.valClass || ""}`} style={!j.valClass ? { color: "var(--ink-800)" } : undefined}>{j.val}</b></div>
+            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}>{j.valStr || m(j.sum)}</b></div>
           </div>
         ))}
       </div>
@@ -389,11 +453,11 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
           <span className="pos" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" style={{ width: 16, height: 16 }} /> Débit = Crédit · l'écriture peut être enregistrée</span>
-          <div style={{ display: "flex", gap: 8 }}><button className="btn btn-ghost" style={{ height: 34 }}>Brouillon</button><button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="check" /> Enregistrer</button></div>
+          <div style={{ display: "flex", gap: 8 }}><button type="button" className="btn btn-ghost" style={{ height: 34 }} onClick={() => notify("Brouillon enregistré (démo).")}>Brouillon</button><button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="check" /> Enregistrer</button></div>
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link"><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
           <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
           <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
@@ -426,7 +490,7 @@ function Field({ label, value, muted, block }) {
 function Types() {
   return (
     <>
-      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Nouveau type" onAction={() => {}} />
+      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Nouveau type" onAction={() => notify()} />
       <Note>Toute activité de l'entreprise est saisie via un <b>type de transaction</b>. Chaque type pré‑remplit automatiquement les comptes (débit/crédit), le journal et l'imputation analytique — loyers, dons, ventes, achats, salaires…</Note>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({fbTypes.length} activités)</span></h3></div>
@@ -451,12 +515,12 @@ function GrandLivre() {
   const [sel, setSel] = React.useState(0);
   return (
     <>
-      <PageHead eyebrow="Détail par compte" title="Grand livre" action="Exporter" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="Détail par compte" title="Grand livre" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
       <div className="segtabs">
         {grandLivreAccounts.map((a, i) => <button key={a.code} className={`segtab ${i === sel ? "active grad-accent" : ""}`} onClick={() => setSel(i)}>{a.code} · {a.name}</button>)}
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Compte 521 · Banque FC</h3><span className="tiny">Solde : <b className="num" style={{ color: "var(--ink-800)" }}>39 100 000 FC</b></span></div>
+        <div className="section-head"><h3 className="font-display">Compte 521 · Banque FC</h3><span className="tiny">Solde : <b className="num" style={{ color: "var(--ink-800)" }}>{`39 100 000 ${CUR}`}</b></span></div>
         <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 640 }}>
@@ -480,8 +544,8 @@ function Plan({ accounts, canMutate, onNew }) {
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actif" value="62,4 M FC" /><Mini label="Passif" value="21,2 M FC" />
-        <Mini label="Produits (cumul)" value="134 M FC" valueClass="pos" /><Mini label="Charges (cumul)" value="98 M FC" valueClass="neg" />
+        <Mini label="Actif" value={`62,4 M ${CUR}`} /><Mini label="Passif" value={`21,2 M ${CUR}`} />
+        <Mini label="Produits (cumul)" value={`134 M ${CUR}`} valueClass="pos" /><Mini label="Charges (cumul)" value={`98 M ${CUR}`} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
@@ -510,7 +574,7 @@ function Tiers() {
   const sum = (k) => fbTiers.reduce((s, r) => s + (r[k] || 0), 0);
   return (
     <>
-      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" action="Relancer les impayés" actionIcon="bellRing" onAction={() => {}} />
+      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" action="Relancer les impayés" actionIcon="bellRing" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Créances clients" value="2 150 000" valueClass="pos" />
         <Mini label="Dont échu" value="640 000" tone="danger" valueClass="neg" />
@@ -540,7 +604,7 @@ function Tiers() {
 function Tresorerie() {
   return (
     <>
-      <PageHead eyebrow="Caisse & banques" title="Trésorerie" action="Rapprocher" actionIcon="gitCompare" onAction={() => {}} />
+      <PageHead eyebrow="Caisse & banques" title="Trésorerie" action="Rapprocher" actionIcon="gitCompare" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         {tresorerieComptes.map((c) => (
           <div className="card pad" key={c.name}>
@@ -573,7 +637,7 @@ function Immo() {
   const sum = (k) => fbImmo.reduce((s, r) => s + r[k], 0);
   return (
     <>
-      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" action="Nouveau bien" onAction={() => {}} />
+      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" action="Nouveau bien" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Valeur brute" value="41 700 000" /><Mini label="Amort. cumulés" value="23 000 000" valueClass="neg" />
         <Mini label="Valeur nette (VNC)" value="18 700 000" valueClass="" tone="info" />
@@ -598,7 +662,7 @@ function Immo() {
 function Analytique() {
   return (
     <>
-      <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Rapport bailleur" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Rapport bailleur" actionIcon="download" onAction={() => notify()} ghost />
       <div className="g3" style={{ marginBottom: 18 }}>
         {analytiqueCards.map((c) => (
           <div className={`card pad ${c.warn ? "warn" : ""}`} key={c.name}>
@@ -629,7 +693,7 @@ function Analytique() {
 function Budget() {
   return (
     <>
-      <PageHead eyebrow="Suivi budgétaire 2026" title="Budget vs réalisé" action="Nouvelle ligne" onAction={() => {}} />
+      <PageHead eyebrow="Suivi budgétaire 2026" title="Budget vs réalisé" action="Nouvelle ligne" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Budget total" value="160 000 000" /><Mini label="Réalisé" value="98 000 000" valueClass="" tone="info" />
         <Mini label="Disponible" value="62 000 000" valueClass="pos" /><Mini label="Consommé" value="61 %" />
@@ -652,11 +716,11 @@ function Budget() {
 function Capacite() {
   return (
     <>
-      <PageHead eyebrow="« A-t-on l'argent pour un projet ? »" title="Plan de trésorerie & capacité" action="Exporter" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="« A-t-on l'argent pour un projet ? »" title="Plan de trésorerie & capacité" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
       <div className="banner grad-emerald">
         <div>
           <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="gauge" /> Disponible réel — mobilisable sur fonds propres</div>
-          <div className="font-display num" style={{ fontSize: 30, fontWeight: 700 }}>17 278 000 FC</div>
+          <div className="font-display num" style={{ fontSize: 30, fontWeight: 700 }}>{`17 278 000 ${CUR}`}</div>
           <div style={{ fontSize: 12, opacity: .85 }}>après déduction des dettes à payer et des fonds bailleurs affectés</div>
         </div>
         <div style={{ textAlign: "right", fontSize: 12, opacity: .9 }}><span className="chip" style={{ background: "rgba(255,255,255,.2)", color: "#fff" }}><Icon name="check" style={{ width: 11, height: 11 }} /> Capacité pour un nouveau projet</span><div style={{ marginTop: 8 }}>+ 18,4 k$ en banque USD (non inclus)</div></div>
@@ -668,7 +732,7 @@ function Capacite() {
             <div className="ln"><span><Dot c="var(--blue-500)" /> Trésorerie (caisse + banques FC)</span><b>41 200 000</b></div>
             <div className="ln"><span><Dot c="var(--rose-400)" /> − Dettes à payer (court terme)</span><b className="neg">−10 622 000</b></div>
             <div className="ln"><span><Dot c="var(--amber-400)" /> − Fonds bailleurs affectés</span><b style={{ color: "var(--amber-700)" }}>−13 300 000</b></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}><Dot c="var(--emerald-500)" /> = Disponible réel (libre)</span><b className="pos">17 278 000</b></div>
+            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}><Dot c="var(--emerald-500)" /> = Disponible réel (libre)</span><b className="pos">{`17 278 000 ${CUR}`}</b></div>
           </div>
           <p className="tiny" style={{ marginTop: 10 }}>Détail des dettes : fournisseurs 3,4 M · salaires & charges 5,0 M · TVA DGI 2,2 M.</p>
         </div>
@@ -703,7 +767,7 @@ function Capacite() {
       <div className="card pad info">
         <h3 className="block-title font-display" style={{ marginBottom: 8 }}><Icon name="lightbulb" style={{ color: "var(--blue-600)" }} /> Peut-on financer un nouveau projet ?</h3>
         <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "grid", gap: 8, fontSize: 13, color: "var(--ink-700)" }}>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="checkCircle" style={{ width: 16, height: 16, color: "var(--emerald-600)", flex: "none", marginTop: 1 }} /> <span><b>~17,3 M FC</b> mobilisables aujourd'hui sur fonds propres (sans toucher aux fonds bailleurs).</span></li>
+          <li style={{ display: "flex", gap: 8 }}><Icon name="checkCircle" style={{ width: 16, height: 16, color: "var(--emerald-600)", flex: "none", marginTop: 1 }} /> <span><b>~17,3 M {CUR}</b> mobilisables aujourd'hui sur fonds propres (sans toucher aux fonds bailleurs).</span></li>
           <li style={{ display: "flex", gap: 8 }}><Icon name="alertTriangle" style={{ width: 16, height: 16, color: "var(--amber-600)", flex: "none", marginTop: 1 }} /> <span>La trésorerie descend à <b>13,6 M en août</b> : éviter d'engager plus de ~12 M avant la subvention de septembre.</span></li>
           <li style={{ display: "flex", gap: 8 }}><Icon name="wallet" style={{ width: 16, height: 16, color: "var(--blue-600)", flex: "none", marginTop: 1 }} /> <span>Au-delà : prévoir un <b>financement bailleur</b> dédié — les fonds affectés (13,3 M) ne peuvent pas être détournés.</span></li>
         </ul>
@@ -722,7 +786,7 @@ function Etats({ is, bs }) {
   const profit = Number(is.profit ?? rev - exp);
   return (
     <>
-      <PageHead eyebrow="Exercice 2026 · au 30 juin" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="Exercice 2026 · au 30 juin" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
       <div className="segtabs">{tabs.map(([id, lbl]) => <button key={id} className={`segtab ${tab === id ? "active grad-accent" : ""}`} onClick={() => setTab(id)}>{lbl}</button>)}</div>
 
       {tab === "resultat" && (
@@ -733,7 +797,7 @@ function Etats({ is, bs }) {
             <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
             {fbResultat.charges.map(([l, v]) => <div className="ln" key={l} style={{ marginTop: 0 }}><span className="muted">{l}</span><span className="neg">{nf.format(v)}</span></div>)}
             <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (excédent)</span><span className="pos">{signed(profit)}</span></div>
+            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (excédent)</span><span className="pos">{signed(profit)} {CUR}</span></div>
           </div>
         </div>
       )}
@@ -744,11 +808,11 @@ function Etats({ is, bs }) {
           <div className="g2">
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
-              <div className="stmt num">{fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(fbBilan.totalActif)}</span></div></div>
+              <div className="stmt num">{fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(fbBilan.totalActif)} {CUR}</span></div></div>
             </div>
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif</div>
-              <div className="stmt num">{fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif</span><span>{nf.format(fbBilan.totalPassif)}</span></div></div>
+              <div className="stmt num">{fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif</span><span>{nf.format(fbBilan.totalPassif)} {CUR}</span></div></div>
             </div>
           </div>
           <div style={{ marginTop: 12 }}><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif</span></div>
@@ -757,7 +821,7 @@ function Etats({ is, bs }) {
 
       {tab === "balance" && (
         <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Balance générale <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3><button className="link"><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+          <div className="section-head"><h3 className="font-display">Balance générale <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
@@ -794,7 +858,7 @@ function Etats({ is, bs }) {
 function Tva() {
   return (
     <>
-      <PageHead eyebrow="Déclaration · juin 2026" title="TVA & taxes" action="Préparer la déclaration" actionIcon="fileCheck" onAction={() => {}} />
+      <PageHead eyebrow="Déclaration · juin 2026" title="TVA & taxes" action="Préparer la déclaration" actionIcon="fileCheck" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <div className="card pad"><div className="kpi-label">TVA collectée (16 %)</div><div className="font-display num pos" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>3 632 000</div><div className="tiny">sur ventes / prestations</div></div>
         <div className="card pad"><div className="kpi-label">TVA déductible</div><div className="font-display num neg" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>1 410 000</div><div className="tiny">sur achats</div></div>
@@ -832,7 +896,7 @@ function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClo
               <FField label="Libellé" value={form.particulars} onChange={(v) => set("particulars", v)} required />
               <FSelect label="Débit" value={form.debitId} onChange={(v) => set("debitId", v)} rows={accounts} />
               <FSelect label="Crédit" value={form.creditId} onChange={(v) => set("creditId", v)} rows={accounts} />
-              <FField label="Montant (FC)" type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
+              <FField label={`Montant (${CUR})`} type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
               <FField label="Type / journal" value={form.type} onChange={(v) => set("type", v)} />
             </>
           )}

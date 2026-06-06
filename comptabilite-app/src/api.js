@@ -36,7 +36,9 @@ async function jsonFetch(path, init = {}, retried = false) {
 }
 
 export const api = {
-  transactions: () => jsonFetch("/transaction?status=true&page=1&limit=25"),
+  setting: () => jsonFetch("/setting"),
+  currencies: () => jsonFetch("/currency?query=all"),
+  transactions: () => jsonFetch("/transaction?status=true&page=1&limit=100"),
   accounts: () => jsonFetch("/account?type=sa&query=all"),
   mainAccounts: () => jsonFetch("/account?query=ma"),
   trialBalance: () => jsonFetch("/account?query=tb"),

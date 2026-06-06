@@ -1,6 +1,8 @@
 import React from "react";
 import { api } from "./api.js";
-import { LoginScreen, useAuthToken, clearAuth } from "./auth.jsx";
+import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
+import { AiAssistant } from "./aiAssistant.jsx";
+import { defaultSymbol, symbolFor } from "./currency.js";
 import {
   fallback, AV_COLORS, presences as fbPresences, conges as fbConges, absents as fbAbsents,
   contrats as fbContrats, dossiers as fbDossiers, timesheet as fbTimesheet, grille as fbGrille,
@@ -108,9 +110,28 @@ const MOB_PRIMARY = ["dashboard", "employes", "presences", "paie"];
 const MOB_LABEL = { dashboard: "Accueil", employes: "Équipe", presences: "Pointage", paie: "Paie" };
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
+// Devise résolue depuis la BD (GET /setting + /currency), comme le CRM.
+let CUR = "CDF";
+let CURRENCIES = []; // liste pour résoudre la devise propre à chaque employé
 const nf = new Intl.NumberFormat("fr-FR");
-const fc = (v) => `${nf.format(Math.round(Number(v || 0)))} FC`;
-const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M FC`;
+const fc = (v, sym) => `${nf.format(Math.round(Number(v || 0)))} ${sym || CUR}`;
+const fcM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
+const salarySym = (u) => symbolFor(u?.currentSalaryCurrencyId, CURRENCIES, CUR);
+
+// Toast léger — fait répondre les boutons sans endpoint dédié.
+const DEMO = "Action de démonstration — à connecter au backend.";
+function notify(msg) { try { window.dispatchEvent(new CustomEvent("hr:toast", { detail: msg || DEMO })); } catch {} }
+function Toaster() {
+  const [msg, setMsg] = React.useState(null);
+  React.useEffect(() => {
+    let t;
+    const on = (e) => { setMsg(e.detail); clearTimeout(t); t = setTimeout(() => setMsg(null), 2600); };
+    window.addEventListener("hr:toast", on);
+    return () => { window.removeEventListener("hr:toast", on); clearTimeout(t); };
+  }, []);
+  if (!msg) return null;
+  return <div className="toast">{msg}</div>;
+}
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username || u.email || `Employé #${u.id}`;
 const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
@@ -178,9 +199,13 @@ function App() {
   const [moreOpen, setMoreOpen] = React.useState(false);
   const isMobile = useIsMobile();
 
+  const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
-    Promise.allSettled([api.overview(), api.shifts(), api.awards(), api.salaryHistory()])
-      .then(([overview, shifts, awards, salaries]) => {
+    Promise.allSettled([api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.setting(), api.currencies()])
+      .then(([overview, shifts, awards, salaries, setting, currencies]) => {
+        const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
+        if (curList) CURRENCIES = curList;
+        if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
         const next = {
           staff: overview.value?.staff?.length ? overview.value.staff : fallback.staff,
           designations: overview.value?.designations || fallback.designations,
@@ -198,6 +223,9 @@ function App() {
   React.useEffect(() => load(), [load]);
 
   const canMutate = apiStatus === "api";
+  const me = getUser();
+  const myInitials = initials(me.name);
+  const myRole = me.role || "Ressources humaines";
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
 
   async function save(kind, form) {
@@ -256,8 +284,8 @@ function App() {
             ))}
         </nav>
         <div className="user-chip">
-          <span className="user-avatar grad-accent">AK</span>
-          <div><div className="user-name">A. Kalala</div><div className="user-role">Responsable RH</div></div>
+          <span className="user-avatar grad-accent">{myInitials}</span>
+          <div><div className="user-name">{me.name}</div><div className="user-role">{myRole}</div></div>
           <button className="user-logout" title="Se déconnecter" onClick={clearAuth}><Icon name="logout" /></button>
         </div>
       </aside>
@@ -267,7 +295,7 @@ function App() {
           <span className="brand-icon grad-accent"><Icon name="usersRound" /></span>
           <span className="mob-title font-display">{TITLES[route]}</span>
         </div>
-        <span className="user-avatar grad-accent">AK</span>
+        <span className="user-avatar grad-accent">{myInitials}</span>
       </div>
 
       <main className="main">
@@ -307,6 +335,8 @@ function App() {
       )}
 
       {modal && <RecordModal modal={modal} staff={staff} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      <Toaster />
+      <AiAssistant />
     </div>
   );
 }
@@ -393,7 +423,7 @@ function Employes({ staff, go }) {
                 <div><Icon name="phone" /> +243 ··· ·· ··</div>
               </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{fc(u.currentSalary)} / mois</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{fc(u.currentSalary, salarySym(u))} / mois</span>
                 <span style={{ fontSize: 12, color: "var(--teal-600)", fontWeight: 500, display: "flex", alignItems: "center", gap: 2 }}>Profil <Icon name="chevronRight" style={{ width: 14, height: 14 }} /></span>
               </div>
             </div>
@@ -408,7 +438,7 @@ function Employes({ staff, go }) {
 function Presences() {
   return (
     <>
-      <PageHead eyebrow="Pointage · jeudi 5 juin 2026" title="Présences & pointage" action="Pointer maintenant" actionIcon="fingerprint" onAction={() => {}} />
+      <PageHead eyebrow="Pointage · jeudi 5 juin 2026" title="Présences & pointage" action="Pointer maintenant" actionIcon="fingerprint" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <KPI label="Présents" value="38" icon="checkCircle" />
         <KPI label="Retards" value="3" tone="warn" icon="clock" />
@@ -434,7 +464,7 @@ function Presences() {
 function Conges() {
   return (
     <>
-      <PageHead eyebrow="Absences" title="Congés & absences" action="Nouvelle demande" onAction={() => {}} />
+      <PageHead eyebrow="Absences" title="Congés & absences" action="Nouvelle demande" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <KPI label="En attente" value={fbConges.length} tone="warn" />
         <Mini label="Approuvés (mois)" value="8" valueClass="" />
@@ -449,8 +479,8 @@ function Conges() {
               <Avatar name={c.name} color={c.av} size={36} />
               <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{c.name} · <span className="muted" style={{ fontWeight: 400 }}>{c.type}</span></div><div className="tiny">{c.detail}</div></div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button className="btn" style={{ height: 32, padding: "0 10px", background: "var(--emerald-500)", color: "#fff" }}><Icon name="check" /></button>
-                <button className="btn btn-ghost" style={{ height: 32, padding: "0 10px", color: "var(--rose-500)" }}><Icon name="x" /></button>
+                <button type="button" className="btn" style={{ height: 32, padding: "0 10px", background: "var(--emerald-500)", color: "#fff" }} onClick={() => notify("Demande approuvée (démo).")}><Icon name="check" /></button>
+                <button type="button" className="btn btn-ghost" style={{ height: 32, padding: "0 10px", color: "var(--rose-500)" }} onClick={() => notify("Demande refusée (démo).")}><Icon name="x" /></button>
               </div>
             </div>
           ))}
@@ -528,7 +558,7 @@ function Paie({ staff, masse, canMutate, onNew }) {
 function Contrats() {
   return (
     <>
-      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => {}} />
+      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Total contrats" value="42" />
         <Mini label="CDI" value="31" />
@@ -565,7 +595,7 @@ function Dossiers() {
   const keys = ["cv", "id", "dip", "ctr", "cnss", "psea"];
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => {}} ghost />
+      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => notify()} ghost />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Dossiers complets" value="35" valueClass="" />
         <KPI label="Incomplets" value="7" tone="warn" />
@@ -598,7 +628,7 @@ function Timesheet() {
   const sum = (k) => fbTimesheet.reduce((s, r) => s + r[k], 0);
   return (
     <>
-      <PageHead eyebrow="Allocation du temps · juin 2026" title="Timesheet — projets & bailleurs" action="Rapport bailleur" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="Allocation du temps · juin 2026" title="Timesheet — projets & bailleurs" action="Rapport bailleur" actionIcon="download" onAction={() => notify()} ghost />
       <div className="note"><Icon name="lightbulb" /> <span>Chaque agent répartit son temps entre les <b>projets/bailleurs</b>. C'est l'équivalent RH de l'analytique comptable — <b>exigé par les bailleurs</b> pour justifier les salaires imputés.</span></div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Heures saisies" value="6 240 h" /><Mini label="Taux de remplissage" value="92 %" valueClass="" />
@@ -623,7 +653,7 @@ function Timesheet() {
 function Remuneration({ masse }) {
   return (
     <>
-      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Modifier la grille" actionIcon="settings" onAction={() => {}} />
+      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Modifier la grille" actionIcon="settings" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Masse salariale / mois" value={fcM(masse)} />
         <Mini label="Prime transport (total)" value="2,1 M FC" />
@@ -649,7 +679,7 @@ function Remuneration({ masse }) {
 function Frais() {
   return (
     <>
-      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => {}} />
+      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <KPI label="À rembourser / valider" value="3" tone="warn" />
         <Mini label="Avances en cours" value="1,2 M FC" />
@@ -676,7 +706,7 @@ function Frais() {
 function Declarations() {
   return (
     <>
-      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => {}} />
+      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="CNSS (sécurité sociale)" value="3 124 000" />
         <Mini label="INPP (formation prof.)" value="568 000" />
@@ -702,7 +732,7 @@ function Declarations() {
 function Performance() {
   return (
     <>
-      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => {}} />
+      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => notify()} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Évaluations faites" value={<>26<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/42</span></>} />
         <Mini label="Note moyenne" value={<>3,9<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/5</span></>} valueClass="" />
@@ -729,7 +759,7 @@ function Performance() {
 function Formation() {
   return (
     <>
-      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => {}} />
+      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Sessions planifiées" value="6" />
         <Mini label="Agents formés (2026)" value="23" valueClass="" />
@@ -759,7 +789,7 @@ function Recrutement() {
   ];
   return (
     <>
-      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => {}} />
+      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => notify()} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <div className="card pad"><div className="kpi-label">Offres ouvertes</div><div className="font-display kpi-value">3</div><div className="tiny" style={{ marginTop: 4 }}>Agent terrain · Comptable · Chauffeur</div></div>
         <div className="card pad"><div className="kpi-label">Candidatures</div><div className="font-display kpi-value">37</div><div className="tiny" style={{ marginTop: 4 }}>12 cette semaine</div></div>
@@ -830,7 +860,7 @@ function Reporting() {
   const proj = [{ l: "Programme Kinshasa", v: "11,4 M", p: 40, c: "grad-accent" }, { l: "Programme Kongo Central", v: "8,6 M", p: 30, c: "grad-accent" }, { l: "Fonctionnement / structure", v: "8,4 M", p: 30, c: "amber" }];
   return (
     <>
-      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={() => {}} ghost />
+      <PageHead eyebrow="Analytique RH" title="Reporting RH" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Effectif" value="42" /><Mini label="Turnover (annuel)" value="9 %" />
         <Mini label="Ancienneté moy." value="3,4 ans" /><Mini label="Ratio H / F" value="58 / 42" />
@@ -878,7 +908,7 @@ function SelfService() {
           <div className="card pad" key={t.title}>
             <h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={t.icon} style={{ color: "var(--teal-600)" }} /> {t.title}</h3>
             <div className="kv">{t.rows.map(([k, v], i) => <div key={i}><span className="muted">{k}</span><span style={{ fontWeight: 500 }}>{v}</span></div>)}</div>
-            <button className={`tile-btn ${t.accent ? "accent" : ""}`}><Icon name={t.bicon} /> {t.btn}</button>
+            <button type="button" className={`tile-btn ${t.accent ? "accent" : ""}`} onClick={() => notify()}><Icon name={t.bicon} /> {t.btn}</button>
           </div>
         ))}
       </div>
