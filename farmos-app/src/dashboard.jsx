@@ -127,7 +127,7 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     target: i.actionTarget || i.action_target,
   }));
 
-  // KPI set (adapts). When live data is ready, prefer it; otherwise show sample.
+  // KPI set (adapts). Values come from live API/DB data only.
   const liveKpis = k ? [
     { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: [k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total, k.total], icon: "layers" },
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
@@ -483,9 +483,9 @@ const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "var(--cols-5)", gap: 8 }}>
       {SPECIES.map((s_orig) => {
-        const liveN = liveCounts ? (liveCounts[s_orig.id] ?? 0) : null;
-        const liveSickN = liveSick ? (liveSick[s_orig.id] ?? 0) : null;
-        const s = liveN != null ? { ...s_orig, count: liveN, sick: liveSickN } : s_orig;
+        const liveN = liveCounts ? (liveCounts[s_orig.id] ?? 0) : 0;
+        const liveSickN = liveSick ? (liveSick[s_orig.id] ?? 0) : 0;
+        const s = { ...s_orig, count: liveN, sick: liveSickN };
         return (
         <button key={s.id} onClick={() => onSelect(s.id)} style={{
           background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 10,
@@ -510,7 +510,7 @@ const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
             <span className="tnum serif" style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--ink-950)" }}>{s.count.toLocaleString("fr-CA")}</span>
             <span className="mono" style={{ fontSize: 10, color: "var(--fg-3)" }}>{s.countingUnit === "lot" ? (lang==="fr"?"oiseaux":"birds") : s.countingUnit === "bassin" ? "kg" : ""}</span>
           </div>
-          <Sparkline data={s.productTrend} color={s.accent}/>
+          <Sparkline data={Array(12).fill(s.count)} color={s.accent}/>
         </button>
         );
       })}
@@ -525,37 +525,29 @@ const SpeciesDetailPanel = ({ lang, species }) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
       <div className="bilang">
         <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>
-          {lang === "fr" ? "Module spécifique" : "Species module"} · <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{lang === "fr" ? species.fr : species.en}</span>
+          {lang === "fr" ? "Module specifique" : "Species module"} - <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{lang === "fr" ? species.fr : species.en}</span>
         </h3>
-        <span className="sec">{species.modules.length} {lang === "fr" ? "modules adaptés" : "adapted modules"}</span>
+        <span className="sec">{species.modules.length} {lang === "fr" ? "modules adaptes" : "adapted modules"}</span>
       </div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 24 }}>
-      {/* Diseases */}
       <div>
         <div className="overline" style={{ color: "var(--health-700)", marginBottom: 8 }}>
-          {lang === "fr" ? "Maladies surveillées" : "Monitored diseases"}
+          {lang === "fr" ? "Donnees sanitaires" : "Health data"}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {(lang === "fr" ? species.diseases : species.diseasesEn).map((d, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: i === 0 ? "var(--rust-700)" : i === 1 ? "var(--wheat-500)" : "var(--ink-300)" }}/>
-              <span style={{ color: "var(--ink-800)" }}>{d}</span>
-              {i === 0 && <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{Math.floor(species.sick * 0.6)} cas</span>}
-            </div>
-          ))}
-        </div>
+        <span style={{ color: "var(--ink-700)", fontSize: 13 }}>
+          {lang === "fr" ? "Les maladies, alertes et traitements sont lus depuis la base." : "Diseases, alerts and treatments are read from the database."}
+        </span>
       </div>
-      {/* Alerts surveilled */}
       <div>
         <div className="overline" style={{ color: "var(--pertinence-700)", marginBottom: 8 }}>
-          {lang === "fr" ? "Alertes surveillées" : "Monitored alerts"}
+          {lang === "fr" ? "Modules actifs" : "Active modules"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {(lang === "fr" ? species.alerts : species.alertsEn).map((a, i) => (
+          {species.modules.map((m, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              <Icon name={i === 0 ? "chart" : i === 1 ? "pulse" : i === 2 ? "calendar" : "thermometer"} size={13} color="var(--pertinence-500)"/>
-              <span style={{ color: "var(--ink-800)" }}>{a}</span>
+              <Icon name="check" size={13} color="var(--pertinence-500)"/>
+              <span style={{ color: "var(--ink-800)" }}>{m}</span>
             </div>
           ))}
         </div>
@@ -570,7 +562,6 @@ const SpeciesDetailPanel = ({ lang, species }) => (
   </div>
 );
 
-// ─── AI Insights ─────────────────────────────────────────────────────────
 const AI_INSIGHT_DEST = { predict: "alerts", feed: "stock", repro: "repro", anomaly: "alerts" };
 const AIPanel = ({ lang, insights, onNav }) => (
   <div className="card" style={{ padding: "16px 18px" }}>

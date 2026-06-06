@@ -1,8 +1,6 @@
 /* eslint-disable */
-// FarmOS Pro — Species definitions, sample data, i18n.
-// The species registry IS the adaptation system: each entry declares which
-// modules show, what units to use, which form fields the animal sheet has,
-// which diseases the health module surfaces, etc.
+// FarmOS Pro - UI species registry and i18n. Business data comes from API/DB.
+// The species registry drives UI fields, modules, labels and units only.
 
 // ─── i18n ────────────────────────────────────────────────────────────────
 const I18N = {
@@ -165,7 +163,7 @@ const I18N = {
 const t = (lang, key) => (I18N[lang] && I18N[lang][key]) || key;
 
 // ─── Species registry ────────────────────────────────────────────────────
-// Each entry drives form fields, dashboards, units, alerts, diseases.
+// Each entry drives form fields, modules, labels and units.
 const SPECIES = [
   {
     id: "cow",
@@ -174,18 +172,15 @@ const SPECIES = [
     frSing: "Vache",         enSing: "Cow",
     accent: "var(--pertinence-700)",
     accentBg: "var(--pertinence-50)",
-    count: 247, sick: 6, mortality: 0.8,
     countingUnit: "tête",
     productPrimary: "milk",      // milk, eggs, meat, wool, growth, fish
     productLabel:  { fr: "Lait · L/j",   en: "Milk · L/d" },
-    productValue:  "5 412",  productUnit: "L/jour",
-    productTrend:  [40, 42, 41, 43, 45, 44, 46, 48, 47, 46, 48, 50],
     housingLabel:  { fr: "Bâtiment & enclos",   en: "Barn & paddock" },
     repro: ["heat", "ai", "gestation", "calving", "fertility", "calf-history"],
-    diseases:      ["Mammite", "Boiterie", "Métrite", "Fièvre", "Parasites internes"],
-    diseasesEn:    ["Mastitis", "Lameness", "Metritis", "Fever", "Internal parasites"],
-    alerts: ["Baisse lait", "Mammite suspectée", "Vêlage proche", "Vaccination retard"],
-    alertsEn: ["Milk drop", "Suspected mastitis", "Calving imminent", "Vaccine overdue"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["tag", "ear-loop", "race", "sex", "dob", "weight", "color", "barn", "lot", "lactation", "rumination", "temp", "ai-history"],
     modules: ["health", "milk", "repro", "feed", "finance"],
   },
@@ -196,18 +191,15 @@ const SPECIES = [
     frSing: "Porc",          enSing: "Pig",
     accent: "var(--oxblood-700)",
     accentBg: "var(--oxblood-50)",
-    count: 1842, sick: 28, mortality: 2.1,
     countingUnit: "tête",
     productPrimary: "growth",
     productLabel:  { fr: "GMQ · g/j",   en: "ADG · g/d" },
-    productValue:  "856",  productUnit: "g/jour",
-    productTrend:  [780, 790, 810, 820, 800, 830, 850, 845, 860, 856, 870, 856],
     housingLabel:  { fr: "Salle, lot & enclos",   en: "Room, batch & pen" },
     repro: ["heat", "ai", "gestation", "farrow", "litter", "weaning"],
-    diseases:    ["Diarrhée néonatale", "Toux", "PRRS", "Morsure de queue", "Boiterie"],
-    diseasesEn:  ["Neonatal diarrhea", "Cough", "PRRS", "Tail biting", "Lameness"],
-    alerts: ["Mortalité élevée", "Retard croissance", "Problème mise bas", "Baisse alimentation"],
-    alertsEn: ["High mortality", "Growth lag", "Farrowing issue", "Feed intake drop"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["tag", "type", "race", "sex", "dob", "weight", "lot", "room", "fcr", "weaning-w", "litter-id"],
     modules: ["health", "growth", "repro", "feed", "finance", "biosec"],
   },
@@ -218,18 +210,15 @@ const SPECIES = [
     frSing: "Poulet",        enSing: "Chicken",
     accent: "var(--autorite-700)",
     accentBg: "var(--autorite-50)",
-    count: 18420, sick: 0, mortality: 1.4,
     countingUnit: "lot",
     productPrimary: "eggs",
     productLabel:  { fr: "Œufs · jour",   en: "Eggs · day" },
-    productValue:  "16 248",  productUnit: "œufs/jour",
-    productTrend:  [14500, 14800, 15100, 15400, 15700, 16000, 15800, 16100, 16200, 16100, 16300, 16248],
     housingLabel:  { fr: "Bâtiment & lot",   en: "House & batch" },
     repro: [],
-    diseases:    ["Maladie respiratoire", "Coccidiose", "Diarrhée", "Picage"],
-    diseasesEn:  ["Respiratory disease", "Coccidiosis", "Diarrhea", "Feather pecking"],
-    alerts: ["Mortalité anormale", "Baisse ponte", "Température élevée", "Eau insuffisante"],
-    alertsEn: ["Abnormal mortality", "Lay drop", "High temperature", "Insufficient water"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["batch-id", "count", "age", "race", "weight-avg", "house", "temp", "humidity", "lay-rate"],
     modules: ["health", "eggs", "growth", "feed", "finance", "biosec"],
   },
@@ -240,18 +229,15 @@ const SPECIES = [
     frSing: "Bassin",        enSing: "Pond",
     accent: "var(--pertinence-700)",
     accentBg: "var(--pertinence-50)",
-    count: 24500, sick: 0, mortality: 1.2,
     countingUnit: "bassin",
     productPrimary: "growth",
     productLabel:  { fr: "Biomasse · kg",   en: "Biomass · kg" },
-    productValue:  "9 820",  productUnit: "kg",
-    productTrend:  [8400, 8500, 8600, 8800, 8900, 9100, 9200, 9400, 9500, 9600, 9700, 9820],
     housingLabel:  { fr: "Bassin & circuit",   en: "Pond & circuit" },
     repro: [],
-    diseases:    ["Parasites", "Champignons", "Maladie de peau"],
-    diseasesEn:  ["Parasites", "Fungi", "Skin disease"],
-    alerts: ["Oxygène faible", "pH dangereux", "Mortalité élevée", "Eau contaminée"],
-    alertsEn: ["Low oxygen", "Dangerous pH", "High mortality", "Contaminated water"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["pond-id", "species", "density", "oxygen", "ph", "temp-water", "weight-avg", "biomass"],
     modules: ["health", "growth", "feed", "finance", "water"],
   },
@@ -262,18 +248,15 @@ const SPECIES = [
     frSing: "Chèvre",        enSing: "Goat",
     accent: "var(--solidite-700)",
     accentBg: "var(--solidite-50)",
-    count: 142, sick: 3, mortality: 1.0,
     countingUnit: "tête",
     productPrimary: "milk",
     productLabel:  { fr: "Lait · L/j",   en: "Milk · L/d" },
-    productValue:  "184",  productUnit: "L/jour",
-    productTrend:  [160, 165, 170, 168, 172, 175, 180, 178, 182, 184, 186, 184],
     housingLabel:  { fr: "Bâtiment & pâturage",   en: "Barn & pasture" },
     repro: ["heat", "kidding", "fertility"],
-    diseases:    ["Parasites", "Diarrhée", "Boiterie"],
-    diseasesEn:  ["Parasites", "Diarrhea", "Lameness"],
-    alerts: ["Perte poids", "Parasite élevé", "Mise bas proche"],
-    alertsEn: ["Weight loss", "High parasite", "Kidding imminent"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["tag", "race", "sex", "dob", "weight", "pasture", "lactation"],
     modules: ["health", "milk", "repro", "feed", "finance"],
   },
@@ -284,18 +267,15 @@ const SPECIES = [
     frSing: "Mouton",        enSing: "Sheep",
     accent: "var(--autorite-700)",
     accentBg: "var(--autorite-50)",
-    count: 318, sick: 4, mortality: 0.9,
     countingUnit: "tête",
     productPrimary: "wool",
     productLabel:  { fr: "Tonte · kg",   en: "Shearing · kg" },
-    productValue:  "612",  productUnit: "kg/an",
-    productTrend:  [40, 50, 55, 50, 45, 60, 70, 80, 90, 85, 80, 60],
     housingLabel:  { fr: "Pâturage & bergerie",   en: "Pasture & fold" },
     repro: ["heat", "lambing", "fertility"],
-    diseases:    ["Parasites", "Boiterie", "Infection peau"],
-    diseasesEn:  ["Parasites", "Lameness", "Skin infection"],
-    alerts: ["Maladie contagieuse", "Baisse poids", "Parasites"],
-    alertsEn: ["Contagious disease", "Weight drop", "Parasites"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["tag", "race", "sex", "dob", "weight", "pasture", "wool-quality"],
     modules: ["health", "wool", "repro", "feed", "finance"],
   },
@@ -306,18 +286,15 @@ const SPECIES = [
     frSing: "Lapin",         enSing: "Rabbit",
     accent: "var(--oxblood-700)",
     accentBg: "var(--oxblood-50)",
-    count: 480, sick: 5, mortality: 2.4,
     countingUnit: "tête",
     productPrimary: "growth",
     productLabel:  { fr: "Croissance · g/j",   en: "Growth · g/d" },
-    productValue:  "38",  productUnit: "g/jour",
-    productTrend:  [30, 32, 34, 35, 36, 37, 38, 38, 39, 38, 38, 38],
     housingLabel:  { fr: "Cage & rangée",   en: "Cage & row" },
     repro: ["mating", "kindling", "litter", "weaning"],
-    diseases:    ["Diarrhée", "Maladie respiratoire", "Parasites"],
-    diseasesEn:  ["Diarrhea", "Respiratory disease", "Parasites"],
-    alerts: ["Mortalité", "Problème reproduction", "Baisse croissance"],
-    alertsEn: ["Mortality", "Repro issue", "Growth drop"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["tag", "race", "sex", "dob", "weight", "cage", "litter-id"],
     modules: ["health", "growth", "repro", "feed", "finance"],
   },
@@ -328,18 +305,15 @@ const SPECIES = [
     frSing: "Canard",        enSing: "Duck",
     accent: "var(--solidite-700)",
     accentBg: "var(--solidite-50)",
-    count: 920, sick: 2, mortality: 1.1,
     countingUnit: "lot",
     productPrimary: "eggs",
     productLabel:  { fr: "Œufs · jour",   en: "Eggs · day" },
-    productValue:  "612",  productUnit: "œufs/jour",
-    productTrend:  [540, 560, 580, 590, 600, 610, 605, 612, 615, 612, 618, 612],
     housingLabel:  { fr: "Bâtiment & bassin",   en: "House & pond" },
     repro: ["lay-rate"],
-    diseases:    ["Grippe aviaire", "Parasites", "Infections"],
-    diseasesEn:  ["Avian flu", "Parasites", "Infections"],
-    alerts: ["Baisse ponte", "Mortalité", "Maladie contagieuse"],
-    alertsEn: ["Lay drop", "Mortality", "Contagious disease"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["batch-id", "count", "age", "house", "lay-rate", "pond"],
     modules: ["health", "eggs", "feed", "finance", "biosec"],
   },
@@ -350,18 +324,15 @@ const SPECIES = [
     frSing: "Dinde",         enSing: "Turkey",
     accent: "var(--autorite-700)",
     accentBg: "var(--autorite-50)",
-    count: 680, sick: 1, mortality: 1.8,
     countingUnit: "lot",
     productPrimary: "growth",
     productLabel:  { fr: "Poids moyen · kg",   en: "Avg weight · kg" },
-    productValue:  "9,4",  productUnit: "kg",
-    productTrend:  [7.2, 7.5, 7.8, 8.1, 8.4, 8.6, 8.9, 9.0, 9.1, 9.2, 9.3, 9.4],
     housingLabel:  { fr: "Bâtiment & lot",   en: "House & batch" },
     repro: [],
-    diseases:    ["Parasites", "Maladie respiratoire"],
-    diseasesEn:  ["Parasites", "Respiratory disease"],
-    alerts: ["Croissance lente", "Mortalité anormale"],
-    alertsEn: ["Slow growth", "Abnormal mortality"],
+    diseases: [],
+    diseasesEn: [],
+    alerts: [],
+    alertsEn: [],
     fields: ["batch-id", "count", "age", "house", "weight-avg", "fcr"],
     modules: ["health", "growth", "feed", "finance", "biosec"],
   },
@@ -370,107 +341,15 @@ const SPECIES = [
 const speciesById = (id) => SPECIES.find((s) => s.id === id);
 
 // ─── Aggregate totals (computed) ─────────────────────────────────────────
-const TOTALS = SPECIES.reduce((acc, s) => ({
-  count: acc.count + s.count,
-  sick: acc.sick + s.sick,
-  mortality: acc.mortality + s.mortality,
-  speciesCount: acc.speciesCount + 1,
-}), { count: 0, sick: 0, mortality: 0, speciesCount: 0 });
-
-// ─── Sample animals (representative across species) ──────────────────────
-const ANIMALS = [
-  // Cows
-  { id: "BQ-2024-0118", glyph: "cow", species: "cow", name: "Marguerite", race: "Holstein", sex: "F", dob: "2021-03-14", weight: 612, lot: "Lot A", barn: "Étable 1", status: "healthy", milk: 32.4, repro: "Gestante · 162 j", lastEvent: "Insémination · 14 déc." },
-  { id: "BQ-2024-0119", glyph: "cow", species: "cow", name: "Clémence", race: "Holstein", sex: "F", dob: "2020-07-22", weight: 658, lot: "Lot A", barn: "Étable 1", status: "treatment", milk: 18.2, repro: "Lactante 4", lastEvent: "Traitement mammite · J+2", withdrawal: { until: "2026-06-04", kind: "milk", med: "Mastijet Fort" } },
-  { id: "BQ-2024-0120", glyph: "cow", species: "cow", name: "Aurore", race: "Jersey", sex: "F", dob: "2022-01-11", weight: 480, lot: "Lot B", barn: "Étable 1", status: "healthy", milk: 24.1, repro: "Tarie", lastEvent: "Tarissement · 18 mai" },
-  { id: "BQ-2024-0121", glyph: "cow", species: "cow", name: "Pivoine", race: "Jersey", sex: "F", dob: "2019-04-02", weight: 502, lot: "Lot B", barn: "Étable 2", status: "alert", milk: 14.0, repro: "Chaleur détectée", lastEvent: "↓ Lait depuis 3 j", alert: "Baisse lait" },
-  // Pigs
-  { id: "PR-2026-A032", glyph: "pig", species: "pig", name: "Truie #A032", race: "Large White", sex: "F", dob: "2023-09-01", weight: 245, lot: "Maternité 3", barn: "Salle 3", status: "healthy", repro: "Gestante · 98 j", lastEvent: "IA · 18 fév." },
-  { id: "PR-2026-A077", glyph: "pig", species: "pig", name: "Lot Engr. 77", race: "Duroc × LW", sex: "Mixte", dob: "2025-12-10", weight: 68, lot: "Engr. 77", barn: "Salle 6", status: "treatment", lastEvent: "Antibio collectif · J+4", withdrawal: { until: "2026-06-12", kind: "meat", med: "Tylan 200" } },
-  // Chickens
-  { id: "AV-2026-L14", glyph: "chicken", species: "chicken", name: "Lot Pondeuses 14", race: "Lohmann Brown", sex: "F", dob: "2025-08-04", weight: 2.0, lot: "Lot 14", barn: "Bâtiment B2", status: "healthy", lastEvent: "Taux ponte 92 %" },
-  { id: "AV-2026-L09", glyph: "chicken", species: "chicken", name: "Lot Chair 09", race: "Ross 308", sex: "Mixte", dob: "2026-04-22", weight: 1.4, lot: "Lot 09", barn: "Bâtiment B1", status: "alert", lastEvent: "Température 28 °C · alerte", alert: "Température élevée" },
-  // Fish
-  { id: "AQ-B-04", glyph: "fish", species: "fish", name: "Bassin Truite 04", race: "Truite arc-en-ciel", sex: "Mixte", dob: "2025-10-01", weight: 420, lot: "Bassin 4", barn: "Circuit A", status: "alert", lastEvent: "O₂ à 6,1 mg/L", alert: "Oxygène faible" },
-  { id: "AQ-B-07", glyph: "fish", species: "fish", name: "Bassin Tilapia 07", race: "Tilapia du Nil", sex: "Mixte", dob: "2026-01-15", weight: 280, lot: "Bassin 7", barn: "Circuit B", status: "healthy", lastEvent: "Croissance +3,2 %" },
-  // Goats
-  { id: "CP-2024-066", glyph: "goat", species: "goat", name: "Câline", race: "Saanen", sex: "F", dob: "2022-05-11", weight: 64, lot: "Pâturage Nord", barn: "Bâtiment C", status: "healthy", milk: 3.4, repro: "Lactante 2", lastEvent: "Pesée · 18 mai" },
-  // Sheep
-  { id: "OV-2025-211", glyph: "sheep", species: "sheep", name: "Lot Mérinos 211", race: "Mérinos", sex: "Mixte", dob: "2024-03-20", weight: 58, lot: "Pâturage Sud", barn: "Bergerie", status: "treatment", lastEvent: "Vermifuge · J+6" },
-  // Rabbits
-  { id: "LP-2026-019", glyph: "rabbit", species: "rabbit", name: "Mère #019", race: "Néo-Zélandais", sex: "F", dob: "2024-11-12", weight: 4.6, lot: "Rangée 2", barn: "Cuniculerie", status: "healthy", repro: "Portée · 14 lapereaux", lastEvent: "Mise bas · 22 mai" },
-  // Ducks
-  { id: "CN-2026-L05", glyph: "duck", species: "duck", name: "Lot Pékin 05", race: "Canard de Pékin", sex: "Mixte", dob: "2025-09-04", weight: 3.1, lot: "Lot 05", barn: "Bâtiment D", status: "healthy", lastEvent: "Ponte 88 %" },
-  // Turkey
-  { id: "DI-2026-L02", glyph: "turkey", species: "turkey", name: "Lot Dindon 02", race: "Bronze des Prés", sex: "Mixte", dob: "2026-02-01", weight: 9.4, lot: "Lot 02", barn: "Bâtiment E", status: "healthy", lastEvent: "GMQ 92 g/j" },
-];
-
-// ─── Critical alerts (cross-species) ─────────────────────────────────────
-const ALERTS = [
-  { id: 1, kind: "withdrawal", severity: "critical", animal: "Clémence", animalId: "BQ-2024-0119", species: "cow", title: "Délai de retrait · lait", subtitle: "Mastijet Fort · 9 jours restants · vente bloquée", date: "Il y a 4 h", icon: "shield" },
-  { id: 2, kind: "disease",    severity: "high",     animal: "Lot Engr. 77", animalId: "PR-2026-A077", species: "pig", title: "PRRS suspecté · Salle 6", subtitle: "Toux & température sur 14 porcs · isolement recommandé", date: "Il y a 6 h", icon: "alert" },
-  { id: 3, kind: "env",        severity: "high",     animal: "Bassin Truite 04", animalId: "AQ-B-04", species: "fish", title: "Oxygène faible · 6,1 mg/L", subtitle: "Seuil 7,0 · oxygénation auto déclenchée", date: "Il y a 32 min", icon: "drop2" },
-  { id: 4, kind: "env",        severity: "high",     animal: "Bâtiment B1", animalId: "AV-2026-L09", species: "chicken", title: "Température 28 °C", subtitle: "Lot Chair 09 · ventilation +20 %", date: "Il y a 1 h", icon: "thermometer" },
-  { id: 5, kind: "vaccine",    severity: "medium",   animal: "Lot Mérinos 211", animalId: "OV-2025-211", species: "sheep", title: "Vaccin clavelée · retard 4 j", subtitle: "318 moutons · rappel à programmer", date: "Hier", icon: "syringe" },
-  { id: 6, kind: "prod",       severity: "medium",   animal: "Pivoine", animalId: "BQ-2024-0121", species: "cow", title: "Baisse lait · 30 %", subtitle: "14 L/j vs moyenne 22 L/j · 3 jours", date: "Il y a 2 j", icon: "chart" },
-];
-
-// ─── Treatments ──────────────────────────────────────────────────────────
-const TREATMENTS = [
-  { id: "T-1042", species: "cow",      animal: "Clémence",       med: "Mastijet Fort", reason: "Mammite quartier AG", dosage: "1 inj./quartier", route: "Intra-mammaire", start: "2026-05-22", end: "2026-05-25", vet: "Dr. Boucher", status: "running", withdrawal: { milk: 9, meat: 28 } },
-  { id: "T-1043", species: "pig",      animal: "Lot Engr. 77",   med: "Tylan 200",     reason: "Toux respiratoire", dosage: "10 mg/kg",      route: "Eau de boisson",  start: "2026-05-20", end: "2026-05-25", vet: "Dr. Lavoie",  status: "running", withdrawal: { meat: 14 } },
-  { id: "T-1044", species: "sheep",    animal: "Lot Mérinos 211", med: "Ivermectine",  reason: "Parasites internes", dosage: "0,2 mg/kg",     route: "Sous-cutanée",    start: "2026-05-18", end: "2026-05-18", vet: "Dr. Boucher", status: "completed", withdrawal: { meat: 28 } },
-  { id: "T-1045", species: "chicken",  animal: "Lot Pondeuses 14", med: "Coccivac-D", reason: "Prévention coccidiose", dosage: "1 dose",      route: "Eau de boisson",  start: "2026-05-15", end: "2026-05-15", vet: "Dr. Lavoie",  status: "completed", withdrawal: { eggs: 0 } },
-  { id: "T-1046", species: "fish",     animal: "Bassin Truite 04", med: "Sel de mer", reason: "Parasites externes", dosage: "5 g/L · 30 min", route: "Bassin",         start: "2026-05-23", end: "2026-05-23", vet: "Dr. Tremblay",status: "completed", withdrawal: { meat: 0 } },
-];
-
-// ─── Vaccines (calendar) ─────────────────────────────────────────────────
-const VACCINES = [
-  { id: "V-001", species: "cow",     vaccine: "IBR/BVD",            target: "Génisses 6-9 mois", due: "2026-06-02", n: 18, status: "due-soon" },
-  { id: "V-002", species: "cow",     vaccine: "Mammite (J5)",       target: "Vaches taries",     due: "2026-05-30", n:  6, status: "scheduled" },
-  { id: "V-003", species: "pig",     vaccine: "Mycoplasme",         target: "Porcelets sevrés",  due: "2026-05-27", n: 124, status: "scheduled" },
-  { id: "V-004", species: "pig",     vaccine: "Circovirus",         target: "Lot Engr. 77",      due: "2026-05-26", n: 198, status: "today" },
-  { id: "V-005", species: "chicken", vaccine: "Newcastle",          target: "Lot Chair 09",      due: "2026-05-26", n: 4200, status: "today" },
-  { id: "V-006", species: "chicken", vaccine: "Bronchite infect.",  target: "Lot Pondeuses 14",  due: "2026-06-08", n: 3800, status: "scheduled" },
-  { id: "V-007", species: "sheep",   vaccine: "Clavelée",           target: "Lot Mérinos 211",   due: "2026-05-22", n:  318, status: "overdue" },
-  { id: "V-008", species: "duck",    vaccine: "Grippe aviaire H5",  target: "Lot Pékin 05",      due: "2026-06-14", n:  920, status: "scheduled" },
-  { id: "V-009", species: "goat",    vaccine: "Entérotoxémie",      target: "Cheptel complet",   due: "2026-06-22", n:  142, status: "scheduled" },
-  { id: "V-010", species: "rabbit",  vaccine: "VHD",                target: "Reproductrices",    due: "2026-06-05", n:   86, status: "scheduled" },
-];
-
-// ─── Stock ──────────────────────────────────────────────────────────────
-const STOCK = [
-  { id: "F-001", kind: "feed", name: "Granulé vache laitière 18 %",  qty: 4820, unit: "kg", min: 1500, supplier: "Coop Agri-Pro",  expiry: "2026-09-12", species: ["cow", "goat"] },
-  { id: "F-002", kind: "feed", name: "Aliment porc engraissement",   qty:  120, unit: "kg", min:  500, supplier: "Meunerie Tremblay", expiry: "2026-08-04", species: ["pig"], lowStock: true },
-  { id: "F-003", kind: "feed", name: "Aliment ponte poule",          qty: 2410, unit: "kg", min:  800, supplier: "Coop Agri-Pro",  expiry: "2026-07-22", species: ["chicken", "duck"] },
-  { id: "F-004", kind: "feed", name: "Granulé truite 4 mm",          qty:  640, unit: "kg", min:  200, supplier: "Skretting",      expiry: "2026-10-30", species: ["fish"] },
-  { id: "F-005", kind: "feed", name: "Foin sec 1ʳᵉ coupe",           qty:   72, unit: "balles", min: 30, supplier: "Ferme Lapierre", expiry: "—", species: ["cow", "goat", "sheep"] },
-  { id: "M-001", kind: "med", name: "Mastijet Fort",         qty:  18, unit: "tubes", min:  10, supplier: "Vétoquinol", expiry: "2027-03-01", species: ["cow", "goat"] },
-  { id: "M-002", kind: "med", name: "Tylan 200 (injectable)",qty:   4, unit: "fl.",    min:  6, supplier: "Elanco",     expiry: "2026-08-12", species: ["pig"], lowStock: true },
-  { id: "M-003", kind: "med", name: "Ivermectine pour-on",   qty:  12, unit: "L",      min:  4, supplier: "Boehringer", expiry: "2027-06-04", species: ["cow", "sheep", "goat"] },
-  { id: "M-004", kind: "med", name: "Coccivac-D",            qty: 240, unit: "doses",  min: 100, supplier: "MSD",        expiry: "2026-12-01", species: ["chicken"] },
-  { id: "M-005", kind: "med", name: "Sel de mer aquaculture",qty:  80, unit: "kg",     min: 20, supplier: "Aquatech",    expiry: "—",           species: ["fish"] },
-];
-
-// ─── Finance series ──────────────────────────────────────────────────────
-const FINANCE = {
-  revenue: [42, 48, 51, 56, 62, 68, 72, 78, 81, 85, 89, 94], // k$ /month
-  expense: [28, 31, 33, 36, 39, 42, 44, 47, 49, 51, 53, 55],
-  byCategory: [
-    { cat: "Lait",        amount: 41200, fr: "Lait",        en: "Milk",     color: "var(--pertinence-500)" },
-    { cat: "Œufs",        amount: 28400, fr: "Œufs",        en: "Eggs",     color: "var(--autorite-500)" },
-    { cat: "Viande porc", amount: 18900, fr: "Viande porc", en: "Pork",     color: "var(--oxblood-500)" },
-    { cat: "Poisson",     amount:  4200, fr: "Poisson",     en: "Fish",     color: "var(--pertinence-300)" },
-    { cat: "Laine",       amount:  1300, fr: "Laine",       en: "Wool",     color: "var(--solidite-500)" },
-  ],
-};
-
-// ─── AI Insights / next actions ─────────────────────────────────────────
-const AI_INSIGHTS = [
-  { id: 1, kind: "predict",  icon: "sparkle",    confidence: 87, fr: "Risque de mammite élevé sur 4 vaches Holstein la semaine prochaine — basé sur baisse rumination + conductivité lait.", en: "High mastitis risk for 4 Holstein cows next week — based on rumination drop + milk conductivity.", action: "Voir les vaches concernées" },
-  { id: 2, kind: "feed",     icon: "wheat",      confidence: 92, fr: "Le stock d'aliment porc engraissement sera épuisé dans 3 jours au rythme actuel. Commande recommandée : 1 200 kg.", en: "Pig finishing feed will run out in 3 days at current rate. Recommended order: 1,200 kg.", action: "Lancer la commande" },
-  { id: 3, kind: "repro",    icon: "calendar",   confidence: 81, fr: "12 vaches en chaleur détectées entre le 27 et le 31 mai. Planifier l'inséminateur sur 2 jours consécutifs.", en: "12 cows in heat detected May 27–31. Schedule inseminator for 2 consecutive days.", action: "Planifier" },
-  { id: 4, kind: "anomaly",  icon: "pulse",      confidence: 76, fr: "Anomalie de ponte sur Lot Pondeuses 14 : –4 % vs prévision. Probable lien à la température +2 °C la nuit.", en: "Lay anomaly on Layer Lot 14: −4% vs forecast. Likely linked to nighttime +2 °C.", action: "Voir l'analyse" },
-];
+// Business data must come from the FarmOS API/DB. These exports stay empty so
+// legacy imports fail closed instead of rendering sample farm records.
+const TOTALS = { count: 0, sick: 0, mortality: 0, speciesCount: SPECIES.length };
+const ANIMALS = [];
+const ALERTS = [];
+const TREATMENTS = [];
+const VACCINES = [];
+const STOCK = [];
+const FINANCE = { revenue: [], expense: [], byCategory: [] };
+const AI_INSIGHTS = [];
 
 export { I18N, t, SPECIES, speciesById, TOTALS, ANIMALS, ALERTS, TREATMENTS, VACCINES, STOCK, FINANCE, AI_INSIGHTS };
