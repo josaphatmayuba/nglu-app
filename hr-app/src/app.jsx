@@ -171,6 +171,10 @@ function exportCsv(filename, headers, rows) {
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username || u.email || `Employé #${u.id}`;
 const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
+const toNum = (v) => v === "" || v == null ? undefined : Number(v);
+function cleanPayload(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== ""));
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -183,144 +187,37 @@ function useIsMobile() {
   return m;
 }
 
+const TODAY = new Date().toISOString().slice(0, 10);
 const ACTION_FORMS = {
-  contract: {
-    title: "Nouveau contrat",
-    submit: "Créer le contrat",
-    success: "Contrat créé dans le registre RH.",
-    fields: [
-      { key: "employee", label: "Employé", required: true },
-      { key: "type", label: "Type", type: "select", options: ["CDI", "CDD", "Consultance", "Stage"] },
-      { key: "startDate", label: "Début", type: "date", required: true },
-      { key: "endDate", label: "Fin", type: "date" },
-      { key: "comment", label: "Commentaire", type: "textarea" },
-    ],
-    defaults: { employee: "", type: "CDD", startDate: new Date().toISOString().slice(0, 10), endDate: "", comment: "" },
-  },
-  uploadDocument: {
-    title: "Téléverser un document",
-    submit: "Ajouter au dossier",
-    success: "Document ajouté au dossier RH.",
-    fields: [
-      { key: "employee", label: "Employé", required: true },
-      { key: "documentType", label: "Type de document", type: "select", options: ["Contrat signé", "Pièce ID", "Diplôme", "Carte CNSS", "Code conduite (PSEA)", "Autre"] },
-      { key: "reference", label: "Référence fichier" },
-      { key: "note", label: "Note", type: "textarea" },
-    ],
-    defaults: { employee: "", documentType: "Contrat signé", reference: "", note: "" },
-  },
-  leaveRequest: {
-    title: "Nouvelle demande de congé",
-    submit: "Soumettre la demande",
-    success: "Demande de congé soumise.",
-    fields: [
-      { key: "employee", label: "Employé", required: true },
-      { key: "type", label: "Type", type: "select", options: ["Congé annuel", "Maladie", "Mission", "Maternité", "Sans solde"] },
-      { key: "startDate", label: "Début", type: "date", required: true },
-      { key: "endDate", label: "Fin", type: "date", required: true },
-      { key: "reason", label: "Motif", type: "textarea" },
-    ],
-    defaults: { employee: "", type: "Congé annuel", startDate: new Date().toISOString().slice(0, 10), endDate: new Date().toISOString().slice(0, 10), reason: "" },
-  },
-  payroll: {
-    title: "Lancer la paie",
-    submit: "Valider la paie",
-    success: "Paie lancée pour la période sélectionnée.",
-    fields: [
-      { key: "period", label: "Période", required: true },
-      { key: "paymentDate", label: "Date de paiement", type: "date", required: true },
-      { key: "method", label: "Mode de paiement", type: "select", options: ["Mobile money", "Virement", "Mixte"] },
-      { key: "note", label: "Note de validation", type: "textarea" },
-    ],
-    defaults: { period: "Juin 2026", paymentDate: "2026-06-30", method: "Mixte", note: "" },
-  },
-  salaryGrid: {
-    title: "Modifier la grille salariale",
-    submit: "Enregistrer la grille",
-    success: "Grille salariale enregistrée.",
-    fields: [
-      { key: "role", label: "Poste / échelon", required: true },
-      { key: "base", label: "Salaire de base", type: "number", required: true },
-      { key: "allowance", label: "Indemnités", type: "number" },
-      { key: "note", label: "Note", type: "textarea" },
-    ],
-    defaults: { role: "", base: 0, allowance: 0, note: "" },
-  },
-  expense: {
-    title: "Nouvelle demande de frais",
-    submit: "Soumettre les frais",
-    success: "Demande de frais envoyée en validation.",
-    fields: [
-      { key: "employee", label: "Employé", required: true },
-      { key: "type", label: "Type", type: "select", options: ["Transport", "Mission", "Achat terrain", "Avance", "Autre"] },
-      { key: "amount", label: "Montant", type: "number", required: true },
-      { key: "date", label: "Date", type: "date", required: true },
-      { key: "description", label: "Description", type: "textarea" },
-    ],
-    defaults: { employee: "", type: "Transport", amount: 0, date: new Date().toISOString().slice(0, 10), description: "" },
-  },
-  declarations: {
-    title: "Préparer les bordereaux",
-    submit: "Préparer",
-    success: "Bordereaux sociaux préparés.",
-    fields: [
-      { key: "period", label: "Période", required: true },
-      { key: "organism", label: "Organisme", type: "select", options: ["CNSS", "INPP", "ONEM", "DGI / IPR", "Tous"] },
-      { key: "dueDate", label: "Échéance", type: "date" },
-      { key: "note", label: "Note", type: "textarea" },
-    ],
-    defaults: { period: "Juin 2026", organism: "Tous", dueDate: "2026-07-15", note: "" },
-  },
-  evaluation: {
-    title: "Nouvelle évaluation",
-    submit: "Créer l'évaluation",
-    success: "Évaluation créée en brouillon.",
-    fields: [
-      { key: "employee", label: "Employé", required: true },
-      { key: "cycle", label: "Cycle", required: true },
-      { key: "manager", label: "Manager" },
-      { key: "objectives", label: "Objectifs", type: "textarea" },
-    ],
-    defaults: { employee: "", cycle: "S1 2026", manager: "", objectives: "" },
-  },
-  training: {
-    title: "Nouvelle session de formation",
-    submit: "Planifier",
-    success: "Session de formation planifiée.",
-    fields: [
-      { key: "title", label: "Formation", required: true },
-      { key: "audience", label: "Public cible" },
-      { key: "date", label: "Date", type: "date", required: true },
-      { key: "budget", label: "Budget", type: "number" },
-    ],
-    defaults: { title: "", audience: "Tous les agents", date: new Date().toISOString().slice(0, 10), budget: 0 },
-  },
-  jobOffer: {
-    title: "Nouvelle offre",
-    submit: "Publier l'offre",
-    success: "Offre ajoutée au pipeline recrutement.",
-    fields: [
-      { key: "role", label: "Poste", required: true },
-      { key: "department", label: "Département" },
-      { key: "deadline", label: "Date limite", type: "date" },
-      { key: "description", label: "Description", type: "textarea" },
-    ],
-    defaults: { role: "", department: "Programmes & terrain", deadline: "", description: "" },
-  },
-  selfService: {
-    title: "Demande self-service",
-    submit: "Envoyer",
-    success: "Demande transmise au service RH.",
-    fields: [
-      { key: "request", label: "Demande", required: true },
-      { key: "details", label: "Détails", type: "textarea" },
-    ],
-    defaults: { request: "", details: "" },
-  },
+  designation: { title: "Nouveau poste", submit: "Créer", success: "Poste créé dans la base.", defaults: { name: "" } },
+  shift: { title: "Nouvel horaire", submit: "Créer", success: "Horaire créé dans la base.", defaults: { name: "", startTime: "08:00", endTime: "17:00" } },
+  award: { title: "Nouvelle récompense", submit: "Créer", success: "Récompense créée dans la base.", defaults: { name: "", description: "" } },
+  designationHistory: { title: "Affecter un poste", submit: "Enregistrer", success: "Historique de poste enregistré.", defaults: { userId: "", designationId: "", designationStartDate: new Date().toISOString().slice(0, 10), designationEndDate: "", designationComment: "" } },
+  salary: { title: "Nouveau salaire", submit: "Enregistrer", success: "Salaire enregistré dans l'historique.", defaults: { userId: "", salary: 0, salaryStartDate: new Date().toISOString().slice(0, 10), salaryEndDate: "", salaryComment: "", paymentAccountId: 2, currencyId: "" } },
+  awardHistory: { title: "Attribuer une récompense", submit: "Enregistrer", success: "Récompense attribuée dans l'historique.", defaults: { userId: "", awardId: "", awardedDate: new Date().toISOString().slice(0, 10), comment: "" } },
+  closeAccount: { title: "Fermer le compte", submit: "Confirmer", success: "Compte employé désactivé.", defaults: { userId: "", reason: "Démission", note: "" } },
 };
-const API_MUTATION_KINDS = new Set(["designation", "shift", "award", "salary"]);
 
 /* ── Petits composants réutilisables ───────────────────────────────────── */
+Object.assign(ACTION_FORMS, {
+  employee: { title: "Nouvel employÃ©", submit: "CrÃ©er", success: "EmployÃ© crÃ©Ã© dans la base.", defaults: { firstName: "", lastName: "", username: "", password: "ChangeMe123!", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "" }, fields: [{ key: "firstName", label: "PrÃ©nom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "password", label: "Mot de passe initial", type: "password", required: true }, { key: "roleId", label: "RÃ´le", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "TÃ©lÃ©phone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }] },
+  designation: { title: "Nouveau poste", submit: "CrÃ©er", success: "Poste crÃ©Ã© dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du poste", required: true }] },
+  shift: { title: "Nouvel horaire", submit: "CrÃ©er", success: "Horaire crÃ©Ã© dans la base.", defaults: { name: "", startTime: "08:00", endTime: "17:00" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "startTime", label: "DÃ©but", type: "time", required: true }, { key: "endTime", label: "Fin", type: "time", required: true }] },
+  award: { title: "Nouvelle rÃ©compense", submit: "CrÃ©er", success: "RÃ©compense crÃ©Ã©e dans la base.", defaults: { name: "", description: "" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "description", label: "Description", type: "textarea" }] },
+  designationHistory: { title: "Affecter un poste", submit: "Enregistrer", success: "Historique de poste enregistrÃ©.", defaults: { userId: "", designationId: "", designationStartDate: TODAY, designationEndDate: "", designationComment: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations", required: true }, { key: "designationStartDate", label: "DÃ©but", type: "date" }, { key: "designationEndDate", label: "Fin", type: "date" }, { key: "designationComment", label: "Commentaire", type: "textarea" }] },
+  salary: { title: "Nouveau salaire", submit: "Enregistrer", success: "Salaire enregistrÃ© dans l'historique.", defaults: { userId: "", salary: 0, salaryStartDate: TODAY, salaryEndDate: "", salaryComment: "", paymentAccountId: 2, currencyId: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "salary", label: "Montant", type: "number", required: true }, { key: "currencyId", label: "Devise", type: "select", optionKey: "currencies" }, { key: "salaryStartDate", label: "Date", type: "date", required: true }, { key: "paymentAccountId", label: "Compte crÃ©dit", type: "select", options: [{ value: 2, label: "Banque" }, { value: 1, label: "Caisse" }] }, { key: "salaryComment", label: "Commentaire", type: "textarea" }] },
+  awardHistory: { title: "Attribuer une rÃ©compense", submit: "Enregistrer", success: "RÃ©compense attribuÃ©e dans l'historique.", defaults: { userId: "", awardId: "", awardedDate: TODAY, comment: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "awardId", label: "RÃ©compense", type: "select", optionKey: "awards", required: true }, { key: "awardedDate", label: "Date", type: "date", required: true }, { key: "comment", label: "Commentaire", type: "textarea" }] },
+  closeAccount: { title: "Fermer le compte", submit: "Confirmer", success: "Compte employÃ© dÃ©sactivÃ©.", defaults: { userId: "", reason: "DÃ©mission", note: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "reason", label: "Motif", type: "select", options: ["DÃ©mission", "Fin de contrat", "Licenciement", "DÃ©cÃ¨s", "Autre"], required: true }, { key: "note", label: "Note", type: "textarea" }] },
+  leaveRequest: { title: "Demande de congÃ©", submit: "Soumettre", success: "Demande de congÃ© enregistrÃ©e.", defaults: { userId: "", type: "CongÃ© annuel", startDate: TODAY, endDate: TODAY, reason: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "type", label: "Type", type: "select", options: ["CongÃ© annuel", "Maladie", "MaternitÃ©", "PaternitÃ©", "Mission", "Autre"], required: true }, { key: "startDate", label: "DÃ©but", type: "date", required: true }, { key: "endDate", label: "Fin", type: "date", required: true }, { key: "reason", label: "Motif", type: "textarea" }] },
+  hrContract: { title: "Nouveau contrat RH", submit: "Enregistrer", success: "Contrat RH enregistrÃ©.", defaults: { userId: "", contractType: "CDI", startDate: TODAY, endDate: "", reference: "", notes: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "contractType", label: "Type", type: "select", options: ["CDI", "CDD", "Consultance", "Stage", "Volontariat"], required: true }, { key: "startDate", label: "DÃ©but", type: "date", required: true }, { key: "endDate", label: "Fin", type: "date" }, { key: "reference", label: "RÃ©fÃ©rence" }, { key: "notes", label: "Notes", type: "textarea" }] },
+  hrDocument: { title: "Ajouter un document", submit: "Enregistrer", success: "Document RH enregistrÃ©.", defaults: { userId: "", documentType: "Contrat signÃ©", reference: "", fileUrl: "", note: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "documentType", label: "Type", type: "select", options: ["CV", "PiÃ¨ce ID", "DiplÃ´me", "Contrat signÃ©", "NÂ° CNSS", "Code conduite / PSEA", "Attestation"], required: true }, { key: "reference", label: "RÃ©fÃ©rence" }, { key: "fileUrl", label: "Lien fichier" }, { key: "note", label: "Note", type: "textarea" }] },
+  expenseRequest: { title: "Nouvelle demande de frais", submit: "Soumettre", success: "Demande de frais enregistrÃ©e.", defaults: { userId: "", type: "Remboursement", amount: 0, requestDate: TODAY, description: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "type", label: "Type", type: "select", options: ["Remboursement", "Avance", "Transport", "Mission", "Communication", "Autre"], required: true }, { key: "amount", label: "Montant", type: "number", required: true }, { key: "requestDate", label: "Date", type: "date", required: true }, { key: "description", label: "Description", type: "textarea" }] },
+  socialDeclaration: { title: "DÃ©claration sociale", submit: "PrÃ©parer", success: "DÃ©claration sociale enregistrÃ©e.", defaults: { period: "2026-06", organism: "CNSS", baseAmount: 0, rate: "", amount: 0, dueDate: TODAY, note: "" }, fields: [{ key: "period", label: "PÃ©riode", required: true }, { key: "organism", label: "Organisme", type: "select", options: ["CNSS", "INPP", "ONEM", "DGI / IPR", "Autre"], required: true }, { key: "baseAmount", label: "Base", type: "number" }, { key: "rate", label: "Taux" }, { key: "amount", label: "Montant", type: "number" }, { key: "dueDate", label: "Ã‰chÃ©ance", type: "date" }, { key: "note", label: "Note", type: "textarea" }] },
+  performanceReview: { title: "Nouvelle Ã©valuation", submit: "Enregistrer", success: "Ã‰valuation enregistrÃ©e.", defaults: { userId: "", managerId: "", cycle: "S1 2026", score: "", objectives: "", comments: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "managerId", label: "Manager", type: "select", optionKey: "staff" }, { key: "cycle", label: "Cycle", required: true }, { key: "score", label: "Score / 5", type: "number" }, { key: "objectives", label: "Objectifs", type: "textarea" }, { key: "comments", label: "Commentaires", type: "textarea" }] },
+  trainingSession: { title: "Session de formation", submit: "Planifier", success: "Formation enregistrÃ©e.", defaults: { title: "", audience: "Toute l'Ã©quipe", sessionDate: TODAY, budget: 0, note: "" }, fields: [{ key: "title", label: "Titre", required: true }, { key: "audience", label: "Public" }, { key: "sessionDate", label: "Date", type: "date" }, { key: "budget", label: "Budget", type: "number" }, { key: "note", label: "Note", type: "textarea" }] },
+  recruitmentOffer: { title: "Nouvelle offre", submit: "Publier", success: "Offre de recrutement enregistrÃ©e.", defaults: { role: "", departmentId: "", deadline: TODAY, description: "" }, fields: [{ key: "role", label: "Poste Ã  recruter", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "deadline", label: "Date limite", type: "date" }, { key: "description", label: "Description", type: "textarea" }] },
+});
+
 function KPI({ label, value, sub, subClass = "", icon, tone }) {
   return (
     <div className={`card pad ${tone === "warn" ? "warn" : tone === "danger" ? "danger" : ""}`}>
@@ -370,13 +267,16 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
-  const [actionState, setActionState] = React.useState({ payrollLaunched: false });
   const isMobile = useIsMobile();
 
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
-    Promise.allSettled([api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.setting(), api.currencies()])
-      .then(([overview, shifts, awards, salaries, setting, currencies]) => {
+    Promise.allSettled([
+      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.roles(), api.setting(), api.currencies(),
+      api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
+      api.performanceReviews(), api.trainingSessions(), api.recruitmentOffers()
+    ])
+      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
@@ -387,6 +287,15 @@ function App() {
           shifts: Array.isArray(shifts.value) && shifts.value.length ? shifts.value : fallback.shifts,
           awards: awards.value?.getAllAward || (Array.isArray(awards.value) ? awards.value : null) || fallback.awards,
           salaries: salaries.value?.getAllSalaryHistory || fallback.salaries,
+          roles: roles.value?.getAllRole || (Array.isArray(roles.value) ? roles.value : []),
+          leaveRequests: leaves.value?.getAllHrLeaveRequest || (Array.isArray(leaves.value) ? leaves.value : []) || [],
+          contracts: contracts.value?.getAllHrContract || (Array.isArray(contracts.value) ? contracts.value : []) || [],
+          documents: documents.value?.getAllHrDocument || (Array.isArray(documents.value) ? documents.value : []) || [],
+          expenseRequests: expenses.value?.getAllHrExpenseRequest || (Array.isArray(expenses.value) ? expenses.value : []) || [],
+          socialDeclarations: declarations.value?.getAllHrSocialDeclaration || (Array.isArray(declarations.value) ? declarations.value : []) || [],
+          performanceReviews: reviews.value?.getAllHrPerformanceReview || (Array.isArray(reviews.value) ? reviews.value : []) || [],
+          trainingSessions: trainings.value?.getAllHrTrainingSession || (Array.isArray(trainings.value) ? trainings.value : []) || [],
+          recruitmentOffers: offers.value?.getAllHrRecruitmentOffer || (Array.isArray(offers.value) ? offers.value : []) || [],
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
         setData(next);
@@ -401,69 +310,83 @@ function App() {
   const myRole = me.role || "Ressources humaines";
   const go = (id) => { setRoute(id); setMoreOpen(false); window.scrollTo(0, 0); };
 
-  function saveLocal(kind, form) {
-    const id = Date.now();
-    if (kind === "payroll") setActionState((cur) => ({ ...cur, payrollLaunched: true }));
-    setData((cur) => {
-      if (ACTION_FORMS[kind]) return cur;
-      if (kind === "employee") {
-        const firstName = form.firstName?.trim() || "Nouvel";
-        const lastName = form.lastName?.trim() || "Employé";
-        const departmentName = form.departmentName?.trim() || "Administration & RH";
-        const designationName = form.designationName?.trim() || "Agent";
-        return {
-          ...cur,
-          staff: [
-            ...cur.staff,
-            {
-              id,
-              firstName,
-              lastName,
-              username: `${firstName[0] || "n"}${lastName}`.toLowerCase(),
-              designation: { name: designationName },
-              department: { name: departmentName },
-              currentSalary: Number(form.salary || 0),
-              status: "true",
-            },
-          ],
-          departments: cur.departments.map((d) => d.name === departmentName ? { ...d, count: Number(d.count || 0) + 1 } : d),
-        };
-      }
-      if (kind === "designation") return { ...cur, designations: [...cur.designations, { id, name: form.name }] };
-      if (kind === "shift") return { ...cur, shifts: [...cur.shifts, { id, name: form.name, startTime: form.startTime, endTime: form.endTime, workHour: 8 }] };
-      if (kind === "award") return { ...cur, awards: [...cur.awards, { id, name: form.name, description: form.description || "" }] };
-      if (kind === "salary") {
-        const salary = Number(form.salary || 0);
-        return {
-          ...cur,
-          salaries: [{ id, userId: Number(form.userId), salary, startDate: form.salaryStartDate, comment: form.salaryComment || "Paie RH" }, ...cur.salaries],
-          staff: cur.staff.map((u) => Number(u.id) === Number(form.userId) ? { ...u, currentSalary: salary } : u),
-        };
-      }
-      return cur;
-    });
-    setModal(null);
-    notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistré en mode local.`);
-  }
-
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      if (apiStatus === "api" && API_MUTATION_KINDS.has(kind)) {
-        if (kind === "designation") await api.createDesignation({ name: form.name });
-        if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
-        if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
-        if (kind === "salary") await api.createSalary({
-          userId: Number(form.userId), salary: Number(form.salary), salaryStartDate: form.salaryStartDate,
-          salaryComment: form.salaryComment || null, paymentAccountId: Number(form.paymentAccountId || 2),
-        });
-        setModal(null); load(); notify(`${titleFor(kind)} enregistré avec l'API.`);
-      } else {
-        saveLocal(kind, form);
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "recruitmentOffer"];
+      if (hrApiKinds.includes(kind)) {
+        if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
+        if (kind === "hrContract") await api.createHrContract(cleanPayload({ userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null, reference: form.reference || null, notes: form.notes || null }));
+        if (kind === "hrDocument") await api.createHrDocument(cleanPayload({ userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null, fileUrl: form.fileUrl || null, note: form.note || null }));
+        if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({ userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), requestDate: form.requestDate, description: form.description || null }));
+        if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), dueDate: form.dueDate || null, note: form.note || null }));
+        if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
+        if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), note: form.note || null }));
+        if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
+        setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
+        return;
       }
-    } catch {
-      saveLocal(kind, form);
-      notify("API dev indisponible, action conservée localement.");
+      if (kind === "employee") {
+        await api.createUser(cleanPayload({
+          firstName: form.firstName, lastName: form.lastName, username: form.username, password: form.password,
+          roleId: Number(form.roleId), email: form.email, phone: form.phone, departmentId: toNum(form.departmentId),
+          designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
+          bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
+          state: form.state, zipCode: form.zipCode, country: form.country,
+        }));
+      }
+      if (kind === "designation") await api.createDesignation({ name: form.name });
+      if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
+      if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
+      if (kind === "designationHistory") await api.createDesignationHistory(cleanPayload({
+        userId: Number(form.userId), designationId: Number(form.designationId), designationStartDate: form.designationStartDate,
+        designationEndDate: form.designationEndDate || null, designationComment: form.designationComment || null,
+      }));
+      if (kind === "salary") await api.createSalary(cleanPayload({
+        userId: Number(form.userId), salary: Number(form.salary), salaryStartDate: form.salaryStartDate,
+        salaryEndDate: form.salaryEndDate || null, salaryComment: form.salaryComment || null,
+        paymentAccountId: Number(form.paymentAccountId || 2), currencyId: toNum(form.currencyId),
+      }));
+      if (kind === "awardHistory") await api.createAwardHistory(cleanPayload({
+        userId: Number(form.userId), awardId: Number(form.awardId), awardedDate: form.awardedDate, comment: form.comment || null,
+      }));
+      if (kind === "closeAccount") {
+        const leaveReason = form.note?.trim() ? `${form.reason} — ${form.note.trim()}` : form.reason;
+        await api.updateUser(Number(form.userId), { status: "false", leaveDate: new Date().toISOString().slice(0, 10), leaveReason });
+      }
+      setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistré avec l'API.`);
+      if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({
+        userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null,
+      }));
+      if (kind === "hrContract") await api.createHrContract(cleanPayload({
+        userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null,
+        reference: form.reference || null, notes: form.notes || null,
+      }));
+      if (kind === "hrDocument") await api.createHrDocument(cleanPayload({
+        userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null,
+        fileUrl: form.fileUrl || null, note: form.note || null,
+      }));
+      if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({
+        userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), requestDate: form.requestDate,
+        description: form.description || null,
+      }));
+      if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({
+        period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null,
+        amount: Number(form.amount || 0), dueDate: form.dueDate || null, note: form.note || null,
+      }));
+      if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({
+        userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle,
+        score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null,
+      }));
+      if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({
+        title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null,
+        budget: Number(form.budget || 0), note: form.note || null,
+      }));
+      if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({
+        role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null,
+      }));
+    } catch (err) {
+      setError(err.message || String(err));
     }
     finally { setBusy(false); }
   }
@@ -481,13 +404,13 @@ function App() {
     presences: <Presences staff={staff} />,
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet />,
-    paie: <Paie staff={staff} masse={masse} launched={actionState.payrollLaunched} setModal={setModal} />,
+    paie: <Paie staff={staff} masse={masse} setModal={setModal} />,
     remuneration: <Remuneration masse={masse} setModal={setModal} />,
-    frais: <Frais setModal={setModal} />,
-    declarations: <Declarations setModal={setModal} />,
-    performance: <Performance setModal={setModal} />,
-    formation: <Formation setModal={setModal} />,
-    recrutement: <Recrutement setModal={setModal} />,
+    frais: <Frais {...ctx} />,
+    declarations: <Declarations {...ctx} />,
+    performance: <Performance {...ctx} />,
+    formation: <Formation {...ctx} />,
+    recrutement: <Recrutement {...ctx} />,
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
     reporting: <Reporting />,
     selfservice: <SelfService setModal={setModal} />,
@@ -561,7 +484,7 @@ function App() {
         </div>
       )}
 
-      {modal && <RecordModal modal={modal} staff={staff} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      {modal && <RecordModal modal={modal} data={data} staff={staff} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
       <Toaster />
       <AiAssistant />
     </div>
@@ -733,7 +656,7 @@ function Presences() {
 function Conges({ setModal }) {
   const [requests, setRequests] = React.useState(fbConges);
   const addRequest = () => {
-    setModal({ kind: "leaveRequest" });
+    return setModal({ kind: "leaveRequest" });
   };
   const decide = (index, accepted) => {
     const req = requests[index];
@@ -784,19 +707,16 @@ function Conges({ setModal }) {
 }
 
 /* ── Paie ──────────────────────────────────────────────────────────────── */
-function Paie({ staff, masse, launched, setModal }) {
+function Paie({ staff, masse, setModal }) {
   const net = Math.round(masse * 0.85);
   const exportBulletins = () => exportCsv(
     "bulletins-juin-2026.csv",
     ["Employé", "Poste", `Brut (${CUR})`, `Retenues (${CUR})`, `Net (${CUR})`, "Statut"],
     staff.map((u) => { const brut = Number(u.currentSalary || 0); const ret = Math.round(brut * 0.15); return [fullName(u), u.designation?.name || "", brut, ret, brut - ret, "En attente"]; })
   );
-  const launchPayroll = () => {
-    setModal({ kind: "payroll" });
-  };
   return (
     <>
-      <PageHead eyebrow="Période · juin 2026" title="Paie" action={launched ? "Paie lancée" : "Lancer la paie"} actionIcon={launched ? "checkCircle" : "play"} onAction={launchPayroll} ghost={launched} />
+      <PageHead eyebrow="Historique DB" title="Paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
       <div className="banner grad-accent">
         <div>
           <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="wallet" /> Net à payer · juin</div>
@@ -809,8 +729,8 @@ function Paie({ staff, masse, launched, setModal }) {
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Bulletins" value={staff.length} />
-        <Mini label="Validés" value={launched ? staff.length : 0} valueClass="" />
-        <KPI label="En attente" value={launched ? 0 : staff.length} tone={launched ? undefined : "warn"} />
+        <Mini label="Historique salaires" value={staff.length} valueClass="" />
+        <KPI label="À vérifier" value={staff.length} tone="warn" />
         <Mini label="Via mobile money" value={Math.round(staff.length * 0.74)} />
       </div>
       <div className="card pad table-card">
@@ -828,7 +748,7 @@ function Paie({ staff, masse, launched, setModal }) {
                     <td className="r num">{nf.format(brut)}</td>
                     <td className="r num muted">{nf.format(ret)}</td>
                     <td className="r num" style={{ fontWeight: 600 }}>{nf.format(brut - ret)}</td>
-                    <td className="r"><span className={`chip ${launched ? "emerald" : "amber"}`}>{launched ? "Validé" : "En attente"}</span></td>
+                    <td className="r"><span className="chip amber">Historique</span></td>
                   </tr>
                 );
               })}
@@ -848,7 +768,7 @@ function Contrats({ setModal }) {
   const exportContrats = () => exportCsv("contrats.csv", ["Employé", "Type", "Début", "Fin", "Statut"], filtered.map((c) => [c.name, c.type, c.start, c.end, c.status]));
   return (
     <>
-      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => setModal({ kind: "contract" })} />
+      <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => setModal({ kind: "hrContract" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Total contrats" value="42" />
         <Mini label="CDI" value="31" />
@@ -888,7 +808,7 @@ function Dossiers({ setModal }) {
   const keys = ["cv", "id", "dip", "ctr", "cnss", "psea"];
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => setModal({ kind: "uploadDocument" })} ghost />
+      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Téléverser" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Dossiers complets" value="35" valueClass="" />
         <KPI label="Incomplets" value="7" tone="warn" />
@@ -946,7 +866,7 @@ function Timesheet() {
 function Remuneration({ masse, setModal }) {
   return (
     <>
-      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Modifier la grille" actionIcon="settings" onAction={() => setModal({ kind: "salaryGrid" })} />
+      <PageHead eyebrow="Grille & primes" title="Rémunération" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Masse salariale / mois" value={fcM(masse)} />
         <Mini label="Prime transport (total)" value="2,1 M FC" />
@@ -972,7 +892,7 @@ function Remuneration({ masse, setModal }) {
 function Frais({ setModal }) {
   return (
     <>
-      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => setModal({ kind: "expense" })} />
+      <PageHead eyebrow="Remboursements & acomptes" title="Frais & avances" action="Nouvelle demande" onAction={() => setModal({ kind: "expenseRequest" })} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <KPI label="À rembourser / valider" value="3" tone="warn" />
         <Mini label="Avances en cours" value="1,2 M FC" />
@@ -999,7 +919,7 @@ function Frais({ setModal }) {
 function Declarations({ setModal }) {
   return (
     <>
-      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => setModal({ kind: "declarations" })} />
+      <PageHead eyebrow="Cotisations & impôts · juin 2026" title="Déclarations sociales & fiscales" action="Préparer les bordereaux" actionIcon="fileCheck" onAction={() => setModal({ kind: "socialDeclaration" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="CNSS (sécurité sociale)" value="3 124 000" />
         <Mini label="INPP (formation prof.)" value="568 000" />
@@ -1025,7 +945,7 @@ function Declarations({ setModal }) {
 function Performance({ setModal }) {
   return (
     <>
-      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => setModal({ kind: "evaluation" })} />
+      <PageHead eyebrow="Évaluations · cycle S1 2026" title="Performance" action="Nouvelle évaluation" onAction={() => setModal({ kind: "performanceReview" })} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Évaluations faites" value={<>26<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/42</span></>} />
         <Mini label="Note moyenne" value={<>3,9<span style={{ color: "var(--ink-400)", fontSize: 16 }}>/5</span></>} valueClass="" />
@@ -1052,7 +972,7 @@ function Performance({ setModal }) {
 function Formation({ setModal }) {
   return (
     <>
-      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => setModal({ kind: "training" })} />
+      <PageHead eyebrow="Plan de formation 2026" title="Formation & compétences" action="Nouvelle session" onAction={() => setModal({ kind: "trainingSession" })} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <Mini label="Sessions planifiées" value="6" />
         <Mini label="Agents formés (2026)" value="23" valueClass="" />
@@ -1082,7 +1002,7 @@ function Recrutement({ setModal }) {
   ];
   return (
     <>
-      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => setModal({ kind: "jobOffer" })} />
+      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => setModal({ kind: "recruitmentOffer" })} />
       <div className="g3" style={{ marginBottom: 18 }}>
         <div className="card pad"><div className="kpi-label">Offres ouvertes</div><div className="font-display kpi-value">3</div><div className="tiny" style={{ marginTop: 4 }}>Agent terrain · Comptable · Chauffeur</div></div>
         <div className="card pad"><div className="kpi-label">Candidatures</div><div className="font-display kpi-value">37</div><div className="tiny" style={{ marginTop: 4 }}>12 cette semaine</div></div>
@@ -1210,19 +1130,28 @@ function SelfService({ setModal }) {
 }
 
 /* ── Modal création ────────────────────────────────────────────────────── */
-function RecordModal({ modal, staff, busy, error, onSave, onClose }) {
+function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const [form, setForm] = React.useState(() => ({ ...defaults(modal.kind, staff), ...(modal.initial || {}) }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const action = ACTION_FORMS[modal.kind];
+  const opts = {
+    staff: staff.map((u) => ({ value: u.id, label: fullName(u) })),
+    roles: (data.roles || []).map((r) => ({ value: r.id, label: r.name })),
+    departments: (data.departments || []).map((d) => ({ value: d.id, label: d.name })),
+    designations: (data.designations || []).map((d) => ({ value: d.id, label: d.name })),
+    shifts: (data.shifts || []).map((s) => ({ value: s.id, label: `${s.name} (${(s.startTime || "").slice(0, 5)}-${(s.endTime || "").slice(0, 5)})` })),
+    awards: (data.awards || []).map((a) => ({ value: a.id, label: a.name })),
+    currencies: CURRENCIES.map((c) => ({ value: c.id, label: `${c.currencyName || c.name || c.currencyCode} (${c.currencySymbol || c.symbol || c.currencyCode})` })),
+  };
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
         <div className="modal-head"><div><h2 className="font-display">{titleFor(modal.kind)}</h2><p>RH NgoluApp</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
           {action && action.fields.map((field) => (
-            <Field key={field.key} {...field} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} />
+            <Field key={field.key} {...field} options={field.optionKey ? opts[field.optionKey] || [] : field.options} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} />
           ))}
-          {modal.kind === "employee" && (
+          {modal.kind === "employee" && !action && (
             <>
               <Field label="Prénom" value={form.firstName} onChange={(v) => set("firstName", v)} required />
               <Field label="Nom" value={form.lastName} onChange={(v) => set("lastName", v)} required />
@@ -1233,8 +1162,8 @@ function RecordModal({ modal, staff, busy, error, onSave, onClose }) {
           )}
           {!action && !["employee", "salary"].includes(modal.kind) && <Field label="Nom" value={form.name} onChange={(v) => set("name", v)} required />}
           {modal.kind === "shift" && <><Field label="Début" type="time" value={form.startTime} onChange={(v) => set("startTime", v)} required /><Field label="Fin" type="time" value={form.endTime} onChange={(v) => set("endTime", v)} required /></>}
-          {modal.kind === "award" && <Field label="Description" value={form.description} onChange={(v) => set("description", v)} />}
-          {modal.kind === "salary" && (
+          {modal.kind === "award" && !action && <Field label="Description" value={form.description} onChange={(v) => set("description", v)} />}
+          {modal.kind === "salary" && !action && (
             <>
               <label className="field"><span>Employé</span><select value={form.userId} onChange={(e) => set("userId", e.target.value)}>{staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}</select></label>
               <Field label="Montant (FC)" type="number" value={form.salary} onChange={(v) => set("salary", v)} required />
@@ -1255,7 +1184,10 @@ function Field({ label, value, onChange, type = "text", required = false, option
     return <label className="field wide"><span>{label}</span><textarea required={required} value={value} onChange={(e) => onChange(e.target.value)} rows={3} /></label>;
   }
   if (type === "select") {
-    return <label className="field"><span>{label}</span><select required={required} value={value} onChange={(e) => onChange(e.target.value)}>{options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>;
+    return <label className="field"><span>{label}</span><select required={required} value={value} onChange={(e) => onChange(e.target.value)}><option value="">SÃ©lectionner</option>{options.map((opt) => {
+      const item = typeof opt === "object" ? opt : { value: opt, label: opt };
+      return <option key={item.value} value={item.value}>{item.label}</option>;
+    })}</select></label>;
   }
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }

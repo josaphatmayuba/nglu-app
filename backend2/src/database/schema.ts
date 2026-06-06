@@ -549,6 +549,117 @@ export const awardHistories = mysqlTable("award_histories", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrLeaveRequests = mysqlTable("hr_leave_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  type: varchar("type", { length: 80 }).notNull(),
+  startDate: date("startDate", { mode: "string" }).notNull(),
+  endDate: date("endDate", { mode: "string" }).notNull(),
+  reason: text("reason"),
+  status: varchar("status", { length: 30 }).default("pending").notNull(),
+  decisionComment: text("decisionComment"),
+  decidedBy: bigint("decidedBy", { mode: "number" }),
+  decidedAt: timestamp("decidedAt"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrContracts = mysqlTable("hr_contracts", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  contractType: varchar("contractType", { length: 80 }).notNull(),
+  startDate: date("startDate", { mode: "string" }).notNull(),
+  endDate: date("endDate", { mode: "string" }),
+  reference: varchar("reference", { length: 120 }),
+  notes: text("notes"),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrDocuments = mysqlTable("hr_documents", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  documentType: varchar("documentType", { length: 120 }).notNull(),
+  reference: varchar("reference", { length: 160 }),
+  fileUrl: varchar("fileUrl", { length: 500 }),
+  note: text("note"),
+  status: varchar("status", { length: 30 }).default("received").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrExpenseRequests = mysqlTable("hr_expense_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  type: varchar("type", { length: 100 }).notNull(),
+  amount: double("amount").default(0).notNull(),
+  requestDate: date("requestDate", { mode: "string" }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 30 }).default("pending").notNull(),
+  decisionComment: text("decisionComment"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrSocialDeclarations = mysqlTable("hr_social_declarations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  period: varchar("period", { length: 30 }).notNull(),
+  organism: varchar("organism", { length: 120 }).notNull(),
+  baseAmount: double("baseAmount").default(0).notNull(),
+  rate: varchar("rate", { length: 30 }),
+  amount: double("amount").default(0).notNull(),
+  dueDate: date("dueDate", { mode: "string" }),
+  note: text("note"),
+  status: varchar("status", { length: 30 }).default("prepared").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrPerformanceReviews = mysqlTable("hr_performance_reviews", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  managerId: bigint("managerId", { mode: "number" }),
+  cycle: varchar("cycle", { length: 80 }).notNull(),
+  score: double("score"),
+  objectives: text("objectives"),
+  comments: text("comments"),
+  status: varchar("status", { length: 30 }).default("draft").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrTrainingSessions = mysqlTable("hr_training_sessions", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  title: varchar("title", { length: 180 }).notNull(),
+  audience: varchar("audience", { length: 180 }),
+  sessionDate: date("sessionDate", { mode: "string" }),
+  budget: double("budget").default(0).notNull(),
+  note: text("note"),
+  status: varchar("status", { length: 30 }).default("planned").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrRecruitmentOffers = mysqlTable("hr_recruitment_offers", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  role: varchar("role", { length: 180 }).notNull(),
+  departmentId: bigint("departmentId", { mode: "number" }),
+  deadline: date("deadline", { mode: "string" }),
+  description: text("description"),
+  status: varchar("status", { length: 30 }).default("open").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const colors = mysqlTable("colors", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

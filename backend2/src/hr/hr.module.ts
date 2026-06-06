@@ -5,9 +5,17 @@ import {
   AwardHistoryController,
   DesignationController,
   DesignationHistoryController,
+  HrContractController,
   HrController,
+  HrDocumentController,
+  HrExpenseRequestController,
+  HrLeaveRequestController,
+  HrPerformanceReviewController,
+  HrRecruitmentOfferController,
   SalaryHistoryController,
   ShiftController,
+  HrSocialDeclarationController,
+  HrTrainingSessionController,
 } from "./hr.controller";
 import { HrService } from "./hr.service";
 
@@ -21,6 +29,14 @@ import { HrService } from "./hr.service";
     DesignationHistoryController,
     SalaryHistoryController,
     AwardHistoryController,
+    HrLeaveRequestController,
+    HrContractController,
+    HrDocumentController,
+    HrExpenseRequestController,
+    HrSocialDeclarationController,
+    HrPerformanceReviewController,
+    HrTrainingSessionController,
+    HrRecruitmentOfferController,
   ],
   providers: [HrService],
 })

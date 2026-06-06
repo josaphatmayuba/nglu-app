@@ -9,6 +9,14 @@ import {
   departments,
   designationHistories,
   designations,
+  hrContracts,
+  hrDocuments,
+  hrExpenseRequests,
+  hrLeaveRequests,
+  hrPerformanceReviews,
+  hrRecruitmentOffers,
+  hrSocialDeclarations,
+  hrTrainingSessions,
   roles,
   salaryHistories,
   shifts,
@@ -21,12 +29,28 @@ import {
   CreateAwardHistoryDto,
   CreateDesignationDto,
   CreateDesignationHistoryDto,
+  CreateHrContractDto,
+  CreateHrDocumentDto,
+  CreateHrExpenseRequestDto,
+  CreateHrLeaveRequestDto,
+  CreateHrPerformanceReviewDto,
+  CreateHrRecruitmentOfferDto,
+  CreateHrSocialDeclarationDto,
+  CreateHrTrainingSessionDto,
   CreateSalaryHistoryDto,
   CreateShiftDto,
   UpdateAwardDto,
   UpdateAwardHistoryDto,
   UpdateDesignationDto,
   UpdateDesignationHistoryDto,
+  UpdateHrContractDto,
+  UpdateHrDocumentDto,
+  UpdateHrExpenseRequestDto,
+  UpdateHrLeaveRequestDto,
+  UpdateHrPerformanceReviewDto,
+  UpdateHrRecruitmentOfferDto,
+  UpdateHrSocialDeclarationDto,
+  UpdateHrTrainingSessionDto,
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
 } from "./dto/hr.dto";
@@ -267,6 +291,157 @@ export class HrService {
     return this.findAwardHistory(id);
   }
 
+  listLeaveRequests(q: Record<string, string>) {
+    return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest");
+  }
+
+  findLeaveRequest(id: number) {
+    return this.findOne(hrLeaveRequests, id, "Leave request not found.");
+  }
+
+  async createLeaveRequest(input: CreateHrLeaveRequestDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrLeaveRequests, input, (id) => this.findLeaveRequest(id));
+  }
+
+  async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto) {
+    await this.findLeaveRequest(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
+    return this.updateRecord(hrLeaveRequests, id, { ...input, ...decision }, () => this.findLeaveRequest(id));
+  }
+
+  listContracts(q: Record<string, string>) {
+    return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract");
+  }
+
+  findContract(id: number) {
+    return this.findOne(hrContracts, id, "HR contract not found.");
+  }
+
+  async createContract(input: CreateHrContractDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrContracts, input, (id) => this.findContract(id));
+  }
+
+  async updateContract(id: number, input: UpdateHrContractDto) {
+    await this.findContract(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    return this.updateRecord(hrContracts, id, input, () => this.findContract(id));
+  }
+
+  listDocuments(q: Record<string, string>) {
+    return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument");
+  }
+
+  findDocument(id: number) {
+    return this.findOne(hrDocuments, id, "HR document not found.");
+  }
+
+  async createDocument(input: CreateHrDocumentDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrDocuments, input, (id) => this.findDocument(id));
+  }
+
+  async updateDocument(id: number, input: UpdateHrDocumentDto) {
+    await this.findDocument(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id));
+  }
+
+  listExpenseRequests(q: Record<string, string>) {
+    return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest");
+  }
+
+  findExpenseRequest(id: number) {
+    return this.findOne(hrExpenseRequests, id, "Expense request not found.");
+  }
+
+  async createExpenseRequest(input: CreateHrExpenseRequestDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id));
+  }
+
+  async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto) {
+    await this.findExpenseRequest(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id));
+  }
+
+  listSocialDeclarations(q: Record<string, string>) {
+    return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration");
+  }
+
+  findSocialDeclaration(id: number) {
+    return this.findOne(hrSocialDeclarations, id, "Social declaration not found.");
+  }
+
+  async createSocialDeclaration(input: CreateHrSocialDeclarationDto) {
+    return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id));
+  }
+
+  async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto) {
+    await this.findSocialDeclaration(id);
+    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id));
+  }
+
+  listPerformanceReviews(q: Record<string, string>) {
+    return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview");
+  }
+
+  findPerformanceReview(id: number) {
+    return this.findOne(hrPerformanceReviews, id, "Performance review not found.");
+  }
+
+  async createPerformanceReview(input: CreateHrPerformanceReviewDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
+    return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id));
+  }
+
+  async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto) {
+    await this.findPerformanceReview(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
+    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id));
+  }
+
+  listTrainingSessions(q: Record<string, string>) {
+    return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession");
+  }
+
+  findTrainingSession(id: number) {
+    return this.findOne(hrTrainingSessions, id, "Training session not found.");
+  }
+
+  async createTrainingSession(input: CreateHrTrainingSessionDto) {
+    return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id));
+  }
+
+  async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto) {
+    await this.findTrainingSession(id);
+    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id));
+  }
+
+  listRecruitmentOffers(q: Record<string, string>) {
+    return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer");
+  }
+
+  findRecruitmentOffer(id: number) {
+    return this.findOne(hrRecruitmentOffers, id, "Recruitment offer not found.");
+  }
+
+  async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto) {
+    if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
+    return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id));
+  }
+
+  async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto) {
+    await this.findRecruitmentOffer(id);
+    if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
+    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id));
+  }
+
   async staffOverview() {
     const rows = await this.db
       .select({
@@ -354,6 +529,40 @@ export class HrService {
     const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
     const [{ total }] = await this.db.select({ total: count(table.id) }).from(table).where(where);
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
+  }
+
+  private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+    const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const status = q["status"];
+    const where = userId ? eq(table.userId, userId) : status ? eq(table.status, status) : undefined;
+    if (q["query"] === "all") {
+      return this.db.select().from(table).where(where).orderBy(desc(table.id));
+    }
+    const { skip, limit } = this.pagination(q);
+    const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
+    const [{ total }] = await this.db.select({ total: count(table.id) }).from(table).where(where);
+    return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
+  }
+
+  private async createRecord(table: any, input: Record<string, any>, find: (id: number) => Promise<any>) {
+    const [result] = await this.db.insert(table).values({
+      ...this.compact(input),
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return find(Number(result.insertId));
+  }
+
+  private async updateRecord(table: any, id: number, input: Record<string, any>, find: () => Promise<any>) {
+    await this.db.update(table).set({
+      ...this.compact(input),
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(table.id, id));
+    return find();
+  }
+
+  private compact(input: Record<string, any>) {
+    return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
   }
 
   private async findOne(table: any, id: number, message: string) {
