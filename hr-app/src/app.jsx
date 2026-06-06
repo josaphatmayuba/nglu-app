@@ -142,15 +142,32 @@ function Toaster() {
 }
 function ActionFeed() {
   const [items, setItems] = React.useState([]);
+  const timers = React.useRef(new Map());
   React.useEffect(() => {
     const on = (e) => {
       const message = e.detail || DEMO;
       const time = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-      setItems((cur) => [{ id: `${Date.now()}-${Math.random()}`, message, time }, ...cur].slice(0, 3));
+      const id = `${Date.now()}-${Math.random()}`;
+      setItems((cur) => [{ id, message, time }, ...cur].slice(0, 3));
+      const timer = window.setTimeout(() => {
+        setItems((cur) => cur.filter((item) => item.id !== id));
+        timers.current.delete(id);
+      }, 6500);
+      timers.current.set(id, timer);
     };
     window.addEventListener("hr:toast", on);
-    return () => window.removeEventListener("hr:toast", on);
+    return () => {
+      window.removeEventListener("hr:toast", on);
+      timers.current.forEach((timer) => window.clearTimeout(timer));
+      timers.current.clear();
+    };
   }, []);
+  const dismiss = (id) => {
+    const timer = timers.current.get(id);
+    if (timer) window.clearTimeout(timer);
+    timers.current.delete(id);
+    setItems((cur) => cur.filter((item) => item.id !== id));
+  };
   if (!items.length) return null;
   return (
     <div className="action-feed" aria-live="polite">
@@ -159,6 +176,7 @@ function ActionFeed() {
           <span className="row-ic"><Icon name="checkCircle" /></span>
           <span>{item.message}</span>
           <time>{item.time}</time>
+          <button type="button" className="action-feed-close" onClick={() => dismiss(item.id)} aria-label="Fermer la notification"><Icon name="x" /></button>
         </div>
       ))}
     </div>

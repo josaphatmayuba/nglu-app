@@ -233,6 +233,9 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .action-feed-item .row-ic { width: 28px; height: 28px; border-radius: 9px; background: var(--teal-100); color: var(--teal-700); }
 .action-feed-item .row-ic .ic { width: 15px; height: 15px; }
 .action-feed-item time { margin-left: auto; color: var(--ink-400); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.action-feed-close { width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-400); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.action-feed-close:hover { background: rgba(20,184,166,.12); color: var(--ink-700); }
+.action-feed-close .ic { width: 14px; height: 14px; }
 .inline-error { background: var(--rose-100); color: var(--rose-700); padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 14px; }
 .source-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
 .source-pill.api { background: var(--emerald-100); color: var(--emerald-700); }
