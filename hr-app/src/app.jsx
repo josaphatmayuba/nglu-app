@@ -195,6 +195,35 @@ const employeeForm = (u) => ({
   country: u.country || "",
   status: u.status || "true",
 });
+function enrichDepartments(departments, staff) {
+  const source = Array.isArray(departments) && departments.length ? departments : fallback.departments;
+  const fallbackByName = new Map(fallback.departments.map((d) => [String(d.name).toLowerCase(), d]));
+  const fallbackById = new Map(fallback.departments.map((d) => [String(d.id), d]));
+  const countById = new Map();
+  const countByName = new Map();
+
+  for (const user of staff || []) {
+    const deptId = user.departmentId ?? user.department?.id;
+    const deptName = user.department?.name;
+    if (deptId != null) countById.set(String(deptId), (countById.get(String(deptId)) || 0) + 1);
+    if (deptName) {
+      const key = String(deptName).toLowerCase();
+      countByName.set(key, (countByName.get(key) || 0) + 1);
+    }
+  }
+
+  return source.map((dept, index) => {
+    const key = String(dept.name || "").toLowerCase();
+    const fallbackDept = fallbackById.get(String(dept.id)) || fallbackByName.get(key) || fallback.departments[index] || {};
+    return {
+      ...fallbackDept,
+      ...dept,
+      count: countById.get(String(dept.id)) ?? countByName.get(key) ?? Number(dept.count || fallbackDept.count || 0),
+      color: dept.color || fallbackDept.color || ["teal", "sky", "emerald", "amber", "ink"][index % 5],
+      head: dept.head || fallbackDept.head || "Direction",
+    };
+  });
+}
 function cleanPayload(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== ""));
 }
@@ -259,7 +288,8 @@ function Avatar({ name, color, size = 36, sq = false, text }) {
 }
 function Bar({ pct, cls = "grad-accent" }) {
   const bg = { amber: "var(--amber-400)", sky: "var(--sky-400)", ink: "var(--ink-300)", teal: "var(--teal-400)" }[cls];
-  return <div className="bar"><span className={bg ? "" : cls} style={{ width: `${pct}%`, background: bg }} /></div>;
+  const width = Number.isFinite(Number(pct)) ? Math.max(0, Math.min(100, Number(pct))) : 0;
+  return <div className="bar"><span className={bg ? "" : cls} style={{ width: `${width}%`, background: bg }} /></div>;
 }
 function PageHead({ eyebrow, title, action, onAction, actionIcon = "plus", disabled, ghost }) {
   return (
@@ -304,10 +334,11 @@ function App() {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
+        const staffRows = overview.value?.staff?.length ? overview.value.staff : fallback.staff;
         const next = {
-          staff: overview.value?.staff?.length ? overview.value.staff : fallback.staff,
+          staff: staffRows,
           designations: overview.value?.designations || fallback.designations,
-          departments: overview.value?.departments || fallback.departments,
+          departments: enrichDepartments(overview.value?.departments, staffRows),
           shifts: Array.isArray(shifts.value) && shifts.value.length ? shifts.value : fallback.shifts,
           awards: awards.value?.getAllAward || (Array.isArray(awards.value) ? awards.value : null) || fallback.awards,
           salaries: salaries.value?.getAllSalaryHistory || fallback.salaries,
@@ -506,6 +537,7 @@ function App() {
 function Dashboard({ data, staff, masse, go, setModal }) {
   const total = staff.length || 42;
   const presents = Math.max(0, total - fbAbsents.length - 1);
+  const deptMax = Math.max(1, ...data.departments.map((d) => Number(d.count || 0)));
   return (
     <>
       <PageHead eyebrow="Vue d'ensemble · juin 2026" title="Ressources humaines" action="Nouvel employé" actionIcon="userPlus" onAction={() => setModal({ kind: "employee" })} />
@@ -521,7 +553,7 @@ function Dashboard({ data, staff, masse, go, setModal }) {
           {data.departments.map((d) => (
             <div key={d.id} style={{ marginBottom: 12, fontSize: 13 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{d.name}</span><span className="muted">{d.count}</span></div>
-              <Bar pct={Math.min(100, d.count * 5)} cls={d.color === "teal" ? "grad-accent" : d.color === "sky" ? "grad-sky" : d.color} />
+              <Bar pct={Math.max(5, Math.round((Number(d.count || 0) / deptMax) * 100))} cls={d.color === "teal" ? "grad-accent" : d.color === "sky" ? "grad-sky" : d.color} />
             </div>
           ))}
         </section>
