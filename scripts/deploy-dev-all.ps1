@@ -10,6 +10,8 @@ Usage :
   scripts\deploy-dev-all.ps1 -SkipMigrations
   scripts\deploy-dev-all.ps1 -SkipFarmos
   scripts\deploy-dev-all.ps1 -SkipBatiPro
+  scripts\deploy-dev-all.ps1 -SkipHR
+  scripts\deploy-dev-all.ps1 -SkipDomus
   scripts\deploy-dev-all.ps1 -Migrations @("0060_*.sql","0061_*.sql")
 #>
 param(
@@ -21,6 +23,7 @@ param(
   [switch]$SkipMigrations,
   [switch]$SkipFarmos,
   [switch]$SkipBatiPro,
+  [switch]$SkipHR,
   [switch]$SkipDomus,
   [switch]$SkipBuild
 )
@@ -116,6 +119,18 @@ if (-not $SkipBatiPro) {
   $ErrorActionPreference = $prev
 }
 
+if (-not $SkipHR) {
+  Section "Deploying hr-app"
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  if ($SkipBuild) {
+    & "$repoRoot\scripts\deploy-dev-hr-aws.ps1" -SkipBuild -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  } else {
+    & "$repoRoot\scripts\deploy-dev-hr-aws.ps1" -SkipGitPull 2>&1 | ForEach-Object { Write-Host $_ }
+  }
+  $ErrorActionPreference = $prev
+}
+
 if (-not $SkipDomus) {
   Section "Deploying domus-app"
   $prev = $ErrorActionPreference
@@ -132,4 +147,5 @@ Section "All done"
 Write-Host "Backend:  https://dev.ongdngolu.org/api/health"
 Write-Host "FarmOS:   https://dev.ongdngolu.org/farmos/"
 Write-Host "BatiPro:  https://dev.ongdngolu.org/batipro/"
+Write-Host "HR:       https://dev.ongdngolu.org/hr/"
 Write-Host "Domus:    https://dev.ongdngolu.org/domus/"

@@ -355,36 +355,6 @@ function App() {
         await api.updateUser(Number(form.userId), { status: "false", leaveDate: new Date().toISOString().slice(0, 10), leaveReason });
       }
       setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistré avec l'API.`);
-      if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({
-        userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null,
-      }));
-      if (kind === "hrContract") await api.createHrContract(cleanPayload({
-        userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null,
-        reference: form.reference || null, notes: form.notes || null,
-      }));
-      if (kind === "hrDocument") await api.createHrDocument(cleanPayload({
-        userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null,
-        fileUrl: form.fileUrl || null, note: form.note || null,
-      }));
-      if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({
-        userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), requestDate: form.requestDate,
-        description: form.description || null,
-      }));
-      if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({
-        period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null,
-        amount: Number(form.amount || 0), dueDate: form.dueDate || null, note: form.note || null,
-      }));
-      if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({
-        userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle,
-        score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null,
-      }));
-      if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({
-        title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null,
-        budget: Number(form.budget || 0), note: form.note || null,
-      }));
-      if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({
-        role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null,
-      }));
     } catch (err) {
       setError(err.message || String(err));
     }

@@ -10,6 +10,15 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+
+- HR: les suppressions des tables avec `status` passent en suppression logique (`status=false`) et les listes masquent les enregistrements inactifs par defaut.
+- HR app: nettoyage du flux d'enregistrement pour retirer les appels API HR dupliques/inatteignables, et alignement de `closeUser` sur `PUT /user/:id` afin de conserver `leaveDate` et `leaveReason`.
+
+### Added
+
+- HR deploy: ajout de `scripts/deploy-dev-hr-aws.ps1` et integration de `hr-app` dans `scripts/deploy-dev-all.ps1`.
+
 ## [3.2.0] - 2026-06-04
 
 ### Security

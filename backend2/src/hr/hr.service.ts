@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { count, desc, eq, inArray, like, sql } from "drizzle-orm";
+import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -504,17 +504,25 @@ export class HrService {
   }
 
   async deleteRow(table: any, id: number) {
-    await this.db.delete(table).where(eq(table.id, id));
+    if (!table.status) {
+      throw new BadRequestException("Soft delete is not available for this HR record type yet.");
+    }
+    await this.findOne(table, id, "Record not found.");
+    await this.db
+      .update(table)
+      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(table.id, id));
     return { message: "Deleted successfully." };
   }
 
   private async listSimple(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
     const status = q["status"];
-    const where = q["query"] === "search"
-      ? like(table.name, `%${q["key"] ?? ""}%`)
-      : status ? eq(table.status, status) : undefined;
+    const where = and(
+      q["query"] === "search" ? like(table.name, `%${q["key"] ?? ""}%`) : undefined,
+      eq(table.status, status ?? "true"),
+    );
     if (q["query"] === "all") {
-      return this.db.select().from(table).where(eq(table.status, "true")).orderBy(desc(table.id));
+      return this.db.select().from(table).where(where).orderBy(desc(table.id));
     }
     const { skip, limit } = this.pagination(q);
     const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
@@ -534,7 +542,10 @@ export class HrService {
   private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
     const status = q["status"];
-    const where = userId ? eq(table.userId, userId) : status ? eq(table.status, status) : undefined;
+    const where = and(
+      userId ? eq(table.userId, userId) : undefined,
+      status ? eq(table.status, status) : ne(table.status, "false"),
+    );
     if (q["query"] === "all") {
       return this.db.select().from(table).where(where).orderBy(desc(table.id));
     }
