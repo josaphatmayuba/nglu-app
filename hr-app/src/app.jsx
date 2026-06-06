@@ -90,7 +90,7 @@ const NAV = [
   { id: "conges", label: "Congés & absences", icon: "palmtree" },
   { id: "timesheet", label: "Timesheet (projets)", icon: "timer" },
   { section: "Paie & rémunération" },
-  { id: "paie", label: "Paie", icon: "wallet" },
+  { id: "paie", label: "Historique de paie", icon: "wallet" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
   { id: "declarations", label: "Déclarations sociales", icon: "fileCheck" },
   { section: "Développement" },
@@ -1020,44 +1020,74 @@ function Conges({ data, staff, setModal }) {
 
 /* Paie */
 function Paie({ data, staff, masse, setModal }) {
+  const [q, setQ] = React.useState("");
+  const [employeeFilter, setEmployeeFilter] = React.useState("");
+  const [currencyFilter, setCurrencyFilter] = React.useState("");
   const rows = data.salaries || [];
-  const employeeCount = new Set(rows.map((s) => s.userId).filter(Boolean)).size;
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
+  const employeeFor = (userId) => staff.find((u) => String(u.id) === String(userId));
+  const employeeSearchText = (u) => u ? [fullName(u), u.username, u.email, matricule(u), u.designation?.name, u.department?.name].filter(Boolean).join(" ").toLowerCase() : "";
+  const historySearchText = (s) => [personName(staff, s.userId), employeeSearchText(employeeFor(s.userId)), comment(s), dateStart(s), dateEnd(s), dateOnly(s.createdAt)].filter(Boolean).join(" ").toLowerCase();
+  const currenciesInHistory = [...new Set(rows.map((s) => symbolFor(s.currencyId, CURRENCIES, CUR)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const needle = q.trim().toLowerCase();
+  const filteredRows = rows.filter((s) => {
+    if (employeeFilter && String(s.userId) !== String(employeeFilter)) return false;
+    if (currencyFilter && symbolFor(s.currencyId, CURRENCIES, CUR) !== currencyFilter) return false;
+    return !needle || historySearchText(s).includes(needle);
+  });
+  const currentFiltered = staff.filter((u) => {
+    if (employeeFilter && String(u.id) !== String(employeeFilter)) return false;
+    if (currencyFilter && salarySym(u) !== currencyFilter) return false;
+    return !needle || employeeSearchText(u).includes(needle);
+  });
+  const employeeCount = new Set(filteredRows.map((s) => s.userId).filter(Boolean)).size;
+  const hasFilters = Boolean(needle || employeeFilter || currencyFilter);
   const exportHistory = () => exportCsv(
     "historique-salaires.csv",
     ["Employe", "Salaire", "Devise", "Debut", "Fin", "Commentaire", "Enregistre le"],
-    rows.map((s) => [personName(staff, s.userId), Math.round(Number(s.salary || 0)), symbolFor(s.currencyId, CURRENCIES, CUR), dateStart(s), dateEnd(s), comment(s), dateOnly(s.createdAt)])
+    filteredRows.map((s) => [personName(staff, s.userId), Math.round(Number(s.salary || 0)), symbolFor(s.currencyId, CURRENCIES, CUR), dateStart(s), dateEnd(s), comment(s), dateOnly(s.createdAt)])
   );
   const exportCurrent = () => exportCsv(
     "salaires-actuels.csv",
     ["Employe", "Poste", "Salaire", "Devise", "Statut"],
-    staff.map((u) => [fullName(u), u.designation?.name || "", Math.round(Number(u.currentSalary || 0)), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
+    currentFiltered.map((u) => [fullName(u), u.designation?.name || "", Math.round(Number(u.currentSalary || 0)), salarySym(u), u.status === "false" ? "Inactif" : "Actif"])
   );
   return (
     <>
-      <PageHead eyebrow="Historique des salaires" title="Paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
+      <PageHead eyebrow="Historique des salaires" title="Historique de paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
       <div className="g3" style={{ marginBottom: 16 }}>
-        <Mini label="Lignes historique" value={rows.length} />
+        <Mini label={hasFilters ? "Resultats historique" : "Lignes historique"} value={filteredRows.length} />
         <Mini label="Employes salaries" value={employeeCount} />
         <Mini label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} />
       </div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="searchbar">
+          <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
+          <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} aria-label="Filtrer par employe">
+            <option value="">Tous les employes</option>
+            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
+          </select>
+          <select className="pillbtn" value={currencyFilter} onChange={(e) => setCurrencyFilter(e.target.value)} aria-label="Filtrer par devise">
+            <option value="">Toutes les devises</option>
+            {currenciesInHistory.map((sym) => <option key={sym} value={sym}>{sym}</option>)}
+          </select>
+        </div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 760 }}>
           <thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th><th className="r">Enregistre le</th></tr></thead>
-          <tbody>{rows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateStart(s) || "-"}</td><td>{dateEnd(s) || "-"}</td><td className="muted">{comment(s) || "-"}</td><td className="r muted">{dateOnly(s.createdAt) || "-"}</td></tr>)}</tbody>
+          <tbody>{filteredRows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateStart(s) || "-"}</td><td>{dateEnd(s) || "-"}</td><td className="muted">{comment(s) || "-"}</td><td className="r muted">{dateOnly(s.createdAt) || "-"}</td></tr>)}</tbody>
         </table></div>
-        {rows.length === 0 && <EmptyState title="Aucun historique de salaire en base" detail="Clique sur Nouveau salaire pour creer la premiere ligne d'historique." />}
+        {filteredRows.length === 0 && <EmptyState title={rows.length === 0 ? "Aucun historique de salaire en base" : "Aucun salaire ne correspond aux filtres"} detail={rows.length === 0 ? "Clique sur Nouveau salaire pour creer la premiere ligne d'historique." : "Modifie la recherche ou les filtres pour retrouver un employe."} />}
       </div>
       <div className="card pad table-card" style={{ marginTop: 16 }}>
         <div className="section-head"><h3 className="font-display">Salaires actuels</h3><button type="button" className="link" onClick={exportCurrent}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
           <thead><tr><th>Employe</th><th>Poste</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
-          <tbody>{staff.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
+          <tbody>{currentFiltered.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
         </table></div>
-        {staff.length === 0 && <EmptyState title="Aucun employe en base" />}
+        {currentFiltered.length === 0 && <EmptyState title={staff.length === 0 ? "Aucun employe en base" : "Aucun employe ne correspond aux filtres"} />}
       </div>
     </>
   );
