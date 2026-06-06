@@ -232,7 +232,9 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .icon-btn .ic { width: 16px; height: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
 .field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-600); }
-.field input, .field select { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
+.field.wide { grid-column: 1 / -1; }
+.field input, .field select, .field textarea { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
+.field textarea { padding-top: 10px; resize: vertical; line-height: 1.4; }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ── Mobile bottom nav + plus sheet ────────────────────────────────────── */
