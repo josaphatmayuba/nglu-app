@@ -488,6 +488,77 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+const SELF_ACTION_FORMS = {
+  leaveRequest: {
+    title: "Demander un conge",
+    subtitle: "Ta demande sera envoyee aux RH pour validation.",
+    submit: "Envoyer la demande",
+    success: "Demande de conge envoyee.",
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "type", label: "Type de conge", type: "select", options: ["Conge annuel", "Maladie", "Maternite", "Paternite", "Mission", "Autre"], required: true },
+      { key: "startDate", label: "Date de debut", type: "date", required: true },
+      { key: "endDate", label: "Date de fin", type: "date", required: true },
+      { key: "reason", label: "Motif", type: "textarea", wide: true },
+    ],
+  },
+  timesheet: {
+    title: "Saisir mon temps",
+    subtitle: "Enregistre les heures travaillees sur un projet ou un bailleur.",
+    submit: "Soumettre les heures",
+    success: "Timesheet envoye.",
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "workDate", label: "Date travaillee", type: "date", required: true },
+      { key: "period", label: "Periode" },
+      { key: "project", label: "Projet", required: true },
+      { key: "donor", label: "Bailleur" },
+      { key: "hours", label: "Nombre d'heures", type: "number", required: true },
+      { key: "activity", label: "Activite realisee", type: "textarea", wide: true },
+      { key: "note", label: "Note", type: "textarea", wide: true },
+    ],
+  },
+  expenseRequest: {
+    title: "Demander un remboursement ou une avance",
+    subtitle: "Indique le montant, la devise et la raison de la demande.",
+    submit: "Envoyer la demande",
+    success: "Demande de frais envoyee.",
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "type", label: "Nature de la demande", type: "select", options: ["Remboursement", "Avance", "Transport", "Mission", "Communication", "Autre"], required: true },
+      { key: "amount", label: "Montant demande", type: "number", required: true },
+      { key: "requestDate", label: "Date de la demande", type: "date", required: true },
+      { key: "description", label: "Justification", type: "textarea", wide: true },
+    ],
+  },
+  hrDocument: {
+    title: "Deposer un document",
+    subtitle: "Ajoute un document personnel ou RH a ton dossier.",
+    submit: "Deposer le document",
+    success: "Document envoye aux RH.",
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "documentType", label: "Type de document", type: "select", options: ["CV", "Piece ID", "Diplome", "Contrat signe", "N CNSS", "Code conduite / PSEA", "Attestation", "Autre"], required: true },
+      { key: "reference", label: "Reference" },
+      { key: "fileUrl", label: "Lien du document" },
+      { key: "note", label: "Commentaire", type: "textarea", wide: true },
+    ],
+  },
+  employeeRequest: {
+    title: "Faire une demande RH",
+    subtitle: "Pour une attestation, correction de profil ou autre demande administrative.",
+    submit: "Envoyer aux RH",
+    success: "Demande RH envoyee.",
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "requestType", label: "Type de demande", type: "select", options: ["Attestation de travail", "Changement d'adresse", "Changement compte bancaire", "Correction profil", "Document administratif", "Autre"], required: true },
+      { key: "subject", label: "Objet", required: true },
+      { key: "requestedDate", label: "Date de la demande", type: "date", required: true },
+      { key: "description", label: "Details de la demande", type: "textarea", wide: true },
+    ],
+  },
+};
+
 function KPI({ label, value, sub, subClass = "", icon, tone }) {
   return (
     <div className={`card pad ${tone === "warn" ? "warn" : tone === "danger" ? "danger" : ""}`}>
@@ -1282,14 +1353,14 @@ function SelfService({ data, staff, me, setModal }) {
   const activeContract = myContracts.find((c) => isApproved(c.status)) || myContracts[0];
   const lastSalary = mySalaries[0];
   const thisMonthHours = myTimesheets.filter((t) => dateOnly(t.workDate).slice(0, 7) === TODAY.slice(0, 7)).reduce((sum, t) => sum + Number(t.hours || 0), 0);
-  const selfModal = (kind, initial = {}) => setModal({ kind, initial: { userId, ...initial }, lockUserId: true });
+  const selfModal = (kind, initial = {}) => setModal({ kind, initial: { userId, ...initial }, lockUserId: true, source: "selfservice" });
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const actions = [
-    { icon: "palmtree", title: "Demander un conge", onClick: () => selfModal("leaveRequest") },
-    { icon: "timer", title: "Saisir un timesheet", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
-    { icon: "receipt", title: "Nouvelle demande de frais", onClick: () => selfModal("expenseRequest", { requestDate: TODAY }) },
-    { icon: "folder", title: "Deposer un document", onClick: () => selfModal("hrDocument") },
-    { icon: "fileCheck", title: "Demande RH", onClick: () => selfModal("employeeRequest") },
+    { icon: "palmtree", title: "Demander un conge", cta: "Envoyer", onClick: () => selfModal("leaveRequest") },
+    { icon: "timer", title: "Saisir un timesheet", cta: "Saisir", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
+    { icon: "receipt", title: "Frais ou avance", cta: "Demander", onClick: () => selfModal("expenseRequest", { requestDate: TODAY }) },
+    { icon: "folder", title: "Deposer un document", cta: "Deposer", onClick: () => selfModal("hrDocument") },
+    { icon: "fileCheck", title: "Demande RH", cta: "Soumettre", onClick: () => selfModal("employeeRequest") },
   ];
   return (
     <>
@@ -1301,7 +1372,7 @@ function SelfService({ data, staff, me, setModal }) {
         <Mini label="Documents" value={myDocuments.length} />
         <Mini label="Salaire actuel" value={lastSalary ? fc(lastSalary.salary, symbolFor(lastSalary.currencyId, CURRENCIES, CUR)) : (user?.currentSalary ? fc(user.currentSalary, salarySym(user)) : `0 ${CUR}`)} />
       </div>
-      <div className="g3" style={{ marginBottom: 16 }}>{actions.map((a) => <div className="card pad" key={a.title}><h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={a.icon} style={{ color: "var(--teal-600)" }} /> {a.title}</h3><button type="button" className="tile-btn accent" disabled={!userId} onClick={a.onClick}><Icon name="plus" /> Creer dans la base</button></div>)}</div>
+      <div className="g3" style={{ marginBottom: 16 }}>{actions.map((a) => <div className="card pad" key={a.title}><h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={a.icon} style={{ color: "var(--teal-600)" }} /> {a.title}</h3><button type="button" className="tile-btn accent" disabled={!userId} onClick={a.onClick}><Icon name="plus" /> {a.cta}</button></div>)}</div>
       <div className="g2" style={{ marginBottom: 16 }}>
         <div className="card pad"><h3 className="block-title font-display">Mon profil</h3><div className="kv"><div><span>Nom</span><span>{user ? fullName(user) : me.name}</span></div><div><span>Poste</span><span>{user?.designation?.name || "-"}</span></div><div><span>Departement</span><span>{user?.department?.name || "-"}</span></div><div><span>Telephone</span><span>{displayPhone(user)}</span></div><div><span>Adresse</span><span>{[user?.street, user?.city, user?.country].filter(Boolean).join(", ") || "-"}</span></div></div></div>
         <div className="card pad"><h3 className="block-title font-display">Contrat actif</h3>{activeContract ? <div className="kv"><div><span>Type</span><span>{activeContract.contractType || "-"}</span></div><div><span>Debut</span><span>{dateOnly(activeContract.startDate) || "-"}</span></div><div><span>Fin</span><span>{dateOnly(activeContract.endDate) || "-"}</span></div><div><span>Statut</span><span>{statusChip(activeContract.status)}</span></div></div> : <EmptyState title="Aucun contrat en base" />}</div>
@@ -1324,7 +1395,8 @@ function SelfList({ title, rows, render, empty }) {
 
 /* Modal creation */
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
-  const action = ACTION_FORMS[modal.kind];
+  const selfAction = modal.lockUserId ? SELF_ACTION_FORMS[modal.kind] : null;
+  const action = selfAction || ACTION_FORMS[modal.kind];
   const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession"].includes(modal.kind);
   const [form, setForm] = React.useState(() => {
     const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
@@ -1365,7 +1437,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
-        <div className="modal-head"><div><h2 className="font-display">{titleFor(modal.kind)}</h2><p>RH NgoluApp</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2 className="font-display">{action?.title || titleFor(modal.kind)}</h2><p>{action?.subtitle || (modal.lockUserId ? "Espace employe" : "RH NgoluApp")}</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
           {action && action.fields.map((field) => {
             if (field.kind === "section") return <div key={field.label} className="form-section">{field.label}</div>;
