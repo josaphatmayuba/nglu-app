@@ -260,6 +260,7 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 /* ── Modal ─────────────────────────────────────────────────────────────── */
 .modal-scrim { position: fixed; inset: 0; background: rgba(6,16,15,.5); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
 .modal-card { background: #fff; border-radius: 18px; box-shadow: 0 24px 70px rgba(0,0,0,.35); display: grid; gap: 16px; max-height: min(760px, calc(100vh - 40px)); max-width: 640px; overflow: auto; padding: 22px; width: 100%; }
+.modal-card.wide { max-width: 860px; }
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .modal-head h2 { margin: 0; font-size: 18px; }
 .modal-head p { margin: 2px 0 0; color: var(--ink-500); font-size: 12px; }
@@ -269,6 +270,7 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .form-section { grid-column: 1 / -1; border-top: 1px solid var(--ink-100); color: var(--ink-400); font-size: 11px; font-weight: 700; letter-spacing: .06em; margin-top: 4px; padding-top: 12px; text-transform: uppercase; }
 .field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-600); }
 .field.wide { grid-column: 1 / -1; }
+.computed-field { align-items: center; background: var(--ink-50); border: 1px solid var(--ink-100); border-radius: 10px; color: var(--ink-700); display: flex; min-height: 43px; padding: 0 14px; }
 .field input, .field select, .field textarea { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
 .field input[readonly] { background: var(--ink-50); color: var(--ink-500); }
 .field small { color: var(--ink-400); font-size: 11px; font-weight: 500; line-height: 1.35; }

@@ -218,6 +218,38 @@ const initials = (s) => (s || "?").split(" ").filter(Boolean).slice(0, 2).map((p
 const colorFor = (s) => AV_COLORS[(initials(s).charCodeAt(0) + (initials(s).charCodeAt(1) || 0)) % AV_COLORS.length];
 const toNum = (v) => v === "" || v == null ? undefined : Number(v);
 const dateOnly = (v) => v ? String(v).slice(0, 10) : "";
+const CONTRACT_TYPES = ["CDI", "CDD", "Stage", "Consultant", "Journalier", "Volontariat"];
+const CONTRACT_STATUSES = [
+  { value: "draft", label: "Brouillon" },
+  { value: "validation", label: "En validation" },
+  { value: "approved", label: "Approuve" },
+  { value: "signed", label: "Signe" },
+  { value: "active", label: "Actif" },
+  { value: "expired", label: "Expire" },
+  { value: "terminated", label: "Resilie" },
+];
+const hasContractEndDate = (form) => ["CDD", "Stage", "Consultant", "Journalier", "Volontariat"].includes(form.contractType);
+const usesPayrollSalary = (form) => ["CDI", "CDD", "Journalier", "Volontariat"].includes(form.contractType);
+const usesProbation = (form) => ["CDI", "CDD"].includes(form.contractType);
+function contractDurationText(form) {
+  if (!form.startDate || !form.endDate) return "-";
+  const start = new Date(form.startDate);
+  const end = new Date(form.endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return "-";
+  const months = Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth());
+  const days = Math.max(1, Math.round((end - start) / 86400000) + 1);
+  return months >= 1 ? `${months} mois` : `${days} jours`;
+}
+function contractTotalText(form) {
+  const total = Number(form.baseSalary || 0) + Number(form.transportAllowance || 0) + Number(form.housingAllowance || 0);
+  return fc(total, symbolFor(form.currencyId || defaultCurrencyId(), CURRENCIES, CUR));
+}
+function contractMoneyText(contract) {
+  if (contract?.contractType === "Consultant") return fc(contract.contractAmount, moneySymbolFor(contract));
+  if (contract?.contractType === "Stage") return fc(contract.stipend, moneySymbolFor(contract));
+  const total = Number(contract?.baseSalary || 0) + Number(contract?.transportAllowance || 0) + Number(contract?.housingAllowance || 0);
+  return fc(total, moneySymbolFor(contract));
+}
 const displayPhone = (u) => {
   const raw = typeof u === "string" ? u : u?.phone;
   if (!String(raw || "").trim()) return "Telephone non renseigne";
@@ -248,10 +280,28 @@ const arrayFrom = (value, key) => {
   if (key && Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const isPending = (status) => ["pending", "en_attente", "submitted"].includes(String(status || "").toLowerCase());
+const STATUS_LABELS = {
+  pending: "En attente",
+  submitted: "Soumis",
+  validation: "En validation",
+  approved: "Approuve",
+  signed: "Signe",
+  active: "Actif",
+  draft: "Brouillon",
+  expired: "Expire",
+  terminated: "Resilie",
+  rejected: "Rejete",
+  received: "Recu",
+  planned: "Planifie",
+  done: "Termine",
+  open: "Ouvert",
+  true: "Actif",
+  false: "Inactif",
+};
+const isPending = (status) => ["pending", "en_attente", "submitted", "draft", "validation"].includes(String(status || "").toLowerCase());
 const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true"].includes(String(status || "").toLowerCase());
 const chipForStatus = (status) => isPending(status) ? "amber" : isApproved(status) ? "emerald" : String(status || "").toLowerCase() === "rejected" ? "rose" : "ink";
-const statusLabel = (status) => status ? String(status) : "Non renseigne";
+const statusLabel = (status) => STATUS_LABELS[String(status || "").toLowerCase()] || (status ? String(status) : "Non renseigne");
 const personName = (staff, userId) => fullName((staff || []).find((u) => String(u.id) === String(userId)) || { id: userId });
 const sameId = (a, b) => String(a ?? "") !== "" && String(a) === String(b ?? "");
 const findCurrentStaff = (me, staff) => (staff || []).find((u) => sameId(u.id, me?.id)) || (staff || []).find((u) => fullName(u).toLowerCase() === String(me?.name || "").toLowerCase()) || null;
@@ -488,6 +538,91 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+Object.assign(ACTION_FORMS, {
+  hrContract: {
+    title: "Nouveau contrat RH",
+    submit: "Enregistrer",
+    success: "Contrat RH enregistre.",
+    wide: true,
+    defaults: {
+      userId: "",
+      contractType: "CDI",
+      startDate: TODAY,
+      endDate: "",
+      designationId: "",
+      departmentId: "",
+      workLocation: "",
+      baseSalary: 0,
+      transportAllowance: 0,
+      housingAllowance: 0,
+      stipend: 0,
+      contractAmount: 0,
+      currencyId: "",
+      payFrequency: "Mensuelle",
+      probationMonths: 3,
+      probationEndDate: "",
+      workSchedule: "Temps plein",
+      managerId: "",
+      hrResponsibleId: "",
+      school: "",
+      supervisor: "",
+      deliverables: "",
+      generatedDocumentUrl: "",
+      signedDocumentUrl: "",
+      amendmentsUrl: "",
+      identityDocumentUrl: "",
+      diplomasUrl: "",
+      status: "draft",
+      notes: "",
+    },
+    fields: [
+      { kind: "section", label: "Informations generales" },
+      { kind: "computed", label: "Reference", value: () => "Generee automatiquement a l'enregistrement", wide: true },
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "contractType", label: "Type de contrat", type: "select", options: CONTRACT_TYPES, required: true },
+      { key: "designationId", label: "Poste", type: "select", optionKey: "designations" },
+      { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" },
+      { key: "workLocation", label: "Lieu de travail" },
+      { key: "startDate", label: "Date de debut", type: "date", required: true },
+      { key: "endDate", label: "Date de fin", type: "date", visibleWhen: hasContractEndDate },
+      { kind: "computed", label: "Duree", value: contractDurationText, visibleWhen: hasContractEndDate },
+      { key: "probationMonths", label: "Periode d'essai (mois)", type: "number", visibleWhen: usesProbation },
+      { key: "probationEndDate", label: "Fin periode d'essai", type: "date", visibleWhen: usesProbation },
+
+      { kind: "section", label: "Conditions salariales" },
+      { key: "baseSalary", label: "Salaire de base", type: "number", visibleWhen: usesPayrollSalary },
+      { key: "transportAllowance", label: "Prime transport", type: "number", visibleWhen: usesPayrollSalary },
+      { key: "housingAllowance", label: "Prime logement", type: "number", visibleWhen: usesPayrollSalary },
+      { key: "stipend", label: "Indemnite de stage", type: "number", visibleWhen: (form) => form.contractType === "Stage" },
+      { key: "contractAmount", label: "Montant contrat", type: "number", visibleWhen: (form) => form.contractType === "Consultant" },
+      { key: "currencyId", label: "Devise", type: "select", optionKey: "currencies" },
+      { key: "payFrequency", label: "Frequence de paie", type: "select", options: ["Mensuelle", "Bimensuelle", "Hebdomadaire", "Journaliere", "Forfait"] },
+      { kind: "computed", label: "Total mensuel", value: contractTotalText, visibleWhen: usesPayrollSalary },
+
+      { kind: "section", label: "Stage", visibleWhen: (form) => form.contractType === "Stage" },
+      { key: "school", label: "Ecole", visibleWhen: (form) => form.contractType === "Stage" },
+      { key: "supervisor", label: "Encadreur", visibleWhen: (form) => form.contractType === "Stage" },
+
+      { kind: "section", label: "Consultance", visibleWhen: (form) => form.contractType === "Consultant" },
+      { key: "deliverables", label: "Livrables", type: "textarea", wide: true, visibleWhen: (form) => form.contractType === "Consultant" },
+
+      { kind: "section", label: "Suivi RH" },
+      { key: "workSchedule", label: "Horaires de travail" },
+      { key: "managerId", label: "Responsable hierarchique", type: "select", optionKey: "staff" },
+      { key: "hrResponsibleId", label: "Responsable RH", type: "select", optionKey: "staff" },
+      { key: "status", label: "Statut", type: "select", options: CONTRACT_STATUSES, requiresStatusPermission: true },
+
+      { kind: "section", label: "Documents" },
+      { key: "generatedDocumentUrl", label: "Contrat genere (lien)", wide: true },
+      { key: "signedDocumentUrl", label: "Contrat signe (lien)", wide: true },
+      { key: "amendmentsUrl", label: "Avenants (lien)", wide: true },
+      { key: "identityDocumentUrl", label: "Piece identite (lien)", wide: true },
+      { key: "diplomasUrl", label: "Diplomes (lien)", wide: true },
+      { key: "notes", label: "Notes", type: "textarea", wide: true },
+    ],
+  },
+});
+
 const SELF_ACTION_FORMS = {
   leaveRequest: {
     title: "Demander un conge",
@@ -663,7 +798,37 @@ function App() {
       const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
-        if (kind === "hrContract") await api.createHrContract(cleanPayload({ userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null, reference: form.reference || null, notes: form.notes || null }));
+        if (kind === "hrContract") await api.createHrContract(cleanPayload({
+          userId: Number(form.userId),
+          contractType: form.contractType,
+          startDate: form.startDate,
+          endDate: hasContractEndDate(form) ? form.endDate || null : null,
+          designationId: toNum(form.designationId),
+          departmentId: toNum(form.departmentId),
+          managerId: toNum(form.managerId),
+          hrResponsibleId: toNum(form.hrResponsibleId),
+          workLocation: form.workLocation || null,
+          currencyId: toNum(form.currencyId),
+          baseSalary: Number(form.baseSalary || 0),
+          transportAllowance: Number(form.transportAllowance || 0),
+          housingAllowance: Number(form.housingAllowance || 0),
+          payFrequency: form.payFrequency || null,
+          probationMonths: usesProbation(form) ? toNum(form.probationMonths) : null,
+          probationEndDate: usesProbation(form) ? form.probationEndDate || null : null,
+          workSchedule: form.workSchedule || null,
+          school: form.contractType === "Stage" ? form.school || null : null,
+          supervisor: form.contractType === "Stage" ? form.supervisor || null : null,
+          stipend: form.contractType === "Stage" ? Number(form.stipend || 0) : 0,
+          contractAmount: form.contractType === "Consultant" ? Number(form.contractAmount || 0) : 0,
+          deliverables: form.contractType === "Consultant" ? form.deliverables || null : null,
+          generatedDocumentUrl: form.generatedDocumentUrl || null,
+          signedDocumentUrl: form.signedDocumentUrl || null,
+          amendmentsUrl: form.amendmentsUrl || null,
+          identityDocumentUrl: form.identityDocumentUrl || null,
+          diplomasUrl: form.diplomasUrl || null,
+          status: form.status || "draft",
+          notes: form.notes || null,
+        }));
         if (kind === "hrDocument") await api.createHrDocument(cleanPayload({ userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null, fileUrl: form.fileUrl || null, note: form.note || null }));
         if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({ userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), requestDate: form.requestDate, description: form.description || null }));
         if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), dueDate: form.dueDate || null, note: form.note || null }));
@@ -1189,16 +1354,18 @@ function Paie({ data, staff, masse, setModal }) {
 function Contrats({ data, staff, setModal }) {
   const [q, setQ] = React.useState("");
   const rows = data.contracts || [];
-  const filtered = rows.filter((c) => !q.trim() || [personName(staff, c.userId), c.contractType, c.reference, c.status].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
-  const soon = expiringContracts(rows);
-  const exportContrats = () => exportCsv("contrats.csv", ["Employe", "Type", "Debut", "Fin", "Statut"], filtered.map((c) => [personName(staff, c.userId), c.contractType || "", dateOnly(c.startDate), dateOnly(c.endDate), statusLabel(c.status)]));
+  const filtered = rows.filter((c) => !q.trim() || [personName(staff, c.userId), c.contractType, c.reference, c.status, contractMoneyText(c)].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+  const soon90 = expiringContracts(rows, 90);
+  const soon30 = expiringContracts(rows, 30);
+  const soon7 = expiringContracts(rows, 7);
+  const exportContrats = () => exportCsv("contrats.csv", ["Reference", "Employe", "Type", "Debut", "Fin", "Montant", "Statut"], filtered.map((c) => [c.reference || "", personName(staff, c.userId), c.contractType || "", dateOnly(c.startDate), dateOnly(c.endDate), contractMoneyText(c), statusLabel(c.status)]));
   return (
     <>
       <PageHead eyebrow="Cycle de vie" title="Contrats" action="Nouveau contrat" onAction={() => setModal({ kind: "hrContract" })} />
-      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Total contrats" value={rows.length} /><Mini label="Actifs" value={rows.filter((c) => isApproved(c.status)).length} /><Mini label="Sans date fin" value={rows.filter((c) => !c.endDate).length} /><KPI label="Expirent < 30 j" value={soon.length} tone={soon.length ? "warn" : undefined} /></div>
+      <div className="g4 kpis" style={{ marginBottom: 16 }}><Mini label="Total contrats" value={rows.length} /><KPI label="Expirent < 90 j" value={soon90.length} tone={soon90.length ? "warn" : undefined} /><KPI label="Expirent < 30 j" value={soon30.length} tone={soon30.length ? "warn" : undefined} /><KPI label="Urgent < 7 j" value={soon7.length} tone={soon7.length ? "warn" : undefined} /></div>
       <div className="card pad table-card">
-        <div className="searchbar"><label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employe, type, statut)..." /></label><button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button></div>
-        <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 620 }}><thead><tr><th>Employe</th><th>Type</th><th>Debut</th><th>Fin</th><th className="r">Statut</th></tr></thead><tbody>{filtered.map((c) => <tr key={c.id}><td style={{ fontWeight: 500 }}>{personName(staff, c.userId)}</td><td><span className="chip ink">{c.contractType || "Contrat"}</span></td><td>{dateOnly(c.startDate) || "-"}</td><td className="muted">{dateOnly(c.endDate) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span></td></tr>)}</tbody></table></div>
+        <div className="searchbar"><label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher (employe, reference, type, montant, statut)..." /></label><button type="button" className="pillbtn" onClick={exportContrats}><Icon name="download" /> Exporter</button></div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 900 }}><thead><tr><th>Reference</th><th>Employe</th><th>Type</th><th>Debut</th><th>Fin</th><th className="r">Montant</th><th className="r">Alerte</th><th className="r">Statut</th></tr></thead><tbody>{filtered.map((c) => { const days = daysUntil(c.endDate); return <tr key={c.id}><td className="muted">{c.reference || "-"}</td><td style={{ fontWeight: 500 }}>{personName(staff, c.userId)}</td><td><span className="chip ink">{c.contractType || "Contrat"}</span></td><td>{dateOnly(c.startDate) || "-"}</td><td className="muted">{dateOnly(c.endDate) || "-"}</td><td className="r">{contractMoneyText(c)}</td><td className="r">{days == null || days < 0 ? "-" : days <= 7 ? <span className="chip amber">{days} j</span> : days <= 30 ? <span className="chip amber">{days} j</span> : days <= 90 ? <span className="chip ink">{days} j</span> : "-"}</td><td className="r"><span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span></td></tr>; })}</tbody></table></div>
         {filtered.length === 0 && <EmptyState title="Aucun contrat en base" />}
       </div>
     </>
@@ -1411,7 +1578,7 @@ function SelfList({ title, rows, render, empty }) {
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const selfAction = modal.lockUserId ? SELF_ACTION_FORMS[modal.kind] : null;
   const action = selfAction || ACTION_FORMS[modal.kind];
-  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession"].includes(modal.kind);
+  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract"].includes(modal.kind);
   const [form, setForm] = React.useState(() => {
     const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
     if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
@@ -1446,15 +1613,18 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     if (field.key === "salary") return true;
     if (["expenseRequest", "socialDeclaration"].includes(modal.kind) && ["amount", "baseAmount"].includes(field.key)) return true;
     if (modal.kind === "trainingSession" && field.key === "budget") return true;
+    if (modal.kind === "hrContract" && ["baseSalary", "transportAllowance", "housingAllowance", "stipend", "contractAmount"].includes(field.key)) return true;
     return false;
   };
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
-      <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
+      <form className={`modal-card ${action?.wide ? "wide" : ""}`} onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
         <div className="modal-head"><div><h2 className="font-display">{action?.title || titleFor(modal.kind)}</h2><p>{action?.subtitle || (modal.lockUserId ? "Espace employe" : "RH NgoluApp")}</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
         <div className="form-grid">
           {action && action.fields.map((field) => {
+            if (field.visibleWhen && !field.visibleWhen(form)) return null;
             if (field.kind === "section") return <div key={field.label} className="form-section">{field.label}</div>;
+            if (field.kind === "computed") return <div key={field.label} className={`field ${field.wide ? "wide" : ""}`}><span>{field.label}</span><div className="computed-field">{field.value ? field.value(form) : "-"}</div></div>;
             if (field.requiresStatusPermission && !canManageUserStatus()) return null;
             const options = field.optionKey ? opts[field.optionKey] || [] : field.options;
             if (modal.lockUserId && field.key === "userId") return null;

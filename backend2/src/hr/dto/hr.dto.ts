@@ -171,6 +171,26 @@ export class CreateHrContractDto {
   @IsNumber()
   userId: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  designationId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  departmentId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  managerId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  hrResponsibleId?: number | null;
+
   @IsString()
   @IsNotEmpty()
   contractType: string;
@@ -188,14 +208,97 @@ export class CreateHrContractDto {
 
   @IsOptional()
   @IsString()
+  workLocation?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  baseSalary?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  transportAllowance?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  housingAllowance?: number | null;
+
+  @IsOptional()
+  @IsString()
+  payFrequency?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  probationMonths?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  probationEndDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  workSchedule?: string | null;
+
+  @IsOptional()
+  @IsString()
+  school?: string | null;
+
+  @IsOptional()
+  @IsString()
+  supervisor?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  stipend?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  contractAmount?: number | null;
+
+  @IsOptional()
+  @IsString()
+  deliverables?: string | null;
+
+  @IsOptional()
+  @IsString()
+  generatedDocumentUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  signedDocumentUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  amendmentsUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  identityDocumentUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  diplomasUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
   notes?: string | null;
 }
 
-export class UpdateHrContractDto extends PartialType(CreateHrContractDto) {
-  @IsOptional()
-  @IsString()
-  status?: string;
-}
+export class UpdateHrContractDto extends PartialType(CreateHrContractDto) {}
 
 export class CreateHrDocumentDto {
   @Type(() => Number)

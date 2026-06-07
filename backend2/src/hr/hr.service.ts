@@ -326,13 +326,14 @@ export class HrService {
   }
 
   async createContract(input: CreateHrContractDto) {
-    await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrContracts, input, (id) => this.findContract(id));
+    await this.validateContractRefs(input);
+    const reference = input.reference || (await this.nextContractReference(input.startDate));
+    return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id));
   }
 
   async updateContract(id: number, input: UpdateHrContractDto) {
     await this.findContract(id);
-    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    await this.validateContractRefs(input);
     return this.updateRecord(hrContracts, id, input, () => this.findContract(id));
   }
 
@@ -638,6 +639,25 @@ export class HrService {
   private async ensureExists(table: any, id: number, message: string) {
     const rows = await this.db.select().from(table).where(eq(table.id, id)).limit(1);
     if (!rows.length) throw new NotFoundException(message);
+  }
+
+  private async validateContractRefs(input: Partial<CreateHrContractDto>) {
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.designationId) await this.ensureExists(designations, input.designationId, "Designation not found.");
+    if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
+    if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
+    if (input.hrResponsibleId) await this.ensureExists(users, input.hrResponsibleId, "HR responsible not found.");
+    if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private async nextContractReference(startDate?: string | null) {
+    const year = String(startDate || "").slice(0, 4) || String(new Date().getFullYear());
+    const pattern = `CTR-${year}-%`;
+    const [{ total }] = await this.db
+      .select({ total: count(hrContracts.id) })
+      .from(hrContracts)
+      .where(like(hrContracts.reference, pattern));
+    return `CTR-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
   }
 
   private normalizeTime(value: string) {
