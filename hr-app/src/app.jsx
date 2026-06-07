@@ -250,6 +250,7 @@ function contractMoneyText(contract) {
   const total = Number(contract?.baseSalary || 0) + Number(contract?.transportAllowance || 0) + Number(contract?.housingAllowance || 0);
   return fc(total, moneySymbolFor(contract));
 }
+const fallbackEmployeeId = (u) => `EMP-${dateOnly(u?.joinDate).slice(0, 4) || TODAY.slice(0, 4)}-${String(u?.id || 0).padStart(4, "0")}`;
 const displayPhone = (u) => {
   const raw = typeof u === "string" ? u : u?.phone;
   if (!String(raw || "").trim()) return "Telephone non renseigne";
@@ -322,12 +323,22 @@ const employeeForm = (u) => ({
   roleId: u.roleId || u.role?.id || "",
   email: u.email || "",
   phone: u.phone || "",
+  gender: u.gender || "",
+  birthDate: dateOnly(u.birthDate),
+  maritalStatus: u.maritalStatus || "",
+  childrenCount: u.childrenCount ?? 0,
+  nationality: u.nationality || "",
+  emergencyContactName: u.emergencyContactName || "",
+  emergencyContactPhone: u.emergencyContactPhone || "",
+  emergencyContactRelationship: u.emergencyContactRelationship || "",
+  personalDocumentsUrl: u.personalDocumentsUrl || "",
   departmentId: u.departmentId || u.department?.id || "",
   designationId: u.designationId || u.designation?.id || "",
   shiftId: u.shiftId || "",
   employeeId: u.employeeId || "",
   joinDate: dateOnly(u.joinDate),
   bloodGroup: u.bloodGroup || "",
+  image: u.image || "",
   street: u.street || "",
   city: u.city || "",
   state: u.state || "",
@@ -462,7 +473,7 @@ Object.assign(ACTION_FORMS, {
     title: "Nouvel employe",
     submit: "Creer",
     success: "Employe cree dans la base.",
-    defaults: { firstName: "", lastName: "", username: "", password: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "RDC" },
+    defaults: { firstName: "", lastName: "", username: "", password: "", email: "", phone: "", gender: "", birthDate: "", maritalStatus: "", childrenCount: 0, nationality: "Congolaise", emergencyContactName: "", emergencyContactPhone: "", emergencyContactRelationship: "", personalDocumentsUrl: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "", image: "", street: "", city: "", state: "", zipCode: "", country: "RDC" },
     fields: [
       { kind: "section", label: "Identite" },
       { key: "firstName", label: "Prenom", required: true },
@@ -471,14 +482,25 @@ Object.assign(ACTION_FORMS, {
       { key: "password", label: "Mot de passe initial", type: "password", required: true, generated: true, help: "Min 12 caracteres, avec au moins une lettre et un chiffre." },
       { key: "email", label: "Email", type: "email", readOnly: true, help: "Genere automatiquement avec le prenom et le nom." },
       { key: "phone", label: "Telephone" },
+      { key: "image", label: "Photo (lien fichier)", wide: true },
+      { key: "gender", label: "Genre", type: "select", options: ["Femme", "Homme", "Autre", "Non precise"] },
+      { key: "birthDate", label: "Date de naissance", type: "date" },
+      { key: "maritalStatus", label: "Etat civil", type: "select", options: ["Celibataire", "Marie(e)", "Divorce(e)", "Veuf/Veuve", "Non precise"] },
+      { key: "childrenCount", label: "Nombre d'enfants", type: "number" },
+      { key: "nationality", label: "Nationalite" },
       { kind: "section", label: "Informations RH" },
       { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true },
       { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" },
       { key: "designationId", label: "Poste", type: "select", optionKey: "designations" },
       { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" },
-      { key: "employeeId", label: "Matricule" },
+      { key: "employeeId", label: "Matricule", readOnly: true, help: "Genere automatiquement par l'API si vide." },
       { key: "joinDate", label: "Date d'embauche", type: "date" },
       { key: "bloodGroup", label: "Groupe sanguin" },
+      { kind: "section", label: "Contact d'urgence" },
+      { key: "emergencyContactName", label: "Nom contact" },
+      { key: "emergencyContactPhone", label: "Telephone contact", type: "phone" },
+      { key: "emergencyContactRelationship", label: "Lien avec l'employe" },
+      { key: "personalDocumentsUrl", label: "Pieces personnelles (lien dossier)", wide: true },
       { kind: "section", label: "Adresse" },
       { key: "street", label: "Rue", wide: true },
       { key: "city", label: "Ville" },
@@ -491,7 +513,7 @@ Object.assign(ACTION_FORMS, {
     title: "Modifier employe",
     submit: "Enregistrer",
     success: "Employe modifie dans la base.",
-    defaults: { id: "", firstName: "", lastName: "", username: "", password: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" },
+    defaults: { id: "", firstName: "", lastName: "", username: "", password: "", email: "", phone: "", gender: "", birthDate: "", maritalStatus: "", childrenCount: 0, nationality: "", emergencyContactName: "", emergencyContactPhone: "", emergencyContactRelationship: "", personalDocumentsUrl: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", image: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" },
     fields: [
       { kind: "section", label: "Identite" },
       { key: "firstName", label: "Prenom", required: true },
@@ -500,6 +522,12 @@ Object.assign(ACTION_FORMS, {
       { key: "password", label: "Changer mot de passe", type: "password", help: "Laisser vide pour garder l'ancien mot de passe." },
       { key: "email", label: "Email", type: "email" },
       { key: "phone", label: "Telephone" },
+      { key: "image", label: "Photo (lien fichier)", wide: true },
+      { key: "gender", label: "Genre", type: "select", options: ["Femme", "Homme", "Autre", "Non precise"] },
+      { key: "birthDate", label: "Date de naissance", type: "date" },
+      { key: "maritalStatus", label: "Etat civil", type: "select", options: ["Celibataire", "Marie(e)", "Divorce(e)", "Veuf/Veuve", "Non precise"] },
+      { key: "childrenCount", label: "Nombre d'enfants", type: "number" },
+      { key: "nationality", label: "Nationalite" },
       { key: "status", label: "Statut", type: "select", options: [{ value: "true", label: "Actif" }, { value: "false", label: "Inactif" }], requiresStatusPermission: true },
       { kind: "section", label: "Informations RH" },
       { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true },
@@ -509,6 +537,11 @@ Object.assign(ACTION_FORMS, {
       { key: "employeeId", label: "Matricule" },
       { key: "joinDate", label: "Date d'embauche", type: "date" },
       { key: "bloodGroup", label: "Groupe sanguin" },
+      { kind: "section", label: "Contact d'urgence" },
+      { key: "emergencyContactName", label: "Nom contact" },
+      { key: "emergencyContactPhone", label: "Telephone contact", type: "phone" },
+      { key: "emergencyContactRelationship", label: "Lien avec l'employe" },
+      { key: "personalDocumentsUrl", label: "Pieces personnelles (lien dossier)", wide: true },
       { kind: "section", label: "Adresse" },
       { key: "street", label: "Rue", wide: true },
       { key: "city", label: "Ville" },
@@ -704,8 +737,8 @@ function KPI({ label, value, sub, subClass = "", icon, tone }) {
 function Mini({ label, value, valueClass = "" }) {
   return <div className="card pad"><div className="kpi-label">{label}</div><div className={`font-display ${valueClass}`} style={{ fontSize: 22, fontWeight: 700, marginTop: 2 }}>{value}</div></div>;
 }
-function Avatar({ name, color, size = 36, sq = false, text }) {
-  return <span className={`av ${sq ? "sq" : ""}`} style={{ width: size, height: size, background: color || colorFor(name), fontSize: size <= 30 ? 10 : 12 }}>{text || initials(name)}</span>;
+function Avatar({ name, color, size = 36, sq = false, text, src }) {
+  return <span className={`av ${sq ? "sq" : ""}`} style={{ width: size, height: size, background: color || colorFor(name), fontSize: size <= 30 ? 10 : 12 }}>{src ? <img src={src} alt="" /> : text || initials(name)}</span>;
 }
 function Bar({ pct, cls = "grad-accent" }) {
   const bg = { amber: "var(--amber-400)", sky: "var(--sky-400)", ink: "var(--ink-300)", teal: "var(--teal-400)" }[cls];
@@ -864,7 +897,11 @@ function App() {
           firstName: form.firstName, lastName: form.lastName, username: form.username, password,
           roleId: Number(form.roleId), email, phone: form.phone, departmentId: toNum(form.departmentId),
           designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
-          bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
+          gender: form.gender, birthDate: form.birthDate, maritalStatus: form.maritalStatus,
+          childrenCount: Number(form.childrenCount || 0), nationality: form.nationality,
+          emergencyContactName: form.emergencyContactName, emergencyContactPhone: form.emergencyContactPhone,
+          emergencyContactRelationship: form.emergencyContactRelationship, personalDocumentsUrl: form.personalDocumentsUrl,
+          bloodGroup: form.bloodGroup, image: form.image, joinDate: form.joinDate, street: form.street, city: form.city,
           state: form.state, zipCode: form.zipCode, country: form.country,
         }));
       }
@@ -874,7 +911,11 @@ function App() {
           firstName: form.firstName, lastName: form.lastName, username: form.username, password: form.password,
           roleId: Number(form.roleId), email: form.email, phone: form.phone, departmentId: toNum(form.departmentId),
           designationId: toNum(form.designationId), shiftId: toNum(form.shiftId), employeeId: form.employeeId,
-          bloodGroup: form.bloodGroup, joinDate: form.joinDate, street: form.street, city: form.city,
+          gender: form.gender, birthDate: form.birthDate, maritalStatus: form.maritalStatus,
+          childrenCount: Number(form.childrenCount || 0), nationality: form.nationality,
+          emergencyContactName: form.emergencyContactName, emergencyContactPhone: form.emergencyContactPhone,
+          emergencyContactRelationship: form.emergencyContactRelationship, personalDocumentsUrl: form.personalDocumentsUrl,
+          bloodGroup: form.bloodGroup, image: form.image, joinDate: form.joinDate, street: form.street, city: form.city,
           state: form.state, zipCode: form.zipCode, country: form.country, status: canManageUserStatus() ? form.status : undefined,
         }));
       }
@@ -1074,7 +1115,7 @@ function Employes({ data, staff, setModal }) {
   const [dept, setDept] = React.useState("");
   const [view, setView] = React.useState("grid");
   const depts = [...new Set(staff.map((u) => u.department?.name).filter(Boolean))];
-  const matricule = (u) => `NG-${String(u.id).padStart(3, "0")}`;
+  const matricule = (u) => u.employeeId || fallbackEmployeeId(u);
   const filtered = staff.filter((u) => {
     const okDept = !dept || u.department?.name === dept;
     const hay = `${fullName(u)} ${u.designation?.name || ""} ${u.department?.name || ""} ${matricule(u)}`.toLowerCase();
@@ -1113,7 +1154,7 @@ function Employes({ data, staff, setModal }) {
           <thead><tr><th>Employé</th><th>Poste</th><th>Département</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
           <tbody>{filtered.map((u) => { const name = fullName(u); return (
             <tr key={u.id}>
-              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)} · {displayPhone(u)}</div><EmployeeActions user={u} setModal={setModal} /></div></div></td>
+              <td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} src={u.image} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{matricule(u)} · {displayPhone(u)}</div><EmployeeActions user={u} setModal={setModal} /></div></div></td>
               <td>{u.designation?.name || "—"}</td>
               <td className="muted">{u.department?.name || "—"}</td>
               <td className="r num">{fc(u.currentSalary, salarySym(u))}</td>
@@ -1129,7 +1170,7 @@ function Employes({ data, staff, setModal }) {
           return (
             <div className="card pad" key={u.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar name={name} color={colorFor(name)} size={48} sq />
+                <Avatar name={name} color={colorFor(name)} size={48} sq src={u.image} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
                   <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.designation?.name || "Poste non assigné"}</div>
@@ -1139,7 +1180,7 @@ function Employes({ data, staff, setModal }) {
               <div className="emp-meta">
                 <div><Icon name="phone" /> {displayPhone(u)}</div>
                 <div><Icon name="building2" /> {u.department?.name || "Département"}</div>
-                <div><Icon name="badgeCheck" /> {u.employeeId || `NG-${String(u.id).padStart(3, "0")}`}</div>
+                <div><Icon name="badgeCheck" /> {matricule(u)}</div>
               </div>
               <div style={{ marginTop: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 12, fontWeight: 600 }}>{fc(u.currentSalary, salarySym(u))} / mois</span>
@@ -1192,10 +1233,10 @@ function EmployeeProfileModal({ user, onClose, onEdit, onCloseAccount }) {
           <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
         </div>
         <div className="employee-profile-head">
-          <Avatar name={name} color={colorFor(name)} size={54} sq />
+          <Avatar name={name} color={colorFor(name)} size={54} sq src={user.image} />
           <div>
             <div className="chip emerald">{user.status === "false" ? "Inactif" : "Actif"}</div>
-            <div className="tiny" style={{ marginTop: 6 }}>NG-{String(user.id).padStart(3, "0")}</div>
+            <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || fallbackEmployeeId(user)}</div>
           </div>
         </div>
         <div className="employee-profile-grid">
@@ -1247,6 +1288,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
   const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const hasAlerts = (contractDays != null && contractDays >= 0 && contractDays <= 90) || onLeaveNow || documents.length === 0;
+  const emergencyContact = [user.emergencyContactName, user.emergencyContactPhone ? displayPhone(user.emergencyContactPhone) : "", user.emergencyContactRelationship].filter(Boolean).join(" - ");
 
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -1260,10 +1302,10 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
         </div>
 
         <div className="employee-profile-head">
-          <Avatar name={name} color={colorFor(name)} size={54} sq />
+          <Avatar name={name} color={colorFor(name)} size={54} sq src={user.image} />
           <div>
             <div className={user.status === "false" ? "chip rose" : "chip emerald"}>{user.status === "false" ? "Inactif" : "Actif"}</div>
-            <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || `NG-${String(user.id).padStart(3, "0")}`}</div>
+            <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || fallbackEmployeeId(user)}</div>
           </div>
         </div>
 
@@ -1289,7 +1331,14 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
               {row("Poste", user.designation?.name)}
               {row("Date d'embauche", dateOnly(user.joinDate))}
               {row("Salaire actuel", `${fc(user.currentSalary, salarySym(user))} / mois`)}
+              {row("Genre", user.gender)}
+              {row("Date de naissance", dateOnly(user.birthDate))}
+              {row("Etat civil", user.maritalStatus)}
+              {row("Enfants", user.childrenCount != null ? String(user.childrenCount) : "")}
+              {row("Nationalite", user.nationality)}
+              {row("Contact urgence", emergencyContact)}
               {row("Adresse", [user.street, user.city, user.country].filter(Boolean).join(", "))}
+              {row("Pieces personnelles", user.personalDocumentsUrl)}
               {row("Motif de depart", user.leaveReason)}
             </div>
             <div className="employee-360-grid">
@@ -1524,7 +1573,7 @@ function Paie({ data, staff, masse, setModal }) {
         <div className="section-head"><h3 className="font-display">Salaires actuels</h3><button type="button" className="link" onClick={exportCurrent}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 560 }}>
           <thead><tr><th>Employe</th><th>Poste</th><th className="r">Salaire</th><th className="r">Statut</th></tr></thead>
-          <tbody>{currentFiltered.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
+          <tbody>{currentFiltered.map((u) => { const name = fullName(u); return <tr key={u.id}><td><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Avatar name={name} color={colorFor(name)} size={30} src={u.image} /><div><div style={{ fontWeight: 500 }}>{name}</div><div className="tiny">{u.department?.name || ""}</div></div></div></td><td>{u.designation?.name || ""}</td><td className="r num">{fc(u.currentSalary, salarySym(u))}</td><td className="r"><span className={"chip " + (u.status === "false" ? "ink" : "emerald")}>{u.status === "false" ? "Inactif" : "Actif"}</span></td></tr>; })}</tbody>
         </table></div>
         {currentFiltered.length === 0 && <EmptyState title={staff.length === 0 ? "Aucun employe en base" : "Aucun employe ne correspond aux filtres"} />}
       </div>
@@ -1811,7 +1860,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
             const options = field.optionKey ? opts[field.optionKey] || [] : field.options;
             if (modal.lockUserId && field.key === "userId") return null;
             if (field.key === "currencyId") return null;
-            if (field.key === "phone") return <PhoneField key={field.key} label={field.label} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} required={field.required} />;
+            if (field.key === "phone" || field.type === "phone") return <PhoneField key={field.key} label={field.label} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} required={field.required} />;
             if (field.generated && field.key === "password") {
               return (
                 <GeneratedPasswordField

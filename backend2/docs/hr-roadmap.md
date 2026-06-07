@@ -38,7 +38,19 @@ Objectif: enrichir la table et les formulaires employes.
 - Contact d'urgence.
 - Pieces jointes personnelles.
 
-Statut: a faire.
+Statut: en cours.
+
+Fait:
+- Champs DB/API pour genre, date de naissance, etat civil, enfants, nationalite.
+- Contact d'urgence avec telephone international.
+- Photo via lien fichier.
+- Matricule genere par l'API au format `EMP-YYYY-0001` si vide.
+- Formulaires RH creation/modification connectes a ces champs.
+- Dossier employe 360 affiche ces informations.
+
+Reste:
+- Vrai upload fichier/photo avec stockage central.
+- Table dediee pour pieces personnelles si plusieurs fichiers doivent etre versionnes.
 
 ## Stade 3 - Organigramme
 
@@ -90,7 +102,7 @@ Statut: a faire.
 
 ## Stade 7 - Affectations projets ONG
 
-Objectif: calculer le cout RH par projet/bailleur.
+Objectif: calculer le cout RH par projet.
 
 - Projet.
 - Affectation employe-projet.

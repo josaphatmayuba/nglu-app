@@ -400,6 +400,13 @@
       "when": 1780218000000,
       "tag": "0076_hr_contract_professional_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1780221600000,
+      "tag": "0077_hr_employee_complete_fields",
+      "breakpoints": true
     }
   ]
 }
