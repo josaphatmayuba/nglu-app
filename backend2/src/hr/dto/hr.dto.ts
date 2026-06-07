@@ -389,6 +389,14 @@ export class CreateHrTimesheetDto {
   @IsString()
   period?: string | null;
 
+  @IsOptional()
+  @IsDateString()
+  periodStartDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  periodEndDate?: string | null;
+
   @IsString()
   @IsNotEmpty()
   project: string;

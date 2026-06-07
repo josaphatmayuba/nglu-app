@@ -474,11 +474,11 @@ Object.assign(ACTION_FORMS, {
     title: "Nouvelle saisie d'heures",
     submit: "Enregistrer",
     success: "Heures enregistrees.",
-    defaults: { userId: "", workDate: TODAY, period: TODAY.slice(0, 7), project: "", donor: "", activity: "", hours: 0, note: "" },
+    defaults: { userId: "", periodStartDate: TODAY, periodEndDate: TODAY, project: "", donor: "", activity: "", hours: 0, note: "" },
     fields: [
       { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
-      { key: "workDate", label: "Date", type: "date", required: true },
-      { key: "period", label: "Periode" },
+      { key: "periodStartDate", label: "Debut de periode", type: "date", required: true },
+      { key: "periodEndDate", label: "Fin de periode", type: "date", required: true },
       { key: "project", label: "Projet / activite", required: true },
       { key: "donor", label: "Financement / centre de cout" },
       { key: "hours", label: "Heures", type: "number", required: true },
@@ -504,17 +504,15 @@ const SELF_ACTION_FORMS = {
   },
   timesheet: {
     title: "Saisir mes heures",
-    subtitle: "Indique la date, le travail effectue et le nombre d'heures.",
+    subtitle: "Indique la periode, le travail effectue et le nombre d'heures.",
     submit: "Soumettre les heures",
     success: "Heures envoyees.",
     fields: [
       { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
-      { key: "workDate", label: "Date travaillee", type: "date", required: true },
-      { key: "period", label: "Periode" },
-      { key: "project", label: "Projet ou activite", required: true },
-      { key: "donor", label: "Financement ou centre de cout" },
+      { key: "periodStartDate", label: "Debut de periode", type: "date", required: true },
+      { key: "periodEndDate", label: "Fin de periode", type: "date", required: true },
       { key: "hours", label: "Nombre d'heures", type: "number", required: true },
-      { key: "activity", label: "Activite realisee", type: "textarea", wide: true },
+      { key: "activity", label: "Travail effectue", type: "textarea", wide: true, required: true },
       { key: "note", label: "Note", type: "textarea", wide: true },
     ],
   },
@@ -671,7 +669,23 @@ function App() {
         if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), dueDate: form.dueDate || null, note: form.note || null }));
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
         if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), currencyId: toNum(form.currencyId), note: form.note || null }));
-        if (kind === "timesheet") await api.createTimesheet(cleanPayload({ userId: Number(form.userId), workDate: form.workDate, period: form.period || null, project: form.project, donor: form.donor || null, activity: form.activity || null, hours: Number(form.hours || 0), note: form.note || null }));
+        if (kind === "timesheet") {
+          const periodStartDate = form.periodStartDate || form.workDate || TODAY;
+          const periodEndDate = form.periodEndDate || periodStartDate;
+          const activity = (form.activity || form.project || "Heures travaillees").trim();
+          await api.createTimesheet(cleanPayload({
+            userId: Number(form.userId),
+            workDate: periodStartDate,
+            period: form.period || `${periodStartDate} - ${periodEndDate}`,
+            periodStartDate,
+            periodEndDate,
+            project: form.project || activity.slice(0, 180),
+            donor: form.donor || null,
+            activity,
+            hours: Number(form.hours || 0),
+            note: form.note || null,
+          }));
+        }
         if (kind === "employeeRequest") await api.createEmployeeRequest(cleanPayload({ userId: Number(form.userId), requestType: form.requestType, subject: form.subject, requestedDate: form.requestedDate, description: form.description || null }));
         if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
         setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
@@ -1211,8 +1225,8 @@ function Timesheet({ data, staff, setModal }) {
   const projectCount = new Set(rows.map((row) => row.project).filter(Boolean)).size;
   const exportTimesheets = () => exportCsv(
     "timesheets.csv",
-    ["Employe", "Date", "Periode", "Projet", "Financement", "Activite", "Heures", "Statut", "Note"],
-    rows.map((row) => [personName(staff, row.userId), dateOnly(row.workDate), row.period || "", row.project || "", row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
+    ["Employe", "Debut", "Fin", "Projet", "Financement", "Activite", "Heures", "Statut", "Note"],
+    rows.map((row) => [personName(staff, row.userId), dateOnly(row.periodStartDate || row.workDate), dateOnly(row.periodEndDate || row.workDate), row.project || "", row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
   );
   return (
     <>
@@ -1226,8 +1240,8 @@ function Timesheet({ data, staff, setModal }) {
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Heures saisies</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 840 }}>
-          <thead><tr><th>Employe</th><th>Date</th><th>Periode</th><th>Projet</th><th>Financement</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.workDate) || "-"}</td><td>{row.period || "-"}</td><td>{row.project || "-"}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
+          <thead><tr><th>Employe</th><th>Debut</th><th>Fin</th><th>Projet</th><th>Financement</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.periodStartDate || row.workDate) || "-"}</td><td>{dateOnly(row.periodEndDate || row.workDate) || "-"}</td><td>{row.project || "-"}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
         </table></div>
         {rows.length === 0 && <EmptyState title="Aucune heure saisie" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet ou une activite." />}
       </div>
@@ -1352,12 +1366,12 @@ function SelfService({ data, staff, me, setModal }) {
   const pendingCount = [...myLeaves, ...myExpenses, ...myTimesheets, ...myRequests].filter((r) => isPending(r.status)).length;
   const activeContract = myContracts.find((c) => isApproved(c.status)) || myContracts[0];
   const lastSalary = mySalaries[0];
-  const thisMonthHours = myTimesheets.filter((t) => dateOnly(t.workDate).slice(0, 7) === TODAY.slice(0, 7)).reduce((sum, t) => sum + Number(t.hours || 0), 0);
+  const thisMonthHours = myTimesheets.filter((t) => dateOnly(t.periodStartDate || t.workDate).slice(0, 7) === TODAY.slice(0, 7)).reduce((sum, t) => sum + Number(t.hours || 0), 0);
   const selfModal = (kind, initial = {}) => setModal({ kind, initial: { userId, ...initial }, lockUserId: true, source: "selfservice" });
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const actions = [
     { icon: "palmtree", title: "Demander un conge", cta: "Envoyer", onClick: () => selfModal("leaveRequest") },
-    { icon: "timer", title: "Saisir mes heures", cta: "Saisir", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
+    { icon: "timer", title: "Saisir mes heures", cta: "Saisir", onClick: () => selfModal("timesheet", { periodStartDate: TODAY, periodEndDate: TODAY }) },
     { icon: "receipt", title: "Frais ou avance", cta: "Demander", onClick: () => selfModal("expenseRequest", { requestDate: TODAY }) },
     { icon: "folder", title: "Deposer un document", cta: "Deposer", onClick: () => selfModal("hrDocument") },
     { icon: "fileCheck", title: "Demande RH", cta: "Soumettre", onClick: () => selfModal("employeeRequest") },
@@ -1380,7 +1394,7 @@ function SelfService({ data, staff, me, setModal }) {
       <div className="g2" style={{ marginBottom: 16 }}>
         <SelfList title="Mes conges" empty="Aucune demande de conge" rows={myLeaves.slice(0, 5)} render={(r) => <><div><b>{r.type || "Conge"}</b><div className="tiny">{dateOnly(r.startDate)} - {dateOnly(r.endDate)}</div></div>{statusChip(r.status)}</>} />
         <SelfList title="Mes frais & avances" empty="Aucune demande de frais" rows={myExpenses.slice(0, 5)} render={(r) => <><div><b>{r.type || "Frais"}</b><div className="tiny">{dateOnly(r.requestDate)} - {r.description || ""}</div></div><div style={{ textAlign: "right" }}><b>{fc(r.amount, moneySymbolFor(r))}</b><div>{statusChip(r.status)}</div></div></>} />
-        <SelfList title="Mes heures" empty="Aucune heure saisie" rows={myTimesheets.slice(0, 5)} render={(r) => <><div><b>{r.project || "Activite"}</b><div className="tiny">{dateOnly(r.workDate)}{r.donor ? ` - ${r.donor}` : ""}</div></div><div style={{ textAlign: "right" }}><b>{nf.format(Number(r.hours || 0))} h</b><div>{statusChip(r.status)}</div></div></>} />
+        <SelfList title="Mes heures" empty="Aucune heure saisie" rows={myTimesheets.slice(0, 5)} render={(r) => <><div><b>{r.activity || r.project || "Travail effectue"}</b><div className="tiny">{[dateOnly(r.periodStartDate || r.workDate), dateOnly(r.periodEndDate || r.workDate)].filter(Boolean).join(" - ")}</div></div><div style={{ textAlign: "right" }}><b>{nf.format(Number(r.hours || 0))} h</b><div>{statusChip(r.status)}</div></div></>} />
         <SelfList title="Mes documents" empty="Aucun document" rows={myDocuments.slice(0, 5)} render={(r) => <><div><b>{r.documentType || "Document"}</b><div className="tiny">{r.reference || r.note || "-"}</div></div>{r.fileUrl ? <a className="link" href={r.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : statusChip(r.status)}</>} />
         <SelfList title="Mes demandes RH" empty="Aucune demande RH" rows={myRequests.slice(0, 5)} render={(r) => <><div><b>{r.subject || r.requestType}</b><div className="tiny">{r.requestType} - {dateOnly(r.requestedDate)}</div></div>{statusChip(r.status)}</>} />
         <SelfList title="Evaluations & formation" empty="Aucune evaluation ou formation" rows={[...myReviews.slice(0, 3), ...data.trainingSessions.slice(0, 3)]} render={(r) => <><div><b>{r.cycle || r.title || "Element RH"}</b><div className="tiny">{r.score != null ? `Score ${r.score}/5` : [r.audience, dateOnly(r.sessionDate)].filter(Boolean).join(" - ")}</div></div>{statusChip(r.status)}</>} />

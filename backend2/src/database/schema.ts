@@ -669,6 +669,8 @@ export const hrTimesheets = mysqlTable("hr_timesheets", {
   userId: bigint("userId", { mode: "number" }).notNull(),
   workDate: date("workDate", { mode: "string" }).notNull(),
   period: varchar("period", { length: 30 }),
+  periodStartDate: date("periodStartDate", { mode: "string" }),
+  periodEndDate: date("periodEndDate", { mode: "string" }),
   project: varchar("project", { length: 180 }).notNull(),
   donor: varchar("donor", { length: 180 }),
   activity: varchar("activity", { length: 255 }),
