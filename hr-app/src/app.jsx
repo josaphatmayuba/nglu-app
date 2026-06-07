@@ -997,8 +997,10 @@ function App() {
       )}
 
       {modal && (modal.kind === "employeeProfile"
-        ? <EmployeeProfileModal
+        ? <Employee360ProfileModal
             user={modal.user}
+            data={data}
+            staff={staff}
             onClose={() => setModal(null)}
             onEdit={() => setModal({ kind: "editEmployee", initial: employeeForm(modal.user) })}
             onCloseAccount={() => setModal({ kind: "closeAccount", initial: { userId: modal.user.id } })}
@@ -1216,6 +1218,186 @@ function EmployeeProfileModal({ user, onClose, onEdit, onCloseAccount }) {
       </div>
     </div>
   );
+}
+
+function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAccount }) {
+  const name = fullName(user);
+  const [tab, setTab] = React.useState("resume");
+  const userId = user?.id;
+  const contracts = byUser(data.contracts, userId);
+  const salaries = byUser(data.salaries, userId);
+  const leaves = byUser(data.leaveRequests, userId);
+  const documents = byUser(data.documents, userId);
+  const timesheets = byUser(data.timesheets, userId);
+  const reviews = byUser(data.performanceReviews, userId);
+  const trainings = byUser(data.trainingSessions, userId);
+  const expenses = byUser(data.expenseRequests, userId);
+  const requests = byUser(data.employeeRequests, userId);
+  const activeContract = contracts.find((c) => isApproved(c.status)) || contracts[0];
+  const totalHours = timesheets.reduce((sum, row) => sum + Number(row.hours || 0), 0);
+  const openLeaves = leaves.filter((row) => isPending(row.status)).length;
+  const contractDays = daysUntil(activeContract?.endDate);
+  const onLeaveNow = leaves.some((leave) => currentLeaves([leave]).length);
+  const projectHours = [...timesheets.reduce((map, row) => {
+    const key = row.project || "Projet non renseigne";
+    map.set(key, (map.get(key) || 0) + Number(row.hours || 0));
+    return map;
+  }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
+  const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["developpement", "Developpement"]];
+  const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
+  const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
+  const hasAlerts = (contractDays != null && contractDays >= 0 && contractDays <= 90) || onLeaveNow || documents.length === 0;
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <div className="modal-card employee-profile-card employee-360-card">
+        <div className="modal-head">
+          <div>
+            <h2 className="font-display">{name}</h2>
+            <p>{user.designation?.name || "Poste non assigne"} - {user.department?.name || "Departement non assigne"}</p>
+          </div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+
+        <div className="employee-profile-head">
+          <Avatar name={name} color={colorFor(name)} size={54} sq />
+          <div>
+            <div className={user.status === "false" ? "chip rose" : "chip emerald"}>{user.status === "false" ? "Inactif" : "Actif"}</div>
+            <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || `NG-${String(user.id).padStart(3, "0")}`}</div>
+          </div>
+        </div>
+
+        <div className="employee-360-kpis">
+          <Mini label="Contrats" value={contracts.length} />
+          <Mini label="Conges ouverts" value={openLeaves} />
+          <Mini label="Heures saisies" value={`${nf.format(totalHours)} h`} />
+          <Mini label="Documents" value={documents.length} />
+        </div>
+
+        <div className="employee-360-tabs">
+          {tabs.map(([id, label]) => <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
+        </div>
+
+        {tab === "resume" && (
+          <div className="employee-360-body">
+            <div className="employee-profile-grid">
+              {row("Telephone", displayPhone(user))}
+              {row("Email", user.email)}
+              {row("Identifiant", user.username)}
+              {row("Role", user.role?.name)}
+              {row("Departement", user.department?.name)}
+              {row("Poste", user.designation?.name)}
+              {row("Date d'embauche", dateOnly(user.joinDate))}
+              {row("Salaire actuel", `${fc(user.currentSalary, salarySym(user))} / mois`)}
+              {row("Adresse", [user.street, user.city, user.country].filter(Boolean).join(", "))}
+              {row("Motif de depart", user.leaveReason)}
+            </div>
+            <div className="employee-360-grid">
+              <Employee360Panel title="Contrat actif">
+                {activeContract ? (
+                  <div className="kv">
+                    {row("Reference", activeContract.reference)}
+                    {row("Type", activeContract.contractType)}
+                    {row("Debut", dateOnly(activeContract.startDate))}
+                    {row("Fin", dateOnly(activeContract.endDate))}
+                    {row("Montant", contractMoneyText(activeContract))}
+                    <div><span>Statut</span><strong>{statusChip(activeContract.status)}</strong></div>
+                  </div>
+                ) : <EmptyState title="Aucun contrat lie a cet employe" />}
+              </Employee360Panel>
+              <Employee360Panel title="Alertes">
+                {hasAlerts ? (
+                  <div className="employee-360-alerts">
+                    {contractDays != null && contractDays >= 0 && contractDays <= 90 && <div className="note"><Icon name="fileText" />Contrat expire dans {contractDays} jours.</div>}
+                    {onLeaveNow && <div className="note"><Icon name="palmtree" />Employe actuellement en conge.</div>}
+                    {documents.length === 0 && <div className="note"><Icon name="folder" />Aucun document RH lie a cet employe.</div>}
+                  </div>
+                ) : <EmptyState title="Aucune alerte active" detail="Les alertes apparaissent selon les donnees en base." />}
+              </Employee360Panel>
+            </div>
+            <Employee360Panel title="Temps par projet">
+              <Employee360List rows={projectHours.slice(0, 6)} empty="Aucune heure par projet pour cet employe" render={(item) => <><span>{item.project}</span><strong>{nf.format(item.hours)} h</strong></>} />
+            </Employee360Panel>
+          </div>
+        )}
+
+        {tab === "contrats" && (
+          <Employee360Panel title="Contrats de l'employe">
+            <Employee360List rows={contracts} empty="Aucun contrat en base" render={(c) => <><span>{c.reference || c.contractType || "Contrat"}<small>{[c.contractType, dateOnly(c.startDate), dateOnly(c.endDate)].filter(Boolean).join(" - ")}</small></span><strong>{statusChip(c.status)}</strong></>} />
+          </Employee360Panel>
+        )}
+
+        {tab === "paie" && (
+          <div className="employee-360-body">
+            <Employee360Panel title="Salaire actuel">
+              <div className="kv">{row("Montant", `${fc(user.currentSalary, salarySym(user))} / mois`)}{activeContract && row("Source contrat", activeContract.reference || activeContract.contractType)}</div>
+            </Employee360Panel>
+            <Employee360Panel title="Historique de paie">
+              <Employee360List rows={salaries} empty="Aucune ligne de paie en base" render={(s) => <><span>{dateOnly(s.salaryStartDate || s.startDate) || "Date non renseignee"}<small>{s.salaryComment || ""}</small></span><strong>{fc(s.salary, moneySymbolFor(s))}</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Frais & avances">
+              <Employee360List rows={expenses} empty="Aucune demande de frais liee" render={(e) => <><span>{e.type || "Frais"}<small>{dateOnly(e.requestDate)}</small></span><strong>{fc(e.amount, moneySymbolFor(e))}</strong></>} />
+            </Employee360Panel>
+          </div>
+        )}
+
+        {tab === "temps" && (
+          <div className="employee-360-grid">
+            <Employee360Panel title="Conges">
+              <Employee360List rows={leaves} empty="Aucune demande de conge" render={(l) => <><span>{l.type || "Conge"}<small>{[dateOnly(l.startDate), dateOnly(l.endDate)].filter(Boolean).join(" - ")}</small></span><strong>{statusChip(l.status)}</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Heures">
+              <Employee360List rows={timesheets} empty="Aucune heure saisie" render={(t) => <><span>{t.activity || t.project || "Travail"}<small>{[dateOnly(t.periodStartDate || t.workDate), dateOnly(t.periodEndDate || t.workDate)].filter(Boolean).join(" - ")}</small></span><strong>{nf.format(Number(t.hours || 0))} h</strong></>} />
+            </Employee360Panel>
+          </div>
+        )}
+
+        {tab === "documents" && (
+          <div className="employee-360-grid">
+            <Employee360Panel title="Documents RH">
+              <Employee360List rows={documents} empty="Aucun document en base" render={(d) => <><span>{d.documentType || "Document"}<small>{d.reference || d.note || ""}</small></span><strong>{d.fileUrl ? <a className="link" href={d.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : statusChip(d.status)}</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Demandes RH">
+              <Employee360List rows={requests} empty="Aucune demande RH" render={(r) => <><span>{r.subject || r.requestType}<small>{dateOnly(r.requestedDate)}</small></span><strong>{statusChip(r.status)}</strong></>} />
+            </Employee360Panel>
+          </div>
+        )}
+
+        {tab === "developpement" && (
+          <div className="employee-360-grid">
+            <Employee360Panel title="Evaluations">
+              <Employee360List rows={reviews} empty="Aucune evaluation en base" render={(r) => <><span>{r.cycle || "Evaluation"}<small>{r.comments || r.objectives || ""}</small></span><strong>{r.score != null ? `${r.score}/5` : statusChip(r.status)}</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Formations">
+              <Employee360List rows={trainings} empty="Aucune formation liee a cet employe" render={(t) => <><span>{t.title || "Formation"}<small>{[t.audience, dateOnly(t.sessionDate)].filter(Boolean).join(" - ")}</small></span><strong>{statusChip(t.status)}</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Discipline">
+              <EmptyState title="Module discipline a connecter" detail="Aucune table/API discipline n'existe encore pour cet employe." />
+            </Employee360Panel>
+            <Employee360Panel title="Signature electronique">
+              <EmptyState title="Signature a connecter" detail="Les contrats signes seront relies ici quand le module document/signature sera pret." />
+            </Employee360Panel>
+          </div>
+        )}
+
+        <div className="employee-360-note">Stade 1: dossier central connecte aux donnees existantes. Les blocs vides attendent leur table/API dediee.</div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Fermer</button>
+          <button type="button" className="btn btn-ghost" onClick={onEdit}><Icon name="edit" /> Modifier</button>
+          <button type="button" className="btn btn-accent grad-accent" onClick={onCloseAccount}><Icon name="xCircle" /> Fermer le compte</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Employee360Panel({ title, children }) {
+  return <div className="employee-360-panel"><h3 className="block-title font-display">{title}</h3>{children}</div>;
+}
+
+function Employee360List({ rows, empty, render }) {
+  if (!rows.length) return <EmptyState title={empty} />;
+  return <div className="employee-360-list">{rows.map((row, index) => <div className="employee-360-row" key={row.id || `${index}`}>{render(row)}</div>)}</div>;
 }
 
 function Presences() {
