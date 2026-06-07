@@ -12,6 +12,7 @@ import {
   hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
+  hrPayrolls,
   hrPerformanceReviews,
   hrRecruitmentOffers,
   hrSocialDeclarations,
@@ -30,6 +31,7 @@ import {
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
+  CreateHrPayrollDto,
   CreateHrPerformanceReviewDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
@@ -46,6 +48,7 @@ import {
   UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
   UpdateHrLeaveRequestDto,
+  UpdateHrPayrollDto,
   UpdateHrPerformanceReviewDto,
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
@@ -149,6 +152,22 @@ export class SalaryHistoryController {
   @Post() create(@Body() body: CreateSalaryHistoryDto) { return this.service.createSalaryHistory(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSalaryHistoryDto) { return this.service.updateSalaryHistory(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(salaryHistories, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-payrolls")
+@Controller("hr/payrolls")
+export class HrPayrollController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listPayrolls(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
+  @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrPayrolls, id); }
 }
 
 @ApiBearerAuth()

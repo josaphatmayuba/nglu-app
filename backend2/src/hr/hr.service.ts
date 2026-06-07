@@ -14,6 +14,7 @@ import {
   hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
+  hrPayrolls,
   hrPerformanceReviews,
   hrRecruitmentOffers,
   hrSocialDeclarations,
@@ -36,6 +37,7 @@ import {
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
+  CreateHrPayrollDto,
   CreateHrPerformanceReviewDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
@@ -52,6 +54,7 @@ import {
   UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
   UpdateHrLeaveRequestDto,
+  UpdateHrPayrollDto,
   UpdateHrPerformanceReviewDto,
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
@@ -263,6 +266,30 @@ export class HrService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(eq(salaryHistories.id, id));
     return this.findSalaryHistory(id);
+  }
+
+  listPayrolls(q: Record<string, string>) {
+    return this.listHrRecords(q, hrPayrolls, "getAllHrPayroll", "totalHrPayroll");
+  }
+
+  findPayroll(id: number) {
+    return this.findOne(hrPayrolls, id, "Payroll not found.");
+  }
+
+  async createPayroll(input: CreateHrPayrollDto) {
+    await this.validatePayrollRefs(input);
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
+    const payload = this.payrollPayload({ ...input, currencyId });
+    return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id));
+  }
+
+  async updatePayroll(id: number, input: UpdateHrPayrollDto) {
+    const current = await this.findPayroll(id);
+    await this.validatePayrollRefs(input);
+    if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    const payload = this.payrollPayload({ ...current, ...input });
+    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
   }
 
   listAwardHistory(q: Record<string, string>) {
@@ -648,6 +675,45 @@ export class HrService {
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
     if (input.hrResponsibleId) await this.ensureExists(users, input.hrResponsibleId, "HR responsible not found.");
     if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private async validatePayrollRefs(input: Partial<CreateHrPayrollDto>) {
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.contractId) await this.ensureExists(hrContracts, input.contractId, "Contract not found.");
+    if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private payrollPayload(input: Partial<CreateHrPayrollDto> & Record<string, any>) {
+    const n = (value: any) => Number(value || 0);
+    const grossSalary = n(input.baseSalary) + n(input.transportAllowance) + n(input.housingAllowance)
+      + n(input.riskAllowance) + n(input.otherAllowances) + n(input.overtimeAmount);
+    const netSalary = Math.max(0, grossSalary - n(input.unpaidAbsenceDeduction) - n(input.advanceDeduction)
+      - n(input.taxAmount) - n(input.cnssAmount) - n(input.otherDeductions));
+    return {
+      userId: input.userId,
+      contractId: input.contractId ?? null,
+      period: input.period,
+      currencyId: input.currencyId ?? null,
+      baseSalary: n(input.baseSalary),
+      transportAllowance: n(input.transportAllowance),
+      housingAllowance: n(input.housingAllowance),
+      riskAllowance: n(input.riskAllowance),
+      otherAllowances: n(input.otherAllowances),
+      overtimeHours: n(input.overtimeHours),
+      overtimeAmount: n(input.overtimeAmount),
+      unpaidAbsenceDeduction: n(input.unpaidAbsenceDeduction),
+      advanceDeduction: n(input.advanceDeduction),
+      taxAmount: n(input.taxAmount),
+      cnssAmount: n(input.cnssAmount),
+      otherDeductions: n(input.otherDeductions),
+      grossSalary,
+      netSalary,
+      workedDays: n(input.workedDays),
+      absenceDays: n(input.absenceDays),
+      paidLeaveDays: n(input.paidLeaveDays),
+      status: input.status || "draft",
+      notes: input.notes ?? null,
+    };
   }
 
   private async nextContractReference(startDate?: string | null) {

@@ -54,14 +54,28 @@ Reste:
 
 ## Stade 3 - Organigramme
 
-Objectif: relier chaque employe a un responsable et une equipe.
+Objectif: relier chaque employe a un responsable et une equipe. en se basant ce qui est sur crm.
 
 - Superieur hierarchique.
 - Equipe/service.
 - Vue organigramme par departement.
 - Alertes sur postes sans manager.
 
-Statut: a faire.
+Statut: en cours.
+
+Fait:
+- Table `hr_payrolls` pour bulletins mensuels.
+- API `hr/payrolls` avec creation, liste, mise a jour, suppression.
+- Calcul serveur du brut et du net a payer.
+- Formulaire HR avec salaire de base, primes, heures supplementaires, retenues, impots et CNSS.
+- Page Paie avec bulletins, brut total, net a payer, filtres et export.
+- Dossier employe 360 relie aux bulletins de paie.
+
+Reste:
+- Generation automatique d'une paie depuis contrat + presence + conges.
+- Regles CNSS/IPR parametrees par pays.
+- Validation workflow et verrouillage apres paiement.
+- PDF fiche de paie et signature/accuse de reception employe.
 
 ## Stade 4 - Paie professionnelle
 

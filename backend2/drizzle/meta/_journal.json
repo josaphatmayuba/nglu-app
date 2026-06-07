@@ -407,6 +407,13 @@
       "when": 1780221600000,
       "tag": "0077_hr_employee_complete_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1780225200000,
+      "tag": "0078_hr_payrolls",
+      "breakpoints": true
     }
   ]
 }

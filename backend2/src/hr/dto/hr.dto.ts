@@ -112,6 +112,111 @@ export class CreateSalaryHistoryDto {
 
 export class UpdateSalaryHistoryDto extends PartialType(CreateSalaryHistoryDto) {}
 
+export class CreateHrPayrollDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  contractId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  period: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  baseSalary?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  transportAllowance?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  housingAllowance?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  riskAllowance?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  otherAllowances?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  overtimeHours?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  overtimeAmount?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  unpaidAbsenceDeduction?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  advanceDeduction?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  taxAmount?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cnssAmount?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  otherDeductions?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  workedDays?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  absenceDays?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  paidLeaveDays?: number | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateHrPayrollDto extends PartialType(CreateHrPayrollDto) {}
+
 export class CreateAwardHistoryDto {
   @Type(() => Number)
   @IsNumber()

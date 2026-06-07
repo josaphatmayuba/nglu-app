@@ -548,6 +548,36 @@ export const salaryHistories = mysqlTable("salary_histories", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrPayrolls = mysqlTable("hr_payrolls", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  contractId: bigint("contractId", { mode: "number" }),
+  period: varchar("period", { length: 20 }).notNull(),
+  currencyId: bigint("currencyId", { mode: "number" }),
+  baseSalary: double("baseSalary").default(0).notNull(),
+  transportAllowance: double("transportAllowance").default(0).notNull(),
+  housingAllowance: double("housingAllowance").default(0).notNull(),
+  riskAllowance: double("riskAllowance").default(0).notNull(),
+  otherAllowances: double("otherAllowances").default(0).notNull(),
+  overtimeHours: double("overtimeHours").default(0).notNull(),
+  overtimeAmount: double("overtimeAmount").default(0).notNull(),
+  unpaidAbsenceDeduction: double("unpaidAbsenceDeduction").default(0).notNull(),
+  advanceDeduction: double("advanceDeduction").default(0).notNull(),
+  taxAmount: double("taxAmount").default(0).notNull(),
+  cnssAmount: double("cnssAmount").default(0).notNull(),
+  otherDeductions: double("otherDeductions").default(0).notNull(),
+  grossSalary: double("grossSalary").default(0).notNull(),
+  netSalary: double("netSalary").default(0).notNull(),
+  workedDays: double("workedDays").default(0).notNull(),
+  absenceDays: double("absenceDays").default(0).notNull(),
+  paidLeaveDays: double("paidLeaveDays").default(0).notNull(),
+  status: varchar("status", { length: 30 }).default("draft").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const awardHistories = mysqlTable("award_histories", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number" }).notNull(),

@@ -90,7 +90,7 @@ const NAV = [
   { id: "conges", label: "Congés & absences", icon: "palmtree" },
   { id: "timesheet", label: "Temps projets", icon: "timer" },
   { section: "Paie & rémunération" },
-  { id: "paie", label: "Historique de paie", icon: "wallet" },
+  { id: "paie", label: "Paie", icon: "wallet" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
   { id: "declarations", label: "Déclarations sociales", icon: "fileCheck" },
   { section: "Développement" },
@@ -250,6 +250,15 @@ function contractMoneyText(contract) {
   const total = Number(contract?.baseSalary || 0) + Number(contract?.transportAllowance || 0) + Number(contract?.housingAllowance || 0);
   return fc(total, moneySymbolFor(contract));
 }
+function payrollGross(row) {
+  return Number(row?.baseSalary || 0) + Number(row?.transportAllowance || 0) + Number(row?.housingAllowance || 0)
+    + Number(row?.riskAllowance || 0) + Number(row?.otherAllowances || 0) + Number(row?.overtimeAmount || 0);
+}
+function payrollNet(row) {
+  return Math.max(0, payrollGross(row) - Number(row?.unpaidAbsenceDeduction || 0) - Number(row?.advanceDeduction || 0)
+    - Number(row?.taxAmount || 0) - Number(row?.cnssAmount || 0) - Number(row?.otherDeductions || 0));
+}
+const payrollMoneyText = (row, amount) => fc(amount, moneySymbolFor(row));
 const fallbackEmployeeId = (u) => `EMP-${dateOnly(u?.joinDate).slice(0, 4) || TODAY.slice(0, 4)}-${String(u?.id || 0).padStart(4, "0")}`;
 const displayPhone = (u) => {
   const raw = typeof u === "string" ? u : u?.phone;
@@ -263,6 +272,7 @@ const EMPTY_DATA = {
   shifts: [],
   awards: [],
   salaries: [],
+  payrolls: [],
   roles: [],
   leaveRequests: [],
   contracts: [],
@@ -287,6 +297,7 @@ const STATUS_LABELS = {
   validation: "En validation",
   approved: "Approuve",
   signed: "Signe",
+  paid: "Paye",
   active: "Actif",
   draft: "Brouillon",
   expired: "Expire",
@@ -300,7 +311,7 @@ const STATUS_LABELS = {
   false: "Inactif",
 };
 const isPending = (status) => ["pending", "en_attente", "submitted", "draft", "validation"].includes(String(status || "").toLowerCase());
-const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true"].includes(String(status || "").toLowerCase());
+const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true", "paid"].includes(String(status || "").toLowerCase());
 const chipForStatus = (status) => isPending(status) ? "amber" : isApproved(status) ? "emerald" : String(status || "").toLowerCase() === "rejected" ? "rose" : "ink";
 const statusLabel = (status) => STATUS_LABELS[String(status || "").toLowerCase()] || (status ? String(status) : "Non renseigne");
 const personName = (staff, userId) => fullName((staff || []).find((u) => String(u.id) === String(userId)) || { id: userId });
@@ -656,6 +667,67 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+Object.assign(ACTION_FORMS, {
+  payroll: {
+    title: "Nouveau bulletin de paie",
+    submit: "Enregistrer",
+    success: "Bulletin de paie enregistre.",
+    wide: true,
+    defaults: {
+      userId: "",
+      contractId: "",
+      period: TODAY.slice(0, 7),
+      currencyId: "",
+      baseSalary: 0,
+      transportAllowance: 0,
+      housingAllowance: 0,
+      riskAllowance: 0,
+      otherAllowances: 0,
+      overtimeHours: 0,
+      overtimeAmount: 0,
+      unpaidAbsenceDeduction: 0,
+      advanceDeduction: 0,
+      taxAmount: 0,
+      cnssAmount: 0,
+      otherDeductions: 0,
+      workedDays: 0,
+      absenceDays: 0,
+      paidLeaveDays: 0,
+      status: "draft",
+      notes: "",
+    },
+    fields: [
+      { kind: "section", label: "Reference paie" },
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "contractId", label: "Contrat", type: "select", optionKey: "contracts" },
+      { key: "period", label: "Periode", type: "month", required: true },
+      { key: "currencyId", label: "Devise", type: "select", optionKey: "currencies" },
+      { key: "status", label: "Statut", type: "select", options: [{ value: "draft", label: "Brouillon" }, { value: "validation", label: "En validation" }, { value: "approved", label: "Approuve" }, { value: "paid", label: "Paye" }] },
+      { kind: "section", label: "Gains" },
+      { key: "baseSalary", label: "Salaire de base", type: "number", required: true },
+      { key: "transportAllowance", label: "Prime transport", type: "number" },
+      { key: "housingAllowance", label: "Prime logement", type: "number" },
+      { key: "riskAllowance", label: "Prime risque", type: "number" },
+      { key: "otherAllowances", label: "Autres primes", type: "number" },
+      { key: "overtimeHours", label: "Heures supp.", type: "number" },
+      { key: "overtimeAmount", label: "Montant heures supp.", type: "number" },
+      { kind: "computed", label: "Salaire brut", value: (form) => fc(payrollGross(form), symbolFor(form.currencyId || defaultCurrencyId(), CURRENCIES, CUR)) },
+      { kind: "section", label: "Retenues" },
+      { key: "unpaidAbsenceDeduction", label: "Absences non payees", type: "number" },
+      { key: "advanceDeduction", label: "Avances retenues", type: "number" },
+      { key: "taxAmount", label: "Impots", type: "number" },
+      { key: "cnssAmount", label: "CNSS", type: "number" },
+      { key: "otherDeductions", label: "Autres retenues", type: "number" },
+      { kind: "computed", label: "Net a payer", value: (form) => fc(payrollNet(form), symbolFor(form.currencyId || defaultCurrencyId(), CURRENCIES, CUR)) },
+      { kind: "section", label: "Presence" },
+      { key: "workedDays", label: "Jours travailles", type: "number" },
+      { key: "absenceDays", label: "Jours absence", type: "number" },
+      { key: "paidLeaveDays", label: "Jours conge paye", type: "number" },
+      { key: "notes", label: "Notes", type: "textarea", wide: true },
+    ],
+  },
+});
+
 const SELF_ACTION_FORMS = {
   leaveRequest: {
     title: "Demander un conge",
@@ -780,11 +852,11 @@ function App() {
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.roles(), api.setting(), api.currencies(),
+      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
       api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, salaries, payrolls, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -800,6 +872,7 @@ function App() {
           shifts: Array.isArray(shifts.value) ? shifts.value : [],
           awards: arrayFrom(awards.value, "getAllAward"),
           salaries: arrayFrom(salaries.value, "getAllSalaryHistory"),
+          payrolls: arrayFrom(payrolls.value, "getAllHrPayroll"),
           roles: arrayFrom(roles.value, "getAllRole"),
           leaveRequests: arrayFrom(leaves.value, "getAllHrLeaveRequest"),
           contracts: arrayFrom(contracts.value, "getAllHrContract"),
@@ -828,7 +901,7 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer"];
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer", "payroll"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({
@@ -865,6 +938,29 @@ function App() {
         if (kind === "hrDocument") await api.createHrDocument(cleanPayload({ userId: Number(form.userId), documentType: form.documentType, reference: form.reference || null, fileUrl: form.fileUrl || null, note: form.note || null }));
         if (kind === "expenseRequest") await api.createExpenseRequest(cleanPayload({ userId: Number(form.userId), type: form.type, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), requestDate: form.requestDate, description: form.description || null }));
         if (kind === "socialDeclaration") await api.createSocialDeclaration(cleanPayload({ period: form.period, organism: form.organism, baseAmount: Number(form.baseAmount || 0), rate: form.rate || null, amount: Number(form.amount || 0), currencyId: toNum(form.currencyId), dueDate: form.dueDate || null, note: form.note || null }));
+        if (kind === "payroll") await api.createPayroll(cleanPayload({
+          userId: Number(form.userId),
+          contractId: toNum(form.contractId),
+          period: form.period,
+          currencyId: toNum(form.currencyId),
+          baseSalary: Number(form.baseSalary || 0),
+          transportAllowance: Number(form.transportAllowance || 0),
+          housingAllowance: Number(form.housingAllowance || 0),
+          riskAllowance: Number(form.riskAllowance || 0),
+          otherAllowances: Number(form.otherAllowances || 0),
+          overtimeHours: Number(form.overtimeHours || 0),
+          overtimeAmount: Number(form.overtimeAmount || 0),
+          unpaidAbsenceDeduction: Number(form.unpaidAbsenceDeduction || 0),
+          advanceDeduction: Number(form.advanceDeduction || 0),
+          taxAmount: Number(form.taxAmount || 0),
+          cnssAmount: Number(form.cnssAmount || 0),
+          otherDeductions: Number(form.otherDeductions || 0),
+          workedDays: Number(form.workedDays || 0),
+          absenceDays: Number(form.absenceDays || 0),
+          paidLeaveDays: Number(form.paidLeaveDays || 0),
+          status: form.status || "draft",
+          notes: form.notes || null,
+        }));
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
         if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), currencyId: toNum(form.currencyId), note: form.note || null }));
         if (kind === "timesheet") {
@@ -1267,6 +1363,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
   const userId = user?.id;
   const contracts = byUser(data.contracts, userId);
   const salaries = byUser(data.salaries, userId);
+  const payrolls = byUser(data.payrolls, userId);
   const leaves = byUser(data.leaveRequests, userId);
   const documents = byUser(data.documents, userId);
   const timesheets = byUser(data.timesheets, userId);
@@ -1313,7 +1410,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
           <Mini label="Contrats" value={contracts.length} />
           <Mini label="Conges ouverts" value={openLeaves} />
           <Mini label="Heures saisies" value={`${nf.format(totalHours)} h`} />
-          <Mini label="Documents" value={documents.length} />
+          <Mini label="Bulletins" value={payrolls.length} />
         </div>
 
         <div className="employee-360-tabs">
@@ -1380,6 +1477,9 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
           <div className="employee-360-body">
             <Employee360Panel title="Salaire actuel">
               <div className="kv">{row("Montant", `${fc(user.currentSalary, salarySym(user))} / mois`)}{activeContract && row("Source contrat", activeContract.reference || activeContract.contractType)}</div>
+            </Employee360Panel>
+            <Employee360Panel title="Bulletins de paie">
+              <Employee360List rows={payrolls} empty="Aucun bulletin de paie en base" render={(p) => <><span>{p.period || "Periode"}<small>{statusLabel(p.status)}</small></span><strong>{payrollMoneyText(p, p.netSalary ?? payrollNet(p))}</strong></>} />
             </Employee360Panel>
             <Employee360Panel title="Historique de paie">
               <Employee360List rows={salaries} empty="Aucune ligne de paie en base" render={(s) => <><span>{dateOnly(s.salaryStartDate || s.startDate) || "Date non renseignee"}<small>{s.salaryComment || ""}</small></span><strong>{fc(s.salary, moneySymbolFor(s))}</strong></>} />
@@ -1512,14 +1612,21 @@ function Paie({ data, staff, masse, setModal }) {
   const [employeeFilter, setEmployeeFilter] = React.useState("");
   const [currencyFilter, setCurrencyFilter] = React.useState("");
   const rows = data.salaries || [];
+  const payrollRows = data.payrolls || [];
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
   const employeeFor = (userId) => staff.find((u) => String(u.id) === String(userId));
   const employeeSearchText = (u) => u ? [fullName(u), u.username, u.email, matricule(u), u.designation?.name, u.department?.name].filter(Boolean).join(" ").toLowerCase() : "";
   const historySearchText = (s) => [personName(staff, s.userId), employeeSearchText(employeeFor(s.userId)), comment(s), dateStart(s), dateEnd(s), dateOnly(s.createdAt)].filter(Boolean).join(" ").toLowerCase();
-  const currenciesInHistory = [...new Set(rows.map((s) => symbolFor(s.currencyId, CURRENCIES, CUR)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const currenciesInHistory = [...new Set([...rows.map((s) => symbolFor(s.currencyId, CURRENCIES, CUR)), ...payrollRows.map((p) => symbolFor(p.currencyId, CURRENCIES, CUR))].filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const needle = q.trim().toLowerCase();
+  const payrollSearchText = (p) => [personName(staff, p.userId), employeeSearchText(employeeFor(p.userId)), p.period, p.status, p.notes].filter(Boolean).join(" ").toLowerCase();
+  const filteredPayrolls = payrollRows.filter((p) => {
+    if (employeeFilter && String(p.userId) !== String(employeeFilter)) return false;
+    if (currencyFilter && symbolFor(p.currencyId, CURRENCIES, CUR) !== currencyFilter) return false;
+    return !needle || payrollSearchText(p).includes(needle);
+  });
   const filteredRows = rows.filter((s) => {
     if (employeeFilter && String(s.userId) !== String(employeeFilter)) return false;
     if (currencyFilter && symbolFor(s.currencyId, CURRENCIES, CUR) !== currencyFilter) return false;
@@ -1530,8 +1637,15 @@ function Paie({ data, staff, masse, setModal }) {
     if (currencyFilter && salarySym(u) !== currencyFilter) return false;
     return !needle || employeeSearchText(u).includes(needle);
   });
-  const employeeCount = new Set(filteredRows.map((s) => s.userId).filter(Boolean)).size;
+  const employeeCount = new Set([...filteredRows.map((s) => s.userId), ...filteredPayrolls.map((p) => p.userId)].filter(Boolean)).size;
   const hasFilters = Boolean(needle || employeeFilter || currencyFilter);
+  const payrollNetLines = moneyLinesFrom(filteredPayrolls, (p) => p.netSalary ?? payrollNet(p), moneySymbolFor);
+  const payrollGrossLines = moneyLinesFrom(filteredPayrolls, (p) => p.grossSalary ?? payrollGross(p), moneySymbolFor);
+  const exportPayrolls = () => exportCsv(
+    "bulletins-paie.csv",
+    ["Employe", "Periode", "Brut", "Net", "Devise", "Statut", "Notes"],
+    filteredPayrolls.map((p) => [personName(staff, p.userId), p.period || "", Math.round(Number(p.grossSalary ?? payrollGross(p))), Math.round(Number(p.netSalary ?? payrollNet(p))), symbolFor(p.currencyId, CURRENCIES, CUR), statusLabel(p.status), p.notes || ""])
+  );
   const exportHistory = () => exportCsv(
     "historique-salaires.csv",
     ["Employe", "Salaire", "Devise", "Debut", "Fin", "Commentaire", "Enregistre le"],
@@ -1544,14 +1658,15 @@ function Paie({ data, staff, masse, setModal }) {
   );
   return (
     <>
-      <PageHead eyebrow="Historique des salaires" title="Historique de paie" action="Nouveau salaire" actionIcon="plus" onAction={() => setModal({ kind: "salary" })} />
-      <div className="g3" style={{ marginBottom: 16 }}>
-        <Mini label={hasFilters ? "Resultats historique" : "Lignes historique"} value={filteredRows.length} />
+      <PageHead eyebrow="Payroll" title="Paie professionnelle" action="Nouveau bulletin" actionIcon="plus" onAction={() => setModal({ kind: "payroll" })} />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label={hasFilters ? "Bulletins filtres" : "Bulletins"} value={filteredPayrolls.length} />
         <Mini label="Employes salaries" value={employeeCount} />
-        <Mini label="Masse salariale / mois" value={<MoneyLines lines={salaryMoneyLines(staff)} />} />
+        <Mini label="Brut total" value={<MoneyLines lines={payrollGrossLines} empty={`0 ${CUR}`} />} />
+        <Mini label="Net a payer" value={<MoneyLines lines={payrollNetLines} empty={`0 ${CUR}`} />} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Bulletins de paie</h3><button type="button" className="link" onClick={exportPayrolls}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
           <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} aria-label="Filtrer par employe">
@@ -1563,6 +1678,14 @@ function Paie({ data, staff, masse, setModal }) {
             {currenciesInHistory.map((sym) => <option key={sym} value={sym}>{sym}</option>)}
           </select>
         </div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 920 }}>
+          <thead><tr><th>Employe</th><th>Periode</th><th className="r">Brut</th><th className="r">Net</th><th className="r">Impots</th><th className="r">CNSS</th><th className="r">Absences</th><th className="r">Statut</th></tr></thead>
+          <tbody>{filteredPayrolls.map((p) => <tr key={p.id}><td style={{ fontWeight: 500 }}>{personName(staff, p.userId)}</td><td>{p.period || "-"}</td><td className="r">{payrollMoneyText(p, p.grossSalary ?? payrollGross(p))}</td><td className="r" style={{ fontWeight: 700 }}>{payrollMoneyText(p, p.netSalary ?? payrollNet(p))}</td><td className="r">{payrollMoneyText(p, p.taxAmount)}</td><td className="r">{payrollMoneyText(p, p.cnssAmount)}</td><td className="r">{payrollMoneyText(p, p.unpaidAbsenceDeduction)}</td><td className="r"><span className={"chip " + chipForStatus(p.status)}>{statusLabel(p.status)}</span></td></tr>)}</tbody>
+        </table></div>
+        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin pour creer la premiere paie mensuelle." : "Modifie la recherche ou les filtres."} />}
+      </div>
+      <div className="card pad table-card" style={{ marginTop: 16 }}>
+        <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><div style={{ display: "flex", gap: 10 }}><button type="button" className="link" onClick={() => setModal({ kind: "salary" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Nouveau salaire</button><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 760 }}>
           <thead><tr><th>Employe</th><th className="r">Salaire</th><th>Debut</th><th>Fin</th><th>Commentaire</th><th className="r">Enregistre le</th></tr></thead>
           <tbody>{filteredRows.map((s) => <tr key={s.id}><td style={{ fontWeight: 500 }}>{personName(staff, s.userId)}</td><td className="r">{fc(s.salary, symbolFor(s.currencyId, CURRENCIES, CUR))}</td><td>{dateStart(s) || "-"}</td><td>{dateEnd(s) || "-"}</td><td className="muted">{comment(s) || "-"}</td><td className="r muted">{dateOnly(s.createdAt) || "-"}</td></tr>)}</tbody>
@@ -1809,7 +1932,7 @@ function SelfList({ title, rows, render, empty }) {
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const selfAction = modal.lockUserId ? SELF_ACTION_FORMS[modal.kind] : null;
   const action = selfAction || ACTION_FORMS[modal.kind];
-  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract"].includes(modal.kind);
+  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract", "payroll"].includes(modal.kind);
   const [form, setForm] = React.useState(() => {
     const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
     if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
@@ -1838,6 +1961,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     shifts: (data.shifts || []).map((s) => ({ value: s.id, label: `${s.name} (${(s.startTime || "").slice(0, 5)}-${(s.endTime || "").slice(0, 5)})` })),
     awards: (data.awards || []).map((a) => ({ value: a.id, label: a.name })),
     currencies: currencyOptions(),
+    contracts: (data.contracts || []).map((c) => ({ value: c.id, label: [c.reference, personName(staff, c.userId), c.contractType].filter(Boolean).join(" - ") })),
   };
   const isMoneyField = (field) => {
     if (!field) return false;
@@ -1845,6 +1969,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     if (["expenseRequest", "socialDeclaration"].includes(modal.kind) && ["amount", "baseAmount"].includes(field.key)) return true;
     if (modal.kind === "trainingSession" && field.key === "budget") return true;
     if (modal.kind === "hrContract" && ["baseSalary", "transportAllowance", "housingAllowance", "stipend", "contractAmount"].includes(field.key)) return true;
+    if (modal.kind === "payroll" && ["baseSalary", "transportAllowance", "housingAllowance", "riskAllowance", "otherAllowances", "overtimeAmount", "unpaidAbsenceDeduction", "advanceDeduction", "taxAmount", "cnssAmount", "otherDeductions"].includes(field.key)) return true;
     return false;
   };
   return (
