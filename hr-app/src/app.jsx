@@ -88,7 +88,7 @@ const NAV = [
   { section: "Temps" },
   { id: "presences", label: "Présences & pointage", icon: "fingerprint" },
   { id: "conges", label: "Congés & absences", icon: "palmtree" },
-  { id: "timesheet", label: "Timesheet (projets)", icon: "timer" },
+  { id: "timesheet", label: "Temps projets", icon: "timer" },
   { section: "Paie & rémunération" },
   { id: "paie", label: "Historique de paie", icon: "wallet" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
@@ -471,16 +471,16 @@ Object.assign(ACTION_FORMS, {
 
 Object.assign(ACTION_FORMS, {
   timesheet: {
-    title: "Nouvelle saisie timesheet",
+    title: "Nouvelle saisie d'heures",
     submit: "Enregistrer",
-    success: "Timesheet enregistre en base.",
+    success: "Heures enregistrees.",
     defaults: { userId: "", workDate: TODAY, period: TODAY.slice(0, 7), project: "", donor: "", activity: "", hours: 0, note: "" },
     fields: [
       { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
       { key: "workDate", label: "Date", type: "date", required: true },
       { key: "period", label: "Periode" },
-      { key: "project", label: "Projet", required: true },
-      { key: "donor", label: "Bailleur" },
+      { key: "project", label: "Projet / activite", required: true },
+      { key: "donor", label: "Financement / centre de cout" },
       { key: "hours", label: "Heures", type: "number", required: true },
       { key: "activity", label: "Activite", wide: true },
       { key: "note", label: "Note", type: "textarea" },
@@ -503,16 +503,16 @@ const SELF_ACTION_FORMS = {
     ],
   },
   timesheet: {
-    title: "Saisir mon temps",
-    subtitle: "Enregistre les heures travaillees sur un projet ou un bailleur.",
+    title: "Saisir mes heures",
+    subtitle: "Indique la date, le travail effectue et le nombre d'heures.",
     submit: "Soumettre les heures",
-    success: "Timesheet envoye.",
+    success: "Heures envoyees.",
     fields: [
       { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
       { key: "workDate", label: "Date travaillee", type: "date", required: true },
       { key: "period", label: "Periode" },
-      { key: "project", label: "Projet", required: true },
-      { key: "donor", label: "Bailleur" },
+      { key: "project", label: "Projet ou activite", required: true },
+      { key: "donor", label: "Financement ou centre de cout" },
       { key: "hours", label: "Nombre d'heures", type: "number", required: true },
       { key: "activity", label: "Activite realisee", type: "textarea", wide: true },
       { key: "note", label: "Note", type: "textarea", wide: true },
@@ -1211,12 +1211,12 @@ function Timesheet({ data, staff, setModal }) {
   const projectCount = new Set(rows.map((row) => row.project).filter(Boolean)).size;
   const exportTimesheets = () => exportCsv(
     "timesheets.csv",
-    ["Employe", "Date", "Periode", "Projet", "Bailleur", "Activite", "Heures", "Statut", "Note"],
+    ["Employe", "Date", "Periode", "Projet", "Financement", "Activite", "Heures", "Statut", "Note"],
     rows.map((row) => [personName(staff, row.userId), dateOnly(row.workDate), row.period || "", row.project || "", row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
   );
   return (
     <>
-      <PageHead eyebrow="Allocation du temps" title="Timesheet - projets & bailleurs" action="Nouvelle saisie" actionIcon="plus" onAction={() => setModal({ kind: "timesheet" })} />
+      <PageHead eyebrow="Allocation du temps" title="Temps projets" action="Nouvelle saisie" actionIcon="plus" onAction={() => setModal({ kind: "timesheet" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Lignes en base" value={rows.length} />
         <Mini label="Heures saisies" value={nf.format(totalHours)} />
@@ -1224,12 +1224,12 @@ function Timesheet({ data, staff, setModal }) {
         <KPI label="A valider" value={pending} tone={pending ? "warn" : undefined} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Saisies timesheet en base</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Heures saisies</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 840 }}>
-          <thead><tr><th>Employe</th><th>Date</th><th>Periode</th><th>Projet</th><th>Bailleur</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
+          <thead><tr><th>Employe</th><th>Date</th><th>Periode</th><th>Projet</th><th>Financement</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
           <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.workDate) || "-"}</td><td>{row.period || "-"}</td><td>{row.project || "-"}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
         </table></div>
-        {rows.length === 0 && <EmptyState title="Aucune saisie timesheet en base" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet et un bailleur." />}
+        {rows.length === 0 && <EmptyState title="Aucune heure saisie" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet ou une activite." />}
       </div>
     </>
   );
@@ -1357,14 +1357,14 @@ function SelfService({ data, staff, me, setModal }) {
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const actions = [
     { icon: "palmtree", title: "Demander un conge", cta: "Envoyer", onClick: () => selfModal("leaveRequest") },
-    { icon: "timer", title: "Saisir un timesheet", cta: "Saisir", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
+    { icon: "timer", title: "Saisir mes heures", cta: "Saisir", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
     { icon: "receipt", title: "Frais ou avance", cta: "Demander", onClick: () => selfModal("expenseRequest", { requestDate: TODAY }) },
     { icon: "folder", title: "Deposer un document", cta: "Deposer", onClick: () => selfModal("hrDocument") },
     { icon: "fileCheck", title: "Demande RH", cta: "Soumettre", onClick: () => selfModal("employeeRequest") },
   ];
   return (
     <>
-      <PageHead eyebrow="Portail agent" title="Espace employe" />
+      <PageHead eyebrow="Mon espace" title="Espace employe" />
       {!userId && <div className="card pad" style={{ marginBottom: 16 }}><EmptyState title="Compte employe non relie" detail="Reconnecte-toi avec un compte employe pour voir tes donnees personnelles." /></div>}
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Demandes en attente" value={pendingCount} />
@@ -1380,7 +1380,7 @@ function SelfService({ data, staff, me, setModal }) {
       <div className="g2" style={{ marginBottom: 16 }}>
         <SelfList title="Mes conges" empty="Aucune demande de conge" rows={myLeaves.slice(0, 5)} render={(r) => <><div><b>{r.type || "Conge"}</b><div className="tiny">{dateOnly(r.startDate)} - {dateOnly(r.endDate)}</div></div>{statusChip(r.status)}</>} />
         <SelfList title="Mes frais & avances" empty="Aucune demande de frais" rows={myExpenses.slice(0, 5)} render={(r) => <><div><b>{r.type || "Frais"}</b><div className="tiny">{dateOnly(r.requestDate)} - {r.description || ""}</div></div><div style={{ textAlign: "right" }}><b>{fc(r.amount, moneySymbolFor(r))}</b><div>{statusChip(r.status)}</div></div></>} />
-        <SelfList title="Mes timesheets" empty="Aucune saisie timesheet" rows={myTimesheets.slice(0, 5)} render={(r) => <><div><b>{r.project || "Projet"}</b><div className="tiny">{dateOnly(r.workDate)} - {r.donor || "Bailleur non renseigne"}</div></div><div style={{ textAlign: "right" }}><b>{nf.format(Number(r.hours || 0))} h</b><div>{statusChip(r.status)}</div></div></>} />
+        <SelfList title="Mes heures" empty="Aucune heure saisie" rows={myTimesheets.slice(0, 5)} render={(r) => <><div><b>{r.project || "Activite"}</b><div className="tiny">{dateOnly(r.workDate)}{r.donor ? ` - ${r.donor}` : ""}</div></div><div style={{ textAlign: "right" }}><b>{nf.format(Number(r.hours || 0))} h</b><div>{statusChip(r.status)}</div></div></>} />
         <SelfList title="Mes documents" empty="Aucun document" rows={myDocuments.slice(0, 5)} render={(r) => <><div><b>{r.documentType || "Document"}</b><div className="tiny">{r.reference || r.note || "-"}</div></div>{r.fileUrl ? <a className="link" href={r.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : statusChip(r.status)}</>} />
         <SelfList title="Mes demandes RH" empty="Aucune demande RH" rows={myRequests.slice(0, 5)} render={(r) => <><div><b>{r.subject || r.requestType}</b><div className="tiny">{r.requestType} - {dateOnly(r.requestedDate)}</div></div>{statusChip(r.status)}</>} />
         <SelfList title="Evaluations & formation" empty="Aucune evaluation ou formation" rows={[...myReviews.slice(0, 3), ...data.trainingSessions.slice(0, 3)]} render={(r) => <><div><b>{r.cycle || r.title || "Element RH"}</b><div className="tiny">{r.score != null ? `Score ${r.score}/5` : [r.audience, dateOnly(r.sessionDate)].filter(Boolean).join(" - ")}</div></div>{statusChip(r.status)}</>} />
