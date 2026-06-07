@@ -8,6 +8,7 @@ import {
   designationHistories,
   designations,
   hrContracts,
+  hrAttendances,
   hrDocuments,
   hrEmployeeRequests,
   hrExpenseRequests,
@@ -29,6 +30,7 @@ import {
   CreateDesignationDto,
   CreateDesignationHistoryDto,
   CreateHrContractDto,
+  CreateHrAttendanceDto,
   CreateHrDocumentDto,
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
@@ -48,6 +50,7 @@ import {
   UpdateDesignationDto,
   UpdateDesignationHistoryDto,
   UpdateHrContractDto,
+  UpdateHrAttendanceDto,
   UpdateHrDocumentDto,
   UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
@@ -112,6 +115,23 @@ export class ShiftController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(shifts, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-attendances")
+@Controller("hr/attendances")
+export class HrAttendanceController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listAttendances(q); }
+  @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.attendanceSummary(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findAttendance(id); }
+  @Post() create(@Body() body: CreateHrAttendanceDto) { return this.service.createAttendance(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrAttendances, id); }
 }
 
 @ApiBearerAuth()

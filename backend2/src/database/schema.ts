@@ -516,6 +516,27 @@ export const shifts = mysqlTable("shifts", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrAttendances = mysqlTable("hr_attendances", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  workDate: date("workDate", { mode: "string" }).notNull(),
+  shiftId: bigint("shiftId", { mode: "number" }),
+  clockIn: varchar("clockIn", { length: 20 }),
+  pauseOut: varchar("pauseOut", { length: 20 }),
+  pauseIn: varchar("pauseIn", { length: 20 }),
+  clockOut: varchar("clockOut", { length: 20 }),
+  workedHours: double("workedHours").default(0).notNull(),
+  lateMinutes: int("lateMinutes").default(0).notNull(),
+  overtimeHours: double("overtimeHours").default(0).notNull(),
+  absenceHours: double("absenceHours").default(0).notNull(),
+  source: varchar("source", { length: 30 }).default("manual").notNull(),
+  status: varchar("status", { length: 30 }).default("present").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const awards = mysqlTable("awards", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

@@ -101,7 +101,18 @@ Objectif: relier le temps travaille a l'employe et a la paie.
 - QR/GPS ensuite.
 - Biometrie seulement apres analyse legale et securite.
 
-Statut: a faire.
+Statut: termine.
+
+Fait:
+- Table `hr_attendances` pour pointage manuel.
+- API `hr/attendances` avec creation, liste, mise a jour, suppression.
+- API `hr/attendances/summary` pour totaux presence, retard, absence et heures supplementaires.
+- Calcul serveur des heures travaillees avec pause, retard selon horaire, absence et heures sup.
+- Page `Presences & pointage` connectee a la base avec KPIs, table et export CSV.
+
+Reste:
+- QR/GPS en phase suivante.
+- Biometrie uniquement apres analyse legale et securite.
 
 ## Stade 6 - Conges avec workflow
 

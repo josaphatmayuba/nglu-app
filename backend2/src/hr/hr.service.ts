@@ -10,6 +10,7 @@ import {
   designationHistories,
   designations,
   hrContracts,
+  hrAttendances,
   hrDocuments,
   hrEmployeeRequests,
   hrExpenseRequests,
@@ -35,6 +36,7 @@ import {
   CreateDesignationDto,
   CreateDesignationHistoryDto,
   CreateHrContractDto,
+  CreateHrAttendanceDto,
   CreateHrDocumentDto,
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
@@ -54,6 +56,7 @@ import {
   UpdateDesignationDto,
   UpdateDesignationHistoryDto,
   UpdateHrContractDto,
+  UpdateHrAttendanceDto,
   UpdateHrDocumentDto,
   UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
@@ -140,6 +143,95 @@ export class HrService {
       })
       .where(eq(shifts.id, id));
     return this.findShift(id);
+  }
+
+  listAttendances(q: Record<string, string>) {
+    return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance");
+  }
+
+  findAttendance(id: number) {
+    return this.findOne(hrAttendances, id, "Attendance not found.");
+  }
+
+  async createAttendance(input: CreateHrAttendanceDto) {
+    await this.validateAttendanceRefs(input);
+    const payload = await this.attendancePayload(input);
+    return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id));
+  }
+
+  async updateAttendance(id: number, input: UpdateHrAttendanceDto) {
+    const current = await this.findAttendance(id);
+    await this.validateAttendanceRefs(input);
+    const payload = await this.attendancePayload({ ...current, ...input });
+    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id));
+  }
+
+  async attendanceSummary(q: Record<string, string>) {
+    const month = q["month"] || "";
+    const startDate = q["startDate"] || "";
+    const endDate = q["endDate"] || "";
+    const rows = await this.db
+      .select()
+      .from(hrAttendances)
+      .where(ne(hrAttendances.status, "false"))
+      .orderBy(desc(hrAttendances.workDate));
+
+    const filtered = rows.filter((row) => {
+      const workDate = String(row.workDate || "");
+      if (month && workDate.slice(0, 7) !== month) return false;
+      if (startDate && workDate < startDate) return false;
+      if (endDate && workDate > endDate) return false;
+      return true;
+    });
+
+    const emptyAttendanceStats = () => ({
+      records: filtered.length,
+      present: 0,
+      late: 0,
+      absent: 0,
+      partial: 0,
+      workedHours: 0,
+      lateMinutes: 0,
+      overtimeHours: 0,
+      absenceHours: 0,
+    });
+    const totals = emptyAttendanceStats();
+    const byEmployee = new Map<number, ReturnType<typeof emptyAttendanceStats> & { userId: number }>();
+
+    for (const row of filtered) {
+      const userId = Number(row.userId);
+      const status = String(row.status || "").toLowerCase();
+      const employee = byEmployee.get(userId) || { ...emptyAttendanceStats(), userId, records: 0 };
+      for (const target of [totals, employee]) {
+        target.records += target === totals ? 0 : 1;
+        if (status === "late") target.late += 1;
+        else if (status === "absent") target.absent += 1;
+        else if (status === "partial") target.partial += 1;
+        else target.present += 1;
+        target.workedHours += Number(row.workedHours || 0);
+        target.lateMinutes += Number(row.lateMinutes || 0);
+        target.overtimeHours += Number(row.overtimeHours || 0);
+        target.absenceHours += Number(row.absenceHours || 0);
+      }
+      byEmployee.set(userId, employee);
+    }
+
+    const round = (value: number) => Math.round(value * 100) / 100;
+    return {
+      filters: { month: month || null, startDate: startDate || null, endDate: endDate || null },
+      totals: {
+        ...totals,
+        workedHours: round(totals.workedHours),
+        overtimeHours: round(totals.overtimeHours),
+        absenceHours: round(totals.absenceHours),
+      },
+      byEmployee: Array.from(byEmployee.values()).map((row) => ({
+        ...row,
+        workedHours: round(row.workedHours),
+        overtimeHours: round(row.overtimeHours),
+        absenceHours: round(row.absenceHours),
+      })),
+    };
   }
 
   listAwards(q: Record<string, string>) {
@@ -898,6 +990,60 @@ export class HrService {
     if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
   }
 
+  private async validateAttendanceRefs(input: Partial<CreateHrAttendanceDto>) {
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.shiftId) await this.ensureExists(shifts, input.shiftId, "Shift not found.");
+  }
+
+  private async attendancePayload(input: Partial<CreateHrAttendanceDto> & Record<string, any>) {
+    const userId = Number(input.userId);
+    if (!userId) throw new BadRequestException("User is required for attendance.");
+    if (!input.workDate) throw new BadRequestException("Work date is required for attendance.");
+
+    const [user] = await this.db
+      .select({ id: users.id, shiftId: users.shiftId })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!user) throw new NotFoundException("User not found.");
+
+    const shiftId = input.shiftId ?? user.shiftId ?? null;
+    const shift = shiftId ? await this.findShift(Number(shiftId)) : null;
+    const statusInput = String(input.status || "").trim().toLowerCase();
+    const normalizedStatus = statusInput && statusInput !== "auto" ? statusInput : "";
+    const clockIn = this.cleanTime(input.clockIn);
+    const pauseOut = this.cleanTime(input.pauseOut);
+    const pauseIn = this.cleanTime(input.pauseIn);
+    const clockOut = this.cleanTime(input.clockOut);
+    const expectedHours = shift ? Number(shift.workHour || this.workHours(shift.startTime, shift.endTime) || 0) : 0;
+    const workedHours = normalizedStatus === "absent" ? 0 : this.attendanceWorkedHours(clockIn, clockOut, pauseOut, pauseIn);
+    const lateMinutes = shift && clockIn && normalizedStatus !== "absent"
+      ? this.lateMinutes(clockIn, shift.startTime)
+      : 0;
+    const overtimeHours = this.roundNumber(Math.max(0, workedHours - expectedHours));
+    const absenceHours = normalizedStatus === "absent"
+      ? this.roundNumber(expectedHours)
+      : this.roundNumber(Math.max(0, expectedHours - workedHours));
+    const status = normalizedStatus || this.inferAttendanceStatus({ clockIn, clockOut, workedHours, lateMinutes });
+
+    return {
+      userId,
+      workDate: input.workDate,
+      shiftId,
+      clockIn,
+      pauseOut,
+      pauseIn,
+      clockOut,
+      workedHours,
+      lateMinutes,
+      overtimeHours,
+      absenceHours,
+      source: input.source || "manual",
+      status,
+      note: input.note ?? null,
+    };
+  }
+
   private async timesheetPayload(input: Partial<CreateHrTimesheetDto> & Record<string, any>) {
     let projectLabel = input.project;
     let donor = input.donor ?? null;
@@ -1029,6 +1175,58 @@ export class HrService {
       .from(hrProjects)
       .where(like(hrProjects.code, pattern));
     return `ONG-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
+  }
+
+  private cleanTime(value?: string | null) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    return this.normalizeTime(raw);
+  }
+
+  private minutesFromTime(value?: string | null) {
+    if (!value) return null;
+    const parts = this.normalizeTime(value).split(":").map(Number);
+    if (parts.length < 2 || parts.some((part) => Number.isNaN(part))) return null;
+    return parts[0] * 60 + parts[1];
+  }
+
+  private minutesBetween(start?: string | null, end?: string | null) {
+    const startMinutes = this.minutesFromTime(start);
+    const endMinutes = this.minutesFromTime(end);
+    if (startMinutes == null || endMinutes == null) return 0;
+    let minutes = endMinutes - startMinutes;
+    if (minutes < 0) minutes += 24 * 60;
+    return minutes;
+  }
+
+  private attendanceWorkedHours(clockIn?: string | null, clockOut?: string | null, pauseOut?: string | null, pauseIn?: string | null) {
+    const gross = this.minutesBetween(clockIn, clockOut);
+    const pause = pauseOut && pauseIn ? this.minutesBetween(pauseOut, pauseIn) : 0;
+    return this.roundHours(Math.max(0, gross - pause));
+  }
+
+  private lateMinutes(clockIn: string, shiftStart: string) {
+    const inMinutes = this.minutesFromTime(clockIn);
+    const startMinutes = this.minutesFromTime(shiftStart);
+    if (inMinutes == null || startMinutes == null) return 0;
+    let diff = inMinutes - startMinutes;
+    if (diff < -720) diff += 24 * 60;
+    return Math.max(0, diff);
+  }
+
+  private inferAttendanceStatus(input: { clockIn?: string | null; clockOut?: string | null; workedHours: number; lateMinutes: number }) {
+    if (!input.clockIn && !input.clockOut) return "absent";
+    if (!input.clockIn || !input.clockOut || input.workedHours <= 0) return "partial";
+    if (input.lateMinutes > 0) return "late";
+    return "present";
+  }
+
+  private roundHours(minutesOrHours: number) {
+    return Math.round((minutesOrHours / 60) * 100) / 100;
+  }
+
+  private roundNumber(value: number) {
+    return Math.round(value * 100) / 100;
   }
 
   private normalizeTime(value: string) {

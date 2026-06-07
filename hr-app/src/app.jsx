@@ -272,6 +272,8 @@ const EMPTY_DATA = {
   departments: [],
   shifts: [],
   awards: [],
+  attendances: [],
+  attendanceSummary: { totals: { records: 0, present: 0, late: 0, absent: 0, partial: 0, workedHours: 0, lateMinutes: 0, overtimeHours: 0, absenceHours: 0 }, byEmployee: [] },
   salaries: [],
   payrolls: [],
   projects: [],
@@ -314,12 +316,22 @@ const STATUS_LABELS = {
   closed: "Cloture",
   suspended: "Suspendu",
   ended: "Termine",
+  present: "Present",
+  late: "En retard",
+  absent: "Absent",
+  partial: "Partiel",
+  validated: "Valide",
   true: "Actif",
   false: "Inactif",
 };
 const isPending = (status) => ["pending", "en_attente", "submitted", "draft", "validation"].includes(String(status || "").toLowerCase());
-const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true", "paid"].includes(String(status || "").toLowerCase());
-const chipForStatus = (status) => isPending(status) ? "amber" : isApproved(status) ? "emerald" : String(status || "").toLowerCase() === "rejected" ? "rose" : "ink";
+const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true", "paid", "present", "validated"].includes(String(status || "").toLowerCase());
+const chipForStatus = (status) => {
+  const value = String(status || "").toLowerCase();
+  if (["late", "partial"].includes(value)) return "amber";
+  if (["absent", "rejected"].includes(value)) return "rose";
+  return isPending(value) ? "amber" : isApproved(value) ? "emerald" : "ink";
+};
 const statusLabel = (status) => STATUS_LABELS[String(status || "").toLowerCase()] || (status ? String(status) : "Non renseigne");
 const personName = (staff, userId) => fullName((staff || []).find((u) => String(u.id) === String(userId)) || { id: userId });
 const sameId = (a, b) => String(a ?? "") !== "" && String(a) === String(b ?? "");
@@ -571,6 +583,23 @@ Object.assign(ACTION_FORMS, {
 });
 
 Object.assign(ACTION_FORMS, {
+  attendance: {
+    title: "Nouveau pointage",
+    submit: "Enregistrer",
+    success: "Pointage enregistre.",
+    defaults: { userId: "", workDate: TODAY, shiftId: "", clockIn: "08:00", pauseOut: "12:00", pauseIn: "13:00", clockOut: "17:00", status: "", note: "" },
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "workDate", label: "Date", type: "date", required: true },
+      { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" },
+      { key: "clockIn", label: "Entree", type: "time" },
+      { key: "pauseOut", label: "Debut pause", type: "time" },
+      { key: "pauseIn", label: "Retour pause", type: "time" },
+      { key: "clockOut", label: "Sortie", type: "time" },
+      { key: "status", label: "Statut", type: "select", options: [{ value: "", label: "Automatique" }, { value: "present", label: "Present" }, { value: "late", label: "En retard" }, { value: "absent", label: "Absent" }, { value: "partial", label: "Partiel" }, { value: "validated", label: "Valide" }] },
+      { key: "note", label: "Note", type: "textarea", wide: true },
+    ],
+  },
   timesheet: {
     title: "Nouvelle saisie d'heures",
     submit: "Enregistrer",
@@ -906,11 +935,11 @@ function App() {
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
+      api.overview(), api.shifts(), api.awards(), api.attendances(), api.attendanceSummary(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
       api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -925,6 +954,8 @@ function App() {
           departments: enrichDepartments(Array.isArray(overview.value?.departments) ? overview.value.departments : [], staffRows),
           shifts: Array.isArray(shifts.value) ? shifts.value : [],
           awards: arrayFrom(awards.value, "getAllAward"),
+          attendances: arrayFrom(attendances.value, "getAllHrAttendance"),
+          attendanceSummary: attendanceSummary.value || EMPTY_DATA.attendanceSummary,
           salaries: arrayFrom(salaries.value, "getAllSalaryHistory"),
           payrolls: arrayFrom(payrolls.value, "getAllHrPayroll"),
           projects: arrayFrom(projects.value, "getAllHrProject"),
@@ -958,9 +989,21 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer", "payroll", "hrProject", "hrProjectAssignment"];
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "attendance", "employeeRequest", "recruitmentOffer", "payroll", "hrProject", "hrProjectAssignment"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
+        if (kind === "attendance") await api.createAttendance(cleanPayload({
+          userId: Number(form.userId),
+          workDate: form.workDate,
+          shiftId: toNum(form.shiftId),
+          clockIn: form.clockIn || null,
+          pauseOut: form.pauseOut || null,
+          pauseIn: form.pauseIn || null,
+          clockOut: form.clockOut || null,
+          status: form.status || null,
+          source: "manual",
+          note: form.note || null,
+        }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({
           userId: Number(form.userId),
           contractType: form.contractType,
@@ -1135,7 +1178,7 @@ function App() {
     employes: <Employes {...ctx} />,
     contrats: <Contrats {...ctx} />,
     dossiers: <Dossiers {...ctx} />,
-    presences: <Presences staff={staff} />,
+    presences: <Presences data={data} staff={staff} setModal={setModal} />,
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
     paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} />,
@@ -1642,13 +1685,70 @@ function Employee360List({ rows, empty, render }) {
   return <div className="employee-360-list">{rows.map((row, index) => <div className="employee-360-row" key={row.id || `${index}`}>{render(row)}</div>)}</div>;
 }
 
-function Presences() {
+function Presences({ data, staff, setModal }) {
+  const rows = data.attendances || [];
+  const totals = data.attendanceSummary?.totals || {};
+  const shiftName = (shiftId) => {
+    const shift = (data.shifts || []).find((s) => String(s.id) === String(shiftId));
+    return shift ? `${shift.name} (${String(shift.startTime || "").slice(0, 5)}-${String(shift.endTime || "").slice(0, 5)})` : "-";
+  };
+  const timeText = (row) => [row.clockIn, row.pauseOut, row.pauseIn, row.clockOut].map((value) => value ? String(value).slice(0, 5) : "--:--").join(" / ");
+  const exportAttendances = () => exportCsv(
+    "presences-pointage.csv",
+    ["Employe", "Date", "Horaire", "Entree", "Pause", "Retour", "Sortie", "Heures travaillees", "Retard minutes", "Absence heures", "Heures sup", "Statut", "Source", "Note"],
+    rows.map((row) => [
+      personName(staff, row.userId),
+      dateOnly(row.workDate),
+      shiftName(row.shiftId),
+      row.clockIn ? String(row.clockIn).slice(0, 5) : "",
+      row.pauseOut ? String(row.pauseOut).slice(0, 5) : "",
+      row.pauseIn ? String(row.pauseIn).slice(0, 5) : "",
+      row.clockOut ? String(row.clockOut).slice(0, 5) : "",
+      Number(row.workedHours || 0),
+      Number(row.lateMinutes || 0),
+      Number(row.absenceHours || 0),
+      Number(row.overtimeHours || 0),
+      statusLabel(row.status),
+      row.source || "manual",
+      row.note || "",
+    ])
+  );
   return (
     <>
-      <PageHead eyebrow="Pointage" title="Presences & pointage" />
-      <div className="card pad">
-        <div className="section-head"><h3 className="font-display">Feuille de presence</h3></div>
-        <EmptyState title="Module de pointage non connecte a la base" detail="Aucune presence n'est affichee tant qu'un endpoint BD n'alimente pas ce module." />
+      <PageHead eyebrow="Pointage" title="Presences & pointage" action="Nouveau pointage" actionIcon="plus" onAction={() => setModal({ kind: "attendance" })} />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <KPI label="Presents" value={totals.present ?? rows.filter((r) => ["present", "validated"].includes(String(r.status || "").toLowerCase())).length} icon="checkCircle" />
+        <KPI label="En retard" value={totals.late ?? rows.filter((r) => String(r.status || "").toLowerCase() === "late").length} tone={(totals.late || 0) ? "warn" : undefined} icon="clock" />
+        <KPI label="Absents" value={totals.absent ?? rows.filter((r) => String(r.status || "").toLowerCase() === "absent").length} tone={(totals.absent || 0) ? "danger" : undefined} icon="xCircle" />
+        <Mini label="Heures travaillees" value={nf.format(Number(totals.workedHours || rows.reduce((sum, r) => sum + Number(r.workedHours || 0), 0)))} />
+      </div>
+      <div className="g3" style={{ marginBottom: 16 }}>
+        <Mini label="Pointages" value={totals.records ?? rows.length} />
+        <Mini label="Minutes retard" value={nf.format(Number(totals.lateMinutes || 0))} />
+        <Mini label="Heures sup." value={nf.format(Number(totals.overtimeHours || 0))} />
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head">
+          <h3 className="font-display">Feuille de presence</h3>
+          <button type="button" className="link" onClick={exportAttendances}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button>
+        </div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 980 }}>
+          <thead><tr><th>Employe</th><th>Date</th><th>Horaire</th><th>Entree / pause / retour / sortie</th><th className="r">Heures</th><th className="r">Retard</th><th className="r">Absence</th><th className="r">Sup.</th><th className="r">Statut</th></tr></thead>
+          <tbody>{rows.map((row) => (
+            <tr key={row.id}>
+              <td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}<div className="tiny">{row.source || "manual"}</div></td>
+              <td>{dateOnly(row.workDate) || "-"}</td>
+              <td>{shiftName(row.shiftId)}</td>
+              <td className="muted">{timeText(row)}{row.note ? <div className="tiny">{row.note}</div> : null}</td>
+              <td className="r">{nf.format(Number(row.workedHours || 0))}</td>
+              <td className="r">{nf.format(Number(row.lateMinutes || 0))} min</td>
+              <td className="r">{nf.format(Number(row.absenceHours || 0))} h</td>
+              <td className="r">{nf.format(Number(row.overtimeHours || 0))} h</td>
+              <td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+        {rows.length === 0 && <EmptyState title="Aucun pointage en base" detail="Clique sur Nouveau pointage pour enregistrer une entree, pause, retour et sortie." />}
       </div>
     </>
   );

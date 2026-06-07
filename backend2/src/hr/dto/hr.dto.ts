@@ -35,6 +35,50 @@ export class UpdateShiftDto extends PartialType(CreateShiftDto) {
   status?: string;
 }
 
+export class CreateHrAttendanceDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsDateString()
+  workDate: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  shiftId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  clockIn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  pauseOut?: string | null;
+
+  @IsOptional()
+  @IsString()
+  pauseIn?: string | null;
+
+  @IsOptional()
+  @IsString()
+  clockOut?: string | null;
+
+  @IsOptional()
+  @IsString()
+  source?: string | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
+  note?: string | null;
+}
+
+export class UpdateHrAttendanceDto extends PartialType(CreateHrAttendanceDto) {}
+
 export class CreateAwardDto {
   @IsString()
   @IsNotEmpty()

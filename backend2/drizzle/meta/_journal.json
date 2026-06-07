@@ -428,6 +428,13 @@
       "when": 1780232400000,
       "tag": "0080_hr_timesheets_project_id",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1780236000000,
+      "tag": "0081_hr_attendances",
+      "breakpoints": true
     }
   ]
 }
