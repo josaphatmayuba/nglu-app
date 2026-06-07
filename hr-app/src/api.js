@@ -47,6 +47,7 @@ export const api = {
   salaryHistory: () => jsonFetch("/salary-history?page=1&count=20"),
   payrolls: () => jsonFetch("/hr/payrolls?query=all"),
   hrProjects: () => jsonFetch("/hr/projects?query=all"),
+  hrProjectReport: () => jsonFetch("/hr/projects/report"),
   hrProjectAssignments: () => jsonFetch("/hr/project-assignments?query=all"),
   leaveRequests: () => jsonFetch("/hr/leave-requests?query=all"),
   hrContracts: () => jsonFetch("/hr/contracts?query=all"),

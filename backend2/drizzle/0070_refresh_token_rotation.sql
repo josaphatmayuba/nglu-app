@@ -1,5 +1,23 @@
 -- SCRUM-121: refresh-token rotation + reuse detection + per-device sessions.
-ALTER TABLE `sessions` ADD COLUMN `family_id` VARCHAR(36) NULL;
+SET @sessions_family_id_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'sessions'
+    AND COLUMN_NAME = 'family_id'
+);
+--> statement-breakpoint
+SET @sessions_family_id_sql := IF(
+  @sessions_family_id_exists = 0,
+  'ALTER TABLE `sessions` ADD COLUMN `family_id` VARCHAR(36) NULL',
+  'SELECT 1'
+);
+--> statement-breakpoint
+PREPARE sessions_family_id_stmt FROM @sessions_family_id_sql;
+--> statement-breakpoint
+EXECUTE sessions_family_id_stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE sessions_family_id_stmt;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `refresh_tokens` (
   `jti` VARCHAR(36) NOT NULL,

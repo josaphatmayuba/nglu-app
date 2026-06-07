@@ -702,9 +702,14 @@ export class CreateHrTimesheetDto {
   @IsDateString()
   periodEndDate?: string | null;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  projectId?: number | null;
+
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  project: string;
+  project?: string | null;
 
   @IsOptional()
   @IsString()

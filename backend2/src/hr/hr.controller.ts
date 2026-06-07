@@ -185,6 +185,7 @@ export class HrProjectController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>) { return this.service.listProjects(q); }
+  @Get("report") report(@Query() q: Record<string, string>) { return this.service.projectAnalytics(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findProject(id); }
   @Post() create(@Body() body: CreateHrProjectDto) { return this.service.createProject(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }

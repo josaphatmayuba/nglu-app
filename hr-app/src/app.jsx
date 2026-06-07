@@ -275,6 +275,7 @@ const EMPTY_DATA = {
   salaries: [],
   payrolls: [],
   projects: [],
+  projectReport: { projects: [], byMonth: [], byDonor: [], byDepartment: [], totals: [] },
   projectAssignments: [],
   roles: [],
   leaveRequests: [],
@@ -574,12 +575,13 @@ Object.assign(ACTION_FORMS, {
     title: "Nouvelle saisie d'heures",
     submit: "Enregistrer",
     success: "Heures enregistrees.",
-    defaults: { userId: "", periodStartDate: TODAY, periodEndDate: TODAY, project: "", donor: "", activity: "", hours: 0, note: "" },
+    defaults: { userId: "", periodStartDate: TODAY, periodEndDate: TODAY, projectId: "", project: "", donor: "", activity: "", hours: 0, note: "" },
     fields: [
       { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
       { key: "periodStartDate", label: "Debut de periode", type: "date", required: true },
       { key: "periodEndDate", label: "Fin de periode", type: "date", required: true },
-      { key: "project", label: "Projet / activite", required: true },
+      { key: "projectId", label: "Projet ONG", type: "select", optionKey: "projects", required: true },
+      { key: "project", label: "Libelle libre / activite" },
       { key: "donor", label: "Financement / centre de cout" },
       { key: "hours", label: "Heures", type: "number", required: true },
       { key: "activity", label: "Activite", wide: true },
@@ -904,11 +906,11 @@ function App() {
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
+      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
       api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, payrolls, projects, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -926,6 +928,7 @@ function App() {
           salaries: arrayFrom(salaries.value, "getAllSalaryHistory"),
           payrolls: arrayFrom(payrolls.value, "getAllHrPayroll"),
           projects: arrayFrom(projects.value, "getAllHrProject"),
+          projectReport: projectReport.value || EMPTY_DATA.projectReport,
           projectAssignments: arrayFrom(projectAssignments.value, "getAllHrProjectAssignment"),
           roles: arrayFrom(roles.value, "getAllRole"),
           leaveRequests: arrayFrom(leaves.value, "getAllHrLeaveRequest"),
@@ -1044,15 +1047,18 @@ function App() {
         if (kind === "timesheet") {
           const periodStartDate = form.periodStartDate || form.workDate || TODAY;
           const periodEndDate = form.periodEndDate || periodStartDate;
-          const activity = (form.activity || form.project || "Heures travaillees").trim();
+          const selectedProject = (data.projects || []).find((p) => String(p.id) === String(form.projectId));
+          const projectLabel = (form.project || [selectedProject?.code, selectedProject?.name].filter(Boolean).join(" - ") || "Projet ONG").trim();
+          const activity = (form.activity || projectLabel || "Heures travaillees").trim();
           await api.createTimesheet(cleanPayload({
             userId: Number(form.userId),
             workDate: periodStartDate,
             period: form.period || `${periodStartDate} - ${periodEndDate}`,
             periodStartDate,
             periodEndDate,
-            project: form.project || activity.slice(0, 180),
-            donor: form.donor || null,
+            projectId: toNum(form.projectId),
+            project: projectLabel.slice(0, 180),
+            donor: form.donor || selectedProject?.donor || null,
             activity,
             hours: Number(form.hours || 0),
             note: form.note || null,
@@ -1456,15 +1462,15 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
   const openLeaves = leaves.filter((row) => isPending(row.status)).length;
   const contractDays = daysUntil(activeContract?.endDate);
   const onLeaveNow = leaves.some((leave) => currentLeaves([leave]).length);
-  const projectHours = [...timesheets.reduce((map, row) => {
-    const key = row.project || "Projet non renseigne";
-    map.set(key, (map.get(key) || 0) + Number(row.hours || 0));
-    return map;
-  }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
   const projectLabel = (projectId) => {
     const project = (data.projects || []).find((p) => String(p.id) === String(projectId));
     return project ? [project.code, project.name].filter(Boolean).join(" - ") : `Projet #${projectId}`;
   };
+  const projectHours = [...timesheets.reduce((map, row) => {
+    const key = row.projectId ? projectLabel(row.projectId) : (row.project || "Projet non renseigne");
+    map.set(key, (map.get(key) || 0) + Number(row.hours || 0));
+    return map;
+  }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
   const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["developpement", "Developpement"]];
   const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
@@ -1828,13 +1834,17 @@ function Dossiers({ data, staff, setModal }) {
 /* Timesheet */
 function Timesheet({ data, staff, setModal }) {
   const rows = data.timesheets || [];
+  const projectName = (row) => {
+    const project = (data.projects || []).find((p) => String(p.id) === String(row.projectId));
+    return project ? [project.code, project.name].filter(Boolean).join(" - ") : (row.project || "-");
+  };
   const totalHours = rows.reduce((sum, row) => sum + Number(row.hours || 0), 0);
   const pending = rows.filter((row) => isPending(row.status)).length;
-  const projectCount = new Set(rows.map((row) => row.project).filter(Boolean)).size;
+  const projectCount = new Set(rows.map((row) => row.projectId || row.project).filter(Boolean)).size;
   const exportTimesheets = () => exportCsv(
     "timesheets.csv",
     ["Employe", "Debut", "Fin", "Projet", "Financement", "Activite", "Heures", "Statut", "Note"],
-    rows.map((row) => [personName(staff, row.userId), dateOnly(row.periodStartDate || row.workDate), dateOnly(row.periodEndDate || row.workDate), row.project || "", row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
+    rows.map((row) => [personName(staff, row.userId), dateOnly(row.periodStartDate || row.workDate), dateOnly(row.periodEndDate || row.workDate), projectName(row), row.donor || "", row.activity || "", Number(row.hours || 0), statusLabel(row.status), row.note || ""])
   );
   return (
     <>
@@ -1849,7 +1859,7 @@ function Timesheet({ data, staff, setModal }) {
         <div className="section-head"><h3 className="font-display">Heures saisies</h3><button type="button" className="link" onClick={exportTimesheets}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 840 }}>
           <thead><tr><th>Employe</th><th>Debut</th><th>Fin</th><th>Projet</th><th>Financement</th><th>Activite</th><th className="r">Heures</th><th className="r">Statut</th></tr></thead>
-          <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.periodStartDate || row.workDate) || "-"}</td><td>{dateOnly(row.periodEndDate || row.workDate) || "-"}</td><td>{row.project || "-"}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
+          <tbody>{rows.map((row) => <tr key={row.id}><td style={{ fontWeight: 500 }}>{personName(staff, row.userId)}</td><td>{dateOnly(row.periodStartDate || row.workDate) || "-"}</td><td>{dateOnly(row.periodEndDate || row.workDate) || "-"}</td><td>{projectName(row)}</td><td>{row.donor || "-"}</td><td className="muted">{row.activity || "-"}</td><td className="r">{nf.format(Number(row.hours || 0))}</td><td className="r"><span className={"chip " + chipForStatus(row.status)}>{statusLabel(row.status)}</span></td></tr>)}</tbody>
         </table></div>
         {rows.length === 0 && <EmptyState title="Aucune heure saisie" detail="Clique sur Nouvelle saisie pour enregistrer des heures liees a un projet ou une activite." />}
       </div>
@@ -1860,10 +1870,20 @@ function Timesheet({ data, staff, setModal }) {
 function ProjetsONG({ data, staff, setModal }) {
   const projects = data.projects || [];
   const assignments = data.projectAssignments || [];
+  const report = data.projectReport || {};
+  const reportProjects = report.projects || [];
+  const reportByProject = new Map(reportProjects.map((row) => [String(row.projectId), row]));
+  const reportMoneyLines = (lines = []) => lines
+    .filter((line) => Number(line.amount || 0) !== 0)
+    .map((line) => {
+      const sym = symbolFor(line.currencyId, CURRENCIES, CUR);
+      return { sym, amount: Number(line.amount || 0), text: moneyLineText(line.amount, sym) };
+    });
   const activeProjects = projects.filter((p) => ["active", "planned"].includes(String(p.status || "").toLowerCase()));
   const weightedCost = (a) => Number(a.monthlyCost || 0) * Number(a.timePercent || 0) / 100;
   const budgetLines = moneyLinesFrom(projects, (p) => p.hrBudget, moneySymbolFor);
   const costLines = moneyLinesFrom(assignments, weightedCost, moneySymbolFor);
+  const actualLines = reportMoneyLines(report.totals || []);
   const projectName = (projectId) => {
     const project = projects.find((p) => String(p.id) === String(projectId));
     return project ? [project.code, project.name].filter(Boolean).join(" - ") : `Projet #${projectId}`;
@@ -1882,14 +1902,19 @@ function ProjetsONG({ data, staff, setModal }) {
         <KPI label="Projets actifs" value={activeProjects.length} sub={`${projects.length} projets en base`} icon="folder" />
         <KPI label="Affectations" value={assignments.length} sub={`${new Set(assignments.map((a) => a.userId)).size} employes affectes`} icon="users" />
         <KPI label="Budget RH projets" value={<MoneyLines lines={budgetLines} />} sub="par devise" icon="wallet" />
-        <KPI label="Cout RH impute / mois" value={<MoneyLines lines={costLines} />} sub="cout pondere par temps" icon="banknote" />
+        <KPI label="Cout reel timesheets" value={<MoneyLines lines={actualLines} />} sub={`${report.linkedTimesheets || 0} lignes liees`} icon="banknote" />
+      </div>
+      <div className="g3" style={{ marginBottom: 16 }}>
+        <Mini label="Cout planifie / mois" value={<MoneyLines lines={costLines} />} />
+        <Mini label="Timesheets non lies" value={report.unlinkedTimesheets || 0} />
+        <Mini label="Rapport analytique" value={`${(report.byMonth || []).length} mois`} valueClass="" />
       </div>
       <div className="g2">
         <div className="card pad table-card">
           <div className="section-head"><h3 className="font-display">Projets ONG</h3><button type="button" className="link" onClick={() => setModal({ kind: "hrProject" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Projet</button></div>
-          <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Projet</th><th>Bailleur</th><th className="r">Budget RH</th><th className="r">Cout affecte</th><th className="r">Statut</th></tr></thead>
-            <tbody>{projects.map((p) => <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r">{statusChip(p.status)}</td></tr>)}</tbody>
+          <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 900 }}>
+            <thead><tr><th>Projet</th><th>Bailleur</th><th className="r">Budget RH</th><th className="r">Planifie / mois</th><th className="r">Reel timesheets</th><th className="r">Ecart budget</th><th className="r">Statut</th></tr></thead>
+            <tbody>{projects.map((p) => { const r = reportByProject.get(String(p.id)); return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r"><MoneyLines lines={reportMoneyLines(r?.actualCost || [])} /></td><td className="r">{r ? fc(r.budgetVariance, moneySymbolFor(p)) : "-"}</td><td className="r">{statusChip(p.status)}</td></tr>; })}</tbody>
           </table></div>
           {projects.length === 0 && <EmptyState title="Aucun projet en base" detail="Cree un projet pour affecter les couts RH par bailleur ou centre de cout." />}
         </div>
@@ -1903,7 +1928,30 @@ function ProjetsONG({ data, staff, setModal }) {
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}><button type="button" className="link" onClick={exportAssignments}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         </div>
       </div>
+      <div className="g3" style={{ marginTop: 16 }}>
+        <ProjectAnalyticsCard title="Par mois" rows={report.byMonth || []} labelOf={(r) => r.month || "Sans mois"} moneyLines={reportMoneyLines} />
+        <ProjectAnalyticsCard title="Par bailleur" rows={report.byDonor || []} labelOf={(r) => r.donor || "Sans bailleur"} moneyLines={reportMoneyLines} />
+        <ProjectAnalyticsCard title="Par departement" rows={report.byDepartment || []} labelOf={(r) => r.department || "Sans departement"} moneyLines={reportMoneyLines} />
+      </div>
     </>
+  );
+}
+
+function ProjectAnalyticsCard({ title, rows, labelOf, moneyLines }) {
+  return (
+    <div className="card pad table-card">
+      <h3 className="block-title font-display">{title}</h3>
+      {rows.length === 0 && <EmptyState title="Aucune donnee analytique" detail="Les lignes apparaitront quand les timesheets seront liees aux projets." />}
+      {rows.slice(0, 8).map((row) => (
+        <div className="row" key={labelOf(row)}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>{labelOf(row)}</div>
+            <div className="tiny">{nf.format(Number(row.actualHours || 0))} h</div>
+          </div>
+          <strong style={{ fontSize: 13, textAlign: "right" }}><MoneyLines lines={moneyLines(row.actualCost || [])} /></strong>
+        </div>
+      ))}
+    </div>
   );
 }
 

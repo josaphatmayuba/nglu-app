@@ -124,7 +124,7 @@ Objectif: calculer le cout RH par projet.
 - Budget RH du projet.
 - Rapport de cout RH par projet et devise.
 
-Statut: en cours.
+Statut: termine.
 
 Fait:
 - Tables `hr_projects` et `hr_project_assignments`.
@@ -134,11 +134,12 @@ Fait:
 - Cout mensuel impute par affectation avec pourcentage de temps.
 - Page RH "Affectations projets" avec KPI multi-devise, listes projets/affectations et export CSV.
 - Dossier employe 360 relie aux affectations projets.
-
-Reste:
 - Relier les saisies de temps a `project_id` au lieu du libelle texte.
 - Rapport analytique projet par mois, bailleur et departement.
 - Comparaison budget RH vs cout reel par periode.
+
+Reste:
+- Optionnel: ventilation avancee par ligne budgetaire bailleur si un plan analytique detaille est ajoute plus tard.
 
 ## Stade 8 - Documents et signature
 

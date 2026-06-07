@@ -362,6 +362,136 @@ export class HrService {
     }, () => this.findProjectAssignment(id));
   }
 
+  async projectAnalytics(q: Record<string, string>) {
+    const monthFilter = q["month"] || "";
+    const startFilter = q["startDate"] || "";
+    const endFilter = q["endDate"] || "";
+
+    const [projectRows, assignmentRows, timesheetRows, staffRows, salaryRows, departmentRows] = await Promise.all([
+      this.db.select().from(hrProjects).where(ne(hrProjects.status, "false")).orderBy(desc(hrProjects.id)),
+      this.db.select().from(hrProjectAssignments).where(ne(hrProjectAssignments.status, "false")).orderBy(desc(hrProjectAssignments.id)),
+      this.db.select().from(hrTimesheets).where(ne(hrTimesheets.status, "false")).orderBy(desc(hrTimesheets.id)),
+      this.db.select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        departmentId: users.departmentId,
+      }).from(users),
+      this.db.select({
+        userId: salaryHistories.userId,
+        salary: salaryHistories.salary,
+        currencyId: salaryHistories.currencyId,
+        id: salaryHistories.id,
+      }).from(salaryHistories).orderBy(desc(salaryHistories.id)),
+      this.db.select({ id: departments.id, name: departments.name }).from(departments),
+    ]);
+
+    const projectsById = new Map(projectRows.map((project) => [Number(project.id), project]));
+    const usersById = new Map(staffRows.map((user) => [Number(user.id), user]));
+    const departmentsById = new Map(departmentRows.map((department) => [Number(department.id), department]));
+    const currentSalaryByUser = new Map<number, { salary: number; currencyId: number | null }>();
+    for (const row of salaryRows) {
+      if (!currentSalaryByUser.has(Number(row.userId))) {
+        currentSalaryByUser.set(Number(row.userId), {
+          salary: Number(row.salary || 0),
+          currencyId: row.currencyId ?? null,
+        });
+      }
+    }
+
+    const assignmentsByProject = new Map<number, typeof assignmentRows>();
+    const assignmentsByProjectUser = new Map<string, typeof assignmentRows[number][]>();
+    for (const assignment of assignmentRows) {
+      const projectId = Number(assignment.projectId);
+      assignmentsByProject.set(projectId, [...(assignmentsByProject.get(projectId) || []), assignment]);
+      const key = `${projectId}:${assignment.userId}`;
+      assignmentsByProjectUser.set(key, [...(assignmentsByProjectUser.get(key) || []), assignment]);
+    }
+
+    const projectMap = new Map<number, any>();
+    const monthMap = new Map<string, any>();
+    const donorMap = new Map<string, any>();
+    const departmentMap = new Map<string, any>();
+    const totalsMap = new Map<string, any>();
+    const linkedTimesheets = timesheetRows.filter((row) => row.projectId && projectsById.has(Number(row.projectId)));
+
+    for (const project of projectRows) {
+      const projectId = Number(project.id);
+      const plannedAssignments = assignmentsByProject.get(projectId) || [];
+      const plannedByCurrency = this.moneyTotals(plannedAssignments, (assignment) => this.weightedAssignmentCost(assignment), (assignment) => assignment.currencyId ?? project.currencyId ?? null);
+      projectMap.set(projectId, {
+        projectId,
+        code: project.code,
+        name: project.name,
+        donor: project.donor || "Sans bailleur",
+        currencyId: project.currencyId ?? null,
+        budget: Number(project.hrBudget || 0),
+        plannedMonthlyCost: plannedByCurrency,
+        actualCost: [],
+        actualHours: 0,
+        budgetVariance: Number(project.hrBudget || 0),
+        budgetBurnRatePct: 0,
+      });
+    }
+
+    for (const row of linkedTimesheets) {
+      const periodDate = String(row.periodStartDate || row.workDate || "");
+      if (monthFilter && periodDate.slice(0, 7) !== monthFilter) continue;
+      if (startFilter && periodDate < startFilter) continue;
+      if (endFilter && periodDate > endFilter) continue;
+
+      const projectId = Number(row.projectId);
+      const project = projectsById.get(projectId);
+      if (!project) continue;
+
+      const userId = Number(row.userId);
+      const hours = Number(row.hours || 0);
+      const assignment = this.assignmentForDate(assignmentsByProjectUser.get(`${projectId}:${userId}`) || [], periodDate);
+      const salary = currentSalaryByUser.get(userId);
+      const monthlyCost = assignment ? this.weightedAssignmentCost(assignment) : Number(salary?.salary || 0);
+      const actualCost = (monthlyCost / 173.33) * hours;
+      const currencyId = assignment?.currencyId ?? salary?.currencyId ?? project.currencyId ?? null;
+      const month = periodDate.slice(0, 7) || "Sans mois";
+      const donor = project.donor || row.donor || "Sans bailleur";
+      const departmentId = usersById.get(userId)?.departmentId ?? null;
+      const departmentName = departmentId ? departmentsById.get(Number(departmentId))?.name : null;
+
+      this.addActualCost(projectMap.get(projectId), actualCost, hours, currencyId);
+      this.addGroupedCost(monthMap, month, { month }, actualCost, hours, currencyId);
+      this.addGroupedCost(donorMap, donor, { donor }, actualCost, hours, currencyId);
+      this.addGroupedCost(
+        departmentMap,
+        String(departmentId ?? "none"),
+        { departmentId, department: departmentName || "Sans departement" },
+        actualCost,
+        hours,
+        currencyId,
+      );
+      this.addGroupedCost(totalsMap, String(currencyId ?? "default"), { currencyId }, actualCost, hours, currencyId);
+    }
+
+    const projects = Array.from(projectMap.values()).map((project) => {
+      const actual = this.sumMoneyForCurrency(project.actualCost, project.currencyId);
+      const budget = Number(project.budget || 0);
+      return {
+        ...project,
+        budgetVariance: budget - actual,
+        budgetBurnRatePct: budget > 0 ? Math.round((actual / budget) * 10000) / 100 : 0,
+      };
+    });
+
+    return {
+      filters: { month: monthFilter || null, startDate: startFilter || null, endDate: endFilter || null },
+      projects,
+      byMonth: Array.from(monthMap.values()).sort((a, b) => String(a.month).localeCompare(String(b.month))),
+      byDonor: Array.from(donorMap.values()).sort((a, b) => String(a.donor).localeCompare(String(b.donor))),
+      byDepartment: Array.from(departmentMap.values()).sort((a, b) => String(a.department).localeCompare(String(b.department))),
+      totals: Array.from(totalsMap.values()).flatMap((row) => row.actualCost),
+      linkedTimesheets: linkedTimesheets.length,
+      unlinkedTimesheets: timesheetRows.length - linkedTimesheets.length,
+    };
+  }
+
   listAwardHistory(q: Record<string, string>) {
     return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory");
   }
@@ -537,13 +667,15 @@ export class HrService {
 
   async createTimesheet(input: CreateHrTimesheetDto) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrTimesheets, input, (id) => this.findTimesheet(id));
+    const payload = await this.timesheetPayload(input);
+    return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id));
   }
 
   async updateTimesheet(id: number, input: UpdateHrTimesheetDto) {
-    await this.findTimesheet(id);
+    const current = await this.findTimesheet(id);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrTimesheets, id, input, () => this.findTimesheet(id));
+    const payload = await this.timesheetPayload({ ...current, ...input });
+    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id));
   }
 
   listEmployeeRequests(q: Record<string, string>) {
@@ -684,9 +816,11 @@ export class HrService {
 
   private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const projectId = q["projectId"] && table.projectId ? Number(q["projectId"]) : undefined;
     const status = q["status"];
     const where = and(
       userId ? eq(table.userId, userId) : undefined,
+      projectId ? eq(table.projectId, projectId) : undefined,
       status ? eq(table.status, status) : ne(table.status, "false"),
     );
     if (q["query"] === "all") {
@@ -762,6 +896,86 @@ export class HrService {
     if (input.projectId !== undefined) await this.ensureExists(hrProjects, input.projectId, "HR project not found.");
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private async timesheetPayload(input: Partial<CreateHrTimesheetDto> & Record<string, any>) {
+    let projectLabel = input.project;
+    let donor = input.donor ?? null;
+
+    if (input.projectId !== undefined && input.projectId !== null) {
+      const project = await this.findProject(Number(input.projectId));
+      projectLabel = projectLabel || [project.code, project.name].filter(Boolean).join(" - ");
+      donor = donor || project.donor || null;
+    }
+
+    if (!projectLabel || !String(projectLabel).trim()) {
+      throw new BadRequestException("Project is required for timesheet entries.");
+    }
+
+    return {
+      ...input,
+      projectId: input.projectId ?? null,
+      project: String(projectLabel).slice(0, 180),
+      donor,
+      hours: Number(input.hours || 0),
+    };
+  }
+
+  private weightedAssignmentCost(assignment: { monthlyCost?: number | null; timePercent?: number | null }) {
+    return Number(assignment.monthlyCost || 0) * Number(assignment.timePercent ?? 100) / 100;
+  }
+
+  private assignmentForDate<T extends { startDate?: string | null; endDate?: string | null; status?: string | null }>(
+    assignments: T[],
+    dateValue: string,
+  ) {
+    return assignments.find((assignment) => {
+      const status = String(assignment.status || "active").toLowerCase();
+      if (status === "false" || status === "ended" || status === "suspended") return false;
+      if (assignment.startDate && dateValue < assignment.startDate) return false;
+      if (assignment.endDate && dateValue > assignment.endDate) return false;
+      return true;
+    }) ?? assignments[0];
+  }
+
+  private moneyTotals<T>(rows: T[], amountOf: (row: T) => number, currencyOf: (row: T) => number | null) {
+    const totals = new Map<string, { currencyId: number | null; amount: number }>();
+    for (const row of rows) {
+      const currencyId = currencyOf(row);
+      const key = String(currencyId ?? "default");
+      const current = totals.get(key) || { currencyId, amount: 0 };
+      current.amount += Number(amountOf(row) || 0);
+      totals.set(key, current);
+    }
+    return Array.from(totals.values()).filter((line) => Number(line.amount || 0) !== 0);
+  }
+
+  private addActualCost(target: any, amount: number, hours: number, currencyId: number | null) {
+    if (!target) return;
+    target.actualHours += hours;
+    const key = String(currencyId ?? "default");
+    const current = target.actualCost.find((line: any) => String(line.currencyId ?? "default") === key);
+    if (current) current.amount += amount;
+    else target.actualCost.push({ currencyId, amount });
+  }
+
+  private addGroupedCost(
+    map: Map<string, any>,
+    key: string,
+    base: Record<string, any>,
+    amount: number,
+    hours: number,
+    currencyId: number | null,
+  ) {
+    const row = map.get(key) || { ...base, actualCost: [], actualHours: 0 };
+    this.addActualCost(row, amount, hours, currencyId);
+    map.set(key, row);
+  }
+
+  private sumMoneyForCurrency(lines: Array<{ currencyId: number | null; amount: number }>, currencyId: number | null) {
+    return lines
+      .filter((line) => String(line.currencyId ?? "default") === String(currencyId ?? "default"))
+      .reduce((sum, line) => sum + Number(line.amount || 0), 0);
   }
 
   private payrollPayload(input: Partial<CreateHrPayrollDto> & Record<string, any>) {
