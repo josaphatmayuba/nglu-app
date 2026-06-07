@@ -136,7 +136,19 @@ export class AuthService {
     this.checkLockout(dto.username);
 
     const [user] = await this.db
-      .select()
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        username: users.username,
+        password: users.password,
+        roleId: users.roleId,
+        status: users.status,
+        isLogin: users.isLogin,
+        totpEnabled: users.totpEnabled,
+        totpSecret: users.totpSecret,
+        refreshToken: users.refreshToken,
+        email: users.email,
+      })
       .from(users)
       .where(eq(users.username, dto.username))
       .limit(1);
@@ -222,7 +234,18 @@ export class AuthService {
     const payload = this.verifyMfaToken(mfaToken);
 
     const [user] = await this.db
-      .select()
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        roleId: users.roleId,
+        status: users.status,
+        password: users.password,
+        refreshToken: users.refreshToken,
+        isLogin: users.isLogin,
+        totpEnabled: users.totpEnabled,
+        totpSecret: users.totpSecret,
+        email: users.email,
+      })
       .from(users)
       .where(eq(users.id, payload.sub))
       .limit(1);
