@@ -11,6 +11,7 @@ import {
   designations,
   hrContracts,
   hrDocuments,
+  hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
   hrPerformanceReviews,
@@ -32,6 +33,7 @@ import {
   CreateDesignationHistoryDto,
   CreateHrContractDto,
   CreateHrDocumentDto,
+  CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
   CreateHrPerformanceReviewDto,
@@ -47,6 +49,7 @@ import {
   UpdateDesignationHistoryDto,
   UpdateHrContractDto,
   UpdateHrDocumentDto,
+  UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
   UpdateHrLeaveRequestDto,
   UpdateHrPerformanceReviewDto,
@@ -443,6 +446,26 @@ export class HrService {
     await this.findTimesheet(id);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     return this.updateRecord(hrTimesheets, id, input, () => this.findTimesheet(id));
+  }
+
+  listEmployeeRequests(q: Record<string, string>) {
+    return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest");
+  }
+
+  findEmployeeRequest(id: number) {
+    return this.findOne(hrEmployeeRequests, id, "Employee request not found.");
+  }
+
+  async createEmployeeRequest(input: CreateHrEmployeeRequestDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id));
+  }
+
+  async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto) {
+    await this.findEmployeeRequest(id);
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
+    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id));
   }
 
   listRecruitmentOffers(q: Record<string, string>) {

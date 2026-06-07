@@ -417,6 +417,42 @@ export class UpdateHrTimesheetDto extends PartialType(CreateHrTimesheetDto) {
   status?: string;
 }
 
+export class CreateHrEmployeeRequestDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  requestType: string;
+
+  @IsString()
+  @IsNotEmpty()
+  subject: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @IsDateString()
+  requestedDate: string;
+}
+
+export class UpdateHrEmployeeRequestDto extends PartialType(CreateHrEmployeeRequestDto) {
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  decisionComment?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  decidedBy?: number | null;
+}
+
 export class CreateHrRecruitmentOfferDto {
   @IsString()
   @IsNotEmpty()

@@ -53,6 +53,7 @@ export const api = {
   performanceReviews: () => jsonFetch("/hr/performance-reviews?query=all"),
   trainingSessions: () => jsonFetch("/hr/training-sessions?query=all"),
   timesheets: () => jsonFetch("/hr/timesheets?query=all"),
+  employeeRequests: () => jsonFetch("/hr/employee-requests?query=all"),
   recruitmentOffers: () => jsonFetch("/hr/recruitment-offers?query=all"),
   createUser: (body) => jsonFetch("/user/register", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id, body) => jsonFetch(`/user/${id}`, { method: "PUT", body: JSON.stringify(body) }),
@@ -72,5 +73,7 @@ export const api = {
   createPerformanceReview: (body) => jsonFetch("/hr/performance-reviews", { method: "POST", body: JSON.stringify(body) }),
   createTrainingSession: (body) => jsonFetch("/hr/training-sessions", { method: "POST", body: JSON.stringify(body) }),
   createTimesheet: (body) => jsonFetch("/hr/timesheets", { method: "POST", body: JSON.stringify(body) }),
+  createEmployeeRequest: (body) => jsonFetch("/hr/employee-requests", { method: "POST", body: JSON.stringify(body) }),
+  updateEmployeeRequest: (id, body) => jsonFetch(`/hr/employee-requests/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   createRecruitmentOffer: (body) => jsonFetch("/hr/recruitment-offers", { method: "POST", body: JSON.stringify(body) })
 };

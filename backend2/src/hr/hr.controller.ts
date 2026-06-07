@@ -9,6 +9,7 @@ import {
   designations,
   hrContracts,
   hrDocuments,
+  hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
   hrPerformanceReviews,
@@ -26,6 +27,7 @@ import {
   CreateDesignationHistoryDto,
   CreateHrContractDto,
   CreateHrDocumentDto,
+  CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
   CreateHrPerformanceReviewDto,
@@ -41,6 +43,7 @@ import {
   UpdateDesignationHistoryDto,
   UpdateHrContractDto,
   UpdateHrDocumentDto,
+  UpdateHrEmployeeRequestDto,
   UpdateHrExpenseRequestDto,
   UpdateHrLeaveRequestDto,
   UpdateHrPerformanceReviewDto,
@@ -289,6 +292,22 @@ export class HrTimesheetController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrTimesheets, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-employee-requests")
+@Controller("hr/employee-requests")
+export class HrEmployeeRequestController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listEmployeeRequests(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findEmployeeRequest(id); }
+  @Post() create(@Body() body: CreateHrEmployeeRequestDto) { return this.service.createEmployeeRequest(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrEmployeeRequests, id); }
 }
 
 @ApiBearerAuth()

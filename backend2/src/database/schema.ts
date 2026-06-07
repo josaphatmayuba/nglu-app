@@ -679,6 +679,22 @@ export const hrTimesheets = mysqlTable("hr_timesheets", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrEmployeeRequests = mysqlTable("hr_employee_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  requestType: varchar("requestType", { length: 120 }).notNull(),
+  subject: varchar("subject", { length: 180 }).notNull(),
+  description: text("description"),
+  requestedDate: date("requestedDate", { mode: "string" }).notNull(),
+  status: varchar("status", { length: 30 }).default("pending").notNull(),
+  decisionComment: text("decisionComment"),
+  decidedBy: bigint("decidedBy", { mode: "number" }),
+  decidedAt: timestamp("decidedAt"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const colors = mysqlTable("colors", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),

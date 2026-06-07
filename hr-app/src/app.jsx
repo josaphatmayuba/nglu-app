@@ -239,6 +239,7 @@ const EMPTY_DATA = {
   performanceReviews: [],
   trainingSessions: [],
   timesheets: [],
+  employeeRequests: [],
   recruitmentOffers: [],
 };
 const DEPARTMENT_COLORS = ["teal", "sky", "emerald", "amber", "ink"];
@@ -252,6 +253,9 @@ const isApproved = (status) => ["approved", "active", "received", "planned", "do
 const chipForStatus = (status) => isPending(status) ? "amber" : isApproved(status) ? "emerald" : String(status || "").toLowerCase() === "rejected" ? "rose" : "ink";
 const statusLabel = (status) => status ? String(status) : "Non renseigne";
 const personName = (staff, userId) => fullName((staff || []).find((u) => String(u.id) === String(userId)) || { id: userId });
+const sameId = (a, b) => String(a ?? "") !== "" && String(a) === String(b ?? "");
+const findCurrentStaff = (me, staff) => (staff || []).find((u) => sameId(u.id, me?.id)) || (staff || []).find((u) => fullName(u).toLowerCase() === String(me?.name || "").toLowerCase()) || null;
+const byUser = (rows, userId) => (rows || []).filter((row) => sameId(row.userId, userId));
 const daysUntil = (date) => {
   if (!date) return null;
   const diff = new Date(dateOnly(date)).getTime() - new Date(TODAY).getTime();
@@ -400,6 +404,7 @@ Object.assign(ACTION_FORMS, {
   performanceReview: { title: "Nouvelle Ã©valuation", submit: "Enregistrer", success: "Ã‰valuation enregistrÃ©e.", defaults: { userId: "", managerId: "", cycle: "S1 2026", score: "", objectives: "", comments: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "managerId", label: "Manager", type: "select", optionKey: "staff" }, { key: "cycle", label: "Cycle", required: true }, { key: "score", label: "Score / 5", type: "number" }, { key: "objectives", label: "Objectifs", type: "textarea" }, { key: "comments", label: "Commentaires", type: "textarea" }] },
   trainingSession: { title: "Session de formation", submit: "Planifier", success: "Formation enregistrÃ©e.", defaults: { title: "", audience: "Toute l'Ã©quipe", sessionDate: TODAY, budget: 0, note: "" }, fields: [{ key: "title", label: "Titre", required: true }, { key: "audience", label: "Public" }, { key: "sessionDate", label: "Date", type: "date" }, { key: "budget", label: "Budget", type: "number" }, { key: "note", label: "Note", type: "textarea" }] },
   recruitmentOffer: { title: "Nouvelle offre", submit: "Publier", success: "Offre de recrutement enregistrÃ©e.", defaults: { role: "", departmentId: "", deadline: TODAY, description: "" }, fields: [{ key: "role", label: "Poste Ã  recruter", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "deadline", label: "Date limite", type: "date" }, { key: "description", label: "Description", type: "textarea" }] },
+  employeeRequest: { title: "Demande RH", submit: "Soumettre", success: "Demande RH enregistree.", defaults: { userId: "", requestType: "Attestation de travail", subject: "", requestedDate: TODAY, description: "" }, fields: [{ key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true }, { key: "requestType", label: "Type", type: "select", options: ["Attestation de travail", "Changement d'adresse", "Changement compte bancaire", "Correction profil", "Document administratif", "Autre"], required: true }, { key: "subject", label: "Objet", required: true }, { key: "requestedDate", label: "Date", type: "date", required: true }, { key: "description", label: "Details", type: "textarea" }] },
 });
 
 Object.assign(ACTION_FORMS, {
@@ -540,9 +545,9 @@ function App() {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
-      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.recruitmentOffers()
+      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, offers]) => {
+      .then(([overview, shifts, awards, salaries, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -567,6 +572,7 @@ function App() {
           performanceReviews: arrayFrom(reviews.value, "getAllHrPerformanceReview"),
           trainingSessions: arrayFrom(trainings.value, "getAllHrTrainingSession"),
           timesheets: arrayFrom(timesheets.value, "getAllHrTimesheet"),
+          employeeRequests: arrayFrom(employeeRequests.value, "getAllHrEmployeeRequest"),
           recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
@@ -585,7 +591,7 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "recruitmentOffer"];
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({ userId: Number(form.userId), contractType: form.contractType, startDate: form.startDate, endDate: form.endDate || null, reference: form.reference || null, notes: form.notes || null }));
@@ -595,6 +601,7 @@ function App() {
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
         if (kind === "trainingSession") await api.createTrainingSession(cleanPayload({ title: form.title, audience: form.audience || null, sessionDate: form.sessionDate || null, budget: Number(form.budget || 0), currencyId: toNum(form.currencyId), note: form.note || null }));
         if (kind === "timesheet") await api.createTimesheet(cleanPayload({ userId: Number(form.userId), workDate: form.workDate, period: form.period || null, project: form.project, donor: form.donor || null, activity: form.activity || null, hours: Number(form.hours || 0), note: form.note || null }));
+        if (kind === "employeeRequest") await api.createEmployeeRequest(cleanPayload({ userId: Number(form.userId), requestType: form.requestType, subject: form.subject, requestedDate: form.requestedDate, description: form.description || null }));
         if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
         setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
         return;
@@ -668,7 +675,7 @@ function App() {
     recrutement: <Recrutement {...ctx} />,
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
-    selfservice: <SelfService data={data} setModal={setModal} />,
+    selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
   };
 
   return (
@@ -1260,19 +1267,59 @@ function Reporting({ data, staff, masse }) {
 }
 
 /* Self service */
-function SelfService({ data, setModal }) {
+function SelfService({ data, staff, me, setModal }) {
+  const user = findCurrentStaff(me, staff);
+  const userId = user?.id || me?.id || "";
+  const myLeaves = byUser(data.leaveRequests, userId);
+  const myExpenses = byUser(data.expenseRequests, userId);
+  const myDocuments = byUser(data.documents, userId);
+  const myContracts = byUser(data.contracts, userId);
+  const myTimesheets = byUser(data.timesheets, userId);
+  const myReviews = byUser(data.performanceReviews, userId);
+  const mySalaries = byUser(data.salaries, userId);
+  const myRequests = byUser(data.employeeRequests, userId);
+  const pendingCount = [...myLeaves, ...myExpenses, ...myTimesheets, ...myRequests].filter((r) => isPending(r.status)).length;
+  const activeContract = myContracts.find((c) => isApproved(c.status)) || myContracts[0];
+  const lastSalary = mySalaries[0];
+  const thisMonthHours = myTimesheets.filter((t) => dateOnly(t.workDate).slice(0, 7) === TODAY.slice(0, 7)).reduce((sum, t) => sum + Number(t.hours || 0), 0);
+  const selfModal = (kind, initial = {}) => setModal({ kind, initial: { userId, ...initial }, lockUserId: true });
+  const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const actions = [
-    { icon: "palmtree", title: "Demander un conge", kind: "leaveRequest" },
-    { icon: "receipt", title: "Nouvelle demande de frais", kind: "expenseRequest" },
-    { icon: "folder", title: "Deposer un document", kind: "hrDocument" },
+    { icon: "palmtree", title: "Demander un conge", onClick: () => selfModal("leaveRequest") },
+    { icon: "timer", title: "Saisir un timesheet", onClick: () => selfModal("timesheet", { workDate: TODAY, period: TODAY.slice(0, 7) }) },
+    { icon: "receipt", title: "Nouvelle demande de frais", onClick: () => selfModal("expenseRequest", { requestDate: TODAY }) },
+    { icon: "folder", title: "Deposer un document", onClick: () => selfModal("hrDocument") },
+    { icon: "fileCheck", title: "Demande RH", onClick: () => selfModal("employeeRequest") },
   ];
   return (
     <>
       <PageHead eyebrow="Portail agent" title="Espace employe" />
-      <div className="g3" style={{ marginBottom: 16 }}><Mini label="Mes demandes conges" value={data.leaveRequests.length} /><Mini label="Mes frais" value={data.expenseRequests.length} /><Mini label="Mes documents" value={data.documents.length} /></div>
-      <div className="g3">{actions.map((a) => <div className="card pad" key={a.kind}><h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={a.icon} style={{ color: "var(--teal-600)" }} /> {a.title}</h3><button type="button" className="tile-btn accent" onClick={() => setModal({ kind: a.kind })}><Icon name="plus" /> Creer dans la base</button></div>)}</div>
+      {!userId && <div className="card pad" style={{ marginBottom: 16 }}><EmptyState title="Compte employe non relie" detail="Reconnecte-toi avec un compte employe pour voir tes donnees personnelles." /></div>}
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label="Demandes en attente" value={pendingCount} />
+        <Mini label="Heures ce mois" value={nf.format(thisMonthHours)} />
+        <Mini label="Documents" value={myDocuments.length} />
+        <Mini label="Salaire actuel" value={lastSalary ? fc(lastSalary.salary, symbolFor(lastSalary.currencyId, CURRENCIES, CUR)) : (user?.currentSalary ? fc(user.currentSalary, salarySym(user)) : `0 ${CUR}`)} />
+      </div>
+      <div className="g3" style={{ marginBottom: 16 }}>{actions.map((a) => <div className="card pad" key={a.title}><h3 className="block-title font-display" style={{ fontSize: 14, marginBottom: 10 }}><Icon name={a.icon} style={{ color: "var(--teal-600)" }} /> {a.title}</h3><button type="button" className="tile-btn accent" disabled={!userId} onClick={a.onClick}><Icon name="plus" /> Creer dans la base</button></div>)}</div>
+      <div className="g2" style={{ marginBottom: 16 }}>
+        <div className="card pad"><h3 className="block-title font-display">Mon profil</h3><div className="kv"><div><span>Nom</span><span>{user ? fullName(user) : me.name}</span></div><div><span>Poste</span><span>{user?.designation?.name || "-"}</span></div><div><span>Departement</span><span>{user?.department?.name || "-"}</span></div><div><span>Telephone</span><span>{displayPhone(user)}</span></div><div><span>Adresse</span><span>{[user?.street, user?.city, user?.country].filter(Boolean).join(", ") || "-"}</span></div></div></div>
+        <div className="card pad"><h3 className="block-title font-display">Contrat actif</h3>{activeContract ? <div className="kv"><div><span>Type</span><span>{activeContract.contractType || "-"}</span></div><div><span>Debut</span><span>{dateOnly(activeContract.startDate) || "-"}</span></div><div><span>Fin</span><span>{dateOnly(activeContract.endDate) || "-"}</span></div><div><span>Statut</span><span>{statusChip(activeContract.status)}</span></div></div> : <EmptyState title="Aucun contrat en base" />}</div>
+      </div>
+      <div className="g2" style={{ marginBottom: 16 }}>
+        <SelfList title="Mes conges" empty="Aucune demande de conge" rows={myLeaves.slice(0, 5)} render={(r) => <><div><b>{r.type || "Conge"}</b><div className="tiny">{dateOnly(r.startDate)} - {dateOnly(r.endDate)}</div></div>{statusChip(r.status)}</>} />
+        <SelfList title="Mes frais & avances" empty="Aucune demande de frais" rows={myExpenses.slice(0, 5)} render={(r) => <><div><b>{r.type || "Frais"}</b><div className="tiny">{dateOnly(r.requestDate)} - {r.description || ""}</div></div><div style={{ textAlign: "right" }}><b>{fc(r.amount, moneySymbolFor(r))}</b><div>{statusChip(r.status)}</div></div></>} />
+        <SelfList title="Mes timesheets" empty="Aucune saisie timesheet" rows={myTimesheets.slice(0, 5)} render={(r) => <><div><b>{r.project || "Projet"}</b><div className="tiny">{dateOnly(r.workDate)} - {r.donor || "Bailleur non renseigne"}</div></div><div style={{ textAlign: "right" }}><b>{nf.format(Number(r.hours || 0))} h</b><div>{statusChip(r.status)}</div></div></>} />
+        <SelfList title="Mes documents" empty="Aucun document" rows={myDocuments.slice(0, 5)} render={(r) => <><div><b>{r.documentType || "Document"}</b><div className="tiny">{r.reference || r.note || "-"}</div></div>{r.fileUrl ? <a className="link" href={r.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : statusChip(r.status)}</>} />
+        <SelfList title="Mes demandes RH" empty="Aucune demande RH" rows={myRequests.slice(0, 5)} render={(r) => <><div><b>{r.subject || r.requestType}</b><div className="tiny">{r.requestType} - {dateOnly(r.requestedDate)}</div></div>{statusChip(r.status)}</>} />
+        <SelfList title="Evaluations & formation" empty="Aucune evaluation ou formation" rows={[...myReviews.slice(0, 3), ...data.trainingSessions.slice(0, 3)]} render={(r) => <><div><b>{r.cycle || r.title || "Element RH"}</b><div className="tiny">{r.score != null ? `Score ${r.score}/5` : [r.audience, dateOnly(r.sessionDate)].filter(Boolean).join(" - ")}</div></div>{statusChip(r.status)}</>} />
+      </div>
     </>
   );
+}
+
+function SelfList({ title, rows, render, empty }) {
+  return <div className="card pad"><h3 className="block-title font-display">{title}</h3>{rows.length === 0 && <EmptyState title={empty} />}{rows.map((row) => <div className="row" key={`${title}-${row.id}`} style={{ alignItems: "center" }}>{render(row)}</div>)}</div>;
 }
 
 /* Modal creation */
@@ -1324,6 +1371,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
             if (field.kind === "section") return <div key={field.label} className="form-section">{field.label}</div>;
             if (field.requiresStatusPermission && !canManageUserStatus()) return null;
             const options = field.optionKey ? opts[field.optionKey] || [] : field.options;
+            if (modal.lockUserId && field.key === "userId") return null;
             if (field.key === "currencyId") return null;
             if (field.key === "phone") return <PhoneField key={field.key} label={field.label} value={form[field.key] ?? ""} onChange={(v) => set(field.key, v)} required={field.required} />;
             if (field.generated && field.key === "password") {
