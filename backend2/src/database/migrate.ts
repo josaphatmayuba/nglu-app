@@ -11,6 +11,18 @@ type JournalEntry = {
   breakpoints: boolean;
 };
 
+const OPERATIONAL_REPAIR_MIGRATIONS = [
+  "0071_hr_modules",
+  "0072_hr_timesheets",
+  "0073_hr_money_currency_ids",
+  "0074_hr_employee_requests",
+  "0075_hr_timesheet_period_dates",
+  "0076_hr_contract_professional_fields",
+  "0077_hr_employee_complete_fields",
+  "0078_hr_payrolls",
+  "0079_hr_project_assignments",
+];
+
 async function main() {
   await baselineExistingDatabase();
 
@@ -27,6 +39,7 @@ async function main() {
       throw err;
     }
   }
+  await applyOperationalRepairs();
   await connection.end(); // pool.end() drains all connections
 }
 
@@ -78,6 +91,58 @@ function migrationHash(tag: string) {
   }
 
   return createHash("sha256").update(readFileSync(migrationPath, "utf8")).digest("hex");
+}
+
+async function applyOperationalRepairs() {
+  console.log("Verifying operational schema repairs...");
+  for (const tag of OPERATIONAL_REPAIR_MIGRATIONS) {
+    const migrationPath = `./drizzle/${tag}.sql`;
+    if (!existsSync(migrationPath)) continue;
+    for (const statement of splitSqlStatements(readFileSync(migrationPath, "utf8"))) {
+      await connection.query(statement);
+    }
+  }
+  console.log("Operational schema repairs complete.");
+}
+
+function splitSqlStatements(sqlText: string) {
+  const source = sqlText
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith("--> statement-breakpoint"))
+    .join("\n");
+  const statements: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | "`" | null = null;
+  let escaped = false;
+
+  for (const char of source) {
+    current += char;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = null;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      continue;
+    }
+    if (char === ";") {
+      const statement = current.slice(0, -1).trim();
+      if (statement) statements.push(statement);
+      current = "";
+    }
+  }
+
+  const tail = current.trim();
+  if (tail) statements.push(tail);
+  return statements;
 }
 
 main().catch((err) => {

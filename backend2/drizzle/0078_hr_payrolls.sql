@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS `hr_payrolls` (
-  `id` serial AUTO_INCREMENT NOT NULL,
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `organization_id` bigint NOT NULL DEFAULT 1,
   `userId` bigint NOT NULL,
   `contractId` bigint NULL,

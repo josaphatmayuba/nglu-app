@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS `hr_projects` (
-  `id` serial AUTO_INCREMENT NOT NULL,
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `organization_id` bigint NOT NULL DEFAULT 1,
   `code` varchar(80) NULL,
   `name` varchar(180) NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS `hr_projects` (
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `hr_project_assignments` (
-  `id` serial AUTO_INCREMENT NOT NULL,
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `organization_id` bigint NOT NULL DEFAULT 1,
   `projectId` bigint NOT NULL,
   `userId` bigint NOT NULL,
