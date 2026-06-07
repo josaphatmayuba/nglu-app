@@ -217,6 +217,103 @@ export class CreateHrPayrollDto {
 
 export class UpdateHrPayrollDto extends PartialType(CreateHrPayrollDto) {}
 
+export class CreateHrProjectDto {
+  @IsOptional()
+  @IsString()
+  code?: string | null;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  donor?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  managerId?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  hrBudget?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateHrProjectDto extends PartialType(CreateHrProjectDto) {}
+
+export class CreateHrProjectAssignmentDto {
+  @Type(() => Number)
+  @IsNumber()
+  projectId: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsOptional()
+  @IsString()
+  role?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  timePercent?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  monthlyCost?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  currencyId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateHrProjectAssignmentDto extends PartialType(CreateHrProjectAssignmentDto) {}
+
 export class CreateAwardHistoryDto {
   @Type(() => Number)
   @IsNumber()

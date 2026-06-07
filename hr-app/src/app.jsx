@@ -98,6 +98,7 @@ const NAV = [
   { id: "formation", label: "Formation", icon: "graduationCap" },
   { id: "recrutement", label: "Recrutement", icon: "userPlus" },
   { section: "Structure & pilotage" },
+  { id: "projets", label: "Affectations projets", icon: "folder" },
   { id: "organigramme", label: "Postes & départements", icon: "network" },
   { id: "reporting", label: "Reporting RH", icon: "barChart" },
   { id: "selfservice", label: "Espace employé", icon: "circleUser" },
@@ -273,6 +274,8 @@ const EMPTY_DATA = {
   awards: [],
   salaries: [],
   payrolls: [],
+  projects: [],
+  projectAssignments: [],
   roles: [],
   leaveRequests: [],
   contracts: [],
@@ -307,6 +310,9 @@ const STATUS_LABELS = {
   planned: "Planifie",
   done: "Termine",
   open: "Ouvert",
+  closed: "Cloture",
+  suspended: "Suspendu",
+  ended: "Termine",
   true: "Actif",
   false: "Inactif",
 };
@@ -728,6 +734,52 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+Object.assign(ACTION_FORMS, {
+  hrProject: {
+    title: "Nouveau projet ONG",
+    submit: "Enregistrer",
+    success: "Projet ONG enregistre.",
+    wide: true,
+    defaults: { code: "", name: "", donor: "", managerId: "", startDate: TODAY, endDate: "", hrBudget: 0, currencyId: "", status: "active", notes: "" },
+    fields: [
+      { kind: "section", label: "Projet" },
+      { kind: "computed", label: "Code", value: () => "Genere automatiquement a l'enregistrement", wide: true },
+      { key: "name", label: "Nom du projet", required: true },
+      { key: "donor", label: "Bailleur / financement" },
+      { key: "managerId", label: "Responsable projet", type: "select", optionKey: "staff" },
+      { key: "startDate", label: "Date de debut", type: "date" },
+      { key: "endDate", label: "Date de fin", type: "date" },
+      { kind: "section", label: "Budget RH" },
+      { key: "hrBudget", label: "Budget RH", type: "number" },
+      { key: "currencyId", label: "Devise", type: "select", optionKey: "currencies" },
+      { key: "status", label: "Statut", type: "select", options: [{ value: "active", label: "Actif" }, { value: "planned", label: "Planifie" }, { value: "closed", label: "Cloture" }, { value: "suspended", label: "Suspendu" }] },
+      { key: "notes", label: "Notes", type: "textarea", wide: true },
+    ],
+  },
+  hrProjectAssignment: {
+    title: "Affecter un employe a un projet",
+    submit: "Enregistrer",
+    success: "Affectation projet enregistree.",
+    wide: true,
+    defaults: { projectId: "", userId: "", role: "", startDate: TODAY, endDate: "", timePercent: 100, monthlyCost: 0, currencyId: "", status: "active", notes: "" },
+    fields: [
+      { kind: "section", label: "Affectation" },
+      { key: "projectId", label: "Projet", type: "select", optionKey: "projects", required: true },
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "role", label: "Role sur le projet" },
+      { key: "startDate", label: "Debut affectation", type: "date" },
+      { key: "endDate", label: "Fin affectation", type: "date" },
+      { key: "timePercent", label: "Pourcentage de temps", type: "number" },
+      { kind: "section", label: "Cout RH" },
+      { key: "monthlyCost", label: "Cout mensuel impute", type: "number" },
+      { key: "currencyId", label: "Devise", type: "select", optionKey: "currencies" },
+      { kind: "computed", label: "Cout pondere", value: (form) => fc(Number(form.monthlyCost || 0) * Number(form.timePercent || 0) / 100, symbolFor(form.currencyId || defaultCurrencyId(), CURRENCIES, CUR)) },
+      { key: "status", label: "Statut", type: "select", options: [{ value: "active", label: "Actif" }, { value: "planned", label: "Planifie" }, { value: "ended", label: "Termine" }, { value: "suspended", label: "Suspendu" }] },
+      { key: "notes", label: "Notes", type: "textarea", wide: true },
+    ],
+  },
+});
+
 const SELF_ACTION_FORMS = {
   leaveRequest: {
     title: "Demander un conge",
@@ -852,11 +904,11 @@ function App() {
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.roles(), api.setting(), api.currencies(),
+      api.overview(), api.shifts(), api.awards(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
       api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, salaries, payrolls, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, salaries, payrolls, projects, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -873,6 +925,8 @@ function App() {
           awards: arrayFrom(awards.value, "getAllAward"),
           salaries: arrayFrom(salaries.value, "getAllSalaryHistory"),
           payrolls: arrayFrom(payrolls.value, "getAllHrPayroll"),
+          projects: arrayFrom(projects.value, "getAllHrProject"),
+          projectAssignments: arrayFrom(projectAssignments.value, "getAllHrProjectAssignment"),
           roles: arrayFrom(roles.value, "getAllRole"),
           leaveRequests: arrayFrom(leaves.value, "getAllHrLeaveRequest"),
           contracts: arrayFrom(contracts.value, "getAllHrContract"),
@@ -901,7 +955,7 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer", "payroll"];
+      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "employeeRequest", "recruitmentOffer", "payroll", "hrProject", "hrProjectAssignment"];
       if (hrApiKinds.includes(kind)) {
         if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
         if (kind === "hrContract") await api.createHrContract(cleanPayload({
@@ -959,6 +1013,30 @@ function App() {
           absenceDays: Number(form.absenceDays || 0),
           paidLeaveDays: Number(form.paidLeaveDays || 0),
           status: form.status || "draft",
+          notes: form.notes || null,
+        }));
+        if (kind === "hrProject") await api.createHrProject(cleanPayload({
+          code: form.code || null,
+          name: form.name,
+          donor: form.donor || null,
+          managerId: toNum(form.managerId),
+          startDate: form.startDate || null,
+          endDate: form.endDate || null,
+          hrBudget: Number(form.hrBudget || 0),
+          currencyId: toNum(form.currencyId),
+          status: form.status || "active",
+          notes: form.notes || null,
+        }));
+        if (kind === "hrProjectAssignment") await api.createHrProjectAssignment(cleanPayload({
+          projectId: Number(form.projectId),
+          userId: Number(form.userId),
+          role: form.role || null,
+          startDate: form.startDate || null,
+          endDate: form.endDate || null,
+          timePercent: Number(form.timePercent || 0),
+          monthlyCost: Number(form.monthlyCost || 0),
+          currencyId: toNum(form.currencyId),
+          status: form.status || "active",
           notes: form.notes || null,
         }));
         if (kind === "performanceReview") await api.createPerformanceReview(cleanPayload({ userId: Number(form.userId), managerId: toNum(form.managerId), cycle: form.cycle, score: toNum(form.score), objectives: form.objectives || null, comments: form.comments || null }));
@@ -1060,6 +1138,7 @@ function App() {
     performance: <Performance {...ctx} />,
     formation: <Formation {...ctx} />,
     recrutement: <Recrutement {...ctx} />,
+    projets: <ProjetsONG data={data} staff={staff} setModal={setModal} />,
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
     selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
@@ -1367,6 +1446,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
   const leaves = byUser(data.leaveRequests, userId);
   const documents = byUser(data.documents, userId);
   const timesheets = byUser(data.timesheets, userId);
+  const projectAssignments = byUser(data.projectAssignments, userId);
   const reviews = byUser(data.performanceReviews, userId);
   const trainings = byUser(data.trainingSessions, userId);
   const expenses = byUser(data.expenseRequests, userId);
@@ -1381,6 +1461,10 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
     map.set(key, (map.get(key) || 0) + Number(row.hours || 0));
     return map;
   }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
+  const projectLabel = (projectId) => {
+    const project = (data.projects || []).find((p) => String(p.id) === String(projectId));
+    return project ? [project.code, project.name].filter(Boolean).join(" - ") : `Projet #${projectId}`;
+  };
   const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["developpement", "Developpement"]];
   const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
@@ -1463,6 +1547,9 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
             </div>
             <Employee360Panel title="Temps par projet">
               <Employee360List rows={projectHours.slice(0, 6)} empty="Aucune heure par projet pour cet employe" render={(item) => <><span>{item.project}</span><strong>{nf.format(item.hours)} h</strong></>} />
+            </Employee360Panel>
+            <Employee360Panel title="Affectations projets">
+              <Employee360List rows={projectAssignments} empty="Aucune affectation projet en base" render={(a) => <><span>{projectLabel(a.projectId)}<small>{[a.role, dateOnly(a.startDate), dateOnly(a.endDate)].filter(Boolean).join(" - ")}</small></span><strong>{nf.format(Number(a.timePercent || 0))} %</strong></>} />
             </Employee360Panel>
           </div>
         )}
@@ -1770,6 +1857,56 @@ function Timesheet({ data, staff, setModal }) {
   );
 }
 
+function ProjetsONG({ data, staff, setModal }) {
+  const projects = data.projects || [];
+  const assignments = data.projectAssignments || [];
+  const activeProjects = projects.filter((p) => ["active", "planned"].includes(String(p.status || "").toLowerCase()));
+  const weightedCost = (a) => Number(a.monthlyCost || 0) * Number(a.timePercent || 0) / 100;
+  const budgetLines = moneyLinesFrom(projects, (p) => p.hrBudget, moneySymbolFor);
+  const costLines = moneyLinesFrom(assignments, weightedCost, moneySymbolFor);
+  const projectName = (projectId) => {
+    const project = projects.find((p) => String(p.id) === String(projectId));
+    return project ? [project.code, project.name].filter(Boolean).join(" - ") : `Projet #${projectId}`;
+  };
+  const projectCostLines = (projectId) => moneyLinesFrom(assignments.filter((a) => String(a.projectId) === String(projectId)), weightedCost, moneySymbolFor);
+  const assignmentRows = assignments.slice(0, 50);
+  const exportAssignments = () => exportCsv(
+    "affectations-projets-rh.csv",
+    ["Projet", "Employe", "Role", "Debut", "Fin", "Temps %", "Cout mensuel", "Statut"],
+    assignments.map((a) => [projectName(a.projectId), personName(staff, a.userId), a.role || "", dateOnly(a.startDate), dateOnly(a.endDate), a.timePercent, fc(weightedCost(a), moneySymbolFor(a)), statusLabel(a.status)])
+  );
+  return (
+    <>
+      <PageHead eyebrow="ONG & projets" title="Affectations projets" action="Nouveau projet" actionIcon="plus" onAction={() => setModal({ kind: "hrProject" })} />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <KPI label="Projets actifs" value={activeProjects.length} sub={`${projects.length} projets en base`} icon="folder" />
+        <KPI label="Affectations" value={assignments.length} sub={`${new Set(assignments.map((a) => a.userId)).size} employes affectes`} icon="users" />
+        <KPI label="Budget RH projets" value={<MoneyLines lines={budgetLines} />} sub="par devise" icon="wallet" />
+        <KPI label="Cout RH impute / mois" value={<MoneyLines lines={costLines} />} sub="cout pondere par temps" icon="banknote" />
+      </div>
+      <div className="g2">
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Projets ONG</h3><button type="button" className="link" onClick={() => setModal({ kind: "hrProject" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Projet</button></div>
+          <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 720 }}>
+            <thead><tr><th>Projet</th><th>Bailleur</th><th className="r">Budget RH</th><th className="r">Cout affecte</th><th className="r">Statut</th></tr></thead>
+            <tbody>{projects.map((p) => <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r">{statusChip(p.status)}</td></tr>)}</tbody>
+          </table></div>
+          {projects.length === 0 && <EmptyState title="Aucun projet en base" detail="Cree un projet pour affecter les couts RH par bailleur ou centre de cout." />}
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Affectations employes</h3><button type="button" className="btn btn-accent grad-accent" disabled={!projects.length || !staff.length} onClick={() => setModal({ kind: "hrProjectAssignment" })}><Icon name="plus" /> Affecter</button></div>
+          <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 780 }}>
+            <thead><tr><th>Employe</th><th>Projet</th><th>Role</th><th className="r">Temps</th><th className="r">Cout mensuel</th><th className="r">Statut</th></tr></thead>
+            <tbody>{assignmentRows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{personName(staff, a.userId)}<div className="tiny">{[dateOnly(a.startDate), dateOnly(a.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{projectName(a.projectId)}</td><td>{a.role || "-"}</td><td className="r">{nf.format(Number(a.timePercent || 0))} %</td><td className="r">{fc(weightedCost(a), moneySymbolFor(a))}</td><td className="r">{statusChip(a.status)}</td></tr>)}</tbody>
+          </table></div>
+          {assignmentRows.length === 0 && <EmptyState title="Aucune affectation en base" detail="Les couts RH par projet seront calcules des qu'un employe est affecte." />}
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}><button type="button" className="link" onClick={exportAssignments}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* Frais */
 function Frais({ data, staff, setModal }) {
   const rows = data.expenseRequests || [];
@@ -1932,7 +2069,7 @@ function SelfList({ title, rows, render, empty }) {
 function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const selfAction = modal.lockUserId ? SELF_ACTION_FORMS[modal.kind] : null;
   const action = selfAction || ACTION_FORMS[modal.kind];
-  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract", "payroll"].includes(modal.kind);
+  const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract", "payroll", "hrProject", "hrProjectAssignment"].includes(modal.kind);
   const [form, setForm] = React.useState(() => {
     const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
     if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
@@ -1962,6 +2099,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     awards: (data.awards || []).map((a) => ({ value: a.id, label: a.name })),
     currencies: currencyOptions(),
     contracts: (data.contracts || []).map((c) => ({ value: c.id, label: [c.reference, personName(staff, c.userId), c.contractType].filter(Boolean).join(" - ") })),
+    projects: (data.projects || []).map((p) => ({ value: p.id, label: [p.code, p.name, p.donor].filter(Boolean).join(" - ") })),
   };
   const isMoneyField = (field) => {
     if (!field) return false;
@@ -1970,6 +2108,8 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     if (modal.kind === "trainingSession" && field.key === "budget") return true;
     if (modal.kind === "hrContract" && ["baseSalary", "transportAllowance", "housingAllowance", "stipend", "contractAmount"].includes(field.key)) return true;
     if (modal.kind === "payroll" && ["baseSalary", "transportAllowance", "housingAllowance", "riskAllowance", "otherAllowances", "overtimeAmount", "unpaidAbsenceDeduction", "advanceDeduction", "taxAmount", "cnssAmount", "otherDeductions"].includes(field.key)) return true;
+    if (modal.kind === "hrProject" && field.key === "hrBudget") return true;
+    if (modal.kind === "hrProjectAssignment" && field.key === "monthlyCost") return true;
     return false;
   };
   return (

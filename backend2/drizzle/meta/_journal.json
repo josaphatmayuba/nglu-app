@@ -414,6 +414,13 @@
       "when": 1780225200000,
       "tag": "0078_hr_payrolls",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "5",
+      "when": 1780228800000,
+      "tag": "0079_hr_project_assignments",
+      "breakpoints": true
     }
   ]
 }

@@ -16,6 +16,8 @@ import {
   hrLeaveRequests,
   hrPayrolls,
   hrPerformanceReviews,
+  hrProjectAssignments,
+  hrProjects,
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
@@ -39,6 +41,8 @@ import {
   CreateHrLeaveRequestDto,
   CreateHrPayrollDto,
   CreateHrPerformanceReviewDto,
+  CreateHrProjectAssignmentDto,
+  CreateHrProjectDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -56,6 +60,8 @@ import {
   UpdateHrLeaveRequestDto,
   UpdateHrPayrollDto,
   UpdateHrPerformanceReviewDto,
+  UpdateHrProjectAssignmentDto,
+  UpdateHrProjectDto,
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
   UpdateHrTrainingSessionDto,
@@ -290,6 +296,70 @@ export class HrService {
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...current, ...input });
     return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
+  }
+
+  listProjects(q: Record<string, string>) {
+    return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject");
+  }
+
+  findProject(id: number) {
+    return this.findOne(hrProjects, id, "HR project not found.");
+  }
+
+  async createProject(input: CreateHrProjectDto) {
+    await this.validateProjectRefs(input);
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
+    const code = input.code || (await this.nextProjectCode(input.startDate));
+    return this.createRecord(hrProjects, {
+      ...input,
+      code,
+      currencyId: currencyId ?? null,
+      hrBudget: Number(input.hrBudget || 0),
+      status: input.status || "active",
+    }, (id) => this.findProject(id));
+  }
+
+  async updateProject(id: number, input: UpdateHrProjectDto) {
+    await this.findProject(id);
+    await this.validateProjectRefs(input);
+    if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    return this.updateRecord(hrProjects, id, {
+      ...input,
+      ...(input.hrBudget !== undefined ? { hrBudget: Number(input.hrBudget || 0) } : {}),
+    }, () => this.findProject(id));
+  }
+
+  listProjectAssignments(q: Record<string, string>) {
+    return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment");
+  }
+
+  findProjectAssignment(id: number) {
+    return this.findOne(hrProjectAssignments, id, "HR project assignment not found.");
+  }
+
+  async createProjectAssignment(input: CreateHrProjectAssignmentDto) {
+    await this.validateProjectAssignmentRefs(input);
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
+    return this.createRecord(hrProjectAssignments, {
+      ...input,
+      currencyId: currencyId ?? null,
+      timePercent: Number(input.timePercent ?? 100),
+      monthlyCost: Number(input.monthlyCost || 0),
+      status: input.status || "active",
+    }, (id) => this.findProjectAssignment(id));
+  }
+
+  async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto) {
+    await this.findProjectAssignment(id);
+    await this.validateProjectAssignmentRefs(input);
+    if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    return this.updateRecord(hrProjectAssignments, id, {
+      ...input,
+      ...(input.timePercent !== undefined ? { timePercent: Number(input.timePercent ?? 100) } : {}),
+      ...(input.monthlyCost !== undefined ? { monthlyCost: Number(input.monthlyCost || 0) } : {}),
+    }, () => this.findProjectAssignment(id));
   }
 
   listAwardHistory(q: Record<string, string>) {
@@ -683,6 +753,17 @@ export class HrService {
     if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
   }
 
+  private async validateProjectRefs(input: Partial<CreateHrProjectDto>) {
+    if (input.managerId) await this.ensureExists(users, input.managerId, "Project manager not found.");
+    if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private async validateProjectAssignmentRefs(input: Partial<CreateHrProjectAssignmentDto>) {
+    if (input.projectId !== undefined) await this.ensureExists(hrProjects, input.projectId, "HR project not found.");
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
   private payrollPayload(input: Partial<CreateHrPayrollDto> & Record<string, any>) {
     const n = (value: any) => Number(value || 0);
     const grossSalary = n(input.baseSalary) + n(input.transportAllowance) + n(input.housingAllowance)
@@ -724,6 +805,16 @@ export class HrService {
       .from(hrContracts)
       .where(like(hrContracts.reference, pattern));
     return `CTR-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
+  }
+
+  private async nextProjectCode(startDate?: string | null) {
+    const year = String(startDate || "").slice(0, 4) || String(new Date().getFullYear());
+    const pattern = `ONG-${year}-%`;
+    const [{ total }] = await this.db
+      .select({ total: count(hrProjects.id) })
+      .from(hrProjects)
+      .where(like(hrProjects.code, pattern));
+    return `ONG-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
   }
 
   private normalizeTime(value: string) {

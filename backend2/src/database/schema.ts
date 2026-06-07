@@ -578,6 +578,40 @@ export const hrPayrolls = mysqlTable("hr_payrolls", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrProjects = mysqlTable("hr_projects", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  code: varchar("code", { length: 80 }),
+  name: varchar("name", { length: 180 }).notNull(),
+  donor: varchar("donor", { length: 180 }),
+  managerId: bigint("managerId", { mode: "number" }),
+  startDate: date("startDate", { mode: "string" }),
+  endDate: date("endDate", { mode: "string" }),
+  hrBudget: double("hrBudget").default(0).notNull(),
+  currencyId: bigint("currencyId", { mode: "number" }),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+export const hrProjectAssignments = mysqlTable("hr_project_assignments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  projectId: bigint("projectId", { mode: "number" }).notNull(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  role: varchar("role", { length: 160 }),
+  startDate: date("startDate", { mode: "string" }),
+  endDate: date("endDate", { mode: "string" }),
+  timePercent: double("timePercent").default(100).notNull(),
+  monthlyCost: double("monthlyCost").default(0).notNull(),
+  currencyId: bigint("currencyId", { mode: "number" }),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const awardHistories = mysqlTable("award_histories", {
   id: serial("id").primaryKey(),
   userId: bigint("userId", { mode: "number" }).notNull(),

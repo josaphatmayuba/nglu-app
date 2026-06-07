@@ -14,6 +14,8 @@ import {
   hrLeaveRequests,
   hrPayrolls,
   hrPerformanceReviews,
+  hrProjectAssignments,
+  hrProjects,
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
@@ -33,6 +35,8 @@ import {
   CreateHrLeaveRequestDto,
   CreateHrPayrollDto,
   CreateHrPerformanceReviewDto,
+  CreateHrProjectAssignmentDto,
+  CreateHrProjectDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -50,6 +54,8 @@ import {
   UpdateHrLeaveRequestDto,
   UpdateHrPayrollDto,
   UpdateHrPerformanceReviewDto,
+  UpdateHrProjectAssignmentDto,
+  UpdateHrProjectDto,
   UpdateHrRecruitmentOfferDto,
   UpdateHrSocialDeclarationDto,
   UpdateHrTrainingSessionDto,
@@ -168,6 +174,38 @@ export class HrPayrollController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrPayrolls, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-projects")
+@Controller("hr/projects")
+export class HrProjectController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listProjects(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findProject(id); }
+  @Post() create(@Body() body: CreateHrProjectDto) { return this.service.createProject(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrProjects, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-project-assignments")
+@Controller("hr/project-assignments")
+export class HrProjectAssignmentController {
+  constructor(private readonly service: HrService) {}
+
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listProjectAssignments(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findProjectAssignment(id); }
+  @Post() create(@Body() body: CreateHrProjectAssignmentDto) { return this.service.createProjectAssignment(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrProjectAssignments, id); }
 }
 
 @ApiBearerAuth()
