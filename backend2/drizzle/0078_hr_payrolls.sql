@@ -31,4 +31,3 @@ CREATE TABLE IF NOT EXISTS `hr_payrolls` (
   INDEX `idx_hr_payrolls_period` (`period`),
   INDEX `idx_hr_payrolls_status` (`status`)
 );
---> statement-breakpoint
