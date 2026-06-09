@@ -1054,3 +1054,13 @@ export class ConvertCandidateDto {
   @IsDateString()
   joinDate?: string | null;
 }
+
+export class HrAiChatDto {
+  @IsString()
+  @IsNotEmpty()
+  message: string;
+
+  @IsOptional()
+  @IsString()
+  context?: string | null;
+}

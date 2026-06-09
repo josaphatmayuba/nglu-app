@@ -1246,6 +1246,166 @@ ${footer}`;
     return { candidateId: id, userId: newUserId, employeeId, username };
   }
 
+  // ─── Stade 10: IA RH ─────────────────────────────────────────────────────────
+
+  async aiContext() {
+    const today = new Date().toISOString().slice(0, 10);
+    const in30 = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const currentMonth = today.slice(0, 7);
+
+    const [
+      allContracts,
+      allAttendances,
+      allTimesheets,
+      allPayrolls,
+      allCandidates,
+      allUsers,
+    ] = await Promise.all([
+      this.db.select({
+        id: hrContracts.id, userId: hrContracts.userId, contractType: hrContracts.contractType,
+        endDate: hrContracts.endDate, status: hrContracts.status,
+      }).from(hrContracts).where(ne(hrContracts.status, "false")),
+
+      this.db.select({
+        id: hrAttendances.id, userId: hrAttendances.userId,
+        workDate: hrAttendances.workDate, status: hrAttendances.status,
+      }).from(hrAttendances).where(ne(hrAttendances.status, "false")),
+
+      this.db.select({
+        id: hrTimesheets.id, userId: hrTimesheets.userId,
+        periodStartDate: hrTimesheets.periodStartDate, workDate: hrTimesheets.workDate, status: hrTimesheets.status,
+      }).from(hrTimesheets).where(ne(hrTimesheets.status, "false")),
+
+      this.db.select({
+        id: hrPayrolls.id, userId: hrPayrolls.userId, period: hrPayrolls.period,
+        status: hrPayrolls.status, netSalary: hrPayrolls.netSalary, currencyId: hrPayrolls.currencyId,
+      }).from(hrPayrolls).where(ne(hrPayrolls.status, "false")),
+
+      this.db.select({
+        id: hrCandidates.id, stage: hrCandidates.stage,
+        firstName: hrCandidates.firstName, lastName: hrCandidates.lastName,
+        offerId: hrCandidates.offerId, status: hrCandidates.status,
+      }).from(hrCandidates).where(eq(hrCandidates.status, "active")),
+
+      this.db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName, status: users.status })
+        .from(users).where(eq(users.status, "true")),
+    ]);
+
+    const activeEmployeeIds = new Set(allUsers.map((u) => Number(u.id)));
+    const totalEmployees = activeEmployeeIds.size;
+
+    // Contrats expirant dans 30 jours
+    const expiringContracts = allContracts.filter((c) => {
+      if (!c.endDate) return false;
+      const end = String(c.endDate).slice(0, 10);
+      return end >= today && end <= in30 && !["terminated", "expired"].includes(String(c.status || ""));
+    });
+
+    // Absents aujourd'hui (présences du jour avec statut absence)
+    const todayAttendances = allAttendances.filter((a) => String(a.workDate || "").slice(0, 10) === today);
+    const todayPresentIds = new Set(
+      todayAttendances.filter((a) => !["absent", "false"].includes(String(a.status || ""))).map((a) => Number(a.userId))
+    );
+    const absentToday = [...activeEmployeeIds].filter((id) => !todayPresentIds.has(id)).length;
+
+    // Timesheets manquants (semaine courante — du lundi au dimanche ISO)
+    const weekStart = (() => {
+      const d = new Date(today);
+      const day = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() - day + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    const weekEnd = (() => {
+      const d = new Date(weekStart);
+      d.setUTCDate(d.getUTCDate() + 6);
+      return d.toISOString().slice(0, 10);
+    })();
+    const submittedThisWeek = new Set(
+      allTimesheets
+        .filter((t) => {
+          const d = String(t.periodStartDate || t.workDate || "").slice(0, 10);
+          return d >= weekStart && d <= weekEnd;
+        })
+        .map((t) => Number(t.userId))
+    );
+    const missingTimesheets = [...activeEmployeeIds].filter((id) => !submittedThisWeek.has(id)).length;
+
+    // Bulletins de paie en brouillon ce mois-ci
+    const draftPayrolls = allPayrolls.filter(
+      (p) => String(p.status || "").toLowerCase() === "draft" && String(p.period || "").slice(0, 7) === currentMonth
+    );
+
+    // Candidats en attente (pipeline actif, pas encore embauché/rejeté)
+    const pendingCandidates = allCandidates.filter(
+      (c) => !["embauche", "rejete"].includes(String(c.stage || "").toLowerCase())
+    );
+
+    const alerts: Array<{ category: string; severity: "high" | "medium" | "low"; title: string; detail: string; count: number }> = [];
+
+    if (expiringContracts.length > 0) {
+      alerts.push({
+        category: "contrats",
+        severity: expiringContracts.length >= 3 ? "high" : "medium",
+        title: `${expiringContracts.length} contrat${expiringContracts.length > 1 ? "s" : ""} expirant sous 30 j`,
+        detail: `${expiringContracts.length} contrat${expiringContracts.length > 1 ? "s" : ""} arriveront à échéance avant le ${in30}. Décide : renouvellement (avenant) ou clôture (solde de tout compte).`,
+        count: expiringContracts.length,
+      });
+    }
+
+    if (absentToday > 0) {
+      alerts.push({
+        category: "presences",
+        severity: absentToday >= Math.ceil(totalEmployees * 0.2) ? "high" : "low",
+        title: `${absentToday} employé${absentToday > 1 ? "s" : ""} absent${absentToday > 1 ? "s" : ""} aujourd'hui`,
+        detail: `${absentToday} sur ${totalEmployees} employés actifs n'ont pas encore de pointage pour le ${today}.`,
+        count: absentToday,
+      });
+    }
+
+    if (missingTimesheets > 0) {
+      alerts.push({
+        category: "timesheet",
+        severity: missingTimesheets >= 3 ? "high" : "medium",
+        title: `${missingTimesheets} timesheet${missingTimesheets > 1 ? "s" : ""} manquant${missingTimesheets > 1 ? "s" : ""} (semaine)`,
+        detail: `${missingTimesheets} employé${missingTimesheets > 1 ? "s" : ""} n'ont pas soumis leur feuille de temps pour la semaine du ${weekStart}. Les timesheets conditionnent la facturation aux bailleurs.`,
+        count: missingTimesheets,
+      });
+    }
+
+    if (draftPayrolls.length > 0) {
+      alerts.push({
+        category: "paie",
+        severity: "medium",
+        title: `${draftPayrolls.length} bulletin${draftPayrolls.length > 1 ? "s" : ""} en brouillon (${currentMonth})`,
+        detail: `${draftPayrolls.length} bulletin${draftPayrolls.length > 1 ? "s" : ""} de paie restent en brouillon pour ${currentMonth}. Valide-les avant clôture.`,
+        count: draftPayrolls.length,
+      });
+    }
+
+    if (pendingCandidates.length > 0) {
+      alerts.push({
+        category: "recrutement",
+        severity: "low",
+        title: `${pendingCandidates.length} candidat${pendingCandidates.length > 1 ? "s" : ""} en attente de décision`,
+        detail: `${pendingCandidates.length} candidat${pendingCandidates.length > 1 ? "s" : ""} dans le pipeline de recrutement n'ont pas encore été embauchés ou rejetés.`,
+        count: pendingCandidates.length,
+      });
+    }
+
+    return {
+      date: today,
+      totalEmployees,
+      alerts,
+      summary: {
+        expiringContracts: expiringContracts.length,
+        absentToday,
+        missingTimesheets,
+        draftPayrolls: draftPayrolls.length,
+        pendingCandidates: pendingCandidates.length,
+      },
+    };
+  }
+
   async staffOverview() {
     const rows = await this.db
       .select({

@@ -242,4 +242,18 @@ Objectif: assistant RH base sur les donnees structurees.
 - Questions sur couts RH par projet.
 - Generation de documents.
 
-Statut: a faire apres structuration des donnees.
+Statut: termine.
+
+Fait:
+- API GET hr/ai/context: aggrege en temps reel contrats expirant sous 30 j, absents du jour, timesheets manquants de la semaine, bulletins de paie en brouillon du mois, candidats en attente dans le pipeline.
+- Calcul de severite par alerte (high/medium/low) selon seuils relatifs a l'effectif.
+- Widget IA RH (FAB + panneau chat + onglet Alertes) branche sur les donnees reelles au demarrage.
+- Recommandations generees dynamiquement depuis les alertes vives (aucune donnee hardcodee).
+- Reponses chat contextualisees : chaque mot-cle (contrat, absent, timesheet, paie, candidat) donne une reponse construite depuis les chiffres reels.
+- Salutation adaptee : nb d'alertes detectees + nb d'employes actifs du jour.
+- Degradation propre si l'API est indisponible : widget reste fonctionnel avec reponses generiques.
+
+Reste:
+- Branchement LLM (Claude API) via proxy backend pour reponses en langage naturel illimite.
+- Questions sur couts RH par projet (necessiterait agregation hr_project_assignments + hr_payrolls).
+- Generation de documents depuis le chat (appel interne a POST hr/documents/generate).

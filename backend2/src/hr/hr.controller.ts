@@ -70,6 +70,7 @@ import {
   UpdateHrTimesheetDto,
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
+  HrAiChatDto,
 } from "./dto/hr.dto";
 import { HrService } from "./hr.service";
 
@@ -431,4 +432,15 @@ export class HrCandidateController {
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
   @Post(":id/convert") convert(@Param("id", ParseIntPipe) id: number, @Body() body: ConvertCandidateDto) { return this.service.convertCandidateToEmployee(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrCandidates, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 20 } })
+@ApiTags("hr-ai")
+@Controller("hr/ai")
+export class HrAiController {
+  constructor(private readonly service: HrService) {}
+
+  @Get("context") context() { return this.service.aiContext(); }
 }

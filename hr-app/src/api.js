@@ -98,5 +98,6 @@ export const api = {
   createCandidate: (body) => jsonFetch("/hr/candidates", { method: "POST", body: JSON.stringify(body) }),
   updateCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   convertCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
-  deleteCandidate: (id) => jsonFetch(`/hr/candidates/${id}`, { method: "DELETE" })
+  deleteCandidate: (id) => jsonFetch(`/hr/candidates/${id}`, { method: "DELETE" }),
+  aiContext: () => jsonFetch("/hr/ai/context"),
 };
