@@ -49,6 +49,11 @@ export const env = {
     user: process.env.DB_USERNAME || "nglu_user",
     password: process.env.DB_PASSWORD || "password",
   },
+  anthropic: {
+    apiKey: process.env.ANTHROPIC_API_KEY || "",
+    model: process.env.ANTHROPIC_HR_MODEL || "claude-sonnet-4-6",
+    maxTokens: Number(process.env.ANTHROPIC_HR_MAX_TOKENS || 1024),
+  },
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID || "",
     authToken: process.env.TWILIO_AUTH_TOKEN || "",

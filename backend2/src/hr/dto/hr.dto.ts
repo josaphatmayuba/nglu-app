@@ -1,6 +1,6 @@
 import { ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsArray, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from "class-validator";
 
 export class CreateDesignationDto {
   @IsString()
@@ -426,6 +426,11 @@ export class CreateHrLeaveRequestDto {
   @Type(() => Number)
   @IsNumber()
   isPaid?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  halfDay?: number | null;
 }
 
 export class UpdateHrLeaveRequestDto extends PartialType(CreateHrLeaveRequestDto) {
@@ -1055,6 +1060,42 @@ export class ConvertCandidateDto {
   joinDate?: string | null;
 }
 
+export class CandidateEvaluationCriterionDto {
+  @IsString()
+  @IsNotEmpty()
+  label: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  weight?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  score: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  maxScore?: number;
+}
+
+export class CreateCandidateEvaluationDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  evaluatorId?: number | null;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CandidateEvaluationCriterionDto)
+  criteria: CandidateEvaluationCriterionDto[];
+
+  @IsOptional()
+  @IsString()
+  comment?: string | null;
+}
+
 export class HrAiChatDto {
   @IsString()
   @IsNotEmpty()
@@ -1138,4 +1179,50 @@ export class UpdateHrTaxRuleDto extends PartialType(CreateHrTaxRuleDto) {
   @IsNumber()
   isActive?: number;
 }
+
+export class CreateHrPublicHolidayDto {
+  @IsString()
+  @IsNotEmpty()
+  countryCode: string;
+
+  @IsDateString()
+  date: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  isActive?: number;
+}
+
+export class UpdateHrPublicHolidayDto extends PartialType(CreateHrPublicHolidayDto) {}
+
+export class CreateHrLeaveEntitlementDto {
+  @IsOptional()
+  @IsString()
+  countryCode?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  leaveType: string;
+
+  @IsOptional()
+  @IsString()
+  contractType?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  entitlementDays?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  isActive?: number;
+}
+
+export class UpdateHrLeaveEntitlementDto extends PartialType(CreateHrLeaveEntitlementDto) {}
 

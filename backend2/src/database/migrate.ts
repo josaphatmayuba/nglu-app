@@ -35,6 +35,12 @@ const OPERATIONAL_REPAIR_MIGRATIONS = [
   "0085_hr_payroll_approval",
   "0086_hr_personal_documents",
   "0087_hr_tax_rules",
+  "0088_hr_public_holidays",
+  "0089_hr_leave_entitlements",
+  "0090_hr_payroll_period_lock",
+  "0091_hr_document_approval",
+  "0092_hr_document_signature_hash",
+  "0093_hr_candidate_evaluations",
 ];
 
 type CountRow = RowDataPacket & { count: number };

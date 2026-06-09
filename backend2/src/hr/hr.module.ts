@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { SystemEmailModule } from "../system-email/system-email.module";
 import {
   AwardController,
   AwardHistoryController,
@@ -29,7 +30,7 @@ import {
 import { HrService } from "./hr.service";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SystemEmailModule],
   controllers: [
     HrController,
     DesignationController,

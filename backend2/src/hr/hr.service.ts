@@ -1,11 +1,14 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
+import { createHash, randomBytes } from "crypto";
 
 type HrUploadedFile = { originalname: string; buffer: Buffer; size: number; mimetype: string };
 import { DRIZZLE } from "../database/database.constants";
+import { SystemEmailService } from "../system-email/system-email.service";
+import { env } from "../config/env";
 import {
   appSettings,
   awardHistories,
@@ -17,9 +20,12 @@ import {
   hrContracts,
   hrAttendances,
   hrCandidates,
+  hrCandidateEvaluations,
   hrDocuments,
   hrPersonalDocuments,
   hrTaxRules,
+  hrPublicHolidays,
+  hrLeaveEntitlements,
   hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
@@ -57,6 +63,7 @@ import {
   CreateHrCandidateDto,
   UpdateHrCandidateDto,
   ConvertCandidateDto,
+  CreateCandidateEvaluationDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -86,11 +93,20 @@ import {
   CreateHrPersonalDocumentDto,
   CreateHrTaxRuleDto,
   UpdateHrTaxRuleDto,
+  CreateHrPublicHolidayDto,
+  UpdateHrPublicHolidayDto,
+  CreateHrLeaveEntitlementDto,
+  UpdateHrLeaveEntitlementDto,
 } from "./dto/hr.dto";
 
 @Injectable()
 export class HrService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  private readonly logger = new Logger(HrService.name);
+
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly emails: SystemEmailService,
+  ) {}
 
   listDesignations(q: Record<string, string>) {
     return this.listSimple(q, designations, "getAllDesignation", "totalDesignation");
@@ -518,8 +534,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 </body></html>`;
   }
 
-  async generatePayrollPdf(id: number): Promise<Buffer> {
-    const html = await this.payrollPdfHtml(id);
+  // Rendu HTML -> PDF via Puppeteer (mutualisé entre fiches de paie et documents RH).
+  private async htmlToPdf(html: string): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const puppeteer = require("puppeteer");
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
@@ -530,7 +546,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     });
     try {
       const page = await browser.newPage();
-      // Remove the auto-print script before PDF generation
+      // Retire le script d'auto-impression éventuel avant la génération PDF.
       const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
       await page.setContent(cleanHtml, { waitUntil: "networkidle0" });
       const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
@@ -538,6 +554,20 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     } finally {
       await browser.close();
     }
+  }
+
+  async generatePayrollPdf(id: number): Promise<Buffer> {
+    const html = await this.payrollPdfHtml(id);
+    return this.htmlToPdf(html);
+  }
+
+  // PDF d'un document RH déjà généré (réutilise le HTML stocké dans `content`).
+  async documentPdf(id: number): Promise<{ buffer: Buffer; reference: string }> {
+    const doc = await this.findDocument(id) as Record<string, any>;
+    const html = String(doc.content || "");
+    if (!html.trim()) throw new BadRequestException("This document has no content to render.");
+    const buffer = await this.htmlToPdf(html);
+    return { buffer, reference: String(doc.reference || `document-${id}`) };
   }
 
   async createPayroll(input: CreateHrPayrollDto) {
@@ -571,9 +601,26 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.findPayroll(id);
   }
 
+  // L'approbation/rejet d'un bulletin est réservé au supérieur hiérarchique
+  // de l'employé (managerId du contrat actif). Si aucun manager n'est défini
+  // sur le contrat, on n'impose pas la contrainte pour ne pas bloquer les
+  // données existantes. actorUserId vient du JWT (non du body, non falsifiable).
+  private async assertSupervisor(payrollUserId: number, actorUserId?: number | null) {
+    const [contract] = await this.db.select({ managerId: hrContracts.managerId })
+      .from(hrContracts)
+      .where(and(eq(hrContracts.userId, payrollUserId), ne(hrContracts.status, "terminated")))
+      .orderBy(desc(hrContracts.id))
+      .limit(1);
+    const managerId = contract?.managerId ?? null;
+    if (managerId && managerId !== actorUserId) {
+      throw new ForbiddenException("Only the employee's supervisor can approve or reject this payroll.");
+    }
+  }
+
   async approvePayroll(id: number, approvedBy?: number | null, comment?: string | null) {
     const current = await this.findPayroll(id) as Record<string, any>;
     if (String(current.status) !== "pending_approval") throw new BadRequestException(`Cannot approve a payroll with status "${current.status}".`);
+    await this.assertSupervisor(Number(current.userId), approvedBy);
     await this.db.update(hrPayrolls).set({
       status: "validated",
       approvedBy: approvedBy ?? null,
@@ -587,6 +634,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
   async rejectPayroll(id: number, rejectedBy?: number | null, comment?: string | null) {
     const current = await this.findPayroll(id) as Record<string, any>;
     if (String(current.status) !== "pending_approval") throw new BadRequestException(`Cannot reject a payroll with status "${current.status}".`);
+    await this.assertSupervisor(Number(current.userId), rejectedBy);
     await this.db.update(hrPayrolls).set({
       status: "rejected",
       rejectedBy: rejectedBy ?? null,
@@ -680,6 +728,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       userId,
       contractId: contract?.id ?? null,
       period,
+      periodStart,
+      periodEnd,
       currencyId,
       baseSalary,
       transportAllowance,
@@ -983,6 +1033,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 
   async createLeaveRequest(input: CreateHrLeaveRequestDto) {
     await this.validateLeaveRefs(input);
+    await this.assertNoLockedPayroll(Number(input.userId), String(input.startDate), String(input.endDate));
     const payload = await this.leavePayload(input);
     const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id));
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
@@ -992,12 +1043,22 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
   async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto) {
     const current = await this.findLeaveRequest(id);
     await this.validateLeaveRefs(input);
+    const userId = Number(input.userId ?? current.userId);
+    // Verrou sur l'ancienne ET la nouvelle plage (déplacer hors/dans une période verrouillée).
+    await this.assertNoLockedPayroll(userId, String(current.startDate), String(current.endDate));
+    await this.assertNoLockedPayroll(userId, String(input.startDate ?? current.startDate), String(input.endDate ?? current.endDate));
     const payload = await this.leavePayload({ ...current, ...input }, id);
     await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id));
     const saved = await this.findLeaveRequest(id);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     if (["rejected", "cancelled"].includes(String(saved.status || "").toLowerCase())) await this.clearLeaveAttendance(saved.id);
     return saved;
+  }
+
+  async deleteLeaveRequest(id: number) {
+    const current = await this.findLeaveRequest(id);
+    await this.assertNoLockedPayroll(Number(current.userId), String(current.startDate), String(current.endDate));
+    return this.deleteRow(hrLeaveRequests, id);
   }
 
   async leaveSummary(q: Record<string, string>) {
@@ -1008,12 +1069,14 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       firstName: users.firstName,
       lastName: users.lastName,
       status: users.status,
+      country: users.country,
     }).from(users).where(ne(users.status, "false"));
-    const byEmployee = staffRows.map((user) => {
+    const byEmployee = await Promise.all(staffRows.map(async (user) => {
       const userLeaves = rows.filter((row) => Number(row.userId) === Number(user.id) && Number(row.leaveYear || this.leaveYear(row.startDate)) === year);
       const approved = userLeaves.filter((row) => this.isFinalLeaveApproval(row.status));
       const pending = userLeaves.filter((row) => this.isOpenLeaveStatus(row.status));
-      const entitlementDays = this.leaveEntitlementDays();
+      const country = (user.country || "").trim().toUpperCase().slice(0, 10);
+      const entitlementDays = await this.resolveEntitlementDays(country, "conge_annuel");
       const usedDays = approved.reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
       const pendingDays = pending.reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
       return {
@@ -1025,7 +1088,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
         pendingDays,
         balanceDays: Math.max(0, this.roundNumber(entitlementDays - usedDays)),
       };
-    });
+    }));
     const totals = byEmployee.reduce((acc, row) => ({
       employees: acc.employees + 1,
       entitlementDays: acc.entitlementDays + row.entitlementDays,
@@ -1090,16 +1153,96 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id));
   }
 
+  // Workflow document RH : draft/rejected -> pending_validation -> approved -> signed.
+  async submitDocument(id: number, submittedBy?: number | null) {
+    const current = await this.findDocument(id) as Record<string, any>;
+    const status = String(current.status || "draft");
+    if (!["draft", "received", "rejected"].includes(status)) {
+      throw new BadRequestException(`Cannot submit a document with status "${status}".`);
+    }
+    await this.db.update(hrDocuments).set({
+      status: "pending_validation",
+      submittedBy: submittedBy ?? null,
+      submittedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrDocuments.id, id));
+    return this.findDocument(id);
+  }
+
+  async approveDocument(id: number, approvedBy?: number | null, comment?: string | null) {
+    const current = await this.findDocument(id) as Record<string, any>;
+    if (String(current.status) !== "pending_validation") {
+      throw new BadRequestException(`Cannot approve a document with status "${current.status}".`);
+    }
+    await this.db.update(hrDocuments).set({
+      status: "approved",
+      approvedBy: approvedBy ?? null,
+      approvedAt: sql`CURRENT_TIMESTAMP`,
+      approvalComment: comment ?? null,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrDocuments.id, id));
+    return this.findDocument(id);
+  }
+
+  async rejectDocument(id: number, rejectedBy?: number | null, comment?: string | null) {
+    const current = await this.findDocument(id) as Record<string, any>;
+    if (String(current.status) !== "pending_validation") {
+      throw new BadRequestException(`Cannot reject a document with status "${current.status}".`);
+    }
+    await this.db.update(hrDocuments).set({
+      status: "rejected",
+      rejectedBy: rejectedBy ?? null,
+      rejectedAt: sql`CURRENT_TIMESTAMP`,
+      rejectionComment: comment ?? null,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrDocuments.id, id));
+    return this.findDocument(id);
+  }
+
+  // Empreinte d'intégrité du contenu signé (signature électronique niveau 1).
+  private hashDocumentContent(content: string): string {
+    return createHash("sha256").update(content ?? "", "utf8").digest("hex");
+  }
+
   async signDocument(id: number, signedBy: string) {
-    await this.findDocument(id);
+    const current = await this.findDocument(id) as Record<string, any>;
     if (!signedBy?.trim()) throw new BadRequestException("Signed-by name is required.");
+    if (String(current.status) !== "approved") {
+      throw new BadRequestException(`A document must be approved before signing (current status "${current.status}").`);
+    }
+    const contentHash = this.hashDocumentContent(String(current.content || ""));
+    const signatureToken = randomBytes(16).toString("hex");
     await this.db.update(hrDocuments).set({
       status: "signed",
       signedBy: signedBy.trim(),
       signedAt: sql`CURRENT_TIMESTAMP`,
+      contentHash,
+      signatureToken,
+      signatureAlgorithm: "SHA-256",
       updatedAt: sql`CURRENT_TIMESTAMP`,
     }).where(eq(hrDocuments.id, id));
     return this.findDocument(id);
+  }
+
+  // Vérifie qu'un document signé n'a pas été altéré depuis sa signature.
+  async verifyDocumentSignature(id: number) {
+    const doc = await this.findDocument(id) as Record<string, any>;
+    if (String(doc.status) !== "signed" || !doc.contentHash) {
+      return { valid: false, signed: false, reason: "Document is not signed." };
+    }
+    const currentHash = this.hashDocumentContent(String(doc.content || ""));
+    const valid = currentHash === String(doc.contentHash);
+    return {
+      valid,
+      signed: true,
+      reason: valid ? "Content matches the signed hash." : "Content has been altered since signing.",
+      signedBy: doc.signedBy ?? null,
+      signedAt: doc.signedAt ?? null,
+      signatureToken: doc.signatureToken ?? null,
+      algorithm: doc.signatureAlgorithm ?? null,
+      expectedHash: doc.contentHash,
+      currentHash,
+    };
   }
 
   async documentSummary() {
@@ -1413,9 +1556,97 @@ ${footer}`;
   }
 
   async updateCandidate(id: number, input: UpdateHrCandidateDto) {
-    await this.findCandidate(id);
+    const previous = await this.findCandidate(id) as Record<string, any>;
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    return this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id));
+    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id)) as Record<string, any>;
+    const oldStage = String(previous.stage || "").toLowerCase();
+    const newStage = String(updated.stage || "").toLowerCase();
+    if (newStage && newStage !== oldStage) {
+      await this.notifyCandidateStageChange(updated, newStage);
+    }
+    return updated;
+  }
+
+  async listCandidateEvaluations(candidateId: number) {
+    await this.ensureExists(hrCandidates, candidateId, "Candidate not found.");
+    return this.db.select().from(hrCandidateEvaluations)
+      .where(eq(hrCandidateEvaluations.candidateId, candidateId))
+      .orderBy(desc(hrCandidateEvaluations.id));
+  }
+
+  async createCandidateEvaluation(candidateId: number, input: CreateCandidateEvaluationDto) {
+    await this.ensureExists(hrCandidates, candidateId, "Candidate not found.");
+    if (!input.criteria?.length) throw new BadRequestException("At least one criterion is required.");
+    // Score pondéré normalisé sur 100 (comparable entre grilles différentes).
+    let weightedScore = 0;
+    let weightedMax = 0;
+    for (const c of input.criteria) {
+      const max = Number(c.maxScore ?? 10);
+      const weight = Number(c.weight ?? 1);
+      if (max <= 0 || weight <= 0) continue;
+      weightedScore += (Number(c.score) / max) * weight;
+      weightedMax += weight;
+    }
+    const totalScore = weightedMax > 0 ? this.roundNumber((weightedScore / weightedMax) * 100) : 0;
+    const [result] = await this.db.insert(hrCandidateEvaluations).values({
+      candidateId,
+      evaluatorId: input.evaluatorId ?? null,
+      criteria: input.criteria,
+      totalScore,
+      maxScore: 100,
+      comment: input.comment ?? null,
+    });
+    await this.refreshCandidateRating(candidateId);
+    const [row] = await this.db.select().from(hrCandidateEvaluations)
+      .where(eq(hrCandidateEvaluations.id, Number((result as any).insertId))).limit(1);
+    return row;
+  }
+
+  async deleteCandidateEvaluation(candidateId: number, evaluationId: number) {
+    await this.ensureExists(hrCandidates, candidateId, "Candidate not found.");
+    await this.db.delete(hrCandidateEvaluations).where(and(
+      eq(hrCandidateEvaluations.id, evaluationId),
+      eq(hrCandidateEvaluations.candidateId, candidateId),
+    ));
+    await this.refreshCandidateRating(candidateId);
+    return { deleted: true };
+  }
+
+  // Le `rating` du candidat = moyenne des scores de ses évaluations (ou null si aucune).
+  private async refreshCandidateRating(candidateId: number) {
+    const rows = await this.db.select({ score: hrCandidateEvaluations.totalScore })
+      .from(hrCandidateEvaluations)
+      .where(eq(hrCandidateEvaluations.candidateId, candidateId));
+    const rating = rows.length
+      ? this.roundNumber(rows.reduce((sum, r) => sum + Number(r.score || 0), 0) / rows.length)
+      : null;
+    await this.db.update(hrCandidates).set({ rating, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(hrCandidates.id, candidateId));
+  }
+
+  // Email automatique au candidat à chaque changement d'étape de pipeline.
+  // Non bloquant : le service email skip si SMTP non configuré et catch ses erreurs.
+  private async notifyCandidateStageChange(candidate: Record<string, any>, stage: string) {
+    const to = String(candidate.email || "").trim();
+    if (!to) return;
+    const labels: Record<string, string> = {
+      nouveau: "Votre candidature a bien été reçue",
+      entrevue: "Vous êtes convoqué(e) à un entretien",
+      test: "Vous êtes invité(e) à passer un test",
+      offre: "Une offre vous a été proposée",
+      accepte: "Votre candidature a été acceptée",
+      embauche: "Bienvenue : vous êtes recruté(e) !",
+      rejete: "Suite donnée à votre candidature",
+    };
+    const title = labels[stage] || "Mise à jour de votre candidature";
+    const name = [candidate.firstName, candidate.lastName].filter(Boolean).join(" ") || "Candidat";
+    await this.emails.sendTemplate({
+      to,
+      type: "notification",
+      variables: { title, recipientName: name, message: `${title}. Nouvelle étape de votre candidature : ${stage}.` },
+      relatedType: "hr_candidate",
+      relatedId: candidate.id,
+    });
   }
 
   async candidateSummary() {
@@ -1506,6 +1737,8 @@ ${footer}`;
       allPayrolls,
       allCandidates,
       allUsers,
+      allProjects,
+      allAssignments,
     ] = await Promise.all([
       this.db.select({
         id: hrContracts.id, userId: hrContracts.userId, contractType: hrContracts.contractType,
@@ -1535,6 +1768,17 @@ ${footer}`;
 
       this.db.select({ id: users.id, firstName: users.firstName, lastName: users.lastName, status: users.status })
         .from(users).where(eq(users.status, "true")),
+
+      this.db.select({
+        id: hrProjects.id, name: hrProjects.name, code: hrProjects.code,
+        donor: hrProjects.donor, hrBudget: hrProjects.hrBudget, status: hrProjects.status,
+      }).from(hrProjects).where(ne(hrProjects.status, "false")),
+
+      this.db.select({
+        projectId: hrProjectAssignments.projectId, userId: hrProjectAssignments.userId,
+        monthlyCost: hrProjectAssignments.monthlyCost, timePercent: hrProjectAssignments.timePercent,
+        status: hrProjectAssignments.status,
+      }).from(hrProjectAssignments).where(ne(hrProjectAssignments.status, "false")),
     ]);
 
     const activeEmployeeIds = new Set(allUsers.map((u) => Number(u.id)));
@@ -1638,6 +1882,32 @@ ${footer}`;
       });
     }
 
+    // Coûts RH par projet : coût mensuel assigné (Σ monthlyCost des assignations
+    // actives) vs budget RH du projet, + effectif. Sert aux questions de coûts.
+    const assignmentsByProject = new Map<number, { monthlyCost: number; people: Set<number> }>();
+    for (const a of allAssignments) {
+      const pid = Number(a.projectId);
+      if (!assignmentsByProject.has(pid)) assignmentsByProject.set(pid, { monthlyCost: 0, people: new Set() });
+      const agg = assignmentsByProject.get(pid)!;
+      agg.monthlyCost += Number(a.monthlyCost || 0);
+      agg.people.add(Number(a.userId));
+    }
+    const projectCosts = allProjects.map((p) => {
+      const agg = assignmentsByProject.get(Number(p.id));
+      const monthlyCost = this.roundNumber(agg?.monthlyCost ?? 0);
+      const hrBudget = this.roundNumber(Number(p.hrBudget || 0));
+      return {
+        projectId: Number(p.id),
+        name: p.name,
+        code: p.code ?? null,
+        donor: p.donor ?? null,
+        hrBudget,
+        assignedMonthlyCost: monthlyCost,
+        assignedEmployees: agg?.people.size ?? 0,
+        budgetUsagePercent: hrBudget > 0 ? this.roundNumber((monthlyCost / hrBudget) * 100) : null,
+      };
+    });
+
     return {
       date: today,
       totalEmployees,
@@ -1649,7 +1919,121 @@ ${footer}`;
         draftPayrolls: draftPayrolls.length,
         pendingCandidates: pendingCandidates.length,
       },
+      projectCosts,
     };
+  }
+
+  // Types de documents générables (doivent matcher templateTypeLabel/renderDocumentTemplate).
+  private readonly documentTemplateTypes = ["contrat", "avenant", "attestation", "certificat", "disciplinaire", "conge"];
+
+  // Un appel HTTP à l'API Anthropic (avec timeout). Retourne le corps JSON.
+  private async callAnthropic(payload: Record<string, any>): Promise<any> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": env.anthropic.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        this.logger.error(`Anthropic API error ${res.status}: ${detail.slice(0, 500)}`);
+        throw new BadRequestException("L'assistant IA est momentanément indisponible.");
+      }
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  // Chat RH en langage naturel : proxy backend vers l'API Claude, avec tool-use.
+  // Le contexte RH agrégé (aiContext) est injecté dans le prompt système, et le
+  // LLM peut déclencher la génération d'un document RH via un tool contrôlé.
+  // La clé API reste côté serveur (jamais exposée au client).
+  async aiChat(message: string, extraContext?: string | null, actorId?: number | null) {
+    const trimmed = String(message || "").trim();
+    if (!trimmed) throw new BadRequestException("Message is required.");
+    if (!env.anthropic.apiKey) {
+      throw new BadRequestException("L'assistant IA n'est pas configuré (ANTHROPIC_API_KEY manquante).");
+    }
+
+    const context = await this.aiContext();
+    const systemPrompt = [
+      "Tu es l'assistant RH de NgoluApp. Réponds en français, de façon concise et actionnable.",
+      "Tu t'appuies UNIQUEMENT sur les données RH agrégées fournies ci-dessous ; si une information manque, dis-le clairement au lieu d'inventer.",
+      "Tu peux générer un document RH pour un employé via l'outil generate_hr_document, UNIQUEMENT si l'utilisateur le demande explicitement et fournit l'employé (userId) et le type.",
+      "Données RH agrégées (JSON) :",
+      JSON.stringify(context),
+      extraContext ? `Contexte additionnel fourni par l'utilisateur : ${extraContext}` : "",
+    ].filter(Boolean).join("\n");
+
+    const tools = [{
+      name: "generate_hr_document",
+      description: "Génère un document RH officiel (brouillon) pour un employé donné. À utiliser seulement sur demande explicite de l'utilisateur.",
+      input_schema: {
+        type: "object",
+        properties: {
+          userId: { type: "number", description: "Identifiant de l'employé concerné" },
+          templateType: { type: "string", enum: this.documentTemplateTypes, description: "Type de document à générer" },
+        },
+        required: ["userId", "templateType"],
+      },
+    }];
+
+    const messages: any[] = [{ role: "user", content: trimmed }];
+    const basePayload = { model: env.anthropic.model, max_tokens: env.anthropic.maxTokens, system: systemPrompt, tools };
+    const generatedDocuments: Array<{ id: number; reference: string; documentType: string; userId: number }> = [];
+
+    try {
+      // 1er tour
+      let data = await this.callAnthropic({ ...basePayload, messages });
+
+      // Un seul tour de tool-use autorisé (anti-boucle).
+      if (data.stop_reason === "tool_use") {
+        const toolUses = (data.content || []).filter((b: any) => b.type === "tool_use");
+        messages.push({ role: "assistant", content: data.content });
+        const toolResults: any[] = [];
+        for (const tu of toolUses) {
+          const result = await this.runAiDocumentTool(tu.input, actorId);
+          if (result.document) generatedDocuments.push(result.document);
+          toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result.message, is_error: result.isError });
+        }
+        messages.push({ role: "user", content: toolResults });
+        data = await this.callAnthropic({ ...basePayload, messages });
+      }
+
+      const reply = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text || "").join("\n").trim();
+      return { reply: reply || "(réponse vide)", model: env.anthropic.model, generatedDocuments };
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      const msg = error instanceof Error && error.name === "AbortError" ? "Délai d'attente dépassé." : "Échec de l'appel à l'assistant IA.";
+      this.logger.error(`aiChat failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new BadRequestException(msg);
+    }
+  }
+
+  // Exécute le tool generate_hr_document demandé par le LLM, avec garde-fous.
+  // Renvoie un message texte pour le LLM (jamais d'exception : on rapporte l'erreur au modèle).
+  private async runAiDocumentTool(input: any, actorId?: number | null): Promise<{ message: string; isError: boolean; document?: { id: number; reference: string; documentType: string; userId: number } }> {
+    const userId = Number(input?.userId);
+    const templateType = String(input?.templateType || "");
+    if (!Number.isInteger(userId) || userId <= 0) return { message: "userId invalide.", isError: true };
+    if (!this.documentTemplateTypes.includes(templateType)) {
+      return { message: `templateType invalide. Valeurs autorisées : ${this.documentTemplateTypes.join(", ")}.`, isError: true };
+    }
+    try {
+      const doc = await this.generateDocument({ userId, templateType, generatedBy: actorId ?? null }) as Record<string, any>;
+      const document = { id: Number(doc.id), reference: String(doc.reference), documentType: String(doc.documentType), userId };
+      return { message: `Document généré (brouillon) : ${document.documentType}, référence ${document.reference}, id ${document.id}.`, isError: false, document };
+    } catch (error) {
+      return { message: `Échec de la génération : ${error instanceof Error ? error.message : String(error)}`, isError: true };
+    }
   }
 
   async staffOverview() {
@@ -1846,9 +2230,15 @@ ${footer}`;
     if (String(input.endDate) < String(input.startDate)) throw new BadRequestException("Leave end date must be after start date.");
 
     const status = String(input.status || "pending").toLowerCase();
-    const requestedDays = this.leaveDays(input.startDate, input.endDate);
+    const halfDay = input.halfDay ? 1 : 0;
+    if (halfDay && String(input.startDate) !== String(input.endDate)) {
+      throw new BadRequestException("A half-day leave must span a single day.");
+    }
+    const holidays = await this.leaveHolidaySet(input.startDate, input.endDate);
+    const requestedDays = halfDay ? 0.5 : this.leaveDays(input.startDate, input.endDate, holidays);
     const leaveYear = this.leaveYear(input.startDate);
-    const entitlementDays = this.leaveEntitlementDays(input.type);
+    const country = await this.resolveEmployeeCountry(Number(input.userId));
+    const entitlementDays = await this.resolveEntitlementDays(country, input.type);
     const balanceBefore = await this.leaveBalanceBefore(Number(input.userId), leaveYear, currentId);
     const balanceAfter = this.roundNumber(balanceBefore - (this.isFinalLeaveApproval(status) ? requestedDays : 0));
     const decisionFields: Record<string, any> = {};
@@ -1872,6 +2262,7 @@ ${footer}`;
       startDate: input.startDate,
       endDate: input.endDate,
       requestedDays,
+      halfDay,
       leaveYear,
       entitlementDays,
       balanceBefore,
@@ -1888,29 +2279,77 @@ ${footer}`;
     };
   }
 
-  private leaveEntitlementDays(type?: string | null) {
+  // Clé canonique du type de congé (le champ `type` est du texte libre).
+  private leaveTypeKey(type?: string | null) {
     const value = String(type || "").toLowerCase();
-    if (value.includes("maladie")) return 10;
-    if (value.includes("matern")) return 98;
-    if (value.includes("patern")) return 3;
-    if (value.includes("mission")) return 0;
-    return 24;
+    if (value.includes("maladie")) return "maladie";
+    if (value.includes("matern")) return "maternite";
+    if (value.includes("patern")) return "paternite";
+    if (value.includes("mission")) return "mission";
+    return "conge_annuel";
+  }
+
+  // Barème par défaut codé en dur (filet de sécurité si la table est vide /
+  // aucune règle pays ni '*' trouvée).
+  private defaultEntitlementDays(type?: string | null) {
+    switch (this.leaveTypeKey(type)) {
+      case "maladie": return 10;
+      case "maternite": return 98;
+      case "paternite": return 3;
+      case "mission": return 0;
+      default: return 24;
+    }
+  }
+
+  // Droit de congé pour un pays + type : règle pays exacte, sinon règle '*',
+  // sinon barème codé en dur. countryCode déjà normalisé (upper, max 10).
+  private async resolveEntitlementDays(countryCode: string, type?: string | null) {
+    const key = this.leaveTypeKey(type);
+    const rows = await this.db.select({ countryCode: hrLeaveEntitlements.countryCode, days: hrLeaveEntitlements.entitlementDays })
+      .from(hrLeaveEntitlements)
+      .where(and(eq(hrLeaveEntitlements.leaveType, key), eq(hrLeaveEntitlements.isActive, 1)));
+    const exact = rows.find((r) => String(r.countryCode).toUpperCase() === countryCode && countryCode);
+    if (exact) return Number(exact.days);
+    const fallback = rows.find((r) => String(r.countryCode) === "*");
+    if (fallback) return Number(fallback.days);
+    return this.defaultEntitlementDays(type);
+  }
+
+  // Pays de l'employé (depuis users.country), normalisé comme pour les règles fiscales.
+  private async resolveEmployeeCountry(userId: number): Promise<string> {
+    const [row] = await this.db.select({ country: users.country }).from(users).where(eq(users.id, userId)).limit(1);
+    return (row?.country || "").trim().toUpperCase().slice(0, 10);
   }
 
   private leaveYear(dateValue?: string | null) {
     return Number(String(dateValue || new Date().toISOString()).slice(0, 4));
   }
 
-  private leaveDays(startDate: string, endDate: string) {
+  // Jours ouvrés entre deux dates, week-ends et jours fériés exclus.
+  private leaveDays(startDate: string, endDate: string, holidays?: Set<string>) {
     const start = new Date(`${startDate}T00:00:00Z`);
     const end = new Date(`${endDate}T00:00:00Z`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
     let days = 0;
     for (let cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
       const day = cur.getUTCDay();
-      if (day !== 0 && day !== 6) days += 1;
+      const iso = cur.toISOString().slice(0, 10);
+      if (day !== 0 && day !== 6 && !(holidays && holidays.has(iso))) days += 1;
     }
     return days || 1;
+  }
+
+  // Dates des jours fériés actifs dans l'intervalle (toutes organisations confondues
+  // pour l'instant ; le filtrage par pays viendra avec le paramétrage des droits).
+  private async leaveHolidaySet(startDate: string, endDate: string): Promise<Set<string>> {
+    const rows = await this.db.select({ date: hrPublicHolidays.date })
+      .from(hrPublicHolidays)
+      .where(and(
+        eq(hrPublicHolidays.isActive, 1),
+        sql`${hrPublicHolidays.date} >= ${startDate}`,
+        sql`${hrPublicHolidays.date} <= ${endDate}`,
+      ));
+    return new Set(rows.map((r) => String(r.date).slice(0, 10)));
   }
 
   private async leaveBalanceBefore(userId: number, year: number, currentId?: number) {
@@ -1923,7 +2362,9 @@ ${footer}`;
       .filter((row) => Number(row.leaveYear || this.leaveYear(row.startDate)) === year)
       .filter((row) => this.isFinalLeaveApproval(row.status))
       .reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
-    return this.roundNumber(this.leaveEntitlementDays() - used);
+    const country = await this.resolveEmployeeCountry(userId);
+    const entitlement = await this.resolveEntitlementDays(country, "conge_annuel");
+    return this.roundNumber(entitlement - used);
   }
 
   private isOpenLeaveStatus(status?: string | null) {
@@ -2117,10 +2558,13 @@ ${footer}`;
       + n(input.riskAllowance) + n(input.otherAllowances) + n(input.overtimeAmount);
     const netSalary = Math.max(0, grossSalary - n(input.unpaidAbsenceDeduction) - n(input.advanceDeduction)
       - n(input.taxAmount) - n(input.cnssAmount) - n(input.otherDeductions));
+    const derived = this.periodToRange(input.period);
     return {
       userId: input.userId,
       contractId: input.contractId ?? null,
       period: input.period,
+      periodStart: input.periodStart ?? derived?.start ?? null,
+      periodEnd: input.periodEnd ?? derived?.end ?? null,
       currencyId: input.currencyId ?? null,
       baseSalary: n(input.baseSalary),
       transportAllowance: n(input.transportAllowance),
@@ -2147,6 +2591,50 @@ ${footer}`;
   private currentPayrollPeriod() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  // Déduit un intervalle [début, fin] depuis un libellé de période mensuel
+  // (YYYY-MM). Renvoie null si le format n'est pas mensuel (les bulletins non
+  // mensuels doivent fournir periodStart/periodEnd explicitement).
+  private periodToRange(period?: string | null): { start: string; end: string } | null {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(period || "").trim());
+    if (!m) return null;
+    const year = Number(m[1]);
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    const lastDay = new Date(year, month, 0).getDate();
+    return {
+      start: `${m[1]}-${m[2]}-01`,
+      end: `${m[1]}-${m[2]}-${String(lastDay).padStart(2, "0")}`,
+    };
+  }
+
+  // Statut à partir duquel un bulletin verrouille sa période (réglage RH).
+  private async payrollLockStage(): Promise<"validated" | "paid"> {
+    const [row] = await this.db.select({ stage: appSettings.payrollLockStage }).from(appSettings).limit(1);
+    return String(row?.stage || "paid") === "validated" ? "validated" : "paid";
+  }
+
+  // Refuse l'opération si un bulletin verrouillant (statut >= seuil réglé) de
+  // l'employé couvre une période qui chevauche [start, end]. S'adapte à toute
+  // fréquence de paie via l'intervalle réel du bulletin.
+  private async assertNoLockedPayroll(userId: number, start: string, end: string) {
+    const stage = await this.payrollLockStage();
+    const lockingStatuses = stage === "validated" ? ["validated", "paid"] : ["paid"];
+    const rows = await this.db.select({
+      id: hrPayrolls.id, status: hrPayrolls.status,
+      periodStart: hrPayrolls.periodStart, periodEnd: hrPayrolls.periodEnd,
+    }).from(hrPayrolls).where(and(
+      eq(hrPayrolls.userId, userId),
+      inArray(hrPayrolls.status, lockingStatuses),
+    ));
+    const clash = rows.find((r) => r.periodStart && r.periodEnd
+      && String(r.periodStart) <= end && String(r.periodEnd) >= start);
+    if (clash) {
+      throw new ForbiddenException(
+        `This leave overlaps a locked payroll period (#${clash.id}, status "${clash.status}"). Unlock or adjust the payroll first.`,
+      );
+    }
   }
 
   private async nextContractReference(startDate?: string | null) {
@@ -2275,6 +2763,22 @@ ${footer}`;
     return { image: path };
   }
 
+  // Upload d'une pièce candidat (CV, lettre de motivation, portfolio).
+  // Réutilise saveFile (magic bytes + nom sécurisé) et écrit l'URL dans le champ dédié.
+  async uploadCandidateFile(candidateId: number, file: HrUploadedFile, kind: string) {
+    await this.ensureExists(hrCandidates, candidateId, "Candidate not found.");
+    const fieldByKind: Record<string, "cvUrl" | "coverLetterUrl" | "portfolioUrl"> = {
+      cv: "cvUrl",
+      coverLetter: "coverLetterUrl",
+      portfolio: "portfolioUrl",
+    };
+    const field = fieldByKind[kind];
+    if (!field) throw new BadRequestException('Invalid file kind. Use "cv", "coverLetter" or "portfolio".');
+    const { path } = this.saveFile(file);
+    await this.db.update(hrCandidates).set({ [field]: path, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(hrCandidates.id, candidateId));
+    return { [field]: path };
+  }
+
   async listPersonalDocuments(userId: number) {
     return this.db.select().from(hrPersonalDocuments)
       .where(eq(hrPersonalDocuments.userId, userId))
@@ -2362,5 +2866,107 @@ ${footer}`;
     await this.findTaxRule(id);
     await this.db.delete(hrTaxRules).where(eq(hrTaxRules.id, id));
     return { deleted: true };
+  }
+
+  listPublicHolidays(q: Record<string, string> = {}) {
+    const where = q["country"]
+      ? eq(hrPublicHolidays.countryCode, String(q["country"]).toUpperCase())
+      : undefined;
+    return this.db.select().from(hrPublicHolidays).where(where).orderBy(hrPublicHolidays.date);
+  }
+
+  async findPublicHoliday(id: number) {
+    const [row] = await this.db.select().from(hrPublicHolidays).where(eq(hrPublicHolidays.id, id)).limit(1);
+    if (!row) throw new NotFoundException("Public holiday not found.");
+    return row;
+  }
+
+  async createPublicHoliday(input: CreateHrPublicHolidayDto) {
+    const [result] = await this.db.insert(hrPublicHolidays).values({
+      countryCode: input.countryCode.toUpperCase(),
+      date: input.date,
+      name: input.name,
+      isActive: input.isActive === 0 ? 0 : 1,
+    });
+    return this.findPublicHoliday((result as any).insertId);
+  }
+
+  async updatePublicHoliday(id: number, input: UpdateHrPublicHolidayDto) {
+    await this.findPublicHoliday(id);
+    const patch: Record<string, any> = {};
+    if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
+    if (input.date !== undefined) patch["date"] = input.date;
+    if (input.name !== undefined) patch["name"] = input.name;
+    if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(hrPublicHolidays).set(patch).where(eq(hrPublicHolidays.id, id));
+    }
+    return this.findPublicHoliday(id);
+  }
+
+  async deletePublicHoliday(id: number) {
+    await this.findPublicHoliday(id);
+    await this.db.delete(hrPublicHolidays).where(eq(hrPublicHolidays.id, id));
+    return { deleted: true };
+  }
+
+  listLeaveEntitlements(q: Record<string, string> = {}) {
+    const where = q["country"]
+      ? eq(hrLeaveEntitlements.countryCode, String(q["country"]).toUpperCase())
+      : undefined;
+    return this.db.select().from(hrLeaveEntitlements).where(where)
+      .orderBy(hrLeaveEntitlements.countryCode, hrLeaveEntitlements.leaveType);
+  }
+
+  async findLeaveEntitlement(id: number) {
+    const [row] = await this.db.select().from(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id)).limit(1);
+    if (!row) throw new NotFoundException("Leave entitlement not found.");
+    return row;
+  }
+
+  async createLeaveEntitlement(input: CreateHrLeaveEntitlementDto) {
+    const [result] = await this.db.insert(hrLeaveEntitlements).values({
+      countryCode: (input.countryCode || "*").toUpperCase(),
+      leaveType: input.leaveType,
+      contractType: input.contractType ?? null,
+      entitlementDays: Number(input.entitlementDays ?? 0),
+      isActive: input.isActive === 0 ? 0 : 1,
+    });
+    return this.findLeaveEntitlement((result as any).insertId);
+  }
+
+  async updateLeaveEntitlement(id: number, input: UpdateHrLeaveEntitlementDto) {
+    await this.findLeaveEntitlement(id);
+    const patch: Record<string, any> = {};
+    if (input.countryCode !== undefined) patch["countryCode"] = (input.countryCode || "*").toUpperCase();
+    if (input.leaveType !== undefined) patch["leaveType"] = input.leaveType;
+    if (input.contractType !== undefined) patch["contractType"] = input.contractType ?? null;
+    if (input.entitlementDays !== undefined) patch["entitlementDays"] = Number(input.entitlementDays);
+    if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(hrLeaveEntitlements).set(patch).where(eq(hrLeaveEntitlements.id, id));
+    }
+    return this.findLeaveEntitlement(id);
+  }
+
+  async deleteLeaveEntitlement(id: number) {
+    await this.findLeaveEntitlement(id);
+    await this.db.delete(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id));
+    return { deleted: true };
+  }
+
+  async getPayrollLockStage() {
+    return { stage: await this.payrollLockStage() };
+  }
+
+  async setPayrollLockStage(stage: string) {
+    const value = String(stage) === "validated" ? "validated" : "paid";
+    const [row] = await this.db.select({ id: appSettings.id }).from(appSettings).limit(1);
+    if (row) {
+      await this.db.update(appSettings).set({ payrollLockStage: value }).where(eq(appSettings.id, row.id));
+    } else {
+      await this.db.insert(appSettings).values({ payrollLockStage: value });
+    }
+    return { stage: value };
   }
 }

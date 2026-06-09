@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -46,6 +46,7 @@ import {
   CreateHrCandidateDto,
   UpdateHrCandidateDto,
   ConvertCandidateDto,
+  CreateCandidateEvaluationDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -77,6 +78,10 @@ import {
   CreateHrPersonalDocumentDto,
   CreateHrTaxRuleDto,
   UpdateHrTaxRuleDto,
+  CreateHrPublicHolidayDto,
+  UpdateHrPublicHolidayDto,
+  CreateHrLeaveEntitlementDto,
+  UpdateHrLeaveEntitlementDto,
 } from "./dto/hr.dto";
 import { HrService } from "./hr.service";
 
@@ -200,6 +205,12 @@ export class SalaryHistoryController {
 export class HrPayrollController {
   constructor(private readonly service: HrService) {}
 
+  // Id de l'utilisateur authentifié (JWT), source fiable pour les approbations.
+  private actorId(req: Request): number | null {
+    const sub = (req as unknown as { user?: { sub?: number } }).user?.sub;
+    return typeof sub === "number" ? sub : null;
+  }
+
   @Get() list(@Query() q: Record<string, string>) { return this.service.listPayrolls(q); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.payrollSummary(q); }
   @Get("generate") generate(@Query() q: Record<string, string>) { return this.service.generatePayroll(q); }
@@ -219,8 +230,8 @@ export class HrPayrollController {
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
   @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.submitPayroll(id, body.approvedBy); }
-  @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.approvePayroll(id, body.approvedBy, body.comment); }
-  @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.rejectPayroll(id, body.approvedBy, body.comment); }
+  @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.approvePayroll(id, this.actorId(req) ?? body.approvedBy, body.comment); }
+  @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.rejectPayroll(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/pay") pay(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.markPayrollPaid(id, body.approvedBy); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
@@ -289,7 +300,7 @@ export class HrLeaveRequestController {
   @Post() create(@Body() body: CreateHrLeaveRequestDto) { return this.service.createLeaveRequest(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
-  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrLeaveRequests, id); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteLeaveRequest(id); }
 }
 
 @ApiBearerAuth()
@@ -316,12 +327,28 @@ export class HrContractController {
 export class HrDocumentController {
   constructor(private readonly service: HrService) {}
 
+  private actorId(req: Request): number | null {
+    const sub = (req as unknown as { user?: { sub?: number } }).user?.sub;
+    return typeof sub === "number" ? sub : null;
+  }
+
   @Get() list(@Query() q: Record<string, string>) { return this.service.listDocuments(q); }
   @Get("summary") summary() { return this.service.documentSummary(); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findDocument(id); }
   @Post() create(@Body() body: CreateHrDocumentDto) { return this.service.createDocument(body); }
   @Post("generate") generate(@Body() body: GenerateHrDocumentDto) { return this.service.generateDocument(body); }
+  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const { buffer, reference } = await this.service.documentPdf(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  }
+  @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.submitDocument(id, this.actorId(req) ?? body.approvedBy); }
+  @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.approveDocument(id, this.actorId(req) ?? body.approvedBy, body.comment); }
+  @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.rejectDocument(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/sign") sign(@Param("id", ParseIntPipe) id: number, @Body() body: { signedBy: string }) { return this.service.signDocument(id, body.signedBy); }
+  @Get(":id/verify") verify(@Param("id", ParseIntPipe) id: number) { return this.service.verifyDocumentSignature(id); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrDocuments, id); }
@@ -454,6 +481,24 @@ export class HrCandidateController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
   @Post(":id/convert") convert(@Param("id", ParseIntPipe) id: number, @Body() body: ConvertCandidateDto) { return this.service.convertCandidateToEmployee(id, body); }
+
+  @Post(":id/upload")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf", "image/gif"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF, GIF."), false);
+    },
+  }))
+  upload(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @Body("kind") kind: string) {
+    if (!file) throw new BadRequestException("Aucun fichier reçu.");
+    return this.service.uploadCandidateFile(id, file, kind || "cv");
+  }
+
+  @Get(":id/evaluations") listEvaluations(@Param("id", ParseIntPipe) id: number) { return this.service.listCandidateEvaluations(id); }
+  @Post(":id/evaluations") createEvaluation(@Param("id", ParseIntPipe) id: number, @Body() body: CreateCandidateEvaluationDto) { return this.service.createCandidateEvaluation(id, body); }
+  @Delete(":id/evaluations/:evalId") deleteEvaluation(@Param("id", ParseIntPipe) id: number, @Param("evalId", ParseIntPipe) evalId: number) { return this.service.deleteCandidateEvaluation(id, evalId); }
+
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrCandidates, id); }
 }
 
@@ -466,6 +511,10 @@ export class HrAiController {
   constructor(private readonly service: HrService) {}
 
   @Get("context") context() { return this.service.aiContext(); }
+  @Post("chat") chat(@Body() body: HrAiChatDto, @Req() req: Request) {
+    const sub = (req as unknown as { user?: { sub?: number } }).user?.sub;
+    return this.service.aiChat(body.message, body.context, typeof sub === "number" ? sub : null);
+  }
 }
 
 @ApiBearerAuth()
@@ -530,4 +579,40 @@ export class HrEmployeesController {
 
   @Delete("tax-rules/:id")
   deleteTaxRule(@Param("id", ParseIntPipe) id: number) { return this.service.deleteTaxRule(id); }
+
+  @Get("public-holidays")
+  listPublicHolidays(@Query() q: Record<string, string>) { return this.service.listPublicHolidays(q); }
+
+  @Get("public-holidays/:id")
+  findPublicHoliday(@Param("id", ParseIntPipe) id: number) { return this.service.findPublicHoliday(id); }
+
+  @Post("public-holidays")
+  createPublicHoliday(@Body() body: CreateHrPublicHolidayDto) { return this.service.createPublicHoliday(body); }
+
+  @Patch("public-holidays/:id")
+  updatePublicHoliday(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPublicHolidayDto) { return this.service.updatePublicHoliday(id, body); }
+
+  @Delete("public-holidays/:id")
+  deletePublicHoliday(@Param("id", ParseIntPipe) id: number) { return this.service.deletePublicHoliday(id); }
+
+  @Get("leave-entitlements")
+  listLeaveEntitlements(@Query() q: Record<string, string>) { return this.service.listLeaveEntitlements(q); }
+
+  @Get("leave-entitlements/:id")
+  findLeaveEntitlement(@Param("id", ParseIntPipe) id: number) { return this.service.findLeaveEntitlement(id); }
+
+  @Post("leave-entitlements")
+  createLeaveEntitlement(@Body() body: CreateHrLeaveEntitlementDto) { return this.service.createLeaveEntitlement(body); }
+
+  @Patch("leave-entitlements/:id")
+  updateLeaveEntitlement(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveEntitlementDto) { return this.service.updateLeaveEntitlement(id, body); }
+
+  @Delete("leave-entitlements/:id")
+  deleteLeaveEntitlement(@Param("id", ParseIntPipe) id: number) { return this.service.deleteLeaveEntitlement(id); }
+
+  @Get("payroll-lock-stage")
+  getPayrollLockStage() { return this.service.getPayrollLockStage(); }
+
+  @Post("payroll-lock-stage")
+  setPayrollLockStage(@Body("stage") stage: string) { return this.service.setPayrollLockStage(stage); }
 }

@@ -594,6 +594,8 @@ export const hrPayrolls = mysqlTable("hr_payrolls", {
   workedDays: double("workedDays").default(0).notNull(),
   absenceDays: double("absenceDays").default(0).notNull(),
   paidLeaveDays: double("paidLeaveDays").default(0).notNull(),
+  periodStart: date("periodStart", { mode: "string" }),
+  periodEnd: date("periodEnd", { mode: "string" }),
   status: varchar("status", { length: 30 }).default("draft").notNull(),
   notes: text("notes"),
   submittedAt: timestamp("submittedAt"),
@@ -662,6 +664,7 @@ export const hrLeaveRequests = mysqlTable("hr_leave_requests", {
   startDate: date("startDate", { mode: "string" }).notNull(),
   endDate: date("endDate", { mode: "string" }).notNull(),
   requestedDays: double("requestedDays").default(0).notNull(),
+  halfDay: tinyint("halfDay").default(0).notNull(),
   leaveYear: int("leaveYear"),
   entitlementDays: double("entitlementDays").default(0).notNull(),
   balanceBefore: double("balanceBefore").default(0).notNull(),
@@ -732,8 +735,19 @@ export const hrDocuments = mysqlTable("hr_documents", {
   generatedAt: timestamp("generatedAt"),
   generatedBy: bigint("generatedBy", { mode: "number" }),
   content: text("content"),
+  submittedAt: timestamp("submittedAt"),
+  submittedBy: bigint("submittedBy", { mode: "number" }),
+  approvedBy: bigint("approvedBy", { mode: "number" }),
+  approvedAt: timestamp("approvedAt"),
+  approvalComment: text("approvalComment"),
+  rejectedBy: bigint("rejectedBy", { mode: "number" }),
+  rejectedAt: timestamp("rejectedAt"),
+  rejectionComment: text("rejectionComment"),
   signedAt: timestamp("signedAt"),
   signedBy: varchar("signedBy", { length: 255 }),
+  contentHash: varchar("contentHash", { length: 64 }),
+  signatureToken: varchar("signatureToken", { length: 64 }),
+  signatureAlgorithm: varchar("signatureAlgorithm", { length: 40 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });
@@ -846,6 +860,20 @@ export const hrCandidates = mysqlTable("hr_candidates", {
   notes: text("notes"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+// Évaluations candidat : grille de critères pondérés + score agrégé
+export const hrCandidateEvaluations = mysqlTable("hr_candidate_evaluations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  candidateId: bigint("candidateId", { mode: "number" }).notNull(),
+  evaluatorId: bigint("evaluatorId", { mode: "number" }),
+  criteria: json("criteria"),
+  totalScore: double("total_score").default(0).notNull(),
+  maxScore: double("max_score").default(0).notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").onUpdateNow(),
 });
 
 export const hrPersonalDocuments = mysqlTable("hr_personal_documents", {
@@ -1113,6 +1141,7 @@ export const appSettings = mysqlTable("appSetting", {
   logo: varchar("logo", { length: 255 }),
   landlordSignature: text("landlord_signature"),
   currencyId: bigint("currencyId", { mode: "number" }),
+  payrollLockStage: varchar("payrollLockStage", { length: 20 }).default("paid").notNull(),
   isPos: varchar("isPos", { length: 10 }).default("false"),
   isDiscount: varchar("isDiscount", { length: 10 }).default("false"),
   isTax: varchar("isTax", { length: 10 }).default("false"),
@@ -1838,6 +1867,31 @@ export const hrTaxRules = mysqlTable("hr_tax_rules", {
   iprThreshold: double("ipr_threshold").default(0).notNull(),
   iprBrackets: json("ipr_brackets"),
   notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").onUpdateNow(),
+});
+
+// Droits de congés par pays/type (country_code='*' = défaut)
+export const hrLeaveEntitlements = mysqlTable("hr_leave_entitlements", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  countryCode: varchar("country_code", { length: 10 }).default("*").notNull(),
+  leaveType: varchar("leave_type", { length: 80 }).notNull(),
+  contractType: varchar("contract_type", { length: 80 }),
+  entitlementDays: double("entitlement_days").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").onUpdateNow(),
+});
+
+// Jours fériés par pays (exclus du décompte de congés)
+export const hrPublicHolidays = mysqlTable("hr_public_holidays", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  countryCode: varchar("country_code", { length: 10 }).notNull(),
+  date: date("date", { mode: "string" }).notNull(),
+  name: varchar("name", { length: 180 }).notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").onUpdateNow(),
