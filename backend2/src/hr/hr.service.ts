@@ -388,6 +388,8 @@ export class HrService {
       ? await this.db.select({ currencyCode: currencies.currencyCode }).from(currencies).where(eq(currencies.id, Number(payroll.currencyId))).limit(1)
       : [null];
 
+    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
+    const orgName = settingRow?.companyName || "Mon Organisation";
     const employeeName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(" ") || `Employé #${payroll.userId}`;
     const matricule = userRow?.employeeId || `EMP-${String(payroll.userId).padStart(6, "0")}`;
     const curr = currencyRow?.currencyCode || "USD";
@@ -438,7 +440,7 @@ tr:last-child td{border-bottom:none}
 .notes{font-size:11px;color:#666;font-style:italic;margin-top:8px}
 </style></head><body>
 <div class="header">
-  <div><div class="org-name">NgoluApp ONG</div><div class="org-sub">Document RH officiel — Confidentiel</div></div>
+  <div><div class="org-name">${orgName}</div><div class="org-sub">Document RH officiel — Confidentiel</div></div>
   <div class="doc-title">
     <h1>Bulletin de paie</h1>
     <div class="period">${periodLabel}</div>
@@ -805,7 +807,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
         projectId,
         code: project.code,
         name: project.name,
-        donor: project.donor || "Sans bailleur",
+        donor: project.donor || "Sans financeur",
         currencyId: project.currencyId ?? null,
         budget: Number(project.hrBudget || 0),
         plannedMonthlyCost: plannedByCurrency,
@@ -834,7 +836,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       const actualCost = (monthlyCost / 173.33) * hours;
       const currencyId = assignment?.currencyId ?? salary?.currencyId ?? project.currencyId ?? null;
       const month = periodDate.slice(0, 7) || "Sans mois";
-      const donor = project.donor || row.donor || "Sans bailleur";
+      const donor = project.donor || row.donor || "Sans financeur";
       const departmentId = usersById.get(userId)?.departmentId ?? null;
       const departmentName = departmentId ? departmentsById.get(Number(departmentId))?.name : null;
 
@@ -1060,7 +1062,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       .orderBy(desc(hrContracts.id)).limit(1);
     const contract = contracts[0] ?? null;
 
-    const orgName = "NgoluApp ONG";
+    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
+    const orgName = settingRow?.companyName || "Mon Organisation";
     const today = new Date().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
     const employeeName = [userRow.firstName, userRow.lastName].filter(Boolean).join(" ");
     const poste = contract?.designationId ? `Poste #${contract.designationId}` : "Non defini";
@@ -1545,7 +1548,7 @@ ${footer}`;
         category: "timesheet",
         severity: missingTimesheets >= 3 ? "high" : "medium",
         title: `${missingTimesheets} timesheet${missingTimesheets > 1 ? "s" : ""} manquant${missingTimesheets > 1 ? "s" : ""} (semaine)`,
-        detail: `${missingTimesheets} employé${missingTimesheets > 1 ? "s" : ""} n'ont pas soumis leur feuille de temps pour la semaine du ${weekStart}. Les timesheets conditionnent la facturation aux bailleurs.`,
+        detail: `${missingTimesheets} employé${missingTimesheets > 1 ? "s" : ""} n'ont pas soumis leur feuille de temps pour la semaine du ${weekStart}. Les timesheets conditionnent la facturation aux clients et financeurs.`,
         count: missingTimesheets,
       });
     }
@@ -2093,12 +2096,12 @@ ${footer}`;
 
   private async nextProjectCode(startDate?: string | null) {
     const year = String(startDate || "").slice(0, 4) || String(new Date().getFullYear());
-    const pattern = `ONG-${year}-%`;
+    const pattern = `PRJ-${year}-%`;
     const [{ total }] = await this.db
       .select({ total: count(hrProjects.id) })
       .from(hrProjects)
       .where(like(hrProjects.code, pattern));
-    return `ONG-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
+    return `PRJ-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
   }
 
   private cleanTime(value?: string | null) {

@@ -152,7 +152,7 @@ Reste:
 - Jours feries locaux et demi-jour.
 - Verrouillage paie mensuelle une fois les conges importes.
 
-## Stade 7 - Affectations projets ONG
+## Stade 7 - Affectations projets
 
 Objectif: calculer le cout RH par projet.
 
@@ -167,7 +167,7 @@ Statut: termine.
 Fait:
 - Tables `hr_projects` et `hr_project_assignments`.
 - API `hr/projects` et `hr/project-assignments`.
-- Code projet automatique `ONG-YYYY-0001` si non renseigne.
+- Code projet automatique `PRJ-YYYY-0001` si non renseigne.
 - Budget RH par projet avec devise.
 - Cout mensuel impute par affectation avec pourcentage de temps.
 - Page RH "Affectations projets" avec KPI multi-devise, listes projets/affectations et export CSV.

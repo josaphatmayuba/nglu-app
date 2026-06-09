@@ -814,7 +814,7 @@ Object.assign(ACTION_FORMS, {
       { kind: "section", label: "Projet" },
       { kind: "computed", label: "Code", value: () => "Genere automatiquement a l'enregistrement", wide: true },
       { key: "name", label: "Nom du projet", required: true },
-      { key: "donor", label: "Bailleur / financement" },
+      { key: "donor", label: "Financeur / donneur d'ordre" },
       { key: "managerId", label: "Responsable projet", type: "select", optionKey: "staff" },
       { key: "startDate", label: "Date de debut", type: "date" },
       { key: "endDate", label: "Date de fin", type: "date" },
@@ -2378,12 +2378,12 @@ function ProjetsONG({ data, staff, setModal }) {
       </div>
       <div className="g2">
         <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Projets ONG</h3><button type="button" className="link" onClick={() => setModal({ kind: "hrProject" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Projet</button></div>
+          <div className="section-head"><h3 className="font-display">Projets</h3><button type="button" className="link" onClick={() => setModal({ kind: "hrProject" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Projet</button></div>
           <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 900 }}>
-            <thead><tr><th>Projet</th><th>Bailleur</th><th className="r">Budget RH</th><th className="r">Planifie / mois</th><th className="r">Reel timesheets</th><th className="r">Ecart budget</th><th className="r">Statut</th></tr></thead>
+            <thead><tr><th>Projet</th><th>Financeur</th><th className="r">Budget RH</th><th className="r">Planifie / mois</th><th className="r">Reel timesheets</th><th className="r">Ecart budget</th><th className="r">Statut</th></tr></thead>
             <tbody>{projects.map((p) => { const r = reportByProject.get(String(p.id)); return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}<div className="tiny">{p.code || `Projet #${p.id}`} - {[dateOnly(p.startDate), dateOnly(p.endDate)].filter(Boolean).join(" - ") || "Periode non renseignee"}</div></td><td>{p.donor || "-"}</td><td className="r">{fc(p.hrBudget, moneySymbolFor(p))}</td><td className="r"><MoneyLines lines={projectCostLines(p.id)} /></td><td className="r"><MoneyLines lines={reportMoneyLines(r?.actualCost || [])} /></td><td className="r">{r ? fc(r.budgetVariance, moneySymbolFor(p)) : "-"}</td><td className="r">{statusChip(p.status)}</td></tr>; })}</tbody>
           </table></div>
-          {projects.length === 0 && <EmptyState title="Aucun projet en base" detail="Cree un projet pour affecter les couts RH par bailleur ou centre de cout." />}
+          {projects.length === 0 && <EmptyState title="Aucun projet en base" detail="Cree un projet pour affecter les couts RH par financeur ou centre de cout." />}
         </div>
         <div className="card pad table-card">
           <div className="section-head"><h3 className="font-display">Affectations employes</h3><button type="button" className="btn btn-accent grad-accent" disabled={!projects.length || !staff.length} onClick={() => setModal({ kind: "hrProjectAssignment" })}><Icon name="plus" /> Affecter</button></div>
@@ -2397,7 +2397,7 @@ function ProjetsONG({ data, staff, setModal }) {
       </div>
       <div className="g3" style={{ marginTop: 16 }}>
         <ProjectAnalyticsCard title="Par mois" rows={report.byMonth || []} labelOf={(r) => r.month || "Sans mois"} moneyLines={reportMoneyLines} />
-        <ProjectAnalyticsCard title="Par bailleur" rows={report.byDonor || []} labelOf={(r) => r.donor || "Sans bailleur"} moneyLines={reportMoneyLines} />
+        <ProjectAnalyticsCard title="Par financeur" rows={report.byDonor || []} labelOf={(r) => r.donor || "Sans financeur"} moneyLines={reportMoneyLines} />
         <ProjectAnalyticsCard title="Par departement" rows={report.byDepartment || []} labelOf={(r) => r.department || "Sans departement"} moneyLines={reportMoneyLines} />
       </div>
     </>
