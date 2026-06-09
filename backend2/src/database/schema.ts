@@ -848,6 +848,21 @@ export const hrCandidates = mysqlTable("hr_candidates", {
   updatedAt: timestamp("updated_at"),
 });
 
+export const hrPersonalDocuments = mysqlTable("hr_personal_documents", {
+  id: serial("id").primaryKey(),
+  userId: bigint("userId", { mode: "number" }).notNull(),
+  documentType: varchar("documentType", { length: 100 }).notNull(),
+  fileName: varchar("fileName", { length: 255 }).notNull(),
+  filePath: varchar("filePath", { length: 500 }).notNull(),
+  fileSize: int("fileSize"),
+  mimeType: varchar("mimeType", { length: 100 }),
+  version: int("version").default(1).notNull(),
+  notes: text("notes"),
+  uploadedBy: bigint("uploadedBy", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").onUpdateNow(),
+});
+
 export const hrTimesheets = mysqlTable("hr_timesheets", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

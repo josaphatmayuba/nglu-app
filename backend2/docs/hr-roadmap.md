@@ -48,9 +48,9 @@ Fait:
 - Formulaires RH creation/modification connectes a ces champs.
 - Dossier employe 360 affiche ces informations.
 
-Reste:
-- Vrai upload fichier/photo avec stockage central.
-- Table dediee pour pieces personnelles si plusieurs fichiers doivent etre versionnes.
+Statut: termine.
+
+Reste: rien.
 
 ## Stade 3 - Organigramme
 

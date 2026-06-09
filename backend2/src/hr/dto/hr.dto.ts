@@ -1075,3 +1075,22 @@ export class PayrollApprovalDto {
   @IsString()
   comment?: string | null;
 }
+
+export class CreateHrPersonalDocumentDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  documentType: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  uploadedBy?: number | null;
+}

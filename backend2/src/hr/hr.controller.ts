@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
@@ -73,6 +74,7 @@ import {
   UpdateShiftDto,
   HrAiChatDto,
   PayrollApprovalDto,
+  CreateHrPersonalDocumentDto,
 } from "./dto/hr.dto";
 import { HrService } from "./hr.service";
 
@@ -455,4 +457,53 @@ export class HrAiController {
   constructor(private readonly service: HrService) {}
 
   @Get("context") context() { return this.service.aiContext(); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 20 } })
+@ApiTags("hr-employees")
+@Controller("hr/employees")
+export class HrEmployeesController {
+  constructor(private readonly service: HrService) {}
+
+  @Post(":id/photo")
+  @UseInterceptors(FileInterceptor("photo", {
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, GIF."), false);
+    },
+  }))
+  uploadPhoto(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any) {
+    if (!file) throw new BadRequestException("Aucun fichier reçu.");
+    return this.service.uploadEmployeePhoto(id, file);
+  }
+
+  @Get(":id/personal-documents")
+  listDocs(@Param("id", ParseIntPipe) id: number) {
+    return this.service.listPersonalDocuments(id);
+  }
+
+  @Post(":id/personal-documents")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf", "image/gif"];
+      allowed.includes(file.mimetype) ? cb(null, true) : cb(new BadRequestException("Format non autorisé. Formats acceptés : JPEG, PNG, WebP, PDF, GIF."), false);
+    },
+  }))
+  uploadDoc(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() file: any,
+    @Body() body: CreateHrPersonalDocumentDto,
+  ) {
+    if (!file) throw new BadRequestException("Aucun fichier reçu.");
+    return this.service.createPersonalDocument(file, { ...body, userId: id });
+  }
+
+  @Delete("personal-documents/:docId")
+  deleteDoc(@Param("docId", ParseIntPipe) docId: number) {
+    return this.service.deletePersonalDocument(docId);
+  }
 }

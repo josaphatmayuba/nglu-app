@@ -104,4 +104,18 @@ export const api = {
   rejectPayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/reject`, { method: "POST", body: JSON.stringify(body) }),
   payPayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/pay`, { method: "POST", body: JSON.stringify(body) }),
   aiContext: () => jsonFetch("/hr/ai/context"),
+  uploadEmployeePhoto: (userId, file) => {
+    const form = new FormData(); form.append("photo", file);
+    return jsonFetch(`/hr/employees/${userId}/photo`, { method: "POST", body: form, headers: {} });
+  },
+  listPersonalDocuments: (userId) => jsonFetch(`/hr/employees/${userId}/personal-documents`),
+  uploadPersonalDocument: (userId, file, documentType, notes, uploadedBy) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("documentType", documentType);
+    if (notes) form.append("notes", notes);
+    if (uploadedBy) form.append("uploadedBy", String(uploadedBy));
+    return jsonFetch(`/hr/employees/${userId}/personal-documents`, { method: "POST", body: form, headers: {} });
+  },
+  deletePersonalDocument: (docId) => jsonFetch(`/hr/employees/personal-documents/${docId}`, { method: "DELETE" }),
 };

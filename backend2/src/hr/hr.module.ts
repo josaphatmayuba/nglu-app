@@ -18,6 +18,7 @@ import {
   HrProjectController,
   HrCandidateController,
   HrAiController,
+  HrEmployeesController,
   HrRecruitmentOfferController,
   HrTimesheetController,
   SalaryHistoryController,
@@ -53,6 +54,7 @@ import { HrService } from "./hr.service";
     HrRecruitmentOfferController,
     HrCandidateController,
     HrAiController,
+    HrEmployeesController,
   ],
   providers: [HrService],
 })

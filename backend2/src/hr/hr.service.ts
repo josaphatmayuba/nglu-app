@@ -1,6 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
+import { join } from "path";
+
+type HrUploadedFile = { originalname: string; buffer: Buffer; size: number; mimetype: string };
 import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
@@ -14,6 +18,7 @@ import {
   hrAttendances,
   hrCandidates,
   hrDocuments,
+  hrPersonalDocuments,
   hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
@@ -77,6 +82,7 @@ import {
   UpdateHrTimesheetDto,
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
+  CreateHrPersonalDocumentDto,
 } from "./dto/hr.dto";
 
 @Injectable()
@@ -2172,5 +2178,62 @@ ${footer}`;
     const page = Number(q["page"] ?? 1);
     const cnt = Number(q["count"] ?? 10);
     return { skip: (page - 1) * cnt, limit: cnt };
+  }
+
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+
+  private saveFile(file: HrUploadedFile): { name: string; path: string } {
+    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
+    const ext = (file.originalname.split(".").pop() || "bin").toLowerCase();
+    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    writeFileSync(join(this.uploadDir, name), file.buffer);
+    return { name, path: `/files/${name}` };
+  }
+
+  async uploadEmployeePhoto(userId: number, file: HrUploadedFile) {
+    await this.ensureExists(users, userId, "Employee not found.");
+    const { path } = this.saveFile(file);
+    await this.db.update(users).set({ image: path, updatedAt: sql`CURRENT_TIMESTAMP` }).where(eq(users.id, userId));
+    return { image: path };
+  }
+
+  async listPersonalDocuments(userId: number) {
+    return this.db.select().from(hrPersonalDocuments)
+      .where(eq(hrPersonalDocuments.userId, userId))
+      .orderBy(desc(hrPersonalDocuments.createdAt));
+  }
+
+  async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto) {
+    await this.ensureExists(users, dto.userId, "Employee not found.");
+    const { name, path } = this.saveFile(file);
+    const [existing] = await this.db.select({ version: hrPersonalDocuments.version })
+      .from(hrPersonalDocuments)
+      .where(and(eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
+      .orderBy(desc(hrPersonalDocuments.version))
+      .limit(1);
+    const version = (existing?.version ?? 0) + 1;
+    const [result] = await this.db.insert(hrPersonalDocuments).values({
+      userId: dto.userId,
+      documentType: dto.documentType,
+      fileName: file.originalname,
+      filePath: path,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      version,
+      notes: dto.notes ?? null,
+      uploadedBy: dto.uploadedBy ?? null,
+    });
+    return this.db.select().from(hrPersonalDocuments)
+      .where(eq(hrPersonalDocuments.id, Number((result as any).insertId)))
+      .limit(1).then((r) => r[0]);
+  }
+
+  async deletePersonalDocument(id: number) {
+    const [doc] = await this.db.select().from(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id)).limit(1);
+    if (!doc) throw new NotFoundException("Document not found.");
+    const localFile = join(this.uploadDir, doc.filePath.replace(/^\/files\//, ""));
+    if (existsSync(localFile)) unlinkSync(localFile);
+    await this.db.delete(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id));
+    return { deleted: true };
   }
 }

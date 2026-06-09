@@ -1611,7 +1611,45 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
     return map;
   }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
   const candidatureRecord = (data.candidates || []).find((c) => String(c.convertedUserId) === String(userId));
-  const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["developpement", "Developpement"]];
+  const [personalDocs, setPersonalDocs] = React.useState(null);
+  const [photoUploading, setPhotoUploading] = React.useState(false);
+  const [docUploading, setDocUploading] = React.useState(false);
+  const [photoError, setPhotoError] = React.useState(null);
+  const [docError, setDocError] = React.useState(null);
+  const [userImage, setUserImage] = React.useState(user.image);
+  React.useEffect(() => {
+    api.listPersonalDocuments(userId).then(setPersonalDocs).catch(() => setPersonalDocs([]));
+  }, [userId]);
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true); setPhotoError(null);
+    try {
+      const res = await api.uploadEmployeePhoto(userId, file);
+      setUserImage(res.image);
+    } catch (err) { setPhotoError(err.message); }
+    finally { setPhotoUploading(false); }
+  };
+  const handleDocUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const docType = window.prompt("Type de document (ex: CIN, Passeport, Diplome, Contrat, Autre) :", "CIN");
+    if (!docType) return;
+    setDocUploading(true); setDocError(null);
+    try {
+      const created = await api.uploadPersonalDocument(userId, file, docType);
+      setPersonalDocs((prev) => [created, ...(prev || [])]);
+    } catch (err) { setDocError(err.message); }
+    finally { setDocUploading(false); }
+  };
+  const handleDeleteDoc = async (docId) => {
+    if (!window.confirm("Supprimer ce document ?")) return;
+    try {
+      await api.deletePersonalDocument(docId);
+      setPersonalDocs((prev) => (prev || []).filter((d) => d.id !== docId));
+    } catch (err) { alert(err.message); }
+  };
+  const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["pieces", "Pieces"], ["developpement", "Developpement"]];
   const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
   const hasAlerts = (contractDays != null && contractDays >= 0 && contractDays <= 90) || onLeaveNow || documents.length === 0;
@@ -1629,10 +1667,18 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
         </div>
 
         <div className="employee-profile-head">
-          <Avatar name={name} color={colorFor(name)} size={54} sq src={user.image} />
+          <div style={{ position: "relative", display: "inline-block" }}>
+            <Avatar name={name} color={colorFor(name)} size={54} sq src={userImage} />
+            <label title="Changer la photo" style={{ position: "absolute", bottom: -4, right: -4, background: "#14b8a6", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#fff", fontSize: 12 }}>
+              <Icon name="edit" style={{ width: 11, height: 11 }} />
+              <input type="file" accept="image/*" style={{ display: "none" }} onChange={handlePhotoUpload} disabled={photoUploading} />
+            </label>
+          </div>
           <div>
             <div className={user.status === "false" ? "chip rose" : "chip emerald"}>{user.status === "false" ? "Inactif" : "Actif"}</div>
             <div className="tiny" style={{ marginTop: 6 }}>{user.employeeId || fallbackEmployeeId(user)}</div>
+            {photoUploading && <div className="tiny" style={{ color: "#14b8a6", marginTop: 2 }}>Upload en cours...</div>}
+            {photoError && <div className="tiny" style={{ color: "#ef4444", marginTop: 2 }}>{photoError}</div>}
           </div>
         </div>
 
@@ -1665,7 +1711,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
               {row("Nationalite", user.nationality)}
               {row("Contact urgence", emergencyContact)}
               {row("Adresse", [user.street, user.city, user.country].filter(Boolean).join(", "))}
-              {row("Pieces personnelles", user.personalDocumentsUrl)}
+              {user.personalDocumentsUrl && row("Pieces personnelles (ancien lien)", user.personalDocumentsUrl)}
               {row("Motif de depart", user.leaveReason)}
             </div>
             <div className="employee-360-grid">
@@ -1742,6 +1788,32 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
             <Employee360Panel title="Demandes RH">
               <Employee360List rows={requests} empty="Aucune demande RH" render={(r) => <><span>{r.subject || r.requestType}<small>{dateOnly(r.requestedDate)}</small></span><strong>{statusChip(r.status)}</strong></>} />
             </Employee360Panel>
+          </div>
+        )}
+
+        {tab === "pieces" && (
+          <div className="employee-360-body" style={{ padding: "0 0 16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h3 className="font-display" style={{ fontSize: 14 }}>Pieces personnelles ({(personalDocs || []).length})</h3>
+              <label className="btn btn-accent grad-accent" style={{ fontSize: 12, cursor: "pointer" }}>
+                <Icon name="plus" style={{ width: 12, height: 12 }} /> {docUploading ? "Upload..." : "Ajouter"}
+                <input type="file" accept="image/*,application/pdf" style={{ display: "none" }} onChange={handleDocUpload} disabled={docUploading} />
+              </label>
+            </div>
+            {docError && <div className="tiny" style={{ color: "#ef4444", marginBottom: 8 }}>{docError}</div>}
+            {personalDocs === null && <div className="tiny" style={{ color: "#64748b" }}>Chargement...</div>}
+            {personalDocs !== null && personalDocs.length === 0 && <div className="tiny" style={{ color: "#64748b" }}>Aucune piece personnelle en base. Cliquez sur Ajouter pour telecharger un document.</div>}
+            {(personalDocs || []).map((doc) => (
+              <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{doc.documentType}</div>
+                  <div className="tiny">{doc.fileName} &middot; v{doc.version} &middot; {dateOnly(doc.createdAt)}</div>
+                  {doc.notes && <div className="tiny" style={{ color: "#64748b" }}>{doc.notes}</div>}
+                </div>
+                <a className="link" href={`${API_ROOT}${doc.filePath}`} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Ouvrir</a>
+                <button type="button" className="icon-btn" style={{ color: "#ef4444" }} onClick={() => handleDeleteDoc(doc.id)}><Icon name="trash" style={{ width: 14, height: 14 }} /></button>
+              </div>
+            ))}
           </div>
         )}
 
