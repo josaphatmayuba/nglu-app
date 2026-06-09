@@ -123,7 +123,20 @@ Objectif: conges connectes aux soldes, presence et paie.
 - Workflow employe -> chef -> RH -> approuve.
 - Impact presence et paie.
 
-Statut: a faire.
+Statut: termine.
+
+Fait:
+- Workflow `pending -> manager_approved -> approved` avec rejet possible.
+- Champs DB/API pour responsable, commentaires chef/RH, dates de decision et decideur.
+- Calcul serveur des jours demandes, droits annuels, solde avant et solde apres approbation.
+- API `hr/leave-requests/summary` pour les soldes par employe et indicateurs workflow.
+- Impact presence: une demande approuvee genere des lignes `hr_attendances` liees par `leaveRequestId`.
+- Page `Conges & absences` avec KPIs workflow, decisions chef/RH, absents aujourd'hui et soldes par employe.
+
+Reste:
+- Parametrage fin des droits par pays/contrat/type de conge.
+- Jours feries locaux et demi-jour.
+- Verrouillage paie mensuelle une fois les conges importes.
 
 ## Stade 7 - Affectations projets ONG
 
@@ -146,11 +159,11 @@ Fait:
 - Page RH "Affectations projets" avec KPI multi-devise, listes projets/affectations et export CSV.
 - Dossier employe 360 relie aux affectations projets.
 - Relier les saisies de temps a `project_id` au lieu du libelle texte.
-- Rapport analytique projet par mois, bailleur et departement.
+- Rapport analytique projet par mois et departement.
 - Comparaison budget RH vs cout reel par periode.
 
 Reste:
-- Optionnel: ventilation avancee par ligne budgetaire bailleur si un plan analytique detaille est ajoute plus tard.
+- Optionnel: ventilation avancee par ligne budgetaire si un plan analytique detaille est ajoute plus tard.
 
 ## Stade 8 - Documents et signature
 

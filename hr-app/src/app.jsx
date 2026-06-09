@@ -281,6 +281,7 @@ const EMPTY_DATA = {
   projectAssignments: [],
   roles: [],
   leaveRequests: [],
+  leaveSummary: { totals: { employees: 0, entitlementDays: 0, usedDays: 0, pendingDays: 0, balanceDays: 0 }, byEmployee: [], workflow: { pending: 0, managerApproved: 0, approved: 0, rejected: 0 } },
   contracts: [],
   documents: [],
   expenseRequests: [],
@@ -302,6 +303,9 @@ const STATUS_LABELS = {
   submitted: "Soumis",
   validation: "En validation",
   approved: "Approuve",
+  manager_approved: "Chef approuve",
+  hr_review: "Revue RH",
+  hr_approved: "RH approuve",
   signed: "Signe",
   paid: "Paye",
   active: "Actif",
@@ -321,14 +325,16 @@ const STATUS_LABELS = {
   absent: "Absent",
   partial: "Partiel",
   validated: "Valide",
+  paid_leave: "Conge paye",
+  unpaid_leave: "Conge non paye",
   true: "Actif",
   false: "Inactif",
 };
 const isPending = (status) => ["pending", "en_attente", "submitted", "draft", "validation"].includes(String(status || "").toLowerCase());
-const isApproved = (status) => ["approved", "active", "received", "planned", "done", "open", "true", "paid", "present", "validated"].includes(String(status || "").toLowerCase());
+const isApproved = (status) => ["approved", "hr_approved", "active", "received", "planned", "done", "open", "true", "paid", "present", "validated", "paid_leave"].includes(String(status || "").toLowerCase());
 const chipForStatus = (status) => {
   const value = String(status || "").toLowerCase();
-  if (["late", "partial"].includes(value)) return "amber";
+  if (["late", "partial", "manager_approved", "hr_review"].includes(value)) return "amber";
   if (["absent", "rejected"].includes(value)) return "rose";
   return isPending(value) ? "amber" : isApproved(value) ? "emerald" : "ink";
 };
@@ -405,7 +411,7 @@ function currentLeaves(leaves) {
     const start = dateOnly(leave.startDate);
     const end = dateOnly(leave.endDate);
     const status = String(leave.status || "").toLowerCase();
-    return start && end && start <= TODAY && end >= TODAY && status !== "rejected";
+    return start && end && start <= TODAY && end >= TODAY && ["approved", "hr_approved"].includes(status);
   });
 }
 function expiringContracts(contracts, horizon = 30) {
@@ -583,6 +589,33 @@ Object.assign(ACTION_FORMS, {
 });
 
 Object.assign(ACTION_FORMS, {
+  leaveRequest: {
+    title: "Demande de conge",
+    submit: "Soumettre",
+    success: "Demande de conge enregistree.",
+    defaults: { userId: "", type: "Conge annuel", startDate: TODAY, endDate: TODAY, managerId: "", isPaid: "1", reason: "" },
+    fields: [
+      { key: "userId", label: "Employe", type: "select", optionKey: "staff", required: true },
+      { key: "type", label: "Type", type: "select", options: ["Conge annuel", "Maladie", "Maternite", "Paternite", "Mission", "Autre"], required: true },
+      { key: "startDate", label: "Debut", type: "date", required: true },
+      { key: "endDate", label: "Fin", type: "date", required: true },
+      { key: "managerId", label: "Chef / responsable", type: "select", optionKey: "staff" },
+      { key: "isPaid", label: "Impact paie", type: "select", options: [{ value: "1", label: "Conge paye" }, { value: "0", label: "Conge non paye" }] },
+      { key: "reason", label: "Motif", type: "textarea", wide: true },
+    ],
+  },
+  leaveDecision: {
+    title: "Decision conge",
+    submit: "Enregistrer",
+    success: "Decision conge enregistree.",
+    defaults: { id: "", status: "manager_approved", decidedBy: "", managerId: "", decisionComment: "" },
+    fields: [
+      { key: "status", label: "Decision", type: "select", options: [{ value: "manager_approved", label: "Chef approuve" }, { value: "approved", label: "RH approuve" }, { value: "rejected", label: "Rejeter" }], required: true },
+      { key: "decidedBy", label: "Decide par", type: "select", optionKey: "staff" },
+      { key: "managerId", label: "Chef / responsable", type: "select", optionKey: "staff" },
+      { key: "decisionComment", label: "Commentaire", type: "textarea", wide: true },
+    ],
+  },
   attendance: {
     title: "Nouveau pointage",
     submit: "Enregistrer",
@@ -936,10 +969,10 @@ function App() {
   const load = React.useCallback(() => {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.attendances(), api.attendanceSummary(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
-      api.leaveRequests(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
+      api.leaveRequests(), api.leaveSummary(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
       api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
     ])
-      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -963,6 +996,7 @@ function App() {
           projectAssignments: arrayFrom(projectAssignments.value, "getAllHrProjectAssignment"),
           roles: arrayFrom(roles.value, "getAllRole"),
           leaveRequests: arrayFrom(leaves.value, "getAllHrLeaveRequest"),
+          leaveSummary: leaveSummary.value || EMPTY_DATA.leaveSummary,
           contracts: arrayFrom(contracts.value, "getAllHrContract"),
           documents: arrayFrom(documents.value, "getAllHrDocument"),
           expenseRequests: arrayFrom(expenses.value, "getAllHrExpenseRequest"),
@@ -989,9 +1023,17 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      const hrApiKinds = ["leaveRequest", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "attendance", "employeeRequest", "recruitmentOffer", "payroll", "hrProject", "hrProjectAssignment"];
+      const hrApiKinds = ["leaveRequest", "leaveDecision", "hrContract", "hrDocument", "expenseRequest", "socialDeclaration", "performanceReview", "trainingSession", "timesheet", "attendance", "employeeRequest", "recruitmentOffer", "payroll", "hrProject", "hrProjectAssignment"];
       if (hrApiKinds.includes(kind)) {
-        if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null }));
+        if (kind === "leaveRequest") await api.createLeaveRequest(cleanPayload({ userId: Number(form.userId), type: form.type, startDate: form.startDate, endDate: form.endDate, reason: form.reason || null, managerId: toNum(form.managerId), isPaid: form.isPaid === "0" ? 0 : 1 }));
+        if (kind === "leaveDecision") await api.updateLeaveRequest(Number(form.id), cleanPayload({
+          status: form.status,
+          decidedBy: toNum(form.decidedBy),
+          managerId: toNum(form.managerId),
+          decisionComment: form.decisionComment || null,
+          managerComment: form.status === "manager_approved" ? form.decisionComment || null : undefined,
+          hrComment: form.status === "approved" ? form.decisionComment || null : undefined,
+        }));
         if (kind === "attendance") await api.createAttendance(cleanPayload({
           userId: Number(form.userId),
           workDate: form.workDate,
@@ -1757,31 +1799,49 @@ function Presences({ data, staff, setModal }) {
 /* Conges */
 function Conges({ data, staff, setModal }) {
   const requests = data.leaveRequests || [];
-  const pending = requests.filter((r) => isPending(r.status));
-  const approved = requests.filter((r) => isApproved(r.status));
+  const summary = data.leaveSummary || EMPTY_DATA.leaveSummary;
+  const pending = requests.filter((r) => ["pending", "submitted"].includes(String(r.status || "").toLowerCase()));
+  const managerApproved = requests.filter((r) => String(r.status || "").toLowerCase() === "manager_approved");
+  const approved = requests.filter((r) => ["approved", "hr_approved"].includes(String(r.status || "").toLowerCase()));
   const today = currentLeaves(requests);
   const addRequest = () => setModal({ kind: "leaveRequest" });
   const detail = (r) => [dateOnly(r.startDate), dateOnly(r.endDate)].filter(Boolean).join(" -> ") || "Dates non renseignees";
+  const decision = (request, status) => setModal({ kind: "leaveDecision", initial: { id: request.id, status, userId: request.userId, managerId: request.managerId || "", decidedBy: "", decisionComment: "" } });
   return (
     <>
       <PageHead eyebrow="Absences" title="Conges & absences" action="Nouvelle demande" onAction={addRequest} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <KPI label="En attente" value={pending.length} tone={pending.length ? "warn" : undefined} />
-        <Mini label="Approuves" value={approved.length} valueClass="" />
+        <KPI label="A valider chef" value={pending.length} tone={pending.length ? "warn" : undefined} />
+        <KPI label="A valider RH" value={managerApproved.length} tone={managerApproved.length ? "warn" : undefined} />
         <Mini label="En conge aujourd'hui" value={today.length} />
-        <Mini label="Total demandes" value={requests.length} />
+        <Mini label="Solde total" value={`${nf.format(Number(summary.totals?.balanceDays || 0))} j`} />
+      </div>
+      <div className="g3" style={{ marginBottom: 18 }}>
+        <Mini label="Jours approuves" value={`${nf.format(Number(summary.totals?.usedDays || 0))} j`} />
+        <Mini label="Jours en attente" value={`${nf.format(Number(summary.totals?.pendingDays || 0))} j`} />
+        <Mini label="Demandes approuvees" value={approved.length} />
       </div>
       <div className="g3">
         <section className="card pad span2">
-          <h3 className="block-title font-display">Demandes en base</h3>
+          <div className="section-head"><h3 className="block-title font-display">Workflow des demandes</h3></div>
           {requests.length === 0 && <EmptyState title="Aucune demande de conge en base" />}
           {requests.map((c) => {
             const name = personName(staff, c.userId);
+            const status = String(c.status || "").toLowerCase();
             return (
               <div className="row" key={c.id || [c.userId, c.startDate, c.endDate].filter(Boolean).join("-")}>
                 <Avatar name={name} color={colorFor(name)} size={36} />
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{name} - <span className="muted" style={{ fontWeight: 400 }}>{c.type || "Conge"}</span></div><div className="tiny">{detail(c)}{c.reason ? " - " + c.reason : ""}</div></div>
-                <span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{name} - <span className="muted" style={{ fontWeight: 400 }}>{c.type || "Conge"}</span></div>
+                  <div className="tiny">{detail(c)} - {nf.format(Number(c.requestedDays || 0))} j{c.reason ? " - " + c.reason : ""}</div>
+                  <div className="tiny">Solde: {nf.format(Number(c.balanceBefore || 0))} -> {nf.format(Number(c.balanceAfter || 0))} j</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span>
+                  {["pending", "submitted"].includes(status) && <button type="button" className="link" onClick={() => decision(c, "manager_approved")}>Chef approuve</button>}
+                  {status === "manager_approved" && <button type="button" className="link" onClick={() => decision(c, "approved")}>RH approuve</button>}
+                  {!["approved", "hr_approved", "rejected"].includes(status) && <button type="button" className="link" onClick={() => decision(c, "rejected")}>Rejeter</button>}
+                </div>
               </div>
             );
           })}
@@ -1794,6 +1854,14 @@ function Conges({ data, staff, setModal }) {
             return <div key={a.id || name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}><Avatar name={name} color={colorFor(name)} size={30} /><div style={{ fontSize: 12 }}><div style={{ fontWeight: 500 }}>{name}</div><div className="muted">{a.type || "Conge"} - retour {dateOnly(a.endDate) || "non renseigne"}</div></div></div>;
           })}
         </section>
+      </div>
+      <div className="card pad table-card" style={{ marginTop: 16 }}>
+        <div className="section-head"><h3 className="font-display">Soldes par employe</h3><span className="tiny">{summary.year || TODAY.slice(0, 4)}</span></div>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 680 }}>
+          <thead><tr><th>Employe</th><th className="r">Droit</th><th className="r">Utilise</th><th className="r">En attente</th><th className="r">Solde</th></tr></thead>
+          <tbody>{(summary.byEmployee || []).map((row) => <tr key={row.userId}><td style={{ fontWeight: 500 }}>{row.name || personName(staff, row.userId)}</td><td className="r">{nf.format(Number(row.entitlementDays || 0))} j</td><td className="r">{nf.format(Number(row.usedDays || 0))} j</td><td className="r">{nf.format(Number(row.pendingDays || 0))} j</td><td className="r">{nf.format(Number(row.balanceDays || 0))} j</td></tr>)}</tbody>
+        </table></div>
+        {(summary.byEmployee || []).length === 0 && <EmptyState title="Aucun solde calcule" detail="Les soldes apparaitront quand les employes seront charges depuis l'API." />}
       </div>
     </>
   );

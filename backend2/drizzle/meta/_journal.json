@@ -435,6 +435,13 @@
       "when": 1780236000000,
       "tag": "0081_hr_attendances",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1780239600000,
+      "tag": "0082_hr_leave_workflow",
+      "breakpoints": true
     }
   ]
 }

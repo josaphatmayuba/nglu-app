@@ -395,6 +395,37 @@ export class CreateHrLeaveRequestDto {
   @IsOptional()
   @IsString()
   reason?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  managerId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string | null;
+
+  @IsOptional()
+  @IsString()
+  managerComment?: string | null;
+
+  @IsOptional()
+  @IsString()
+  hrComment?: string | null;
+
+  @IsOptional()
+  @IsString()
+  decisionComment?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  decidedBy?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  isPaid?: number | null;
 }
 
 export class UpdateHrLeaveRequestDto extends PartialType(CreateHrLeaveRequestDto) {

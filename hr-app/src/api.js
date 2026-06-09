@@ -52,6 +52,7 @@ export const api = {
   hrProjectReport: () => jsonFetch("/hr/projects/report"),
   hrProjectAssignments: () => jsonFetch("/hr/project-assignments?query=all"),
   leaveRequests: () => jsonFetch("/hr/leave-requests?query=all"),
+  leaveSummary: () => jsonFetch("/hr/leave-requests/summary"),
   hrContracts: () => jsonFetch("/hr/contracts?query=all"),
   hrDocuments: () => jsonFetch("/hr/documents?query=all"),
   expenseRequests: () => jsonFetch("/hr/expense-requests?query=all"),

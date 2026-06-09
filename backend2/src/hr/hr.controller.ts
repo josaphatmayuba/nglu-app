@@ -253,6 +253,7 @@ export class HrLeaveRequestController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>) { return this.service.listLeaveRequests(q); }
+  @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.leaveSummary(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findLeaveRequest(id); }
   @Post() create(@Body() body: CreateHrLeaveRequestDto) { return this.service.createLeaveRequest(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }

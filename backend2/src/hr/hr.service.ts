@@ -625,15 +625,73 @@ export class HrService {
   }
 
   async createLeaveRequest(input: CreateHrLeaveRequestDto) {
-    await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrLeaveRequests, input, (id) => this.findLeaveRequest(id));
+    await this.validateLeaveRefs(input);
+    const payload = await this.leavePayload(input);
+    const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id));
+    if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
+    return saved;
   }
 
   async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto) {
-    await this.findLeaveRequest(id);
-    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
-    return this.updateRecord(hrLeaveRequests, id, { ...input, ...decision }, () => this.findLeaveRequest(id));
+    const current = await this.findLeaveRequest(id);
+    await this.validateLeaveRefs(input);
+    const payload = await this.leavePayload({ ...current, ...input }, id);
+    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id));
+    const saved = await this.findLeaveRequest(id);
+    if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
+    if (["rejected", "cancelled"].includes(String(saved.status || "").toLowerCase())) await this.clearLeaveAttendance(saved.id);
+    return saved;
+  }
+
+  async leaveSummary(q: Record<string, string>) {
+    const year = Number(q["year"] || new Date().getFullYear());
+    const rows = await this.db.select().from(hrLeaveRequests).where(ne(hrLeaveRequests.status, "false")).orderBy(desc(hrLeaveRequests.id));
+    const staffRows = await this.db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      status: users.status,
+    }).from(users).where(ne(users.status, "false"));
+    const byEmployee = staffRows.map((user) => {
+      const userLeaves = rows.filter((row) => Number(row.userId) === Number(user.id) && Number(row.leaveYear || this.leaveYear(row.startDate)) === year);
+      const approved = userLeaves.filter((row) => this.isFinalLeaveApproval(row.status));
+      const pending = userLeaves.filter((row) => this.isOpenLeaveStatus(row.status));
+      const entitlementDays = this.leaveEntitlementDays();
+      const usedDays = approved.reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
+      const pendingDays = pending.reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
+      return {
+        userId: user.id,
+        name: [user.firstName, user.lastName].filter(Boolean).join(" "),
+        year,
+        entitlementDays,
+        usedDays,
+        pendingDays,
+        balanceDays: Math.max(0, this.roundNumber(entitlementDays - usedDays)),
+      };
+    });
+    const totals = byEmployee.reduce((acc, row) => ({
+      employees: acc.employees + 1,
+      entitlementDays: acc.entitlementDays + row.entitlementDays,
+      usedDays: acc.usedDays + row.usedDays,
+      pendingDays: acc.pendingDays + row.pendingDays,
+      balanceDays: acc.balanceDays + row.balanceDays,
+    }), { employees: 0, entitlementDays: 0, usedDays: 0, pendingDays: 0, balanceDays: 0 });
+    return {
+      year,
+      totals: {
+        ...totals,
+        usedDays: this.roundNumber(totals.usedDays),
+        pendingDays: this.roundNumber(totals.pendingDays),
+        balanceDays: this.roundNumber(totals.balanceDays),
+      },
+      byEmployee,
+      workflow: {
+        pending: rows.filter((row) => this.isOpenLeaveStatus(row.status)).length,
+        managerApproved: rows.filter((row) => String(row.status || "").toLowerCase() === "manager_approved").length,
+        approved: rows.filter((row) => this.isFinalLeaveApproval(row.status)).length,
+        rejected: rows.filter((row) => String(row.status || "").toLowerCase() === "rejected").length,
+      },
+    };
   }
 
   listContracts(q: Record<string, string>) {
@@ -988,6 +1046,150 @@ export class HrService {
     if (input.projectId !== undefined) await this.ensureExists(hrProjects, input.projectId, "HR project not found.");
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     if (input.currencyId) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+  }
+
+  private async validateLeaveRefs(input: Partial<CreateHrLeaveRequestDto>) {
+    if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
+    if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
+    if (input.decidedBy) await this.ensureExists(users, input.decidedBy, "Decision user not found.");
+  }
+
+  private async leavePayload(input: Partial<CreateHrLeaveRequestDto> & Record<string, any>, currentId?: number) {
+    if (!input.userId) throw new BadRequestException("User is required for leave request.");
+    if (!input.type) throw new BadRequestException("Leave type is required.");
+    if (!input.startDate || !input.endDate) throw new BadRequestException("Leave dates are required.");
+    if (String(input.endDate) < String(input.startDate)) throw new BadRequestException("Leave end date must be after start date.");
+
+    const status = String(input.status || "pending").toLowerCase();
+    const requestedDays = this.leaveDays(input.startDate, input.endDate);
+    const leaveYear = this.leaveYear(input.startDate);
+    const entitlementDays = this.leaveEntitlementDays(input.type);
+    const balanceBefore = await this.leaveBalanceBefore(Number(input.userId), leaveYear, currentId);
+    const balanceAfter = this.roundNumber(balanceBefore - (this.isFinalLeaveApproval(status) ? requestedDays : 0));
+    const decisionFields: Record<string, any> = {};
+
+    if (status === "manager_approved") {
+      decisionFields.managerDecisionAt = sql`CURRENT_TIMESTAMP`;
+      decisionFields.managerComment = input.managerComment ?? input.decisionComment ?? null;
+    }
+    if (this.isFinalLeaveApproval(status)) {
+      decisionFields.hrDecisionAt = sql`CURRENT_TIMESTAMP`;
+      decisionFields.decidedAt = sql`CURRENT_TIMESTAMP`;
+      decisionFields.hrComment = input.hrComment ?? input.decisionComment ?? null;
+    }
+    if (status === "rejected") {
+      decisionFields.decidedAt = sql`CURRENT_TIMESTAMP`;
+    }
+
+    return {
+      userId: Number(input.userId),
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      requestedDays,
+      leaveYear,
+      entitlementDays,
+      balanceBefore,
+      balanceAfter,
+      isPaid: input.isPaid === 0 ? 0 : 1,
+      reason: input.reason ?? null,
+      status,
+      managerId: input.managerId ?? null,
+      managerComment: input.managerComment ?? null,
+      hrComment: input.hrComment ?? null,
+      decisionComment: input.decisionComment ?? null,
+      decidedBy: input.decidedBy ?? null,
+      ...decisionFields,
+    };
+  }
+
+  private leaveEntitlementDays(type?: string | null) {
+    const value = String(type || "").toLowerCase();
+    if (value.includes("maladie")) return 10;
+    if (value.includes("matern")) return 98;
+    if (value.includes("patern")) return 3;
+    if (value.includes("mission")) return 0;
+    return 24;
+  }
+
+  private leaveYear(dateValue?: string | null) {
+    return Number(String(dateValue || new Date().toISOString()).slice(0, 4));
+  }
+
+  private leaveDays(startDate: string, endDate: string) {
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+    let days = 0;
+    for (let cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
+      const day = cur.getUTCDay();
+      if (day !== 0 && day !== 6) days += 1;
+    }
+    return days || 1;
+  }
+
+  private async leaveBalanceBefore(userId: number, year: number, currentId?: number) {
+    const rows = await this.db
+      .select()
+      .from(hrLeaveRequests)
+      .where(and(eq(hrLeaveRequests.userId, userId), ne(hrLeaveRequests.status, "false")));
+    const used = rows
+      .filter((row) => Number(row.id) !== Number(currentId || 0))
+      .filter((row) => Number(row.leaveYear || this.leaveYear(row.startDate)) === year)
+      .filter((row) => this.isFinalLeaveApproval(row.status))
+      .reduce((sum, row) => sum + Number(row.requestedDays || this.leaveDays(row.startDate, row.endDate)), 0);
+    return this.roundNumber(this.leaveEntitlementDays() - used);
+  }
+
+  private isOpenLeaveStatus(status?: string | null) {
+    return ["pending", "submitted", "manager_approved", "hr_review"].includes(String(status || "").toLowerCase());
+  }
+
+  private isFinalLeaveApproval(status?: string | null) {
+    return ["approved", "hr_approved"].includes(String(status || "").toLowerCase());
+  }
+
+  private leaveDates(startDate: string, endDate: string) {
+    const dates: string[] = [];
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    for (let cur = new Date(start); cur <= end; cur.setUTCDate(cur.getUTCDate() + 1)) {
+      const day = cur.getUTCDay();
+      if (day !== 0 && day !== 6) dates.push(cur.toISOString().slice(0, 10));
+    }
+    return dates;
+  }
+
+  private async applyLeaveToAttendance(leave: any) {
+    const existing = await this.db
+      .select({ workDate: hrAttendances.workDate })
+      .from(hrAttendances)
+      .where(and(eq(hrAttendances.leaveRequestId, Number(leave.id)), ne(hrAttendances.status, "false")));
+    const existingDates = new Set(existing.map((row) => String(row.workDate)));
+    const dates = this.leaveDates(leave.startDate, leave.endDate).filter((date) => !existingDates.has(date));
+    if (!dates.length) return;
+
+    await this.db.insert(hrAttendances).values(dates.map((workDate) => ({
+      userId: Number(leave.userId),
+      workDate,
+      leaveRequestId: Number(leave.id),
+      workedHours: 0,
+      lateMinutes: 0,
+      overtimeHours: 0,
+      absenceHours: 8,
+      source: "leave",
+      status: leave.isPaid === 0 ? "unpaid_leave" : "paid_leave",
+      note: [leave.type, leave.reason].filter(Boolean).join(" - ") || "Conge approuve",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })));
+  }
+
+  private async clearLeaveAttendance(leaveRequestId: number) {
+    await this.db
+      .update(hrAttendances)
+      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(hrAttendances.leaveRequestId, Number(leaveRequestId)));
   }
 
   private async validateAttendanceRefs(input: Partial<CreateHrAttendanceDto>) {
