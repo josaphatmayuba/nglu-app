@@ -146,7 +146,13 @@ pipelines:
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Chaque deploiement prod est en trigger manuel (clic dans Bitbucket).
+    # NB: Bitbucket interdit qu'un premier step soit manuel → step "gate" auto
+    # (ne déploie rien) en tête, puis les déploiements manuels en parallèle.
     master:
+      - step:
+          name: Gate prod (auto, aucun déploiement)
+          script:
+            - echo "Master mis à jour. Lance manuellement les steps de déploiement prod ci-dessous."
       - parallel:
           - step:
               name: Backend2 → prod (manuel)
