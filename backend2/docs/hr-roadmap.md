@@ -215,7 +215,22 @@ Objectif: gerer les candidats jusqu'a l'embauche.
 - Pipeline nouveau, entrevue, test, offre, accepte, embauche.
 - Conversion candidat -> employe.
 
-Statut: a faire.
+Statut: termine.
+
+Fait:
+- Migration 0084: table hr_candidates avec profil complet (identite, profil pro, candidature, calendrier).
+- Pipeline 7 etapes: nouveau, entrevue, test, offre, accepte, embauche, rejete.
+- API GET hr/candidates/summary: KPIs pipeline (nb par etape, en cours, convertis, avec entretien).
+- API CRUD hr/candidates: creation, liste, mise a jour, suppression.
+- API POST hr/candidates/:id/convert: conversion automatique candidat -> employe (creation compte utilisateur, matricule EMP-YYYY-0001, mot de passe hache).
+- Page Recrutement reecrite: KPIs pipeline, mini-kanban par etape, tableau des candidats avec filtres, deplacement d'etape inline, modal conversion avec choix role/departement/date d'entree.
+- Postes ouverts (hr_recruitment_offers actifs) affiches en bandeau.
+- Dossier employe 360: panneau "Dossier de candidature" affiche si l'employe a ete converti depuis un candidat (poste anterieur, experience, entretien, competences).
+
+Reste:
+- Upload CV et documents joints (stockage central).
+- Email automatique au candidat a chaque changement d'etape.
+- Score d'evaluation candidat avec grille de criteres.
 
 ## Stade 10 - IA RH
 

@@ -897,3 +897,160 @@ export class UpdateHrRecruitmentOfferDto extends PartialType(CreateHrRecruitment
   @IsString()
   status?: string;
 }
+
+export class CreateHrCandidateDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  offerId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string | null;
+
+  @IsOptional()
+  @IsString()
+  phone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  nationality?: string | null;
+
+  @IsOptional()
+  @IsString()
+  gender?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string | null;
+
+  @IsOptional()
+  @IsString()
+  currentTitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  currentEmployer?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  yearsExperience?: number | null;
+
+  @IsOptional()
+  @IsString()
+  educationLevel?: string | null;
+
+  @IsOptional()
+  @IsString()
+  skills?: string | null;
+
+  @IsOptional()
+  @IsString()
+  languages?: string | null;
+
+  @IsOptional()
+  @IsString()
+  source?: string | null;
+
+  @IsOptional()
+  @IsString()
+  cvUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  portfolioUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  linkedinUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  coverLetterUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  stage?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  rating?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  interviewDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  testDate?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  offerDate?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  offerAmount?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  offerCurrencyId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  assignedTo?: number | null;
+
+  @IsOptional()
+  @IsString()
+  decisionComment?: string | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateHrCandidateDto extends PartialType(CreateHrCandidateDto) {
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class ConvertCandidateDto {
+  @IsOptional()
+  @IsString()
+  username?: string | null;
+
+  @IsOptional()
+  @IsString()
+  password?: string | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  roleId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  departmentId?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  joinDate?: string | null;
+}

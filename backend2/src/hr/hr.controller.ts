@@ -7,6 +7,7 @@ import {
   awards,
   designationHistories,
   designations,
+  hrCandidates,
   hrContracts,
   hrAttendances,
   hrDocuments,
@@ -40,6 +41,9 @@ import {
   CreateHrPerformanceReviewDto,
   CreateHrProjectAssignmentDto,
   CreateHrProjectDto,
+  CreateHrCandidateDto,
+  UpdateHrCandidateDto,
+  ConvertCandidateDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -409,4 +413,22 @@ export class HrRecruitmentOfferController {
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrRecruitmentOffers, id); }
+}
+
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTags("hr-candidates")
+@Controller("hr/candidates")
+export class HrCandidateController {
+  constructor(private readonly service: HrService) {}
+
+  @Get("summary") summary() { return this.service.candidateSummary(); }
+  @Get() list(@Query() q: Record<string, string>) { return this.service.listCandidates(q); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findCandidate(id); }
+  @Post() create(@Body() body: CreateHrCandidateDto) { return this.service.createCandidate(body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
+  @Post(":id/convert") convert(@Param("id", ParseIntPipe) id: number, @Body() body: ConvertCandidateDto) { return this.service.convertCandidateToEmployee(id, body); }
+  @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrCandidates, id); }
 }

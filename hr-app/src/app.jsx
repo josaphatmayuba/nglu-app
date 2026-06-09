@@ -291,6 +291,8 @@ const EMPTY_DATA = {
   timesheets: [],
   employeeRequests: [],
   recruitmentOffers: [],
+  candidates: [],
+  candidateSummary: { total: 0, pending: 0, converted: 0, withInterview: 0, pipeline: { nouveau: 0, entrevue: 0, test: 0, offre: 0, accepte: 0, embauche: 0, rejete: 0 } },
   payrollSummary: { period: "all", bulletins: 0, employees: 0, grossTotal: 0, netTotal: 0, taxTotal: 0, cnssTotal: 0, workflow: { draft: 0, validated: 0, paid: 0 }, periods: [] },
   documentSummary: { total: 0, generated: 0, signed: 0, pending: 0, employees: 0, byType: {} },
 };
@@ -846,6 +848,46 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+Object.assign(ACTION_FORMS, {
+  candidate: {
+    title: "Nouveau candidat",
+    submit: "Enregistrer",
+    success: "Candidat enregistre.",
+    wide: true,
+    defaults: { offerId: "", firstName: "", lastName: "", email: "", phone: "", nationality: "", gender: "", birthDate: "", currentTitle: "", currentEmployer: "", yearsExperience: "", educationLevel: "", skills: "", languages: "", source: "", cvUrl: "", linkedinUrl: "", stage: "nouveau", interviewDate: "", testDate: "", offerDate: "", offerAmount: "", offerCurrencyId: "", notes: "" },
+    fields: [
+      { kind: "section", label: "Identite" },
+      { key: "firstName", label: "Prenom", required: true },
+      { key: "lastName", label: "Nom", required: true },
+      { key: "email", label: "Email" },
+      { key: "phone", label: "Telephone" },
+      { key: "gender", label: "Genre", type: "select", options: [{ value: "", label: "Non renseigne" }, { value: "Masculin", label: "Masculin" }, { value: "Feminin", label: "Feminin" }] },
+      { key: "birthDate", label: "Date de naissance", type: "date" },
+      { key: "nationality", label: "Nationalite" },
+      { kind: "section", label: "Profil professionnel" },
+      { key: "currentTitle", label: "Poste actuel" },
+      { key: "currentEmployer", label: "Employeur actuel" },
+      { key: "yearsExperience", label: "Annees d'experience", type: "number" },
+      { key: "educationLevel", label: "Niveau d'etudes", type: "select", options: [{ value: "", label: "Non renseigne" }, { value: "Bac", label: "Bac" }, { value: "Bac+2", label: "Bac+2" }, { value: "Bac+3 / Licence", label: "Bac+3 / Licence" }, { value: "Bac+5 / Master", label: "Bac+5 / Master" }, { value: "Doctorat", label: "Doctorat" }, { value: "Autre", label: "Autre" }] },
+      { key: "skills", label: "Competences (mots-cles)", type: "textarea", wide: true },
+      { key: "languages", label: "Langues" },
+      { kind: "section", label: "Candidature" },
+      { key: "offerId", label: "Poste vise", type: "select", optionKey: "offers" },
+      { key: "source", label: "Source", type: "select", options: [{ value: "", label: "Non renseigne" }, { value: "Annonce LinkedIn", label: "Annonce LinkedIn" }, { value: "Site carriere", label: "Site carriere" }, { value: "Recommandation", label: "Recommandation" }, { value: "Agence", label: "Agence" }, { value: "Candidature spontanee", label: "Candidature spontanee" }, { value: "Autre", label: "Autre" }] },
+      { key: "stage", label: "Etape", type: "select", options: CANDIDATE_STAGES.map((s) => ({ value: s.value, label: s.label })) },
+      { key: "cvUrl", label: "URL du CV" },
+      { key: "linkedinUrl", label: "Profil LinkedIn" },
+      { kind: "section", label: "Calendrier" },
+      { key: "interviewDate", label: "Date d'entretien", type: "date" },
+      { key: "testDate", label: "Date du test", type: "date" },
+      { key: "offerDate", label: "Date d'offre", type: "date" },
+      { key: "offerAmount", label: "Montant de l'offre", type: "number" },
+      { key: "offerCurrencyId", label: "Devise offre", type: "select", optionKey: "currencies" },
+      { key: "notes", label: "Notes", type: "textarea", wide: true },
+    ],
+  },
+});
+
 const SELF_ACTION_FORMS = {
   leaveRequest: {
     title: "Demander un conge",
@@ -972,9 +1014,9 @@ function App() {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.attendances(), api.attendanceSummary(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.leaveSummary(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
-      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers(), api.payrollSummary(), api.hrDocumentSummary()
+      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers(), api.payrollSummary(), api.hrDocumentSummary(), api.hrCandidates(), api.candidateSummary()
     ])
-      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers, payrollSummary, documentSummary]) => {
+      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers, payrollSummary, documentSummary, candidatesRes, candidateSummaryRes]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -1008,6 +1050,8 @@ function App() {
           timesheets: arrayFrom(timesheets.value, "getAllHrTimesheet"),
           employeeRequests: arrayFrom(employeeRequests.value, "getAllHrEmployeeRequest"),
           recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
+          candidates: arrayFrom(candidatesRes.value, "getAllHrCandidate"),
+          candidateSummary: candidateSummaryRes.value || EMPTY_DATA.candidateSummary,
           payrollSummary: payrollSummary.value || EMPTY_DATA.payrollSummary,
           documentSummary: documentSummary.value || EMPTY_DATA.documentSummary,
         };
@@ -1155,6 +1199,11 @@ function App() {
         }
         if (kind === "employeeRequest") await api.createEmployeeRequest(cleanPayload({ userId: Number(form.userId), requestType: form.requestType, subject: form.subject, requestedDate: form.requestedDate, description: form.description || null }));
         if (kind === "recruitmentOffer") await api.createRecruitmentOffer(cleanPayload({ role: form.role, departmentId: toNum(form.departmentId), deadline: form.deadline || null, description: form.description || null }));
+        if (kind === "candidate") {
+          const body = cleanPayload({ offerId: toNum(form.offerId), firstName: form.firstName, lastName: form.lastName, email: form.email || null, phone: form.phone || null, nationality: form.nationality || null, gender: form.gender || null, birthDate: form.birthDate || null, currentTitle: form.currentTitle || null, currentEmployer: form.currentEmployer || null, yearsExperience: toNum(form.yearsExperience), educationLevel: form.educationLevel || null, skills: form.skills || null, languages: form.languages || null, source: form.source || null, cvUrl: form.cvUrl || null, linkedinUrl: form.linkedinUrl || null, stage: form.stage || "nouveau", interviewDate: form.interviewDate || null, testDate: form.testDate || null, offerDate: form.offerDate || null, offerAmount: toNum(form.offerAmount), offerCurrencyId: toNum(form.offerCurrencyId), notes: form.notes || null });
+          if (form.id) await api.updateCandidate(form.id, body);
+          else await api.createCandidate(body);
+        }
         setModal(null); load(); notify(ACTION_FORMS[kind]?.success || `${titleFor(kind)} enregistrÃ© avec l'API.`);
         return;
       }
@@ -1232,7 +1281,7 @@ function App() {
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
     formation: <Formation {...ctx} />,
-    recrutement: <Recrutement {...ctx} />,
+    recrutement: <Recrutement {...ctx} reload={load} />,
     projets: <ProjetsONG data={data} staff={staff} setModal={setModal} />,
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
@@ -1560,6 +1609,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
     map.set(key, (map.get(key) || 0) + Number(row.hours || 0));
     return map;
   }, new Map()).entries()].map(([project, hours]) => ({ project, hours }));
+  const candidatureRecord = (data.candidates || []).find((c) => String(c.convertedUserId) === String(userId));
   const tabs = [["resume", "Resume"], ["contrats", "Contrats"], ["paie", "Paie"], ["temps", "Temps"], ["documents", "Documents"], ["developpement", "Developpement"]];
   const row = (label, value) => <div><span>{label}</span><strong>{value || "-"}</strong></div>;
   const statusChip = (status) => <span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>;
@@ -1708,6 +1758,22 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
             <Employee360Panel title="Documents signes">
               <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(d.content); w.document.close(); }}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
             </Employee360Panel>
+            {candidatureRecord && (
+              <Employee360Panel title="Dossier de candidature">
+                <div style={{ fontSize: 13 }}>
+                  <div className="kv">
+                    <div><span>Nom</span><span>{candidatureRecord.firstName} {candidatureRecord.lastName}</span></div>
+                    {candidatureRecord.currentTitle && <div><span>Poste anterieur</span><span>{candidatureRecord.currentTitle}{candidatureRecord.currentEmployer ? ` — ${candidatureRecord.currentEmployer}` : ""}</span></div>}
+                    {candidatureRecord.yearsExperience != null && <div><span>Experience</span><span>{candidatureRecord.yearsExperience} an(s)</span></div>}
+                    {candidatureRecord.educationLevel && <div><span>Formation</span><span>{candidatureRecord.educationLevel}</span></div>}
+                    {candidatureRecord.source && <div><span>Source</span><span>{candidatureRecord.source}</span></div>}
+                    {candidatureRecord.interviewDate && <div><span>Date entretien</span><span>{dateOnly(candidatureRecord.interviewDate)}</span></div>}
+                    {candidatureRecord.convertedAt && <div><span>Date embauche</span><span>{dateOnly(candidatureRecord.convertedAt)}</span></div>}
+                  </div>
+                  {candidatureRecord.skills && <div style={{ marginTop: 8 }}><span className="muted" style={{ fontSize: 11 }}>Competences : </span>{candidatureRecord.skills}</div>}
+                </div>
+              </Employee360Panel>
+            )}
           </div>
         )}
 
@@ -2396,13 +2462,212 @@ function Formation({ data, setModal }) {
 }
 
 /* Recrutement */
-function Recrutement({ data, setModal }) {
-  const rows = data.recruitmentOffers || [];
+const CANDIDATE_STAGES = [
+  { value: "nouveau", label: "Nouveau", color: "ink" },
+  { value: "entrevue", label: "Entrevue", color: "sky" },
+  { value: "test", label: "Test", color: "amber" },
+  { value: "offre", label: "Offre", color: "accent-soft" },
+  { value: "accepte", label: "Accepte", color: "emerald" },
+  { value: "embauche", label: "Embauche", color: "emerald" },
+  { value: "rejete", label: "Rejete", color: "rose" },
+];
+const stageChip = (stage) => {
+  const s = CANDIDATE_STAGES.find((x) => x.value === String(stage || "").toLowerCase()) || { color: "ink" };
+  return s.color;
+};
+const stageLabel = (stage) => {
+  const s = CANDIDATE_STAGES.find((x) => x.value === String(stage || "").toLowerCase());
+  return s ? s.label : (stage ? String(stage) : "Nouveau");
+};
+
+function Recrutement({ data, reload, setModal }) {
+  const candidates = data.candidates || [];
+  const offers = data.recruitmentOffers || [];
+  const summary = data.candidateSummary || EMPTY_DATA.candidateSummary;
+  const [search, setSearch] = React.useState("");
+  const [stageFilter, setStageFilter] = React.useState("all");
+  const [busy, setBusy] = React.useState(false);
+  const [convertModal, setConvertModal] = React.useState(null);
+  const [convertForm, setConvertForm] = React.useState({ username: "", password: "", roleId: "", departmentId: "", joinDate: TODAY });
+
+  const filtered = candidates.filter((c) => {
+    const name = `${c.firstName || ""} ${c.lastName || ""}`.toLowerCase();
+    const matchSearch = !search || name.includes(search.toLowerCase()) || (c.email || "").toLowerCase().includes(search.toLowerCase());
+    const matchStage = stageFilter === "all" || String(c.stage || "nouveau") === stageFilter;
+    return matchSearch && matchStage;
+  });
+
+  const pipeline = summary.pipeline || {};
+
+  async function moveStage(id, stage) {
+    setBusy(true);
+    try { await api.updateCandidate(id, { stage }); reload(); notify(`Candidat déplacé vers « ${stageLabel(stage)} ».`); }
+    catch (e) { notify(String(e.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  async function doConvert() {
+    if (!convertModal) return;
+    setBusy(true);
+    try {
+      const res = await api.convertCandidate(convertModal.id, {
+        username: convertForm.username || undefined,
+        password: convertForm.password || undefined,
+        roleId: convertForm.roleId ? Number(convertForm.roleId) : undefined,
+        departmentId: convertForm.departmentId ? Number(convertForm.departmentId) : undefined,
+        joinDate: convertForm.joinDate || undefined,
+      });
+      setConvertModal(null);
+      reload();
+      notify(`Candidat converti en employé : ${res.employeeId} (login: ${res.username}).`);
+    }
+    catch (e) { notify(String(e.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  async function deleteCandidate(id) {
+    if (!window.confirm("Supprimer ce candidat ?")) return;
+    setBusy(true);
+    try { await api.deleteCandidate(id); reload(); notify("Candidat supprimé."); }
+    catch (e) { notify(String(e.message || e)); }
+    finally { setBusy(false); }
+  }
+
+  const exportCandidates = () => exportCsv("candidats.csv",
+    ["Nom", "Prenom", "Email", "Telephone", "Poste actuel", "Experience (ans)", "Etape", "Date entretien", "Statut"],
+    filtered.map((c) => [c.lastName || "", c.firstName || "", c.email || "", c.phone || "", c.currentTitle || "", c.yearsExperience ?? "", stageLabel(c.stage), dateOnly(c.interviewDate) || "", statusLabel(c.status)])
+  );
+
   return (
     <>
-      <PageHead eyebrow="Pipeline" title="Recrutement" action="Nouvelle offre" onAction={() => setModal({ kind: "recruitmentOffer" })} />
-      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Offres" value={rows.length} /><Mini label="Ouvertes" value={rows.filter((r) => isApproved(r.status)).length} /><Mini label="Avec deadline" value={rows.filter((r) => r.deadline).length} /></div>
-      <div className="card pad table-card"><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 620 }}><thead><tr><th>Role</th><th>Departement</th><th>Deadline</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((r) => <tr key={r.id}><td style={{ fontWeight: 500 }}>{r.role || "Offre"}</td><td>{r.department?.name || r.departmentId || "-"}</td><td>{dateOnly(r.deadline) || "-"}</td><td className="r"><span className={"chip " + chipForStatus(r.status)}>{statusLabel(r.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucune offre de recrutement en base" />}</div>
+      <PageHead eyebrow="Pipeline RH" title="Recrutement" action="Nouveau candidat" actionIcon="userPlus" onAction={() => setModal({ kind: "candidate" })} />
+
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label="Candidats actifs" value={summary.total} />
+        <Mini label="En cours" value={summary.pending} />
+        <Mini label="Avec entretien" value={summary.withInterview} />
+        <Mini label="Convertis employe" value={summary.converted} />
+      </div>
+
+      {/* Pipeline kanban-style KPIs */}
+      <div className="card pad" style={{ marginBottom: 16 }}>
+        <h3 className="block-title font-display">Pipeline de candidature</h3>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {CANDIDATE_STAGES.map((s) => (
+            <div key={s.value} className="card" style={{ flex: "1 1 100px", minWidth: 90, padding: "10px 12px", cursor: "pointer", border: stageFilter === s.value ? "2px solid var(--teal-500)" : "1px solid var(--ink-100)" }}
+              onClick={() => setStageFilter(stageFilter === s.value ? "all" : s.value)}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--ink-800)" }}>{pipeline[s.value] ?? 0}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Offres de poste ouvertes */}
+      {offers.filter((o) => !["closed", "false"].includes(String(o.status || ""))).length > 0 && (
+        <div className="card pad" style={{ marginBottom: 16 }}>
+          <h3 className="block-title font-display">Postes ouverts</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {offers.filter((o) => !["closed", "false"].includes(String(o.status || ""))).map((o) => (
+              <span key={o.id} className="chip emerald">{o.role}{o.deadline ? ` — ${dateOnly(o.deadline)}` : ""}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Table candidats */}
+      <div className="card pad table-card">
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <div className="search-box" style={{ flex: 1, minWidth: 180 }}>
+            <Icon name="search" /><input placeholder="Rechercher..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <select className="select" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} style={{ width: 140 }}>
+            <option value="all">Toutes les etapes</option>
+            {CANDIDATE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <button className="btn btn-ghost" onClick={exportCandidates}><Icon name="download" /> CSV</button>
+        </div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 780 }}>
+            <thead>
+              <tr><th>Candidat</th><th>Poste</th><th>Experience</th><th>Entretien</th><th>Etape</th><th>Source</th><th className="r">Actions</th></tr>
+            </thead>
+            <tbody>
+              {filtered.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{c.firstName} {c.lastName}</div>
+                    <div className="tiny muted">{c.email || c.phone || "-"}</div>
+                  </td>
+                  <td>
+                    <div>{c.currentTitle || "-"}</div>
+                    <div className="tiny muted">{c.currentEmployer || ""}</div>
+                  </td>
+                  <td>{c.yearsExperience != null ? `${c.yearsExperience} an(s)` : "-"}</td>
+                  <td>{dateOnly(c.interviewDate) || "-"}</td>
+                  <td>
+                    <select className="select" style={{ height: 28, fontSize: 12, padding: "0 8px" }} value={c.stage || "nouveau"} disabled={busy}
+                      onChange={(e) => moveStage(c.id, e.target.value)}>
+                      {CANDIDATE_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </td>
+                  <td className="tiny muted">{c.source || "-"}</td>
+                  <td className="r" style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button className="btn btn-ghost" style={{ height: 28, fontSize: 12, padding: "0 8px" }}
+                      onClick={() => setModal({ kind: "candidate", prefill: c })}>
+                      <Icon name="edit" />
+                    </button>
+                    {!c.convertedUserId && ["accepte", "embauche"].includes(String(c.stage || "")) && (
+                      <button className="btn" style={{ height: 28, fontSize: 12, padding: "0 8px", background: "var(--teal-600)", color: "#fff" }}
+                        onClick={() => { setConvertModal(c); setConvertForm({ username: "", password: "", roleId: "", departmentId: "", joinDate: TODAY }); }}>
+                        <Icon name="userPlus" /> Embaucher
+                      </button>
+                    )}
+                    {c.convertedUserId && <span className="chip emerald" style={{ fontSize: 11 }}>Employe #{c.convertedUserId}</span>}
+                    <button className="btn btn-ghost" style={{ height: 28, fontSize: 12, padding: "0 8px", color: "var(--rose-600)" }}
+                      onClick={() => deleteCandidate(c.id)}>
+                      <Icon name="x" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length === 0 && <EmptyState title="Aucun candidat" detail="Ajoutez un candidat pour commencer le pipeline." />}
+      </div>
+
+      {/* Modal conversion candidat → employé */}
+      {convertModal && (
+        <div className="modal-backdrop" onClick={() => setConvertModal(null)}>
+          <div className="modal-box" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head"><h2 className="modal-title">Embaucher {convertModal.firstName} {convertModal.lastName}</h2><button className="modal-close" onClick={() => setConvertModal(null)}><Icon name="x" /></button></div>
+            <div className="modal-body">
+              <p className="muted" style={{ fontSize: 13, marginBottom: 12 }}>Un compte employé sera créé. Les champs vides utiliseront des valeurs par défaut.</p>
+              <label className="field-label">Nom d'utilisateur (optionnel)</label>
+              <input className="input" value={convertForm.username} placeholder={`${(convertModal.firstName || "").toLowerCase()}.${(convertModal.lastName || "").toLowerCase()}`} onChange={(e) => setConvertForm((f) => ({ ...f, username: e.target.value }))} />
+              <label className="field-label" style={{ marginTop: 10 }}>Mot de passe initial (optionnel)</label>
+              <input className="input" type="password" placeholder="Par défaut: nom+année" value={convertForm.password} onChange={(e) => setConvertForm((f) => ({ ...f, password: e.target.value }))} />
+              <label className="field-label" style={{ marginTop: 10 }}>Rôle</label>
+              <select className="select" value={convertForm.roleId} onChange={(e) => setConvertForm((f) => ({ ...f, roleId: e.target.value }))}>
+                <option value="">-- Rôle par défaut (Employé) --</option>
+                {(data.roles || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+              <label className="field-label" style={{ marginTop: 10 }}>Département</label>
+              <select className="select" value={convertForm.departmentId} onChange={(e) => setConvertForm((f) => ({ ...f, departmentId: e.target.value }))}>
+                <option value="">-- Aucun --</option>
+                {(data.departments || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <label className="field-label" style={{ marginTop: 10 }}>Date d'entrée</label>
+              <input className="input" type="date" value={convertForm.joinDate} onChange={(e) => setConvertForm((f) => ({ ...f, joinDate: e.target.value }))} />
+            </div>
+            <div className="modal-foot">
+              <button className="btn btn-ghost" onClick={() => setConvertModal(null)}>Annuler</button>
+              <button className="btn" style={{ background: "var(--teal-600)", color: "#fff" }} disabled={busy} onClick={doConvert}>{busy ? "..." : "Confirmer l'embauche"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -2534,6 +2799,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
     currencies: currencyOptions(),
     contracts: (data.contracts || []).map((c) => ({ value: c.id, label: [c.reference, personName(staff, c.userId), c.contractType].filter(Boolean).join(" - ") })),
     projects: (data.projects || []).map((p) => ({ value: p.id, label: [p.code, p.name, p.donor].filter(Boolean).join(" - ") })),
+    offers: (data.recruitmentOffers || []).filter((o) => !["closed", "false"].includes(String(o.status || ""))).map((o) => ({ value: o.id, label: o.role })),
   };
   const isMoneyField = (field) => {
     if (!field) return false;

@@ -92,5 +92,11 @@ export const api = {
   createTimesheet: (body) => jsonFetch("/hr/timesheets", { method: "POST", body: JSON.stringify(body) }),
   createEmployeeRequest: (body) => jsonFetch("/hr/employee-requests", { method: "POST", body: JSON.stringify(body) }),
   updateEmployeeRequest: (id, body) => jsonFetch(`/hr/employee-requests/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  createRecruitmentOffer: (body) => jsonFetch("/hr/recruitment-offers", { method: "POST", body: JSON.stringify(body) })
+  createRecruitmentOffer: (body) => jsonFetch("/hr/recruitment-offers", { method: "POST", body: JSON.stringify(body) }),
+  hrCandidates: () => jsonFetch("/hr/candidates?query=all"),
+  candidateSummary: () => jsonFetch("/hr/candidates/summary"),
+  createCandidate: (body) => jsonFetch("/hr/candidates", { method: "POST", body: JSON.stringify(body) }),
+  updateCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  convertCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
+  deleteCandidate: (id) => jsonFetch(`/hr/candidates/${id}`, { method: "DELETE" })
 };

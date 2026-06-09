@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import * as bcrypt from "bcryptjs";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -11,6 +12,7 @@ import {
   designations,
   hrContracts,
   hrAttendances,
+  hrCandidates,
   hrDocuments,
   hrEmployeeRequests,
   hrExpenseRequests,
@@ -46,6 +48,9 @@ import {
   CreateHrPerformanceReviewDto,
   CreateHrProjectAssignmentDto,
   CreateHrProjectDto,
+  CreateHrCandidateDto,
+  UpdateHrCandidateDto,
+  ConvertCandidateDto,
   CreateHrRecruitmentOfferDto,
   CreateHrSocialDeclarationDto,
   CreateHrTrainingSessionDto,
@@ -1144,6 +1149,101 @@ ${footer}`;
     await this.findRecruitmentOffer(id);
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
     return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id));
+  }
+
+  // ─── Stade 9: Recrutement / Candidats ────────────────────────────────────────
+
+  listCandidates(q: Record<string, string>) {
+    return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate");
+  }
+
+  findCandidate(id: number) {
+    return this.findOne(hrCandidates, id, "Candidate not found.");
+  }
+
+  async createCandidate(input: CreateHrCandidateDto) {
+    if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
+    return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id));
+  }
+
+  async updateCandidate(id: number, input: UpdateHrCandidateDto) {
+    await this.findCandidate(id);
+    if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
+    return this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id));
+  }
+
+  async candidateSummary() {
+    const rows = await this.db.select().from(hrCandidates).where(eq(hrCandidates.status, "active"));
+    const pipeline: Record<string, number> = {
+      nouveau: 0, entrevue: 0, test: 0, offre: 0, accepte: 0, embauche: 0, rejete: 0,
+    };
+    for (const row of rows) {
+      const stage = String(row.stage || "nouveau").toLowerCase();
+      pipeline[stage] = (pipeline[stage] ?? 0) + 1;
+    }
+    const converted = rows.filter((r) => r.convertedUserId != null).length;
+    const withInterview = rows.filter((r) => r.interviewDate != null).length;
+    const pending = rows.filter((r) => !["embauche", "rejete"].includes(String(r.stage || "").toLowerCase())).length;
+    return {
+      total: rows.length,
+      pipeline,
+      converted,
+      withInterview,
+      pending,
+    };
+  }
+
+  async convertCandidateToEmployee(id: number, input: ConvertCandidateDto) {
+    const candidate = await this.findCandidate(id);
+    if (candidate.convertedUserId) {
+      throw new BadRequestException("Candidate already converted to employee.");
+    }
+
+    const year = String(new Date().getFullYear());
+    const pattern = `EMP-${year}-%`;
+    const [{ total }] = await this.db
+      .select({ total: count(users.id) })
+      .from(users)
+      .where(like(users.employeeId, pattern));
+    const employeeId = `EMP-${year}-${String(Number(total || 0) + 1).padStart(4, "0")}`;
+
+    const username = input.username || `${String(candidate.firstName).toLowerCase()}.${String(candidate.lastName).toLowerCase()}`.replace(/\s+/g, ".");
+    const rawPassword = input.password || `${String(candidate.lastName).toLowerCase()}${year}`;
+    const hashedPassword = await bcrypt.hash(rawPassword, 10);
+
+    const [result] = await this.db.insert(users).values({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      email: candidate.email ?? null,
+      phone: candidate.phone ?? null,
+      gender: candidate.gender ?? null,
+      birthDate: candidate.birthDate ?? null,
+      nationality: candidate.nationality ?? null,
+      username,
+      password: hashedPassword,
+      roleId: input.roleId ?? 2,
+      departmentId: input.departmentId ?? null,
+      joinDate: input.joinDate ? new Date(input.joinDate) : new Date(),
+      employeeId,
+      status: "true",
+      isLogin: "false",
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const newUserId = Number(result.insertId);
+
+    await this.db
+      .update(hrCandidates)
+      .set({
+        convertedUserId: newUserId,
+        convertedAt: sql`CURRENT_TIMESTAMP`,
+        stage: "embauche",
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(hrCandidates.id, id));
+
+    return { candidateId: id, userId: newUserId, employeeId, username };
   }
 
   async staffOverview() {

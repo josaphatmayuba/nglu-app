@@ -449,6 +449,13 @@
       "when": 1780243200000,
       "tag": "0083_hr_document_generation",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1780246800000,
+      "tag": "0084_hr_candidates",
+      "breakpoints": true
     }
   ]
 }
