@@ -41,6 +41,17 @@ pipelines:
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
+              name: Middleware → dev
+              condition: { changesets: { includePaths: ["middleware/**", "docker-compose.dev.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+
+          - step:
               name: Frontend → dev
               caches: [node-frontend]
               condition: { changesets: { includePaths: ["frontend/**"] } }
@@ -146,6 +157,18 @@ pipelines:
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Middleware → prod (manuel)
+              trigger: manual
+              condition: { changesets: { includePaths: ["middleware/**", "docker-compose.prod.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
@@ -255,7 +278,8 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → dev (full)
               script:
@@ -277,7 +301,8 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo skip)"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - scp -o StrictHostKeyChecking=no -r middleware $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2 middleware"
           - step:
               name: Apps statiques → prod (full)
               script:
