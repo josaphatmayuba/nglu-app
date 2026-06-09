@@ -48,6 +48,22 @@ export const api = {
   attendanceSummary: () => jsonFetch("/hr/attendances/summary"),
   salaryHistory: () => jsonFetch("/salary-history?page=1&count=20"),
   payrolls: () => jsonFetch("/hr/payrolls?query=all"),
+  payrollHtml: async (id) => {
+    const res = await fetch(`${API_ROOT}/hr/payrolls/${id}/html`, { headers: { ...authHeaders() } });
+    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    return res.text();
+  },
+  // Téléchargement authentifié (un <a href> ne porte pas le JWT -> 401).
+  downloadAuth: async (path, filename) => {
+    const res = await fetch(`${API_ROOT}${path}`, { headers: { ...authHeaders() } });
+    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   payrollSummary: (period) => jsonFetch(`/hr/payrolls/summary${period ? `?period=${period}` : ""}`),
   generatePayroll: (userId, period) => jsonFetch(`/hr/payrolls/generate?userId=${userId}${period ? `&period=${period}` : ""}`),
   hrProjects: () => jsonFetch("/hr/projects?query=all"),
@@ -83,6 +99,9 @@ export const api = {
   createHrContract: (body) => jsonFetch("/hr/contracts", { method: "POST", body: JSON.stringify(body) }),
   hrDocumentSummary: () => jsonFetch("/hr/documents/summary"),
   generateHrDocument: (body) => jsonFetch("/hr/documents/generate", { method: "POST", body: JSON.stringify(body) }),
+  submitHrDocument: (id) => jsonFetch(`/hr/documents/${id}/submit`, { method: "POST", body: JSON.stringify({}) }),
+  approveHrDocument: (id, comment) => jsonFetch(`/hr/documents/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+  rejectHrDocument: (id, comment) => jsonFetch(`/hr/documents/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
   signHrDocument: (id, signedBy) => jsonFetch(`/hr/documents/${id}/sign`, { method: "POST", body: JSON.stringify({ signedBy }) }),
   createHrDocument: (body) => jsonFetch("/hr/documents", { method: "POST", body: JSON.stringify(body) }),
   createExpenseRequest: (body) => jsonFetch("/hr/expense-requests", { method: "POST", body: JSON.stringify(body) }),

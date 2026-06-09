@@ -2034,6 +2034,12 @@ function Paie({ data, staff, masse, setModal, reload }) {
   const rows = data.salaries || [];
   const payrollRows = data.payrolls || [];
   const summary = data.payrollSummary || EMPTY_DATA.payrollSummary;
+  const [payrollPreview, setPayrollPreview] = React.useState(null); // { html } ou { loading:true }
+  const openPayrollPreview = async (p) => {
+    setPayrollPreview({ loading: true });
+    try { setPayrollPreview({ html: await api.payrollHtml(p.id) }); }
+    catch (e) { setPayrollPreview(null); alert(e.message); }
+  };
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
@@ -2174,14 +2180,29 @@ function Paie({ data, staff, masse, setModal, reload }) {
                 {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--red-500, #ef4444)" }} onClick={() => handleReject(p)}>Rejeter</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
-                <a href={`${API_ROOT}/hr/payrolls/${p.id}/html`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>Aperçu</a>
-                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>PDF ↓</a>
+                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openPayrollPreview(p)}>Aperçu</button>
+                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/payrolls/${p.id}/pdf`, `fiche-paie-${p.id}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
               </td>
             </tr>;
           })}</tbody>
         </table></div>
         {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin ou Generer depuis contrat pour creer la premiere paie." : "Modifie la recherche ou les filtres."} />}
       </div>
+
+      {payrollPreview && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setPayrollPreview(null)}>
+          <div style={{ background: "#fff", borderRadius: 10, width: "min(820px,96vw)", maxHeight: "90vh", overflow: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.22)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>Aperçu du bulletin</span>
+              <button type="button" className="link" onClick={() => setPayrollPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+            </div>
+            {payrollPreview.loading
+              ? <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Chargement…</div>
+              : <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: payrollPreview.html }} />}
+          </div>
+        </div>
+      )}
+
       <div className="card pad table-card" style={{ marginTop: 16 }}>
         <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><div style={{ display: "flex", gap: 10 }}><button type="button" className="link" onClick={() => setModal({ kind: "salary" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Nouveau salaire</button><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div></div>
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 760 }}>
@@ -2274,6 +2295,15 @@ function Dossiers({ data, staff, setModal, reload }) {
     } catch (e) { alert(e.message); }
   };
 
+  // Workflow de validation : draft/received -> pending_validation -> approved -> signed.
+  const handleSubmitDoc = async (d) => { try { await api.submitHrDocument(d.id); reload(); } catch (e) { alert(e.message); } };
+  const handleApproveDoc = async (d) => { try { await api.approveHrDocument(d.id, null); reload(); } catch (e) { alert(e.message); } };
+  const handleRejectDoc = async (d) => {
+    const reason = window.prompt("Motif du rejet (optionnel) :", "");
+    if (reason === null) return;
+    try { await api.rejectHrDocument(d.id, reason || null); reload(); } catch (e) { alert(e.message); }
+  };
+
   const exportDocs = () => exportCsv(
     "documents-rh.csv",
     ["Employe", "Type", "Reference", "Statut", "Genere", "Signe le", "Signe par", "Version"],
@@ -2332,7 +2362,10 @@ function Dossiers({ data, staff, setModal, reload }) {
         <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 820 }}>
           <thead><tr><th>Employe</th><th>Type</th><th>Reference</th><th>Ver.</th><th className="r">Statut</th><th className="r">Signe par</th><th className="r">Actions</th></tr></thead>
           <tbody>{filtered.map((d) => {
-            const isSigned = String(d.status || "") === "signed";
+            const st = String(d.status || "").toLowerCase();
+            const canSubmit = ["draft", "received", "rejected"].includes(st);
+            const isPending = st === "pending_validation";
+            const isApproved = st === "approved";
             return <tr key={d.id}>
               <td style={{ fontWeight: 500 }}>{personName(staff, d.userId)}</td>
               <td><span style={{ display: "flex", alignItems: "center", gap: 6 }}>{d.documentType || "Document"}{d.templateType && <span className="chip ink" style={{ fontSize: 10, padding: "1px 6px" }}>Genere</span>}</span></td>
@@ -2343,7 +2376,10 @@ function Dossiers({ data, staff, setModal, reload }) {
               <td className="r" style={{ whiteSpace: "nowrap", display: "flex", gap: 6, justifyContent: "flex-end" }}>
                 {d.content && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => setPreview(d)}>Apercu</button>}
                 {d.fileUrl && <a className="link" href={d.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Ouvrir</a>}
-                {!isSigned && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => { setSigning(d); setSignName(""); }}>Signer</button>}
+                {canSubmit && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => handleSubmitDoc(d)}>Soumettre</button>}
+                {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleApproveDoc(d)}>Approuver</button>}
+                {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--rose-600)" }} onClick={() => handleRejectDoc(d)}>Rejeter</button>}
+                {isApproved && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => { setSigning(d); setSignName(""); }}>Signer</button>}
               </td>
             </tr>;
           })}</tbody>
@@ -2357,7 +2393,8 @@ function Dossiers({ data, staff, setModal, reload }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>{preview.documentType} — {preview.reference}</span>
               <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(preview.content); w.document.close(); w.print(); }}>Imprimer / PDF</button>
+                <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/documents/${preview.id}/pdf`, `${preview.reference || "document"}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(preview.content); w.document.close(); w.print(); }}>Imprimer</button>
                 <button type="button" className="link" onClick={() => setPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
               </div>
             </div>
