@@ -189,6 +189,8 @@ export class HrPayrollController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>) { return this.service.listPayrolls(q); }
+  @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.payrollSummary(q); }
+  @Get("generate") generate(@Query() q: Record<string, string>) { return this.service.generatePayroll(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }

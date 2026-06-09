@@ -384,10 +384,116 @@ export class HrService {
 
   async updatePayroll(id: number, input: UpdateHrPayrollDto) {
     const current = await this.findPayroll(id);
+    const currentStatus = String(current.status || "draft");
+    if (currentStatus === "paid") throw new BadRequestException("Cannot modify a paid payroll.");
     await this.validatePayrollRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...current, ...input });
     return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
+  }
+
+  async generatePayroll(q: Record<string, string>) {
+    const userId = q["userId"] ? Number(q["userId"]) : null;
+    const period = q["period"] || this.currentPayrollPeriod();
+    if (!userId) throw new BadRequestException("userId is required.");
+    await this.ensureExists(users, userId, "User not found.");
+
+    const [yearStr, monthStr] = period.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const periodEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const contracts = await this.db.select().from(hrContracts)
+      .where(and(eq(hrContracts.userId, userId), ne(hrContracts.status, "terminated")))
+      .orderBy(desc(hrContracts.id))
+      .limit(1);
+    const contract = contracts[0] ?? null;
+
+    const attendances = await this.db.select().from(hrAttendances)
+      .where(and(
+        eq(hrAttendances.userId, userId),
+        ne(hrAttendances.status, "false"),
+        sql`${hrAttendances.workDate} >= ${periodStart}`,
+        sql`${hrAttendances.workDate} <= ${periodEnd}`,
+      ));
+
+    const leaves = await this.db.select().from(hrLeaveRequests)
+      .where(and(
+        eq(hrLeaveRequests.userId, userId),
+        ne(hrLeaveRequests.status, "false"),
+        sql`${hrLeaveRequests.startDate} <= ${periodEnd}`,
+        sql`${hrLeaveRequests.endDate} >= ${periodStart}`,
+      ));
+
+    const workedDays = attendances.filter((a) => !["paid_leave", "unpaid_leave"].includes(String(a.status || ""))).length;
+    const paidLeaveDays = attendances.filter((a) => String(a.status || "") === "paid_leave").length;
+    const unpaidLeaveDays = attendances.filter((a) => String(a.status || "") === "unpaid_leave").length;
+    const absenceDays = Math.max(0, leaves.filter((l) => !this.isFinalLeaveApproval(l.status)).length);
+    const overtimeHours = attendances.reduce((sum, a) => sum + Number(a.overtimeHours || 0), 0);
+
+    const baseSalary = Number(contract?.baseSalary || 0);
+    const transportAllowance = Number(contract?.transportAllowance || 0);
+    const housingAllowance = Number(contract?.housingAllowance || 0);
+    const overtimeRate = baseSalary > 0 ? (baseSalary / 22 / 8) * 1.5 : 0;
+    const overtimeAmount = this.roundNumber(overtimeHours * overtimeRate);
+    const dailyRate = baseSalary > 0 ? baseSalary / 22 : 0;
+    const unpaidAbsenceDeduction = this.roundNumber(unpaidLeaveDays * dailyRate);
+
+    const currencyId = contract?.currencyId ?? (await this.resolveDefaultCurrency());
+
+    return {
+      userId,
+      contractId: contract?.id ?? null,
+      period,
+      currencyId,
+      baseSalary,
+      transportAllowance,
+      housingAllowance,
+      riskAllowance: 0,
+      otherAllowances: 0,
+      overtimeHours: this.roundNumber(overtimeHours),
+      overtimeAmount,
+      unpaidAbsenceDeduction,
+      advanceDeduction: 0,
+      taxAmount: 0,
+      cnssAmount: 0,
+      otherDeductions: 0,
+      workedDays: this.roundNumber(workedDays),
+      absenceDays: this.roundNumber(absenceDays),
+      paidLeaveDays: this.roundNumber(paidLeaveDays),
+      status: "draft",
+      notes: `Genere automatiquement depuis contrat + presence pour ${period}`,
+    };
+  }
+
+  async payrollSummary(q: Record<string, string>) {
+    const period = q["period"] || null;
+    const rows = await this.db.select().from(hrPayrolls).where(ne(hrPayrolls.status, "false")).orderBy(desc(hrPayrolls.id));
+    const filtered = period ? rows.filter((r) => r.period === period) : rows;
+    const n = (v: any) => Number(v || 0);
+    const grossTotal = filtered.reduce((sum, r) => sum + n(r.grossSalary), 0);
+    const netTotal = filtered.reduce((sum, r) => sum + n(r.netSalary), 0);
+    const taxTotal = filtered.reduce((sum, r) => sum + n(r.taxAmount), 0);
+    const cnssTotal = filtered.reduce((sum, r) => sum + n(r.cnssAmount), 0);
+    const employeeCount = new Set(filtered.map((r) => r.userId)).size;
+    const periods = [...new Set(rows.map((r) => r.period).filter(Boolean))].sort().reverse().slice(0, 24);
+    return {
+      period: period || "all",
+      bulletins: filtered.length,
+      employees: employeeCount,
+      grossTotal: this.roundNumber(grossTotal),
+      netTotal: this.roundNumber(netTotal),
+      taxTotal: this.roundNumber(taxTotal),
+      cnssTotal: this.roundNumber(cnssTotal),
+      workflow: {
+        draft: filtered.filter((r) => String(r.status || "draft") === "draft").length,
+        validated: filtered.filter((r) => String(r.status || "") === "validated").length,
+        paid: filtered.filter((r) => String(r.status || "") === "paid").length,
+      },
+      periods,
+    };
   }
 
   listProjects(q: Record<string, string>) {
@@ -1357,6 +1463,11 @@ export class HrService {
       status: input.status || "draft",
       notes: input.notes ?? null,
     };
+  }
+
+  private currentPayrollPeriod() {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   }
 
   private async nextContractReference(startDate?: string | null) {

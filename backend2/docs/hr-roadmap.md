@@ -89,7 +89,21 @@ Objectif: produire une paie calculable et auditable.
 - Brut, net a payer, multi-devise.
 - Lien avec contrat, presence et conges.
 
-Statut: a faire.
+Statut: termine.
+
+Fait:
+- Generation automatique d'un bulletin depuis le contrat actif + presences + conges du mois (API GET hr/payrolls/generate).
+- Workflow draft -> validated -> paid avec verrouillage du bulletin paye.
+- API hr/payrolls/summary pour KPIs globaux (brut total, net, workflow draft/valide/paye).
+- Calcul serveur: jours travailles, conges payes, absences non payees, heures supplementaires depuis presences.
+- Filtres par periode, employe et devise dans la page Paie.
+- Actions en ligne: Valider et Marquer paye directement depuis la table.
+- Export CSV enrichi avec jours travailles, absences, impots, CNSS.
+
+Reste:
+- Regles CNSS/IPR parametrees par pays (taux configurables).
+- Generation PDF fiche de paie.
+- Verrouillage et validation workflow RH (approbation superieur avant paiement).
 
 ## Stade 5 - Presence
 

@@ -291,6 +291,7 @@ const EMPTY_DATA = {
   timesheets: [],
   employeeRequests: [],
   recruitmentOffers: [],
+  payrollSummary: { period: "all", bulletins: 0, employees: 0, grossTotal: 0, netTotal: 0, taxTotal: 0, cnssTotal: 0, workflow: { draft: 0, validated: 0, paid: 0 }, periods: [] },
 };
 const DEPARTMENT_COLORS = ["teal", "sky", "emerald", "amber", "ink"];
 const arrayFrom = (value, key) => {
@@ -970,9 +971,9 @@ function App() {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.attendances(), api.attendanceSummary(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.leaveSummary(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
-      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers()
+      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers(), api.payrollSummary()
     ])
-      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers]) => {
+      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers, payrollSummary]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -1006,6 +1007,7 @@ function App() {
           timesheets: arrayFrom(timesheets.value, "getAllHrTimesheet"),
           employeeRequests: arrayFrom(employeeRequests.value, "getAllHrEmployeeRequest"),
           recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
+          payrollSummary: payrollSummary.value || EMPTY_DATA.payrollSummary,
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
         setData(next);
@@ -1223,7 +1225,7 @@ function App() {
     presences: <Presences data={data} staff={staff} setModal={setModal} />,
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
-    paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} />,
+    paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} reload={load} />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
@@ -1868,12 +1870,16 @@ function Conges({ data, staff, setModal }) {
 }
 
 /* Paie */
-function Paie({ data, staff, masse, setModal }) {
+function Paie({ data, staff, masse, setModal, reload }) {
   const [q, setQ] = React.useState("");
   const [employeeFilter, setEmployeeFilter] = React.useState("");
   const [currencyFilter, setCurrencyFilter] = React.useState("");
+  const [periodFilter, setPeriodFilter] = React.useState("");
+  const [generating, setGenerating] = React.useState(false);
+  const [generateError, setGenerateError] = React.useState("");
   const rows = data.salaries || [];
   const payrollRows = data.payrolls || [];
+  const summary = data.payrollSummary || EMPTY_DATA.payrollSummary;
   const dateStart = (s) => dateOnly(s.salaryStartDate || s.startDate);
   const dateEnd = (s) => dateOnly(s.salaryEndDate || s.endDate);
   const comment = (s) => s.salaryComment || s.comment || "";
@@ -1886,6 +1892,7 @@ function Paie({ data, staff, masse, setModal }) {
   const filteredPayrolls = payrollRows.filter((p) => {
     if (employeeFilter && String(p.userId) !== String(employeeFilter)) return false;
     if (currencyFilter && symbolFor(p.currencyId, CURRENCIES, CUR) !== currencyFilter) return false;
+    if (periodFilter && p.period !== periodFilter) return false;
     return !needle || payrollSearchText(p).includes(needle);
   });
   const filteredRows = rows.filter((s) => {
@@ -1899,13 +1906,35 @@ function Paie({ data, staff, masse, setModal }) {
     return !needle || employeeSearchText(u).includes(needle);
   });
   const employeeCount = new Set([...filteredRows.map((s) => s.userId), ...filteredPayrolls.map((p) => p.userId)].filter(Boolean)).size;
-  const hasFilters = Boolean(needle || employeeFilter || currencyFilter);
+  const hasFilters = Boolean(needle || employeeFilter || currencyFilter || periodFilter);
   const payrollNetLines = moneyLinesFrom(filteredPayrolls, (p) => p.netSalary ?? payrollNet(p), moneySymbolFor);
   const payrollGrossLines = moneyLinesFrom(filteredPayrolls, (p) => p.grossSalary ?? payrollGross(p), moneySymbolFor);
+  const availablePeriods = [...new Set(payrollRows.map((p) => p.period).filter(Boolean))].sort().reverse();
+
+  const handleGenerate = async () => {
+    if (!employeeFilter) { setGenerateError("Selectionne un employe pour generer la paie."); return; }
+    const now = new Date();
+    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    setGenerating(true); setGenerateError("");
+    try {
+      const draft = await api.generatePayroll(employeeFilter, period);
+      setModal({ kind: "payroll", prefill: draft });
+    } catch (e) {
+      setGenerateError(e.message || "Erreur lors de la generation.");
+    } finally { setGenerating(false); }
+  };
+
+  const handleValidate = async (p) => {
+    try { await api.updatePayroll(p.id, { status: "validated" }); reload(); } catch (e) { alert(e.message); }
+  };
+  const handleMarkPaid = async (p) => {
+    try { await api.updatePayroll(p.id, { status: "paid" }); reload(); } catch (e) { alert(e.message); }
+  };
+
   const exportPayrolls = () => exportCsv(
     "bulletins-paie.csv",
-    ["Employe", "Periode", "Brut", "Net", "Devise", "Statut", "Notes"],
-    filteredPayrolls.map((p) => [personName(staff, p.userId), p.period || "", Math.round(Number(p.grossSalary ?? payrollGross(p))), Math.round(Number(p.netSalary ?? payrollNet(p))), symbolFor(p.currencyId, CURRENCIES, CUR), statusLabel(p.status), p.notes || ""])
+    ["Employe", "Periode", "Brut", "Net", "Devise", "Jours travailles", "Absences", "Impots", "CNSS", "Statut", "Notes"],
+    filteredPayrolls.map((p) => [personName(staff, p.userId), p.period || "", Math.round(Number(p.grossSalary ?? payrollGross(p))), Math.round(Number(p.netSalary ?? payrollNet(p))), symbolFor(p.currencyId, CURRENCIES, CUR), p.workedDays ?? 0, p.absenceDays ?? 0, p.taxAmount ?? 0, p.cnssAmount ?? 0, statusLabel(p.status), p.notes || ""])
   );
   const exportHistory = () => exportCsv(
     "historique-salaires.csv",
@@ -1921,29 +1950,68 @@ function Paie({ data, staff, masse, setModal }) {
     <>
       <PageHead eyebrow="Payroll" title="Paie professionnelle" action="Nouveau bulletin" actionIcon="plus" onAction={() => setModal({ kind: "payroll" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <Mini label={hasFilters ? "Bulletins filtres" : "Bulletins"} value={filteredPayrolls.length} />
+        <Mini label="Brouillons" value={summary.workflow.draft} />
+        <KPI label="Valides" value={summary.workflow.validated} tone={summary.workflow.validated ? "warn" : undefined} />
+        <KPI label="Payes" value={summary.workflow.paid} tone={summary.workflow.paid ? "emerald" : undefined} />
+        <Mini label="Employes" value={summary.employees} />
+      </div>
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label={hasFilters ? "Bulletins filtres" : "Bulletins (total)"} value={hasFilters ? filteredPayrolls.length : summary.bulletins} />
         <Mini label="Employes salaries" value={employeeCount} />
         <Mini label="Brut total" value={<MoneyLines lines={payrollGrossLines} empty={`0 ${CUR}`} />} />
         <Mini label="Net a payer" value={<MoneyLines lines={payrollNetLines} empty={`0 ${CUR}`} />} />
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Bulletins de paie</h3><button type="button" className="link" onClick={exportPayrolls}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head">
+          <h3 className="font-display">Bulletins de paie</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" className="pillbtn" onClick={handleGenerate} disabled={generating} title="Generer depuis contrat et presences du mois en cours">
+              <Icon name="play" style={{ width: 13, height: 13 }} /> {generating ? "Calcul..." : "Generer depuis contrat"}
+            </button>
+            <button type="button" className="link" onClick={exportPayrolls}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button>
+          </div>
+        </div>
+        {generateError && <div className="chip amber" style={{ marginBottom: 8 }}>{generateError}</div>}
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
-          <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} aria-label="Filtrer par employe">
+          <select className="pillbtn" value={employeeFilter} onChange={(e) => { setEmployeeFilter(e.target.value); setGenerateError(""); }} aria-label="Filtrer par employe">
             <option value="">Tous les employes</option>
             {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
+          </select>
+          <select className="pillbtn" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} aria-label="Filtrer par periode">
+            <option value="">Toutes les periodes</option>
+            {availablePeriods.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select className="pillbtn" value={currencyFilter} onChange={(e) => setCurrencyFilter(e.target.value)} aria-label="Filtrer par devise">
             <option value="">Toutes les devises</option>
             {currenciesInHistory.map((sym) => <option key={sym} value={sym}>{sym}</option>)}
           </select>
         </div>
-        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 920 }}>
-          <thead><tr><th>Employe</th><th>Periode</th><th className="r">Brut</th><th className="r">Net</th><th className="r">Impots</th><th className="r">CNSS</th><th className="r">Absences</th><th className="r">Statut</th></tr></thead>
-          <tbody>{filteredPayrolls.map((p) => <tr key={p.id}><td style={{ fontWeight: 500 }}>{personName(staff, p.userId)}</td><td>{p.period || "-"}</td><td className="r">{payrollMoneyText(p, p.grossSalary ?? payrollGross(p))}</td><td className="r" style={{ fontWeight: 700 }}>{payrollMoneyText(p, p.netSalary ?? payrollNet(p))}</td><td className="r">{payrollMoneyText(p, p.taxAmount)}</td><td className="r">{payrollMoneyText(p, p.cnssAmount)}</td><td className="r">{payrollMoneyText(p, p.unpaidAbsenceDeduction)}</td><td className="r"><span className={"chip " + chipForStatus(p.status)}>{statusLabel(p.status)}</span></td></tr>)}</tbody>
+        <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 1020 }}>
+          <thead><tr><th>Employe</th><th>Periode</th><th className="r">Brut</th><th className="r">Net</th><th className="r">Impots</th><th className="r">CNSS</th><th className="r">Jours</th><th className="r">Absences</th><th className="r">Statut</th><th className="r">Actions</th></tr></thead>
+          <tbody>{filteredPayrolls.map((p) => {
+            const isPaid = String(p.status || "") === "paid";
+            const isDraft = String(p.status || "draft") === "draft";
+            const isValidated = String(p.status || "") === "validated";
+            return <tr key={p.id}>
+              <td style={{ fontWeight: 500 }}>{personName(staff, p.userId)}</td>
+              <td>{p.period || "-"}</td>
+              <td className="r">{payrollMoneyText(p, p.grossSalary ?? payrollGross(p))}</td>
+              <td className="r" style={{ fontWeight: 700 }}>{payrollMoneyText(p, p.netSalary ?? payrollNet(p))}</td>
+              <td className="r">{payrollMoneyText(p, p.taxAmount)}</td>
+              <td className="r">{payrollMoneyText(p, p.cnssAmount)}</td>
+              <td className="r">{p.workedDays ?? "-"}</td>
+              <td className="r">{p.absenceDays ?? "-"}</td>
+              <td className="r"><span className={"chip " + chipForStatus(p.status)}>{statusLabel(p.status)}</span></td>
+              <td className="r" style={{ whiteSpace: "nowrap" }}>
+                {isDraft && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => handleValidate(p)}>Valider</button>}
+                {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
+                {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
+              </td>
+            </tr>;
+          })}</tbody>
         </table></div>
-        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin pour creer la premiere paie mensuelle." : "Modifie la recherche ou les filtres."} />}
+        {filteredPayrolls.length === 0 && <EmptyState title={payrollRows.length === 0 ? "Aucun bulletin de paie en base" : "Aucun bulletin ne correspond aux filtres"} detail={payrollRows.length === 0 ? "Clique sur Nouveau bulletin ou Generer depuis contrat pour creer la premiere paie." : "Modifie la recherche ou les filtres."} />}
       </div>
       <div className="card pad table-card" style={{ marginTop: 16 }}>
         <div className="section-head"><h3 className="font-display">Historique des salaires en base</h3><div style={{ display: "flex", gap: 10 }}><button type="button" className="link" onClick={() => setModal({ kind: "salary" })}><Icon name="plus" style={{ width: 13, height: 13 }} /> Nouveau salaire</button><button type="button" className="link" onClick={exportHistory}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div></div>
@@ -2287,7 +2355,7 @@ function RecordModal({ modal, data, staff, busy, error, onSave, onClose }) {
   const action = selfAction || ACTION_FORMS[modal.kind];
   const hasMoney = ["salary", "expenseRequest", "socialDeclaration", "trainingSession", "hrContract", "payroll", "hrProject", "hrProjectAssignment"].includes(modal.kind);
   const [form, setForm] = React.useState(() => {
-    const base = { ...defaults(modal.kind, staff), ...(modal.initial || {}) };
+    const base = { ...defaults(modal.kind, staff), ...(modal.prefill || {}), ...(modal.initial || {}) };
     if (hasMoney && !base.currencyId) base.currencyId = defaultCurrencyId();
     if (modal.kind === "employee") {
       if (!base.password) base.password = generateInitialPassword();
