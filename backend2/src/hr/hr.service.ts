@@ -38,6 +38,7 @@ import {
   CreateHrContractDto,
   CreateHrAttendanceDto,
   CreateHrDocumentDto,
+  GenerateHrDocumentDto,
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
@@ -837,6 +838,178 @@ export class HrService {
     await this.findDocument(id);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id));
+  }
+
+  async signDocument(id: number, signedBy: string) {
+    await this.findDocument(id);
+    if (!signedBy?.trim()) throw new BadRequestException("Signed-by name is required.");
+    await this.db.update(hrDocuments).set({
+      status: "signed",
+      signedBy: signedBy.trim(),
+      signedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrDocuments.id, id));
+    return this.findDocument(id);
+  }
+
+  async documentSummary() {
+    const rows = await this.db.select().from(hrDocuments).where(ne(hrDocuments.status, "false"));
+    const byType = rows.reduce((acc: Record<string, number>, r) => {
+      const t = r.documentType || "Autre";
+      acc[t] = (acc[t] || 0) + 1;
+      return acc;
+    }, {});
+    return {
+      total: rows.length,
+      generated: rows.filter((r) => r.templateType != null).length,
+      signed: rows.filter((r) => String(r.status || "") === "signed").length,
+      pending: rows.filter((r) => ["draft", "pending", "received"].includes(String(r.status || ""))).length,
+      employees: new Set(rows.map((r) => r.userId)).size,
+      byType,
+    };
+  }
+
+  async generateDocument(input: GenerateHrDocumentDto) {
+    await this.ensureExists(users, input.userId, "User not found.");
+    const [userRow] = await this.db.select().from(users).where(eq(users.id, input.userId)).limit(1);
+    const contracts = await this.db.select().from(hrContracts)
+      .where(and(eq(hrContracts.userId, input.userId), ne(hrContracts.status, "terminated")))
+      .orderBy(desc(hrContracts.id)).limit(1);
+    const contract = contracts[0] ?? null;
+
+    const orgName = "NgoluApp ONG";
+    const today = new Date().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
+    const employeeName = [userRow.firstName, userRow.lastName].filter(Boolean).join(" ");
+    const poste = contract?.designationId ? `Poste #${contract.designationId}` : "Non defini";
+    const dateDebut = contract?.startDate ? new Date(contract.startDate).toLocaleDateString("fr-FR") : "Non defini";
+    const salaire = contract?.baseSalary ? `${contract.baseSalary}` : "0";
+    const typeContrat = contract?.contractType || "Non defini";
+    const reference = contract?.reference || `REF-${input.userId}-${new Date().getFullYear()}`;
+
+    const content = this.renderDocumentTemplate(input.templateType, {
+      orgName, today, employeeName, poste, dateDebut, salaire, typeContrat, reference,
+      userId: input.userId,
+    });
+
+    const docType = this.templateTypeLabel(input.templateType);
+    const version = await this.nextDocumentVersion(input.userId, input.templateType);
+    const docRef = `${input.templateType.toUpperCase().slice(0, 4)}-${String(input.userId).padStart(4, "0")}-${new Date().getFullYear()}-v${version}`;
+
+    return this.createRecord(hrDocuments, {
+      userId: input.userId,
+      documentType: docType,
+      reference: docRef,
+      templateType: input.templateType,
+      version,
+      content,
+      status: "draft",
+      generatedBy: input.generatedBy ?? null,
+      generatedAt: sql`CURRENT_TIMESTAMP`,
+      note: `Genere automatiquement le ${today}`,
+    }, (id) => this.findDocument(id));
+  }
+
+  private async nextDocumentVersion(userId: number, templateType: string) {
+    const rows = await this.db.select({ id: hrDocuments.id })
+      .from(hrDocuments)
+      .where(and(eq(hrDocuments.userId, userId), eq(hrDocuments.templateType, templateType)));
+    return rows.length + 1;
+  }
+
+  private templateTypeLabel(templateType: string) {
+    const labels: Record<string, string> = {
+      contrat: "Contrat de travail",
+      avenant: "Avenant au contrat",
+      attestation: "Attestation de travail",
+      certificat: "Certificat de travail",
+      disciplinaire: "Lettre disciplinaire",
+      conge: "Autorisation de conge",
+    };
+    return labels[templateType] || templateType;
+  }
+
+  private renderDocumentTemplate(templateType: string, ctx: Record<string, any>) {
+    const header = `<div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:40px 48px;color:#1a1a1a">
+<div style="text-align:center;margin-bottom:32px">
+  <div style="font-size:20px;font-weight:700;letter-spacing:1px">${ctx.orgName}</div>
+  <div style="font-size:12px;color:#666;margin-top:4px">Document RH officiel</div>
+</div>`;
+    const footer = `<div style="margin-top:48px;border-top:1px solid #ddd;padding-top:20px;display:flex;justify-content:space-between">
+  <div><div style="font-size:11px;color:#999">Emis le ${ctx.today}</div></div>
+  <div style="text-align:right"><div style="font-size:12px;font-weight:600">Signature autorisee</div>
+  <div style="margin-top:40px;border-top:1px solid #999;padding-top:4px;min-width:160px;font-size:11px;color:#999">Date et signature</div></div>
+</div></div>`;
+
+    if (templateType === "contrat") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">CONTRAT DE TRAVAIL - ${ctx.typeContrat.toUpperCase()}</h2>
+<p>Ref: <strong>${ctx.reference}</strong></p>
+<p>Entre <strong>${ctx.orgName}</strong> (l'Employeur) et <strong>${ctx.employeeName}</strong> (l'Employe),</p>
+<p>il est convenu et arrete ce qui suit :</p>
+<h3 style="font-size:13px;margin-top:20px">Article 1 — Engagement</h3>
+<p>L'Employeur engage l'Employe a compter du <strong>${ctx.dateDebut}</strong> au poste de <strong>${ctx.poste}</strong>.</p>
+<h3 style="font-size:13px;margin-top:16px">Article 2 — Nature du contrat</h3>
+<p>Le present contrat est un contrat de type <strong>${ctx.typeContrat}</strong>.</p>
+<h3 style="font-size:13px;margin-top:16px">Article 3 — Remuneration</h3>
+<p>L'Employe percevra un salaire de base mensuel brut de <strong>${ctx.salaire}</strong>.</p>
+<h3 style="font-size:13px;margin-top:16px">Article 4 — Obligations</h3>
+<p>L'Employe s'engage a respecter le reglement interieur, la politique de protection et sauvegarde, et le code de conduite de l'organisation.</p>
+${footer}`;
+
+    if (templateType === "attestation") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">ATTESTATION DE TRAVAIL</h2>
+<p>Je soussigne(e), representant(e) de <strong>${ctx.orgName}</strong>, atteste par la presente que :</p>
+<p><strong>${ctx.employeeName}</strong> est employe(e) au sein de notre organisation depuis le <strong>${ctx.dateDebut}</strong>,
+au poste de <strong>${ctx.poste}</strong>.</p>
+<p>Cette attestation est delivree a l'interesse(e) pour faire valoir ce que de droit.</p>
+<p>Fait a _______________, le ${ctx.today}</p>
+${footer}`;
+
+    if (templateType === "certificat") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">CERTIFICAT DE TRAVAIL</h2>
+<p>Nous certifions que <strong>${ctx.employeeName}</strong> a ete employe(e) au sein de <strong>${ctx.orgName}</strong>
+a compter du <strong>${ctx.dateDebut}</strong>, en qualite de <strong>${ctx.poste}</strong>.</p>
+<p>Durant cette periode, cet(te) employe(e) a accompli ses fonctions avec serieux et professionnalisme.</p>
+<p>Le present certificat est etabli a la demande de l'interesse(e) et lui est remis pour servir et valoir ce que de droit.</p>
+<p>Fait a _______________, le ${ctx.today}</p>
+${footer}`;
+
+    if (templateType === "avenant") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">AVENANT AU CONTRAT DE TRAVAIL</h2>
+<p>Ref: <strong>${ctx.reference}-AV</strong></p>
+<p>Entre <strong>${ctx.orgName}</strong> et <strong>${ctx.employeeName}</strong>,</p>
+<p>il est convenu de modifier les conditions du contrat initial comme suit :</p>
+<table style="width:100%;border-collapse:collapse;margin:20px 0">
+  <tr style="background:#f5f5f5"><th style="padding:8px;text-align:left;border:1px solid #ddd">Element</th><th style="padding:8px;text-align:left;border:1px solid #ddd">Ancienne valeur</th><th style="padding:8px;text-align:left;border:1px solid #ddd">Nouvelle valeur</th></tr>
+  <tr><td style="padding:8px;border:1px solid #ddd">Poste</td><td style="padding:8px;border:1px solid #ddd">${ctx.poste}</td><td style="padding:8px;border:1px solid #ddd">________________</td></tr>
+  <tr><td style="padding:8px;border:1px solid #ddd">Salaire brut</td><td style="padding:8px;border:1px solid #ddd">${ctx.salaire}</td><td style="padding:8px;border:1px solid #ddd">________________</td></tr>
+</table>
+<p>Toutes les autres clauses du contrat restent inchangees.</p>
+<p>Fait a _______________, le ${ctx.today}</p>
+${footer}`;
+
+    if (templateType === "disciplinaire") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">LETTRE DISCIPLINAIRE</h2>
+<p>A l'attention de : <strong>${ctx.employeeName}</strong><br>Poste : <strong>${ctx.poste}</strong></p>
+<p>Monsieur / Madame,</p>
+<p>Nous avons constate un manquement aux obligations professionnelles et/ou au reglement interieur de l'organisation.</p>
+<p><strong>Faits reproches :</strong></p>
+<p style="min-height:60px;border:1px dashed #ccc;padding:12px;border-radius:4px;color:#666">[ A completer ]</p>
+<p>En consequence, nous vous notifions la sanction suivante : ________________</p>
+<p>Nous vous invitons a prendre connaissance de ce courrier et a nous retourner le present document signe pour accuse de reception.</p>
+<p>Fait a _______________, le ${ctx.today}</p>
+${footer}`;
+
+    if (templateType === "conge") return `${header}
+<h2 style="text-align:center;font-size:16px;font-weight:700;margin-bottom:24px">AUTORISATION DE CONGE</h2>
+<p>Il est autorise a <strong>${ctx.employeeName}</strong> (${ctx.poste}) de s'absenter du :</p>
+<p style="margin:16px 0"><strong>Du :</strong> ______________ <strong>Au :</strong> ______________ (inclus)</p>
+<p><strong>Nature du conge :</strong> ________________</p>
+<p><strong>Nombre de jours :</strong> ________________</p>
+<p>La reprise du travail est prevue le : ______________</p>
+<p>Fait a _______________, le ${ctx.today}</p>
+${footer}`;
+
+    return `${header}<p>Template <strong>${templateType}</strong> non reconnu.</p>${footer}`;
   }
 
   listExpenseRequests(q: Record<string, string>) {

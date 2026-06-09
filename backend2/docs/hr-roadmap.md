@@ -188,7 +188,23 @@ Objectif: automatiser les documents RH.
 - Signature electronique.
 - Historique des versions.
 
-Statut: a faire.
+Statut: termine.
+
+Fait:
+- Migration 0083: colonnes templateType, version, generatedAt, generatedBy, content, signedAt, signedBy sur hr_documents.
+- API POST hr/documents/generate: genere un document HTML depuis template (contrat, avenant, attestation, certificat, lettre disciplinaire, autorisation de conge) en lisant le contrat actif de l'employe.
+- API POST hr/documents/:id/sign: marque le document comme signe avec nom et date.
+- API GET hr/documents/summary: KPIs (total, generes, signes, en attente, par type).
+- Versioning automatique par employe et type de template.
+- Page Documents enrichie: generation depuis template avec formulaire, table avec filtre, badge "Genere", colonne version et signataire.
+- Apercu HTML inline avec bouton Imprimer/PDF (impression navigateur ou sauvegarde PDF).
+- Modal de signature avec nom du signataire.
+- Dossier 360 employe: panneau "Documents signes" relie.
+
+Reste:
+- Generation PDF serveur (puppeteer ou wkhtmltopdf si installe en prod).
+- Signature electronique avec certificat numerique.
+- Workflow de validation avant signature (approbation RH).
 
 ## Stade 9 - Recrutement
 

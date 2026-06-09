@@ -32,6 +32,7 @@ import {
   CreateHrContractDto,
   CreateHrAttendanceDto,
   CreateHrDocumentDto,
+  GenerateHrDocumentDto,
   CreateHrEmployeeRequestDto,
   CreateHrExpenseRequestDto,
   CreateHrLeaveRequestDto,
@@ -288,8 +289,11 @@ export class HrDocumentController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>) { return this.service.listDocuments(q); }
+  @Get("summary") summary() { return this.service.documentSummary(); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findDocument(id); }
   @Post() create(@Body() body: CreateHrDocumentDto) { return this.service.createDocument(body); }
+  @Post("generate") generate(@Body() body: GenerateHrDocumentDto) { return this.service.generateDocument(body); }
+  @Post(":id/sign") sign(@Param("id", ParseIntPipe) id: number, @Body() body: { signedBy: string }) { return this.service.signDocument(id, body.signedBy); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrDocuments, id); }

@@ -597,12 +597,39 @@ export class CreateHrDocumentDto {
   @IsOptional()
   @IsString()
   note?: string | null;
+
+  @IsOptional()
+  @IsString()
+  templateType?: string | null;
+
+  @IsOptional()
+  @IsString()
+  content?: string | null;
+
+  @IsOptional()
+  @IsString()
+  signedBy?: string | null;
 }
 
 export class UpdateHrDocumentDto extends PartialType(CreateHrDocumentDto) {
   @IsOptional()
   @IsString()
   status?: string;
+}
+
+export class GenerateHrDocumentDto {
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+  @IsString()
+  @IsNotEmpty()
+  templateType: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  generatedBy?: number | null;
 }
 
 export class CreateHrExpenseRequestDto {

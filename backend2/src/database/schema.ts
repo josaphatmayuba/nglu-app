@@ -717,6 +717,13 @@ export const hrDocuments = mysqlTable("hr_documents", {
   fileUrl: varchar("fileUrl", { length: 500 }),
   note: text("note"),
   status: varchar("status", { length: 30 }).default("received").notNull(),
+  templateType: varchar("templateType", { length: 80 }),
+  version: int("version").default(1).notNull(),
+  generatedAt: timestamp("generatedAt"),
+  generatedBy: bigint("generatedBy", { mode: "number" }),
+  content: text("content"),
+  signedAt: timestamp("signedAt"),
+  signedBy: varchar("signedBy", { length: 255 }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

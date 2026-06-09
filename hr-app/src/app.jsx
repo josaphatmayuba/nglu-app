@@ -292,6 +292,7 @@ const EMPTY_DATA = {
   employeeRequests: [],
   recruitmentOffers: [],
   payrollSummary: { period: "all", bulletins: 0, employees: 0, grossTotal: 0, netTotal: 0, taxTotal: 0, cnssTotal: 0, workflow: { draft: 0, validated: 0, paid: 0 }, periods: [] },
+  documentSummary: { total: 0, generated: 0, signed: 0, pending: 0, employees: 0, byType: {} },
 };
 const DEPARTMENT_COLORS = ["teal", "sky", "emerald", "amber", "ink"];
 const arrayFrom = (value, key) => {
@@ -971,9 +972,9 @@ function App() {
     Promise.allSettled([
       api.overview(), api.shifts(), api.awards(), api.attendances(), api.attendanceSummary(), api.salaryHistory(), api.payrolls(), api.hrProjects(), api.hrProjectReport(), api.hrProjectAssignments(), api.roles(), api.setting(), api.currencies(),
       api.leaveRequests(), api.leaveSummary(), api.hrContracts(), api.hrDocuments(), api.expenseRequests(), api.socialDeclarations(),
-      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers(), api.payrollSummary()
+      api.performanceReviews(), api.trainingSessions(), api.timesheets(), api.employeeRequests(), api.recruitmentOffers(), api.payrollSummary(), api.hrDocumentSummary()
     ])
-      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers, payrollSummary]) => {
+      .then(([overview, shifts, awards, attendances, attendanceSummary, salaries, payrolls, projects, projectReport, projectAssignments, roles, setting, currencies, leaves, leaveSummary, contracts, documents, expenses, declarations, reviews, trainings, timesheets, employeeRequests, offers, payrollSummary, documentSummary]) => {
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (curList) CURRENCIES = curList;
         if (setting.value && curList) {
@@ -1008,6 +1009,7 @@ function App() {
           employeeRequests: arrayFrom(employeeRequests.value, "getAllHrEmployeeRequest"),
           recruitmentOffers: arrayFrom(offers.value, "getAllHrRecruitmentOffer"),
           payrollSummary: payrollSummary.value || EMPTY_DATA.payrollSummary,
+          documentSummary: documentSummary.value || EMPTY_DATA.documentSummary,
         };
         const ok = [overview, shifts, awards, salaries].some((r) => r.status === "fulfilled" && r.value);
         setData(next);
@@ -1221,7 +1223,7 @@ function App() {
     dashboard: <Dashboard {...ctx} />,
     employes: <Employes {...ctx} />,
     contrats: <Contrats {...ctx} />,
-    dossiers: <Dossiers {...ctx} />,
+    dossiers: <Dossiers {...ctx} reload={load} />,
     presences: <Presences data={data} staff={staff} setModal={setModal} />,
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
@@ -1703,8 +1705,8 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
             <Employee360Panel title="Discipline">
               <EmptyState title="Module discipline a connecter" detail="Aucune table/API discipline n'existe encore pour cet employe." />
             </Employee360Panel>
-            <Employee360Panel title="Signature electronique">
-              <EmptyState title="Signature a connecter" detail="Les contrats signes seront relies ici quand le module document/signature sera pret." />
+            <Employee360Panel title="Documents signes">
+              <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(d.content); w.document.close(); }}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
             </Employee360Panel>
           </div>
         )}
@@ -2056,13 +2058,161 @@ function Contrats({ data, staff, setModal }) {
 }
 
 /* Dossiers */
-function Dossiers({ data, staff, setModal }) {
+const DOCUMENT_TEMPLATES = [
+  { value: "contrat", label: "Contrat de travail" },
+  { value: "avenant", label: "Avenant au contrat" },
+  { value: "attestation", label: "Attestation de travail" },
+  { value: "certificat", label: "Certificat de travail" },
+  { value: "disciplinaire", label: "Lettre disciplinaire" },
+  { value: "conge", label: "Autorisation de conge" },
+];
+
+function Dossiers({ data, staff, setModal, reload }) {
   const rows = data.documents || [];
+  const summary = data.documentSummary || EMPTY_DATA.documentSummary;
+  const [q, setQ] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
+  const [employeeFilter, setEmployeeFilter] = React.useState("");
+  const [preview, setPreview] = React.useState(null);
+  const [generating, setGenerating] = React.useState(false);
+  const [genForm, setGenForm] = React.useState({ userId: "", templateType: "contrat" });
+  const [genError, setGenError] = React.useState("");
+  const [signing, setSigning] = React.useState(null);
+  const [signName, setSignName] = React.useState("");
+
+  const needle = q.trim().toLowerCase();
+  const docTypes = [...new Set(rows.map((d) => d.documentType).filter(Boolean))].sort();
+  const filtered = rows.filter((d) => {
+    if (employeeFilter && String(d.userId) !== String(employeeFilter)) return false;
+    if (typeFilter && d.documentType !== typeFilter) return false;
+    return !needle || [personName(staff, d.userId), d.documentType, d.reference, d.note, d.status].join(" ").toLowerCase().includes(needle);
+  });
+
+  const handleGenerate = async () => {
+    if (!genForm.userId) { setGenError("Selectionne un employe."); return; }
+    setGenerating(true); setGenError("");
+    try {
+      await api.generateHrDocument({ userId: Number(genForm.userId), templateType: genForm.templateType });
+      reload();
+    } catch (e) { setGenError(e.message || "Erreur de generation."); }
+    finally { setGenerating(false); }
+  };
+
+  const handleSign = async () => {
+    if (!signName.trim()) return;
+    try {
+      await api.signHrDocument(signing.id, signName.trim());
+      setSigning(null); setSignName("");
+      reload();
+    } catch (e) { alert(e.message); }
+  };
+
+  const exportDocs = () => exportCsv(
+    "documents-rh.csv",
+    ["Employe", "Type", "Reference", "Statut", "Genere", "Signe le", "Signe par", "Version"],
+    filtered.map((d) => [personName(staff, d.userId), d.documentType, d.reference || "", statusLabel(d.status), d.templateType ? "Oui" : "Non", dateOnly(d.signedAt) || "", d.signedBy || "", d.version || 1])
+  );
+
   return (
     <>
-      <PageHead eyebrow="Dossier du personnel" title="Dossiers & documents" action="Televerser" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
-      <div className="g3" style={{ marginBottom: 18 }}><Mini label="Documents" value={rows.length} /><Mini label="Employes avec document" value={new Set(rows.map((d) => d.userId).filter(Boolean)).size} /><Mini label="Recus" value={rows.filter((d) => isApproved(d.status)).length} /></div>
-      <div className="card pad table-card"><h3 className="block-title font-display">Documents en base</h3><div className="tbl-scroll"><table className="tbl" style={{ minWidth: 680 }}><thead><tr><th>Employe</th><th>Type</th><th>Reference</th><th>Fichier</th><th className="r">Statut</th></tr></thead><tbody>{rows.map((d) => <tr key={d.id}><td style={{ fontWeight: 500 }}>{personName(staff, d.userId)}</td><td>{d.documentType || "Document"}</td><td className="muted">{d.reference || "-"}</td><td>{d.fileUrl ? <a className="link" href={d.fileUrl} target="_blank" rel="noreferrer">Ouvrir</a> : "-"}</td><td className="r"><span className={"chip " + chipForStatus(d.status)}>{statusLabel(d.status)}</span></td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="Aucun document en base" />}</div>
+      <PageHead eyebrow="Dossier du personnel" title="Documents & signature" action="Deposer un document" actionIcon="upload" onAction={() => setModal({ kind: "hrDocument" })} ghost />
+      <div className="g4 kpis" style={{ marginBottom: 16 }}>
+        <Mini label="Documents total" value={summary.total} />
+        <Mini label="Generes depuis template" value={summary.generated} />
+        <KPI label="Signes" value={summary.signed} tone={summary.signed ? "emerald" : undefined} />
+        <KPI label="En attente" value={summary.pending} tone={summary.pending ? "warn" : undefined} />
+      </div>
+
+      <div className="card pad" style={{ marginBottom: 16 }}>
+        <h3 className="block-title font-display" style={{ marginBottom: 12 }}>Generer un document depuis template</h3>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>Employe</label>
+            <select className="pillbtn" value={genForm.userId} onChange={(e) => { setGenForm((f) => ({ ...f, userId: e.target.value })); setGenError(""); }} style={{ minWidth: 180 }}>
+              <option value="">-- Choisir un employe --</option>
+              {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 12, color: "var(--muted)" }}>Type de document</label>
+            <select className="pillbtn" value={genForm.templateType} onChange={(e) => setGenForm((f) => ({ ...f, templateType: e.target.value }))} style={{ minWidth: 200 }}>
+              {DOCUMENT_TEMPLATES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <button type="button" className="btn" onClick={handleGenerate} disabled={generating} style={{ alignSelf: "flex-end" }}>
+            <Icon name="fileText" style={{ width: 14, height: 14 }} /> {generating ? "Generation..." : "Generer"}
+          </button>
+        </div>
+        {genError && <div className="chip amber" style={{ marginTop: 8 }}>{genError}</div>}
+      </div>
+
+      <div className="card pad table-card">
+        <div className="section-head">
+          <h3 className="font-display">Documents en base</h3>
+          <button type="button" className="link" onClick={exportDocs}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button>
+        </div>
+        <div className="searchbar">
+          <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher employe, type, reference..." /></label>
+          <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)}>
+            <option value="">Tous les employes</option>
+            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
+          </select>
+          <select className="pillbtn" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="">Tous les types</option>
+            {docTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="tbl-scroll"><table className="tbl" style={{ minWidth: 820 }}>
+          <thead><tr><th>Employe</th><th>Type</th><th>Reference</th><th>Ver.</th><th className="r">Statut</th><th className="r">Signe par</th><th className="r">Actions</th></tr></thead>
+          <tbody>{filtered.map((d) => {
+            const isSigned = String(d.status || "") === "signed";
+            return <tr key={d.id}>
+              <td style={{ fontWeight: 500 }}>{personName(staff, d.userId)}</td>
+              <td><span style={{ display: "flex", alignItems: "center", gap: 6 }}>{d.documentType || "Document"}{d.templateType && <span className="chip ink" style={{ fontSize: 10, padding: "1px 6px" }}>Genere</span>}</span></td>
+              <td className="muted">{d.reference || "-"}</td>
+              <td className="muted">v{d.version || 1}</td>
+              <td className="r"><span className={"chip " + chipForStatus(d.status)}>{statusLabel(d.status)}</span></td>
+              <td className="r muted">{d.signedBy ? <span title={dateOnly(d.signedAt) || ""}>{d.signedBy}</span> : "-"}</td>
+              <td className="r" style={{ whiteSpace: "nowrap", display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                {d.content && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => setPreview(d)}>Apercu</button>}
+                {d.fileUrl && <a className="link" href={d.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Ouvrir</a>}
+                {!isSigned && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => { setSigning(d); setSignName(""); }}>Signer</button>}
+              </td>
+            </tr>;
+          })}</tbody>
+        </table></div>
+        {filtered.length === 0 && <EmptyState title={rows.length === 0 ? "Aucun document en base" : "Aucun document ne correspond aux filtres"} detail={rows.length === 0 ? "Genere un document depuis template ou depose un fichier." : ""} />}
+      </div>
+
+      {preview && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setPreview(null)}>
+          <div style={{ background: "#fff", borderRadius: 10, width: "min(760px,96vw)", maxHeight: "88vh", overflow: "auto", padding: 0, boxShadow: "0 8px 40px rgba(0,0,0,0.22)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid #eee", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>{preview.documentType} — {preview.reference}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(preview.content); w.document.close(); w.print(); }}>Imprimer / PDF</button>
+                <button type="button" className="link" onClick={() => setPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
+              </div>
+            </div>
+            <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: preview.content }} />
+          </div>
+        </div>
+      )}
+
+      {signing && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 9100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setSigning(null)}>
+          <div style={{ background: "#fff", borderRadius: 10, padding: 28, width: "min(400px,94vw)", boxShadow: "0 4px 24px rgba(0,0,0,0.18)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: 16, fontSize: 16 }}>Signer le document</h3>
+            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>{signing.documentType} — {signing.reference}</p>
+            <label style={{ fontSize: 13, display: "block", marginBottom: 6 }}>Nom du signataire</label>
+            <input className="input" value={signName} onChange={(e) => setSignName(e.target.value)} placeholder="Nom complet du responsable..." style={{ width: "100%", marginBottom: 16 }} />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" className="link" onClick={() => setSigning(null)}>Annuler</button>
+              <button type="button" className="btn" onClick={handleSign} disabled={!signName.trim()}>Confirmer la signature</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
