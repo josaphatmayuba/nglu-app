@@ -2182,9 +2182,28 @@ ${footer}`;
 
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
+  private validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
+    const s = buffer.subarray(0, 12);
+    switch (mimetype) {
+      case "image/jpeg":  return s[0] === 0xff && s[1] === 0xd8 && s[2] === 0xff;
+      case "image/png":   return s.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      case "image/webp":  return s.slice(0, 4).toString("ascii") === "RIFF" && s.slice(8, 12).toString("ascii") === "WEBP";
+      case "image/gif":   return s.slice(0, 6).toString("ascii").startsWith("GIF8");
+      case "application/pdf": return s.slice(0, 4).toString("ascii") === "%PDF";
+      default:            return false;
+    }
+  }
+
   private saveFile(file: HrUploadedFile): { name: string; path: string } {
+    if (!this.validateMagicBytes(file.buffer, file.mimetype)) {
+      throw new BadRequestException("Le contenu du fichier ne correspond pas au type déclaré.");
+    }
     if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-    const ext = (file.originalname.split(".").pop() || "bin").toLowerCase();
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+      "image/gif": "gif", "application/pdf": "pdf",
+    };
+    const ext = mimeToExt[file.mimetype] || "bin";
     const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
     writeFileSync(join(this.uploadDir, name), file.buffer);
     return { name, path: `/files/${name}` };
