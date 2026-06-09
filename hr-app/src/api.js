@@ -118,4 +118,8 @@ export const api = {
     return jsonFetch(`/hr/employees/${userId}/personal-documents`, { method: "POST", body: form, headers: {} });
   },
   deletePersonalDocument: (docId) => jsonFetch(`/hr/employees/personal-documents/${docId}`, { method: "DELETE" }),
+  taxRules: () => jsonFetch("/hr/tax-rules"),
+  createTaxRule: (body) => jsonFetch("/hr/tax-rules", { method: "POST", body: JSON.stringify(body) }),
+  updateTaxRule: (id, body) => jsonFetch(`/hr/tax-rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteTaxRule: (id) => jsonFetch(`/hr/tax-rules/${id}`, { method: "DELETE" }),
 };

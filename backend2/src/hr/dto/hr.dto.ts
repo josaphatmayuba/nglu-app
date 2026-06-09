@@ -1094,3 +1094,48 @@ export class CreateHrPersonalDocumentDto {
   @IsNumber()
   uploadedBy?: number | null;
 }
+
+export class CreateHrTaxRuleDto {
+  @IsString()
+  @IsNotEmpty()
+  countryCode: string;
+
+  @IsString()
+  @IsNotEmpty()
+  countryName: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cnssEmployeeRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cnssEmployerRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  iprRate?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  iprThreshold?: number;
+
+  @IsOptional()
+  iprBrackets?: Array<{ upTo: number | null; rate: number }> | null;
+
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateHrTaxRuleDto extends PartialType(CreateHrTaxRuleDto) {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  isActive?: number;
+}
+

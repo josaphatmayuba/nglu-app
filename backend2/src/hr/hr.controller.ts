@@ -75,6 +75,8 @@ import {
   HrAiChatDto,
   PayrollApprovalDto,
   CreateHrPersonalDocumentDto,
+  CreateHrTaxRuleDto,
+  UpdateHrTaxRuleDto,
 } from "./dto/hr.dto";
 import { HrService } from "./hr.service";
 
@@ -506,4 +508,19 @@ export class HrEmployeesController {
   deleteDoc(@Param("docId", ParseIntPipe) docId: number) {
     return this.service.deletePersonalDocument(docId);
   }
+
+  @Get("tax-rules")
+  listTaxRules() { return this.service.listTaxRules(); }
+
+  @Get("tax-rules/:id")
+  findTaxRule(@Param("id", ParseIntPipe) id: number) { return this.service.findTaxRule(id); }
+
+  @Post("tax-rules")
+  createTaxRule(@Body() body: CreateHrTaxRuleDto) { return this.service.createTaxRule(body); }
+
+  @Patch("tax-rules/:id")
+  updateTaxRule(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTaxRuleDto) { return this.service.updateTaxRule(id, body); }
+
+  @Delete("tax-rules/:id")
+  deleteTaxRule(@Param("id", ParseIntPipe) id: number) { return this.service.deleteTaxRule(id); }
 }

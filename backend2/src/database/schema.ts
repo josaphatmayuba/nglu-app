@@ -1825,3 +1825,20 @@ export const farmosSemenStraws = mysqlTable("farmos_semen_straws", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
+
+// Tax / cotisation rules per country
+export const hrTaxRules = mysqlTable("hr_tax_rules", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  countryCode: varchar("country_code", { length: 10 }).notNull(),
+  countryName: varchar("country_name", { length: 100 }).notNull(),
+  cnssEmployeeRate: double("cnss_employee_rate").default(0).notNull(),
+  cnssEmployerRate: double("cnss_employer_rate").default(0).notNull(),
+  iprRate: double("ipr_rate").default(0).notNull(),
+  iprThreshold: double("ipr_threshold").default(0).notNull(),
+  iprBrackets: json("ipr_brackets"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").onUpdateNow(),
+});

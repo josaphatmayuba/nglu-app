@@ -19,6 +19,7 @@ import {
   hrCandidates,
   hrDocuments,
   hrPersonalDocuments,
+  hrTaxRules,
   hrEmployeeRequests,
   hrExpenseRequests,
   hrLeaveRequests,
@@ -83,6 +84,8 @@ import {
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
   CreateHrPersonalDocumentDto,
+  CreateHrTaxRuleDto,
+  UpdateHrTaxRuleDto,
 } from "./dto/hr.dto";
 
 @Injectable()
@@ -635,6 +638,22 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 
     const currencyId = contract?.currencyId ?? (await this.resolveDefaultCurrency());
 
+    // Resolve tax rule: use employee country, fallback to org default
+    const [userRow] = await this.db.select({ country: users.country }).from(users).where(eq(users.id, userId)).limit(1);
+    const countryCode = (userRow?.country || "").trim().toUpperCase().slice(0, 10);
+    let taxRule: typeof hrTaxRules.$inferSelect | null = null;
+    if (countryCode) {
+      const rules = await this.db.select().from(hrTaxRules)
+        .where(and(eq(hrTaxRules.countryCode, countryCode), eq(hrTaxRules.isActive, 1)))
+        .limit(1);
+      taxRule = rules[0] ?? null;
+    }
+
+    const grossBeforeCnss = baseSalary + transportAllowance + housingAllowance + overtimeAmount;
+    const cnssAmount = taxRule ? this.roundNumber(grossBeforeCnss * Number(taxRule.cnssEmployeeRate || 0)) : 0;
+    const taxableBase = Math.max(0, grossBeforeCnss - cnssAmount - unpaidAbsenceDeduction);
+    const taxAmount = taxRule ? this.computeIpr(taxableBase, taxRule) : 0;
+
     return {
       userId,
       contractId: contract?.id ?? null,
@@ -649,15 +668,33 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       overtimeAmount,
       unpaidAbsenceDeduction,
       advanceDeduction: 0,
-      taxAmount: 0,
-      cnssAmount: 0,
+      taxAmount,
+      cnssAmount,
       otherDeductions: 0,
       workedDays: this.roundNumber(workedDays),
       absenceDays: this.roundNumber(absenceDays),
       paidLeaveDays: this.roundNumber(paidLeaveDays),
       status: "draft",
-      notes: `Genere automatiquement depuis contrat + presence pour ${period}`,
+      notes: `Genere automatiquement depuis contrat + presence pour ${period}${taxRule ? ` (${taxRule.countryCode})` : ""}`,
     };
+  }
+
+  private computeIpr(taxableBase: number, taxRule: typeof hrTaxRules.$inferSelect): number {
+    const brackets = taxRule.iprBrackets as Array<{ upTo: number | null; rate: number }> | null;
+    if (brackets && brackets.length > 0) {
+      let tax = 0;
+      let prev = 0;
+      for (const bracket of brackets) {
+        const ceil = bracket.upTo ?? Infinity;
+        const slice = Math.min(taxableBase, ceil) - prev;
+        if (slice <= 0) break;
+        tax += slice * bracket.rate;
+        prev = ceil;
+        if (taxableBase <= ceil) break;
+      }
+      return this.roundNumber(tax);
+    }
+    return this.roundNumber(taxableBase * Number(taxRule.iprRate || 0));
   }
 
   async payrollSummary(q: Record<string, string>) {
@@ -2253,6 +2290,55 @@ ${footer}`;
     const localFile = join(this.uploadDir, doc.filePath.replace(/^\/files\//, ""));
     if (existsSync(localFile)) unlinkSync(localFile);
     await this.db.delete(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id));
+    return { deleted: true };
+  }
+
+  listTaxRules() {
+    return this.db.select().from(hrTaxRules).orderBy(hrTaxRules.countryName);
+  }
+
+  async findTaxRule(id: number) {
+    const [row] = await this.db.select().from(hrTaxRules).where(eq(hrTaxRules.id, id)).limit(1);
+    if (!row) throw new NotFoundException("Tax rule not found.");
+    return row;
+  }
+
+  async createTaxRule(input: CreateHrTaxRuleDto) {
+    const [result] = await this.db.insert(hrTaxRules).values({
+      countryCode: input.countryCode.toUpperCase(),
+      countryName: input.countryName,
+      cnssEmployeeRate: Number(input.cnssEmployeeRate ?? 0),
+      cnssEmployerRate: Number(input.cnssEmployerRate ?? 0),
+      iprRate: Number(input.iprRate ?? 0),
+      iprThreshold: Number(input.iprThreshold ?? 0),
+      iprBrackets: input.iprBrackets ?? null,
+      notes: input.notes ?? null,
+      isActive: 1,
+    });
+    return this.findTaxRule((result as any).insertId);
+  }
+
+  async updateTaxRule(id: number, input: UpdateHrTaxRuleDto) {
+    await this.findTaxRule(id);
+    const patch: Record<string, any> = {};
+    if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
+    if (input.countryName !== undefined) patch["countryName"] = input.countryName;
+    if (input.cnssEmployeeRate !== undefined) patch["cnssEmployeeRate"] = Number(input.cnssEmployeeRate);
+    if (input.cnssEmployerRate !== undefined) patch["cnssEmployerRate"] = Number(input.cnssEmployerRate);
+    if (input.iprRate !== undefined) patch["iprRate"] = Number(input.iprRate);
+    if (input.iprThreshold !== undefined) patch["iprThreshold"] = Number(input.iprThreshold);
+    if (input.iprBrackets !== undefined) patch["iprBrackets"] = input.iprBrackets ?? null;
+    if (input.notes !== undefined) patch["notes"] = input.notes ?? null;
+    if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(hrTaxRules).set(patch).where(eq(hrTaxRules.id, id));
+    }
+    return this.findTaxRule(id);
+  }
+
+  async deleteTaxRule(id: number) {
+    await this.findTaxRule(id);
+    await this.db.delete(hrTaxRules).where(eq(hrTaxRules.id, id));
     return { deleted: true };
   }
 }
