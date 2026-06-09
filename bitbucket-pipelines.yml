@@ -37,6 +37,9 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
+                # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
@@ -156,6 +159,9 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
+                # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
+                - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
