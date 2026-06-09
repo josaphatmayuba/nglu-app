@@ -1,4 +1,4 @@
-CREATE TABLE `hr_personal_documents` (
+CREATE TABLE IF NOT EXISTS `hr_personal_documents` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `userId` bigint NOT NULL,
   `documentType` varchar(100) NOT NULL,

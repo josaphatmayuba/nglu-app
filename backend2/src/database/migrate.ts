@@ -23,6 +23,18 @@ const OPERATIONAL_REPAIR_MIGRATIONS = [
   "0077_hr_employee_complete_fields",
   "0078_hr_payrolls",
   "0079_hr_project_assignments",
+  // 0080-0087: les timestamps `when` du journal Drizzle sont en désordre
+  // (0085-0087 < 0084), donc Drizzle saute ces migrations au boot. On les
+  // rejoue ici. Tous ces fichiers ont été rendus idempotents (IF NOT EXISTS /
+  // SET+IF+PREPARE) pour pouvoir être réexécutés à chaque démarrage.
+  "0080_hr_timesheets_project_id",
+  "0081_hr_attendances",
+  "0082_hr_leave_workflow",
+  "0083_hr_document_generation",
+  "0084_hr_candidates",
+  "0085_hr_payroll_approval",
+  "0086_hr_personal_documents",
+  "0087_hr_tax_rules",
 ];
 
 type CountRow = RowDataPacket & { count: number };

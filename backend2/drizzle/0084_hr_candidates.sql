@@ -1,5 +1,5 @@
-CREATE TABLE `hr_candidates` (
-  `id` serial PRIMARY KEY NOT NULL,
+CREATE TABLE IF NOT EXISTS `hr_candidates` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `organization_id` bigint NOT NULL DEFAULT 1,
   `offerId` bigint DEFAULT NULL,
   `firstName` varchar(180) NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE `hr_candidates` (
   `currentEmployer` varchar(180) DEFAULT NULL,
   `yearsExperience` double DEFAULT NULL,
   `educationLevel` varchar(120) DEFAULT NULL,
-  `skills` text DEFAULT NULL,
+  `skills` text,
   `languages` varchar(500) DEFAULT NULL,
   `source` varchar(120) DEFAULT NULL,
   `cvUrl` varchar(500) DEFAULT NULL,
@@ -28,11 +28,14 @@ CREATE TABLE `hr_candidates` (
   `offerAmount` double DEFAULT NULL,
   `offerCurrencyId` bigint DEFAULT NULL,
   `convertedUserId` bigint DEFAULT NULL,
-  `convertedAt` timestamp DEFAULT NULL,
+  `convertedAt` timestamp NULL DEFAULT NULL,
   `assignedTo` bigint DEFAULT NULL,
-  `decisionComment` text DEFAULT NULL,
+  `decisionComment` text,
   `status` varchar(30) NOT NULL DEFAULT 'active',
-  `notes` text DEFAULT NULL,
-  `created_at` timestamp DEFAULT NULL,
-  `updated_at` timestamp DEFAULT NULL
+  `notes` text,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_hr_candidates_offer` (`offerId`),
+  INDEX `idx_hr_candidates_stage` (`stage`)
 );

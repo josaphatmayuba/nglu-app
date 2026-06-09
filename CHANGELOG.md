@@ -12,6 +12,11 @@ This project follows:
 
 ### Fixed
 
+- HR (drift migrations 0080->0087): les timestamps `when` du journal Drizzle etaient en desordre (0085/0086/0087 < 0084), si bien que Drizzle sautait ces 8 migrations au boot. Consequence sur dev: tables `hr_attendances`, `hr_candidates`, `hr_personal_documents`, `hr_tax_rules` absentes + colonnes payroll-approval / leave-workflow / document-generation manquantes -> ecrans Presences, Recrutement, upload de documents et paie casses (500). En plus, 0084 et 0087 etaient ecrites en syntaxe PostgreSQL (`serial`, `text DEFAULT NULL`).
+  - 0084 et 0087 reecrites en MySQL (`BIGINT UNSIGNED AUTO_INCREMENT`).
+  - 0082, 0083, 0085 et 0086 rendues idempotentes (pattern `SET/IF/PREPARE/EXECUTE` ou `IF NOT EXISTS`) pour pouvoir etre rejouees sans erreur.
+  - Ajout de 0080->0087 a `OPERATIONAL_REPAIR_MIGRATIONS` (backend2 `migrate.ts`) afin qu'elles soient reappliquees a chaque boot tant que le journal reste desordonne -> corrige dev ET prod via pipeline.
+  - Filet manuel: `scripts/sql/0080_0087_hr_drift_repair.sql` (idempotent) applique a la main sur la base dev.
 - HR: les suppressions des tables avec `status` passent en suppression logique (`status=false`) et les listes masquent les enregistrements inactifs par defaut.
 - HR app: nettoyage du flux d'enregistrement pour retirer les appels API HR dupliques/inatteignables, et alignement de `closeUser` sur `PUT /user/:id` afin de conserver `leaveDate` et `leaveReason`.
 - HR app: affichage du telephone reel dans l'annuaire employes et ajout des actions Visualiser, Modifier et Fermer le compte depuis chaque employe.
