@@ -202,14 +202,17 @@ export class UsersService {
 
     const hash = await bcrypt.hash(dto.password, 10);
 
+    const employeeId = dto.employeeId || (await this.nextEmployeeId(dto.joinDate));
     let result: { insertId?: number | bigint };
     try {
       [result] = await this.db.insert(users).values({
         ...dto,
+        employeeId,
         email: mailbox?.email ?? dto.email,
         password: hash,
         joinDate: dto.joinDate ? new Date(dto.joinDate) : null,
         leaveDate: dto.leaveDate ? new Date(dto.leaveDate) : null,
+        birthDate: dto.birthDate || null,
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       });
@@ -249,6 +252,7 @@ export class UsersService {
 
     if (dto.joinDate) updateData["joinDate"] = new Date(dto.joinDate);
     if (dto.leaveDate) updateData["leaveDate"] = new Date(dto.leaveDate);
+    if (dto.birthDate) updateData["birthDate"] = dto.birthDate;
     updateData["updatedAt"] = sql`CURRENT_TIMESTAMP`;
 
     await this.db.update(users).set(updateData).where(eq(users.id, id));
@@ -296,6 +300,17 @@ export class UsersService {
   private safeUser(u: typeof users.$inferSelect) {
     const { password: _, refreshToken: __, isLogin: ___, ...safe } = u;
     return safe;
+  }
+
+  private async nextEmployeeId(joinDate?: string | null) {
+    const year = String(joinDate || "").slice(0, 4) || String(new Date().getFullYear());
+    const pattern = `EMP-${year}-%`;
+    const [{ lastEmployeeId }] = await this.db
+      .select({ lastEmployeeId: sql<string | null>`max(${users.employeeId})` })
+      .from(users)
+      .where(like(users.employeeId, pattern));
+    const lastNumber = Number(String(lastEmployeeId || "").split("-").pop() || 0);
+    return `EMP-${year}-${String(lastNumber + 1).padStart(4, "0")}`;
   }
 
   private userDesignationHistory(userId: number) {

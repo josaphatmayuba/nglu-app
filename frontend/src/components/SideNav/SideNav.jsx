@@ -318,7 +318,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "RH",
-          to: "/admin/hr",
+          action: () => { window.location.href = "/hr/"; },
           icon: BriefcaseBusiness,
           permit: {
             permissions: ["create-user", "readAll-user"],
@@ -344,8 +344,8 @@ const SideNav = ({ collapsed, setCollapsed }) => {
           },
         },
         {
-          label: "Comptabilité",
-          to: "/admin/accounting",
+          label: "Comptabilite",
+          action: () => { window.location.href = "/comptabilite/"; },
           icon: WalletCards,
           permit: {
             permissions: ["create-account", "readAll-account"],

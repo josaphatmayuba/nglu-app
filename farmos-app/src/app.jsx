@@ -3,7 +3,7 @@
 
 import React from "react";
 import { Icon } from "./icons";
-import { SPECIES, speciesById, t, ALERTS, ANIMALS, STOCK } from "./data";
+import { SPECIES, t } from "./data";
 import { Sidebar, Topbar } from "./shell";
 import { Dashboard } from "./dashboard";
 import { Animals } from "./animals";

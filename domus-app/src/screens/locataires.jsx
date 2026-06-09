@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { api, domusOnboardingUrl } from "../api.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
-import { useApi } from "../data.js";
+import { normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
@@ -14,6 +14,8 @@ import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActio
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 
 const avatarTones = ["iris", "orange", "purple", "emerald", "ink"];
+let tenantCurrencyOptions = [];
+let tenantDefaultCurrencyId = "";
 // Dégradés des avatars de carte locataire (mêmes teintes que le CRM immobilier).
 const LETTER_TONES = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const onboardingStatusMeta = {
@@ -75,13 +77,15 @@ function formatShortDate(value) {
 }
 
 async function loadTenantsModule() {
-  const [tenants, onboarding, leases, units] = await Promise.all([
+  const [tenants, onboarding, leases, units, currencies, setting] = await Promise.all([
     api.tenants(),
     api.onboardingList().catch(() => []),
     api.leases().catch(() => []),
     api.units().catch(() => []),
+    api.currencies().catch(() => []),
+    api.setting().catch(() => null),
   ]);
-  return { tenants, onboarding, leases, units };
+  return { tenants, onboarding, leases, units, currencies, setting };
 }
 
 // ── Liaison locataire → bail actif → unité (comme le CRM TenantsPanel) ──
@@ -131,6 +135,25 @@ function leaseRentLabel(activeLease, activeUnit) {
   return `${sym} ${Number(amount).toLocaleString("fr-FR")}`.trim();
 }
 
+function DomusTenantMoneyField({ label, value, currencyId, onAmountChange, onCurrencyChange }) {
+  const options = tenantCurrencyOptions.length
+    ? tenantCurrencyOptions
+    : [{ value: tenantDefaultCurrencyId || "", label: "CDF", symbol: "CDF" }];
+  return (
+    <label className="domus-property-field">
+      <span>{label}</span>
+      <div className="domus-money-input">
+        <input type="number" min="0" step="0.01" value={value ?? ""} onChange={(e) => onAmountChange(e.target.value)} placeholder="Optionnel" />
+        <select value={currencyId ?? ""} onChange={(e) => onCurrencyChange(e.target.value)} aria-label="Devise">
+          {options.map((option) => (
+            <option key={option.value || option.symbol || option.label} value={option.value}>{option.symbol || option.label}</option>
+          ))}
+        </select>
+      </div>
+    </label>
+  );
+}
+
 export function Locataires() {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
@@ -146,6 +169,9 @@ export function Locataires() {
   }, [data?.onboarding, dateRange]);
   const leases = useMemo(() => (Array.isArray(data?.leases) ? data.leases : []), [data?.leases]);
   const units = useMemo(() => (Array.isArray(data?.units) ? data.units : []), [data?.units]);
+  const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
+  tenantCurrencyOptions = currency.currencyOptions;
+  tenantDefaultCurrencyId = currency.defaultCurrencyId;
 
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -610,7 +636,7 @@ const emptyTenant = {
   birth_date: "", sex: "M", nationality: "Congolaise", marital_status: "célibataire",
   contacted_person: "", contacted_person_phone_number: "",
   prossional_status: "salarie", main_activity: "", entity_name: "",
-  contract_type: "CDI", monthly_pay: "", other_monthly_income: "",
+  contract_type: "CDI", monthly_pay: "", salary_currency_id: "", other_monthly_income: "",
   occupant_number: 1, partenair_name: "", partenair_number: "",
   child_number: 0, child_ages: [],
   old_address: "", old_lessor: "", moving_reason: "",
@@ -666,6 +692,7 @@ function tenantToForm(t) {
     entity_name: t.entityName || "",
     contract_type: t.contractType || "CDI",
     monthly_pay: t.monthlyPay != null && t.monthlyPay !== "" ? String(Number(t.monthlyPay)) : "",
+    salary_currency_id: t.salaryCurrencyId != null && t.salaryCurrencyId !== "" ? String(t.salaryCurrencyId) : "",
     other_monthly_income: t.otherMonthlyIncome != null && t.otherMonthlyIncome !== "" ? String(Number(t.otherMonthlyIncome)) : "",
     occupant_number: t.occupantNumber || 1,
     partenair_name: t.partenairName || "",
@@ -726,6 +753,7 @@ function tenantPayload(f) {
     child_number: childN > 0 ? childN : 0,
   };
   if (f.monthly_pay !== "") payload.monthly_pay = Number(f.monthly_pay);
+  if (f.salary_currency_id !== "") payload.salary_currency_id = Number(f.salary_currency_id);
   if (f.other_monthly_income !== "") payload.other_monthly_income = Number(f.other_monthly_income);
   if (f.old_address.trim()) payload.old_address = f.old_address.trim();
   if (f.old_lessor.trim()) payload.old_lessor = f.old_lessor.trim();
@@ -815,8 +843,20 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
             <DomusPropertySelect label="Type de contrat" value={form.contract_type} onChange={(v) => set({ contract_type: v })} required options={CONTRACT_OPTIONS} />
           </div>
           <div className="domus-property-form-grid">
-            <DomusPropertyField label="Salaire mensuel" type="number" value={form.monthly_pay} onChange={(v) => set({ monthly_pay: v })} placeholder="Optionnel" />
-            <DomusPropertyField label="Autres revenus / mois" type="number" value={form.other_monthly_income} onChange={(v) => set({ other_monthly_income: v })} placeholder="Optionnel" />
+            <DomusTenantMoneyField
+              label="Salaire mensuel"
+              value={form.monthly_pay}
+              currencyId={form.salary_currency_id || tenantDefaultCurrencyId}
+              onAmountChange={(v) => set({ monthly_pay: v, salary_currency_id: form.salary_currency_id || tenantDefaultCurrencyId })}
+              onCurrencyChange={(v) => set({ salary_currency_id: v })}
+            />
+            <DomusTenantMoneyField
+              label="Autres revenus / mois"
+              value={form.other_monthly_income}
+              currencyId={form.salary_currency_id || tenantDefaultCurrencyId}
+              onAmountChange={(v) => set({ other_monthly_income: v, salary_currency_id: form.salary_currency_id || tenantDefaultCurrencyId })}
+              onCurrencyChange={(v) => set({ salary_currency_id: v })}
+            />
           </div>
         </FormSection>
 

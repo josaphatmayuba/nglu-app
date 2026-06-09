@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS `hr_projects` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `organization_id` bigint NOT NULL DEFAULT 1,
+  `code` varchar(80) NULL,
+  `name` varchar(180) NOT NULL,
+  `donor` varchar(180) NULL,
+  `managerId` bigint NULL,
+  `startDate` date NULL,
+  `endDate` date NULL,
+  `hrBudget` double NOT NULL DEFAULT 0,
+  `currencyId` bigint NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `notes` text NULL,
+  `created_at` timestamp NULL,
+  `updated_at` timestamp NULL,
+  CONSTRAINT `hr_projects_id` PRIMARY KEY(`id`),
+  INDEX `idx_hr_projects_status` (`status`),
+  INDEX `idx_hr_projects_donor` (`donor`)
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `hr_project_assignments` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `organization_id` bigint NOT NULL DEFAULT 1,
+  `projectId` bigint NOT NULL,
+  `userId` bigint NOT NULL,
+  `role` varchar(160) NULL,
+  `startDate` date NULL,
+  `endDate` date NULL,
+  `timePercent` double NOT NULL DEFAULT 100,
+  `monthlyCost` double NOT NULL DEFAULT 0,
+  `currencyId` bigint NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'active',
+  `notes` text NULL,
+  `created_at` timestamp NULL,
+  `updated_at` timestamp NULL,
+  CONSTRAINT `hr_project_assignments_id` PRIMARY KEY(`id`),
+  INDEX `idx_hr_project_assignments_project` (`projectId`),
+  INDEX `idx_hr_project_assignments_user` (`userId`),
+  INDEX `idx_hr_project_assignments_status` (`status`)
+);

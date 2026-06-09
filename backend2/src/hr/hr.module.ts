@@ -1,18 +1,36 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
+import { SystemEmailModule } from "../system-email/system-email.module";
 import {
   AwardController,
   AwardHistoryController,
   DesignationController,
   DesignationHistoryController,
+  HrContractController,
+  HrAttendanceController,
   HrController,
+  HrDocumentController,
+  HrEmployeeRequestController,
+  HrExpenseRequestController,
+  HrLeaveRequestController,
+  HrPayrollController,
+  HrPerformanceReviewController,
+  HrProjectAssignmentController,
+  HrProjectController,
+  HrCandidateController,
+  HrAiController,
+  HrEmployeesController,
+  HrRecruitmentOfferController,
+  HrTimesheetController,
   SalaryHistoryController,
   ShiftController,
+  HrSocialDeclarationController,
+  HrTrainingSessionController,
 } from "./hr.controller";
 import { HrService } from "./hr.service";
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SystemEmailModule],
   controllers: [
     HrController,
     DesignationController,
@@ -20,7 +38,24 @@ import { HrService } from "./hr.service";
     AwardController,
     DesignationHistoryController,
     SalaryHistoryController,
+    HrAttendanceController,
     AwardHistoryController,
+    HrLeaveRequestController,
+    HrPayrollController,
+    HrProjectController,
+    HrProjectAssignmentController,
+    HrContractController,
+    HrDocumentController,
+    HrEmployeeRequestController,
+    HrExpenseRequestController,
+    HrSocialDeclarationController,
+    HrPerformanceReviewController,
+    HrTrainingSessionController,
+    HrTimesheetController,
+    HrRecruitmentOfferController,
+    HrCandidateController,
+    HrAiController,
+    HrEmployeesController,
   ],
   providers: [HrService],
 })

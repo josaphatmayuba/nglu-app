@@ -358,6 +358,167 @@
       "when": 1780196400000,
       "tag": "0070_refresh_token_rotation",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1780200000000,
+      "tag": "0071_hr_modules",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1780203600000,
+      "tag": "0072_hr_timesheets",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1780207200000,
+      "tag": "0073_hr_money_currency_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1780210800000,
+      "tag": "0074_hr_employee_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1780214400000,
+      "tag": "0075_hr_timesheet_period_dates",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1780218000000,
+      "tag": "0076_hr_contract_professional_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1780221600000,
+      "tag": "0077_hr_employee_complete_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1780225200000,
+      "tag": "0078_hr_payrolls",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "5",
+      "when": 1780228800000,
+      "tag": "0079_hr_project_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1780232400000,
+      "tag": "0080_hr_timesheets_project_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1780236000000,
+      "tag": "0081_hr_attendances",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1780239600000,
+      "tag": "0082_hr_leave_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "5",
+      "when": 1780243200000,
+      "tag": "0083_hr_document_generation",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1780246800000,
+      "tag": "0084_hr_candidates",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1749427200000,
+      "tag": "0085_hr_payroll_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1749513600000,
+      "tag": "0086_hr_personal_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1749600000000,
+      "tag": "0087_hr_tax_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1749686400000,
+      "tag": "0088_hr_public_holidays",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1749772800000,
+      "tag": "0089_hr_leave_entitlements",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1749859200000,
+      "tag": "0090_hr_payroll_period_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1749945600000,
+      "tag": "0091_hr_document_approval",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1750032000000,
+      "tag": "0092_hr_document_signature_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "5",
+      "when": 1750118400000,
+      "tag": "0093_hr_candidate_evaluations",
+      "breakpoints": true
     }
   ]
 }

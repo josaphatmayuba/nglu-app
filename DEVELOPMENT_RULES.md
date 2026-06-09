@@ -55,8 +55,8 @@ Every agent working with Jira must keep the issue status aligned with the real s
 - While working, add Jira comments with useful technical notes, changed files, blockers, and validation results so another agent can continue without re-investigating.
 - Every task must include technical validation appropriate to the change: lint, typecheck, build, automated tests, focused scripts, or migration checks.
 - Every frontend or user-visible task must include UI validation before it is considered ready. Prefer local browser validation first, then dev/prod validation when the task requires deployment.
-- At the end of each task, update the AWS dev environment (`dev.ongdngolu.org`) so the user can test the latest work. If deployment is blocked, document the blocker in Jira and in the final handoff.
-- After a task is implemented and validated, push the code to the `develop` branch so the remote branch matches the AWS dev environment. If pushing is blocked, document the blocker in Jira and in the final handoff.
+- At the end of each task, do not deploy manually to AWS dev by default. Commit and push the validated code; Bitbucket pipelines are responsible for deployment. Manual AWS deployment is allowed only when the user explicitly asks for it.
+- After a task is implemented and validated, push the code to the `develop` branch so Bitbucket can deploy it. If pushing is blocked, document the blocker in Jira and in the final handoff.
 - Frontend deployments to AWS dev must be built with `npm run build:dev`, not plain `npm run build`, so the compiled bundle points to `https://dev.ongdngolu.org/api`. Production deployments must use `npm run build:prod`.
 - After every code or configuration change, run an appropriate verification before changing the Jira status. Verification must prove the changed behavior still works, not only that files were edited.
 - When code is implemented but still needs QA, user confirmation, staging verification, or deployment validation, move the issue to `Test`.
@@ -90,6 +90,13 @@ The public marketing site and CRM must stay separated:
 - `https://ongdngolu.org/` serves the marketing site.
 - `https://ongdngolu.org/crm` is the CRM entry point.
 - Do not move the CRM back to the domain root.
+
+## Data Entry UX Policy
+
+- Phone fields must use an international phone input with a visible country indicator and dialing code. Default to Congo DRC (`+243`) when no country is known, and store the normalized international value whenever the backend accepts it.
+- Money fields must never be plain number inputs. Any salary, rent, amount, fee, budget, price, income, payment, deposit, or balance field must show the currency beside the amount through a currency selector or adjacent currency code/symbol.
+- Currency values must come from the database/configuration (`currency` + `setting`) where available. Do not hardcode business amounts or fake currencies in frontend data files.
+- Money displays must include the currency code/symbol everywhere, including cards, tables, modals, exports, tenant files, HR profiles, and summaries.
 
 ## Frontend Dev Deployment Policy
 

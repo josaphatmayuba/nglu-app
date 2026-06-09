@@ -69,6 +69,10 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     return true;
   });
   const medCostMonth = medExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const activeBySpecies = SPECIES.map((s) => {
+    const rows = allAnimals.filter((a) => (!speciesFilter || a.species === speciesFilter) && a.species === s.id && a.status && a.status !== "healthy");
+    return { ...s, activeCount: rows.length, statuses: [...new Set(rows.map((a) => a.status).filter(Boolean))] };
+  }).filter((s) => s.activeCount > 0);
 
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
@@ -172,22 +176,23 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           <div className="card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div className="bilang">
-                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Maladies actives" : "Active diseases"}</h3>
-                <span className="sec">{lang === "fr" ? "12 cas répartis" : "12 cases"}</span>
+                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Statuts sanitaires actifs" : "Active health statuses"}</h3>
+                <span className="sec">{activeBySpecies.reduce((sum, s) => sum + s.activeCount, 0)} {lang === "fr" ? "cas en base" : "DB cases"}</span>
               </div>
               <button className="btn btn-sm btn-ghost"><Icon name="filter" size={12} color="var(--ink-700)"/></button>
             </div>
-            {(speciesFilter ? [speciesById(speciesFilter)] : SPECIES.slice(0, 5)).map((s) => (
+            {activeBySpecies.length === 0 && <EmptyState title={lang === "fr" ? "Aucun statut sanitaire actif en base" : "No active health status in database"} />}
+            {activeBySpecies.map((s) => (
               <div key={s.id} style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <AnimalGlyph kind={s.glyph} size={14} color="var(--ink-700)"/>
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)" }}>{lang === "fr" ? s.fr : s.en}</span>
-                  <span style={{ fontSize: 10.5, color: "var(--fg-3)" }} className="mono">{s.sick} cas</span>
+                  <span style={{ fontSize: 10.5, color: "var(--fg-3)" }} className="mono">{s.activeCount}</span>
                 </div>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                  {(lang === "fr" ? s.diseases : s.diseasesEn).slice(0, 3).map((d, i) => (
+                  {s.statuses.map((status, i) => (
                     <span key={i} className="tag" style={{ background: i === 0 ? "var(--rust-50)" : "var(--bg-sunken)", color: i === 0 ? "var(--rust-900)" : "var(--ink-700)" }}>
-                      {d}
+                      {status}
                     </span>
                   ))}
                 </div>

@@ -74,6 +74,7 @@
     "mysql2": "^3.11.5",
     "nodemailer": "^8.0.7",
     "otplib": "^13.4.0",
+    "puppeteer": "^25.1.0",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

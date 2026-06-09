@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS `hr_timesheets` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `organization_id` BIGINT NOT NULL DEFAULT 1,
+  `userId` BIGINT NOT NULL,
+  `workDate` DATE NOT NULL,
+  `period` VARCHAR(30) NULL,
+  `project` VARCHAR(180) NOT NULL,
+  `donor` VARCHAR(180) NULL,
+  `activity` VARCHAR(255) NULL,
+  `hours` DOUBLE NOT NULL DEFAULT 0,
+  `status` VARCHAR(30) NOT NULL DEFAULT 'submitted',
+  `note` TEXT NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_hr_timesheets_user` (`userId`),
+  INDEX `idx_hr_timesheets_work_date` (`workDate`),
+  INDEX `idx_hr_timesheets_project` (`project`),
+  INDEX `idx_hr_timesheets_status` (`status`)
+);

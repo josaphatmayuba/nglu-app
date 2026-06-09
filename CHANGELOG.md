@@ -10,6 +10,25 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+
+- HR (drift migrations 0080->0087): les timestamps `when` du journal Drizzle etaient en desordre (0085/0086/0087 < 0084), si bien que Drizzle sautait ces 8 migrations au boot. Consequence sur dev: tables `hr_attendances`, `hr_candidates`, `hr_personal_documents`, `hr_tax_rules` absentes + colonnes payroll-approval / leave-workflow / document-generation manquantes -> ecrans Presences, Recrutement, upload de documents et paie casses (500). En plus, 0084 et 0087 etaient ecrites en syntaxe PostgreSQL (`serial`, `text DEFAULT NULL`).
+  - 0084 et 0087 reecrites en MySQL (`BIGINT UNSIGNED AUTO_INCREMENT`).
+  - 0082, 0083, 0085 et 0086 rendues idempotentes (pattern `SET/IF/PREPARE/EXECUTE` ou `IF NOT EXISTS`) pour pouvoir etre rejouees sans erreur.
+  - Ajout de 0080->0087 a `OPERATIONAL_REPAIR_MIGRATIONS` (backend2 `migrate.ts`) afin qu'elles soient reappliquees a chaque boot tant que le journal reste desordonne -> corrige dev ET prod via pipeline.
+  - Filet manuel: `scripts/sql/0080_0087_hr_drift_repair.sql` (idempotent) applique a la main sur la base dev.
+- HR: les suppressions des tables avec `status` passent en suppression logique (`status=false`) et les listes masquent les enregistrements inactifs par defaut.
+- HR app: nettoyage du flux d'enregistrement pour retirer les appels API HR dupliques/inatteignables, et alignement de `closeUser` sur `PUT /user/:id` afin de conserver `leaveDate` et `leaveReason`.
+- HR app: affichage du telephone reel dans l'annuaire employes et ajout des actions Visualiser, Modifier et Fermer le compte depuis chaque employe.
+- HR: ajout de la migration Drizzle `0071_hr_modules` pour creer automatiquement les tables RH manquantes (`hr_leave_requests`, contrats, documents, frais, declarations, performance, formations, recrutement) lors du deploy Bitbucket.
+- HR app: stabilisation du tableau de bord departements; les compteurs/couleurs sont enrichis depuis le personnel live au lieu de remplacer le fallback par des departements API incomplets.
+- HR app: suppression des donnees metier hardcodees de `data.js`; les ecrans utilisent uniquement les donnees API/BD ou affichent un etat vide.
+- FarmOS app: suppression des donnees metier hardcodees de `data.jsx`; QuickEntry et les panneaux lisent les animaux, stocks, maladies et alertes depuis l'API/BD ou restent vides.
+
+### Added
+
+- HR deploy: ajout de `scripts/deploy-dev-hr-aws.ps1` et integration de `hr-app` dans `scripts/deploy-dev-all.ps1`.
+
 ## [3.2.0] - 2026-06-04
 
 ### Security

@@ -1,0 +1,49 @@
+import { clearAuth, getToken, restoreSession } from "./auth.jsx";
+
+const NATIVE = typeof window !== "undefined" &&
+  (window.Capacitor?.isNativePlatform?.() === true || /^capacitor:\/\//.test(window.location?.protocol || ""));
+const API_HOST = (typeof window !== "undefined" && window.COMPTABILITE_API_HOST) || "https://dev.ongdngolu.org";
+export const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
+
+function authHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function jsonFetch(path, init = {}, retried = false) {
+  const res = await fetch(`${API_ROOT}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init.headers || {})
+    }
+  });
+  if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return jsonFetch(path, init, true);
+      }
+      clearAuth();
+      window.dispatchEvent(new CustomEvent("comptabilite:auth-changed"));
+    }
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 180)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export const api = {
+  setting: () => jsonFetch("/setting"),
+  currencies: () => jsonFetch("/currency?query=all"),
+  transactions: () => jsonFetch("/transaction?status=true&page=1&limit=100"),
+  accounts: () => jsonFetch("/account?type=sa&query=all"),
+  mainAccounts: () => jsonFetch("/account?query=ma"),
+  trialBalance: () => jsonFetch("/account?query=tb"),
+  balanceSheet: () => jsonFetch("/account?query=bs"),
+  incomeStatement: () => jsonFetch("/account?query=is"),
+  createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
+  createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) })
+};

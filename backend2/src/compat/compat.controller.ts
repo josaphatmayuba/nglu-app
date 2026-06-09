@@ -34,8 +34,18 @@ export class CompatController {
 
   @Get(["files/:id", "product-image/:id", "slider-images/:id", "customer-profileImage/:id", "customer-profile-image/:id"])
   showFile(@Param("id") id: string, @Res() res: Response) {
+    // Reject path traversal attempts
+    if (id.includes("..") || id.includes("/") || id.includes("\\")) {
+      return res.status(400).json({ error: "Invalid file name" });
+    }
     const path = filePath(id);
     if (!existsSync(path)) return res.status(404).json({ error: "File Not found" });
+    const safeName = id.replace(/[^\w.\-]/g, "_");
+    const isPdf = id.toLowerCase().endsWith(".pdf");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'");
+    // Images can be displayed inline; PDFs forced to download to prevent JS execution
+    res.setHeader("Content-Disposition", isPdf ? `attachment; filename="${safeName}"` : `inline; filename="${safeName}"`);
     return createReadStream(path).pipe(res);
   }
 

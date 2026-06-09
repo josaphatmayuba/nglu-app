@@ -1,7 +1,7 @@
 /* eslint-disable */
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
-import { SPECIES, ANIMALS, STOCK, speciesById } from "./data";
+import { SPECIES, speciesById } from "./data";
 import { api } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
 
@@ -645,7 +645,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
   const productKind = context?.productKind || sp.productPrimary; // milk | eggs | growth | wool
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   React.useEffect(() => {
-    api.listAnimals().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveAnimals(rows); }).catch(() => {});
+    api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
   }, []);
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === species);
   const [saving, setSaving] = React.useState(false);
@@ -829,8 +829,8 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
   const loadAll = React.useCallback(() => {
     Promise.all([api.listAnimals(), api.listMedicines(), api.listDiseases()])
       .then(([a, m, d]) => {
-        if (Array.isArray(a) && a.length) setLiveAnimals(a);
-        if (Array.isArray(m) && m.length) setLiveMeds(m);
+        if (Array.isArray(a)) setLiveAnimals(a);
+        if (Array.isArray(m)) setLiveMeds(m);
         if (Array.isArray(d)) setLiveDiseases(d);
       })
       .catch(() => {});
@@ -841,10 +841,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     window.addEventListener("farmos:lookup-created", refetch);
     return () => window.removeEventListener("farmos:lookup-created", refetch);
   }, [loadAll]);
-  const animalsForSpecies = (liveAnimals || ANIMALS).filter((a) => a.species === form.species);
-  const medsForSpecies = liveMeds || STOCK.filter((s) => s.kind === "med" && s.species?.includes(form.species));
+  const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species);
+  const medsForSpecies = (liveMeds || []).filter((s) => s.kind === "med" && s.species?.includes(form.species));
   const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
-  const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : speciesDef.diseases.map((d, i) => ({ id: null, name_fr: d, name_en: speciesDef.diseasesEn[i] }));
+  const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : [];
   const [saving, setSaving] = React.useState(false);
 
   const submit = async () => {
@@ -1116,7 +1116,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
     }).catch(() => {});
   }, [invoiceDirty]);
   React.useEffect(() => {
-    api.listMedicines().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveMeds(rows); }).catch(() => {});
+    api.listMedicines().then((rows) => { if (Array.isArray(rows)) setLiveMeds(rows); }).catch(() => {});
     // Lots disponibles = valeurs distinctes de `lot` parmi les animaux,
     // avec compteur d'animaux et espèce dominante pour le label.
     api.listAnimals().then((rows) => {
@@ -1141,7 +1141,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       setLots(opts);
     }).catch(() => {});
   }, [lang]);
-  const stockOptions = liveMeds || STOCK;
+  const stockOptions = liveMeds || [];
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -1291,7 +1291,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
   const [males, setMales] = React.useState([]);
   const [suggesting, setSuggesting] = React.useState(false);
   React.useEffect(() => {
-    api.listAnimals().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveAnimals(rows); }).catch(() => {});
+    api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
   }, []);
   React.useEffect(() => {
     if (kind !== "ai" || !form.species) { setStraws([]); setMales([]); return; }
@@ -1327,7 +1327,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       setSuggesting(false);
     }
   };
-  const animalsForSpecies = (liveAnimals || ANIMALS).filter((a) => {
+  const animalsForSpecies = (liveAnimals || []).filter((a) => {
     const sp = a.species;
     const sex = a.sex;
     return sp === form.species && (sex === "F" || sex === "Mixte" || !sex);
@@ -1337,8 +1337,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     if (saving) return;
     const selected = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
     if (!selected || !liveAnimals) {
-      onSaved && onSaved({ kind: "repro", severity: "info", message: lang === "fr" ? "Démo : événement enregistré localement (pas d'animal lié en BD)." : "Demo: event saved locally (no DB animal)." });
-      onClose();
+      onSaved && onSaved({ kind: "repro", severity: "error", message: lang === "fr" ? "Selectionne un animal existant en BD." : "Select an animal that exists in the database." });
       return;
     }
     setSaving(true);
@@ -1535,7 +1534,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   React.useEffect(() => {
-    api.listAnimals().then((rows) => { if (Array.isArray(rows) && rows.length) setLiveAnimals(rows); }).catch(() => {});
+    api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
   }, []);
   const submit = async () => {
     if (saving) return;
@@ -1593,7 +1592,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-              options={ANIMALS.filter((a) => a.species === form.species).map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={(liveAnimals || []).filter((a) => a.species === form.species).map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
         </FormGrid>

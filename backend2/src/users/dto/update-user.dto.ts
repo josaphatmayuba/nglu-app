@@ -15,6 +15,15 @@ export class UpdateUserDto {
   @ApiPropertyOptional() @IsOptional() @IsInt() roleId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() email?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() gender?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() birthDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() maritalStatus?: string;
+  @ApiPropertyOptional() @IsOptional() @IsInt() childrenCount?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() nationality?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() emergencyContactName?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() emergencyContactPhone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() emergencyContactRelationship?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() personalDocumentsUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() street?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() city?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() state?: string;
