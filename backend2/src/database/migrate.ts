@@ -12,36 +12,31 @@ type JournalEntry = {
   breakpoints: boolean;
 };
 
-const OPERATIONAL_REPAIR_MIGRATIONS = [
-  "0070_refresh_token_rotation",
-  "0071_hr_modules",
-  "0072_hr_timesheets",
-  "0073_hr_money_currency_ids",
-  "0074_hr_employee_requests",
-  "0075_hr_timesheet_period_dates",
-  "0076_hr_contract_professional_fields",
-  "0077_hr_employee_complete_fields",
-  "0078_hr_payrolls",
-  "0079_hr_project_assignments",
-  // 0080-0087: les timestamps `when` du journal Drizzle sont en désordre
-  // (0085-0087 < 0084), donc Drizzle saute ces migrations au boot. On les
-  // rejoue ici. Tous ces fichiers ont été rendus idempotents (IF NOT EXISTS /
-  // SET+IF+PREPARE) pour pouvoir être réexécutés à chaque démarrage.
-  "0080_hr_timesheets_project_id",
-  "0081_hr_attendances",
-  "0082_hr_leave_workflow",
-  "0083_hr_document_generation",
-  "0084_hr_candidates",
-  "0085_hr_payroll_approval",
-  "0086_hr_personal_documents",
-  "0087_hr_tax_rules",
-  "0088_hr_public_holidays",
-  "0089_hr_leave_entitlements",
-  "0090_hr_payroll_period_lock",
-  "0091_hr_document_approval",
-  "0092_hr_document_signature_hash",
-  "0093_hr_candidate_evaluations",
-];
+// Seuil d'auto-découverte : toute migration dont le numéro est >= à ce seuil est
+// considérée idempotente (CREATE TABLE IF NOT EXISTS / pattern SET+IF+PREPARE) et
+// rejouée au boot. Évite la liste codée en dur : une nouvelle migration >=0070
+// est donc appliquée automatiquement, même si le `when` du journal est en
+// désordre (drift connu 0080-0087) — plus aucun oubli possible.
+const OPERATIONAL_REPAIR_MIN_INDEX = 70;
+
+// Numéro de migration extrait du tag (ex. "0088_hr_public_holidays" -> 88).
+function migrationIndex(tag: string): number {
+  const m = /^(\d+)/.exec(tag);
+  return m ? Number(m[1]) : NaN;
+}
+
+// Liste calculée (et non codée en dur) des migrations à rejouer au boot :
+// toutes celles du journal Drizzle dont l'index >= OPERATIONAL_REPAIR_MIN_INDEX,
+// triées par index croissant.
+function operationalRepairMigrations(): string[] {
+  return journalEntries()
+    .map((entry) => entry.tag)
+    .filter((tag) => {
+      const idx = migrationIndex(tag);
+      return Number.isFinite(idx) && idx >= OPERATIONAL_REPAIR_MIN_INDEX;
+    })
+    .sort((a, b) => migrationIndex(a) - migrationIndex(b));
+}
 
 type CountRow = RowDataPacket & { count: number };
 type MigrationStateRow = RowDataPacket & { created_at: number };
@@ -132,8 +127,10 @@ function migrationHash(tag: string) {
 
 async function applyPendingOperationalRepairs() {
   const entries = journalEntries();
-  const firstTag = OPERATIONAL_REPAIR_MIGRATIONS[0];
-  const lastTag = OPERATIONAL_REPAIR_MIGRATIONS[OPERATIONAL_REPAIR_MIGRATIONS.length - 1];
+  const repairTags = operationalRepairMigrations();
+  if (repairTags.length === 0) return;
+  const firstTag = repairTags[0];
+  const lastTag = repairTags[repairTags.length - 1];
   const firstIndex = entries.findIndex((entry) => entry.tag === firstTag);
   const firstEntry = entries[firstIndex];
   const lastEntry = journalEntry(lastTag);
@@ -171,7 +168,7 @@ async function migrationTableExists() {
 }
 
 async function markOperationalRepairsApplied() {
-  for (const tag of OPERATIONAL_REPAIR_MIGRATIONS) {
+  for (const tag of operationalRepairMigrations()) {
     const entry = journalEntry(tag);
     const [rows] = await connection.execute<CountRow[]>(
       "select count(*) as count from __drizzle_migrations where created_at = ?",
@@ -191,11 +188,18 @@ async function applyOperationalRepairs() {
   console.log("Verifying operational schema repairs...");
   const repairConnection = await connection.getConnection();
   try {
-    for (const tag of OPERATIONAL_REPAIR_MIGRATIONS) {
+    for (const tag of operationalRepairMigrations()) {
       const migrationPath = `./drizzle/${tag}.sql`;
       if (!existsSync(migrationPath)) continue;
-      for (const statement of splitSqlStatements(readFileSync(migrationPath, "utf8"))) {
-        await repairConnection.query(statement);
+      // Tolérant aux erreurs : une migration non idempotente (ex. colonne déjà
+      // existante) ne doit pas crash-looper le conteneur — on logge et on continue.
+      try {
+        for (const statement of splitSqlStatements(readFileSync(migrationPath, "utf8"))) {
+          await repairConnection.query(statement);
+        }
+      } catch (err: any) {
+        const code = err?.code || err?.errno || "unknown";
+        console.warn(`⚠ Operational repair skipped for ${tag} (${code}): ${err?.message ?? err}`);
       }
     }
   } finally {
