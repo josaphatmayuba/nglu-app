@@ -849,6 +849,19 @@ Object.assign(ACTION_FORMS, {
   },
 });
 
+// Déclaré avant usage : ACTION_FORMS.candidate (top-level) lit CANDIDATE_STAGES
+// à l'évaluation du module — une déclaration plus bas provoquerait un TDZ
+// ("Cannot access 'CANDIDATE_STAGES' before initialization").
+const CANDIDATE_STAGES = [
+  { value: "nouveau", label: "Nouveau", color: "ink" },
+  { value: "entrevue", label: "Entrevue", color: "sky" },
+  { value: "test", label: "Test", color: "amber" },
+  { value: "offre", label: "Offre", color: "accent-soft" },
+  { value: "accepte", label: "Accepte", color: "emerald" },
+  { value: "embauche", label: "Embauche", color: "emerald" },
+  { value: "rejete", label: "Rejete", color: "rose" },
+];
+
 Object.assign(ACTION_FORMS, {
   candidate: {
     title: "Nouveau candidat",
@@ -2550,15 +2563,6 @@ function Formation({ data, setModal }) {
 }
 
 /* Recrutement */
-const CANDIDATE_STAGES = [
-  { value: "nouveau", label: "Nouveau", color: "ink" },
-  { value: "entrevue", label: "Entrevue", color: "sky" },
-  { value: "test", label: "Test", color: "amber" },
-  { value: "offre", label: "Offre", color: "accent-soft" },
-  { value: "accepte", label: "Accepte", color: "emerald" },
-  { value: "embauche", label: "Embauche", color: "emerald" },
-  { value: "rejete", label: "Rejete", color: "rose" },
-];
 const stageChip = (stage) => {
   const s = CANDIDATE_STAGES.find((x) => x.value === String(stage || "").toLowerCase()) || { color: "ink" };
   return s.color;
