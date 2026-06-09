@@ -1,0 +1,22 @@
+# Liste des fichiers inclus
+
+- prompts/prompt_10_roadmap_24_mois_mvp_erp_sifa.md
+- prompts/prompt_11_cahier_des_charges_erp_sifa.md
+- prompts/prompt_12_architecture_saas_multitenant_erp_sifa.md
+- prompts/prompt_13_migration_donnees_compatibilite_erp_sifa.md
+- prompts/prompt_14_conformite_gouvernance_audit_erp_sifa.md
+- prompts/prompt_15_integrations_api_import_export_erp_sifa.md
+- prompts/prompt_16_ia_analytics_decisionnel_erp_sifa.md
+- prompts/prompt_17_mobile_pwa_offline_terrain_erp_sifa.md
+- prompts/prompt_18_implementation_client_support_formation_erp_sifa.md
+- prompts/prompt_19_packaging_pricing_proposals_branding_erp_sifa.md
+- prompts/prompt_20_master_index_final_erp_sifa.md
+- prompts/prompt_2_audit_reel_backend_erp_sifa.md
+- prompts/prompt_3_plan_execution_technique_erp_sifa.md
+- prompts/prompt_4_frontend_ux_erp_sifa.md
+- prompts/prompt_5_commercialisation_securite_erp_sifa.md
+- prompts/prompt_6_qualite_tests_devops_deploiement_erp_sifa.md
+- prompts/prompt_7_documentation_complete_erp_sifa.md
+- prompts/prompt_8_donnees_demo_scenarios_erp_sifa.md
+- prompts/prompt_9_backlog_tickets_erp_sifa.md
+- prompts/prompt_audit_transformation_erp_sifa.md
