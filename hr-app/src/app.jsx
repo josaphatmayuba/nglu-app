@@ -329,6 +329,7 @@ const STATUS_LABELS = {
   absent: "Absent",
   partial: "Partiel",
   validated: "Valide",
+  pending_approval: "En approbation",
   paid_leave: "Conge paye",
   unpaid_leave: "Conge non paye",
   true: "Actif",
@@ -338,7 +339,7 @@ const isPending = (status) => ["pending", "en_attente", "submitted", "draft", "v
 const isApproved = (status) => ["approved", "hr_approved", "active", "received", "planned", "done", "open", "true", "paid", "present", "validated", "paid_leave"].includes(String(status || "").toLowerCase());
 const chipForStatus = (status) => {
   const value = String(status || "").toLowerCase();
-  if (["late", "partial", "manager_approved", "hr_review"].includes(value)) return "amber";
+  if (["late", "partial", "manager_approved", "hr_review", "pending_approval"].includes(value)) return "amber";
   if (["absent", "rejected"].includes(value)) return "rose";
   return isPending(value) ? "amber" : isApproved(value) ? "emerald" : "ink";
 };
@@ -1992,11 +1993,19 @@ function Paie({ data, staff, masse, setModal, reload }) {
     } finally { setGenerating(false); }
   };
 
-  const handleValidate = async (p) => {
-    try { await api.updatePayroll(p.id, { status: "validated" }); reload(); } catch (e) { alert(e.message); }
+  const handleSubmit = async (p) => {
+    try { await api.submitPayroll(p.id); reload(); } catch (e) { alert(e.message); }
+  };
+  const handleApprove = async (p) => {
+    try { await api.approvePayroll(p.id); reload(); } catch (e) { alert(e.message); }
+  };
+  const handleReject = async (p) => {
+    const reason = window.prompt("Motif du rejet (optionnel) :");
+    if (reason === null) return;
+    try { await api.rejectPayroll(p.id, { comment: reason }); reload(); } catch (e) { alert(e.message); }
   };
   const handleMarkPaid = async (p) => {
-    try { await api.updatePayroll(p.id, { status: "paid" }); reload(); } catch (e) { alert(e.message); }
+    try { await api.payPayroll(p.id); reload(); } catch (e) { alert(e.message); }
   };
 
   const exportPayrolls = () => exportCsv(
@@ -2019,9 +2028,9 @@ function Paie({ data, staff, masse, setModal, reload }) {
       <PageHead eyebrow="Payroll" title="Paie professionnelle" action="Nouveau bulletin" actionIcon="plus" onAction={() => setModal({ kind: "payroll" })} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label="Brouillons" value={summary.workflow.draft} />
+        <KPI label="En approbation" value={payrollRows.filter((p) => String(p.status) === "pending_approval").length} tone={payrollRows.filter((p) => String(p.status) === "pending_approval").length ? "warn" : undefined} />
         <KPI label="Valides" value={summary.workflow.validated} tone={summary.workflow.validated ? "warn" : undefined} />
         <KPI label="Payes" value={summary.workflow.paid} tone={summary.workflow.paid ? "emerald" : undefined} />
-        <Mini label="Employes" value={summary.employees} />
       </div>
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
         <Mini label={hasFilters ? "Bulletins filtres" : "Bulletins (total)"} value={hasFilters ? filteredPayrolls.length : summary.bulletins} />
@@ -2058,9 +2067,12 @@ function Paie({ data, staff, masse, setModal, reload }) {
         <div className="tbl-scroll"><table className="tbl num" style={{ minWidth: 1020 }}>
           <thead><tr><th>Employe</th><th>Periode</th><th className="r">Brut</th><th className="r">Net</th><th className="r">Impots</th><th className="r">CNSS</th><th className="r">Jours</th><th className="r">Absences</th><th className="r">Statut</th><th className="r">Actions</th></tr></thead>
           <tbody>{filteredPayrolls.map((p) => {
-            const isPaid = String(p.status || "") === "paid";
-            const isDraft = String(p.status || "draft") === "draft";
-            const isValidated = String(p.status || "") === "validated";
+            const st = String(p.status || "draft");
+            const isPaid = st === "paid";
+            const isDraft = st === "draft";
+            const isRejected = st === "rejected";
+            const isPending = st === "pending_approval";
+            const isValidated = st === "validated";
             return <tr key={p.id}>
               <td style={{ fontWeight: 500 }}>{personName(staff, p.userId)}</td>
               <td>{p.period || "-"}</td>
@@ -2071,11 +2083,13 @@ function Paie({ data, staff, masse, setModal, reload }) {
               <td className="r">{p.workedDays ?? "-"}</td>
               <td className="r">{p.absenceDays ?? "-"}</td>
               <td className="r"><span className={"chip " + chipForStatus(p.status)}>{statusLabel(p.status)}</span></td>
-              <td className="r" style={{ whiteSpace: "nowrap" }}>
-                {isDraft && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => handleValidate(p)}>Valider</button>}
+              <td className="r" style={{ whiteSpace: "nowrap", display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+                {(isDraft || isRejected) && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => handleSubmit(p)}>Soumettre</button>}
+                {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleApprove(p)}>Approuver</button>}
+                {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--red-500, #ef4444)" }} onClick={() => handleReject(p)}>Rejeter</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
-                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12, marginLeft: isDraft || isValidated || isPaid ? 8 : 0 }}>Fiche PDF</a>
+                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>PDF</a>
               </td>
             </tr>;
           })}</tbody>

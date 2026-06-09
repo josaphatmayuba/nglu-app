@@ -1064,3 +1064,14 @@ export class HrAiChatDto {
   @IsString()
   context?: string | null;
 }
+
+export class PayrollApprovalDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  approvedBy?: number | null;
+
+  @IsOptional()
+  @IsString()
+  comment?: string | null;
+}

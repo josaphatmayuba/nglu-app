@@ -456,6 +456,13 @@
       "when": 1780246800000,
       "tag": "0084_hr_candidates",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1749427200000,
+      "tag": "0085_hr_payroll_approval",
+      "breakpoints": true
     }
   ]
 }

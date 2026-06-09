@@ -72,6 +72,7 @@ import {
   UpdateSalaryHistoryDto,
   UpdateShiftDto,
   HrAiChatDto,
+  PayrollApprovalDto,
 } from "./dto/hr.dto";
 import { HrService } from "./hr.service";
 
@@ -206,6 +207,10 @@ export class HrPayrollController {
   }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
+  @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.submitPayroll(id, body.approvedBy); }
+  @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.approvePayroll(id, body.approvedBy, body.comment); }
+  @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.rejectPayroll(id, body.approvedBy, body.comment); }
+  @Post(":id/pay") pay(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.markPayrollPaid(id, body.approvedBy); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(hrPayrolls, id); }

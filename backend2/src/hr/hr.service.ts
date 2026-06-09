@@ -525,6 +525,57 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
   }
 
+  async submitPayroll(id: number, submittedBy?: number | null) {
+    const current = await this.findPayroll(id) as Record<string, any>;
+    const status = String(current.status || "draft");
+    if (!["draft", "rejected"].includes(status)) throw new BadRequestException(`Cannot submit a payroll with status "${status}".`);
+    await this.db.update(hrPayrolls).set({
+      status: "pending_approval",
+      submittedBy: submittedBy ?? null,
+      submittedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrPayrolls.id, id));
+    return this.findPayroll(id);
+  }
+
+  async approvePayroll(id: number, approvedBy?: number | null, comment?: string | null) {
+    const current = await this.findPayroll(id) as Record<string, any>;
+    if (String(current.status) !== "pending_approval") throw new BadRequestException(`Cannot approve a payroll with status "${current.status}".`);
+    await this.db.update(hrPayrolls).set({
+      status: "validated",
+      approvedBy: approvedBy ?? null,
+      approvedAt: sql`CURRENT_TIMESTAMP`,
+      approvalComment: comment ?? null,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrPayrolls.id, id));
+    return this.findPayroll(id);
+  }
+
+  async rejectPayroll(id: number, rejectedBy?: number | null, comment?: string | null) {
+    const current = await this.findPayroll(id) as Record<string, any>;
+    if (String(current.status) !== "pending_approval") throw new BadRequestException(`Cannot reject a payroll with status "${current.status}".`);
+    await this.db.update(hrPayrolls).set({
+      status: "rejected",
+      rejectedBy: rejectedBy ?? null,
+      rejectedAt: sql`CURRENT_TIMESTAMP`,
+      rejectionComment: comment ?? null,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrPayrolls.id, id));
+    return this.findPayroll(id);
+  }
+
+  async markPayrollPaid(id: number, paidBy?: number | null) {
+    const current = await this.findPayroll(id) as Record<string, any>;
+    if (String(current.status) !== "validated") throw new BadRequestException(`Cannot mark as paid a payroll with status "${current.status}". Validate it first.`);
+    await this.db.update(hrPayrolls).set({
+      status: "paid",
+      paidBy: paidBy ?? null,
+      paidAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    }).where(eq(hrPayrolls.id, id));
+    return this.findPayroll(id);
+  }
+
   async generatePayroll(q: Record<string, string>) {
     const userId = q["userId"] ? Number(q["userId"]) : null;
     const period = q["period"] || this.currentPayrollPeriod();

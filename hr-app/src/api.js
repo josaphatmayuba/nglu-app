@@ -99,5 +99,9 @@ export const api = {
   updateCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   convertCandidate: (id, body) => jsonFetch(`/hr/candidates/${id}/convert`, { method: "POST", body: JSON.stringify(body) }),
   deleteCandidate: (id) => jsonFetch(`/hr/candidates/${id}`, { method: "DELETE" }),
+  submitPayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/submit`, { method: "POST", body: JSON.stringify(body) }),
+  approvePayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/approve`, { method: "POST", body: JSON.stringify(body) }),
+  rejectPayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/reject`, { method: "POST", body: JSON.stringify(body) }),
+  payPayroll: (id, body = {}) => jsonFetch(`/hr/payrolls/${id}/pay`, { method: "POST", body: JSON.stringify(body) }),
   aiContext: () => jsonFetch("/hr/ai/context"),
 };
