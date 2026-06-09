@@ -2161,7 +2161,8 @@ function Paie({ data, staff, masse, setModal, reload }) {
                 {isPending && <button type="button" className="link" style={{ fontSize: 12, color: "var(--red-500, #ef4444)" }} onClick={() => handleReject(p)}>Rejeter</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
-                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>PDF</a>
+                <a href={`${API_ROOT}/hr/payrolls/${p.id}/html`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>Aperçu</a>
+                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12 }}>PDF ↓</a>
               </td>
             </tr>;
           })}</tbody>

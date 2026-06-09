@@ -203,11 +203,18 @@ export class HrPayrollController {
   @Get() list(@Query() q: Record<string, string>) { return this.service.listPayrolls(q); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.payrollSummary(q); }
   @Get("generate") generate(@Query() q: Record<string, string>) { return this.service.generatePayroll(q); }
-  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+  @Get(":id/html") async html(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
     const html = await this.service.payrollPdfHtml(id);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Content-Disposition", `inline; filename="fiche-paie-${id}.html"`);
     res.send(html);
+  }
+  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const pdfBuffer = await this.service.generatePayrollPdf(id);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="fiche-paie-${id}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.end(pdfBuffer);
   }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }

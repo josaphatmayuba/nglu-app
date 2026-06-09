@@ -518,6 +518,28 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 </body></html>`;
   }
 
+  async generatePayrollPdf(id: number): Promise<Buffer> {
+    const html = await this.payrollPdfHtml(id);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const puppeteer = require("puppeteer");
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    try {
+      const page = await browser.newPage();
+      // Remove the auto-print script before PDF generation
+      const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
+      await page.setContent(cleanHtml, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
+      return Buffer.from(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  }
+
   async createPayroll(input: CreateHrPayrollDto) {
     await this.validatePayrollRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
