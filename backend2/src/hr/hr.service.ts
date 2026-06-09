@@ -380,6 +380,133 @@ export class HrService {
     return this.findOne(hrPayrolls, id, "Payroll not found.");
   }
 
+  async payrollPdfHtml(id: number): Promise<string> {
+    const payroll = await this.findPayroll(id) as Record<string, any>;
+    const [userRow] = await this.db.select({ firstName: users.firstName, lastName: users.lastName, employeeId: users.employeeId })
+      .from(users).where(eq(users.id, Number(payroll.userId))).limit(1);
+    const [currencyRow] = payroll.currencyId
+      ? await this.db.select({ currencyCode: currencies.currencyCode }).from(currencies).where(eq(currencies.id, Number(payroll.currencyId))).limit(1)
+      : [null];
+
+    const employeeName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(" ") || `Employé #${payroll.userId}`;
+    const matricule = userRow?.employeeId || `EMP-${String(payroll.userId).padStart(6, "0")}`;
+    const curr = currencyRow?.currencyCode || "USD";
+    const fmt = (v: any) => Number(v || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const statusLabels: Record<string, string> = { draft: "Brouillon", validated: "Validé", paid: "Payé" };
+    const statusColors: Record<string, string> = { draft: "#f59e0b", validated: "#3b82f6", paid: "#10b981" };
+    const status = String(payroll.status || "draft");
+    const periodLabel = (() => {
+      const [y, m] = String(payroll.period || "").split("-");
+      if (!y || !m) return payroll.period || "";
+      return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    })();
+    const today = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+
+    return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<title>Fiche de paie — ${employeeName} — ${periodLabel}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background:#fff;padding:40px 48px;max-width:800px;margin:0 auto}
+@media print{body{padding:20px 24px}@page{margin:1cm}}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #14b8a6;padding-bottom:16px;margin-bottom:24px}
+.org-name{font-size:18px;font-weight:700;color:#14b8a6;letter-spacing:1px}
+.org-sub{font-size:11px;color:#666;margin-top:2px}
+.doc-title{text-align:right}
+.doc-title h1{font-size:15px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.doc-title .period{font-size:13px;color:#444;margin-top:2px}
+.status-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;color:#fff;background:${statusColors[status] || "#999"};margin-top:4px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px}
+.info-box label{font-size:10px;text-transform:uppercase;color:#666;letter-spacing:.5px;display:block;margin-bottom:2px}
+.info-box value{font-size:13px;font-weight:600}
+table{width:100%;border-collapse:collapse;margin-bottom:20px}
+th{background:#f1f5f9;font-size:11px;text-transform:uppercase;color:#64748b;letter-spacing:.4px;padding:8px 12px;text-align:left;border-bottom:1px solid #e2e8f0}
+td{padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}
+tr:last-child td{border-bottom:none}
+.amount{text-align:right;font-variant-numeric:tabular-nums}
+.section-title{font-size:12px;font-weight:700;text-transform:uppercase;color:#14b8a6;letter-spacing:.5px;margin:20px 0 8px}
+.total-row td{font-weight:700;background:#f8fafc;border-top:2px solid #e2e8f0;border-bottom:2px solid #e2e8f0}
+.net-row td{font-weight:700;font-size:15px;background:#14b8a6;color:#fff}
+.net-row .amount{color:#fff}
+.days-row{display:flex;gap:16px;margin-bottom:20px}
+.day-box{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;text-align:center}
+.day-box .val{font-size:20px;font-weight:700;color:#14b8a6}
+.day-box .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.footer{display:flex;justify-content:space-between;margin-top:40px;padding-top:20px;border-top:1px solid #e2e8f0;font-size:11px;color:#999}
+.sig-block{text-align:right}
+.sig-line{margin-top:40px;border-top:1px solid #999;min-width:160px;padding-top:4px;font-size:11px;color:#666}
+.notes{font-size:11px;color:#666;font-style:italic;margin-top:8px}
+</style></head><body>
+<div class="header">
+  <div><div class="org-name">NgoluApp ONG</div><div class="org-sub">Document RH officiel — Confidentiel</div></div>
+  <div class="doc-title">
+    <h1>Bulletin de paie</h1>
+    <div class="period">${periodLabel}</div>
+    <span class="status-badge">${statusLabels[status] || status}</span>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div class="info-box"><label>Employé</label><value>${employeeName}</value></div>
+  <div class="info-box"><label>Matricule</label><value>${matricule}</value></div>
+  <div class="info-box"><label>Période</label><value>${periodLabel}</value></div>
+  <div class="info-box"><label>Devise</label><value>${curr}</value></div>
+</div>
+
+<div class="days-row">
+  <div class="day-box"><div class="val">${fmt(payroll.workedDays)}</div><div class="lbl">Jours travaillés</div></div>
+  <div class="day-box"><div class="val">${fmt(payroll.paidLeaveDays)}</div><div class="lbl">Congés payés</div></div>
+  <div class="day-box"><div class="val">${fmt(payroll.absenceDays)}</div><div class="lbl">Absences</div></div>
+  <div class="day-box"><div class="val">${fmt(payroll.overtimeHours)}</div><div class="lbl">H. supp.</div></div>
+</div>
+
+<div class="section-title">Éléments de rémunération</div>
+<table>
+  <thead><tr><th>Libellé</th><th class="amount">Montant (${curr})</th></tr></thead>
+  <tbody>
+    <tr><td>Salaire de base</td><td class="amount">${fmt(payroll.baseSalary)}</td></tr>
+    ${Number(payroll.transportAllowance) > 0 ? `<tr><td>Indemnité de transport</td><td class="amount">${fmt(payroll.transportAllowance)}</td></tr>` : ""}
+    ${Number(payroll.housingAllowance) > 0 ? `<tr><td>Indemnité de logement</td><td class="amount">${fmt(payroll.housingAllowance)}</td></tr>` : ""}
+    ${Number(payroll.riskAllowance) > 0 ? `<tr><td>Prime de risque</td><td class="amount">${fmt(payroll.riskAllowance)}</td></tr>` : ""}
+    ${Number(payroll.otherAllowances) > 0 ? `<tr><td>Autres primes</td><td class="amount">${fmt(payroll.otherAllowances)}</td></tr>` : ""}
+    ${Number(payroll.overtimeAmount) > 0 ? `<tr><td>Heures supplémentaires (${fmt(payroll.overtimeHours)} h)</td><td class="amount">${fmt(payroll.overtimeAmount)}</td></tr>` : ""}
+    <tr class="total-row"><td>Salaire brut</td><td class="amount">${fmt(payroll.grossSalary)}</td></tr>
+  </tbody>
+</table>
+
+<div class="section-title">Retenues</div>
+<table>
+  <thead><tr><th>Libellé</th><th class="amount">Montant (${curr})</th></tr></thead>
+  <tbody>
+    ${Number(payroll.unpaidAbsenceDeduction) > 0 ? `<tr><td>Absences non payées</td><td class="amount">- ${fmt(payroll.unpaidAbsenceDeduction)}</td></tr>` : ""}
+    ${Number(payroll.advanceDeduction) > 0 ? `<tr><td>Avance sur salaire</td><td class="amount">- ${fmt(payroll.advanceDeduction)}</td></tr>` : ""}
+    ${Number(payroll.taxAmount) > 0 ? `<tr><td>Impôts (IPR)</td><td class="amount">- ${fmt(payroll.taxAmount)}</td></tr>` : ""}
+    ${Number(payroll.cnssAmount) > 0 ? `<tr><td>CNSS</td><td class="amount">- ${fmt(payroll.cnssAmount)}</td></tr>` : ""}
+    ${Number(payroll.otherDeductions) > 0 ? `<tr><td>Autres retenues</td><td class="amount">- ${fmt(payroll.otherDeductions)}</td></tr>` : ""}
+    ${[payroll.unpaidAbsenceDeduction, payroll.advanceDeduction, payroll.taxAmount, payroll.cnssAmount, payroll.otherDeductions].every((v) => !Number(v))
+      ? `<tr><td colspan="2" style="color:#999;font-style:italic;text-align:center">Aucune retenue ce mois</td></tr>` : ""}
+  </tbody>
+</table>
+
+<table>
+  <tbody>
+    <tr class="net-row"><td>NET À PAYER</td><td class="amount">${fmt(payroll.netSalary)} ${curr}</td></tr>
+  </tbody>
+</table>
+
+${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
+
+<div class="footer">
+  <div>Émis le ${today} · Réf bulletin #${payroll.id}</div>
+  <div class="sig-block">
+    <div>Signature autorisée</div>
+    <div class="sig-line">Date et signature</div>
+  </div>
+</div>
+<script>window.onload = function(){ window.print(); }</script>
+</body></html>`;
+  }
+
   async createPayroll(input: CreateHrPayrollDto) {
     await this.validatePayrollRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());

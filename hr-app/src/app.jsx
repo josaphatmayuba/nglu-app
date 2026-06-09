@@ -3,7 +3,7 @@ import PhoneInputBase, { formatPhoneNumberIntl } from "react-phone-number-input"
 import flags from "react-phone-number-input/flags";
 import fr from "react-phone-number-input/locale/fr.json";
 import "react-phone-number-input/style.css";
-import { api } from "./api.js";
+import { api, API_ROOT } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 import { defaultSymbol, symbolFor } from "./currency.js";
@@ -2075,6 +2075,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
                 {isDraft && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => handleValidate(p)}>Valider</button>}
                 {isValidated && <button type="button" className="link" style={{ fontSize: 12, color: "var(--emerald-600)" }} onClick={() => handleMarkPaid(p)}>Marquer paye</button>}
                 {isPaid && <span className="muted" style={{ fontSize: 12 }}>Verrouille</span>}
+                <a href={`${API_ROOT}/hr/payrolls/${p.id}/pdf`} target="_blank" rel="noopener noreferrer" className="link" style={{ fontSize: 12, marginLeft: isDraft || isValidated || isPaid ? 8 : 0 }}>Fiche PDF</a>
               </td>
             </tr>;
           })}</tbody>

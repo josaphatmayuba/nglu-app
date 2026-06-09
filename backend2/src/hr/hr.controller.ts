@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -197,6 +198,12 @@ export class HrPayrollController {
   @Get() list(@Query() q: Record<string, string>) { return this.service.listPayrolls(q); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.payrollSummary(q); }
   @Get("generate") generate(@Query() q: Record<string, string>) { return this.service.generatePayroll(q); }
+  @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
+    const html = await this.service.payrollPdfHtml(id);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Content-Disposition", `inline; filename="fiche-paie-${id}.html"`);
+    res.send(html);
+  }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
