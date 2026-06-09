@@ -145,19 +145,13 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
-    # Chaque deploiement prod est en trigger manuel (clic dans Bitbucket).
-    # NB: Bitbucket interdit qu'un premier step soit manuel → step "gate" auto
-    # (ne déploie rien) en tête, puis les déploiements manuels en parallèle.
+    # Déploiement prod AUTOMATIQUE au push/merge sur master (comme develop→dev).
+    # changesets.includePaths => seuls les projets réellement modifiés sont déployés.
     master:
-      - step:
-          name: Gate prod (auto, aucun déploiement)
-          script:
-            - echo "Master mis à jour. Lance manuellement les steps de déploiement prod ci-dessous."
       - parallel:
           - step:
-              name: Backend2 → prod (manuel)
+              name: Backend2 → prod
               caches: [node-backend2]
-              trigger: manual
               condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -172,8 +166,7 @@ pipelines:
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
-              name: Middleware → prod (manuel)
-              trigger: manual
+              name: Middleware → prod
               condition: { changesets: { includePaths: ["middleware/**", "docker-compose.prod.yml"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -184,9 +177,8 @@ pipelines:
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
-              name: Frontend → prod (manuel)
+              name: Frontend → prod
               caches: [node-frontend]
-              trigger: manual
               condition: { changesets: { includePaths: ["frontend/**"] } }
               # Prod = dist bind-montee servie par nginx : on NE rebuild PAS l'image (cf. incident prod), simple reload.
               script:
@@ -198,9 +190,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
-              name: Domus → prod (manuel)
+              name: Domus → prod
               caches: [node-domus]
-              trigger: manual
               condition: { changesets: { includePaths: ["domus-app/**"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -211,9 +202,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
-              name: FarmOS → prod (manuel)
+              name: FarmOS → prod
               caches: [node-farmos]
-              trigger: manual
               condition: { changesets: { includePaths: ["farmos-app/**"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -224,9 +214,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
-              name: BatiPro → prod (manuel)
+              name: BatiPro → prod
               caches: [node-batipro]
-              trigger: manual
               condition: { changesets: { includePaths: ["batipro-app/**"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -237,9 +226,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
-              name: HR → prod (manuel)
+              name: HR → prod
               caches: [node-hr]
-              trigger: manual
               condition: { changesets: { includePaths: ["hr-app/**"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -251,9 +239,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
-              name: Comptabilite → prod (manuel)
+              name: Comptabilite → prod
               caches: [node-comptabilite]
-              trigger: manual
               condition: { changesets: { includePaths: ["comptabilite-app/**"] } }
               script:
                 - apk add --no-cache openssh-client
@@ -265,9 +252,8 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
-              name: Marketing → prod (manuel)
+              name: Marketing → prod
               caches: [node-marketing]
-              trigger: manual
               condition: { changesets: { includePaths: ["marketing-site/**"] } }
               script:
                 - apk add --no-cache openssh-client
