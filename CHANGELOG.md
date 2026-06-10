@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.5.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS PDF (toujours 500 après le fix Chromium) : `htmlToPdf` passe en `waitUntil:"load"` (les images base64 inline faisaient timeouter `networkidle0`), ajoute `protocolTimeout`/`--disable-gpu`, et expose désormais la vraie cause Puppeteer dans la réponse (au lieu d'un 500 générique) pour diagnostic sans logs serveur.
+
 ## [3.5.0] - 2026-06-10
 
 ### Added
