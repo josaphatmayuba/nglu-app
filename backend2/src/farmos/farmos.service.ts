@@ -534,6 +534,12 @@ export class FarmosService {
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
+    // Associer le médicament au stock : si le traitement référence un médicament
+    // du stock + une quantité consommée, on décrémente le stock (prompt #275).
+    if (input.medicine_id && Number(input.medicine_quantity) > 0) {
+      await this.consumeMedicine(input.medicine_id, Number(input.medicine_quantity), orgId).catch((e) =>
+        console.warn("[FarmOS] consume on treatment failed:", (e as Error).message));
+    }
     await this.recomputeAnimalWithdrawal(input.animal_id, orgId);
     await this.publishFarmosUpdate("createTreatment", ["treatments", "medicines", "animals"], "created", id, orgId);
     return this.getTreatment(id, orgId);

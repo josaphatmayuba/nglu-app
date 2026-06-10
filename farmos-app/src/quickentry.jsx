@@ -918,6 +918,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       disease_id: toNumericId(selectedDisease),
       medicine_id: toNumericId(selectedMed),
       medicine_name: selectedMed?.name || null,
+      medicine_quantity: form.medQty ? Number(form.medQty) : null, // décrémente le stock
       dosage: form.dosage || null,
       route: form.route || null,
       start_date: startDate,
@@ -1017,6 +1018,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
                 category="route"
                 placeholder={lang === "fr" ? "Rechercher ou ajouter une voie…" : "Search or add a route…"}
               />
+            </FormField>
+            <FormField label={lang === "fr" ? "Qté prélevée du stock" : "Qty taken from stock"}>
+              <input className="input mono" type="number" min="0" step="any" placeholder="0"
+                value={form.medQty || ""} onChange={(e) => set("medQty", e.target.value)}/>
             </FormField>
           </FormGrid>
           <FormGrid cols={3}>

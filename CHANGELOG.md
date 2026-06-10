@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-06-10
+
+### Added
+
+- FarmOS — association médicament ↔ stock : à la création d'un traitement avec un médicament et une « Qté prélevée du stock », le stock du médicament est décrémenté automatiquement (réutilise `consumeMedicine`). Champ ajouté au formulaire de traitement (quickentry).
+
 ## [3.7.2] - 2026-06-10
 
 ### Fixed

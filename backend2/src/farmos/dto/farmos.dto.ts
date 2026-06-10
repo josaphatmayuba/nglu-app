@@ -402,6 +402,7 @@ export class CreateTreatmentDto {
   disease_id: number;
 
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() medicine_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() medicine_quantity?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() medicine_name?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() dosage?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() route?: string | null;
