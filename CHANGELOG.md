@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.14.0] - 2026-06-10
+
+### Added
+
+- FarmOS — 3 modes UI (Éleveur / Vétérinaire / Gestionnaire) + Tout. Sélecteur de mode dans la barre latérale qui filtre la navigation principale selon le profil (Éleveur : quotidien terrain ; Vétérinaire : clinique ; Gestionnaire : direction/finance ; Tout : comportement historique, défaut). Mode persistant en localStorage (`farmos_mode`). Purement visuel : ne remplace pas les permissions backend (rôles), et le routing direct/deep-links mobile (`/farmos/<slug>`) reste accessible quel que soit le mode. Si l'écran actif sort du mode choisi, retour au tableau de bord.
+
 ## [3.13.0] - 2026-06-10
 
 ### Added
