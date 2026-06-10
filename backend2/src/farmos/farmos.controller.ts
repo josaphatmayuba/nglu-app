@@ -9,8 +9,10 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
@@ -27,6 +29,8 @@ import {
   CreateMortalityEventDto,
   CreateVaccinationDto,
   CreateVetExamDto,
+  SignVetExamDto,
+  CreateFarmosDocumentDto,
   CreateWorkLogDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
@@ -430,10 +434,86 @@ export class FarmosController {
     return this.farmos.listVetExams(orgId);
   }
 
+  @Permissions("readAll-farmos")
+  @Get("vet-exams/:id")
+  getVetExam(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getVetExam(id, orgId);
+  }
+
   @Permissions("create-farmos")
   @Post("vet-exams")
   createVetExam(@Body() body: CreateVetExamDto, @CurrentOrg() orgId: number) {
     return this.farmos.createVetExam(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("vet-exams/:id")
+  updateVetExam(@Param("id", ParseIntPipe) id: number, @Body() body: CreateVetExamDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateVetExam(id, body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Post("vet-exams/:id/sign")
+  signVetExam(@Param("id", ParseIntPipe) id: number, @Body() body: SignVetExamDto, @CurrentOrg() orgId: number) {
+    return this.farmos.signVetExam(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("vet-exams/:id")
+  deleteVetExam(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteVetExam(id, orgId);
+  }
+
+  // ─── Documents (#3) ───────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("documents")
+  listDocuments(@CurrentOrg() orgId: number, @Query("animal_id") animalId?: string, @Query("doc_type") docType?: string) {
+    return this.farmos.listDocuments(orgId, animalId ? Number(animalId) : null, docType || null);
+  }
+
+  @Permissions("readAll-farmos")
+  @Get("documents/:id/download")
+  async downloadDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
+    const doc: any = await this.farmos.getDocument(id, orgId);
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(doc.dataUrl);
+    const buffer = m ? Buffer.from(m[2], "base64") : Buffer.from(doc.dataUrl);
+    res.setHeader("Content-Type", doc.contentType || (m ? m[1] : "application/octet-stream"));
+    res.setHeader("Content-Disposition", `attachment; filename="${doc.filename || `document-${id}`}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  }
+
+  @Permissions("create-farmos")
+  @Post("documents")
+  createDocument(@Body() body: CreateFarmosDocumentDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createDocument(body, orgId, userId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("documents/:id")
+  deleteDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteDocument(id, orgId);
+  }
+
+  // ─── Rapports PDF (#3) ────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("vet-exams/:id/pdf")
+  async vetExamPdf(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @Res() res: Response) {
+    const { buffer, reference } = await this.farmos.vetExamPdf(id, orgId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  }
+
+  @Permissions("readAll-farmos")
+  @Get("reports/finance/pdf")
+  async financePdf(@CurrentOrg() orgId: number, @Res() res: Response) {
+    const { buffer, reference } = await this.farmos.financePdf(orgId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${reference}.pdf"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
   }
 
   @Permissions("readAll-farmos")
@@ -467,6 +547,13 @@ export class FarmosController {
   @Get("finance-summary")
   getFinanceSummary(@CurrentOrg() orgId: number) {
     return this.farmos.getFinanceSummary(orgId);
+  }
+
+  @ApiOperation({ summary: "Profitability per animal and per lot (revenue − cost)." })
+  @Permissions("readAll-farmos")
+  @Get("profitability")
+  getProfitability(@CurrentOrg() orgId: number) {
+    return this.farmos.getProfitability(orgId);
   }
 
   @ApiOperation({ summary: "List user-editable lookup values (breeds, vets, routes, …)." })

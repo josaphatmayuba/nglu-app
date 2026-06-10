@@ -3,7 +3,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -57,6 +57,7 @@ export class FarmosService {
       this.getFinanceSummary(orgId),
       this.listProductionLogs(orgId),
     ]);
+    const withdrawalAlerts = this.computeWithdrawalAlerts(treatments, animals);
     return {
       animals,
       medicines,
@@ -68,7 +69,94 @@ export class FarmosService {
       aiInsights,
       finance,
       productionLogs,
+      withdrawalAlerts,
     };
+  }
+
+  // ─── Délai de retrait (withdrawal period) — conformité sécurité alimentaire ──
+  // Calcule la date « commercialisable à partir de » par produit (viande/lait/œufs)
+  // à partir des traitements actifs : (endDate ?? startDate) + délai.
+  private withdrawalEndDates(treatment: any): { meat: string | null; milk: string | null; eggs: string | null } {
+    const base = treatment.endDate ?? treatment.startDate;
+    if (!base) return { meat: null, milk: null, eggs: null };
+    const addDays = (days: number | null | undefined): string | null => {
+      if (days == null || days <= 0) return null;
+      const d = new Date(`${base}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return null;
+      d.setUTCDate(d.getUTCDate() + days);
+      return d.toISOString().slice(0, 10);
+    };
+    const milkDays = treatment.withdrawalMilkHours != null ? Math.ceil(Number(treatment.withdrawalMilkHours) / 24) : null;
+    return {
+      meat: addDays(treatment.withdrawalMeatDays),
+      milk: addDays(milkDays),
+      eggs: addDays(treatment.withdrawalEggsDays),
+    };
+  }
+
+  // Pour un animal donné : la date de fin de retrait la plus tardive encore active (par produit).
+  private animalWithdrawalUntil(treatments: any[], animalId: number, today: string) {
+    const result: { meat: string | null; milk: string | null; eggs: string | null } = { meat: null, milk: null, eggs: null };
+    for (const t of treatments) {
+      if (Number(t.animalId) !== Number(animalId)) continue;
+      const ends = this.withdrawalEndDates(t);
+      for (const key of ["meat", "milk", "eggs"] as const) {
+        const end = ends[key];
+        if (end && end >= today && (!result[key] || end > result[key]!)) result[key] = end;
+      }
+    }
+    return result;
+  }
+
+  // Recalcule et dénormalise withdrawalUntil/withdrawalKind sur l'animal à partir
+  // de ses traitements actifs. Appelé après toute mutation de traitement.
+  // withdrawalUntil = la date la plus tardive tous produits confondus (sécurité max),
+  // withdrawalKind = le produit qui porte cette date.
+  private async recomputeAnimalWithdrawal(animalId: number, orgId: number) {
+    const today = new Date().toISOString().slice(0, 10);
+    const treatments = await this.db
+      .select()
+      .from(farmosTreatments)
+      .where(and(eq(farmosTreatments.animalId, animalId), eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1)));
+    const until = this.animalWithdrawalUntil(treatments, animalId, today);
+    let kind: string | null = null;
+    let date: string | null = null;
+    for (const key of ["meat", "milk", "eggs"] as const) {
+      if (until[key] && (!date || until[key]! > date)) {
+        date = until[key];
+        kind = key;
+      }
+    }
+    await this.db
+      .update(farmosAnimals)
+      .set({ withdrawalUntil: date, withdrawalKind: kind })
+      .where(and(eq(farmosAnimals.id, animalId), eq(farmosAnimals.organizationId, orgId)));
+  }
+
+  private computeWithdrawalAlerts(treatments: any[], animals: any[]) {
+    const today = new Date().toISOString().slice(0, 10);
+    const alerts: Array<{
+      animalId: number;
+      animalName: string | null;
+      species: string | null;
+      meatUntil: string | null;
+      milkUntil: string | null;
+      eggsUntil: string | null;
+    }> = [];
+    for (const a of animals) {
+      const until = this.animalWithdrawalUntil(treatments, Number(a.id), today);
+      if (until.meat || until.milk || until.eggs) {
+        alerts.push({
+          animalId: Number(a.id),
+          animalName: a.name ?? a.tag ?? null,
+          species: a.species ?? null,
+          meatUntil: until.meat,
+          milkUntil: until.milk,
+          eggsUntil: until.eggs,
+        });
+      }
+    }
+    return alerts;
   }
 
   // ─── FarmOS staff onboarding (creates a CRM user assigned to the FarmOS dept) ─
@@ -446,12 +534,13 @@ export class FarmosService {
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
+    await this.recomputeAnimalWithdrawal(input.animal_id, orgId);
     await this.publishFarmosUpdate("createTreatment", ["treatments", "medicines", "animals"], "created", id, orgId);
     return this.getTreatment(id, orgId);
   }
 
   async updateTreatment(id: number, input: UpdateTreatmentDto, orgId: number) {
-    await this.getTreatment(id, orgId);
+    const previous = await this.getTreatment(id, orgId);
     const patch: Record<string, unknown> = {};
     if (input.animal_id !== undefined) patch.animalId = input.animal_id;
     if (input.disease_id !== undefined) patch.diseaseId = input.disease_id;
@@ -469,14 +558,19 @@ export class FarmosService {
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return this.getTreatment(id, orgId);
     await this.db.update(farmosTreatments).set(patch).where(eq(farmosTreatments.id, id));
+    await this.recomputeAnimalWithdrawal(Number(previous.animalId), orgId);
+    if (input.animal_id !== undefined && Number(input.animal_id) !== Number(previous.animalId)) {
+      await this.recomputeAnimalWithdrawal(Number(input.animal_id), orgId);
+    }
     await this.publishFarmosUpdate("updateTreatment", ["treatments", "medicines", "animals"], "updated", id, orgId);
     return this.getTreatment(id, orgId);
   }
 
   async deleteTreatment(id: number, orgId: number) {
-    await this.getTreatment(id, orgId);
+    const previous = await this.getTreatment(id, orgId);
     await this.db.update(farmosTreatments).set({ isActive: 0 }).where(eq(farmosTreatments.id, id));
-    await this.publishFarmosUpdate("deleteTreatment", ["treatments"], "deleted", id, orgId);
+    await this.recomputeAnimalWithdrawal(Number(previous.animalId), orgId);
+    await this.publishFarmosUpdate("deleteTreatment", ["treatments", "animals"], "deleted", id, orgId);
     return { message: "Traitement supprimé." };
   }
 
@@ -587,6 +681,8 @@ export class FarmosService {
     const animal = input.animal_id ? await this.getAnimal(input.animal_id, orgId) : null;
     if (!animal) {
       await this.assertProductionSaleAvailable(input, orgId);
+    } else {
+      this.assertNotUnderMeatWithdrawal(animal);
     }
     const [res] = await this.db.insert(farmosSales).values({
       organizationId: orgId,
@@ -612,6 +708,19 @@ export class FarmosService {
     }
     await this.publishFarmosUpdate("createSale", ["sales", "animals"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
+  }
+
+  // Bloque la vente d'un animal (= abattage/viande) encore sous délai de retrait viande.
+  private assertNotUnderMeatWithdrawal(animal: any) {
+    const until = animal.withdrawalUntil ?? animal.withdrawal_until;
+    const kind = animal.withdrawalKind ?? animal.withdrawal_kind;
+    if (!until) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if (String(until).slice(0, 10) >= today && (kind == null || kind === "meat")) {
+      throw new BadRequestException(
+        `Animal sous délai de retrait viande jusqu'au ${String(until).slice(0, 10)} — vente interdite (sécurité alimentaire).`,
+      );
+    }
   }
 
   private async applyAnimalSale(animal: any, quantity: number, orgId: number) {
@@ -1086,6 +1195,21 @@ export class FarmosService {
       .orderBy(desc(farmosVetExams.examDate));
   }
 
+  // Dossier vétérinaire complet : examen + lignes d'ordonnance.
+  async getVetExam(id: number, orgId: number) {
+    const [exam] = await this.db
+      .select()
+      .from(farmosVetExams)
+      .where(and(eq(farmosVetExams.id, id), eq(farmosVetExams.organizationId, orgId), eq(farmosVetExams.isActive, 1)))
+      .limit(1);
+    if (!exam) throw new NotFoundException("Vet exam not found.");
+    const prescriptions = await this.db
+      .select()
+      .from(farmosVetPrescriptions)
+      .where(and(eq(farmosVetPrescriptions.examId, id), eq(farmosVetPrescriptions.organizationId, orgId), eq(farmosVetPrescriptions.isActive, 1)));
+    return { ...exam, prescriptions };
+  }
+
   async createVetExam(input: any, orgId: number) {
     const [res] = await this.db.insert(farmosVetExams).values({
       organizationId: orgId,
@@ -1094,11 +1218,255 @@ export class FarmosService {
       vet: input.vet ?? null,
       vetUserId: input.vet_user_id ?? null,
       examDate: input.exam_date,
+      examType: input.exam_type ?? null,
+      clinicalExam: input.clinical_exam ?? null,
+      protocol: input.protocol ?? null,
+      temperature: input.temperature != null ? String(input.temperature) : null,
+      weight: input.weight != null ? String(input.weight) : null,
       diagnosis: input.diagnosis ?? null,
       notes: input.notes ?? null,
     }).$returningId();
-    await this.publishFarmosUpdate("createVetExam", ["vetExams"], "created", res.id, orgId);
+    const examId = Number(res.id);
+    await this.replacePrescriptions(examId, input.prescriptions, orgId);
+    await this.publishFarmosUpdate("createVetExam", ["vetExams"], "created", examId, orgId);
+    return this.getVetExam(examId, orgId);
+  }
+
+  async updateVetExam(id: number, input: any, orgId: number) {
+    const exam = await this.getVetExam(id, orgId);
+    if (exam.signedAt) throw new BadRequestException("Examen signé — modification interdite.");
+    const patch: Record<string, unknown> = {};
+    if (input.animal_id !== undefined) patch.animalId = input.animal_id;
+    if (input.species !== undefined) patch.species = input.species;
+    if (input.vet !== undefined) patch.vet = input.vet;
+    if (input.vet_user_id !== undefined) patch.vetUserId = input.vet_user_id;
+    if (input.exam_date !== undefined) patch.examDate = input.exam_date;
+    if (input.exam_type !== undefined) patch.examType = input.exam_type;
+    if (input.clinical_exam !== undefined) patch.clinicalExam = input.clinical_exam;
+    if (input.protocol !== undefined) patch.protocol = input.protocol;
+    if (input.temperature !== undefined) patch.temperature = input.temperature != null ? String(input.temperature) : null;
+    if (input.weight !== undefined) patch.weight = input.weight != null ? String(input.weight) : null;
+    if (input.diagnosis !== undefined) patch.diagnosis = input.diagnosis;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(farmosVetExams).set(patch).where(eq(farmosVetExams.id, id));
+    }
+    if (input.prescriptions !== undefined) {
+      await this.replacePrescriptions(id, input.prescriptions, orgId);
+    }
+    await this.publishFarmosUpdate("updateVetExam", ["vetExams"], "updated", id, orgId);
+    return this.getVetExam(id, orgId);
+  }
+
+  // Signature vétérinaire — verrouille l'examen (cf. workflow signature HR).
+  async signVetExam(id: number, input: any, orgId: number) {
+    const exam = await this.getVetExam(id, orgId);
+    if (exam.signedAt) throw new BadRequestException("Examen déjà signé.");
+    if (!input.signature) throw new BadRequestException("Signature requise.");
+    await this.db
+      .update(farmosVetExams)
+      .set({ signature: input.signature, signedBy: input.signed_by ?? exam.vet ?? null, signedAt: new Date() })
+      .where(eq(farmosVetExams.id, id));
+    await this.publishFarmosUpdate("signVetExam", ["vetExams"], "updated", id, orgId);
+    return this.getVetExam(id, orgId);
+  }
+
+  async deleteVetExam(id: number, orgId: number) {
+    await this.getVetExam(id, orgId);
+    await this.db.update(farmosVetExams).set({ isActive: 0 }).where(eq(farmosVetExams.id, id));
+    await this.publishFarmosUpdate("deleteVetExam", ["vetExams"], "deleted", id, orgId);
+    return { message: "Examen supprimé." };
+  }
+
+  // Remplace les lignes d'ordonnance d'un examen (désactive les anciennes, insère les nouvelles).
+  private async replacePrescriptions(examId: number, lines: any[] | undefined, orgId: number) {
+    if (lines === undefined) return;
+    await this.db
+      .update(farmosVetPrescriptions)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosVetPrescriptions.examId, examId), eq(farmosVetPrescriptions.organizationId, orgId)));
+    if (!Array.isArray(lines) || lines.length === 0) return;
+    await this.db.insert(farmosVetPrescriptions).values(lines.map((l) => ({
+      organizationId: orgId,
+      examId,
+      medicineId: l.medicine_id ?? null,
+      medicineName: l.medicine_name ?? null,
+      dosage: l.dosage ?? null,
+      frequency: l.frequency ?? null,
+      duration: l.duration ?? null,
+      route: l.route ?? null,
+      withdrawalMeatDays: l.withdrawal_meat_days ?? null,
+      withdrawalMilkHours: l.withdrawal_milk_hours ?? null,
+      withdrawalEggsDays: l.withdrawal_eggs_days ?? null,
+      notes: l.notes ?? null,
+    })));
+  }
+
+  // ─── Documents FarmOS (#3) : certificats, ordonnances, factures, analyses ────
+  async listDocuments(orgId: number, animalId?: number | null, docType?: string | null) {
+    const conds = [eq(farmosDocuments.organizationId, orgId), eq(farmosDocuments.isActive, 1)];
+    if (animalId) conds.push(eq(farmosDocuments.animalId, animalId));
+    if (docType) conds.push(eq(farmosDocuments.docType, docType));
+    // Liste sans le data_url (lourd) — récupéré seulement au téléchargement.
+    return this.db
+      .select({
+        id: farmosDocuments.id,
+        animalId: farmosDocuments.animalId,
+        examId: farmosDocuments.examId,
+        docType: farmosDocuments.docType,
+        title: farmosDocuments.title,
+        filename: farmosDocuments.filename,
+        contentType: farmosDocuments.contentType,
+        sizeBytes: farmosDocuments.sizeBytes,
+        issuedDate: farmosDocuments.issuedDate,
+        notes: farmosDocuments.notes,
+        createdAt: farmosDocuments.createdAt,
+      })
+      .from(farmosDocuments)
+      .where(and(...conds))
+      .orderBy(desc(farmosDocuments.id));
+  }
+
+  async getDocument(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosDocuments)
+      .where(and(eq(farmosDocuments.id, id), eq(farmosDocuments.organizationId, orgId), eq(farmosDocuments.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Document not found.");
+    return row;
+  }
+
+  async createDocument(input: any, orgId: number, currentUserId?: number) {
+    if (!input.data_url) throw new BadRequestException("data_url requis.");
+    if (!input.title) throw new BadRequestException("title requis.");
+    const [res] = await this.db.insert(farmosDocuments).values({
+      organizationId: orgId,
+      animalId: input.animal_id ?? null,
+      examId: input.exam_id ?? null,
+      docType: input.doc_type ?? "other",
+      title: input.title,
+      filename: input.filename ?? null,
+      contentType: input.content_type ?? null,
+      sizeBytes: input.size_bytes ?? null,
+      dataUrl: input.data_url,
+      issuedDate: input.issued_date ?? null,
+      notes: input.notes ?? null,
+      uploadedBy: currentUserId ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createDocument", ["documents"], "created", res.id, orgId);
     return { id: res.id };
+  }
+
+  async deleteDocument(id: number, orgId: number) {
+    await this.getDocument(id, orgId);
+    await this.db.update(farmosDocuments).set({ isActive: 0 }).where(eq(farmosDocuments.id, id));
+    await this.publishFarmosUpdate("deleteDocument", ["documents"], "deleted", id, orgId);
+    return { message: "Document supprimé." };
+  }
+
+  // ─── Rapports PDF (#3) — réutilise Puppeteer (déjà dép. via le module HR) ────
+  private async htmlToPdf(html: string): Promise<Buffer> {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const puppeteer = require("puppeteer");
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
+      return Buffer.from(pdfBuffer);
+    } finally {
+      await browser.close();
+    }
+  }
+
+  private esc(v: any): string {
+    return String(v ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
+  }
+
+  // Rapport PDF d'un dossier vétérinaire (examen + ordonnance + signature).
+  async vetExamPdf(id: number, orgId: number): Promise<{ buffer: Buffer; reference: string }> {
+    const exam: any = await this.getVetExam(id, orgId);
+    const animal = exam.animalId ? await this.getAnimal(exam.animalId, orgId).catch(() => null) : null;
+    const rows = (exam.prescriptions || []).map((p: any) => `
+      <tr>
+        <td>${this.esc(p.medicineName)}</td><td>${this.esc(p.dosage)}</td>
+        <td>${this.esc(p.frequency)}</td><td>${this.esc(p.duration)}</td><td>${this.esc(p.route)}</td>
+        <td>${[p.withdrawalMeatDays ? `Viande ${p.withdrawalMeatDays}j` : "", p.withdrawalMilkHours ? `Lait ${p.withdrawalMilkHours}h` : "", p.withdrawalEggsDays ? `Œufs ${p.withdrawalEggsDays}j` : ""].filter(Boolean).join(" · ")}</td>
+      </tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#0E2418;font-size:12px}
+      h1{font-size:20px;margin:0 0 4px} .sub{color:#4a5944;margin-bottom:16px}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:14px}
+      .k{color:#7a8a74;font-size:10px;text-transform:uppercase} .v{font-weight:600}
+      .block{margin:10px 0;padding:8px 10px;background:#f5f3ee;border-radius:6px;white-space:pre-wrap}
+      table{width:100%;border-collapse:collapse;margin-top:6px} th,td{border:1px solid #d8d4cb;padding:5px 7px;text-align:left;font-size:11px}
+      th{background:#eceae3} .sign{margin-top:24px;display:flex;justify-content:space-between;align-items:flex-end}
+      img.sig{height:60px}
+    </style></head><body>
+      <h1>Dossier vétérinaire</h1>
+      <div class="sub">${this.esc(animal?.name || "Troupeau")} · ${this.esc(exam.species || "")} · ${this.esc(String(exam.examDate || "").slice(0, 10))}</div>
+      <div class="grid">
+        <div><div class="k">Type</div><div class="v">${this.esc(exam.examType)}</div></div>
+        <div><div class="k">Vétérinaire</div><div class="v">${this.esc(exam.vet)}</div></div>
+        <div><div class="k">Température</div><div class="v">${this.esc(exam.temperature)} °C</div></div>
+        <div><div class="k">Poids</div><div class="v">${this.esc(exam.weight)} kg</div></div>
+      </div>
+      ${exam.clinicalExam ? `<div class="k">Examen clinique</div><div class="block">${this.esc(exam.clinicalExam)}</div>` : ""}
+      ${exam.diagnosis ? `<div class="k">Diagnostic</div><div class="block">${this.esc(exam.diagnosis)}</div>` : ""}
+      ${exam.protocol ? `<div class="k">Protocole</div><div class="block">${this.esc(exam.protocol)}</div>` : ""}
+      ${rows ? `<div class="k">Ordonnance</div><table><tr><th>Médicament</th><th>Dose</th><th>Fréquence</th><th>Durée</th><th>Voie</th><th>Délai de retrait</th></tr>${rows}</table>` : ""}
+      <div class="sign">
+        <div><div class="k">Signé par</div><div class="v">${this.esc(exam.signedBy || exam.vet || "—")}</div>
+          <div style="font-size:10px;color:#7a8a74">${exam.signedAt ? this.esc(String(exam.signedAt).slice(0, 10)) : "Non signé"}</div></div>
+        ${exam.signature ? `<img class="sig" src="${exam.signature}" alt="signature"/>` : ""}
+      </div>
+    </body></html>`;
+    const buffer = await this.htmlToPdf(html);
+    return { buffer, reference: `dossier-vet-${id}` };
+  }
+
+  // Rapport PDF de rentabilité (résumé financier + ventes/dépenses récentes).
+  async financePdf(orgId: number): Promise<{ buffer: Buffer; reference: string }> {
+    const [finance, sales, expenses] = await Promise.all([
+      this.getFinanceSummary(orgId),
+      this.listSales(orgId),
+      this.listExpenses(orgId),
+    ]);
+    const f: any = finance || {};
+    const sRows = (Array.isArray(sales) ? sales : []).slice(0, 30).map((s: any) => `
+      <tr><td>${this.esc(String(s.saleDate || "").slice(0, 10))}</td><td>${this.esc(s.productType || s.species)}</td>
+      <td>${this.esc(s.buyer)}</td><td style="text-align:right">${this.esc(s.totalAmount)}</td></tr>`).join("");
+    const eRows = (Array.isArray(expenses) ? expenses : []).slice(0, 30).map((e: any) => `
+      <tr><td>${this.esc(String(e.expenseDate || "").slice(0, 10))}</td><td>${this.esc(e.category)}</td>
+      <td>${this.esc(e.notes)}</td><td style="text-align:right">${this.esc(e.amount)}</td></tr>`).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#0E2418;font-size:12px}
+      h1{font-size:20px;margin:0 0 4px} h2{font-size:14px;margin:16px 0 4px}
+      .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+      .kpi{background:#f5f3ee;border-radius:6px;padding:10px} .kpi .k{color:#7a8a74;font-size:10px;text-transform:uppercase}
+      .kpi .v{font-size:18px;font-weight:700} table{width:100%;border-collapse:collapse}
+      th,td{border:1px solid #d8d4cb;padding:5px 7px;font-size:11px;text-align:left} th{background:#eceae3}
+    </style></head><body>
+      <h1>Rapport de rentabilité</h1>
+      <div style="color:#4a5944">Généré le ${new Date().toISOString().slice(0, 10)}</div>
+      <div class="kpis">
+        <div class="kpi"><div class="k">Revenus</div><div class="v">${this.esc(f.totalSales ?? f.revenue ?? 0)}</div></div>
+        <div class="kpi"><div class="k">Dépenses</div><div class="v">${this.esc(f.totalExpenses ?? f.expenses ?? 0)}</div></div>
+        <div class="kpi"><div class="k">Profit</div><div class="v">${this.esc(f.profit ?? f.net ?? 0)}</div></div>
+      </div>
+      <h2>Ventes récentes</h2>
+      <table><tr><th>Date</th><th>Produit</th><th>Acheteur</th><th style="text-align:right">Montant</th></tr>${sRows || "<tr><td colspan=4>—</td></tr>"}</table>
+      <h2>Dépenses récentes</h2>
+      <table><tr><th>Date</th><th>Catégorie</th><th>Note</th><th style="text-align:right">Montant</th></tr>${eRows || "<tr><td colspan=4>—</td></tr>"}</table>
+    </body></html>`;
+    const buffer = await this.htmlToPdf(html);
+    return { buffer, reference: `rentabilite-${new Date().toISOString().slice(0, 10)}` };
   }
 
   async listWorkLogs(orgId: number, userId?: number | null, from?: string | null, to?: string | null) {
@@ -1434,6 +1802,75 @@ export class FarmosService {
       expense: buckets.map((b) => Math.round(b.expense)),
       byCategory,
     };
+  }
+
+  // ─── Rentabilité par animal / lot (#4) ──────────────────────────────────────
+  // Revenu = ventes liées (animal_id). Coût = dépenses liées (related_animal_id).
+  // Profit = revenu − coût. Agrégé aussi par lot (animal.lot).
+  async getProfitability(orgId: number) {
+    const [animals, sales, expenses] = await Promise.all([
+      this.db
+        .select({ id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species, lot: farmosAnimals.lot })
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+      this.db
+        .select({ animalId: farmosSales.animalId, total: farmosSales.totalAmount })
+        .from(farmosSales)
+        .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1))),
+      this.db
+        .select({ animalId: farmosExpenses.relatedAnimalId, amount: farmosExpenses.amount, category: farmosExpenses.category })
+        .from(farmosExpenses)
+        .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1))),
+    ]);
+
+    const revenueByAnimal = new Map<number, number>();
+    for (const s of sales) {
+      if (s.animalId == null) continue;
+      revenueByAnimal.set(Number(s.animalId), (revenueByAnimal.get(Number(s.animalId)) ?? 0) + Number(s.total ?? 0));
+    }
+    const costByAnimal = new Map<number, number>();
+    const costByCategory = new Map<number, Record<string, number>>();
+    for (const e of expenses) {
+      if (e.animalId == null) continue;
+      const id = Number(e.animalId);
+      costByAnimal.set(id, (costByAnimal.get(id) ?? 0) + Number(e.amount ?? 0));
+      const cat = e.category || "other";
+      const m = costByCategory.get(id) ?? {};
+      m[cat] = (m[cat] ?? 0) + Number(e.amount ?? 0);
+      costByCategory.set(id, m);
+    }
+
+    const byAnimal = animals
+      .map((a) => {
+        const id = Number(a.id);
+        const revenue = Math.round(revenueByAnimal.get(id) ?? 0);
+        const cost = Math.round(costByAnimal.get(id) ?? 0);
+        return {
+          animalId: id, name: a.name, species: a.species, lot: a.lot,
+          revenue, cost, profit: revenue - cost,
+          costByCategory: costByCategory.get(id) ?? {},
+        };
+      })
+      .filter((r) => r.revenue !== 0 || r.cost !== 0)
+      .sort((x, y) => y.profit - x.profit);
+
+    const lotMap = new Map<string, { lot: string; revenue: number; cost: number; count: number }>();
+    for (const r of byAnimal) {
+      const key = r.lot || "—";
+      const agg = lotMap.get(key) ?? { lot: key, revenue: 0, cost: 0, count: 0 };
+      agg.revenue += r.revenue; agg.cost += r.cost; agg.count += 1;
+      lotMap.set(key, agg);
+    }
+    const byLot = Array.from(lotMap.values())
+      .map((l) => ({ ...l, profit: l.revenue - l.cost }))
+      .sort((x, y) => y.profit - x.profit);
+
+    const totals = byAnimal.reduce(
+      (acc, r) => ({ revenue: acc.revenue + r.revenue, cost: acc.cost + r.cost, profit: acc.profit + r.profit }),
+      { revenue: 0, cost: 0, profit: 0 },
+    );
+
+    return { byAnimal, byLot, totals };
   }
 
   private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {

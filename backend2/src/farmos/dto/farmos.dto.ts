@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from "class-validator";
 
 export const FARMOS_SPECIES = [
@@ -235,13 +236,52 @@ export class CreateVaccinationDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class VetPrescriptionDto {
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() medicine_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() medicine_name?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() dosage?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() frequency?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() duration?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() route?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_meat_days?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_milk_hours?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_eggs_days?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class CreateVetExamDto {
   @ApiProperty() @IsDateString() exam_date: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() species?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() vet?: string | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() vet_user_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() exam_type?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() clinical_exam?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() protocol?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() temperature?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() weight?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() diagnosis?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional({ type: [VetPrescriptionDto] })
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => VetPrescriptionDto)
+  prescriptions?: VetPrescriptionDto[];
+}
+
+export class SignVetExamDto {
+  @ApiProperty() @IsString() @IsNotEmpty() signature: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() signed_by?: string | null;
+}
+
+export class CreateFarmosDocumentDto {
+  @ApiProperty() @IsString() @IsNotEmpty() title: string;
+  @ApiProperty() @IsString() @IsNotEmpty() data_url: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() doc_type?: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() exam_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() filename?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() content_type?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() size_bytes?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() issued_date?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
