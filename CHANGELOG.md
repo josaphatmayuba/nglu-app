@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-06-10
+
+### Added
+
+- FarmOS — carte « À propos » dans l'écran Paramètres affichant version / build / commit / environnement (visible aussi en prod).
+
 ## [3.3.0] - 2026-06-10
 
 ### Added

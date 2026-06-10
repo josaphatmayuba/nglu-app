@@ -2971,7 +2971,32 @@ const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesF
         </div>
       </section>
       <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
+      <AboutCard lang={lang}/>
     </div>
+  );
+};
+
+// Carte « À propos » — version applicative (source unique du monorepo) + environnement.
+const AboutCard = ({ lang }) => {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(host) ? "dev" : "prod";
+  const row = (k, v) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-1)" }}>
+      <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{k}</span>
+      <span className="mono" style={{ fontSize: 13, color: "var(--ink-900)" }}>{v}</span>
+    </div>
+  );
+  return (
+    <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="overline" style={{ marginBottom: 6 }}>{lang === "fr" ? "À propos" : "About"}</div>
+      {row(lang === "fr" ? "Version" : "Version", `v${base}`)}
+      {row(lang === "fr" ? "Build" : "Build", build)}
+      {row(lang === "fr" ? "Commit" : "Commit", commit)}
+      {row(lang === "fr" ? "Environnement" : "Environment", env)}
+    </section>
   );
 };
 
