@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.20.4] - 2026-06-10
+
+### Changed
+
+- FarmOS — wordmark officiel. Extraction du wordmark « FarmOS » (Farm vert + OS terracotta) de la planche officielle vers `farmos-wordmark.png`. Utilisé sur l'écran de connexion (lockup : icône tête-de-vache + wordmark image) à la place du texte CSS « FarmOS Pro ».
+
 ## [3.20.3] - 2026-06-10
 
 ### Changed

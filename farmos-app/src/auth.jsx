@@ -152,11 +152,10 @@ export function LoginScreen({ lang = "fr" }) {
         borderRadius: 14, padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Brand size={56}/>
-          <div style={{ fontFamily: "var(--font-display, Georgia)", fontWeight: 500, fontSize: 22, color: "var(--ink-950, #0E2418)" }}>
-            FarmOS<span style={{ color: "#D7AA45" }}> Pro</span>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <Brand size={64}/>
+          {/* Wordmark officiel (image) au lieu du texte CSS, pour rester fidèle à la charte. */}
+          <img src="/farmos/farmos-wordmark.png" alt="FarmOS" style={{ height: 26, width: "auto", display: "block" }}/>
           <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", textAlign: "center" }}>
             {lang === "fr" ? "Connecte-toi pour accéder à l'élevage" : "Sign in to access your herd"}
           </div>

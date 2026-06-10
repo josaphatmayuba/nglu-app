@@ -14,6 +14,7 @@ export default defineConfig({
       scope: "/farmos/",
       includeAssets: [
         "farmos-logo.png",
+        "farmos-wordmark.png",
         "apple-touch-icon.png",
         "styles/app.css",
         "styles/farm-tokens.css",
