@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.20.2] - 2026-06-10
+
+### Fixed
+
+- FarmOS — écran Santé : les boutons « Individuel » et « Lot » ouvraient le même formulaire sans différence (et un 3e bouton « Nouveau » redondant). Désormais « Individuel » et « Lot » pré-sélectionnent le type d'application (`scope`) dans le formulaire de traitement ; le bouton « Nouveau » redondant est retiré.
+
 ## [3.20.1] - 2026-06-10
 
 ### Fixed

@@ -113,9 +113,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               <span className="sec">{running.length}</span>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "health" }))}><Icon name="plus" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Individuel" : "Individual"}</button>
-              <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "health" }))}><Icon name="layers" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Lot" : "Batch"}</button>
-              <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "health" }))}><Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Nouveau" : "New"}</button>
+              <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: { tab: "health", scope: "individual" } }))}><Icon name="plus" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Individuel" : "Individual"}</button>
+              <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: { tab: "health", scope: "lot" } }))}><Icon name="layers" size={13} color="#ECF1EC"/>{lang === "fr" ? "Lot" : "Batch"}</button>
             </div>
           </div>
           <div style={{ borderTop: "1px solid var(--border-1)" }}>

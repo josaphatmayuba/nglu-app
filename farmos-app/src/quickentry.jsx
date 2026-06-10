@@ -821,6 +821,8 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     date: new Date().toISOString().slice(0, 10),
     species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
+    // Pré-sélection du type d'application depuis le bouton d'origine (Individuel / Lot).
+    scope: context?.scope || "individual",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
