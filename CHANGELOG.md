@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-06-10
+
+### Added
+
+- FarmOS — module Bâtiments dédié : table `farmos_buildings` (migration 0097) avec capacité, type, température, humidité, responsable, statut d'hygiène. Endpoints CRUD `/buildings` ; l'occupation et le taux sont calculés à la volée depuis `farmos_animals.barn` (+ alerte surcapacité). Nouvel écran « Bâtiments » (cartes occupation + éditeur modal) et entrée de navigation.
+
 ## [3.3.2] - 2026-06-10
 
 ### Fixed

@@ -272,6 +272,18 @@ export class SignVetExamDto {
   @ApiPropertyOptional() @IsOptional() @IsString() signed_by?: string | null;
 }
 
+export class UpsertFarmosBuildingDto {
+  @ApiProperty() @IsString() @IsNotEmpty() name: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() species?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() type?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() capacity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() temperature?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() humidity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() manager?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() hygiene_status?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class CreateFarmosDocumentDto {
   @ApiProperty() @IsString() @IsNotEmpty() title: string;
   @ApiProperty() @IsString() @IsNotEmpty() data_url: string;

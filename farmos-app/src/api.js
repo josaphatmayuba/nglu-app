@@ -256,6 +256,11 @@ export const api = {
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
+  // Bâtiments
+  listBuildings: (species) => jsonFetch(`/buildings${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
+  updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
   deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),

@@ -3,7 +3,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -1363,6 +1363,89 @@ export class FarmosService {
     await this.db.update(farmosDocuments).set({ isActive: 0 }).where(eq(farmosDocuments.id, id));
     await this.publishFarmosUpdate("deleteDocument", ["documents"], "deleted", id, orgId);
     return { message: "Document supprimé." };
+  }
+
+  // ─── Bâtiments FarmOS — occupation calculée depuis animals.barn (par nom) ─────
+  async listBuildings(orgId: number, species?: string | null) {
+    const conds = [eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)];
+    if (species) conds.push(eq(farmosBuildings.species, species));
+    const [buildings, animals] = await Promise.all([
+      this.db.select().from(farmosBuildings).where(and(...conds)).orderBy(farmosBuildings.name),
+      this.db
+        .select({ barn: farmosAnimals.barn, count: farmosAnimals.count })
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+    ]);
+    // Occupation = somme des count (ou 1 par tête) des animaux dont barn == nom du bâtiment.
+    const occByName = new Map<string, number>();
+    for (const a of animals) {
+      if (!a.barn) continue;
+      const n = Number(a.count ?? 0) || 1;
+      occByName.set(a.barn, (occByName.get(a.barn) ?? 0) + n);
+    }
+    return buildings.map((b) => {
+      const occupancy = occByName.get(b.name) ?? 0;
+      const cap = b.capacity ?? null;
+      return {
+        ...b,
+        occupancy,
+        occupancyRate: cap && cap > 0 ? Math.round((occupancy / cap) * 100) : null,
+        overCapacity: cap != null && cap > 0 && occupancy > cap,
+      };
+    });
+  }
+
+  async getBuilding(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosBuildings)
+      .where(and(eq(farmosBuildings.id, id), eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Building not found.");
+    return row;
+  }
+
+  async createBuilding(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosBuildings).values({
+      organizationId: orgId,
+      name: input.name,
+      species: input.species ?? null,
+      type: input.type ?? null,
+      capacity: input.capacity ?? null,
+      temperature: input.temperature != null ? String(input.temperature) : null,
+      humidity: input.humidity != null ? String(input.humidity) : null,
+      manager: input.manager ?? null,
+      hygieneStatus: input.hygiene_status ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createBuilding", ["buildings"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async updateBuilding(id: number, input: any, orgId: number) {
+    await this.getBuilding(id, orgId);
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.species !== undefined) patch.species = input.species;
+    if (input.type !== undefined) patch.type = input.type;
+    if (input.capacity !== undefined) patch.capacity = input.capacity;
+    if (input.temperature !== undefined) patch.temperature = input.temperature != null ? String(input.temperature) : null;
+    if (input.humidity !== undefined) patch.humidity = input.humidity != null ? String(input.humidity) : null;
+    if (input.manager !== undefined) patch.manager = input.manager;
+    if (input.hygiene_status !== undefined) patch.hygieneStatus = input.hygiene_status;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (Object.keys(patch).length === 0) return this.getBuilding(id, orgId);
+    await this.db.update(farmosBuildings).set(patch).where(eq(farmosBuildings.id, id));
+    await this.publishFarmosUpdate("updateBuilding", ["buildings"], "updated", id, orgId);
+    return this.getBuilding(id, orgId);
+  }
+
+  async deleteBuilding(id: number, orgId: number) {
+    await this.getBuilding(id, orgId);
+    await this.db.update(farmosBuildings).set({ isActive: 0 }).where(eq(farmosBuildings.id, id));
+    await this.publishFarmosUpdate("deleteBuilding", ["buildings"], "deleted", id, orgId);
+    return { message: "Bâtiment supprimé." };
   }
 
   // ─── Rapports PDF (#3) — réutilise Puppeteer (déjà dép. via le module HR) ────

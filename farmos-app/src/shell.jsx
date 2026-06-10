@@ -11,6 +11,7 @@ const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
   { id: "identification", icon: "scanLine", labelKey: "identification" },
   { id: "animals",   icon: "layers",    labelKey: "animals" },
+  { id: "buildings", icon: "grid",      labelKey: "buildings" },
   { id: "health",    icon: "pulse",     labelKey: "health" },
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
   { id: "feed",      icon: "wheat",     labelKey: "feed" },

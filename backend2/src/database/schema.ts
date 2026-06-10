@@ -1808,6 +1808,23 @@ export const farmosDocuments = mysqlTable("farmos_documents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const farmosBuildings = mysqlTable("farmos_buildings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  species: varchar("species", { length: 50 }),
+  type: varchar("type", { length: 50 }),
+  capacity: int("capacity"),
+  temperature: decimal("temperature", { precision: 5, scale: 2 }),
+  humidity: decimal("humidity", { precision: 5, scale: 2 }),
+  manager: varchar("manager", { length: 255 }),
+  hygieneStatus: varchar("hygiene_status", { length: 30 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosLookups = mysqlTable("farmos_lookups", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

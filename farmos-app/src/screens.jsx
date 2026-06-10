@@ -3000,4 +3000,135 @@ const AboutCard = ({ lang }) => {
   );
 };
 
-export { HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };
+// ─── BÂTIMENTS ───────────────────────────────────────────────────────────
+const BLANK_BUILDING = { name: "", species: "", type: "", capacity: "", temperature: "", humidity: "", manager: "", hygiene_status: "" };
+const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
+  const [rows, setRows] = React.useState([]);
+  const [editing, setEditing] = React.useState(null); // building | "new" | null
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const refresh = useDataRefresh(["buildings", "animals"]);
+  React.useEffect(() => {
+    let cancel = false;
+    api.listBuildings().then((b) => { if (!cancel) setRows(Array.isArray(b) ? b : []); }).catch((e) => console.warn("listBuildings:", e.message));
+    return () => { cancel = true; };
+  }, [reloadKey, refresh]);
+  const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
+      <div>
+        <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+          {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
+        </h1>
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+        <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}><Icon name="plus" size={13} color="#FBF8F2"/>{lang === "fr" ? "Nouveau bâtiment" : "New building"}</button>
+      </div>
+      {filtered.length === 0 ? (
+        <EmptyState lang={lang} title={lang === "fr" ? "Aucun bâtiment" : "No building"} hint={lang === "fr" ? "Ajoute un bâtiment pour suivre capacité et occupation." : "Add a building to track capacity and occupancy."}/>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
+          {filtered.map((b) => {
+            const rate = b.occupancyRate;
+            const barColor = b.overCapacity ? "var(--oxblood-700)" : rate != null && rate > 85 ? "var(--autorite-500)" : "var(--solidite-500)";
+            return (
+              <div key={b.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }} onClick={() => setEditing(b)}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600 }}>{b.name}</div>
+                  {b.overCapacity && <span className="tag tag-danger" style={{ fontSize: 9.5 }}>{lang === "fr" ? "Surcapacité" : "Over capacity"}</span>}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{[b.type, b.species, b.manager].filter(Boolean).join(" · ") || "—"}</div>
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: "var(--fg-2)" }}>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
+                    <span className="mono">{b.occupancy}{b.capacity ? ` / ${b.capacity}` : ""}{rate != null ? ` · ${rate}%` : ""}</span>
+                  </div>
+                  <div style={{ height: 6, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${Math.min(100, rate ?? 0)}%`, background: barColor }}/>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--fg-2)" }}>
+                  {b.temperature != null && <span>🌡 {b.temperature}°C</span>}
+                  {b.humidity != null && <span>💧 {b.humidity}%</span>}
+                  {b.hygieneStatus && <span>{b.hygieneStatus}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {editing && (
+        <BuildingEditor lang={lang} building={editing === "new" ? null : editing}
+          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
+      )}
+    </div>
+  );
+};
+
+const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
+  const [form, setForm] = React.useState(() => building
+    ? { name: building.name || "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
+    : { ...BLANK_BUILDING });
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const num = (v) => (v === "" || v == null ? null : Number(v));
+  const inputStyle = { padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1)", background: "var(--paper)", fontSize: 13, width: "100%" };
+  const save = async () => {
+    if (!form.name.trim()) { setErr(lang === "fr" ? "Nom requis." : "Name required."); return; }
+    setBusy(true); setErr(null);
+    try {
+      const payload = { name: form.name.trim(), species: form.species || null, type: form.type || null, capacity: num(form.capacity), temperature: num(form.temperature), humidity: num(form.humidity), manager: form.manager || null, hygiene_status: form.hygiene_status || null };
+      if (building?.id) await api.updateBuilding(building.id, payload);
+      else await api.createBuilding(payload);
+      onSaved();
+    } catch (e) { setErr((lang === "fr" ? "Échec : " : "Failed: ") + (e.message || e)); } finally { setBusy(false); }
+  };
+  const del = async () => { if (!building?.id) return; try { await api.deleteBuilding(building.id); onSaved(); } catch (e) { setErr(e.message); } };
+  const Field = ({ label, children }) => (<label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 }}><span className="overline" style={{ fontSize: 10 }}>{label}</span>{children}</label>);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 1000, padding: 20, overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 520, padding: 20, display: "flex", flexDirection: "column", gap: 12, margin: "20px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="overline">{building ? (lang === "fr" ? "Modifier le bâtiment" : "Edit building") : (lang === "fr" ? "Nouveau bâtiment" : "New building")}</div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
+        </div>
+        <Field label={lang === "fr" ? "Nom" : "Name"}><input value={form.name} onChange={set("name")} style={inputStyle}/></Field>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field label={lang === "fr" ? "Espèce" : "Species"}>
+            <select value={form.species} onChange={set("species")} style={inputStyle}>
+              <option value="">—</option>
+              {SPECIES.map((s) => <option key={s.id} value={s.id}>{lang === "fr" ? s.fr : s.en}</option>)}
+            </select>
+          </Field>
+          <Field label={lang === "fr" ? "Type" : "Type"}><input value={form.type} onChange={set("type")} placeholder={lang === "fr" ? "Étable, poulailler…" : "Barn, henhouse…"} style={inputStyle}/></Field>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field label={lang === "fr" ? "Capacité" : "Capacity"}><input type="number" value={form.capacity} onChange={set("capacity")} style={inputStyle}/></Field>
+          <Field label={lang === "fr" ? "Température °C" : "Temperature °C"}><input type="number" step="0.1" value={form.temperature} onChange={set("temperature")} style={inputStyle}/></Field>
+          <Field label={lang === "fr" ? "Humidité %" : "Humidity %"}><input type="number" step="0.1" value={form.humidity} onChange={set("humidity")} style={inputStyle}/></Field>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field label={lang === "fr" ? "Responsable" : "Manager"}><input value={form.manager} onChange={set("manager")} style={inputStyle}/></Field>
+          <Field label={lang === "fr" ? "Hygiène" : "Hygiene"}>
+            <select value={form.hygiene_status} onChange={set("hygiene_status")} style={inputStyle}>
+              <option value="">—</option>
+              <option value="clean">{lang === "fr" ? "Propre" : "Clean"}</option>
+              <option value="ok">{lang === "fr" ? "Correct" : "OK"}</option>
+              <option value="needs_cleaning">{lang === "fr" ? "À nettoyer" : "Needs cleaning"}</option>
+            </select>
+          </Field>
+        </div>
+        {err && <div style={{ color: "var(--oxblood-700)", fontSize: 12 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 6 }}>
+          {building?.id && <button className="btn btn-sm btn-ghost" onClick={del} style={{ color: "var(--oxblood-700)" }}>{lang === "fr" ? "Supprimer" : "Delete"}</button>}
+          <div style={{ flex: 1 }}/>
+          <button className="btn btn-primary" onClick={save} disabled={busy}><Icon name="check" size={13} color="#FBF8F2"/>{lang === "fr" ? "Enregistrer" : "Save"}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };

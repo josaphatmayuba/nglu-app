@@ -540,6 +540,13 @@
       "when": 1780290000000,
       "tag": "0096_farmos_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "5",
+      "when": 1780293600000,
+      "tag": "0097_farmos_buildings",
+      "breakpoints": true
     }
   ]
 }
