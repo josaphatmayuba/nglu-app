@@ -548,20 +548,28 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       "/usr/bin/chromium-browser",
     ].filter(Boolean) as string[];
     const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
+    let browser: any;
     try {
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        protocolTimeout: 60000,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+      });
       const page = await browser.newPage();
       // Retire le script d'auto-impression éventuel avant la génération PDF.
       const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
-      await page.setContent(cleanHtml, { waitUntil: "networkidle0" });
+      // 'load' au lieu de 'networkidle0' : images base64 inline -> pas de requête
+      // réseau, networkidle0 timeoutait (cause du 500 sur les PDF de paie).
+      await page.setContent(cleanHtml, { waitUntil: "load", timeout: 30000 });
       const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
       return Buffer.from(pdfBuffer);
+    } catch (err) {
+      const msg = (err as Error)?.message || String(err);
+      console.error("[HR] htmlToPdf failed:", msg, "| executablePath=", executablePath);
+      throw new BadRequestException(`PDF generation failed: ${msg} (chromium=${executablePath ?? "introuvable"})`);
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
   }
 

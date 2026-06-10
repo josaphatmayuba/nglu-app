@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.5.2] - 2026-06-10
+
+### Fixed
+
+- HR PDF (fiches de paie / documents) : même correctif que FarmOS appliqué au `htmlToPdf` de hr.service — `waitUntil:"load"`, `protocolTimeout`, `--disable-gpu`, et exposition de la vraie cause Puppeteer dans la réponse au lieu d'un 500 générique (le bouton PDF de la paie renvoyait « API 500 »).
+
 ## [3.5.1] - 2026-06-10
 
 ### Fixed
