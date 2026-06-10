@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-06-10
+
+### Fixed
+
+- Génération PDF (HR + FarmOS) : 500 « Internal server error » sur tous les exports PDF. Sur Alpine, le binaire Chromium est `/usr/bin/chromium` alors que `PUPPETEER_EXECUTABLE_PATH` pointait `/usr/bin/chromium-browser` (chemin absent → crash au lancement de Puppeteer). `htmlToPdf` (hr.service.ts + farmos.service.ts) résout désormais le 1er chemin existant parmi env / `/usr/bin/chromium` / `/usr/bin/chromium-browser` ; Dockerfile backend2 corrigé en `/usr/bin/chromium`. Corrige fiches de paie/documents RH ET dossier vét/rentabilité FarmOS.
+
 ## [3.3.1] - 2026-06-10
 
 ### Added

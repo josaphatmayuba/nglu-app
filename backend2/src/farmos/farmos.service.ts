@@ -1369,7 +1369,17 @@ export class FarmosService {
   private async htmlToPdf(html: string): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const puppeteer = require("puppeteer");
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // Le Dockerfile (Alpine) installe chromium ; selon la version le binaire est
+    // /usr/bin/chromium ou /usr/bin/chromium-browser. On résout le 1er existant
+    // (la var d'env peut pointer un chemin absent → crash 500).
+    const candidates = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+    ].filter(Boolean) as string[];
+    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
     const browser = await puppeteer.launch({
       headless: true,
       executablePath,

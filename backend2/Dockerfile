@@ -9,8 +9,9 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
+# Alpine installe le binaire en /usr/bin/chromium (le code resout aussi chromium-browser en repli).
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
