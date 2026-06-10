@@ -150,6 +150,23 @@ export class CreateAnimalDto {
   @IsString()
   status?: string | null;
 
+  @ApiPropertyOptional({ example: "BQ-2022-0007", description: "Mère (external_id ou nom de l'animal mère)." })
+  @IsOptional()
+  @IsString()
+  mother_id?: string | null;
+
+  @ApiPropertyOptional({ example: "BQ-2021-0003", description: "Père (external_id ou nom de l'animal père)." })
+  @IsOptional()
+  @IsString()
+  father_id?: string | null;
+
+  @ApiPropertyOptional({ example: 1500, description: "Valeur estimée de l'animal." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  estimated_value?: number | null;
+
   @ApiPropertyOptional({ example: "Insémination · 14 déc." })
   @IsOptional()
   @IsString()
@@ -171,6 +188,9 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() room?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() type?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() mother_id?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() father_id?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimated_value?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() last_event?: string | null;
 }
 

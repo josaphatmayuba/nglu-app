@@ -499,6 +499,26 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         )}
         {!editing && tab === "details" && (
           <>
+            {(animal.motherId || animal.fatherId || animal.estimatedValue != null) && (
+              <div>
+                <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "Filiation & valeur" : "Lineage & value"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 12 }}>
+                  {[
+                    { fr: "Mère", en: "Mother", icon: "fingerprint", val: animal.motherId },
+                    { fr: "Père", en: "Father", icon: "fingerprint", val: animal.fatherId },
+                    { fr: "Valeur estimée", en: "Estimated value", icon: "coins", val: animal.estimatedValue != null ? `${Number(animal.estimatedValue).toLocaleString("fr-CA")} $` : null, mono: true },
+                  ].filter((f) => f.val != null && f.val !== "").map((f) => (
+                    <div key={f.fr} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <Icon name={f.icon} size={12} color="var(--fg-3)"/>
+                        <span style={{ fontSize: 10.5, color: "var(--fg-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "fr" ? f.fr : f.en}</span>
+                      </div>
+                      <div className={f.mono ? "mono" : ""} style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>{f.val}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {Object.entries(groups).map(([gkey, fkeys]) => (
               <div key={gkey}>
                 <div className="overline" style={{ marginBottom: 10 }}>
@@ -653,6 +673,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
     lot: animal.lot || "",
     barn: animal.barn || "",
     status: animal.status || "healthy",
+    motherId: animal.motherId || "",
+    fatherId: animal.fatherId || "",
+    estimatedValue: animal.estimatedValue ?? "",
   });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
@@ -672,6 +695,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         lot: form.lot || null,
         barn: form.barn || null,
         status: form.status || null,
+        mother_id: form.motherId || null,
+        father_id: form.fatherId || null,
+        estimated_value: form.estimatedValue === "" ? null : Number(form.estimatedValue),
       });
       onSaved();
     } catch (e) {
@@ -726,6 +752,18 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
             <option value="quarantine">{lang === "fr" ? "Quarantaine" : "Quarantine"}</option>
             <option value="withdrawal">{lang === "fr" ? "Délai retrait" : "Withdrawal"}</option>
           </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mère (ID / nom)" : "Mother (ID / name)"}</span>
+          <input className="input" value={form.motherId} onChange={(e) => set("motherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2022-0007" : "e.g. BQ-2022-0007"}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Père (ID / nom)" : "Father (ID / name)"}</span>
+          <input className="input" value={form.fatherId} onChange={(e) => set("fatherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2021-0003" : "e.g. BQ-2021-0003"}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Valeur estimée ($)" : "Estimated value ($)"}</span>
+          <input className="input mono" type="number" step="0.01" min="0" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)}/>
         </label>
       </div>
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}

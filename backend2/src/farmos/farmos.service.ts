@@ -352,6 +352,9 @@ export class FarmosService {
       room: input.room ?? null,
       type: input.type ?? null,
       status: input.status ?? "healthy",
+      motherId: input.mother_id ?? null,
+      fatherId: input.father_id ?? null,
+      estimatedValue: input.estimated_value != null ? String(input.estimated_value) : null,
       lastEvent: input.last_event ?? null,
     });
     const id = Number(result.insertId);
@@ -376,6 +379,9 @@ export class FarmosService {
     if (input.room !== undefined) patch.room = input.room;
     if (input.type !== undefined) patch.type = input.type;
     if (input.status !== undefined) patch.status = input.status;
+    if (input.mother_id !== undefined) patch.motherId = input.mother_id;
+    if (input.father_id !== undefined) patch.fatherId = input.father_id;
+    if (input.estimated_value !== undefined) patch.estimatedValue = input.estimated_value != null ? String(input.estimated_value) : null;
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
     await this.db.update(farmosAnimals).set(patch).where(eq(farmosAnimals.id, id));

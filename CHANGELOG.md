@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-06-10
+
+### Added
+
+- FarmOS — fiche animal : filiation (mère / père) + valeur estimée. Migration idempotente `0100` (journal idx 80) : colonnes `mother_id`, `father_id`, `estimated_value` sur `farmos_animals`. Backend schema/DTO/service (create + update). UI : champs Mère/Père/Valeur estimée dans le formulaire d'édition, carte « Filiation & valeur » dans l'onglet Détails (valeur au format devise `$`). Colonnes optionnelles → backward-compatible.
+
 ## [3.11.0] - 2026-06-10
 
 ### Added

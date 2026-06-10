@@ -467,6 +467,9 @@ export function adaptAnimal(row) {
     lot: row.lot,
     barn: row.barn,
     status: row.status || "healthy",
+    motherId: row.motherId ?? row.mother_id ?? null,
+    fatherId: row.fatherId ?? row.father_id ?? null,
+    estimatedValue: (row.estimatedValue ?? row.estimated_value) != null ? Number(row.estimatedValue ?? row.estimated_value) : null,
     lastEvent: last,
     withdrawal: wUntil
       ? { until: String(wUntil).slice(0, 10), kind: wKind, med: null }
