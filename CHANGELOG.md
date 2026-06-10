@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-06-10
+
+### Added
+
+- FarmOS — bibliothèque maladies enrichie : nouveaux champs `urgency_level`, `symptoms`, `prevention`, `vaccine_available`, `mortality_risk`, `recommended_protocol` sur `farmos_diseases` (migration idempotente `0099`, journal idx 79). Backend : schema Drizzle, `CreateDiseaseDto`/`UpdateDiseaseDto`, `createDisease`/`updateDisease` persistent ces champs. UI éditeur de maladie à venir (champs déjà exposés par l'API). Colonnes optionnelles → backward-compatible.
+
 ## [3.8.0] - 2026-06-10
 
 ### Added

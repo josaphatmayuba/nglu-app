@@ -374,6 +374,13 @@ export class CreateDiseaseDto {
   @IsString()
   common_route?: string | null;
 
+  @ApiPropertyOptional() @IsOptional() @IsString() urgency_level?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() prevention?: string | null;
+  @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
+  @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -387,6 +394,12 @@ export class UpdateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() contagious?: boolean | number;
   @ApiPropertyOptional() @IsOptional() @IsString() severity_default?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() common_route?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() urgency_level?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() prevention?: string | null;
+  @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
+  @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 

@@ -619,6 +619,12 @@ export class FarmosService {
       contagious: input.contagious ? 1 : 0,
       severityDefault: input.severity_default ?? null,
       commonRoute: input.common_route ?? null,
+      urgencyLevel: input.urgency_level ?? null,
+      symptoms: input.symptoms ?? null,
+      prevention: input.prevention ?? null,
+      vaccineAvailable: input.vaccine_available ? 1 : 0,
+      mortalityRisk: input.mortality_risk ?? null,
+      recommendedProtocol: input.recommended_protocol ?? null,
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
@@ -638,6 +644,12 @@ export class FarmosService {
     if (input.contagious !== undefined) patch.contagious = input.contagious ? 1 : 0;
     if (input.severity_default !== undefined) patch.severityDefault = input.severity_default;
     if (input.common_route !== undefined) patch.commonRoute = input.common_route;
+    if (input.urgency_level !== undefined) patch.urgencyLevel = input.urgency_level;
+    if (input.symptoms !== undefined) patch.symptoms = input.symptoms;
+    if (input.prevention !== undefined) patch.prevention = input.prevention;
+    if (input.vaccine_available !== undefined) patch.vaccineAvailable = input.vaccine_available ? 1 : 0;
+    if (input.mortality_risk !== undefined) patch.mortalityRisk = input.mortality_risk;
+    if (input.recommended_protocol !== undefined) patch.recommendedProtocol = input.recommended_protocol;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return disease;
     await this.db.update(farmosDiseases).set(patch).where(eq(farmosDiseases.id, id));

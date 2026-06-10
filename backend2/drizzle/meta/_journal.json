@@ -554,6 +554,13 @@
       "when": 1780297200000,
       "tag": "0098_farmos_vet_exam_clinical",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "5",
+      "when": 1780300800000,
+      "tag": "0099_farmos_disease_library",
+      "breakpoints": true
     }
   ]
 }
