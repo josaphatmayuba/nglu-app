@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-06-10
+
+### Added
+
+- FarmOS — éditeur de bibliothèque maladies (UI) : carte « Bibliothèque maladies » dans l'écran Santé avec liste cliquable (filtrée par espèce) + bouton Ajouter, et modal `DiseaseFormModal` create/edit/remove exposant tous les champs enrichis (nom FR/EN, espèce, urgence, sévérité, risque de mortalité, voie de transmission, symptômes, prévention, protocole recommandé, contagieuse, vaccin disponible, notes). API front `updateDisease`/`deleteDisease` ajoutées (le backend exposait déjà PUT/PATCH/DELETE). Build farmos-app OK.
+
 ## [3.9.0] - 2026-06-10
 
 ### Added

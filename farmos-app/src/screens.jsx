@@ -16,6 +16,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [vetExams, setVetExams] = React.useState([]);
+  const [allDiseases, setAllDiseases] = React.useState([]);
+  const [editingDisease, setEditingDisease] = React.useState(null); // null=fermé, {}=nouveau, row=édition
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses", "vetExams"]);
@@ -29,6 +31,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         const dMap = new Map((Array.isArray(diseases) ? diseases : []).map((d) => [d.id, d]));
         const mapped = (Array.isArray(trs) ? trs : []).map((t) => adaptTreatment(t, aMap, dMap));
         setAllTreatments(mapped);
+        setAllDiseases(Array.isArray(diseases) ? diseases : []);
         setAllAnimals(animalsArr);
         setAllExpenses(Array.isArray(expenses) ? expenses : []);
         setVetExams(Array.isArray(exams) ? exams : []);
@@ -203,6 +206,41 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             ))}
           </div>
 
+          {/* Disease library editor (bibliothèque maladies enrichie) */}
+          <div className="card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div className="bilang">
+                <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Bibliothèque maladies" : "Disease library"}</h3>
+                <span className="sec">{allDiseases.length} {lang === "fr" ? "maladies référencées" : "diseases referenced"}</span>
+              </div>
+              <button className="btn btn-sm btn-primary" onClick={() => setEditingDisease({})}>
+                <Icon name="plus" size={12} color="var(--paper)"/>{lang === "fr" ? "Ajouter" : "Add"}
+              </button>
+            </div>
+            {allDiseases.length === 0 && <EmptyState title={lang === "fr" ? "Aucune maladie référencée" : "No disease referenced"} />}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflow: "auto" }}>
+              {allDiseases
+                .filter((d) => !speciesFilter || d.species === speciesFilter)
+                .map((d) => {
+                  const urg = (d.urgencyLevel || d.urgency_level || "").toLowerCase();
+                  const urgColor = urg === "critical" ? "var(--oxblood-700)" : urg === "high" ? "var(--rust-700)" : urg === "medium" ? "var(--clay-700)" : "var(--ink-500)";
+                  return (
+                    <button key={d.id} onClick={() => setEditingDisease(d)}
+                      style={{ textAlign: "left", border: "1px solid var(--border-1)", background: "var(--paper)", borderRadius: 8, padding: "8px 10px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-900)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{lang === "fr" ? (d.nameFr || d.name_fr) : (d.nameEn || d.name_en || d.nameFr || d.name_fr)}</div>
+                        <div style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+                          {(d.contagious ? (lang === "fr" ? "Contagieuse · " : "Contagious · ") : "")}
+                          {(d.vaccineAvailable ?? d.vaccine_available) ? (lang === "fr" ? "vaccin dispo" : "vaccine available") : (lang === "fr" ? "pas de vaccin" : "no vaccine")}
+                        </div>
+                      </div>
+                      {urg && <span className="tag" style={{ background: "var(--bg-sunken)", color: urgColor, fontSize: 10 }}>{urg}</span>}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+
           {/* Vet card */}
           <div className="card" style={{ background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-800)" }}>
             <div className="overline" style={{ color: "rgba(251,248,242,0.6)", marginBottom: 8 }}>{lang === "fr" ? "Vétérinaire de garde" : "On-call veterinarian"}</div>
@@ -230,6 +268,16 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       />
 
       <FarmosDocumentsSection lang={lang} animals={animalsFiltered}/>
+
+      {editingDisease && (
+        <DiseaseFormModal
+          lang={lang}
+          defaultSpecies={speciesFilter || undefined}
+          disease={Object.keys(editingDisease).length ? editingDisease : null}
+          onClose={() => setEditingDisease(null)}
+          onSaved={() => { setEditingDisease(null); setReloadKey((k) => k + 1); }}
+        />
+      )}
     </div>
   );
 };
@@ -673,6 +721,154 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
             {isEdit && (
               <button className="btn" style={{ color: "var(--rust-700)", borderColor: "var(--rust-700)", marginRight: "auto" }} onClick={handleDelete} disabled={saving || deleting}>
                 {deleting ? "…" : (lang === "fr" ? "Supprimer" : "Delete")}
+              </button>
+            )}
+            <button className="btn" onClick={onClose} disabled={saving || deleting}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving || deleting}>{saving ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DISEASE LIBRARY EDITOR (bibliothèque maladies enrichie) ──────────────
+const URGENCY_OPTS = [
+  { id: "", fr: "—", en: "—" },
+  { id: "low", fr: "Faible", en: "Low" },
+  { id: "medium", fr: "Moyenne", en: "Medium" },
+  { id: "high", fr: "Élevée", en: "High" },
+  { id: "critical", fr: "Critique", en: "Critical" },
+];
+const MORTALITY_OPTS = [
+  { id: "", fr: "—", en: "—" },
+  { id: "low", fr: "Faible", en: "Low" },
+  { id: "medium", fr: "Moyen", en: "Medium" },
+  { id: "high", fr: "Élevé", en: "High" },
+];
+
+function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
+  const isEdit = !!disease;
+  const [nameFr, setNameFr] = React.useState(disease?.nameFr || disease?.name_fr || "");
+  const [nameEn, setNameEn] = React.useState(disease?.nameEn || disease?.name_en || "");
+  const [species, setSpecies] = React.useState(disease?.species || defaultSpecies || (SPECIES[0] && SPECIES[0].id) || "");
+  const [contagious, setContagious] = React.useState(!!(disease?.contagious));
+  const [severity, setSeverity] = React.useState(disease?.severityDefault || disease?.severity_default || "");
+  const [commonRoute, setCommonRoute] = React.useState(disease?.commonRoute || disease?.common_route || "");
+  const [urgency, setUrgency] = React.useState(disease?.urgencyLevel || disease?.urgency_level || "");
+  const [symptoms, setSymptoms] = React.useState(disease?.symptoms || "");
+  const [prevention, setPrevention] = React.useState(disease?.prevention || "");
+  const [vaccine, setVaccine] = React.useState(!!(disease?.vaccineAvailable ?? disease?.vaccine_available));
+  const [mortality, setMortality] = React.useState(disease?.mortalityRisk || disease?.mortality_risk || "");
+  const [protocol, setProtocol] = React.useState(disease?.recommendedProtocol || disease?.recommended_protocol || "");
+  const [notes, setNotes] = React.useState(disease?.notes || "");
+  const [saving, setSaving] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const handleSave = async () => {
+    if (!nameFr.trim() || !species) { setError(lang === "fr" ? "Nom (FR) et espèce requis." : "Name (FR) and species required."); return; }
+    setSaving(true); setError("");
+    const payload = {
+      species,
+      name_fr: nameFr.trim(),
+      name_en: nameEn.trim() || null,
+      contagious: contagious ? 1 : 0,
+      severity_default: severity || null,
+      common_route: commonRoute.trim() || null,
+      urgency_level: urgency || null,
+      symptoms: symptoms.trim() || null,
+      prevention: prevention.trim() || null,
+      vaccine_available: vaccine ? 1 : 0,
+      mortality_risk: mortality || null,
+      recommended_protocol: protocol.trim() || null,
+      notes: notes.trim() || null,
+    };
+    try {
+      if (isEdit) await api.updateDisease(disease.id, payload);
+      else await api.createDisease(payload);
+      onSaved();
+    } catch (e) {
+      setError(e.message || "Erreur"); setSaving(false);
+    }
+  };
+  const handleDelete = async () => {
+    if (!isEdit) return;
+    if (!window.confirm(lang === "fr" ? `Retirer "${nameFr}" de la bibliothèque ?` : `Remove "${nameFr}" from library?`)) return;
+    setDeleting(true); setError("");
+    try { await api.deleteDisease(disease.id); onSaved(); }
+    catch (e) { setError(e.message || "Erreur"); setDeleting(false); }
+  };
+
+  const title = isEdit
+    ? (lang === "fr" ? "Modifier la maladie" : "Edit disease")
+    : (lang === "fr" ? "Nouvelle maladie" : "New disease");
+  const lbl = { fontSize: 12, color: "var(--fg-2)" };
+  const inputStyle = { width: "100%", marginTop: 4 };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 560, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, marginBottom: 16 }}>{title}</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={lbl}>{lang === "fr" ? "Nom (FR)" : "Name (FR)"}
+              <input value={nameFr} onChange={(e) => setNameFr(e.target.value)} className="input" style={inputStyle}/>
+            </label>
+            <label style={lbl}>{lang === "fr" ? "Nom (EN)" : "Name (EN)"}
+              <input value={nameEn} onChange={(e) => setNameEn(e.target.value)} className="input" style={inputStyle}/>
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={lbl}>{lang === "fr" ? "Espèce" : "Species"}
+              <select value={species} onChange={(e) => setSpecies(e.target.value)} className="input" style={inputStyle}>
+                {SPECIES.map((sp) => <option key={sp.id} value={sp.id}>{lang === "fr" ? sp.fr : sp.en}</option>)}
+              </select>
+            </label>
+            <label style={lbl}>{lang === "fr" ? "Niveau d'urgence" : "Urgency level"}
+              <select value={urgency} onChange={(e) => setUrgency(e.target.value)} className="input" style={inputStyle}>
+                {URGENCY_OPTS.map((o) => <option key={o.id} value={o.id}>{lang === "fr" ? o.fr : o.en}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={lbl}>{lang === "fr" ? "Sévérité par défaut" : "Default severity"}
+              <input value={severity} onChange={(e) => setSeverity(e.target.value)} className="input" style={inputStyle} placeholder={lang === "fr" ? "légère, modérée…" : "mild, moderate…"}/>
+            </label>
+            <label style={lbl}>{lang === "fr" ? "Risque de mortalité" : "Mortality risk"}
+              <select value={mortality} onChange={(e) => setMortality(e.target.value)} className="input" style={inputStyle}>
+                {MORTALITY_OPTS.map((o) => <option key={o.id} value={o.id}>{lang === "fr" ? o.fr : o.en}</option>)}
+              </select>
+            </label>
+          </div>
+          <label style={lbl}>{lang === "fr" ? "Voie de transmission courante" : "Common route"}
+            <input value={commonRoute} onChange={(e) => setCommonRoute(e.target.value)} className="input" style={inputStyle} placeholder={lang === "fr" ? "respiratoire, fécale-orale…" : "respiratory, faecal-oral…"}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Symptômes" : "Symptoms"}
+            <textarea value={symptoms} onChange={(e) => setSymptoms(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Prévention" : "Prevention"}
+            <textarea value={prevention} onChange={(e) => setPrevention(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Protocole recommandé" : "Recommended protocol"}
+            <textarea value={protocol} onChange={(e) => setProtocol(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            <label style={{ ...lbl, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={contagious} onChange={(e) => setContagious(e.target.checked)}/>{lang === "fr" ? "Contagieuse" : "Contagious"}
+            </label>
+            <label style={{ ...lbl, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={vaccine} onChange={(e) => setVaccine(e.target.checked)}/>{lang === "fr" ? "Vaccin disponible" : "Vaccine available"}
+            </label>
+          </div>
+          <label style={lbl}>{lang === "fr" ? "Notes" : "Notes"}
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          {isEdit && <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", paddingTop: 4, borderTop: "1px dashed var(--border-1)" }}>ID: {disease.id}</div>}
+          {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            {isEdit && (
+              <button className="btn" style={{ color: "var(--rust-700)", borderColor: "var(--rust-700)", marginRight: "auto" }} onClick={handleDelete} disabled={saving || deleting}>
+                {deleting ? "…" : (lang === "fr" ? "Retirer" : "Remove")}
               </button>
             )}
             <button className="btn" onClick={onClose} disabled={saving || deleting}>{lang === "fr" ? "Annuler" : "Cancel"}</button>

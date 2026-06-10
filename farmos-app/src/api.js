@@ -124,6 +124,8 @@ const KIND_INVALIDATES = {
   updatePrice:            ["priceList"],
   deletePrice:            ["priceList"],
   createDisease:          ["diseases"],
+  updateDisease:          ["diseases"],
+  deleteDisease:          ["diseases"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -273,6 +275,8 @@ export const api = {
   createLookup: (body) => jsonMutate("createLookup", "/lookups", { method: "POST", body: JSON.stringify(body) }),
   deleteLookup: (id) => jsonMutate("deleteLookup", `/lookups/${id}`, { method: "DELETE" }),
   createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
+  updateDisease: (id, body) => jsonMutate("updateDisease", `/diseases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteDisease: (id) => jsonMutate("deleteDisease", `/diseases/${id}`, { method: "DELETE" }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
