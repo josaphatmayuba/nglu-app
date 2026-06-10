@@ -3090,7 +3090,7 @@ const SalesManagementScreen = ({ lang, speciesFilter }) => (
   </div>
 );
 
-const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesFilter, onSpeciesFilter }) => {
+const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesFilter, onSpeciesFilter, tweaks, setTweak }) => {
   const [selected, setSelected] = React.useState(enabledSpecies && enabledSpecies.length ? enabledSpecies : SPECIES.map((s) => s.id));
   const [saving, setSaving] = React.useState(false);
   const [message, setMessage] = React.useState(null);
@@ -3179,9 +3179,64 @@ const SettingsScreen = ({ lang, enabledSpecies, onEnabledSpeciesChange, speciesF
           </button>
         </div>
       </section>
+      {tweaks && setTweak && <AppearanceCard lang={lang} tweaks={tweaks} setTweak={setTweak}/>}
       <LocationsManager lang={lang} enabledSpecies={enabledSpecies}/>
       <AboutCard lang={lang}/>
     </div>
+  );
+};
+
+// Carte « Apparence » — options visuelles déplacées depuis l'ancien panneau
+// Tweaks (désactivé). Thème, densité, style de barre latérale, langue.
+const AppearanceCard = ({ lang, tweaks, setTweak }) => {
+  const Seg = ({ label, value, options }) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span style={{ fontSize: 12, color: "var(--fg-2)" }}>{label}</span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {options.map((o) => {
+          const on = value === o.value;
+          return (
+            <button key={o.value} type="button" onClick={() => setTweak(o.key, o.value)}
+              style={{ padding: "7px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600,
+                border: `1px solid ${on ? "var(--forest-700)" : "var(--border-1)"}`,
+                background: on ? "var(--forest-50)" : "var(--paper)",
+                color: on ? "var(--forest-900)" : "var(--ink-700)" }}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+  return (
+    <section className="card" style={{ marginTop: 20, maxWidth: 860, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <div className="overline">{lang === "fr" ? "Apparence" : "Appearance"}</div>
+        <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
+          {lang === "fr" ? "Préférences visuelles de l'application." : "Application visual preferences."}
+        </div>
+      </div>
+      <Seg label={lang === "fr" ? "Thème" : "Theme"} value={tweaks.theme}
+        options={[
+          { key: "theme", value: "light", label: lang === "fr" ? "Clair" : "Light" },
+          { key: "theme", value: "dark", label: lang === "fr" ? "Sombre" : "Dark" },
+        ]}/>
+      <Seg label={lang === "fr" ? "Densité" : "Density"} value={tweaks.density}
+        options={[
+          { key: "density", value: "comfortable", label: lang === "fr" ? "Confort" : "Comfort" },
+          { key: "density", value: "compact", label: "Compact" },
+        ]}/>
+      <Seg label={lang === "fr" ? "Barre latérale" : "Sidebar"} value={tweaks.sidebarStyle}
+        options={[
+          { key: "sidebarStyle", value: "labels", label: lang === "fr" ? "Icônes + libellés" : "Icons + labels" },
+          { key: "sidebarStyle", value: "icons", label: lang === "fr" ? "Icônes seules" : "Icons only" },
+        ]}/>
+      <Seg label={lang === "fr" ? "Langue" : "Language"} value={tweaks.lang}
+        options={[
+          { key: "lang", value: "fr", label: "Français" },
+          { key: "lang", value: "en", label: "English" },
+        ]}/>
+    </section>
   );
 };
 

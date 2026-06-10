@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.19.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — panneau Tweaks (⚙ flottant) désactivé en dev et prod. Ses options visuelles utiles (Thème, Densité, Barre latérale, Langue) sont déplacées dans l'écran Paramètres, nouvelle carte « Apparence ». L'aperçu device et la navigation rapide (outils de dev) ne sont pas repris.
+
 ## [3.18.0] - 2026-06-10
 
 ### Added

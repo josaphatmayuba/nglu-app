@@ -210,7 +210,7 @@ function App() {
       case "finances":   return <FinancesScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
-      case "settings":   return <SettingsScreen {...props}/>;
+      case "settings":   return <SettingsScreen {...props} tweaks={tweaks} setTweak={setTweak}/>;
       default:           return <Dashboard {...props}/>;
     }
   };
@@ -277,7 +277,8 @@ function App() {
 
         {toast && <Toast message={toast.message} severity={toast.severity} onClose={() => setToast(null)}/>}
       </div>
-      <FarmTweaks tweaks={tweaks} setTweak={setTweak}/>
+      {/* Panneau Tweaks (⚙ flottant) désactivé : options visuelles déplacées
+          dans l'écran Paramètres (carte « Apparence »). */}
       <PwaUpdateBanner lang={tweaks.lang}/>
       <PwaInstallBanner lang={tweaks.lang}/>
       <AiAssistant/>
