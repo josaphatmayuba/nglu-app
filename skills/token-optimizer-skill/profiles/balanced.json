@@ -1,0 +1,20 @@
+{
+  "profile": "balanced",
+  "label": "Modèle équilibré",
+  "effort": "medium",
+  "reliability": "high",
+  "cost": "medium",
+  "use_for": [
+    "fonctionnalité standard",
+    "API + interface",
+    "modification de plusieurs fichiers",
+    "bug logique moyen",
+    "tests unitaires simples"
+  ],
+  "avoid_for": [
+    "audit sécurité critique",
+    "architecture complexe",
+    "migration DB risquée"
+  ],
+  "must_confirm_before_start": true
+}

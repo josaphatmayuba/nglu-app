@@ -1,0 +1,23 @@
+{
+  "profile": "reliable",
+  "label": "Modèle raisonnement fort",
+  "effort": "high",
+  "reliability": "critical",
+  "cost": "high",
+  "use_for": [
+    "architecture",
+    "sécurité",
+    "transactions comptables",
+    "base de données/migration",
+    "bug complexe",
+    "refactorisation lourde",
+    "audit de projet",
+    "code production critique"
+  ],
+  "avoid_for": [
+    "petite correction CSS",
+    "simple reformulation",
+    "tâche sans risque"
+  ],
+  "must_confirm_before_start": true
+}
