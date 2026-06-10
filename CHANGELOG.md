@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.15.3] - 2026-06-10
+
+### Fixed
+
+- FarmOS — onglets fiche animal : le scroll horizontal des onglets était peu découvrable et difficile à utiliser. Remplacé par un retour à la ligne (`flex-wrap`) : tous les onglets restent visibles sans scroll caché, sur 1-2 lignes selon la largeur du panneau.
+
 ## [3.15.2] - 2026-06-10
 
 ### Fixed

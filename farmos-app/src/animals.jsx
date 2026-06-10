@@ -462,8 +462,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {/* Withdrawal warning right at the top */}
         {animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
 
-        {/* Tabs (scroll horizontal si trop d'onglets pour la largeur du panneau) */}
-        <div style={{ display: "flex", gap: 0, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22, overflowX: "auto", scrollbarWidth: "none" }}>
+        {/* Tabs — wrap sur plusieurs lignes : tous les onglets restent visibles
+            sans scroll horizontal caché (peu découvrable sur panneau étroit). */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0 4px", rowGap: 2, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22 }}>
           {[
             { id: "details",  fr: "Détails",       en: "Details",     count: null },
             { id: "health",   fr: "Santé",         en: "Health",      count: related.treatments.length },
