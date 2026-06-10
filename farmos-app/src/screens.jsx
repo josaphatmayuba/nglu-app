@@ -1778,16 +1778,16 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
 // ─── FINANCES ────────────────────────────────────────────────────────────
 // Rentabilité par animal / lot (#4) — tableau revenu / coût / profit.
 const ProfitabilitySection = ({ lang, data }) => {
-  const [view, setView] = React.useState("animal"); // animal | lot
+  const [view, setView] = React.useState("animal"); // animal | lot | building
   const money = (n) => Number(n || 0).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
-  const rows = view === "animal" ? data.byAnimal : data.byLot;
+  const rows = view === "animal" ? data.byAnimal : view === "lot" ? data.byLot : (data.byBuilding || []);
   const profitColor = (p) => (p > 0 ? "var(--solidite-700)" : p < 0 ? "var(--oxblood-700)" : "var(--fg-3)");
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Rentabilité par animal / lot" : "Profitability per animal / lot"}</h3>
         <div style={{ display: "flex", gap: 4 }}>
-          {[{ id: "animal", fr: "Par animal", en: "Per animal" }, { id: "lot", fr: "Par lot", en: "Per lot" }].map((v) => (
+          {[{ id: "animal", fr: "Par animal", en: "Per animal" }, { id: "lot", fr: "Par lot", en: "Per lot" }, { id: "building", fr: "Par bâtiment", en: "Per building" }].map((v) => (
             <button key={v.id} className="btn btn-sm" onClick={() => setView(v.id)}
               style={view === v.id ? { background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-900)" } : {}}>
               {lang === "fr" ? v.fr : v.en}
@@ -1802,23 +1802,26 @@ const ProfitabilitySection = ({ lang, data }) => {
       </div>
       <div style={{ maxHeight: 320, overflow: "auto" }}>
         {rows.length === 0 ? (
-          <div style={{ padding: 18, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune donnée liée à un animal/lot." : "No data linked to an animal/lot."}</div>
-        ) : rows.map((r, i) => (
-          <div key={(view === "animal" ? r.animalId : r.lot) || i} style={{
+          <div style={{ padding: 18, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune donnée liée à un animal/lot/bâtiment." : "No data linked to an animal/lot/building."}</div>
+        ) : rows.map((r, i) => {
+          const groupKey = view === "lot" ? r.lot : r.building;
+          const noneLabel = view === "lot" ? (lang === "fr" ? "Sans lot" : "No lot") : (lang === "fr" ? "Sans bâtiment" : "No building");
+          const title = view === "animal" ? (r.name || `#${r.animalId}`) : (groupKey === "—" ? noneLabel : groupKey);
+          return (
+          <div key={(view === "animal" ? r.animalId : groupKey) || i} style={{
             display: "grid", gridTemplateColumns: "1fr 100px 100px 100px", gap: 10, padding: "10px 18px", alignItems: "center",
             borderBottom: i < rows.length - 1 ? "1px solid var(--border-1)" : "none",
           }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>
-                {view === "animal" ? (r.name || `#${r.animalId}`) : (r.lot === "—" ? (lang === "fr" ? "Sans lot" : "No lot") : r.lot)}
-              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{title}</div>
               <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{view === "animal" ? r.species : `${r.count} ${lang === "fr" ? "animaux" : "animals"}`}</div>
             </div>
             <span className="mono" style={{ fontSize: 12, textAlign: "right" }}>{money(r.revenue)} $</span>
             <span className="mono" style={{ fontSize: 12, textAlign: "right", color: "var(--oxblood-700)" }}>{money(r.cost)} $</span>
             <span className="mono" style={{ fontSize: 13, textAlign: "right", fontWeight: 700, color: profitColor(r.profit) }}>{money(r.profit)} $</span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

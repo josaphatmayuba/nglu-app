@@ -1934,7 +1934,7 @@ export class FarmosService {
   async getProfitability(orgId: number) {
     const [animals, sales, expenses] = await Promise.all([
       this.db
-        .select({ id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species, lot: farmosAnimals.lot })
+        .select({ id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species, lot: farmosAnimals.lot, barn: farmosAnimals.barn })
         .from(farmosAnimals)
         .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
       this.db
@@ -1970,7 +1970,7 @@ export class FarmosService {
         const revenue = Math.round(revenueByAnimal.get(id) ?? 0);
         const cost = Math.round(costByAnimal.get(id) ?? 0);
         return {
-          animalId: id, name: a.name, species: a.species, lot: a.lot,
+          animalId: id, name: a.name, species: a.species, lot: a.lot, barn: a.barn,
           revenue, cost, profit: revenue - cost,
           costByCategory: costByCategory.get(id) ?? {},
         };
@@ -1978,23 +1978,28 @@ export class FarmosService {
       .filter((r) => r.revenue !== 0 || r.cost !== 0)
       .sort((x, y) => y.profit - x.profit);
 
-    const lotMap = new Map<string, { lot: string; revenue: number; cost: number; count: number }>();
-    for (const r of byAnimal) {
-      const key = r.lot || "—";
-      const agg = lotMap.get(key) ?? { lot: key, revenue: 0, cost: 0, count: 0 };
-      agg.revenue += r.revenue; agg.cost += r.cost; agg.count += 1;
-      lotMap.set(key, agg);
-    }
-    const byLot = Array.from(lotMap.values())
-      .map((l) => ({ ...l, profit: l.revenue - l.cost }))
-      .sort((x, y) => y.profit - x.profit);
+    // Agrégation générique par clé (lot ou bâtiment).
+    const groupBy = (keyOf: (r: typeof byAnimal[number]) => string, keyName: "lot" | "building") => {
+      const map = new Map<string, any>();
+      for (const r of byAnimal) {
+        const key = keyOf(r) || "—";
+        const agg = map.get(key) ?? { [keyName]: key, revenue: 0, cost: 0, count: 0 };
+        agg.revenue += r.revenue; agg.cost += r.cost; agg.count += 1;
+        map.set(key, agg);
+      }
+      return Array.from(map.values())
+        .map((l) => ({ ...l, profit: l.revenue - l.cost }))
+        .sort((x, y) => y.profit - x.profit);
+    };
+    const byLot = groupBy((r) => r.lot ?? "", "lot");
+    const byBuilding = groupBy((r) => r.barn ?? "", "building");
 
     const totals = byAnimal.reduce(
       (acc, r) => ({ revenue: acc.revenue + r.revenue, cost: acc.cost + r.cost, profit: acc.profit + r.profit }),
       { revenue: 0, cost: 0, profit: 0 },
     );
 
-    return { byAnimal, byLot, totals };
+    return { byAnimal, byLot, byBuilding, totals };
   }
 
   private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {

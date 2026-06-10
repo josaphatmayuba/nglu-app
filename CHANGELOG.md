@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-06-10
+
+### Added
+
+- FarmOS — rentabilité par bâtiment : `/profitability` renvoie désormais aussi `byBuilding` (regroupement via `animal.barn`), et la section Finances propose une 3ᵉ vue « Par bâtiment » en plus d'animal/lot.
+
 ## [3.5.2] - 2026-06-10
 
 ### Fixed
