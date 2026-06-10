@@ -10,6 +10,19 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-06-10
+
+### Added
+
+- FarmOS — dossier vétérinaire complet : examen clinique enrichi (T°, poids, examen, diagnostic, protocole), ordonnance multi-lignes (médicament/dose/fréquence/durée/voie + délais de retrait) et signature vétérinaire (canvas) qui verrouille le dossier. Migration `0095_farmos_vet_dossier` (tables `farmos_vet_exams` enrichie + `farmos_vet_prescriptions`). Commit `917c1a63`.
+- FarmOS — documents & rapports PDF : table `farmos_documents` (certificats, ordonnances, factures, analyses labo, upload/download base64). PDF dossier vétérinaire + PDF rentabilité via Puppeteer (dépendance HR réutilisée). Migration `0096_farmos_documents`. Commit `917c1a63`.
+- FarmOS — rentabilité par animal / lot : endpoint `/profitability` (revenu − coût par animal, agrégat par lot, totaux) + section dédiée dans l'écran Finances + export PDF. Commit `917c1a63`.
+- FarmOS — badge version + environnement (dev/prod) en bas de la sidebar. Commit `55eac250`.
+
+### Changed
+
+- FarmOS — délai de retrait (withdrawal) : dénormalisation de `withdrawal_until`/`withdrawal_kind` sur l'animal (recalcul à chaque create/update/delete de traitement), alertes dashboard, et blocage de la vente d'un animal encore sous délai viande. Commit `917c1a63`.
+
 ### Fixed
 
 - HR (drift migrations 0080->0087): les timestamps `when` du journal Drizzle etaient en desordre (0085/0086/0087 < 0084), si bien que Drizzle sautait ces 8 migrations au boot. Consequence sur dev: tables `hr_attendances`, `hr_candidates`, `hr_personal_documents`, `hr_tax_rules` absentes + colonnes payroll-approval / leave-workflow / document-generation manquantes -> ecrans Presences, Recrutement, upload de documents et paie casses (500). En plus, 0084 et 0087 etaient ecrites en syntaxe PostgreSQL (`serial`, `text DEFAULT NULL`).
