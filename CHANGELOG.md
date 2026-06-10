@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.7.2] - 2026-06-10
+
+### Fixed
+
+- HR — téléchargement PDF : `downloadAuth` affiche désormais le message explicite du backend au lieu d'un « API 400 » brut. Un document sans contenu HTML (ex. contrat sans modèle) affiche « Ce document n'a pas de contenu à générer » au lieu d'une erreur cryptique.
+
 ## [3.7.1] - 2026-06-10
 
 ### Fixed
