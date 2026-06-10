@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-06-10
+
+### Fixed
+
+- PDF (cause racine enfin identifiée) : `chrome ENOENT … (chromium=introuvable)` — Chromium n'était pas présent dans l'image backend2 déployée. Dockerfile durci : localise le binaire réel après `apk add chromium` (chromium/chromium-browser), crée un lien stable `/usr/bin/chromium`, et **fait échouer le build si Chromium est absent** (garantit que l'image en prod l'a). Détection runtime élargie (htmlToPdf HR+FarmOS) à `/usr/lib/chromium/*`.
+- Version « commit: unknown » en dev/prod : le build pipeline tourne hors dépôt git. `app-version.mjs` lit désormais `BITBUCKET_COMMIT` (puis `CI_COMMIT_SHA`) avant de retomber sur git.
+
 ## [3.7.0] - 2026-06-10
 
 ### Added

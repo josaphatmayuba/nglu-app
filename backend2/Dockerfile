@@ -1,15 +1,21 @@
 FROM node:20-alpine
 
-# Chromium dependencies for puppeteer PDF generation
+# Chromium dependencies for puppeteer PDF generation.
+# On installe chromium, on localise le binaire réel (le nom varie selon la version
+# Alpine : chromium / chromium-browser), puis on crée un lien stable /usr/bin/chromium.
+# Le build ÉCHOUE si chromium est introuvable -> on est sûr que l'image en prod l'a.
 RUN apk add --no-cache \
     chromium \
     nss \
     freetype \
     harfbuzz \
     ca-certificates \
-    ttf-freefont
+    ttf-freefont \
+ && CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)" \
+ && if [ -z "$CHROME_BIN" ]; then echo "ERREUR: chromium introuvable apres apk add" && exit 1; fi \
+ && ln -sf "$CHROME_BIN" /usr/bin/chromium \
+ && /usr/bin/chromium --version
 
-# Alpine installe le binaire en /usr/bin/chromium (le code resout aussi chromium-browser en repli).
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 

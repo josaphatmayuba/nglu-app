@@ -1475,6 +1475,8 @@ export class FarmosService {
       process.env.PUPPETEER_EXECUTABLE_PATH,
       "/usr/bin/chromium",
       "/usr/bin/chromium-browser",
+      "/usr/lib/chromium/chrome",
+      "/usr/lib/chromium/chromium",
     ].filter(Boolean) as string[];
     const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
     let browser: any;
