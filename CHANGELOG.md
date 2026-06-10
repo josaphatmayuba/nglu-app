@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.13.0] - 2026-06-10
+
+### Added
+
+- FarmOS — rôles fins + permissions farmos. Migration idempotente `0101` (journal idx 81, rejouée auto au boot car idx ≥ 70) : crée les permissions `create/readAll/readSingle/update/delete-farmos` (qui n'étaient jamais seedées — le système marchait via les rôles `isSystem` qui bypassent le PermissionsGuard), les 7 rôles métier (Admin Ferme, Gestionnaire Ferme, Éleveur, Vétérinaire, Superviseur Ferme, Employé Ferme, Lecture Ferme) et leurs liaisons rôle↔permission (Admin/Gestionnaire = CRUD complet ; Vét/Superviseur/Éleveur = read+create+update ; Employé = read+create ; Lecture = read seul). `INSERT IGNORE` + `WHERE NOT EXISTS` → sûr sur bases déjà seedées, ne touche aucun rôle/permission existant. Assignation d'un rôle à un utilisateur via l'UI Rôles du CRM.
+
 ## [3.12.0] - 2026-06-10
 
 ### Added

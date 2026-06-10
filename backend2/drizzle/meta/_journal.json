@@ -568,6 +568,13 @@
       "when": 1780304400000,
       "tag": "0100_farmos_animal_lineage",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1780308000000,
+      "tag": "0101_farmos_roles_permissions",
+      "breakpoints": true
     }
   ]
 }
