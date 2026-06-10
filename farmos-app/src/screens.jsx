@@ -6,6 +6,7 @@ import { SpeciesPillBar, KpiCard, Sparkline, FarmScore, EmptyState } from "./she
 import { api, adaptMedicine, adaptTreatment, adaptReproEvent, adaptSaleAsTransaction, adaptExpenseAsTransaction } from "./api";
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
+import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -14,13 +15,14 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allTreatments, setAllTreatments] = React.useState([]);
   const [allAnimals, setAllAnimals] = React.useState([]);
   const [allExpenses, setAllExpenses] = React.useState([]);
+  const [vetExams, setVetExams] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
-  const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses"]);
+  const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses", "vetExams"]);
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listTreatments(), api.listAnimals(), api.listDiseases(), api.listExpenses()])
-      .then(([trs, animals, diseases, expenses]) => {
+    Promise.all([api.listTreatments(), api.listAnimals(), api.listDiseases(), api.listExpenses(), api.listVetExams()])
+      .then(([trs, animals, diseases, expenses, exams]) => {
         if (cancel) return;
         const animalsArr = Array.isArray(animals) ? animals : [];
         const aMap = new Map(animalsArr.map((a) => [a.id, a]));
@@ -29,6 +31,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         setAllTreatments(mapped);
         setAllAnimals(animalsArr);
         setAllExpenses(Array.isArray(expenses) ? expenses : []);
+        setVetExams(Array.isArray(exams) ? exams : []);
       })
       .catch((e) => console.warn("listTreatments failed:", e.message));
     return () => { cancel = true; };
@@ -218,6 +221,15 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </div>
         </div>
       </div>
+
+      <VetDossierSection
+        lang={lang}
+        animals={animalsFiltered}
+        exams={vetExams.filter((e) => !speciesFilter || e.species === speciesFilter)}
+        onChanged={() => setReloadKey((k) => k + 1)}
+      />
+
+      <FarmosDocumentsSection lang={lang} animals={animalsFiltered}/>
     </div>
   );
 };
@@ -1764,9 +1776,58 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
 };
 
 // ─── FINANCES ────────────────────────────────────────────────────────────
+// Rentabilité par animal / lot (#4) — tableau revenu / coût / profit.
+const ProfitabilitySection = ({ lang, data }) => {
+  const [view, setView] = React.useState("animal"); // animal | lot
+  const money = (n) => Number(n || 0).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
+  const rows = view === "animal" ? data.byAnimal : data.byLot;
+  const profitColor = (p) => (p > 0 ? "var(--solidite-700)" : p < 0 ? "var(--oxblood-700)" : "var(--fg-3)");
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Rentabilité par animal / lot" : "Profitability per animal / lot"}</h3>
+        <div style={{ display: "flex", gap: 4 }}>
+          {[{ id: "animal", fr: "Par animal", en: "Per animal" }, { id: "lot", fr: "Par lot", en: "Per lot" }].map((v) => (
+            <button key={v.id} className="btn btn-sm" onClick={() => setView(v.id)}
+              style={view === v.id ? { background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-900)" } : {}}>
+              {lang === "fr" ? v.fr : v.en}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ padding: "10px 18px", display: "flex", gap: 18, fontSize: 12, color: "var(--fg-2)", borderBottom: "1px solid var(--border-1)" }}>
+        <span>{lang === "fr" ? "Revenu total" : "Total revenue"} : <strong>{money(data.totals.revenue)} $</strong></span>
+        <span>{lang === "fr" ? "Coût total" : "Total cost"} : <strong>{money(data.totals.cost)} $</strong></span>
+        <span>{lang === "fr" ? "Profit" : "Profit"} : <strong style={{ color: profitColor(data.totals.profit) }}>{money(data.totals.profit)} $</strong></span>
+      </div>
+      <div style={{ maxHeight: 320, overflow: "auto" }}>
+        {rows.length === 0 ? (
+          <div style={{ padding: 18, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune donnée liée à un animal/lot." : "No data linked to an animal/lot."}</div>
+        ) : rows.map((r, i) => (
+          <div key={(view === "animal" ? r.animalId : r.lot) || i} style={{
+            display: "grid", gridTemplateColumns: "1fr 100px 100px 100px", gap: 10, padding: "10px 18px", alignItems: "center",
+            borderBottom: i < rows.length - 1 ? "1px solid var(--border-1)" : "none",
+          }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>
+                {view === "animal" ? (r.name || `#${r.animalId}`) : (r.lot === "—" ? (lang === "fr" ? "Sans lot" : "No lot") : r.lot)}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{view === "animal" ? r.species : `${r.count} ${lang === "fr" ? "animaux" : "animals"}`}</div>
+            </div>
+            <span className="mono" style={{ fontSize: 12, textAlign: "right" }}>{money(r.revenue)} $</span>
+            <span className="mono" style={{ fontSize: 12, textAlign: "right", color: "var(--oxblood-700)" }}>{money(r.cost)} $</span>
+            <span className="mono" style={{ fontSize: 13, textAlign: "right", fontWeight: 700, color: profitColor(r.profit) }}>{money(r.profit)} $</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [summary, setSummary] = React.useState({ months: [], revenue: [], expense: [], byCategory: [] });
   const totalRev = summary.byCategory.reduce((a,b)=>a+b.amount,0);
+  const [profitability, setProfitability] = React.useState({ byAnimal: [], byLot: [], totals: { revenue: 0, cost: 0, profit: 0 } });
   const [transactions, setTransactions] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
@@ -1774,8 +1835,8 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const refresh = useDataRefresh(["sales", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listSales(), api.listExpenses(), api.getFinanceSummary()])
-      .then(([sales, expenses, sumry]) => {
+    Promise.all([api.listSales(), api.listExpenses(), api.getFinanceSummary(), api.getProfitability()])
+      .then(([sales, expenses, sumry, prof]) => {
         if (cancel) return;
         const merged = [
           ...(Array.isArray(sales) ? sales : []).map((s) => adaptSaleAsTransaction(s, lang)),
@@ -1784,6 +1845,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           .sort((a, b) => (b.isoDate || "").localeCompare(a.isoDate || ""));
         setTransactions(merged.slice(0, 12));
         if (sumry && typeof sumry === "object") setSummary(sumry);
+        if (prof && typeof prof === "object") setProfitability(prof);
       })
       .catch((e) => console.warn("listSales/Expenses failed:", e.message));
     return () => { cancel = true; };
@@ -1858,11 +1920,16 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </div>
       </div>
 
+      {/* Rentabilité par animal / lot (#4) */}
+      {(profitability.byAnimal.length > 0 || profitability.byLot.length > 0) && (
+        <ProfitabilitySection lang={lang} data={profitability}/>
+      )}
+
       {/* Recent transactions */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Transactions récentes" : "Recent transactions"}</h3>
-          <button className="btn btn-sm"><Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Exporter" : "Export"}</button>
+          <button className="btn btn-sm" onClick={() => api.downloadFinancePdf().catch((e) => console.warn(e.message))}><Icon name="download" size={12} color="var(--ink-700)"/>{lang === "fr" ? "Exporter PDF" : "Export PDF"}</button>
         </div>
         {transactions.map((tr, i) => (
           <div key={tr.id || i} style={{
@@ -1965,6 +2032,19 @@ const ReportsScreen = ({ lang }) => {
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
           {lang === "fr" ? <>Rapports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>bibliothèque</span></> : <>Reports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>library</span></>}
         </h1>
+      </div>
+      {/* Rapports générés en direct (#3) */}
+      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--money-500) 12%, transparent)", color: "var(--money-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="coins" size={18} color="currentColor"/>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Rentabilité (généré en direct)" : "Profitability (live generated)"}</div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Revenus, dépenses, profit + ventes/dépenses récentes" : "Revenue, expenses, profit + recent sales/expenses"}</div>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={() => api.downloadFinancePdf().catch((e) => console.warn(e.message))}>
+          <Icon name="download" size={12} color="#FBF8F2"/>PDF
+        </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         {reports.map((r, i) => (

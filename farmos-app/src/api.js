@@ -57,6 +57,21 @@ async function jsonFetch(path, init = {}) {
   return enqueueRequest(() => doJsonFetch(path, init));
 }
 
+// Télécharge un binaire (PDF / fichier) en portant le token via header (pas en
+// <a href>, qui perdrait l'auth). Déclenche le téléchargement navigateur.
+async function downloadBlob(path, fallbackName = "download") {
+  const res = await fetch(`${BASE}${path}`, { headers: { ...authHeaders() } });
+  if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename="?([^"]+)"?/.exec(cd);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = m ? m[1] : fallbackName;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 
 // SCRUM-239 : stale-while-revalidate via Dexie. Sert immédiatement la version
 // cachée de la collection (si présente), puis rafraîchit en arrière-plan et
@@ -95,6 +110,9 @@ const KIND_INVALIDATES = {
   deleteProductionLog:    ["productionLogs"],
   createVaccination:      ["vaccinations"],
   createVetExam:          ["vetExams"],
+  updateVetExam:          ["vetExams"],
+  signVetExam:            ["vetExams"],
+  deleteVetExam:          ["vetExams"],
   createMortalityEvent:   ["mortalityEvents", "animals"],
   createFarmosStaff:      ["staff"],
   createSemenStraw:       ["semenStraws"],
@@ -222,10 +240,22 @@ export const api = {
   consumeMedicine: (id, quantity) => mutate({ kind: "consumeMedicine", method: "POST", path: `/medicines/${id}/consume`, body: { quantity } }),
   createVaccination: (body) => mutate({ kind: "createVaccination", method: "POST", path: "/vaccinations", body }),
   listVetExams: cachedList("vetExams", "/vet-exams"),
+  getVetExam: (id) => jsonFetch(`/vet-exams/${id}`),
   createVetExam: (body) => mutate({ kind: "createVetExam", method: "POST", path: "/vet-exams", body }),
+  updateVetExam: (id, body) => mutate({ kind: "updateVetExam", method: "PUT", path: `/vet-exams/${id}`, body }),
+  signVetExam: (id, body) => mutate({ kind: "signVetExam", method: "POST", path: `/vet-exams/${id}/sign`, body }),
+  deleteVetExam: (id) => mutate({ kind: "deleteVetExam", method: "DELETE", path: `/vet-exams/${id}` }),
+  // Documents & rapports PDF (#3)
+  listDocuments: (animalId, docType) => jsonFetch(`/documents${animalId ? `?animal_id=${animalId}` : ""}${docType ? `${animalId ? "&" : "?"}doc_type=${encodeURIComponent(docType)}` : ""}`),
+  createDocument: (body) => jsonFetch("/documents", { method: "POST", body: JSON.stringify(body) }),
+  deleteDocument: (id) => jsonFetch(`/documents/${id}`, { method: "DELETE" }),
+  downloadDocument: (id, name) => downloadBlob(`/documents/${id}/download`, name || `document-${id}`),
+  downloadVetExamPdf: (id) => downloadBlob(`/vet-exams/${id}/pdf`, `dossier-vet-${id}.pdf`),
+  downloadFinancePdf: () => downloadBlob(`/reports/finance/pdf`, `rentabilite.pdf`),
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
+  getProfitability: () => jsonFetch("/profitability"),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
   deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),

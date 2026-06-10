@@ -1,0 +1,22 @@
+{
+  "profile": "fast",
+  "label": "Modèle rapide / économique",
+  "effort": "low",
+  "reliability": "normal",
+  "cost": "low",
+  "use_for": [
+    "CSS/UI simple",
+    "texte/prompt simple",
+    "petite correction ciblée",
+    "ticket ou résumé court",
+    "question rapide"
+  ],
+  "avoid_for": [
+    "sécurité",
+    "base de données critique",
+    "transactions comptables",
+    "migration",
+    "refactorisation lourde"
+  ],
+  "must_confirm_before_start": true
+}
