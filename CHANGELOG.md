@@ -10,6 +10,16 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.18.0] - 2026-06-10
+
+### Added
+
+- FarmOS — module mortalité enrichi (prompt design). Migration `0103` (journal idx 83) : `event_time`, `barn`, `lot`, `confirmed_cause`, `related_disease_id`, `pre_death_symptoms`, `vet_consulted`, `estimated_loss`, `necropsy_done` sur `farmos_mortality_events`. Section « Détails avancés » dans le formulaire de mortalité (heure, perte estimée $, bâtiment, lot, cause confirmée post-mortem, symptômes avant décès, vétérinaire, autopsie réalisée). Endpoint stats `GET /mortality-events/stats` : décès par mois/espèce/cause, total décès, perte financière totale. (UI des stats à brancher dans un écran dédié — endpoint + données prêts.)
+
+### Fixed
+
+- PDF — corrige le symlink chromium circulaire (`/usr/bin/chromium -> /usr/bin/chromium`) introduit en 3.16.1 : on ne crée le lien que si le binaire réel diffère de `/usr/bin/chromium` (priorité à `chromium-browser`).
+
 ## [3.17.0] - 2026-06-10
 
 ### Added

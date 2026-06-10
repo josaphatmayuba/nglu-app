@@ -324,6 +324,15 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) count?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() cause?: string | null;
   @ApiPropertyOptional({ default: false }) @IsOptional() necropsy_requested?: boolean;
+  @ApiPropertyOptional({ example: "06:30" }) @IsOptional() @IsString() event_time?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() barn?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() confirmed_cause?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_disease_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() pre_death_symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() vet_consulted?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimated_loss?: number | null;
+  @ApiPropertyOptional({ default: false }) @IsOptional() necropsy_done?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 

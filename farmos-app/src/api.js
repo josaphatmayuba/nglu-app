@@ -255,6 +255,7 @@ export const api = {
   downloadVetExamPdf: (id) => downloadBlob(`/vet-exams/${id}/pdf`, `dossier-vet-${id}.pdf`),
   downloadFinancePdf: () => downloadBlob(`/reports/finance/pdf`, `rentabilite.pdf`),
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
+  getMortalityStats: () => jsonFetch("/mortality-events/stats"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),

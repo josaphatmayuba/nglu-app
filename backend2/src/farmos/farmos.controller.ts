@@ -548,6 +548,12 @@ export class FarmosController {
     return this.farmos.listMortalityEvents(orgId);
   }
 
+  @Permissions("readAll-farmos")
+  @Get("mortality-events/stats")
+  getMortalityStats(@CurrentOrg() orgId: number) {
+    return this.farmos.getMortalityStats(orgId);
+  }
+
   @Permissions("create-farmos")
   @Post("mortality-events")
   createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {

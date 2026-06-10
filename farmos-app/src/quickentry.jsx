@@ -1594,6 +1594,14 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         count: form.count ? Number(form.count) : 1,
         cause: form.cause,
         necropsy_requested: !!form.necropsy,
+        event_time: form.time || null,
+        barn: form.barn || null,
+        lot: form.lot || null,
+        confirmed_cause: form.confirmed_cause || null,
+        pre_death_symptoms: form.symptoms || null,
+        vet_consulted: form.vet || null,
+        estimated_loss: form.loss === "" || form.loss == null ? null : Number(form.loss),
+        necropsy_done: !!form.necropsy_done,
         notes: form.notes || null,
       });
       onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` });
@@ -1668,6 +1676,40 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
             {lang === "fr" ? "Autopsie / nécropsie demandée" : "Necropsy requested"}
           </label>
         </FormField>
+      </FormSection>
+
+      <FormSection label={lang === "fr" ? "Détails avancés" : "Advanced details"}>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Heure" : "Time"}>
+            <input className="input mono" type="time" value={form.time || ""} onChange={(e) => set("time", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Perte estimée ($)" : "Estimated loss ($)"}>
+            <input className="input mono" type="number" min="0" step="0.01" value={form.loss || ""} onChange={(e) => set("loss", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Bâtiment" : "Barn"}>
+            <input className="input" value={form.barn || ""} onChange={(e) => set("barn", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Lot" : "Lot"}>
+            <input className="input" value={form.lot || ""} onChange={(e) => set("lot", e.target.value)}/>
+          </FormField>
+        </FormGrid>
+        <FormField label={lang === "fr" ? "Cause confirmée (post-mortem)" : "Confirmed cause (post-mortem)"}>
+          <input className="input" value={form.confirmed_cause || ""} onChange={(e) => set("confirmed_cause", e.target.value)} placeholder={lang === "fr" ? "Après autopsie / labo…" : "After necropsy / lab…"}/>
+        </FormField>
+        <FormField label={lang === "fr" ? "Symptômes avant décès" : "Pre-death symptoms"}>
+          <textarea className="input" style={{ height: 60, padding: 10 }} value={form.symptoms || ""} onChange={(e) => set("symptoms", e.target.value)}/>
+        </FormField>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Vétérinaire consulté" : "Vet consulted"}>
+            <input className="input" value={form.vet || ""} onChange={(e) => set("vet", e.target.value)}/>
+          </FormField>
+          <FormField label="">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink-800)", marginTop: 22 }}>
+              <input type="checkbox" checked={form.necropsy_done || false} onChange={(e) => set("necropsy_done", e.target.checked)}/>
+              {lang === "fr" ? "Autopsie réalisée" : "Necropsy done"}
+            </label>
+          </FormField>
+        </FormGrid>
       </FormSection>
 
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>

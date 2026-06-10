@@ -1669,6 +1669,40 @@ export class FarmosService {
       .orderBy(desc(farmosMortalityEvents.eventDate));
   }
 
+  // Stats mortalité (prompt design) : décès par mois / espèce / cause, totaux,
+  // perte financière. Calcul en mémoire (volumétrie faible) à partir des events.
+  async getMortalityStats(orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(farmosMortalityEvents)
+      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1)));
+    const byMonth: Record<string, number> = {};
+    const bySpecies: Record<string, number> = {};
+    const byCause: Record<string, number> = {};
+    let totalDeaths = 0;
+    let totalLoss = 0;
+    for (const r of rows) {
+      const n = Number(r.count ?? 1);
+      totalDeaths += n;
+      totalLoss += Number(r.estimatedLoss ?? 0);
+      const month = String(r.eventDate ?? "").slice(0, 7);
+      if (month) byMonth[month] = (byMonth[month] ?? 0) + n;
+      if (r.species) bySpecies[r.species] = (bySpecies[r.species] ?? 0) + n;
+      const cause = (r.confirmedCause || r.cause || "—") as string;
+      byCause[cause] = (byCause[cause] ?? 0) + n;
+    }
+    const sortDesc = (obj: Record<string, number>) =>
+      Object.entries(obj).map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
+    return {
+      totalDeaths,
+      totalLoss: Math.round(totalLoss),
+      eventsCount: rows.length,
+      byMonth: Object.entries(byMonth).map(([key, value]) => ({ key, value })).sort((a, b) => a.key.localeCompare(b.key)),
+      bySpecies: sortDesc(bySpecies),
+      byCause: sortDesc(byCause),
+    };
+  }
+
   async createMortalityEvent(input: any, orgId: number) {
     const [res] = await this.db.insert(farmosMortalityEvents).values({
       organizationId: orgId,
@@ -1678,6 +1712,15 @@ export class FarmosService {
       count: input.count ?? 1,
       cause: input.cause ?? null,
       necropsyRequested: input.necropsy_requested ? 1 : 0,
+      eventTime: input.event_time ?? null,
+      barn: input.barn ?? null,
+      lot: input.lot ?? null,
+      confirmedCause: input.confirmed_cause ?? null,
+      relatedDiseaseId: input.related_disease_id ?? null,
+      preDeathSymptoms: input.pre_death_symptoms ?? null,
+      vetConsulted: input.vet_consulted ?? null,
+      estimatedLoss: input.estimated_loss != null ? String(input.estimated_loss) : null,
+      necropsyDone: input.necropsy_done ? 1 : 0,
       notes: input.notes ?? null,
     }).$returningId();
     // Marquer l'animal comme décédé si un ID précis est fourni.
