@@ -1337,6 +1337,31 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     const sex = a.sex;
     return sp === form.species && (sex === "F" || sex === "Mixte" || !sex);
   });
+
+  // Détection de consanguinité : compare la filiation (mother_id/father_id, qui
+  // référencent un external_id ou un nom) de la femelle et du mâle choisi.
+  // Retourne une raison FR/EN si apparentés, sinon null. Non bloquant.
+  const inbreedingWarning = (female, maleExtId) => {
+    if (!female || !maleExtId || !liveAnimals) return null;
+    const idOf = (a) => String(a.external_id ?? a.externalId ?? a.id);
+    const male = liveAnimals.find((a) => idOf(a) === String(maleExtId) || String(a.id) === String(maleExtId));
+    const fMother = female.mother_id ?? female.motherId;
+    const fFather = female.father_id ?? female.fatherId;
+    const femaleKeys = [idOf(female), female.name].filter(Boolean).map(String);
+    // 1) le mâle est le père de la femelle
+    if (fFather && male && (idOf(male) === String(fFather) || male.name === fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    if (fFather && String(maleExtId) === String(fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    // 2) la femelle est la mère du mâle
+    if (male) {
+      const mMother = male.mother_id ?? male.motherId;
+      if (mMother && femaleKeys.includes(String(mMother))) return lang === "fr" ? "la femelle est la mère du mâle" : "the female is the male's mother";
+      // 3) même mère ou même père (fratrie)
+      const mFather = male.father_id ?? male.fatherId;
+      if (fMother && mMother && String(fMother) === String(mMother)) return lang === "fr" ? "même mère (fratrie)" : "same mother (siblings)";
+      if (fFather && mFather && String(fFather) === String(mFather)) return lang === "fr" ? "même père (fratrie)" : "same father (siblings)";
+    }
+    return null;
+  };
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -1344,6 +1369,18 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     if (!selected || !liveAnimals) {
       onSaved && onSaved({ kind: "repro", severity: "error", message: lang === "fr" ? "Selectionne un animal existant en BD." : "Select an animal that exists in the database." });
       return;
+    }
+    // Anti-consanguinité : pour une saillie/IA naturelle avec un mâle identifié,
+    // avertir si la femelle et le mâle sont apparentés (non bloquant).
+    if (kind === "ai") {
+      const maleRef = form.sire_animal_id || form.male;
+      const warn = inbreedingWarning(selected, maleRef);
+      if (warn) {
+        const msg = (lang === "fr"
+          ? `⚠ Risque de consanguinité : ${warn}. Confirmer l'accouplement quand même ?`
+          : `⚠ Inbreeding risk: ${warn}. Confirm mating anyway?`);
+        if (!window.confirm(msg)) return;
+      }
     }
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";

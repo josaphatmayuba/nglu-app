@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.17.0] - 2026-06-10
+
+### Added
+
+- FarmOS — reproduction : alerte anti-consanguinité. Lors d'une saillie/IA avec un mâle identifié (saillie naturelle ou partenaire), si la femelle et le mâle sont apparentés (le mâle est le père de la femelle, la femelle est la mère du mâle, ou fratrie via même mère/père), une confirmation `⚠ Risque de consanguinité` s'affiche avant l'enregistrement. Non bloquant (l'éleveur peut confirmer). Basé sur `mother_id`/`father_id` (ajoutés en 3.12.0).
+
 ## [3.16.1] - 2026-06-10
 
 ### Fixed
