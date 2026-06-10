@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-06-10
+
+### Added
+
+- FarmOS — fiche animal enrichie : 3 nouveaux onglets dans le tiroir de détail animal. **Finances** (revenus/coûts/profit de l'animal + coûts par catégorie, via `getProfitability().byAnimal`), **Documents** (liste téléchargeable via `listDocuments(animalId)`), **Alertes** (délai de retrait viande/lait/œufs en cours, dérivé de `animal.withdrawal`). Réutilise les API existantes, aucun changement backend. Montants au format devise existant (`$`).
+
 ## [3.10.0] - 2026-06-10
 
 ### Added

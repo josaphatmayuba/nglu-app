@@ -322,7 +322,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
-  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], loading: true });
+  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
   const reloadPhotos = React.useCallback(() => {
     if (!animal._pk) { setPhotos([]); return; }
@@ -335,22 +335,46 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     return () => window.removeEventListener("farmos:photo-uploaded", h);
   }, [reloadPhotos, animal._pk]);
   React.useEffect(() => {
-    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], loading: false }); return; }
+    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], finance: null, loading: false }); return; }
     let cancel = false;
-    Promise.all([api.listTreatments(), api.listReproductionEvents(), api.listProductionLogs()])
-      .then(([t, r, p]) => {
+    Promise.all([
+      api.listTreatments(),
+      api.listReproductionEvents(),
+      api.listProductionLogs(),
+      api.listDocuments(animal._pk).catch(() => []),
+      api.getProfitability().catch(() => null),
+    ])
+      .then(([t, r, p, docs, prof]) => {
         if (cancel) return;
         const matchAnimal = (row) => (row.animalId ?? row.animal_id) === animal._pk;
+        const finance = prof && Array.isArray(prof.byAnimal)
+          ? prof.byAnimal.find((x) => Number(x.animalId) === Number(animal._pk)) || null
+          : null;
+        // Alertes par animal : délai de retrait en cours (date calculée par le backend, portée par l'animal).
+        const today = new Date().toISOString().slice(0, 10);
+        const myTreatments = (Array.isArray(t) ? t : []).filter(matchAnimal);
+        const alerts = [];
+        const wd = animal.withdrawal;
+        if (wd && wd.until && String(wd.until).slice(0, 10) >= today) {
+          const kindLabel = wd.kind === "meat" ? (lang === "fr" ? "Retrait viande" : "Meat withdrawal")
+            : wd.kind === "milk" ? (lang === "fr" ? "Retrait lait" : "Milk withdrawal")
+            : wd.kind === "eggs" ? (lang === "fr" ? "Retrait œufs" : "Eggs withdrawal")
+            : (lang === "fr" ? "Délai de retrait" : "Withdrawal period");
+          alerts.push({ type: wd.kind || "withdrawal", until: wd.until, label: kindLabel });
+        }
         setRelated({
-          treatments: (Array.isArray(t) ? t : []).filter(matchAnimal),
+          treatments: myTreatments,
           repro:      (Array.isArray(r) ? r : []).filter(matchAnimal),
           production: (Array.isArray(p) ? p : []).filter(matchAnimal),
+          documents:  (Array.isArray(docs) ? docs : []),
+          alerts,
+          finance,
           loading: false,
         });
       })
       .catch(() => setRelated((s) => ({ ...s, loading: false })));
     return () => { cancel = true; };
-  }, [animal._pk]);
+  }, [animal._pk, lang]);
   const onDelete = async () => {
     if (!animal._pk) return;
     if (!window.confirm(lang === "fr" ? `Supprimer ${animal.name || animal.id} ?` : `Delete ${animal.name || animal.id}?`)) return;
@@ -445,7 +469,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             { id: "health",   fr: "Santé",         en: "Health",      count: related.treatments.length },
             { id: "repro",    fr: "Reproduction",  en: "Reproduction", count: related.repro.length },
             { id: "prod",     fr: "Production",    en: "Production",  count: related.production.length },
+            { id: "finance",  fr: "Finances",      en: "Finance",     count: null },
+            { id: "documents", fr: "Documents",    en: "Documents",   count: related.documents.length },
             { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length },
+            { id: "alerts",   fr: "Alertes",       en: "Alerts",      count: related.alerts.length },
           ].map((tb) => {
             const active = tab === tb.id;
             return (
@@ -513,6 +540,78 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {!editing && tab === "prod" && (
           <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
         )}
+        {!editing && tab === "finance" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          const f = related.finance;
+          if (!f) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée financière pour cet animal (ni vente ni dépense liée)." : "No financial data for this animal (no linked sale or expense)."}</div>;
+          const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
+          const cards = [
+            { fr: "Revenus", en: "Revenue", val: f.revenue, color: "var(--money-500)" },
+            { fr: "Coûts", en: "Costs", val: f.cost, color: "var(--rust-700)" },
+            { fr: "Profit", en: "Profit", val: f.profit, color: f.profit >= 0 ? "var(--health-700)" : "var(--oxblood-700)" },
+          ];
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {cards.map((c) => (
+                  <div key={c.fr} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{lang === "fr" ? c.fr : c.en}</div>
+                    <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: c.color }}>{money(c.val)}</div>
+                  </div>
+                ))}
+              </div>
+              {f.costByCategory && Object.keys(f.costByCategory).length > 0 && (
+                <div>
+                  <div className="overline" style={{ marginBottom: 8 }}>{lang === "fr" ? "Coûts par catégorie" : "Costs by category"}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    {Object.entries(f.costByCategory).map(([cat, amount], i, arr) => (
+                      <div key={cat} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none" }}>
+                        <span style={{ fontSize: 13, color: "var(--ink-900)" }}>{cat}</span>
+                        <span className="mono" style={{ fontSize: 13 }}>{money(amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {!editing && tab === "documents" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.documents.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun document pour cet animal." : "No document for this animal."}</div>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {related.documents.map((d, i, arr) => (
+                <button key={d.id} onClick={() => api.downloadDocument(d.id, d.fileName || d.file_name || d.title)}
+                  style={{ textAlign: "left", border: 0, background: "transparent", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center", cursor: "pointer" }}>
+                  <Icon name="report" size={14} color="var(--ink-700)"/>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--ink-900)" }}>{d.title || d.fileName || d.file_name || `#${d.id}`}</div>
+                    {(d.docType || d.doc_type) && <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{d.docType || d.doc_type}</div>}
+                  </div>
+                  <Icon name="download" size={13} color="var(--ink-500)"/>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+        {!editing && tab === "alerts" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.alerts.length === 0) return <div style={{ color: "var(--health-700)", fontSize: 13 }}>{lang === "fr" ? "Aucune alerte active (pas de délai de retrait en cours)." : "No active alert (no ongoing withdrawal period)."}</div>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {related.alerts.map((a, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--rust-50)", border: "1px solid var(--rust-200, var(--border-1))", borderRadius: 8 }}>
+                  <Icon name="bell" size={15} color="var(--oxblood-700)"/>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--oxblood-900, var(--ink-900))" }}>{a.label}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg-2)" }}>{lang === "fr" ? "Jusqu'au" : "Until"} <span className="mono">{String(a.until).slice(0, 10)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {!editing && tab === "history" && (() => {
           const events = [
             ...related.treatments.map((t) => ({ kind: "health", date: t.startDate || t.start_date, label: `${lang === "fr" ? "Traitement" : "Treatment"} · ${t.medicineName || t.medicine_name || "—"}`, sub: t.status })),
