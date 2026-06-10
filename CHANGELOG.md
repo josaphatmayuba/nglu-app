@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.20.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — responsive mobile : débordement horizontal (scroll + zone blanche à droite) sur l'écran Alertes et autres. La barre de filtres de sévérité scrolle maintenant horizontalement (boutons `flex-shrink:0`) au lieu de pousser la page ; garde CSS globale mobile (`overflow-x:hidden` sur la racine, `max-width:100%` sur les cartes, césure des compteurs mono longs).
+
 ## [3.20.0] - 2026-06-10
 
 ### Changed

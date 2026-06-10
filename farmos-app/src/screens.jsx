@@ -1378,7 +1378,7 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 2 }}>
         {[
           { id: "all", fr: "Toutes", en: "All", count: speciesFiltered.length },
           { id: "critical", fr: "Critique", en: "Critical", count: speciesFiltered.filter(a=>a.severity==="critical").length, color: "var(--rust-700)" },
@@ -1387,7 +1387,7 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           { id: "withdrawal", fr: "Délai retrait", en: "Withdrawal", count: speciesFiltered.filter(a=>a.kind==="withdrawal").length, color: "var(--rust-700)" },
         ].map((tb) => (
           <button key={tb.id} className="btn btn-sm" onClick={() => setTab(tb.id)}
-            style={tab === tb.id ? { background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-900)" } : {}}>
+            style={{ flexShrink: 0, whiteSpace: "nowrap", ...(tab === tb.id ? { background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-900)" } : {}) }}>
             {tb.color && <span style={{ width: 6, height: 6, borderRadius: 999, background: tb.color }}/>}
             {lang === "fr" ? tb.fr : tb.en}
             <span className="mono" style={{ fontSize: 11, opacity: 0.7 }}>{tb.count}</span>

@@ -476,6 +476,15 @@ input, textarea, select { font-family: var(--font-sans); }
   .species-pill { height: 40px; padding: 6px 14px; font-size: 13.5px; }
   .input { height: 42px; font-size: 15px; }   /* iOS won't zoom at ≥16px */
   .nav-item { padding: 12px 12px; font-size: 14.5px; }
+
+  /* Anti-débordement horizontal : sur mobile aucun contenu ne doit pousser la
+     page au-delà du viewport (sinon scroll horizontal + zone blanche à droite).
+     On borne la racine de l'app et on autorise les longues chaînes à casser. */
+  html, body, #root { max-width: 100vw; overflow-x: hidden; }
+  .card { max-width: 100%; }
+  /* Les valeurs mono longues (compteurs « 16 710 ») ne doivent pas élargir leur
+     conteneur grille (min-width:auto par défaut sur les flex/grid items). */
+  .mono, .tnum { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 540px) {
