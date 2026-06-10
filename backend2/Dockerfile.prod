@@ -1,4 +1,24 @@
 FROM node:20-alpine
+
+# Chromium pour la génération PDF puppeteer (HR + FarmOS).
+# On installe chromium, on localise le binaire réel (chromium / chromium-browser
+# selon la version Alpine), puis un lien stable /usr/bin/chromium.
+# Le build ÉCHOUE si chromium est introuvable -> garantie que l'image l'a.
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+ && CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)" \
+ && if [ -z "$CHROME_BIN" ]; then echo "ERREUR: chromium introuvable apres apk add" && exit 1; fi \
+ && ln -sf "$CHROME_BIN" /usr/bin/chromium \
+ && /usr/bin/chromium --version
+
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

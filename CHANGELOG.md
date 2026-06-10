@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.14.1] - 2026-06-10
+
+### Fixed
+
+- PDF (HR + FarmOS) 500 « chromium=introuvable » : `backend2/Dockerfile.prod` (utilisé par docker-compose dev ET prod) n'installait pas chromium — le fix précédent (ca540a30) n'était que dans `Dockerfile`, non utilisé par le compose. Ajout du bloc `apk add chromium …` + symlink `/usr/bin/chromium` + `PUPPETEER_EXECUTABLE_PATH` dans `Dockerfile.prod` (build échoue si chromium absent). Vérifié sur serveur dev : chromium absent du conteneur actuel, `PUPPETEER_EXECUTABLE_PATH` vide → cause racine confirmée. Nécessite un rebuild d'image (le `apk add` neuf invalide le cache à partir de cette couche).
+
 ## [3.14.0] - 2026-06-10
 
 ### Added
