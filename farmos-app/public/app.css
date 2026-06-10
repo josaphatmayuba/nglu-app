@@ -436,10 +436,13 @@ input, textarea, select { font-family: var(--font-sans); }
   --cols-3: repeat(3, 1fr);
   --cols-4: repeat(4, 1fr);
   --cols-5: repeat(5, 1fr);
-  --cols-main: 1fr 380px;       /* dashboard right column */
-  --cols-main-15: 1.5fr 1fr;    /* health page two-col */
-  --cols-main-cal: 1fr 360px;   /* calendar two-col */
-  --cols-main-detail: 1fr 480px;/* animals detail drawer */
+  /* minmax(0,…) sur la colonne fluide : sans ça, `1fr` garde min-width:auto et
+     le contenu large (tableaux) fait déborder la grille → le panneau latéral
+     sort de l'écran à droite (bug responsiveness fiche animal). */
+  --cols-main: minmax(0, 1fr) 380px;       /* dashboard right column */
+  --cols-main-15: minmax(0, 1.5fr) minmax(0, 1fr); /* health page two-col */
+  --cols-main-cal: minmax(0, 1fr) 360px;   /* calendar two-col */
+  --cols-main-detail: minmax(0, 1fr) 480px;/* animals detail drawer */
   --pad-page: 20px 24px 32px;
   --tap: 36px;
 }
@@ -449,7 +452,7 @@ input, textarea, select { font-family: var(--font-sans); }
   :root {
     --cols-5: repeat(3, 1fr);
     --cols-4: repeat(3, 1fr);
-    --cols-main-detail: 1fr 420px;
+    --cols-main-detail: minmax(0, 1fr) 420px;
     --pad-page: 18px 20px 28px;
   }
 }
@@ -521,7 +524,7 @@ input, textarea, select { font-family: var(--font-sans); }
   --cols-main: 1fr !important;
   --cols-main-15: 1fr !important;
   --cols-main-cal: 1fr !important;
-  --cols-main-detail: 1fr 380px !important;
+  --cols-main-detail: minmax(0, 1fr) 380px !important;
   --pad-page: 18px 20px 28px !important;
   --tap: 40px !important;
 }

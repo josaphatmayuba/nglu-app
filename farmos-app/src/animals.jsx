@@ -462,8 +462,8 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {/* Withdrawal warning right at the top */}
         {animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 0, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22 }}>
+        {/* Tabs (scroll horizontal si trop d'onglets pour la largeur du panneau) */}
+        <div style={{ display: "flex", gap: 0, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22, overflowX: "auto", scrollbarWidth: "none" }}>
           {[
             { id: "details",  fr: "Détails",       en: "Details",     count: null },
             { id: "health",   fr: "Santé",         en: "Health",      count: related.treatments.length },
@@ -481,6 +481,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
                 color: active ? "var(--ink-950)" : "var(--ink-500)",
                 borderBottom: active ? "2px solid var(--oxblood-700)" : "2px solid transparent",
                 cursor: "pointer", marginBottom: -1, display: "inline-flex", alignItems: "center", gap: 5,
+                flexShrink: 0, whiteSpace: "nowrap",
               }}>
                 {lang === "fr" ? tb.fr : tb.en}
                 {tb.count != null && tb.count > 0 && (

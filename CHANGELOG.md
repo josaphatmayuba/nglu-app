@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.15.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — responsive fiche animal : le panneau de détail débordait hors écran à droite (sur desktop/tablette). Cause : grilles à panneau latéral utilisant `1fr` (min-width:auto implicite) → le contenu large (tableaux) empêchait la colonne fluide de rétrécir. Passage à `minmax(0, 1fr)` pour `--cols-main`, `--cols-main-detail`, `--cols-main-cal`, `--cols-main-15` (+ surcharges media/force-tablet). Barre d'onglets de la fiche animal : scroll horizontal (`overflow-x:auto`, onglets `flex-shrink:0`) pour les 8 onglets.
+
 ## [3.15.0] - 2026-06-10
 
 ### Added
