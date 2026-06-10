@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import { renderPdfViaService } from "../common/pdf-client";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -536,43 +537,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 
   // Rendu HTML -> PDF via Puppeteer (mutualisé entre fiches de paie et documents RH).
   private async htmlToPdf(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const puppeteer = require("puppeteer");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    // Alpine: le binaire chromium peut etre /usr/bin/chromium OU /usr/bin/chromium-browser.
-    // On resout le 1er chemin existant (la var d'env peut pointer un chemin absent -> 500).
-    const candidates = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      "/usr/bin/chromium",
-      "/usr/bin/chromium-browser",
-      "/usr/lib/chromium/chrome",
-      "/usr/lib/chromium/chromium",
-    ].filter(Boolean) as string[];
-    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    let browser: any;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        executablePath,
-        protocolTimeout: 60000,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-      });
-      const page = await browser.newPage();
-      // Retire le script d'auto-impression éventuel avant la génération PDF.
-      const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
-      // 'load' au lieu de 'networkidle0' : images base64 inline -> pas de requête
-      // réseau, networkidle0 timeoutait (cause du 500 sur les PDF de paie).
-      await page.setContent(cleanHtml, { waitUntil: "load", timeout: 30000 });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
-      return Buffer.from(pdfBuffer);
-    } catch (err) {
-      const msg = (err as Error)?.message || String(err);
-      console.error("[HR] htmlToPdf failed:", msg, "| executablePath=", executablePath);
-      throw new BadRequestException(`PDF generation failed: ${msg} (chromium=${executablePath ?? "introuvable"})`);
-    } finally {
-      if (browser) await browser.close();
-    }
+    // Retire le script d'auto-impression éventuel avant la génération PDF.
+    const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
+    return renderPdfViaService(cleanHtml, "HR");
   }
 
   async generatePayrollPdf(id: number): Promise<Buffer> {

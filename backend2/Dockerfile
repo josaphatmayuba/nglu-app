@@ -1,18 +1,7 @@
 FROM node:20-alpine
 
-# Chromium pour la génération PDF puppeteer (HR + FarmOS).
-# IMPORTANT : bloc NON bloquant (voir Dockerfile.prod). L'apk peut échouer (OOM
-# sur petite instance) sans casser le build. Si chromium est présent → symlink ;
-# sinon le service PDF échoue proprement au runtime, le reste du backend tourne.
-RUN set +e; \
-    apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont || echo "WARN: apk chromium a échoué (PDF indisponible)"; \
-    CHROME_BIN="$(command -v chromium-browser || command -v chromium || true)"; \
-    if [ -n "$CHROME_BIN" ] && [ "$CHROME_BIN" != "/usr/bin/chromium" ]; then ln -sf "$CHROME_BIN" /usr/bin/chromium; fi; \
-    if [ -x /usr/bin/chromium ] || [ -n "$CHROME_BIN" ]; then echo "chromium OK: ${CHROME_BIN:-/usr/bin/chromium}"; else echo "WARN: chromium absent"; fi; \
-    exit 0
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Génération PDF déléguée au microservice `pdf-service` (chromium isolé là-bas).
+# backend2 n'embarque plus chromium/puppeteer.
 
 WORKDIR /app
 

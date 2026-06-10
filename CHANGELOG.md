@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-06-10
+
+### Changed
+
+- PDF — architecture centralisée : nouveau **microservice `pdf-service`** (Express + puppeteer-core + chromium isolé) qui génère les PDF (HTML→PDF) pour toutes les apps. backend2 n'embarque **plus** chromium ni puppeteer (Dockerfiles allégés, `puppeteer` retiré du package.json → fin des OOM/échecs de build sur l'installation chromium). HR et FarmOS appellent le service via HTTP (`backend2/src/common/pdf-client.ts`, `PDF_SERVICE_URL`, défaut `http://pdf-service:8002`). Le service lance chromium **à la demande** puis le ferme (empreinte mémoire ~nulle au repos, adapté aux petites instances). Compose dev+prod : service `pdf-service` (mem_limit 320m) ; pipeline : steps « PDF Service → dev/prod ». ⚠️ Déploiement effectif suspendu à la RAM de l'instance (cf. NOTES).
+
 ## [3.19.0] - 2026-06-10
 
 ### Changed

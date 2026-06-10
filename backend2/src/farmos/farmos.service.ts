@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { renderPdfViaService } from "../common/pdf-client";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
@@ -1490,46 +1491,9 @@ export class FarmosService {
     return { message: "Bâtiment supprimé." };
   }
 
-  // ─── Rapports PDF (#3) — réutilise Puppeteer (déjà dép. via le module HR) ────
+  // ─── Rapports PDF — délégués au microservice pdf-service (voir pdf-client) ───
   private async htmlToPdf(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const puppeteer = require("puppeteer");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    // Le Dockerfile (Alpine) installe chromium ; selon la version le binaire est
-    // /usr/bin/chromium ou /usr/bin/chromium-browser. On résout le 1er existant
-    // (la var d'env peut pointer un chemin absent → crash 500).
-    const candidates = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      "/usr/bin/chromium",
-      "/usr/bin/chromium-browser",
-      "/usr/lib/chromium/chrome",
-      "/usr/lib/chromium/chromium",
-    ].filter(Boolean) as string[];
-    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    let browser: any;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        executablePath,
-        protocolTimeout: 60000,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-      });
-      const page = await browser.newPage();
-      // 'load' (pas 'networkidle0') : les images base64 inline (signature) ne
-      // déclenchent pas de requête réseau et faisaient timeouter networkidle0.
-      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
-      return Buffer.from(pdfBuffer);
-    } catch (err) {
-      // Expose la vraie cause (chemin Chromium, lib manquante, timeout…) au lieu
-      // d'un 500 générique, pour diagnostiquer sans accès aux logs du conteneur.
-      const msg = (err as Error)?.message || String(err);
-      console.error("[FarmOS] htmlToPdf failed:", msg, "| executablePath=", executablePath);
-      throw new BadRequestException(`PDF generation failed: ${msg} (chromium=${executablePath ?? "introuvable"})`);
-    } finally {
-      if (browser) await browser.close();
-    }
+    return renderPdfViaService(html, "FarmOS");
   }
 
   private esc(v: any): string {
