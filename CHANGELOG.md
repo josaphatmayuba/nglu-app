@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.16.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — icônes animaux : `AnimalGlyph` rend désormais des emojis natifs colorés par espèce (🐄 vache, 🐖 porc, 🐔 poulet, 🐟 poisson, 🐐 chèvre, 🐑 mouton, 🐇 lapin, 🦆 canard, 🦃 dinde) au lieu des tracés SVG schématiques. Rendu « réaliste » et reconnaissable partout (cartes KPI, listes, sidebar, fiche animal). Fallback SVG conservé pour toute espèce sans emoji.
+
 ## [3.15.3] - 2026-06-10
 
 ### Fixed

@@ -96,7 +96,26 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
 };
 
 // ─── Animal silhouettes (simplified, monoline) ───────────────────────────
+// Emojis natifs colorés par espèce (rendu "réaliste", cross-plateforme).
+const ANIMAL_EMOJI = {
+  cow: "🐄", pig: "🐖", chicken: "🐔", fish: "🐟", goat: "🐐",
+  sheep: "🐑", rabbit: "🐇", duck: "🦆", turkey: "🦃",
+};
+
 const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.6 }) => {
+  // Emoji natif si disponible pour l'espèce ; sinon fallback sur le tracé SVG.
+  const emoji = ANIMAL_EMOJI[kind];
+  if (emoji) {
+    return (
+      <span
+        role="img"
+        aria-label={kind}
+        style={{ fontSize: size, lineHeight: 1, display: "inline-block", verticalAlign: "middle" }}
+      >
+        {emoji}
+      </span>
+    );
+  }
   const glyphs = {
     cow: (
       // cow head
