@@ -1,20 +1,14 @@
 FROM node:20-alpine
 
-# Chromium dependencies for puppeteer PDF generation.
-# On installe chromium, on localise le binaire réel (le nom varie selon la version
-# Alpine : chromium / chromium-browser), puis on crée un lien stable /usr/bin/chromium.
-# Le build ÉCHOUE si chromium est introuvable -> on est sûr que l'image en prod l'a.
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
- && CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)" \
- && if [ -z "$CHROME_BIN" ]; then echo "ERREUR: chromium introuvable apres apk add" && exit 1; fi \
- && ln -sf "$CHROME_BIN" /usr/bin/chromium \
- && test -x /usr/bin/chromium
+# Chromium pour la génération PDF puppeteer (HR + FarmOS).
+# IMPORTANT : bloc NON bloquant (voir Dockerfile.prod). L'apk peut échouer (OOM
+# sur petite instance) sans casser le build. Si chromium est présent → symlink ;
+# sinon le service PDF échoue proprement au runtime, le reste du backend tourne.
+RUN set +e; \
+    apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont || echo "WARN: apk chromium a échoué (PDF indisponible)"; \
+    CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)"; \
+    if [ -n "$CHROME_BIN" ]; then ln -sf "$CHROME_BIN" /usr/bin/chromium && echo "chromium OK: $CHROME_BIN"; else echo "WARN: chromium absent"; fi; \
+    exit 0
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.16.1] - 2026-06-10
+
+### Fixed
+
+- PDF / pipeline — le bloc d'installation chromium dans `Dockerfile`/`Dockerfile.prod` est rendu NON bloquant (`set +e` + `|| echo WARN` + `exit 0`). L'instance dev a peu de RAM (442 Mio) et le pipeline build l'image sur le serveur (`up -d --build`) → l'`apk add chromium` (206 paquets) échouait en OOM (exit 127) et **cassait tout le déploiement backend**. Désormais le build réussit toujours : si chromium s'installe, le symlink `/usr/bin/chromium` est créé (PDF OK) ; sinon le backend démarre quand même et seul le PDF reste indisponible (échec propre au runtime). À régler définitivement : agrandir l'instance ou déporter le build de l'image (cf. NOTES).
+
 ## [3.16.0] - 2026-06-10
 
 ### Changed

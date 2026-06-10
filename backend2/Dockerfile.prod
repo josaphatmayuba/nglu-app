@@ -1,20 +1,16 @@
 FROM node:20-alpine
 
 # Chromium pour la génération PDF puppeteer (HR + FarmOS).
-# On installe chromium, on localise le binaire réel (chromium / chromium-browser
-# selon la version Alpine), puis un lien stable /usr/bin/chromium.
-# Le build ÉCHOUE si chromium est introuvable -> garantie que l'image l'a.
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
- && CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)" \
- && if [ -z "$CHROME_BIN" ]; then echo "ERREUR: chromium introuvable apres apk add" && exit 1; fi \
- && ln -sf "$CHROME_BIN" /usr/bin/chromium \
- && test -x /usr/bin/chromium
+# IMPORTANT : bloc NON bloquant. L'install peut échouer (OOM sur petite
+# instance, ~750 Mio / 206 paquets) sans casser le build/déploiement — sinon
+# tout le backend ne déploie plus. Si chromium est présent on crée le symlink ;
+# sinon le service PDF échoue proprement au runtime (le reste du backend tourne).
+# `|| true` + `set +e` garantissent exit 0 quelle que soit l'issue de l'apk.
+RUN set +e; \
+    apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont || echo "WARN: apk chromium a échoué (PDF indisponible jusqu'au prochain build avec assez de RAM)"; \
+    CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)"; \
+    if [ -n "$CHROME_BIN" ]; then ln -sf "$CHROME_BIN" /usr/bin/chromium && echo "chromium OK: $CHROME_BIN"; else echo "WARN: chromium absent de l'image"; fi; \
+    exit 0
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
