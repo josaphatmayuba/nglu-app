@@ -761,6 +761,8 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
   const [vaccine, setVaccine] = React.useState(!!(disease?.vaccineAvailable ?? disease?.vaccine_available));
   const [mortality, setMortality] = React.useState(disease?.mortalityRisk || disease?.mortality_risk || "");
   const [protocol, setProtocol] = React.useState(disease?.recommendedProtocol || disease?.recommended_protocol || "");
+  const [causes, setCauses] = React.useState(disease?.possibleCauses || disease?.possible_causes || "");
+  const [exams, setExams] = React.useState(disease?.recommendedExams || disease?.recommended_exams || "");
   const [notes, setNotes] = React.useState(disease?.notes || "");
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -782,6 +784,8 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
       vaccine_available: vaccine ? 1 : 0,
       mortality_risk: mortality || null,
       recommended_protocol: protocol.trim() || null,
+      possible_causes: causes.trim() || null,
+      recommended_exams: exams.trim() || null,
       notes: notes.trim() || null,
     };
     try {
@@ -848,6 +852,12 @@ function DiseaseFormModal({ lang, defaultSpecies, disease, onClose, onSaved }) {
           </label>
           <label style={lbl}>{lang === "fr" ? "Prévention" : "Prevention"}
             <textarea value={prevention} onChange={(e) => setPrevention(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Causes possibles" : "Possible causes"}
+            <textarea value={causes} onChange={(e) => setCauses(e.target.value)} className="input" rows={2} style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Examens recommandés" : "Recommended exams"}
+            <textarea value={exams} onChange={(e) => setExams(e.target.value)} className="input" rows={2} style={inputStyle}/>
           </label>
           <label style={lbl}>{lang === "fr" ? "Protocole recommandé" : "Recommended protocol"}
             <textarea value={protocol} onChange={(e) => setProtocol(e.target.value)} className="input" rows={2} style={inputStyle}/>

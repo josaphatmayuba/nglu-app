@@ -1587,6 +1587,8 @@ export const farmosDiseases = mysqlTable("farmos_diseases", {
   vaccineAvailable: tinyint("vaccine_available").default(0).notNull(),
   mortalityRisk: varchar("mortality_risk", { length: 20 }),
   recommendedProtocol: text("recommended_protocol"),
+  possibleCauses: text("possible_causes"),
+  recommendedExams: text("recommended_exams"),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

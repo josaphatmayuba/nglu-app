@@ -631,6 +631,8 @@ export class FarmosService {
       vaccineAvailable: input.vaccine_available ? 1 : 0,
       mortalityRisk: input.mortality_risk ?? null,
       recommendedProtocol: input.recommended_protocol ?? null,
+      possibleCauses: input.possible_causes ?? null,
+      recommendedExams: input.recommended_exams ?? null,
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
@@ -656,6 +658,8 @@ export class FarmosService {
     if (input.vaccine_available !== undefined) patch.vaccineAvailable = input.vaccine_available ? 1 : 0;
     if (input.mortality_risk !== undefined) patch.mortalityRisk = input.mortality_risk;
     if (input.recommended_protocol !== undefined) patch.recommendedProtocol = input.recommended_protocol;
+    if (input.possible_causes !== undefined) patch.possibleCauses = input.possible_causes;
+    if (input.recommended_exams !== undefined) patch.recommendedExams = input.recommended_exams;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return disease;
     await this.db.update(farmosDiseases).set(patch).where(eq(farmosDiseases.id, id));

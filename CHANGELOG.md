@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.15.0] - 2026-06-10
+
+### Added
+
+- FarmOS — bibliothèque maladies : champs `causes possibles` et `examens recommandés` (complète les champs du prompt design). Migration idempotente `0102` (journal idx 82) + schema/DTO/service + 2 textareas dans le DiseaseFormModal. Backward-compatible.
+
 ## [3.14.1] - 2026-06-10
 
 ### Fixed

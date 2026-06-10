@@ -575,6 +575,13 @@
       "when": 1780308000000,
       "tag": "0101_farmos_roles_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1780311600000,
+      "tag": "0102_farmos_disease_causes_exams",
+      "breakpoints": true
     }
   ]
 }

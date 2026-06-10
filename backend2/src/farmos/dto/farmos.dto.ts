@@ -400,6 +400,8 @@ export class CreateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
   @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() possible_causes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_exams?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -420,6 +422,8 @@ export class UpdateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
   @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() possible_causes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_exams?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
