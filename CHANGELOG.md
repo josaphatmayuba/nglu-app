@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-06-10
+
+### Added
+
+- FarmOS — dossier vétérinaire enrichi (champs cliniques avancés) : motif de consultation, anamnèse, diagnostic différentiel, examens labo demandés + résultats, recommandation, suivi (migration 0098, ALTER idempotents). Ajoutés à l'éditeur et au rapport PDF.
+- FarmOS — calculateur de dose dans l'ordonnance : saisie mg/kg × poids de l'animal → dose totale suggérée, bouton « Utiliser » pour remplir le champ dose.
+
 ## [3.4.0] - 2026-06-10
 
 ### Added

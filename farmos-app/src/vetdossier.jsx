@@ -17,6 +17,7 @@ const EXAM_TYPES = [
 const emptyLine = () => ({
   medicine_name: "", dosage: "", frequency: "", duration: "", route: "",
   withdrawal_meat_days: "", withdrawal_milk_hours: "", withdrawal_eggs_days: "",
+  dose_per_kg: "",
 });
 
 // Pad de signature sur canvas (souris + tactile). Retourne un data-url PNG.
@@ -86,9 +87,16 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
     vet: exam?.vet || "",
     temperature: exam?.temperature || "",
     weight: exam?.weight || "",
+    reason: exam?.reason || "",
+    anamnesis: exam?.anamnesis || "",
     clinical_exam: exam?.clinicalExam || "",
+    differential_diagnosis: exam?.differentialDiagnosis || "",
     diagnosis: exam?.diagnosis || "",
+    lab_tests: exam?.labTests || "",
+    lab_results: exam?.labResults || "",
     protocol: exam?.protocol || "",
+    recommendation: exam?.recommendation || "",
+    followup: exam?.followup || "",
     notes: exam?.notes || "",
   }));
   const [lines, setLines] = React.useState(() =>
@@ -187,15 +195,40 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
           </Field>
         </div>
 
+        <Field label={lang === "fr" ? "Motif de consultation" : "Reason for visit"}>
+          <input value={form.reason} onChange={set("reason")} disabled={signed} style={inputStyle}/>
+        </Field>
+        <Field label={lang === "fr" ? "Anamnèse (historique)" : "Anamnesis (history)"}>
+          <textarea value={form.anamnesis} onChange={set("anamnesis")} disabled={signed} rows={2} style={inputStyle}/>
+        </Field>
         <Field label={lang === "fr" ? "Examen clinique" : "Clinical exam"}>
           <textarea value={form.clinical_exam} onChange={set("clinical_exam")} disabled={signed} rows={2} style={inputStyle}/>
+        </Field>
+        <Field label={lang === "fr" ? "Diagnostic différentiel" : "Differential diagnosis"}>
+          <textarea value={form.differential_diagnosis} onChange={set("differential_diagnosis")} disabled={signed} rows={2} style={inputStyle}/>
         </Field>
         <Field label={lang === "fr" ? "Diagnostic" : "Diagnosis"}>
           <textarea value={form.diagnosis} onChange={set("diagnosis")} disabled={signed} rows={2} style={inputStyle}/>
         </Field>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Field label={lang === "fr" ? "Examens labo demandés" : "Lab tests requested"}>
+            <textarea value={form.lab_tests} onChange={set("lab_tests")} disabled={signed} rows={2} style={inputStyle}/>
+          </Field>
+          <Field label={lang === "fr" ? "Résultats labo" : "Lab results"}>
+            <textarea value={form.lab_results} onChange={set("lab_results")} disabled={signed} rows={2} style={inputStyle}/>
+          </Field>
+        </div>
         <Field label={lang === "fr" ? "Protocole / traitement" : "Protocol / treatment"}>
           <textarea value={form.protocol} onChange={set("protocol")} disabled={signed} rows={2} style={inputStyle}/>
         </Field>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Field label={lang === "fr" ? "Recommandation" : "Recommendation"}>
+            <textarea value={form.recommendation} onChange={set("recommendation")} disabled={signed} rows={2} style={inputStyle}/>
+          </Field>
+          <Field label={lang === "fr" ? "Suivi" : "Follow-up"}>
+            <textarea value={form.followup} onChange={set("followup")} disabled={signed} rows={2} style={inputStyle}/>
+          </Field>
+        </div>
 
         {/* Ordonnance */}
         <div>
@@ -219,6 +252,25 @@ const VetExamEditor = ({ lang, exam, animals, onClose, onSaved }) => {
                   <input type="number" value={l.withdrawal_eggs_days} onChange={setLine(i, "withdrawal_eggs_days")} disabled={signed} placeholder={lang === "fr" ? "Retrait œufs (j)" : "Eggs WD (d)"} style={{ ...inputStyle, flex: 1 }}/>
                   {!signed && lines.length > 1 && <button type="button" className="btn btn-sm btn-ghost" onClick={() => removeLine(i)}><Icon name="x" size={12} color="var(--ink-700)"/></button>}
                 </div>
+                {!signed && (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11, color: "var(--fg-2)" }}>
+                    <span>{lang === "fr" ? "Calcul dose :" : "Dose calc:"}</span>
+                    <input type="number" step="0.1" value={l.dose_per_kg} onChange={setLine(i, "dose_per_kg")} placeholder="mg/kg" style={{ ...inputStyle, width: 90, flex: "none" }}/>
+                    {(() => {
+                      const w = Number(form.weight); const perKg = Number(l.dose_per_kg);
+                      if (!w || !perKg) return <span style={{ color: "var(--fg-3)" }}>{lang === "fr" ? "× poids animal" : "× animal weight"}</span>;
+                      const total = Math.round(w * perKg * 100) / 100;
+                      return (
+                        <>
+                          <span>= <strong>{total} mg</strong> ({w} kg)</span>
+                          <button type="button" className="btn btn-sm" onClick={() => setLines((ls) => ls.map((x, j) => j === i ? { ...x, dosage: `${total} mg` } : x))}>
+                            {lang === "fr" ? "Utiliser" : "Use"}
+                          </button>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             ))}
           </div>

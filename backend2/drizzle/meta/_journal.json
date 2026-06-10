@@ -547,6 +547,13 @@
       "when": 1780293600000,
       "tag": "0097_farmos_buildings",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "5",
+      "when": 1780297200000,
+      "tag": "0098_farmos_vet_exam_clinical",
+      "breakpoints": true
     }
   ]
 }

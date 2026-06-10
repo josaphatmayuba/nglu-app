@@ -1219,11 +1219,18 @@ export class FarmosService {
       vetUserId: input.vet_user_id ?? null,
       examDate: input.exam_date,
       examType: input.exam_type ?? null,
+      reason: input.reason ?? null,
+      anamnesis: input.anamnesis ?? null,
       clinicalExam: input.clinical_exam ?? null,
+      differentialDiagnosis: input.differential_diagnosis ?? null,
       protocol: input.protocol ?? null,
       temperature: input.temperature != null ? String(input.temperature) : null,
       weight: input.weight != null ? String(input.weight) : null,
       diagnosis: input.diagnosis ?? null,
+      labTests: input.lab_tests ?? null,
+      labResults: input.lab_results ?? null,
+      recommendation: input.recommendation ?? null,
+      followup: input.followup ?? null,
       notes: input.notes ?? null,
     }).$returningId();
     const examId = Number(res.id);
@@ -1242,11 +1249,18 @@ export class FarmosService {
     if (input.vet_user_id !== undefined) patch.vetUserId = input.vet_user_id;
     if (input.exam_date !== undefined) patch.examDate = input.exam_date;
     if (input.exam_type !== undefined) patch.examType = input.exam_type;
+    if (input.reason !== undefined) patch.reason = input.reason;
+    if (input.anamnesis !== undefined) patch.anamnesis = input.anamnesis;
     if (input.clinical_exam !== undefined) patch.clinicalExam = input.clinical_exam;
+    if (input.differential_diagnosis !== undefined) patch.differentialDiagnosis = input.differential_diagnosis;
     if (input.protocol !== undefined) patch.protocol = input.protocol;
     if (input.temperature !== undefined) patch.temperature = input.temperature != null ? String(input.temperature) : null;
     if (input.weight !== undefined) patch.weight = input.weight != null ? String(input.weight) : null;
     if (input.diagnosis !== undefined) patch.diagnosis = input.diagnosis;
+    if (input.lab_tests !== undefined) patch.labTests = input.lab_tests;
+    if (input.lab_results !== undefined) patch.labResults = input.lab_results;
+    if (input.recommendation !== undefined) patch.recommendation = input.recommendation;
+    if (input.followup !== undefined) patch.followup = input.followup;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length > 0) {
       await this.db.update(farmosVetExams).set(patch).where(eq(farmosVetExams.id, id));
@@ -1510,9 +1524,16 @@ export class FarmosService {
         <div><div class="k">Température</div><div class="v">${this.esc(exam.temperature)} °C</div></div>
         <div><div class="k">Poids</div><div class="v">${this.esc(exam.weight)} kg</div></div>
       </div>
+      ${exam.reason ? `<div class="k">Motif</div><div class="block">${this.esc(exam.reason)}</div>` : ""}
+      ${exam.anamnesis ? `<div class="k">Anamnèse</div><div class="block">${this.esc(exam.anamnesis)}</div>` : ""}
       ${exam.clinicalExam ? `<div class="k">Examen clinique</div><div class="block">${this.esc(exam.clinicalExam)}</div>` : ""}
+      ${exam.differentialDiagnosis ? `<div class="k">Diagnostic différentiel</div><div class="block">${this.esc(exam.differentialDiagnosis)}</div>` : ""}
       ${exam.diagnosis ? `<div class="k">Diagnostic</div><div class="block">${this.esc(exam.diagnosis)}</div>` : ""}
+      ${exam.labTests ? `<div class="k">Examens labo</div><div class="block">${this.esc(exam.labTests)}</div>` : ""}
+      ${exam.labResults ? `<div class="k">Résultats labo</div><div class="block">${this.esc(exam.labResults)}</div>` : ""}
       ${exam.protocol ? `<div class="k">Protocole</div><div class="block">${this.esc(exam.protocol)}</div>` : ""}
+      ${exam.recommendation ? `<div class="k">Recommandation</div><div class="block">${this.esc(exam.recommendation)}</div>` : ""}
+      ${exam.followup ? `<div class="k">Suivi</div><div class="block">${this.esc(exam.followup)}</div>` : ""}
       ${rows ? `<div class="k">Ordonnance</div><table><tr><th>Médicament</th><th>Dose</th><th>Fréquence</th><th>Durée</th><th>Voie</th><th>Délai de retrait</th></tr>${rows}</table>` : ""}
       <div class="sign">
         <div><div class="k">Signé par</div><div class="v">${this.esc(exam.signedBy || exam.vet || "—")}</div>
