@@ -10,7 +10,7 @@ import { Animals } from "./animals";
 import { Identification } from "./identification";
 import { QuickEntryDrawer, Toast } from "./quickentry";
 import {
-  HealthScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
+  HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
   AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
@@ -53,6 +53,7 @@ const ROUTE_SLUGS = {
   dashboard: "",
   identification: "identification",
   animals: "animaux",
+  buildings: "batiments",
   health: "sante",
   calendar: "calendrier",
   stock: "stock",
@@ -194,6 +195,7 @@ function App() {
       case "dashboard":  return <Dashboard {...props}/>;
       case "identification": return <Identification {...props}/>;
       case "animals":    return <Animals {...props}/>;
+      case "buildings":  return <BuildingsScreen {...props}/>;
       case "health":     return <HealthScreen {...props}/>;
       case "calendar":   return <CalendarScreen {...props}/>;
       case "stock":      return <StockScreen {...props}/>;

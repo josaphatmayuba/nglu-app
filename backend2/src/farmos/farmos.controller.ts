@@ -31,6 +31,7 @@ import {
   CreateVetExamDto,
   SignVetExamDto,
   CreateFarmosDocumentDto,
+  UpsertFarmosBuildingDto,
   CreateWorkLogDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
@@ -493,6 +494,31 @@ export class FarmosController {
   @Delete("documents/:id")
   deleteDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteDocument(id, orgId);
+  }
+
+  // ─── Bâtiments ────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("buildings")
+  listBuildings(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmos.listBuildings(orgId, species || null);
+  }
+
+  @Permissions("create-farmos")
+  @Post("buildings")
+  createBuilding(@Body() body: UpsertFarmosBuildingDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createBuilding(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("buildings/:id")
+  updateBuilding(@Param("id", ParseIntPipe) id: number, @Body() body: UpsertFarmosBuildingDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateBuilding(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("buildings/:id")
+  deleteBuilding(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteBuilding(id, orgId);
   }
 
   // ─── Rapports PDF (#3) ────────────────────────────────────────────────────

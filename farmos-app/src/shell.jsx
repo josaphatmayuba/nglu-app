@@ -11,6 +11,7 @@ const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
   { id: "identification", icon: "scanLine", labelKey: "identification" },
   { id: "animals",   icon: "layers",    labelKey: "animals" },
+  { id: "buildings", icon: "grid",      labelKey: "buildings" },
   { id: "health",    icon: "pulse",     labelKey: "health" },
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
   { id: "feed",      icon: "wheat",     labelKey: "feed" },
@@ -245,8 +246,26 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
 
         {/* User chip — sourced from CRM localStorage (same-origin) */}
         <UserChip showLabels={showLabels} lang={lang}/>
+
+        {/* Version / environnement — en bas de la sidebar */}
+        <VersionTag showLabels={showLabels}/>
       </div>
     </aside>
+  );
+};
+
+// Affiche la version de l'app (source unique du monorepo) + l'environnement.
+const APP_VERSION = import.meta.env.VITE_APP_BUILD_VERSION || import.meta.env.VITE_APP_BASE_VERSION || "—";
+const VersionTag = ({ showLabels }) => {
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const isDev = /dev\.|localhost|127\.0\.0\.1/.test(host);
+  const env = isDev ? "dev" : "prod";
+  const base = import.meta.env.VITE_APP_BASE_VERSION || APP_VERSION;
+  return (
+    <div title={`FarmOS ${APP_VERSION} · ${env}`}
+      style={{ padding: showLabels ? "8px 14px 12px" : "8px 6px 12px", textAlign: "center", fontSize: 10, color: "rgba(236,241,236,0.4)", fontFamily: "ui-monospace, Menlo, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {showLabels ? `FarmOS v${base} · ${env}` : `v${base}`}
+    </div>
   );
 };
 

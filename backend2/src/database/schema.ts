@@ -1698,11 +1698,18 @@ export const farmosVetExams = mysqlTable("farmos_vet_exams", {
   vetUserId: bigint("vet_user_id", { mode: "number" }),
   examDate: date("exam_date", { mode: "string" }).notNull(),
   examType: varchar("exam_type", { length: 50 }),
+  reason: varchar("reason", { length: 500 }),
+  anamnesis: text("anamnesis"),
   clinicalExam: text("clinical_exam"),
+  differentialDiagnosis: text("differential_diagnosis"),
   protocol: text("protocol"),
   temperature: decimal("temperature", { precision: 5, scale: 2 }),
   weight: decimal("weight", { precision: 10, scale: 2 }),
   diagnosis: text("diagnosis"),
+  labTests: text("lab_tests"),
+  labResults: text("lab_results"),
+  recommendation: text("recommendation"),
+  followup: text("followup"),
   notes: text("notes"),
   signature: mediumtext("signature"),
   signedAt: timestamp("signed_at"),
@@ -1806,6 +1813,23 @@ export const farmosDocuments = mysqlTable("farmos_documents", {
   uploadedBy: bigint("uploaded_by", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const farmosBuildings = mysqlTable("farmos_buildings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  species: varchar("species", { length: 50 }),
+  type: varchar("type", { length: 50 }),
+  capacity: int("capacity"),
+  temperature: decimal("temperature", { precision: 5, scale: 2 }),
+  humidity: decimal("humidity", { precision: 5, scale: 2 }),
+  manager: varchar("manager", { length: 255 }),
+  hygieneStatus: varchar("hygiene_status", { length: 30 }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
 export const farmosLookups = mysqlTable("farmos_lookups", {

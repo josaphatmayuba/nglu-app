@@ -3,7 +3,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -1219,11 +1219,18 @@ export class FarmosService {
       vetUserId: input.vet_user_id ?? null,
       examDate: input.exam_date,
       examType: input.exam_type ?? null,
+      reason: input.reason ?? null,
+      anamnesis: input.anamnesis ?? null,
       clinicalExam: input.clinical_exam ?? null,
+      differentialDiagnosis: input.differential_diagnosis ?? null,
       protocol: input.protocol ?? null,
       temperature: input.temperature != null ? String(input.temperature) : null,
       weight: input.weight != null ? String(input.weight) : null,
       diagnosis: input.diagnosis ?? null,
+      labTests: input.lab_tests ?? null,
+      labResults: input.lab_results ?? null,
+      recommendation: input.recommendation ?? null,
+      followup: input.followup ?? null,
       notes: input.notes ?? null,
     }).$returningId();
     const examId = Number(res.id);
@@ -1242,11 +1249,18 @@ export class FarmosService {
     if (input.vet_user_id !== undefined) patch.vetUserId = input.vet_user_id;
     if (input.exam_date !== undefined) patch.examDate = input.exam_date;
     if (input.exam_type !== undefined) patch.examType = input.exam_type;
+    if (input.reason !== undefined) patch.reason = input.reason;
+    if (input.anamnesis !== undefined) patch.anamnesis = input.anamnesis;
     if (input.clinical_exam !== undefined) patch.clinicalExam = input.clinical_exam;
+    if (input.differential_diagnosis !== undefined) patch.differentialDiagnosis = input.differential_diagnosis;
     if (input.protocol !== undefined) patch.protocol = input.protocol;
     if (input.temperature !== undefined) patch.temperature = input.temperature != null ? String(input.temperature) : null;
     if (input.weight !== undefined) patch.weight = input.weight != null ? String(input.weight) : null;
     if (input.diagnosis !== undefined) patch.diagnosis = input.diagnosis;
+    if (input.lab_tests !== undefined) patch.labTests = input.lab_tests;
+    if (input.lab_results !== undefined) patch.labResults = input.lab_results;
+    if (input.recommendation !== undefined) patch.recommendation = input.recommendation;
+    if (input.followup !== undefined) patch.followup = input.followup;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length > 0) {
       await this.db.update(farmosVetExams).set(patch).where(eq(farmosVetExams.id, id));
@@ -1365,23 +1379,126 @@ export class FarmosService {
     return { message: "Document supprimé." };
   }
 
+  // ─── Bâtiments FarmOS — occupation calculée depuis animals.barn (par nom) ─────
+  async listBuildings(orgId: number, species?: string | null) {
+    const conds = [eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)];
+    if (species) conds.push(eq(farmosBuildings.species, species));
+    const [buildings, animals] = await Promise.all([
+      this.db.select().from(farmosBuildings).where(and(...conds)).orderBy(farmosBuildings.name),
+      this.db
+        .select({ barn: farmosAnimals.barn, count: farmosAnimals.count })
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+    ]);
+    // Occupation = somme des count (ou 1 par tête) des animaux dont barn == nom du bâtiment.
+    const occByName = new Map<string, number>();
+    for (const a of animals) {
+      if (!a.barn) continue;
+      const n = Number(a.count ?? 0) || 1;
+      occByName.set(a.barn, (occByName.get(a.barn) ?? 0) + n);
+    }
+    return buildings.map((b) => {
+      const occupancy = occByName.get(b.name) ?? 0;
+      const cap = b.capacity ?? null;
+      return {
+        ...b,
+        occupancy,
+        occupancyRate: cap && cap > 0 ? Math.round((occupancy / cap) * 100) : null,
+        overCapacity: cap != null && cap > 0 && occupancy > cap,
+      };
+    });
+  }
+
+  async getBuilding(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosBuildings)
+      .where(and(eq(farmosBuildings.id, id), eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Building not found.");
+    return row;
+  }
+
+  async createBuilding(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosBuildings).values({
+      organizationId: orgId,
+      name: input.name,
+      species: input.species ?? null,
+      type: input.type ?? null,
+      capacity: input.capacity ?? null,
+      temperature: input.temperature != null ? String(input.temperature) : null,
+      humidity: input.humidity != null ? String(input.humidity) : null,
+      manager: input.manager ?? null,
+      hygieneStatus: input.hygiene_status ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createBuilding", ["buildings"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async updateBuilding(id: number, input: any, orgId: number) {
+    await this.getBuilding(id, orgId);
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.species !== undefined) patch.species = input.species;
+    if (input.type !== undefined) patch.type = input.type;
+    if (input.capacity !== undefined) patch.capacity = input.capacity;
+    if (input.temperature !== undefined) patch.temperature = input.temperature != null ? String(input.temperature) : null;
+    if (input.humidity !== undefined) patch.humidity = input.humidity != null ? String(input.humidity) : null;
+    if (input.manager !== undefined) patch.manager = input.manager;
+    if (input.hygiene_status !== undefined) patch.hygieneStatus = input.hygiene_status;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (Object.keys(patch).length === 0) return this.getBuilding(id, orgId);
+    await this.db.update(farmosBuildings).set(patch).where(eq(farmosBuildings.id, id));
+    await this.publishFarmosUpdate("updateBuilding", ["buildings"], "updated", id, orgId);
+    return this.getBuilding(id, orgId);
+  }
+
+  async deleteBuilding(id: number, orgId: number) {
+    await this.getBuilding(id, orgId);
+    await this.db.update(farmosBuildings).set({ isActive: 0 }).where(eq(farmosBuildings.id, id));
+    await this.publishFarmosUpdate("deleteBuilding", ["buildings"], "deleted", id, orgId);
+    return { message: "Bâtiment supprimé." };
+  }
+
   // ─── Rapports PDF (#3) — réutilise Puppeteer (déjà dép. via le module HR) ────
   private async htmlToPdf(html: string): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const puppeteer = require("puppeteer");
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // Le Dockerfile (Alpine) installe chromium ; selon la version le binaire est
+    // /usr/bin/chromium ou /usr/bin/chromium-browser. On résout le 1er existant
+    // (la var d'env peut pointer un chemin absent → crash 500).
+    const candidates = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+    ].filter(Boolean) as string[];
+    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+    let browser: any;
     try {
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        protocolTimeout: 60000,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+      });
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
+      // 'load' (pas 'networkidle0') : les images base64 inline (signature) ne
+      // déclenchent pas de requête réseau et faisaient timeouter networkidle0.
+      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
       const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
       return Buffer.from(pdfBuffer);
+    } catch (err) {
+      // Expose la vraie cause (chemin Chromium, lib manquante, timeout…) au lieu
+      // d'un 500 générique, pour diagnostiquer sans accès aux logs du conteneur.
+      const msg = (err as Error)?.message || String(err);
+      console.error("[FarmOS] htmlToPdf failed:", msg, "| executablePath=", executablePath);
+      throw new BadRequestException(`PDF generation failed: ${msg} (chromium=${executablePath ?? "introuvable"})`);
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
   }
 
@@ -1417,9 +1534,16 @@ export class FarmosService {
         <div><div class="k">Température</div><div class="v">${this.esc(exam.temperature)} °C</div></div>
         <div><div class="k">Poids</div><div class="v">${this.esc(exam.weight)} kg</div></div>
       </div>
+      ${exam.reason ? `<div class="k">Motif</div><div class="block">${this.esc(exam.reason)}</div>` : ""}
+      ${exam.anamnesis ? `<div class="k">Anamnèse</div><div class="block">${this.esc(exam.anamnesis)}</div>` : ""}
       ${exam.clinicalExam ? `<div class="k">Examen clinique</div><div class="block">${this.esc(exam.clinicalExam)}</div>` : ""}
+      ${exam.differentialDiagnosis ? `<div class="k">Diagnostic différentiel</div><div class="block">${this.esc(exam.differentialDiagnosis)}</div>` : ""}
       ${exam.diagnosis ? `<div class="k">Diagnostic</div><div class="block">${this.esc(exam.diagnosis)}</div>` : ""}
+      ${exam.labTests ? `<div class="k">Examens labo</div><div class="block">${this.esc(exam.labTests)}</div>` : ""}
+      ${exam.labResults ? `<div class="k">Résultats labo</div><div class="block">${this.esc(exam.labResults)}</div>` : ""}
       ${exam.protocol ? `<div class="k">Protocole</div><div class="block">${this.esc(exam.protocol)}</div>` : ""}
+      ${exam.recommendation ? `<div class="k">Recommandation</div><div class="block">${this.esc(exam.recommendation)}</div>` : ""}
+      ${exam.followup ? `<div class="k">Suivi</div><div class="block">${this.esc(exam.followup)}</div>` : ""}
       ${rows ? `<div class="k">Ordonnance</div><table><tr><th>Médicament</th><th>Dose</th><th>Fréquence</th><th>Durée</th><th>Voie</th><th>Délai de retrait</th></tr>${rows}</table>` : ""}
       <div class="sign">
         <div><div class="k">Signé par</div><div class="v">${this.esc(exam.signedBy || exam.vet || "—")}</div>

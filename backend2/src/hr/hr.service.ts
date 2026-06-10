@@ -538,7 +538,16 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
   private async htmlToPdf(html: string): Promise<Buffer> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const puppeteer = require("puppeteer");
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("fs");
+    // Alpine: le binaire chromium peut etre /usr/bin/chromium OU /usr/bin/chromium-browser.
+    // On resout le 1er chemin existant (la var d'env peut pointer un chemin absent -> 500).
+    const candidates = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+    ].filter(Boolean) as string[];
+    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
     const browser = await puppeteer.launch({
       headless: true,
       executablePath,
