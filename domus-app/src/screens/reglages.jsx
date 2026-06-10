@@ -733,6 +733,31 @@ function NumberingCard({ setting, currencies, onSaved }) {
           {msg.type === "ok" && <Check size={14} />}{msg.text}
         </span>}
       </div>
+
+      <AboutVersion />
     </section>
+  );
+}
+
+// À propos — version applicative (source unique du monorepo).
+function AboutVersion() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #eee" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 24, maxWidth: 480 }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>À propos</div>
+      <Row k="Version" v={`v${base}`} />
+      <Row k="Build" v={build} />
+      <Row k="Commit" v={commit} />
+      <Row k="Environnement" v={env} />
+    </div>
   );
 }

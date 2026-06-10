@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app.jsx";
 import { bootstrapAuth } from "./auth.jsx";
+import { mountVersionBadge } from "./version-badge.js";
 import "./styles/app.css";
 
 class ErrorBoundary extends React.Component {
@@ -50,4 +51,5 @@ bootstrapAuth().finally(() => {
       <App />
     </ErrorBoundary>,
   );
+  mountVersionBadge();
 });

@@ -102,6 +102,8 @@ const NAV = [
   { id: "organigramme", label: "Postes & départements", icon: "network" },
   { id: "reporting", label: "Reporting RH", icon: "barChart" },
   { id: "selfservice", label: "Espace employé", icon: "circleUser" },
+  { section: "Système" },
+  { id: "parametres", label: "Paramètres", icon: "settings" },
 ];
 const ITEMS = NAV.filter((n) => n.id);
 const TITLES = Object.fromEntries(ITEMS.map((n) => [n.id, n.label]));
@@ -1300,6 +1302,7 @@ function App() {
     organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
     selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
+    parametres: <Parametres />,
   };
 
   return (
@@ -1384,6 +1387,32 @@ function App() {
       <Toaster />
       <AiAssistant />
     </div>
+  );
+}
+
+/* ── Paramètres (dont version applicative) ─────────────────────────────── */
+function Parametres() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <>
+      <PageHead eyebrow="Système" title="Paramètres" />
+      <div className="card" style={{ maxWidth: 560, padding: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
+        <Row k="Version" v={`v${base}`} />
+        <Row k="Build" v={build} />
+        <Row k="Commit" v={commit} />
+        <Row k="Environnement" v={env} />
+      </div>
+    </>
   );
 }
 

@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-06-10
+
+### Added
+
+- Toutes les apps (hr, domus, batipro, comptabilite) : badge version affiché en bas **en mode dev uniquement** (`version-badge.js`, monté depuis main.jsx) + version dans l'écran **Paramètres/Réglages** (visible en prod). Écran Paramètres créé pour hr-app, batipro-app et comptabilite-app (n'en avaient pas) ; carte « À propos » ajoutée aux Réglages Domus. Le CRM (frontend) affichait déjà la version dans Réglages → À propos. Source unique : fichier racine VERSION.
+
 ## [3.6.0] - 2026-06-10
 
 ### Added

@@ -87,6 +87,8 @@ const NAV = [
   { section: "États" },
   { id: "etats", label: "États financiers", icon: "barChart" },
   { id: "tva", label: "TVA & taxes", icon: "receipt" },
+  { section: "Système" },
+  { id: "parametres", label: "Paramètres", icon: "gauge" },
 ];
 const ITEMS = NAV.filter((n) => n.id);
 const TITLES = Object.fromEntries(ITEMS.map((n) => [n.id, n.label]));
@@ -235,6 +237,7 @@ function App() {
     capacite: <Capacite />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
     tva: <Tva />,
+    parametres: <Parametres />,
   };
 
   return (
@@ -302,6 +305,31 @@ function App() {
 }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
+function Parametres() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <>
+      <PageHead eyebrow="Système" title="Paramètres" />
+      <div className="card" style={{ maxWidth: 560, padding: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
+        <Row k="Version" v={`v${base}`} />
+        <Row k="Build" v={build} />
+        <Row k="Commit" v={commit} />
+        <Row k="Environnement" v={env} />
+      </div>
+    </>
+  );
+}
+
 function Dashboard({ is, transactions, go, onNew, canMutate }) {
   const txs = transactions || [];
   const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.amount || 0), 0);
