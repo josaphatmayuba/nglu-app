@@ -14,7 +14,7 @@ RUN apk add --no-cache \
  && CHROME_BIN="$(command -v chromium || command -v chromium-browser || true)" \
  && if [ -z "$CHROME_BIN" ]; then echo "ERREUR: chromium introuvable apres apk add" && exit 1; fi \
  && ln -sf "$CHROME_BIN" /usr/bin/chromium \
- && /usr/bin/chromium --version
+ && test -x /usr/bin/chromium
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium

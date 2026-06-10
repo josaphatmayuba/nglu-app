@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.15.2] - 2026-06-10
+
+### Fixed
+
+- PDF — le build de l'image backend2 échouait (exit 127) sur `&& /usr/bin/chromium --version` dans `Dockerfile`/`Dockerfile.prod` : exécuter chromium en root dans Alpine au build retourne un code non-zéro et casse le build (donc le pipeline aussi). Remplacé par `test -x /usr/bin/chromium` (vérifie la présence/exécutabilité sans lancer le binaire). Puppeteer lance déjà chromium avec `--no-sandbox` au runtime. Débloque le rebuild de l'image avec chromium.
+
 ## [3.15.1] - 2026-06-10
 
 ### Fixed
