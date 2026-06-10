@@ -153,7 +153,7 @@ export function LoginScreen({ lang = "fr" }) {
         display: "flex", flexDirection: "column", gap: 16,
       }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Brand size={48} color="#0E2418" accent="#D7AA45"/>
+          <Brand size={56}/>
           <div style={{ fontFamily: "var(--font-display, Georgia)", fontWeight: 500, fontSize: 22, color: "var(--ink-950, #0E2418)" }}>
             FarmOS<span style={{ color: "#D7AA45" }}> Pro</span>
           </div>

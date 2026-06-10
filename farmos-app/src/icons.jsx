@@ -212,38 +212,32 @@ const AnimalGlyph = ({ kind, size = 22, color = "currentColor", strokeWidth = 1.
   );
 };
 
-// ─── Brand mark: cow head in a circle with wheat + grass (FarmOS) ────────
-const Brand = ({ size = 28, color = "#ECF1EC", accent = "#D7AA45" }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    {/* outer ring */}
-    <circle cx="32" cy="32" r="29" stroke={color} strokeWidth="2.4"/>
-
-    {/* top wheat sprig + flanking arcs (accent) */}
-    <path d="M22 16C25 12.5 28.5 11 31 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M42 16C39 12.5 35.5 11 33 11" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M32 18.5V10.5" stroke={accent} strokeWidth="2" strokeLinecap="round"/>
-    <path d="M32 11.5C34.2 12 35.4 14 34.6 16.2C32.4 15.7 31.2 13.7 32 11.5Z" fill={accent}/>
-    <path d="M32 11.5C29.8 12 28.6 14 29.4 16.2C31.6 15.7 32.8 13.7 32 11.5Z" fill={accent}/>
-
-    {/* ears */}
-    <path d="M19.5 27C11.5 22.5 6.5 27.5 10.5 33C15 31.5 18 29.5 21.5 27.5Z" fill={color}/>
-    <path d="M44.5 27C52.5 22.5 57.5 27.5 53.5 33C49 31.5 46 29.5 42.5 27.5Z" fill={color}/>
-
-    {/* head / face */}
-    <path d="M20.5 28C19.5 21.5 25 18 32 18C39 18 44.5 21.5 43.5 28C42.8 33 41.5 37 37.5 41C38.5 45 35.5 47.5 32 47.5C28.5 47.5 25.5 45 26.5 41C22.5 37 21.2 33 20.5 28Z" fill={color}/>
-
-    {/* eyes + muzzle details (negative space) */}
-    <path d="M25.5 29C27.5 28 29.5 29 29.5 31C27.5 32 25.5 31 25.5 29Z" fill="#0E2418"/>
-    <path d="M38.5 29C36.5 28 34.5 29 34.5 31C36.5 32 38.5 31 38.5 29Z" fill="#0E2418"/>
-    <path d="M28 40.5C30.5 39 33.5 39 36 40.5" stroke="#0E2418" strokeWidth="1.6" strokeLinecap="round"/>
-    <circle cx="29.5" cy="38" r="1.2" fill="#0E2418"/>
-    <circle cx="34.5" cy="38" r="1.2" fill="#0E2418"/>
-
-    {/* grass at the base */}
-    <path d="M16 54C17.5 48 21 45.5 25.5 46C22.5 48.5 20 51 18.5 55Z" fill={color}/>
-    <path d="M48 54C46.5 48 43 45.5 38.5 46C41.5 48.5 44 51 45.5 55Z" fill={color}/>
-    <path d="M29.5 55.5C29.5 51 31 48.5 33.5 49.5C32.5 52 31.5 53.5 31.5 56Z" fill={color}/>
-  </svg>
-);
+// ─── Brand mark — vrai logo FarmOS ────────────────────────────────────────
+// `farmos-logo.png` = le VRAI logo (tête de vache réaliste + épis + herbe dans
+// un cercle), extrait de la planche officielle farmos-brand-concept.png.
+// (Le farmos-icon.svg et l'ancien tracé SVG étaient des versions ratées.)
+// Le logo a un trait vert foncé sur fond transparent → `onDark` ajoute une
+// pastille claire pour rester lisible sur les fonds foncés (sidebar).
+const Brand = ({ size = 28, onDark = false }) => {
+  const pad = onDark ? Math.round(size * 0.1) : 0;
+  return (
+    <span
+      role="img"
+      aria-label="FarmOS"
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size, height: size, flexShrink: 0, boxSizing: "border-box", padding: pad,
+        background: onDark ? "var(--parchment-50, #FBF8F2)" : "transparent",
+        borderRadius: onDark ? Math.round(size * 0.24) : 0,
+      }}
+    >
+      <img
+        src="/farmos/farmos-logo.png"
+        alt="FarmOS"
+        style={{ width: size - pad * 2, height: size - pad * 2, objectFit: "contain", display: "block" }}
+      />
+    </span>
+  );
+};
 
 export { Icon, AnimalGlyph, Brand };

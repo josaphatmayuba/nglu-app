@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.20.3] - 2026-06-10
+
+### Changed
+
+- FarmOS — vrai logo. Le composant `Brand` et toutes les icônes (favicon, app-icon PWA 192/512, maskable, apple-touch, `farmos-icon.svg`, assets Android) utilisent désormais le **vrai logo** (tête de vache réaliste + épis + herbe dans un cercle), extrait de la planche officielle `farmos-brand-concept.png` vers `farmos-logo.png`. Remplace les versions SVG approximatives précédentes (tracé fait main + ancien `farmos-icon.svg`) qui ne correspondaient pas à la charte.
+
 ## [3.20.2] - 2026-06-10
 
 ### Fixed

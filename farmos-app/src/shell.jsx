@@ -183,7 +183,7 @@ const Sidebar = ({ active, onNav, lang, speciesFilter, onSpeciesFilter, sidebarS
     }}>
       {/* Brand */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: showLabels ? "18px 18px 16px" : "18px 12px 16px", justifyContent: showLabels ? "flex-start" : "center" }}>
-        <Brand size={28} color="#ECF1EC" accent="#D7AA45"/>
+        <Brand size={32} onDark/>
         {showLabels && (
           <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
             <span style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 17, letterSpacing: "-0.015em" }}>
