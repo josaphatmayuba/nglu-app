@@ -43,6 +43,7 @@ import { TransactionTypesModule } from "./transaction-types/transaction-types.mo
 import { TransactionsModule } from "./transactions/transactions.module";
 import { LedgerModule } from "./ledger/ledger.module";
 import { WorkflowModule } from "./workflow/workflow.module";
+import { BudgetModule } from "./budget/budget.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
 
@@ -90,6 +91,7 @@ import { UsersModule } from "./users/users.module";
     TransactionsModule,
     LedgerModule,
     WorkflowModule,
+    BudgetModule,
     TransactionTypesModule,
     UomModule,
     UsersModule,

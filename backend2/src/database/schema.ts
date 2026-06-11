@@ -190,6 +190,44 @@ export const workflowApprovals = mysqlTable("workflow_approvals", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// === Module Budget ERP/SIFA (migration 0109) ===
+export const budgets = mysqlTable("budgets", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  periodId: bigint("period_id", { mode: "number", unsigned: true }),
+  projectId: bigint("project_id", { mode: "number" }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  status: varchar("status", { length: 16 }).default("open").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const budgetLines = mysqlTable("budget_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  budgetId: bigint("budget_id", { mode: "number", unsigned: true }).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  siteId: bigint("site_id", { mode: "number" }),
+  departmentId: bigint("department_id", { mode: "number" }),
+  projectId: bigint("project_id", { mode: "number" }),
+  activityId: bigint("activity_id", { mode: "number" }),
+  plannedAmount: decimal("planned_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+  label: varchar("label", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const budgetConsumptions = mysqlTable("budget_consumptions", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  budgetLineId: bigint("budget_line_id", { mode: "number", unsigned: true }).notNull(),
+  journalEntryId: bigint("journal_entry_id", { mode: "number", unsigned: true }),
+  amount: decimal("amount", { precision: 18, scale: 2 }).notNull(),
+  note: varchar("note", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const customers = mysqlTable("customer", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
