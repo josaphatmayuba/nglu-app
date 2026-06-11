@@ -266,6 +266,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         onChanged={() => setReloadKey((k) => k + 1)}
       />
 
+      <MortalityStatsSection lang={lang} speciesFilter={speciesFilter}/>
+
       <FarmosDocumentsSection lang={lang} animals={animalsFiltered}/>
 
       {editingDisease && (
@@ -276,6 +278,77 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           onClose={() => setEditingDisease(null)}
           onSaved={() => { setEditingDisease(null); setReloadKey((k) => k + 1); }}
         />
+      )}
+    </div>
+  );
+};
+
+// ─── MORTALITÉ — statistiques (prompt design : décès par mois/espèce/cause) ──
+const MortalityStatsSection = ({ lang, speciesFilter }) => {
+  const [stats, setStats] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const refresh = useDataRefresh(["mortalityEvents"]);
+  React.useEffect(() => {
+    let cancel = false;
+    setLoading(true);
+    api.getMortalityStats()
+      .then((s) => { if (!cancel) setStats(s); })
+      .catch(() => { if (!cancel) setStats(null); })
+      .finally(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [refresh]);
+
+  const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
+  const speciesLabel = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.fr : s.en) : id; };
+  const maxOf = (arr) => Math.max(1, ...(arr || []).map((x) => x.value));
+
+  const Bars = ({ title, items, labelFn }) => {
+    if (!items || items.length === 0) return null;
+    const max = maxOf(items);
+    return (
+      <div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{title}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.slice(0, 6).map((it) => (
+            <div key={it.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "var(--ink-800)", width: 96, flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{labelFn ? labelFn(it.key) : it.key}</span>
+              <div style={{ flex: 1, height: 8, background: "var(--bg-sunken)", borderRadius: 999, overflow: "hidden" }}>
+                <div style={{ width: `${(it.value / max) * 100}%`, height: "100%", background: "var(--oxblood-700)", borderRadius: 999 }}/>
+              </div>
+              <span className="mono" style={{ fontSize: 11.5, color: "var(--fg-2)", width: 28, textAlign: "right" }}>{it.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="bilang">
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Mortalité — statistiques" : "Mortality — statistics"}</h3>
+        <span className="sec">{lang === "fr" ? "Décès enregistrés, par cause/espèce/mois" : "Recorded deaths, by cause/species/month"}</span>
+      </div>
+      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {!loading && (!stats || stats.eventsCount === 0) && (
+        <EmptyState title={lang === "fr" ? "Aucun décès enregistré" : "No death recorded"} />
+      )}
+      {!loading && stats && stats.eventsCount > 0 && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Total décès" : "Total deaths"}</div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: "var(--oxblood-700)" }}>{stats.totalDeaths}</div>
+            </div>
+            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Perte estimée" : "Estimated loss"}</div>
+              <div className="mono" style={{ fontSize: 20, fontWeight: 600, color: "var(--ink-900)" }}>{money(stats.totalLoss)}</div>
+            </div>
+          </div>
+          <Bars title={lang === "fr" ? "Par espèce" : "By species"} items={stats.bySpecies} labelFn={speciesLabel}/>
+          <Bars title={lang === "fr" ? "Par cause" : "By cause"} items={stats.byCause}/>
+          <Bars title={lang === "fr" ? "Par mois" : "By month"} items={stats.byMonth}/>
+        </>
       )}
     </div>
   );

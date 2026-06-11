@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.21.0] - 2026-06-10
+
+### Added
+
+- FarmOS — statistiques de mortalité (UI). Nouvelle section « Mortalité — statistiques » dans l'écran Santé : total des décès, perte financière estimée, et graphiques à barres par espèce / par cause / par mois (consomme l'endpoint `GET /mortality-events/stats` ajouté en 3.18.0).
+
 ## [3.20.4] - 2026-06-10
 
 ### Changed
