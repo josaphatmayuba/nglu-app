@@ -349,6 +349,7 @@ export class UpdateFarmosStaffDto {
   @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() phone?: string | null;
   @ApiPropertyOptional({ example: "Vétérinaire" }) @IsOptional() @IsString() designation?: string | null;
+  @ApiPropertyOptional({ description: "Rôle CRM (permissions) à assigner." }) @IsOptional() @Type(() => Number) @IsInt() role_id?: number | null;
 }
 
 export class SetFarmosStaffStatusDto {

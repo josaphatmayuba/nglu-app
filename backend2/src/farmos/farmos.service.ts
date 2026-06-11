@@ -338,6 +338,12 @@ export class FarmosService {
       }
       patch.designationId = designationId;
     }
+    if (input.role_id !== undefined && input.role_id != null) {
+      // Vérifie que le rôle existe avant de l'assigner (permissions de l'employé).
+      const [r] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.id, input.role_id)).limit(1);
+      if (!r) throw new BadRequestException("Rôle introuvable.");
+      patch.roleId = input.role_id;
+    }
     if (Object.keys(patch).length > 0) {
       await this.db.update(users).set(patch).where(eq(users.id, id));
     }
@@ -363,6 +369,16 @@ export class FarmosService {
     }
     await this.publishFarmosUpdate("setFarmosStaffStatus", ["staff"], "updated", id, orgId);
     return { ok: true };
+  }
+
+  // Rôles assignables à un employé (gestion des permissions). On expose tous les
+  // rôles actifs sauf super-admin (non assignable depuis FarmOS).
+  async listAssignableRoles() {
+    const rows = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.status, "true"));
+    return rows.filter((r) => (r.name || "").toLowerCase() !== "super-admin");
   }
 
   // ─── Animals ─────────────────────────────────────────────────────────────
@@ -1969,10 +1985,13 @@ export class FarmosService {
         designation: designations.name,
         departmentId: users.departmentId,
         department: departments.name,
+        roleId: users.roleId,
+        role: roles.name,
       })
       .from(users)
       .leftJoin(designations, eq(users.designationId, designations.id))
       .leftJoin(departments, eq(users.departmentId, departments.id))
+      .leftJoin(roles, eq(users.roleId, roles.id))
       .where(
         and(
           eq(users.organizationId, orgId),

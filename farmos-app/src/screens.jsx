@@ -2589,9 +2589,14 @@ function StaffEditModal({ lang, staff, onClose, onSaved }) {
   const [lastName, setLastName] = React.useState(staff.lastName || "");
   const [phone, setPhone] = React.useState(staff.phone || "");
   const [designation, setDesignation] = React.useState(staff.designation || "");
+  const [roleId, setRoleId] = React.useState(staff.roleId != null ? String(staff.roleId) : "");
+  const [assignableRoles, setAssignableRoles] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [statusBusy, setStatusBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    api.listAssignableRoles().then((r) => setAssignableRoles(Array.isArray(r) ? r : [])).catch(() => {});
+  }, []);
   const lbl = { fontSize: 12, color: "var(--fg-2)" };
   const inputStyle = { width: "100%", marginTop: 4 };
   const isActive = !staff.leaveDate || new Date(staff.leaveDate) > new Date();
@@ -2604,6 +2609,7 @@ function StaffEditModal({ lang, staff, onClose, onSaved }) {
         lastName: lastName.trim() || null,
         phone: phone.trim() || null,
         designation: designation.trim() || null,
+        role_id: roleId ? Number(roleId) : null,
       });
       onSaved();
     } catch (e) { setError(e.message || "Erreur"); setSaving(false); }
@@ -2640,8 +2646,15 @@ function StaffEditModal({ lang, staff, onClose, onSaved }) {
           <label style={lbl}>{lang === "fr" ? "Téléphone" : "Phone"}
             <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" style={inputStyle}/>
           </label>
-          <label style={lbl}>{lang === "fr" ? "Rôle / désignation" : "Role / designation"}
+          <label style={lbl}>{lang === "fr" ? "Désignation (métier)" : "Designation (job)"}
             <input value={designation} onChange={(e) => setDesignation(e.target.value)} className="input" style={inputStyle} placeholder={lang === "fr" ? "Vétérinaire, Éleveur…" : "Vet, Breeder…"}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Rôle & permissions" : "Role & permissions"}
+            <select value={roleId} onChange={(e) => setRoleId(e.target.value)} className="input" style={inputStyle}>
+              <option value="">{lang === "fr" ? "— Aucun rôle —" : "— No role —"}</option>
+              {assignableRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+            <span style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{lang === "fr" ? "Détermine les permissions de l'employé (ex. Lecture Ferme, Vétérinaire, Admin Ferme)." : "Determines the employee's permissions."}</span>
           </label>
 
           <div style={{ borderTop: "1px dashed var(--border-1)", paddingTop: 12 }}>

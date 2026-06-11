@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.25.0] - 2026-06-11
+
+### Added
+
+- FarmOS — gestion des permissions par employé. Le modal employé permet d'assigner un **rôle** (qui détermine les permissions via le RBAC) parmi les rôles disponibles (Admin Ferme, Gestionnaire Ferme, Éleveur, Vétérinaire, Superviseur Ferme, Employé Ferme, Lecture Ferme…). Backend : `GET /staff/roles` (rôles assignables, hors super-admin) ; `PUT /staff/:id` accepte `role_id` ; la liste des employés expose le rôle courant.
+
 ## [3.24.0] - 2026-06-10
 
 ### Added

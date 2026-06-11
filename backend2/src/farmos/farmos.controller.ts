@@ -645,6 +645,13 @@ export class FarmosController {
     return this.farmos.listFarmosStaff(orgId, role || null);
   }
 
+  @ApiOperation({ summary: "Roles assignable to a staff member (permission management)." })
+  @Permissions("readAll-farmos")
+  @Get("staff/roles")
+  listAssignableRoles() {
+    return this.farmos.listAssignableRoles();
+  }
+
   @ApiOperation({ summary: "Onboard a FarmOS staff member (also visible in CRM /staff)." })
   @Permissions("create-farmos")
   @Post("staff")
