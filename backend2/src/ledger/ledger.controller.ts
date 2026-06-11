@@ -14,7 +14,12 @@ import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
-import { CreateJournalEntryDto, PostByRulesDto, ReverseEntryDto } from "./dto/ledger.dto";
+import {
+  CreateJournalEntryDto,
+  CreatePeriodDto,
+  PostByRulesDto,
+  ReverseEntryDto,
+} from "./dto/ledger.dto";
 import { LedgerService } from "./ledger.service";
 
 @ApiTags("ledger")
@@ -73,6 +78,40 @@ export class LedgerController {
   @Get("trial-balance")
   trialBalance(@CurrentOrg() orgId: number) {
     return this.ledger.trialBalance(orgId);
+  }
+
+  @ApiOperation({ summary: "Liste des periodes comptables" })
+  @ApiOkResponse({ description: "Periodes" })
+  @Permissions("readAll-transaction")
+  @Get("periods")
+  listPeriods(@CurrentOrg() orgId: number) {
+    return this.ledger.listPeriods(orgId);
+  }
+
+  @ApiOperation({ summary: "Cree une periode comptable" })
+  @ApiCreatedResponse({ description: "Periode creee" })
+  @Permissions("create-transaction")
+  @Post("periods")
+  createPeriod(@Body() body: CreatePeriodDto, @CurrentOrg() orgId: number) {
+    return this.ledger.createPeriod(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Cloture une periode comptable" })
+  @ApiCreatedResponse({ description: "Periode cloturee" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-transaction")
+  @Post("periods/:id/close")
+  closePeriod(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.ledger.closePeriod(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Rouvre une periode comptable" })
+  @ApiCreatedResponse({ description: "Periode rouverte" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-transaction")
+  @Post("periods/:id/reopen")
+  reopenPeriod(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.ledger.reopenPeriod(id, orgId);
   }
 
   @ApiOperation({ summary: "Grand livre d'un compte (lignes + solde)" })

@@ -110,6 +110,23 @@ export class ReverseEntryDto {
   reason!: string;
 }
 
+export class CreatePeriodDto {
+  @ApiProperty({ example: "2026-Q2" })
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @ApiProperty({ example: "2026-04-01" })
+  @IsString()
+  @IsNotEmpty()
+  startDate!: string;
+
+  @ApiProperty({ example: "2026-06-30" })
+  @IsString()
+  @IsNotEmpty()
+  endDate!: string;
+}
+
 export class PostByRulesDto {
   @ApiProperty({ description: "Type metier (ex: sale, purchase)" })
   @IsString()

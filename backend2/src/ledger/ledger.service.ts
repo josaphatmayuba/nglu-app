@@ -98,6 +98,8 @@ export class LedgerService {
         if (existing.length) return { id: existing[0].id, idempotent: true };
       }
 
+      // Integrite comptable : aucune ecriture sur une periode cloturee.
+      await this.assertPeriodNotClosed(tx, orgId, entryDate);
       const periodId = await this.resolveOpenPeriod(tx, orgId, entryDate);
 
       const [entry] = await tx
@@ -378,6 +380,111 @@ export class LedgerService {
     const totalDebit = Math.round(debits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
     const totalCredit = Math.round(credits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
     return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
+  }
+
+  // ─── Periodes comptables (Phase 6) ──────────────────────────────────────────
+
+  /** Liste les periodes de l'organisation (recentes d'abord). */
+  async listPeriods(orgId: number) {
+    return this.db
+      .select()
+      .from(accountingPeriods)
+      .where(eq(accountingPeriods.organizationId, orgId))
+      .orderBy(desc(accountingPeriods.startDate));
+  }
+
+  /** Cree une periode (statut open par defaut). Refuse le chevauchement de dates. */
+  async createPeriod(
+    input: { name: string; startDate: string; endDate: string },
+    orgId: number,
+  ) {
+    if (input.startDate > input.endDate) {
+      throw new BadRequestException("startDate doit preceder endDate.");
+    }
+    const overlap = await this.db
+      .select({ id: accountingPeriods.id })
+      .from(accountingPeriods)
+      .where(
+        and(
+          eq(accountingPeriods.organizationId, orgId),
+          sql`${accountingPeriods.startDate} <= ${input.endDate}`,
+          sql`${accountingPeriods.endDate} >= ${input.startDate}`,
+        ),
+      )
+      .limit(1);
+    if (overlap.length) {
+      throw new ConflictException("Une periode chevauche cet intervalle de dates.");
+    }
+    const [row] = await this.db
+      .insert(accountingPeriods)
+      .values({
+        organizationId: orgId,
+        name: input.name,
+        startDate: new Date(input.startDate),
+        endDate: new Date(input.endDate),
+        status: "open",
+      })
+      .$returningId();
+    return { id: row.id };
+  }
+
+  /** Cloture une periode (status=closed) : plus aucune ecriture possible dessus. */
+  async closePeriod(periodId: number, orgId: number) {
+    const [period] = await this.db
+      .select()
+      .from(accountingPeriods)
+      .where(
+        and(eq(accountingPeriods.id, periodId), eq(accountingPeriods.organizationId, orgId)),
+      )
+      .limit(1);
+    if (!period) throw new NotFoundException(`Periode #${periodId} introuvable.`);
+    if (period.status === "closed") {
+      throw new ConflictException("Periode deja cloturee.");
+    }
+    await this.db
+      .update(accountingPeriods)
+      .set({ status: "closed" })
+      .where(eq(accountingPeriods.id, periodId));
+    return { id: periodId, status: "closed" };
+  }
+
+  /** Rouvre une periode cloturee (status=open). */
+  async reopenPeriod(periodId: number, orgId: number) {
+    const [period] = await this.db
+      .select()
+      .from(accountingPeriods)
+      .where(
+        and(eq(accountingPeriods.id, periodId), eq(accountingPeriods.organizationId, orgId)),
+      )
+      .limit(1);
+    if (!period) throw new NotFoundException(`Periode #${periodId} introuvable.`);
+    await this.db
+      .update(accountingPeriods)
+      .set({ status: "open" })
+      .where(eq(accountingPeriods.id, periodId));
+    return { id: periodId, status: "open" };
+  }
+
+  /** Refuse l'ecriture si une periode CLOSE couvre la date. */
+  private async assertPeriodNotClosed(tx: Database, orgId: number, date: Date) {
+    const day = date.toISOString().slice(0, 10);
+    const [closed] = await tx
+      .select({ id: accountingPeriods.id, name: accountingPeriods.name })
+      .from(accountingPeriods)
+      .where(
+        and(
+          eq(accountingPeriods.organizationId, orgId),
+          eq(accountingPeriods.status, "closed"),
+          sql`${accountingPeriods.startDate} <= ${day}`,
+          sql`${accountingPeriods.endDate} >= ${day}`,
+        ),
+      )
+      .limit(1);
+    if (closed) {
+      throw new ConflictException(
+        `Periode comptable "${closed.name}" cloturee : aucune ecriture possible au ${day}.`,
+      );
+    }
   }
 
   /** Trouve la periode ouverte couvrant la date (ou null si aucune). */

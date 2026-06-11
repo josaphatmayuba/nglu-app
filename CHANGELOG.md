@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **Cœur comptable moderne ERP/SIFA — Phase 6 (périodes & clôture)** : gestion des `accounting_periods` dans `LedgerService` — `listPeriods`, `createPeriod` (refuse le chevauchement de dates), `closePeriod`, `reopenPeriod`. **Intégrité comptable** : `post()` refuse (409) toute écriture dont la date tombe dans une période clôturée (`assertPeriodNotClosed`), contre-passation incluse. Endpoints `GET/POST /ledger/periods`, `POST /ledger/periods/:id/close`, `POST /ledger/periods/:id/reopen` (déclarés avant `/ledger/:id`). [3.34.0]
 - **Cœur comptable moderne ERP/SIFA — Phase 4 (rapports modernes en parallèle)** : `LedgerService.subAccountBalances()` et `trialBalance()` calculent les soldes par sous-compte depuis le grand livre moderne (`journal_entry_lines`, `side` DEBIT/CREDIT). Endpoints `GET /ledger/balances` et `GET /ledger/trial-balance` (déclarés avant `/ledger/:id` pour le routing). Ajoutés **en parallèle** des rapports table-plate existants (`accounts.service`) — pas de bascule sèche : les lecteurs actuels restent intacts tant que l'historique n'est pas migré (esprit strangler). [3.33.0]
 
 ### Fixed
