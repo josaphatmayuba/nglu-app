@@ -110,6 +110,22 @@ export class ReverseEntryDto {
   reason!: string;
 }
 
+export class ApprovalRequirementDto {
+  @ApiProperty({ example: "farmos_expense" })
+  @IsString()
+  @IsNotEmpty()
+  sourceModule!: string;
+
+  @ApiPropertyOptional({ example: "exp_approval" })
+  @IsOptional()
+  @IsString()
+  workflowKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  isActive?: boolean;
+}
+
 export class CreatePeriodDto {
   @ApiProperty({ example: "2026-Q2" })
   @IsString()

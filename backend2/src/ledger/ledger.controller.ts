@@ -15,6 +15,7 @@ import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
+  ApprovalRequirementDto,
   CreateJournalEntryDto,
   CreatePeriodDto,
   PostByRulesDto,
@@ -78,6 +79,22 @@ export class LedgerController {
   @Get("trial-balance")
   trialBalance(@CurrentOrg() orgId: number) {
     return this.ledger.trialBalance(orgId);
+  }
+
+  @ApiOperation({ summary: "Liste des modules exigeant une approbation avant comptabilisation" })
+  @ApiOkResponse({ description: "Exigences d'approbation" })
+  @Permissions("readAll-transaction")
+  @Get("approval-requirements")
+  listApprovalRequirements(@CurrentOrg() orgId: number) {
+    return this.ledger.listApprovalRequirements(orgId);
+  }
+
+  @ApiOperation({ summary: "Active/configure l'exigence d'approbation d'un module" })
+  @ApiCreatedResponse({ description: "Exigence configuree" })
+  @Permissions("update-transaction")
+  @Post("approval-requirements")
+  setApprovalRequirement(@Body() body: ApprovalRequirementDto, @CurrentOrg() orgId: number) {
+    return this.ledger.setApprovalRequirement(body, orgId);
   }
 
   @ApiOperation({ summary: "Liste des periodes comptables" })

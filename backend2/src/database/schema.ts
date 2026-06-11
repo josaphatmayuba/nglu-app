@@ -154,6 +154,17 @@ export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// Gate d'approbation centralisé (migration 0111) : modules exigeant une approbation workflow.
+export const ledgerApprovalRequirements = mysqlTable("ledger_approval_requirements", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }).notNull(),
+  workflowKey: varchar("workflow_key", { length: 64 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 // === Module Workflow ERP/SIFA (migration 0108) ===
 export const workflows = mysqlTable("workflows", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

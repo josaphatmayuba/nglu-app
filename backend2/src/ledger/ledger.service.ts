@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -12,8 +13,10 @@ import {
   accounts,
   journalEntries,
   journalEntryLines,
+  ledgerApprovalRequirements,
   subAccounts,
   transactionTypeRules,
+  workflowInstances,
 } from "../database/schema";
 import type { Database } from "../database/types";
 
@@ -40,6 +43,8 @@ export interface PostEntryInput {
   exchangeRate?: number;
   /** Cle d'idempotence metier (ex: "sale:1042"). Une ecriture au plus par (org, cle). */
   idempotencyKey?: string;
+  /** Bypass du gate d'approbation (usage interne : comptabilisation declenchee PAR l'approbation). */
+  skipApprovalGate?: boolean;
   lines: LedgerLineInput[];
 }
 
@@ -78,6 +83,12 @@ export class LedgerService {
       throw new BadRequestException(
         `Ecriture desequilibree: debit ${totalDebit / 100} != credit ${totalCredit / 100}.`,
       );
+    }
+
+    // Gate d'approbation centralise : si le module exige une approbation, l'entite
+    // doit avoir une instance workflow "approved". Bypass interne post-approbation.
+    if (!input.skipApprovalGate) {
+      await this.assertApprovedIfRequired(orgId, input.sourceModule, input.relatedId);
     }
 
     const entryDate = input.date ? new Date(input.date) : new Date();
@@ -380,6 +391,95 @@ export class LedgerService {
     const totalDebit = Math.round(debits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
     const totalCredit = Math.round(credits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
     return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
+  }
+
+  // ─── Gate d'approbation (centralise) ─────────────────────────────────────────
+
+  /** Liste les modules exigeant une approbation pour l'organisation. */
+  async listApprovalRequirements(orgId: number) {
+    return this.db
+      .select()
+      .from(ledgerApprovalRequirements)
+      .where(eq(ledgerApprovalRequirements.organizationId, orgId));
+  }
+
+  /** Active l'exigence d'approbation pour un module (idempotent). */
+  async setApprovalRequirement(
+    input: { sourceModule: string; workflowKey?: string; isActive?: boolean },
+    orgId: number,
+  ) {
+    const [existing] = await this.db
+      .select({ id: ledgerApprovalRequirements.id })
+      .from(ledgerApprovalRequirements)
+      .where(
+        and(
+          eq(ledgerApprovalRequirements.organizationId, orgId),
+          eq(ledgerApprovalRequirements.sourceModule, input.sourceModule),
+        ),
+      )
+      .limit(1);
+    const isActive = input.isActive === false ? 0 : 1;
+    if (existing) {
+      await this.db
+        .update(ledgerApprovalRequirements)
+        .set({ workflowKey: input.workflowKey, isActive })
+        .where(eq(ledgerApprovalRequirements.id, existing.id));
+      return { id: existing.id, sourceModule: input.sourceModule, isActive };
+    }
+    const [row] = await this.db
+      .insert(ledgerApprovalRequirements)
+      .values({
+        organizationId: orgId,
+        sourceModule: input.sourceModule,
+        workflowKey: input.workflowKey,
+        isActive,
+      })
+      .$returningId();
+    return { id: row.id, sourceModule: input.sourceModule, isActive };
+  }
+
+  /** Refuse (422) la comptabilisation si le module exige une approbation non validee. */
+  private async assertApprovedIfRequired(
+    orgId: number,
+    sourceModule?: string,
+    relatedId?: string,
+  ) {
+    if (!sourceModule) return;
+    const [req] = await this.db
+      .select({ id: ledgerApprovalRequirements.id })
+      .from(ledgerApprovalRequirements)
+      .where(
+        and(
+          eq(ledgerApprovalRequirements.organizationId, orgId),
+          eq(ledgerApprovalRequirements.sourceModule, sourceModule),
+          eq(ledgerApprovalRequirements.isActive, 1),
+        ),
+      )
+      .limit(1);
+    if (!req) return; // module non soumis a approbation
+
+    if (!relatedId) {
+      throw new BadRequestException(
+        `Comptabilisation du module "${sourceModule}" exige une entite liee (relatedId) pour l'approbation.`,
+      );
+    }
+    const [inst] = await this.db
+      .select({ id: workflowInstances.id })
+      .from(workflowInstances)
+      .where(
+        and(
+          eq(workflowInstances.organizationId, orgId),
+          eq(workflowInstances.entityType, sourceModule),
+          eq(workflowInstances.entityId, relatedId),
+          eq(workflowInstances.status, "approved"),
+        ),
+      )
+      .limit(1);
+    if (!inst) {
+      throw new UnprocessableEntityException(
+        `Comptabilisation refusee : le module "${sourceModule}" (entite ${relatedId}) exige une approbation workflow validee.`,
+      );
+    }
   }
 
   // ─── Periodes comptables (Phase 6) ──────────────────────────────────────────
