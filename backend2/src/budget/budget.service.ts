@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, sql, sum } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { budgetConsumptions, budgetLines, budgets } from "../database/schema";
+import { budgetConsumptions, budgetLines, budgets, journalEntryLines } from "../database/schema";
 import type { Database } from "../database/types";
 
 @Injectable()
@@ -104,6 +104,61 @@ export class BudgetService {
       budgetId,
       planned: this.round(planned),
       consumed: this.round(consumed),
+      remaining: this.round(planned - consumed),
+      overBudget: consumed > planned,
+      lines: result,
+    };
+  }
+
+  /**
+   * Etat consolide calcule LIVE depuis le grand livre : pour chaque ligne budgetaire,
+   * consommation = somme nette (debit - credit) des ecritures sur le compte + dimensions.
+   * Refete la realite comptable sans saisie manuelle de consommation.
+   */
+  async statusFromLedger(budgetId: number, orgId: number) {
+    await this.getBudgetOrThrow(budgetId, orgId);
+    const lines = await this.db
+      .select()
+      .from(budgetLines)
+      .where(and(eq(budgetLines.budgetId, budgetId), eq(budgetLines.organizationId, orgId)));
+
+    const result = [];
+    for (const l of lines) {
+      const conds = [
+        eq(journalEntryLines.organizationId, orgId),
+        eq(journalEntryLines.accountId, l.accountId),
+      ];
+      if (l.projectId != null) conds.push(eq(journalEntryLines.projectId, l.projectId));
+      if (l.siteId != null) conds.push(eq(journalEntryLines.siteId, l.siteId));
+      if (l.departmentId != null) conds.push(eq(journalEntryLines.departmentId, l.departmentId));
+      if (l.activityId != null) conds.push(eq(journalEntryLines.activityId, l.activityId));
+
+      const [row] = await this.db
+        .select({
+          debit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
+          credit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
+        })
+        .from(journalEntryLines)
+        .where(and(...conds));
+      const consumed = this.round(Number(row?.debit ?? 0) - Number(row?.credit ?? 0));
+      const planned = this.round(Number(l.plannedAmount));
+      result.push({
+        lineId: l.id,
+        accountId: l.accountId,
+        label: l.label,
+        planned,
+        consumed,
+        remaining: this.round(planned - consumed),
+        overBudget: consumed > planned,
+      });
+    }
+    const planned = this.round(result.reduce((s, r) => s + r.planned, 0));
+    const consumed = this.round(result.reduce((s, r) => s + r.consumed, 0));
+    return {
+      budgetId,
+      source: "ledger",
+      planned,
+      consumed,
       remaining: this.round(planned - consumed),
       overBudget: consumed > planned,
       lines: result,

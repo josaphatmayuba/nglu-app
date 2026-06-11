@@ -50,6 +50,15 @@ export class BudgetController {
     return this.budget.status(id, orgId);
   }
 
+  @ApiOperation({ summary: "Etat budget calcule LIVE depuis le grand livre (consommation reelle)" })
+  @ApiOkResponse({ description: "Etat budget (source ledger)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("readAll-transaction")
+  @Get(":id/status-ledger")
+  statusFromLedger(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.budget.statusFromLedger(id, orgId);
+  }
+
   @ApiOperation({ summary: "Ajoute une ligne budgetaire" })
   @ApiCreatedResponse({ description: "Ligne creee" })
   @ApiParam({ name: "id", type: Number })
