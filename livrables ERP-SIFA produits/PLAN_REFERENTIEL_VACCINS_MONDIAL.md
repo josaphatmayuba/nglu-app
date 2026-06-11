@@ -26,6 +26,17 @@ Consolider (1) homologations réglementaires (ACIA/Santé Canada, EMA-UPD…) et
 - `vx_protocol_steps` (étapes ordonnées : âge min/max, intervalle, dose, voie)
 - `vx_conditions` + `vx_protocol_step_conditions` : règles asymétriques data-driven (ex: rappel S12 uniquement si zone haut risque). Évaluation contre un contexte animal {espèce, âge, zone, type prod, gestation}.
 
+## Sources mondiales — investigation (juin 2026)
+
+| Source | Données | Format / accès | Fréquence | Verdict |
+|--------|---------|----------------|-----------|---------|
+| **ACIA/CFIA (Canada)** — Veterinary biologics licensed in Canada | Produits biologiques vét. licenciés (nom, fabricant, espèces, statut) | **CSV + XML téléchargeables** + filtres espèce/fabricant. `apps.inspection.canada.ca/webapps/veterinary-biologics-product-list/` | **Mensuelle** | ✅ **Source pilote idéale** (open data, format simple, cadence mensuelle alignée sur notre CRON) |
+| **EMA — Union Product Database (UPD)** | Médicaments vét. autorisés UE/EEE + disponibilité par pays | **API** (données non-confidentielles publiques) + site web. UPD officielle EMA | maj fréquente | ✅ API exploitable (mapping plus riche, multi-pays UE) |
+| **WOAH/OMSA — Terrestrial Manual + Code** | Standards vaccins + chapitres maladies (protocoles, contrôle) | PDF (EN/FR/ES), 12e éd. 2023 | par édition | 🟡 Texte/PDF → parsing manuel ou semi-auto ; alimente `vx_protocols` |
+| **WSAVA** | Guidelines vaccination animaux de compagnie (core/non-core) | PDF / guidelines | par édition | 🟡 PDF → extraction manuelle des protocoles compagnie |
+
+**Stratégie retenue** : commencer par **ACIA (CSV mensuel)** comme connecteur pilote du CRON, puis **EMA-UPD (API)**. WOAH/WSAVA = ingestion semi-manuelle des protocoles (PDF) car pas de flux structuré.
+
 ## ETL (ingestion multi-source)
 - Zones RAW (fichiers bruts horodatés) → STAGING (miroir NVARCHAR + hash ligne) → CORE (MERGE/upsert idempotent).
 - Normalisation via `vx_synonym_map` (EntityType, RawValue, SourceSystem → CanonicalId, confidence) ; non-mappé → file de validation humaine (jamais poussé auto en CORE).
