@@ -906,6 +906,7 @@ export class FarmosService {
       expenseDate: input.expense_date,
       relatedAnimalId: input.related_animal_id ?? null,
       relatedMedicineId: input.related_medicine_id ?? null,
+      projectId: input.project_id ?? null,
       notes: input.notes ?? null,
     }).$returningId();
     // Stock-in : si la dépense est liée à un médicament/aliment et porte une
@@ -2311,7 +2312,7 @@ export class FarmosService {
           currencyId: input.currency_id ?? undefined,
           idempotencyKey: `farmos_expense:${expenseId}`,
           lines: [
-            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense" },
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense", projectId: input.project_id ?? undefined },
             { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.amount), description: "FarmOS Expense" },
           ],
         },
@@ -2348,7 +2349,7 @@ export class FarmosService {
         idempotencyKey: `farmos_expense:${expenseId}`,
         skipApprovalGate: true,
         lines: [
-          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense", projectId: exp.projectId ?? undefined },
           { accountId: type.creditAccountId, side: "CREDIT", amount: Number(exp.amount), description: "FarmOS Expense" },
         ],
       },

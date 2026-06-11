@@ -1983,6 +1983,7 @@ export const farmosExpenses = mysqlTable("farmos_expenses", {
   transactionId: bigint("transaction_id", { mode: "number" }),
   relatedAnimalId: bigint("related_animal_id", { mode: "number" }),
   relatedMedicineId: bigint("related_medicine_id", { mode: "number" }),
+  projectId: bigint("project_id", { mode: "number" }),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

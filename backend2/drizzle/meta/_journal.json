@@ -687,6 +687,13 @@
       "when": 1780365600000,
       "tag": "0117_farmos_vaccines_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "5",
+      "when": 1780369200000,
+      "tag": "0118_farmos_expenses_project",
+      "breakpoints": true
     }
   ]
 }

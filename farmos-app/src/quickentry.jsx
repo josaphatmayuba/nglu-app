@@ -9,6 +9,25 @@ import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
 // Species-aware forms (e.g., milk entry only for milk-producing species).
 
+// ProjectSelect — rattache une depense a un projet/bailleur (axe analytique).
+function ProjectSelect({ lang, value, onChange }) {
+  const [projects, setProjects] = React.useState([]);
+  React.useEffect(() => {
+    api.listProjects().then((r) => setProjects(Array.isArray(r) ? r : [])).catch(() => setProjects([]));
+  }, []);
+  if (projects.length === 0) return null; // pas de projet defini → champ masque
+  return (
+    <FormField label={lang === "fr" ? "Projet / bailleur" : "Project / donor"}>
+      <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+        <option value="">{lang === "fr" ? "— Aucun —" : "— None —"}</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}{p.donor ? ` (${p.donor})` : ""}</option>
+        ))}
+      </select>
+    </FormField>
+  );
+}
+
 // VaccineField — selecteur depuis la base de vaccins (specifications veterinaires).
 // Liste filtrable par espece + saisie libre conservee + panneau de details du vaccin choisi.
 function VaccineField({ lang, value, species, onChange }) {
@@ -1279,6 +1298,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       supplier: form.supplier || null,
       expense_date: form.date,
       related_medicine_id: toNumericId(selectedMed),
+      project_id: form.project_id || null,
     };
     try {
       await api.createExpense(payload);
@@ -1332,6 +1352,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
             <FormField label={lang === "fr" ? "Fournisseur" : "Supplier"}>
               <input className="input" placeholder="Coop Agri-Pro" value={form.supplier || ""} onChange={(e) => set("supplier", e.target.value)}/>
             </FormField>
+            <ProjectSelect lang={lang} value={form.project_id} onChange={(v) => set("project_id", v)} />
             <FormField label={lang === "fr" ? "Coût total ($)" : "Total cost ($)"}>
               <input className="input mono" type="number" placeholder="4320" value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
             </FormField>

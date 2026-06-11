@@ -248,6 +248,13 @@ export const api = {
   listVaccines: (species) => jsonFetch(`/vaccines${species ? `?species=${encodeURIComponent(species)}` : ""}`),
   getVaccine: (id) => jsonFetch(`/vaccines/${id}`),
   createVaccine: (body) => jsonFetch("/vaccines", { method: "POST", body: JSON.stringify(body) }),
+  // Projets/bailleurs (axe analytique) — endpoint racine /api/projects (hors /farmos).
+  listProjects: async () => {
+    const root = (NATIVE ? API_HOST : "") + "/api/projects";
+    const res = await fetch(root, { headers: { ...authHeaders() } });
+    if (!res.ok) return [];
+    return res.json();
+  },
   listVetExams: cachedList("vetExams", "/vet-exams"),
   getVetExam: (id) => jsonFetch(`/vet-exams/${id}`),
   createVetExam: (body) => mutate({ kind: "createVetExam", method: "POST", path: "/vet-exams", body }),
