@@ -198,6 +198,40 @@ export const projects = mysqlTable("projects", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// === Base de donnees de vaccins ANIMAUX FarmOS (migrations 0116/0117) ===
+export const farmosVaccines = mysqlTable("farmos_vaccines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  commercialNames: varchar("commercial_names", { length: 512 }),
+  manufacturer: varchar("manufacturer", { length: 255 }),
+  species: varchar("species", { length: 255 }),
+  targetDiseases: varchar("target_diseases", { length: 512 }),
+  vaccineType: varchar("vaccine_type", { length: 128 }),
+  dose: varchar("dose", { length: 255 }),
+  route: varchar("route", { length: 128 }),
+  primoAge: varchar("primo_age", { length: 128 }),
+  boosterSchedule: varchar("booster_schedule", { length: 512 }),
+  protectionDuration: varchar("protection_duration", { length: 128 }),
+  treatmentDuration: varchar("treatment_duration", { length: 255 }),
+  withdrawalMeat: varchar("withdrawal_meat", { length: 128 }),
+  withdrawalMilk: varchar("withdrawal_milk", { length: 128 }),
+  withdrawalEggs: varchar("withdrawal_eggs", { length: 128 }),
+  sideEffects: text("side_effects"),
+  contraindications: text("contraindications"),
+  precautions: text("precautions"),
+  storage: varchar("storage", { length: 255 }),
+  packaging: varchar("packaging", { length: 255 }),
+  sourceUrl: varchar("source_url", { length: 512 }),
+  registrationNo: varchar("registration_no", { length: 128 }),
+  notes: text("notes"),
+  isSeed: tinyint("is_seed").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 // === Module Procurement + Stock ERP/SIFA (migration 0113) ===
 export const warehouses = mysqlTable("warehouses", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

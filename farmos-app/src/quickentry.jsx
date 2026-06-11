@@ -9,6 +9,98 @@ import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
 // Species-aware forms (e.g., milk entry only for milk-producing species).
 
+// VaccineField — selecteur depuis la base de vaccins (specifications veterinaires).
+// Liste filtrable par espece + saisie libre conservee + panneau de details du vaccin choisi.
+function VaccineField({ lang, value, species, onChange }) {
+  const fr = lang === "fr";
+  const [list, setList] = React.useState([]);
+  const [detail, setDetail] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    api.listVaccines(species).then((r) => setList(Array.isArray(r) ? r : [])).catch(() => setList([]));
+  }, [species]);
+
+  const pick = async (v) => {
+    onChange(v.name);
+    setOpen(false);
+    try { setDetail(await api.getVaccine(v.id)); } catch { setDetail(null); }
+  };
+
+  const Row = ({ k, v }) => v ? (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border-1)", fontSize: 12 }}>
+      <span style={{ color: "var(--fg-2)", flexShrink: 0 }}>{k}</span>
+      <span style={{ textAlign: "right" }}>{v}</span>
+    </div>
+  ) : null;
+
+  return (
+    <FormField label={fr ? "Vaccin" : "Vaccine"} required>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input"
+          placeholder={fr ? "Choisir ou saisir un vaccin…" : "Pick or type a vaccine…"}
+          value={value}
+          onChange={(e) => { onChange(e.target.value); setDetail(null); }}
+          onFocus={() => setOpen(true)}
+        />
+        {open && list.length > 0 && (
+          <div style={{ position: "absolute", zIndex: 30, top: "100%", left: 0, right: 0, maxHeight: 240, overflowY: "auto", background: "var(--bg-1, #fff)", border: "1px solid var(--border-1)", borderRadius: 10, marginTop: 4, boxShadow: "0 8px 24px rgba(0,0,0,.12)" }}>
+            {list
+              .filter((v) => !value || v.name.toLowerCase().includes(value.toLowerCase()))
+              .slice(0, 40)
+              .map((v) => (
+                <button type="button" key={v.id} onClick={() => pick(v)}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: "transparent", border: 0, borderBottom: "1px solid var(--border-1)", cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{v.name}</div>
+                  <div style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{[v.species, v.targetDiseases].filter(Boolean).join(" · ")}</div>
+                </button>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {detail && (
+        <div className="card" style={{ marginTop: 8, padding: 12, fontSize: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <b style={{ fontSize: 13 }}>{detail.name}</b>
+            <button type="button" onClick={() => setDetail(null)} style={{ background: "transparent", border: 0, cursor: "pointer", color: "var(--fg-3)" }}>✕</button>
+          </div>
+          <Row k={fr ? "Maladies cibles" : "Target diseases"} v={detail.targetDiseases} />
+          <Row k={fr ? "Espèces" : "Species"} v={detail.species} />
+          <Row k={fr ? "Type" : "Type"} v={detail.vaccineType} />
+          <Row k={fr ? "Noms commerciaux" : "Brands"} v={detail.commercialNames} />
+          <Row k={fr ? "Fabricant" : "Manufacturer"} v={detail.manufacturer} />
+          <Row k={fr ? "Dose" : "Dose"} v={detail.dose} />
+          <Row k={fr ? "Voie" : "Route"} v={detail.route} />
+          <Row k={fr ? "Primo-vaccination" : "Primo age"} v={detail.primoAge} />
+          <Row k={fr ? "Rappels" : "Boosters"} v={detail.boosterSchedule} />
+          <Row k={fr ? "Durée de protection" : "Protection"} v={detail.protectionDuration} />
+          <Row k={fr ? "Durée de traitement" : "Treatment duration"} v={detail.treatmentDuration} />
+          <Row k={fr ? "Délai retrait viande" : "Withdrawal meat"} v={detail.withdrawalMeat} />
+          <Row k={fr ? "Délai retrait lait" : "Withdrawal milk"} v={detail.withdrawalMilk} />
+          <Row k={fr ? "Délai retrait œufs" : "Withdrawal eggs"} v={detail.withdrawalEggs} />
+          <Row k={fr ? "Effets secondaires" : "Side effects"} v={detail.sideEffects} />
+          <Row k={fr ? "Contre-indications" : "Contraindications"} v={detail.contraindications} />
+          <Row k={fr ? "Précautions" : "Precautions"} v={detail.precautions} />
+          <Row k={fr ? "Conservation" : "Storage"} v={detail.storage} />
+          <Row k={fr ? "Conditionnement" : "Packaging"} v={detail.packaging} />
+          {detail.sourceUrl && (
+            <div style={{ paddingTop: 6 }}>
+              <a href={detail.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--clay-700, #b45309)" }}>
+                {fr ? "Source / fiche du vaccin ↗" : "Source / datasheet ↗"}
+              </a>
+            </div>
+          )}
+          <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--fg-3)", fontStyle: "italic" }}>
+            {fr ? "Données indicatives — à valider par un vétérinaire avant usage." : "Indicative data — confirm with a veterinarian before use."}
+          </div>
+        </div>
+      )}
+    </FormField>
+  );
+}
+
 // Récupère l'ID numérique d'un row, qu'il vienne d'une API brute (id=7) ou
 // d'un adapter qui préfixe (id="M-7", _pk=7). Retourne null si aucun.
 function toNumericId(row) {
@@ -1056,9 +1148,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       {kind === "vaccine" && (
         <FormSection label={lang === "fr" ? "Vaccination" : "Vaccination"}>
           <FormGrid cols={2}>
-            <FormField label={lang === "fr" ? "Vaccin" : "Vaccine"} required>
-              <input className="input" placeholder={lang === "fr" ? "Mycoplasme, Newcastle, IBR…" : "Mycoplasma, Newcastle, IBR…"} value={form.vaccine || ""} onChange={(e) => set("vaccine", e.target.value)}/>
-            </FormField>
+            <VaccineField lang={lang} value={form.vaccine || ""} species={form.species} onChange={(v) => set("vaccine", v)} />
             <FormField label={lang === "fr" ? "Date" : "Date"}>
               <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
             </FormField>
