@@ -694,6 +694,20 @@
       "when": 1780369200000,
       "tag": "0118_farmos_expenses_project",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "5",
+      "when": 1780372800000,
+      "tag": "0119_vaccine_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "5",
+      "when": 1780376400000,
+      "tag": "0120_vaccine_registry_protocols",
+      "breakpoints": true
     }
   ]
 }

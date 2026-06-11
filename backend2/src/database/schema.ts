@@ -232,6 +232,141 @@ export const farmosVaccines = mysqlTable("farmos_vaccines", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// === Referentiel mondial de vaccins animaux (migrations 0119/0120) ===
+export const vxSpecies = mysqlTable("vx_species", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  scientificName: varchar("scientific_name", { length: 150 }),
+  commonNameEn: varchar("common_name_en", { length: 100 }),
+  commonNameFr: varchar("common_name_fr", { length: 100 }),
+  animalCategory: varchar("animal_category", { length: 30 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxPathogens = mysqlTable("vx_pathogens", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  name: varchar("name", { length: 150 }).notNull(),
+  pathogenType: varchar("pathogen_type", { length: 20 }),
+  diseaseNameEn: varchar("disease_name_en", { length: 150 }),
+  diseaseNameFr: varchar("disease_name_fr", { length: 150 }),
+  isZoonotic: tinyint("is_zoonotic").default(0).notNull(),
+  omsaCode: varchar("omsa_code", { length: 40 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxRegions = mysqlTable("vx_regions", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  isoCode: varchar("iso_code", { length: 2 }),
+  name: varchar("name", { length: 100 }).notNull(),
+  regulatoryBody: varchar("regulatory_body", { length: 120 }),
+  parentRegionId: bigint("parent_region_id", { mode: "number", unsigned: true }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxManufacturers = mysqlTable("vx_manufacturers", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  name: varchar("name", { length: 150 }).notNull(),
+  hqRegionId: bigint("hq_region_id", { mode: "number", unsigned: true }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxAntigens = mysqlTable("vx_antigens", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  pathogenId: bigint("pathogen_id", { mode: "number", unsigned: true }).notNull(),
+  strainName: varchar("strain_name", { length: 100 }),
+  antigenForm: varchar("antigen_form", { length: 30 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxVaccines = mysqlTable("vx_vaccines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  productName: varchar("product_name", { length: 200 }).notNull(),
+  manufacturerId: bigint("manufacturer_id", { mode: "number", unsigned: true }),
+  vaccineNature: varchar("vaccine_nature", { length: 30 }),
+  physicalForm: varchar("physical_form", { length: 60 }),
+  storageMinC: decimal("storage_min_c", { precision: 4, scale: 1 }),
+  storageMaxC: decimal("storage_max_c", { precision: 4, scale: 1 }),
+  sourceSystem: varchar("source_system", { length: 40 }),
+  sourceUrl: varchar("source_url", { length: 400 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const vxVaccineAntigens = mysqlTable("vx_vaccine_antigens", {
+  vaccineId: bigint("vaccine_id", { mode: "number", unsigned: true }).notNull(),
+  antigenId: bigint("antigen_id", { mode: "number", unsigned: true }).notNull(),
+  titerOrPotency: varchar("titer_or_potency", { length: 60 }),
+});
+
+export const vxVaccineSpecies = mysqlTable("vx_vaccine_species", {
+  vaccineId: bigint("vaccine_id", { mode: "number", unsigned: true }).notNull(),
+  speciesId: bigint("species_id", { mode: "number", unsigned: true }).notNull(),
+});
+
+export const vxRegistrations = mysqlTable("vx_registrations", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  vaccineId: bigint("vaccine_id", { mode: "number", unsigned: true }).notNull(),
+  regionId: bigint("region_id", { mode: "number", unsigned: true }).notNull(),
+  registrationNumber: varchar("registration_number", { length: 80 }),
+  status: varchar("status", { length: 20 }).default("authorized").notNull(),
+  authorizationDate: date("authorization_date"),
+  expiryDate: date("expiry_date"),
+  sourceSystem: varchar("source_system", { length: 40 }),
+  sourceDocumentUrl: varchar("source_document_url", { length: 400 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxWithdrawalPeriods = mysqlTable("vx_withdrawal_periods", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  registrationId: bigint("registration_id", { mode: "number", unsigned: true }).notNull(),
+  produceType: varchar("produce_type", { length: 20 }).notNull(),
+  withdrawalDays: int("withdrawal_days"),
+});
+
+export const vxProtocols = mysqlTable("vx_protocols", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  vaccineId: bigint("vaccine_id", { mode: "number", unsigned: true }).notNull(),
+  speciesId: bigint("species_id", { mode: "number", unsigned: true }).notNull(),
+  sourceGuideline: varchar("source_guideline", { length: 40 }),
+  protocolCategory: varchar("protocol_category", { length: 20 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const vxProtocolSteps = mysqlTable("vx_protocol_steps", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  protocolId: bigint("protocol_id", { mode: "number", unsigned: true }).notNull(),
+  stepOrder: int("step_order").default(1).notNull(),
+  ageMinDays: int("age_min_days"),
+  ageMaxDays: int("age_max_days"),
+  intervalFromPrevDays: int("interval_from_prev_days"),
+  doseAmount: decimal("dose_amount", { precision: 6, scale: 3 }),
+  doseUnit: varchar("dose_unit", { length: 20 }),
+  route: varchar("route", { length: 40 }),
+});
+
+export const vxConditions = mysqlTable("vx_conditions", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  conditionType: varchar("condition_type", { length: 30 }).notNull(),
+  operator: varchar("operator", { length: 10 }).notNull(),
+  expectedValue: varchar("expected_value", { length: 200 }),
+});
+
+export const vxProtocolStepConditions = mysqlTable("vx_protocol_step_conditions", {
+  protocolStepId: bigint("protocol_step_id", { mode: "number", unsigned: true }).notNull(),
+  conditionId: bigint("condition_id", { mode: "number", unsigned: true }).notNull(),
+  isMandatory: tinyint("is_mandatory").default(1).notNull(),
+  logicGroup: int("logic_group"),
+});
+
+export const vxSynonymMap = mysqlTable("vx_synonym_map", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  entityType: varchar("entity_type", { length: 20 }).notNull(),
+  rawValue: varchar("raw_value", { length: 200 }).notNull(),
+  sourceSystem: varchar("source_system", { length: 40 }),
+  canonicalId: bigint("canonical_id", { mode: "number", unsigned: true }).notNull(),
+  confidence: decimal("confidence", { precision: 3, scale: 2 }).default("1.00").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // === Module Procurement + Stock ERP/SIFA (migration 0113) ===
 export const warehouses = mysqlTable("warehouses", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

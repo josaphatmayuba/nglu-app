@@ -109,6 +109,7 @@ module.exports = [
   { method: '*',    prefix: '/procurement',                   auth: true  },
   { method: '*',    prefix: '/documents',                     auth: true  },
   { method: '*',    prefix: '/projects',                      auth: true  },
+  { method: '*',    prefix: '/vaccine-registry',              auth: true  },
   { method: '*',    prefix: '/transaction',                   auth: true  },
   { method: '*',    prefix: '/transaction-type',              auth: true  },
   { method: '*',    prefix: '/uom',                           auth: true  },
