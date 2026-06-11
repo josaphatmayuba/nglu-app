@@ -14,7 +14,7 @@ import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
-import { CreateJournalEntryDto, ReverseEntryDto } from "./dto/ledger.dto";
+import { CreateJournalEntryDto, PostByRulesDto, ReverseEntryDto } from "./dto/ledger.dto";
 import { LedgerService } from "./ledger.service";
 
 @ApiTags("ledger")
@@ -33,6 +33,18 @@ export class LedgerController {
     @CurrentUserId() userId: number,
   ) {
     return this.ledger.post(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Comptabilise via regles parametrables (transaction_type_rules)" })
+  @ApiCreatedResponse({ description: "Ecriture creee" })
+  @Permissions("create-transaction")
+  @Post("by-rules")
+  createByRules(
+    @Body() body: PostByRulesDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.ledger.postByRules(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Liste des ecritures" })

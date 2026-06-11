@@ -603,6 +603,13 @@
       "when": 1780322400000,
       "tag": "0105_ledger_core",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "5",
+      "when": 1780326000000,
+      "tag": "0106_ledger_seed_rules",
+      "breakpoints": true
     }
   ]
 }

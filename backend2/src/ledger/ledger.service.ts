@@ -11,6 +11,7 @@ import {
   accountingPeriods,
   journalEntries,
   journalEntryLines,
+  transactionTypeRules,
 } from "../database/schema";
 import type { Database } from "../database/types";
 
@@ -134,6 +135,79 @@ export class LedgerService {
 
       return { id: entry.id, idempotent: false };
     });
+  }
+
+  /**
+   * Comptabilise via des regles parametrables (transaction_type_rules).
+   * Pour un `type` donne, chaque `role` fourni dans amountsByRole est resolu en
+   * compte + sens depuis la table de regles. Les montants <= 0 sont ignores.
+   * Ainsi les modules n'ont plus de comptes en dur : ils nomment des roles metier.
+   */
+  async postByRules(
+    input: {
+      type: string;
+      amountsByRole: Record<string, number>;
+      date?: Date | string;
+      reference?: string;
+      particulars: string;
+      sourceModule?: string;
+      relatedId?: string;
+      currencyId?: number;
+      idempotencyKey?: string;
+      dimensions?: Pick<LedgerLineInput, "siteId" | "departmentId" | "projectId" | "activityId">;
+    },
+    orgId: number,
+    userId?: number,
+  ) {
+    const rules = await this.db
+      .select()
+      .from(transactionTypeRules)
+      .where(
+        and(
+          eq(transactionTypeRules.organizationId, orgId),
+          eq(transactionTypeRules.type, input.type),
+          eq(transactionTypeRules.isActive, 1),
+        ),
+      );
+    if (!rules.length) {
+      throw new BadRequestException(
+        `Aucune regle comptable pour le type "${input.type}" (org ${orgId}).`,
+      );
+    }
+
+    const lines: LedgerLineInput[] = [];
+    for (const role of Object.keys(input.amountsByRole)) {
+      const amount = input.amountsByRole[role];
+      if (!amount || amount <= 0) continue;
+      const rule = rules.find((r) => r.role === role);
+      if (!rule) {
+        throw new BadRequestException(
+          `Role "${role}" sans regle pour le type "${input.type}".`,
+        );
+      }
+      lines.push({
+        accountId: rule.accountId,
+        side: rule.side as LedgerSide,
+        amount,
+        description: `${input.type}:${role}`,
+        ...input.dimensions,
+      });
+    }
+
+    return this.post(
+      {
+        date: input.date,
+        reference: input.reference,
+        particulars: input.particulars,
+        sourceModule: input.sourceModule ?? input.type,
+        relatedId: input.relatedId,
+        currencyId: input.currencyId,
+        idempotencyKey: input.idempotencyKey,
+        lines,
+      },
+      orgId,
+      userId,
+    );
   }
 
   /**

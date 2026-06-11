@@ -108,3 +108,43 @@ export class ReverseEntryDto {
   @IsNotEmpty()
   reason!: string;
 }
+
+export class PostByRulesDto {
+  @ApiProperty({ description: "Type metier (ex: sale, purchase)" })
+  @IsString()
+  @IsNotEmpty()
+  type!: string;
+
+  @ApiProperty({ description: "Montants par role (ex: { receivable: 116, revenue: 100, vat_output: 16 })" })
+  amountsByRole!: Record<string, number>;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  particulars!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  relatedId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  currencyId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
