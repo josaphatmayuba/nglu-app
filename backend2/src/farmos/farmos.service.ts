@@ -7,6 +7,7 @@ import { roles } from "../database/schema";
 import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   CreateAnimalDto,
@@ -37,6 +38,7 @@ export class FarmosService {
     private readonly usersService: UsersService,
     private readonly realtime: RealtimeDataPublisher,
     private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
 
   async getDashboardSnapshot(orgId: number) {
@@ -927,6 +929,9 @@ export class FarmosService {
     if (txId) {
       await this.db.update(farmosExpenses).set({ transactionId: txId }).where(eq(farmosExpenses.id, res.id));
     }
+    // Soumet au circuit d'approbation (effectif seulement si un workflow exp_approval existe
+    // et que le module est sous gate ; sinon no-op et la compta a deja eu lieu).
+    await this.submitExpenseForApproval(res.id, orgId);
     await this.publishFarmosUpdate("createExpense", ["expenses", "medicines"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
   }
@@ -2255,8 +2260,68 @@ export class FarmosService {
       );
       return res.id;
     } catch (err) {
+      // Inclut le cas "gate d'approbation" (422) : depense creee, comptabilisation
+      // moderne reportee a l'approbation. Le dual-write plat reste en place.
       console.warn("[FarmOS] syncExpenseToTransaction failed:", (err as Error).message);
       return null;
     }
+  }
+
+  /** Comptabilise une depense via le grand livre, en bypassant le gate (post-approbation). */
+  private async postExpenseLedgerApproved(expenseId: number, orgId: number) {
+    const [exp] = await this.db
+      .select()
+      .from(farmosExpenses)
+      .where(and(eq(farmosExpenses.id, expenseId), eq(farmosExpenses.organizationId, orgId)))
+      .limit(1);
+    if (!exp) throw new NotFoundException("Dépense introuvable.");
+    const type = await this.findTransactionType("FarmOS Expense");
+    if (!type) return null;
+    const particulars = `Dépense FarmOS · ${exp.category}${exp.supplier ? ` · ${exp.supplier}` : ""}`.slice(0, 250);
+    return this.ledger.post(
+      {
+        date: exp.expenseDate ? new Date(exp.expenseDate as any) : undefined,
+        reference: `FARMEXP-${expenseId}`,
+        particulars,
+        sourceModule: "farmos_expense",
+        relatedId: String(expenseId),
+        currencyId: exp.currencyId ?? undefined,
+        idempotencyKey: `farmos_expense:${expenseId}`,
+        skipApprovalGate: true,
+        lines: [
+          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+          { accountId: type.creditAccountId, side: "CREDIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+        ],
+      },
+      orgId,
+    );
+  }
+
+  /** Soumet une depense au circuit d'approbation (no-op si le workflow n'existe pas). */
+  async submitExpenseForApproval(expenseId: number, orgId: number, userId?: number) {
+    try {
+      return await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "farmos_expense", entityId: String(expenseId) },
+        orgId,
+        userId,
+      );
+    } catch (err) {
+      console.warn("[FarmOS] submitExpenseForApproval skipped:", (err as Error).message);
+      return null;
+    }
+  }
+
+  /** Approuve une etape de l'instance liee a la depense ; comptabilise si approuvee. */
+  async approveExpense(expenseId: number, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "farmos_expense" && i.entityId === String(expenseId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette dépense.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.postExpenseLedgerApproved(expenseId, orgId);
+    }
+    return { expenseId, approval: result };
   }
 }

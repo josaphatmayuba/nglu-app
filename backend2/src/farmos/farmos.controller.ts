@@ -384,6 +384,17 @@ export class FarmosController {
     return this.farmos.deleteExpense(id, orgId);
   }
 
+  @Permissions("update-farmos")
+  @Post("expenses/:id/approve")
+  approveExpense(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { comment?: string },
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.approveExpense(id, body?.comment, orgId, userId);
+  }
+
   @Permissions("create-farmos")
   @Post("reproduction-events")
   createReproductionEvent(@Body() body: CreateReproductionEventDto, @CurrentOrg() orgId: number) {
