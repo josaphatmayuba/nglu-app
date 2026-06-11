@@ -45,6 +45,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService } from "../ledger/ledger.service";
 import {
   CreateAwardDto,
   CreateAwardHistoryDto,
@@ -107,6 +108,7 @@ export class HrService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly emails: SystemEmailService,
+    private readonly ledger: LedgerService,
   ) {}
 
   listDesignations(q: Record<string, string>) {
@@ -371,6 +373,25 @@ export class HrService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
+
+    // Ecriture moderne (dual-write) : debit charge salaire (10) / credit caisse ou banque.
+    // orgId par defaut 1 (cohérent avec l'insert plat ; createSalaryHistory n'a pas d'orgId).
+    await this.ledger.post(
+      {
+        date: input.salaryStartDate ? new Date(input.salaryStartDate) : undefined,
+        reference: `SALARY-${salaryHistoryId}`,
+        particulars: input.salaryComment || `Salary payment${input.salaryStartDate ? ` — ${input.salaryStartDate}` : ""}`,
+        sourceModule: "payroll",
+        relatedId: String(salaryHistoryId),
+        currencyId: currencyId ?? undefined,
+        idempotencyKey: `salary:${salaryHistoryId}`,
+        lines: [
+          { accountId: 10, side: "DEBIT", amount: Number(input.salary), description: "Salary expense" },
+          { accountId: creditAccountId, side: "CREDIT", amount: Number(input.salary), description: creditAccountId === 1 ? "Cash" : "Bank" },
+        ],
+      },
+      1,
+    );
 
     return this.findSalaryHistory(salaryHistoryId);
   }

@@ -6,6 +6,7 @@ import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
 import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService } from "../ledger/ledger.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   CreateAnimalDto,
@@ -35,6 +36,7 @@ export class FarmosService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly usersService: UsersService,
     private readonly realtime: RealtimeDataPublisher,
+    private readonly ledger: LedgerService,
   ) {}
 
   async getDashboardSnapshot(orgId: number) {
@@ -2162,6 +2164,23 @@ export class FarmosService {
         type: txTypeName,
         relatedId: `farmos_sale:${saleId}:${input.sale_source ?? this.resolveFarmosSaleSource(input)}:${input.product_type ?? input.species ?? "item"}`,
       }).$returningId();
+      // Ecriture moderne (dual-write) via LedgerService, idempotent par vente.
+      await this.ledger.post(
+        {
+          date: new Date(input.sale_date),
+          reference: `FARMSALE-${saleId}`,
+          particulars: this.buildFarmosSaleParticulars(input, txTypeName),
+          sourceModule: "farmos_sale",
+          relatedId: String(saleId),
+          currencyId: input.currency_id ?? undefined,
+          idempotencyKey: `farmos_sale:${saleId}`,
+          lines: [
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.total_amount), description: txTypeName },
+            { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.total_amount), description: txTypeName },
+          ],
+        },
+        orgId,
+      );
       return res.id;
     } catch (err) {
       console.warn("[FarmOS] syncSaleToTransaction failed:", (err as Error).message);
@@ -2217,6 +2236,23 @@ export class FarmosService {
         type: "FarmOS Expense",
         relatedId: `farmos_expense:${expenseId}`,
       }).$returningId();
+      // Ecriture moderne (dual-write) via LedgerService, idempotent par depense.
+      await this.ledger.post(
+        {
+          date: new Date(input.expense_date),
+          reference: `FARMEXP-${expenseId}`,
+          particulars,
+          sourceModule: "farmos_expense",
+          relatedId: String(expenseId),
+          currencyId: input.currency_id ?? undefined,
+          idempotencyKey: `farmos_expense:${expenseId}`,
+          lines: [
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense" },
+            { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.amount), description: "FarmOS Expense" },
+          ],
+        },
+        orgId,
+      );
       return res.id;
     } catch (err) {
       console.warn("[FarmOS] syncExpenseToTransaction failed:", (err as Error).message);
