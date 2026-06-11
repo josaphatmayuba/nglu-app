@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { CompatModule } from "../compat/compat.module";
 import { DatabaseModule } from "../database/database.module";
+import { LedgerModule } from "../ledger/ledger.module";
 import { SystemEmailModule } from "../system-email/system-email.module";
 import { ContractTemplatesController } from "./contract-templates.controller";
 import { ContractTemplatesService } from "./contract-templates.service";
@@ -12,7 +13,7 @@ import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 
 @Module({
-  imports: [DatabaseModule, SystemEmailModule, CompatModule],
+  imports: [DatabaseModule, SystemEmailModule, CompatModule, LedgerModule],
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,

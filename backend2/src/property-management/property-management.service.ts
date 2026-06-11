@@ -33,6 +33,7 @@ import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
+import { LedgerService } from "../ledger/ledger.service";
 import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
@@ -72,6 +73,7 @@ export class PropertyManagementService {
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly emails: SystemEmailService,
     private readonly sms: CompatService,
+    private readonly ledger: LedgerService,
   ) {}
 
   async dashboard(orgId: number) {
@@ -1077,6 +1079,35 @@ export class PropertyManagementService {
       }
     }
 
+    // Ecriture comptable moderne (partie double) via LedgerService — dual-write,
+    // idempotent par paiement. Loyer + part de taxe regroupes dans une ecriture.
+    const rentLines = [
+      { accountId: debitId, side: "DEBIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+      { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
+    ];
+    if (taxAmt != null && taxAmt > 0) {
+      const taxType = await this.getRealEstateTaxTypeOptional();
+      if (taxType) {
+        rentLines.push(
+          { accountId: taxType.debitAccountId, side: "DEBIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
+          { accountId: taxType.creditAccountId, side: "CREDIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `RENT-${paymentId}`,
+        particulars: input.notes || `Payment for rent — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: paymentCurrencyId ?? undefined,
+        idempotencyKey: `rent-payment:${paymentId}`,
+        lines: rentLines,
+      },
+      orgId,
+    );
+
     await this.advanceLeaseInvoiceDateIfCovered(lease, orgId, input.paymentDate);
     await this.publishPaymentUpdate("created", paymentId, {
       propertyId: lease.propertyId,
@@ -1171,11 +1202,30 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    await this.publishPaymentUpdate("created", Number(depResult.insertId), {
+    const depositId = Number(depResult.insertId);
+    // Ecriture moderne (dual-write) : caution recue, debit Caisse/Banque / credit passif.
+    await this.ledger.post(
+      {
+        date: new Date(input.paymentDate),
+        reference: `DEPOSIT-${depositId}`,
+        particulars: input.notes || `Caution reçue — bail ${lease.reference || lease.id}`,
+        sourceModule: "rent",
+        relatedId: String(lease.id),
+        currencyId: currencyId ?? undefined,
+        idempotencyKey: `deposit-receipt:${depositId}`,
+        lines: [
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Caution reçue" },
+          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: "Tenant Deposits" },
+        ],
+      },
+      orgId,
+    );
+
+    await this.publishPaymentUpdate("created", depositId, {
       propertyId: lease.propertyId,
       unitId: lease.unitId,
     });
-    return this.findDeposit(Number(depResult.insertId));
+    return this.findDeposit(depositId);
   }
 
   async returnDeposit(leaseId: number, input: ReturnDepositDto, orgId: number) {
@@ -1252,6 +1302,38 @@ export class PropertyManagementService {
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(realEstateSecurityDeposits.id, deposit.id));
+
+    // Ecriture moderne (dual-write) : restitution caution. Le passif soldé (débit)
+    // = part rendue (crédit caisse/banque) + retenue (crédit maintenance). Equilibree.
+    const returnLines: Array<{ accountId: number; side: "DEBIT" | "CREDIT"; amount: number; description?: string }> = [];
+    if (returned > 0) {
+      returnLines.push(
+        { accountId: tenantDeposits, side: "DEBIT", amount: returned, description: "Solde passif caution (restitution)" },
+        { accountId: refundCredit, side: "CREDIT", amount: returned, description: input.notes || "Caution restituée" },
+      );
+    }
+    if (deduction > 0) {
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance");
+      returnLines.push(
+        { accountId: tenantDeposits, side: "DEBIT", amount: deduction, description: "Solde passif caution (retenue)" },
+        { accountId: maintenance, side: "CREDIT", amount: deduction, description: input.deductionReason || "Retenue sur caution (dégâts)" },
+      );
+    }
+    if (returnLines.length >= 2) {
+      await this.ledger.post(
+        {
+          date: new Date(input.returnDate),
+          reference: `DEPOSIT-RET-${deposit.id}`,
+          particulars: `Restitution caution — bail ${lease.reference || lease.id}`,
+          sourceModule: "rent",
+          relatedId: String(lease.id),
+          currencyId: currencyId ?? undefined,
+          idempotencyKey: `deposit-return:${deposit.id}`,
+          lines: returnLines,
+        },
+        orgId,
+      );
+    }
 
     await this.publishPaymentUpdate("updated", deposit.id, {
       propertyId: lease.propertyId,
@@ -1629,10 +1711,29 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    const maintenanceCostId = Number((result as any).insertId);
+    // Ecriture moderne (dual-write) : depense maintenance, debit charge / credit caisse.
+    await this.ledger.post(
+      {
+        date: input.paymentDate ? new Date(input.paymentDate) : undefined,
+        reference: `MAINT-${maintenanceCostId}`,
+        particulars: `${input.type === "labour" ? "Labour" : "Service"}: ${input.description}${input.vendorName ? ` — ${input.vendorName}` : ""}`,
+        sourceModule: "maintenance",
+        relatedId: String(maintenanceCostId),
+        currencyId: input.currencyId ?? undefined,
+        idempotencyKey: `maintenance-cost:${maintenanceCostId}`,
+        lines: [
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense" },
+          { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
+        ],
+      },
+      orgId,
+    );
+
     return this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(eq(realEstateMaintenanceCosts.id, Number((result as any).insertId)))
+      .where(eq(realEstateMaintenanceCosts.id, maintenanceCostId))
       .limit(1)
       .then((rows) => rows[0]);
   }
