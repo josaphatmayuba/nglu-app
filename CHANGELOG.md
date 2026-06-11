@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.23.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — la barre latérale affichait « Non connecté » alors que l'utilisateur était connecté (arrivée depuis le CRM via cookie refresh). L'endpoint `GET /auth/refresh-token` expose désormais `id`/`firstName`/`lastName`/`username`/`email` ; `restoreSession` les stocke (comme le login formulaire) et le `UserChip` se rafraîchit sur l'événement `farmos:auth-changed`.
+
 ## [3.23.0] - 2026-06-10
 
 ### Added

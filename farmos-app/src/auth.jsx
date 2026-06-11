@@ -36,7 +36,15 @@ export async function restoreSession() {
       setToken(data.token);
       if (data.role) localStorage.setItem("role", data.role);
       if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
+      // Le refresh-token expose désormais firstName/lastName/username/email/id :
+      // on les stocke comme le login formulaire pour que le UserChip affiche
+      // l'utilisateur (sinon « Non connecté » alors qu'on est connecté).
+      const display = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || data.username || data.email || "";
+      if (display) localStorage.setItem("user", display);
+      if (data.id != null) localStorage.setItem("id", String(data.id));
+      if (data.email) localStorage.setItem("email", data.email);
       localStorage.setItem("isLogged", "true");
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
       return data.token;
     }
   } catch {}

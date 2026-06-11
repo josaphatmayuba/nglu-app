@@ -91,9 +91,15 @@ function readCurrentUser() {
 const UserChip = ({ showLabels, lang }) => {
   const [u, setU] = React.useState(readCurrentUser);
   React.useEffect(() => {
-    const onStorage = () => setU(readCurrentUser());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    const refresh = () => setU(readCurrentUser());
+    // `storage` ne se déclenche pas dans l'onglet courant : on écoute aussi
+    // l'événement applicatif émis au login / à la restauration de session.
+    window.addEventListener("storage", refresh);
+    window.addEventListener("farmos:auth-changed", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("farmos:auth-changed", refresh);
+    };
   }, []);
   if (!u) {
     return (
