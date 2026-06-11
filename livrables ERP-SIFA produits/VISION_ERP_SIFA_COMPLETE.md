@@ -8,6 +8,29 @@ Finance · Approvisionnement · Stock · Ventes · RH · Immobilier · Construct
 
 ---
 
+## 0. État d'avancement (mise à jour 2026-06-11) — VERSION 3.39.0
+
+Tout sur branche `develop`, déployé dev, **validé en réel** sur dev.ongdngolu.org.
+
+**P0 — Cœur comptable moderne (module `backend2/src/ledger/`)** : ✅ COMPLET
+- partie double + équilibre Σdébit=Σcrédit, idempotence, contre-passation (sans DELETE)
+- règles paramétrables (`transaction_type_rules` + `postByRules`)
+- rapports modernes (`/ledger/balances`, `/ledger/trial-balance`)
+- périodes & clôture (blocage écriture sur période close, 409)
+- dual-write strangler depuis 5 modules écrivains (sale/purchase-invoices, property-management, farmos, hr)
+
+**P1 — Modules transverses** : ✅ Workflow · ✅ Budget · ✅ Gate d'approbation centralisé
+- **Workflow** (`backend2/src/workflow/`) : circuits multi-étapes, soumission, approbation/rejet — validé
+- **Budget** (`backend2/src/budget/`) : enveloppe + lignes + consommation + alerte dépassement ; **consommation live depuis le grand livre** (`/budget/:id/status-ledger`) — validé
+- **Gate d'approbation** (dans LedgerService) : « toute dépense approuvée avant comptabilisation », activable par module (`ledger_approval_requirements`), refus 422 si non approuvé — validé
+- **FarmOS câblé** (module pilote) : dépense → soumission auto au workflow → comptabilisation reportée → approbation → écriture générée — **validé bout en bout**
+
+**Reste** : répliquer le câblage workflow aux autres modules (purchase-invoices, maintenance, paie) ; Procurement+Stock et Documents (P1 non démarrés) ; migration historique table plate→grand livre + bascule des lecteurs (prod) ; plan de comptes OHANGE/dimensions analytiques avancées.
+
+Détail technique : voir `MEMORY.md` → [project_erp_sifa_ledger].
+
+---
+
 ## 1. État des 20 modules cibles (cartographie)
 
 Légende : ✅ existe · 🟡 partiel · ❌ absent · 🔌 à connecter au cœur transactionnel
