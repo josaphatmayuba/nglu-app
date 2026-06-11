@@ -46,6 +46,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import {
   CreateAwardDto,
   CreateAwardHistoryDto,
@@ -109,7 +110,22 @@ export class HrService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly emails: SystemEmailService,
     private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
+
+  /** Approuve une paie ; comptabilise l'ecriture en attente a l'approbation finale. */
+  async approveSalary(salaryHistoryId: number, comment: string | undefined, orgId = 1, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "payroll" && i.entityId === String(salaryHistoryId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette paie.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("payroll", String(salaryHistoryId), orgId, userId);
+    }
+    return { salaryHistoryId, approval: result };
+  }
 
   listDesignations(q: Record<string, string>) {
     return this.listSimple(q, designations, "getAllDesignation", "totalDesignation");
@@ -392,6 +408,16 @@ export class HrService {
       },
       1,
     );
+
+    // Soumet la paie au circuit d'approbation (effectif si le module payroll est gate).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "payroll", entityId: String(salaryHistoryId) },
+        1,
+      );
+    } catch (err) {
+      console.warn("[HR] submit payroll approval skipped:", (err as Error).message);
+    }
 
     return this.findSalaryHistory(salaryHistoryId);
   }

@@ -193,6 +193,7 @@ export class SalaryHistoryController {
   @Get() list(@Query() q: Record<string, string>) { return this.service.listSalaryHistory(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findSalaryHistory(id); }
   @Post() create(@Body() body: CreateSalaryHistoryDto) { return this.service.createSalaryHistory(body); }
+  @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: { comment?: string }) { return this.service.approveSalary(id, body?.comment); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSalaryHistoryDto) { return this.service.updateSalaryHistory(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(salaryHistories, id); }
 }

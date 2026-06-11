@@ -34,6 +34,7 @@ import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
@@ -74,7 +75,22 @@ export class PropertyManagementService {
     private readonly emails: SystemEmailService,
     private readonly sms: CompatService,
     private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
+
+  /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
+  async approveMaintenanceCost(costId: number, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "maintenance" && i.entityId === String(costId),
+    );
+    if (!inst) throw new BadRequestException("Aucune instance d'approbation en attente pour ce cout.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("maintenance", String(costId), orgId, userId);
+    }
+    return { costId, approval: result };
+  }
 
   async dashboard(orgId: number) {
     const [properties] = await this.db
@@ -1729,6 +1745,16 @@ export class PropertyManagementService {
       },
       orgId,
     );
+
+    // Soumet le cout de maintenance au circuit d'approbation (effectif si gate).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "maintenance", entityId: String(maintenanceCostId) },
+        orgId,
+      );
+    } catch (err) {
+      console.warn("[Domus] submit maintenance approval skipped:", (err as Error).message);
+    }
 
     return this.db
       .select()
