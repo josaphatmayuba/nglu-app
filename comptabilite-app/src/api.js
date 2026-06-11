@@ -46,13 +46,17 @@ export const api = {
   incomeStatement: () => jsonFetch("/account?query=is"),
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
   createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
+  transactionTypes: () => jsonFetch("/transaction-type"),
 
   // ── Grand livre moderne (partie double) ──────────────────────────────
   ledgerEntries: () => jsonFetch("/ledger"),
   ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
+  ledgerBalances: () => jsonFetch("/ledger/balances"),
+  ledgerAccount: (accountId) => jsonFetch(`/ledger/account/${accountId}`),
   ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
   ledgerIncomeStatement: () => jsonFetch("/ledger/income-statement"),
   ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
+  ledgerPeriods: () => jsonFetch("/ledger/periods"),
 
   // ── Projets / Bailleurs (analytique) ─────────────────────────────────
   projects: () => jsonFetch("/projects"),
@@ -69,5 +73,5 @@ export const api = {
 
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
-  budgetStatus: (id) => jsonFetch(`/budget/${id}/status`)
+  budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`)
 };

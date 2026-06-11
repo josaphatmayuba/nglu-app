@@ -3,12 +3,6 @@ import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 import { defaultSymbol } from "./currency.js";
-import {
-  fallback, journaux as fbJournaux, journalCaisse, ecritures as fbEcritures, planComptable,
-  types as fbTypes, grandLivreAccounts, grandLivre as fbGrandLivre, tresorerieComptes, tresorerieMvts,
-  tva as fbTva, tiers as fbTiers, immobilisations as fbImmo, analytiqueCards, analytiqueRows,
-  budgetLines, cashflowPlan, resultat as fbResultat, bilan as fbBilan, balanceGenerale, flux as fbFlux
-} from "./data.js";
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -103,11 +97,36 @@ const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
 const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
 const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
-const dash = (v) => (v ? nf.format(v) : "—");
 const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
+const EMPTY_INCOME = { totalRevenue: 0, totalExpense: 0, profit: 0, revenue: [], expense: [], expenses: [] };
+const EMPTY_BALANCE = { match: true, totalAsset: 0, totalLiability: 0, totalEquity: 0, assets: [], liabilities: [], equity: [] };
+const EMPTY_TRIAL = { match: true, totalDebit: 0, totalCredit: 0, debits: [], credits: [] };
+const EMPTY_DATA = {
+  transactions: [],
+  accounts: [],
+  mainAccounts: [],
+  trialBalance: EMPTY_TRIAL,
+  balanceSheet: EMPTY_BALANCE,
+  incomeStatement: EMPTY_INCOME,
+};
+const asArray = (value, key) => {
+  if (Array.isArray(value)) return value;
+  if (value && Array.isArray(value[key])) return value[key];
+  return [];
+};
+const accountLabel = (a) => a.subAccount || a.name || a.account || "Compte";
+const accountType = (a) => a.accountType || a.account?.type || a.type || "—";
+const accountText = (a) => `${accountLabel(a)} ${a.account || ""} ${accountType(a)}`.toLowerCase();
+const balanceOf = (a) => Number((a.balance ?? (Number(a.totalDebit || 0) - Number(a.totalCredit || 0))) || 0);
+const hasAny = (a, words) => words.some((w) => accountText(a).includes(w));
+const isTreasuryAccount = (a) => hasAny(a, ["banque", "bank", "caisse", "cash", "trésorerie", "tresorerie"]);
+const isReceivableAccount = (a) => hasAny(a, ["client", "customer", "receivable", "locataire", "tenant"]);
+const isPayableAccount = (a) => hasAny(a, ["fournisseur", "supplier", "payable", "dette"]);
+const isTaxAccount = (a) => hasAny(a, ["tva", "vat", "tax", "dgi"]);
+const isFixedAssetAccount = (a) => hasAny(a, ["immobil", "asset", "équipement", "equipement", "matériel", "materiel", "véhicule", "vehicule"]);
 
 // Toast léger — fait répondre tous les boutons sans endpoint dédié.
-const DEMO = "Action de démonstration — à connecter au backend.";
+const DEMO = "Action à connecter au backend.";
 function notify(msg) { try { window.dispatchEvent(new CustomEvent("compta:toast", { detail: msg || DEMO })); } catch {} }
 function Toaster() {
   const [msg, setMsg] = React.useState(null);
@@ -162,6 +181,19 @@ function PageHead({ eyebrow, title, action, onAction, actionIcon = "plus", disab
 function Note({ icon = "lightbulb", children }) {
   return <div className="note blue"><Icon name={icon} /> <span>{children}</span></div>;
 }
+function EmptyState({ title = "Aucune donnée réelle disponible", detail = "Cet écran attend les données du backend.", action, onAction, icon = "info" }) {
+  return (
+    <div className="card pad" style={{ color: "var(--ink-600)", fontSize: 13 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="row-ic" style={{ background: "var(--blue-100)", color: "var(--blue-600)" }}><Icon name={icon} /></span>
+          <div><div style={{ fontWeight: 700, color: "var(--ink-800)" }}>{title}</div><div className="muted">{detail}</div></div>
+        </div>
+        {action && <button className="btn btn-ghost" type="button" onClick={onAction}>{action}</button>}
+      </div>
+    </div>
+  );
+}
 
 /* ───────────────────────────────────────────────────────────────────────
    Shell
@@ -174,7 +206,7 @@ function AppShell() {
 
 function App() {
   const [route, setRoute] = React.useState("dashboard");
-  const [data, setData] = React.useState({ ...fallback });
+  const [data, setData] = React.useState(EMPTY_DATA);
   const [apiStatus, setApiStatus] = React.useState("local");
   const [modal, setModal] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
@@ -184,20 +216,31 @@ function App() {
 
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
-    Promise.allSettled([api.transactions(), api.accounts(), api.mainAccounts(), api.trialBalance(), api.balanceSheet(), api.incomeStatement(), api.setting(), api.currencies()])
-      .then(([tx, acc, ma, tb, bs, is, setting, currencies]) => {
-        const txs = tx.value?.getAllTransaction || (Array.isArray(tx.value) ? tx.value : null);
+    Promise.allSettled([
+      api.ledgerEntries(),
+      api.ledgerBalances(),
+      api.mainAccounts(),
+      api.ledgerTrialBalance(),
+      api.ledgerBalanceSheet(),
+      api.ledgerIncomeStatement(),
+      api.setting(),
+      api.currencies(),
+    ])
+      .then(([entries, balances, ma, tb, bs, is, setting, currencies]) => {
+        const txs = asArray(entries.value, "entries");
+        const accounts = asArray(balances.value, "balances");
+        const mainAccounts = asArray(ma.value, "getAllAccount");
         const curList = currencies.value?.getAllCurrency || (Array.isArray(currencies.value) ? currencies.value : null);
         if (setting.value && curList) { CUR = defaultSymbol(setting.value, curList, CUR); forceCur((n) => n + 1); }
         setData({
-          transactions: txs?.length ? txs : fallback.transactions,
-          accounts: Array.isArray(acc.value) && acc.value.length ? acc.value : fallback.accounts,
-          mainAccounts: Array.isArray(ma.value) && ma.value.length ? ma.value : fallback.mainAccounts,
-          trialBalance: tb.value || fallback.trialBalance,
-          balanceSheet: bs.value || fallback.balanceSheet,
-          incomeStatement: is.value || fallback.incomeStatement,
+          transactions: txs,
+          accounts,
+          mainAccounts,
+          trialBalance: tb.value || EMPTY_TRIAL,
+          balanceSheet: bs.value || EMPTY_BALANCE,
+          incomeStatement: is.value || EMPTY_INCOME,
         });
-        setApiStatus([tx, acc, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
+        setApiStatus([entries, balances, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
       })
       .catch(() => setApiStatus("local"));
   }, []);
@@ -227,18 +270,18 @@ function App() {
     dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    types: <Types />,
+    types: <Types canMutate={canMutate} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre />,
-    plan: <Plan accounts={data.accounts} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
-    tiers: <Tiers />,
-    tresorerie: <Tresorerie />,
-    immo: <Immo />,
+    plan: <Plan accounts={data.accounts} trialBalance={data.trialBalance} incomeStatement={data.incomeStatement} balanceSheet={data.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
+    tiers: <Tiers accounts={data.accounts} />,
+    tresorerie: <Tresorerie accounts={data.accounts} />,
+    immo: <Immo accounts={data.accounts} />,
     analytique: <Analytique />,
     budget: <Budget />,
     capacite: <Capacite />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva />,
+    tva: <Tva accounts={data.accounts} />,
     parametres: <Parametres />,
   };
 
@@ -339,9 +382,9 @@ function Parametres() {
 
 function Dashboard({ is, transactions, go, onNew, canMutate }) {
   const txs = transactions || [];
-  const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.amount || 0), 0);
-  const exp = Math.abs(Number(is.totalExpense || 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.amount || 0), 0);
-  const profit = Number(is.profit ?? rev - exp);
+  const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.totalCredit || t.amount || 0), 0);
+  const exp = Math.abs(Number(is.totalExpenses ?? is.totalExpense ?? 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.totalDebit || t.amount || 0), 0);
+  const profit = Number(is.netIncome ?? is.profit ?? rev - exp);
   const brouillons = txs.filter((t) => /brouillon|draft|false/i.test(`${t.status ?? ""}`)).length;
   const MN = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
@@ -412,25 +455,27 @@ function Todo({ icon, tone, title, sub, onClick }) {
 /* ── Journaux ──────────────────────────────────────────────────────────── */
 function Journaux({ transactions, onNew, canMutate }) {
   const txs = transactions || [];
-  const entree = (t) => ["CA", "BQ", "VE", "BU"].includes(t);
+  const codeFor = (t) => String(t.type || t.sourceModule || "OD").slice(0, 2).toUpperCase();
   const rows = txs.slice(0, 8).map((t) => ({
     date: String(t.date || "").slice(5).split("-").reverse().join("/"),
-    piece: t.type ? `${t.type}-${String(t.id).padStart(4, "0")}` : "—",
-    label: t.particulars, debit: entree(t.type) ? t.amount : null, credit: entree(t.type) ? null : t.amount,
+    piece: t.reference || `${codeFor(t)}-${String(t.id).padStart(4, "0")}`,
+    label: t.particulars,
+    debit: Number(t.totalDebit ?? t.amount ?? 0),
+    credit: Number(t.totalCredit ?? t.amount ?? 0),
   }));
-  const list = rows.length ? rows : journalCaisse;
+  const list = rows;
   // Journaux agrégés en temps réel depuis les écritures.
   const JMETA = { CA: { name: "Caisse (CA)", icon: "coins", tone: "accent" }, BQ: { name: "Banque (BQ)", icon: "landmark", tone: "accent" }, VE: { name: "Ventes (VE)", icon: "trendingUp", tone: "emerald" }, AC: { name: "Achats (AC)", icon: "trendingDown", tone: "rose" }, OD: { name: "Opérations diverses (OD)", icon: "shuffle", tone: "ink" } };
   const agg = {};
-  txs.forEach((t) => { const k = JMETA[t.type] ? t.type : "OD"; (agg[k] = agg[k] || { count: 0, sum: 0 }).count++; agg[k].sum += Number(t.amount || 0); });
+  txs.forEach((t) => { const k = JMETA[codeFor(t)] ? codeFor(t) : "OD"; (agg[k] = agg[k] || { count: 0, sum: 0 }).count++; agg[k].sum += Number(t.totalDebit ?? t.amount ?? 0); });
   const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, sum: agg[k].sum }));
-  const cards = real.length ? real : fbJournaux.map((j) => ({ code: j.code, name: j.name, icon: j.icon, tone: j.tone, count: j.mvts, valStr: j.val }));
+  const cards = real;
   const toneBg = { emerald: "var(--emerald-100)", rose: "var(--rose-100)", ink: "var(--ink-100)" };
   const toneFg = { emerald: "var(--emerald-600)", rose: "var(--rose-600)", ink: "var(--ink-600)" };
   return (
     <>
       <PageHead eyebrow="Saisie" title="Journaux" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
-      <div className="g3" style={{ marginBottom: 18 }}>
+      {cards.length ? <div className="g3" style={{ marginBottom: 18 }}>
         {cards.map((j) => (
           <div className="card pad" key={j.code}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -441,7 +486,7 @@ function Journaux({ transactions, onNew, canMutate }) {
             <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}>{j.valStr || m(j.sum)}</b></div>
           </div>
         ))}
-      </div>
+      </div> : <div style={{ marginBottom: 18 }}><EmptyState title="Aucun journal alimenté" detail="Les journaux se rempliront avec les écritures du grand livre." action={canMutate ? "Créer une écriture" : undefined} onAction={onNew} /></div>}
       <div className="card pad table-card">
         <h3 className="block-title font-display">Dernières écritures — Journal de caisse</h3>
         <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div></div>
@@ -452,6 +497,7 @@ function Journaux({ transactions, onNew, canMutate }) {
               {list.map((r, i) => (
                 <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
               ))}
+              {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -464,31 +510,21 @@ function Journaux({ transactions, onNew, canMutate }) {
 function Ecritures({ transactions, onNew, canMutate }) {
   const rows = (transactions || []).map((t) => ({
     date: String(t.date || "").slice(5).split("-").reverse().join("/"),
-    journal: t.type || "OD", label: t.particulars, amount: t.amount, status: t.status === "Brouillon" ? "Brouillon" : "Validée",
+    journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
+    label: t.particulars,
+    amount: Number(t.totalDebit ?? t.amount ?? 0),
+    status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
-  const list = rows.length ? rows : fbEcritures;
+  const list = rows;
   return (
     <>
       <PageHead eyebrow="Saisie en partie double" title="Écritures" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="card pad" style={{ marginBottom: 18 }}>
-        <div className="section-head"><h3 className="font-display">Nouvelle écriture</h3><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Équilibrée</span></div>
-        <div className="g3" style={{ marginBottom: 12 }}>
-          <Field label="Date" value="05/06/2026" /><Field label="Journal" value="Caisse (CA)" /><Field label="Pièce" value="CA-0143" muted />
-        </div>
-        <Field label="Libellé" value="Encaissement loyer juin — Joseph Mwepu" block />
-        <div className="tbl-scroll" style={{ marginTop: 12 }}>
-          <table className="tbl num" style={{ minWidth: 560 }}>
-            <thead><tr><th>Compte</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th></tr></thead>
-            <tbody>
-              <tr><td><span className="chip accent-soft">521 · Caisse</span></td><td className="muted" style={{ fontVariantNumeric: "normal" }}>Encaissement loyer</td><td className="r pos">620 000</td><td className="r muted">—</td></tr>
-              <tr><td><span className="chip emerald-soft">706 · Produits locatifs</span></td><td className="muted" style={{ fontVariantNumeric: "normal" }}>Loyer juin LEASE-018</td><td className="r muted">—</td><td className="r neg">620 000</td></tr>
-            </tbody>
-            <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">620 000</td><td className="r">620 000</td></tr></tfoot>
-          </table>
-        </div>
+        <div className="section-head"><h3 className="font-display">Saisie réelle</h3><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Contrôle backend</span></div>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>Les montants affichés ci-dessous proviennent du grand livre. Les exemples de maquette ont été retirés pour éviter toute confusion avec la comptabilité réelle.</p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
-          <span className="pos" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" style={{ width: 16, height: 16 }} /> Débit = Crédit · l'écriture peut être enregistrée</span>
-          <div style={{ display: "flex", gap: 8 }}><button type="button" className="btn btn-ghost" style={{ height: 34 }} onClick={() => notify("Brouillon enregistré (démo).")}>Brouillon</button><button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="check" /> Enregistrer</button></div>
+          <span className="pos" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}><Icon name="checkCircle" style={{ width: 16, height: 16 }} /> Débit = Crédit validé côté API ledger.</span>
+          <button className="btn btn-accent grad-accent" style={{ height: 34 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Créer</button>
         </div>
       </div>
       <div className="card pad table-card">
@@ -505,6 +541,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
               {list.map((r, i) => (
                 <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{nf.format(r.amount)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
+              {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -512,34 +549,43 @@ function Ecritures({ transactions, onNew, canMutate }) {
     </>
   );
 }
-function Field({ label, value, muted, block }) {
-  return (
-    <label style={{ display: "block", fontSize: 12, marginBottom: block ? 0 : undefined }}>
-      <span className="muted">{label}</span>
-      <div style={{ marginTop: 4, height: 38, borderRadius: 10, border: "1px solid var(--ink-200)", background: "#fff", display: "flex", alignItems: "center", padding: "0 12px", fontSize: 13, color: muted ? "var(--ink-400)" : "var(--ink-800)" }}>{value}</div>
-    </label>
-  );
-}
-
 /* ── Types de transaction ──────────────────────────────────────────────── */
-function Types() {
+function Types({ canMutate }) {
+  const [types, setTypes] = React.useState(null);
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const rows = await api.transactionTypes();
+      setTypes(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setError(String(e.message || e));
+      setTypes([]);
+    }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
   return (
     <>
-      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Nouveau type" onAction={() => notify()} />
-      <Note>Toute activité de l'entreprise est saisie via un <b>type de transaction</b>. Chaque type pré‑remplit automatiquement les comptes (débit/crédit), le journal et l'imputation analytique — loyers, dons, ventes, achats, salaires…</Note>
+      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Rafraîchir" actionIcon="download" onAction={load} ghost disabled={!canMutate} />
+      <Note>Ces types viennent de l'API legacy `/transaction-type`. La cible ERP/SIFA reste `transaction_type_rules` pour générer les lignes comptables par rôle métier.</Note>
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({fbTypes.length} activités)</span></h3></div>
+        <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 680 }}>
-            <thead><tr><th>Activité (type)</th><th>Sens</th><th>Compte débit</th><th>Compte crédit</th><th>Journal</th><th>Analytique</th></tr></thead>
+            <thead><tr><th>Activité (type)</th><th>Compte débit</th><th>Compte crédit</th><th>Statut</th><th>Description</th></tr></thead>
             <tbody>
-              {fbTypes.map((t, i) => (
-                <tr key={i}><td style={{ fontWeight: 500 }}>{t.name}</td><td><span className={`chip ${t.sens === "Entrée" ? "emerald-soft" : "rose-soft"}`}>{t.sens}</span></td><td>{t.debit}</td><td>{t.credit}</td><td>{t.journal}</td><td className="muted">{t.ana}</td></tr>
+              {(types || []).map((t) => (
+                <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.name}</td><td>{t.debitAccount?.name || "—"}</td><td>{t.creditAccount?.name || "—"}</td><td><span className={`chip ${t.isActive ? "emerald-soft" : "ink"}`}>{t.isActive ? "actif" : "inactif"}</span></td><td className="muted">{t.description || "—"}</td></tr>
               ))}
+              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type réel configuré.</td></tr>}
+              {types === null && <tr><td colSpan={5} className="muted">Chargement...</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> À la saisie, choisir le type suffit : l'écriture équilibrée est générée. Idéal pour les opérateurs non‑comptables (caisse, terrain).</p>
+        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Dette restante : remplacer debit/credit fixes par des règles paramétrables multi-lignes.</p>
       </div>
     </>
   );
@@ -648,7 +694,7 @@ function GrandLivre() {
       setEntries(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setError(String(e.message || e));
-      setEntries([]); // bascule sur le fallback local
+      setEntries([]);
     }
   }, []);
   React.useEffect(() => { load(); }, [load]);
@@ -662,25 +708,13 @@ function GrandLivre() {
     finally { setBusy(false); }
   };
 
-  // Pas encore d'écriture moderne (ou API indispo) → on garde l'aperçu local existant.
+  // Pas encore d'écriture moderne (ou API indispo) : ne pas afficher de démo comptable.
   if (entries && entries.length === 0) {
     return (
       <>
         <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API grand livre indisponible.</b> <span className="tiny">{error}</span></div>}
-        <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Aperçu (données de démonstration)</h3></div>
-          <div className="tbl-scroll">
-            <table className="tbl num" style={{ minWidth: 640 }}>
-              <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>
-                {fbGrandLivre.map((r, i) => r.report
-                  ? <tr key={i} className="grp"><td colSpan={5}>{r.label}</td><td className="r">{nf.format(r.solde)}</td></tr>
-                  : <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td><td className="r">{nf.format(r.solde)}</td></tr>)}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <EmptyState title="Aucune écriture au grand livre" detail="Le journal des écritures affichera uniquement les écritures postées dans `/ledger`." action="Rafraîchir" onAction={load} icon="scrollText" />
       </>
     );
   }
@@ -718,121 +752,136 @@ function GrandLivre() {
 }
 
 /* ── Plan comptable ────────────────────────────────────────────────────── */
-function Plan({ accounts, canMutate, onNew }) {
+function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate, onNew }) {
+  const totalAssets = Number(balanceSheet?.totalAssets ?? balanceSheet?.totalAsset ?? 0);
+  const totalLiabilities = Number(balanceSheet?.totalLiabilities ?? balanceSheet?.totalLiability ?? 0);
+  const totalRevenue = Number(incomeStatement?.totalRevenue ?? 0);
+  const totalExpenses = Number(incomeStatement?.totalExpenses ?? incomeStatement?.totalExpense ?? 0);
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actif" value={`62,4 M ${CUR}`} /><Mini label="Passif" value={`21,2 M ${CUR}`} />
-        <Mini label="Produits (cumul)" value={`134 M ${CUR}`} valueClass="pos" /><Mini label="Charges (cumul)" value={`98 M ${CUR}`} valueClass="neg" />
+        <Mini label="Actif" value={mM(totalAssets)} /><Mini label="Passif" value={mM(totalLiabilities)} />
+        <Mini label="Produits (cumul)" value={mM(totalRevenue)} valueClass="pos" /><Mini label="Charges (cumul)" value={mM(totalExpenses)} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
             <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th className="r">Solde</th></tr></thead>
             <tbody>
-              {planComptable.map((g) => (
-                <React.Fragment key={g.grp}>
-                  <tr className="grp"><td colSpan={4}>{g.grp}</td></tr>
-                  {g.rows.map((r) => (
-                    <tr key={r.num}><td style={{ fontWeight: 500 }}>{r.num}</td><td style={{ fontVariantNumeric: "normal" }}>{r.name}</td><td><span className={`chip ${r.chip}`}>{r.type}</span></td><td className={`r ${r.pos ? "pos" : ""}`}>{r.solde}</td></tr>
-                  ))}
-                </React.Fragment>
+              {(accounts || []).map((a) => (
+                <tr key={a.id}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{nf.format(Number(a.balance || 0))}</td></tr>
               ))}
+              {(!accounts || accounts.length === 0) && <tr><td colSpan={4} className="muted">Aucun sous-compte réel disponible.</td></tr>}
             </tbody>
+            <tfoot><tr><td colSpan={2}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td><td className="r">{nf.format(Number(trialBalance?.totalDebit || 0))} / {nf.format(Number(trialBalance?.totalCredit || 0))}</td></tr></tfoot>
           </table>
         </div>
-        {accounts?.length > 4 && <p className="tiny" style={{ marginTop: 10 }}>{accounts.length} sous-comptes connectés à l'API.</p>}
+        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} sous-compte(s) connectés à l'API.</p>
       </div>
     </>
   );
 }
 
 /* ── Tiers ─────────────────────────────────────────────────────────────── */
-function Tiers() {
-  const sum = (k) => fbTiers.reduce((s, r) => s + (r[k] || 0), 0);
+function Tiers({ accounts = [] }) {
+  const receivables = accounts.filter(isReceivableAccount);
+  const payables = accounts.filter(isPayableAccount);
+  const rows = [...receivables.map((a) => ({ ...a, family: "Créance" })), ...payables.map((a) => ({ ...a, family: "Dette" }))];
+  const totalReceivable = receivables.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
+  const totalPayable = payables.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
+        <div className="g4 kpis" style={{ marginBottom: 18 }}>
+          <Mini label="Créances clients" value={m(totalReceivable)} valueClass="pos" />
+          <Mini label="Dettes fournisseurs" value={m(totalPayable)} valueClass="neg" />
+          <Mini label="Comptes clients" value={receivables.length} />
+          <Mini label="Comptes fournisseurs" value={payables.length} />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes auxiliaires</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 620 }}>
+              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.family}-${a.id}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" action="Relancer les impayés" actionIcon="bellRing" onAction={() => notify()} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Créances clients" value="2 150 000" valueClass="pos" />
-        <Mini label="Dont échu" value="640 000" tone="danger" valueClass="neg" />
-        <Mini label="Dettes fournisseurs" value="3 400 000" valueClass="neg" />
-        <Mini label="À payer < 30 j" value="1 900 000" />
-      </div>
-      <div className="card pad table-card">
-        <h3 className="block-title font-display">Balance âgée — clients</h3>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 640 }}>
-            <thead><tr><th>Tiers</th><th className="r">Total dû</th><th className="r">Non échu</th><th className="r">0–30 j</th><th className="r">30–60 j</th><th className="r">+60 j</th></tr></thead>
-            <tbody>
-              {fbTiers.map((t, i) => (
-                <tr key={i}><td style={{ fontWeight: 500 }}>{t.name}</td><td className="r">{nf.format(t.total)}</td><td className="r">{dash(t.nonEchu)}</td><td className="r" style={t.d30 ? { color: "var(--amber-600)" } : undefined}>{dash(t.d30)}</td><td className="r" style={t.d60 ? { color: "var(--amber-600)" } : undefined}>{dash(t.d60)}</td><td className="r" style={t.plus60 ? { color: "var(--rose-600)" } : undefined}>{dash(t.plus60)}</td></tr>
-              ))}
-            </tbody>
-            <tfoot><tr><td>Total</td><td className="r">{nf.format(sum("total"))}</td><td className="r">{nf.format(sum("nonEchu"))}</td><td className="r">{nf.format(sum("d30"))}</td><td className="r">{nf.format(sum("d60"))}</td><td className="r neg">{nf.format(sum("plus60"))}</td></tr></tfoot>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Le <b>lettrage</b> rapproche chaque facture de son paiement ; les soldes +60 j sont signalés pour relance.</p>
-      </div>
+      <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
+      <EmptyState title="Balance tiers non connectée" detail="Aucun endpoint comptable dédié ne fournit encore les créances, dettes et échéances clients/fournisseurs." icon="contact" />
     </>
   );
 }
 
 /* ── Trésorerie ────────────────────────────────────────────────────────── */
-function Tresorerie() {
+function Tresorerie({ accounts = [] }) {
+  const rows = accounts.filter(isTreasuryAccount);
+  const total = rows.reduce((s, a) => s + balanceOf(a), 0);
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="Solde trésorerie" value={m(total)} valueClass={total >= 0 ? "pos" : "neg"} />
+          <Mini label="Comptes suivis" value={rows.length} />
+          <Mini label="Source" value="Ledger" tone="info" />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes banque & caisse</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Caisse & banques" title="Trésorerie" action="Rapprocher" actionIcon="gitCompare" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        {tresorerieComptes.map((c) => (
-          <div className="card pad" key={c.name}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span className="row-ic" style={{ background: c.subTone === "emerald" ? "var(--emerald-100)" : "var(--blue-100)", color: c.subTone === "emerald" ? "var(--emerald-600)" : "var(--blue-600)" }}><Icon name={c.icon} /></span><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span></div>
-            <div className="font-display num" style={{ fontSize: 24, fontWeight: 700 }}>{c.val}</div>
-            <div className="tiny" style={c.subTone === "amber" ? { color: "var(--amber-600)" } : c.subTone === "emerald" ? { color: "var(--emerald-600)" } : undefined}>{c.sub}</div>
-          </div>
-        ))}
-      </div>
-      <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Mouvements — Banque FC</h3><span className="chip amber">3 non pointés</span></div>
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un mouvement…</div></div>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 600 }}>
-            <thead><tr><th>Date</th><th>Libellé</th><th className="r">Entrée</th><th className="r">Sortie</th><th className="r">Pointé</th></tr></thead>
-            <tbody>
-              {tresorerieMvts.map((m, i) => (
-                <tr key={i} style={!m.pointe ? { background: "rgba(255,251,235,.6)" } : undefined}><td>{m.date}</td><td style={{ fontVariantNumeric: "normal" }}>{m.label}</td><td className="r pos">{m.entree ? nf.format(m.entree) : <span className="muted">—</span>}</td><td className="r neg">{m.sortie ? nf.format(m.sortie) : <span className="muted">—</span>}</td><td className="r"><Icon name={m.pointe ? "checkCircle" : "circle"} style={{ width: 16, height: 16, color: m.pointe ? "var(--emerald-500)" : "var(--amber-400)", display: "inline" }} /></td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
+      <EmptyState title="Trésorerie non connectée" detail="Les soldes banque/caisse et le rapprochement bancaire doivent être branchés sur un endpoint réel avant affichage." icon="landmark" />
     </>
   );
 }
 
 /* ── Immobilisations ───────────────────────────────────────────────────── */
-function Immo() {
-  const sum = (k) => fbImmo.reduce((s, r) => s + r[k], 0);
+function Immo({ accounts = [] }) {
+  const rows = accounts.filter((a) => accountType(a) === "Asset" && isFixedAssetAccount(a) && !isTreasuryAccount(a));
+  const total = rows.reduce((s, a) => s + balanceOf(a), 0);
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="Valeur nette comptable" value={m(total)} tone="info" />
+          <Mini label="Comptes immo." value={rows.length} />
+          <Mini label="Source" value="Ledger" />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes immobilisations</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" action="Nouveau bien" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <Mini label="Valeur brute" value="41 700 000" /><Mini label="Amort. cumulés" value="23 000 000" valueClass="neg" />
-        <Mini label="Valeur nette (VNC)" value="18 700 000" valueClass="" tone="info" />
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <table className="tbl num" style={{ minWidth: 680 }}>
-          <thead><tr><th>Bien</th><th>Acquis</th><th className="r">Valeur brute</th><th>Durée</th><th className="r">Dotation/an</th><th className="r">Amort. cumulé</th><th className="r">VNC</th></tr></thead>
-          <tbody>
-            {fbImmo.map((b, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{b.name}</td><td>{b.an}</td><td className="r">{nf.format(b.brute)}</td><td>{b.duree}</td><td className="r">{nf.format(b.dot)}</td><td className="r neg">{nf.format(b.amort)}</td><td className="r" style={{ fontWeight: 600 }}>{nf.format(b.vnc)}</td></tr>
-            ))}
-          </tbody>
-          <tfoot><tr><td colSpan={2}>Total</td><td className="r">{nf.format(sum("brute"))}</td><td></td><td className="r">{nf.format(sum("dot"))}</td><td className="r">{nf.format(sum("amort"))}</td><td className="r">{nf.format(sum("vnc"))}</td></tr></tfoot>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Dotation d'amortissement passée automatiquement chaque mois (compte 681 → 28x).</p>
-      </div>
+      <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
+      <EmptyState title="Immobilisations non connectées" detail="Le registre des biens, amortissements et dotations doit venir d'un module backend dédié avant affichage." icon="warehouse" />
     </>
   );
 }
@@ -869,23 +918,13 @@ function Analytique() {
     finally { setBusy(false); }
   };
 
-  // Aucun projet réel (ou API indispo) → aperçu de démonstration existant.
+  // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
   if (projects && projects.length === 0) {
     return (
       <>
         <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
-        <div className="g3" style={{ marginBottom: 18 }}>
-          {analytiqueCards.map((c) => (
-            <div className={`card pad ${c.warn ? "warn" : ""}`} key={c.name}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span><span className={`chip ${c.chip}`}>{c.pct} %</span></div>
-              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {c.bailleur}</div>
-              <div className="bar"><span className={c.grad === "amber" ? "" : c.grad} style={{ width: `${c.pct}%`, background: c.grad === "amber" ? "var(--amber-500)" : undefined }} /></div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {c.depense}</span><span>Budget {c.budget}</span></div>
-            </div>
-          ))}
-        </div>
-        <p className="tiny" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Crée un projet pour suivre produits/charges et consommation budgétaire par bailleur (depuis le grand livre).</p>
+        <EmptyState title="Aucun projet analytique" detail="Les rapports bailleurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
       </>
     );
   }
@@ -948,25 +987,13 @@ function Budget() {
     })();
   }, []);
 
-  // Pas de budget réel (ou API indispo) → aperçu de démonstration existant.
+  // Pas de budget réel (ou API indispo) : ne pas afficher de fausses lignes.
   if (budgets && budgets.length === 0) {
     return (
       <>
         <PageHead eyebrow="Suivi budgétaire" title="Budget vs réalisé" />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API budget indisponible.</b> <span className="tiny">{error}</span></div>}
-        <div className="g4 kpis" style={{ marginBottom: 18 }}>
-          <Mini label="Budget total" value="160 000 000" /><Mini label="Réalisé" value="98 000 000" tone="info" />
-          <Mini label="Disponible" value="62 000 000" valueClass="pos" /><Mini label="Consommé" value="61 %" />
-        </div>
-        <div className="card pad">
-          <h3 className="block-title font-display">Lignes budgétaires (démonstration)</h3>
-          {budgetLines.map((b, i) => (
-            <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{b.name}</span><span className="num" style={b.warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{b.txt}</span></div>
-              <div className="bar"><span className={b.grad === "rose" ? "" : b.grad} style={{ width: `${b.pct}%`, background: b.grad === "rose" ? "var(--rose-500)" : undefined }} /></div>
-            </div>
-          ))}
-        </div>
+        <EmptyState title="Aucun budget réel" detail="Le suivi budgétaire utilise `/budget/:id/status-ledger` et s'affichera après création d'un budget avec lignes." icon="piggyBank" />
       </>
     );
   }
@@ -1010,197 +1037,134 @@ function Budget() {
 function Capacite() {
   return (
     <>
-      <PageHead eyebrow="« A-t-on l'argent pour un projet ? »" title="Plan de trésorerie & capacité" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
-      <div className="banner grad-emerald">
-        <div>
-          <div style={{ fontSize: 12, opacity: .85, display: "flex", alignItems: "center", gap: 6 }}><Icon name="gauge" /> Disponible réel — mobilisable sur fonds propres</div>
-          <div className="font-display num" style={{ fontSize: 30, fontWeight: 700 }}>{`17 278 000 ${CUR}`}</div>
-          <div style={{ fontSize: 12, opacity: .85 }}>après déduction des dettes à payer et des fonds bailleurs affectés</div>
-        </div>
-        <div style={{ textAlign: "right", fontSize: 12, opacity: .9 }}><span className="chip" style={{ background: "rgba(255,255,255,.2)", color: "#fff" }}><Icon name="check" style={{ width: 11, height: 11 }} /> Capacité pour un nouveau projet</span><div style={{ marginTop: 8 }}>+ 18,4 k$ en banque USD (non inclus)</div></div>
-      </div>
-      <div className="g2" style={{ marginBottom: 14 }}>
-        <div className="card pad">
-          <h3 className="block-title font-display">Du solde brut au disponible réel</h3>
-          <div className="stmt num">
-            <div className="ln"><span><Dot c="var(--blue-500)" /> Trésorerie (caisse + banques FC)</span><b>41 200 000</b></div>
-            <div className="ln"><span><Dot c="var(--rose-400)" /> − Dettes à payer (court terme)</span><b className="neg">−10 622 000</b></div>
-            <div className="ln"><span><Dot c="var(--amber-400)" /> − Fonds bailleurs affectés</span><b style={{ color: "var(--amber-700)" }}>−13 300 000</b></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}><Dot c="var(--emerald-500)" /> = Disponible réel (libre)</span><b className="pos">{`17 278 000 ${CUR}`}</b></div>
-          </div>
-          <p className="tiny" style={{ marginTop: 10 }}>Détail des dettes : fournisseurs 3,4 M · salaires & charges 5,0 M · TVA DGI 2,2 M.</p>
-        </div>
-        <div className="card pad">
-          <h3 className="block-title font-display">Répartition de la trésorerie</h3>
-          <div className="stack" style={{ marginBottom: 12 }}><span style={{ width: "42%", background: "var(--emerald-500)" }} /><span style={{ width: "32%", background: "var(--amber-400)" }} /><span style={{ width: "26%", background: "var(--rose-400)" }} /></div>
-          <div className="stmt num" style={{ display: "grid", gap: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--emerald-500)" /> Libre (mobilisable)</span><b>17 278 000</b></div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--amber-400)" /> Affecté à des projets bailleurs</span><span>13 300 000</span></div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}><span><Dot c="var(--rose-400)" /> Engagé (dettes à payer)</span><span>10 622 000</span></div>
-          </div>
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--ink-100)" }} className="stmt num">
-            <div className="ln"><span className="muted">Programme Kongo Central (reste)</span><span>2 900 000</span></div>
-            <div className="ln" style={{ borderBottom: 0 }}><span className="muted">Programme Kinshasa (reste)</span><span>10 400 000</span></div>
-          </div>
-        </div>
-      </div>
-      <div className="card pad table-card" style={{ marginBottom: 14 }}>
-        <h3 className="block-title font-display">Plan de trésorerie prévisionnel <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(3 mois)</span></h3>
-        <div className="tbl-scroll">
-          <table className="tbl num" style={{ minWidth: 620 }}>
-            <thead><tr><th>Mois</th><th className="r">Solde début</th><th className="r">Entrées prévues</th><th className="r">Sorties prévues</th><th className="r">Solde fin</th></tr></thead>
-            <tbody>
-              {cashflowPlan.map((m, i) => (
-                <tr key={i} style={m.warn ? { background: "rgba(255,251,235,.6)" } : undefined}><td style={{ fontWeight: 500 }}>{m.mois}</td><td className="r">{nf.format(m.debut)}</td><td className="r pos">+{nf.format(m.entrees)}</td><td className="r neg">−{nf.format(m.sorties)}</td><td className="r" style={{ fontWeight: 600, color: m.warn ? "var(--amber-700)" : undefined }}>{nf.format(m.fin)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Entrées : loyers + tranches de subvention attendues · Sorties : salaires, fournisseurs, activités terrain.</p>
-      </div>
-      <div className="card pad info">
-        <h3 className="block-title font-display" style={{ marginBottom: 8 }}><Icon name="lightbulb" style={{ color: "var(--blue-600)" }} /> Peut-on financer un nouveau projet ?</h3>
-        <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "grid", gap: 8, fontSize: 13, color: "var(--ink-700)" }}>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="checkCircle" style={{ width: 16, height: 16, color: "var(--emerald-600)", flex: "none", marginTop: 1 }} /> <span><b>~17,3 M {CUR}</b> mobilisables aujourd'hui sur fonds propres (sans toucher aux fonds bailleurs).</span></li>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="alertTriangle" style={{ width: 16, height: 16, color: "var(--amber-600)", flex: "none", marginTop: 1 }} /> <span>La trésorerie descend à <b>13,6 M en août</b> : éviter d'engager plus de ~12 M avant la subvention de septembre.</span></li>
-          <li style={{ display: "flex", gap: 8 }}><Icon name="wallet" style={{ width: 16, height: 16, color: "var(--blue-600)", flex: "none", marginTop: 1 }} /> <span>Au-delà : prévoir un <b>financement bailleur</b> dédié — les fonds affectés (13,3 M) ne peuvent pas être détournés.</span></li>
-        </ul>
-      </div>
+      <PageHead eyebrow="Disponibilité financière" title="Plan de trésorerie & capacité" />
+      <EmptyState title="Capacité non calculée" detail="Le disponible réel doit être calculé depuis les soldes bancaires, dettes, budgets affectés et prévisions validées." icon="gauge" />
     </>
   );
 }
-function Dot({ c }) { return <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: c, marginRight: 8 }} />; }
-
 /* ── États financiers ──────────────────────────────────────────────────── */
 function Etats({ is, bs }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
-  // États réels depuis le grand livre moderne (fallback sur les props/démo si vide ou API indispo).
+  // États réels depuis le grand livre moderne.
   const [liveIs, setLiveIs] = React.useState(null);
   const [liveBs, setLiveBs] = React.useState(null);
+  const [liveTb, setLiveTb] = React.useState(null);
   React.useEffect(() => {
     api.ledgerIncomeStatement().then(setLiveIs).catch(() => setLiveIs(null));
     api.ledgerBalanceSheet().then(setLiveBs).catch(() => setLiveBs(null));
+    api.ledgerTrialBalance().then(setLiveTb).catch(() => setLiveTb(null));
   }, []);
   const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
   const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
+  const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);
 
-  const rev = hasLiveIs ? Number(liveIs.totalRevenue) : (Number(is.totalRevenue) || fbResultat.totalProduits);
-  const exp = hasLiveIs ? Number(liveIs.totalExpenses) : (Math.abs(Number(is.totalExpense)) || fbResultat.totalCharges);
-  const profit = hasLiveIs ? Number(liveIs.netIncome) : Number(is.profit ?? rev - exp);
+  const rev = hasLiveIs ? Number(liveIs.totalRevenue) : 0;
+  const exp = hasLiveIs ? Number(liveIs.totalExpenses) : 0;
+  const profit = hasLiveIs ? Number(liveIs.netIncome) : 0;
   return (
     <>
-      <PageHead eyebrow={hasLiveIs || hasLiveBs ? "Depuis le grand livre" : "Exercice 2026"} title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Depuis le grand livre" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
       <div className="segtabs">{tabs.map(([id, lbl]) => <button key={id} className={`segtab ${tab === id ? "active grad-accent" : ""}`} onClick={() => setTab(id)}>{lbl}</button>)}</div>
 
       {tab === "resultat" && (
-        <div className="card pad" style={{ maxWidth: 680 }}>
-          <h3 className="block-title font-display">Compte de résultat {!hasLiveIs && <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(démonstration)</span>}</h3>
+        hasLiveIs ? <div className="card pad" style={{ maxWidth: 680 }}>
+          <h3 className="block-title font-display">Compte de résultat</h3>
           <div className="stmt num">
-            {hasLiveIs
-              ? liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{nf.format(r.amount)}</span></div>)
-              : fbResultat.produits.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span className="pos">{nf.format(v)}</span></div>)}
+            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{nf.format(r.amount)}</span></div>)}
             <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
-            {hasLiveIs
-              ? liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{nf.format(r.amount)}</span></div>)
-              : fbResultat.charges.map(([l, v]) => <div className="ln" key={l} style={{ marginTop: 0 }}><span className="muted">{l}</span><span className="neg">{nf.format(v)}</span></div>)}
+            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{nf.format(r.amount)}</span></div>)}
             <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
             <div className="ln total" style={{ background: profit >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}><span style={{ color: profit >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Résultat ({profit >= 0 ? "excédent" : "déficit"})</span><span className={profit >= 0 ? "pos" : "neg"}>{signed(profit)} {CUR}</span></div>
           </div>
-        </div>
+        </div> : <EmptyState title="Compte de résultat vide" detail="Aucune ligne produit/charge réelle n'est disponible dans le grand livre." icon="barChart" />
       )}
 
       {tab === "bilan" && (
-        <div className="card pad" style={{ maxWidth: 820 }}>
-          <h3 className="block-title font-display">Bilan {!hasLiveBs && <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(démonstration)</span>}</h3>
+        hasLiveBs ? <div className="card pad" style={{ maxWidth: 820 }}>
+          <h3 className="block-title font-display">Bilan</h3>
           <div className="g2">
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
               <div className="stmt num">
-                {hasLiveBs
-                  ? liveBs.assets.map((r) => <div className="ln" key={`a${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>)
-                  : fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(hasLiveBs ? liveBs.totalAssets : fbBilan.totalActif)} {CUR}</span></div>
+                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(liveBs.totalAssets)} {CUR}</span></div>
               </div>
             </div>
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif + Capitaux propres</div>
               <div className="stmt num">
-                {hasLiveBs
-                  ? [...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                     ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                     <div className="ln" key="netinc"><span className="muted">Résultat de l'exercice</span><span className={liveBs.netIncome >= 0 ? "pos" : "neg"}>{nf.format(liveBs.netIncome)}</span></div>]
-                  : fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span>{nf.format(hasLiveBs ? liveBs.totalLiabilitiesAndEquity : fbBilan.totalPassif)} {CUR}</span></div>
+                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
+                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
+                  <div className="ln" key="netinc"><span className="muted">Résultat de l'exercice</span><span className={liveBs.netIncome >= 0 ? "pos" : "neg"}>{nf.format(liveBs.netIncome)}</span></div>]}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span>{nf.format(liveBs.totalLiabilitiesAndEquity)} {CUR}</span></div>
               </div>
             </div>
           </div>
           <div style={{ marginTop: 12 }}>
-            {(hasLiveBs ? liveBs.balanced : true)
+            {liveBs.balanced
               ? <span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif + CP</span>
               : <span className="chip" style={{ background: "var(--rose-50)", color: "var(--rose-600)" }}>Écart de bilan à vérifier</span>}
           </div>
-        </div>
+        </div> : <EmptyState title="Bilan vide" detail="Aucune ligne bilan réelle n'est disponible dans le grand livre." icon="scale" />
       )}
 
       {tab === "balance" && (
-        <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Balance générale <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        hasLiveTb ? <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
-              <tbody>{balanceGenerale.map((r) => <tr key={r.num}><td style={{ fontWeight: 500 }}>{r.num}</td><td style={{ fontVariantNumeric: "normal" }}>{r.name}</td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>)}</tbody>
-              <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">160 050 000</td><td className="r">160 050 000</td></tr></tfoot>
+              <tbody>
+                {[...(liveTb.debits || []).map((r) => ({ ...r, debit: r.balance, credit: null })), ...(liveTb.credits || []).map((r) => ({ ...r, debit: null, credit: Math.abs(r.balance) }))].map((r) => (
+                  <tr key={r.id}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                ))}
+              </tbody>
+              <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">{nf.format(Number(liveTb.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(liveTb.totalCredit || 0)))}</td></tr></tfoot>
             </table>
           </div>
-          <div style={{ marginTop: 12 }}><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Balance équilibrée · Total débit = Total crédit</span></div>
-        </div>
+          <div style={{ marginTop: 12 }}><span className={`chip ${liveTb.match ? "emerald" : "amber"}`}><Icon name={liveTb.match ? "check" : "alertTriangle"} style={{ width: 11, height: 11 }} /> {liveTb.match ? "Balance équilibrée" : "Balance à vérifier"}</span></div>
+        </div> : <EmptyState title="Balance générale vide" detail="Aucun solde réel n'est disponible dans `/ledger/trial-balance`." icon="barChart" />
       )}
 
       {tab === "flux" && (
-        <div className="card pad" style={{ maxWidth: 680 }}>
-          <h3 className="block-title font-display">Tableau des flux de trésorerie <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(cumul 2026)</span></h3>
-          <div className="stmt num">
-            {fbFlux.map((s) => (
-              <React.Fragment key={s.sec}>
-                <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", margin: "10px 0 2px" }}>{s.sec}</div>
-                {s.rows.map(([l, v, c]) => <div className="ln" key={l}><span className="muted">{l}</span><span className={c}>{v}</span></div>)}
-                <div className="ln bold"><span>{s.total[0]}</span><span className={s.total[2]}>{s.total[1]}</span></div>
-              </React.Fragment>
-            ))}
-            <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Variation de trésorerie</span><span>+35 200 000</span></div>
-            <div className="ln" style={{ marginTop: 4 }}><span className="muted">Trésorerie d'ouverture</span><span>6 000 000</span></div>
-            <div className="ln bold"><span>Trésorerie de clôture</span><span>41 200 000</span></div>
-          </div>
-        </div>
+        <EmptyState title="Flux de trésorerie non connecté" detail="Il manque encore un endpoint réel pour construire le tableau des flux à partir du grand livre et de la trésorerie." icon="wallet" />
       )}
     </>
   );
 }
 
 /* ── TVA ───────────────────────────────────────────────────────────────── */
-function Tva() {
+function Tva({ accounts = [] }) {
+  const rows = accounts.filter(isTaxAccount);
+  const deductible = rows.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
+  const collected = rows.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
+  const net = collected - deductible;
+  if (rows.length) {
+    return (
+      <>
+        <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+        <div className="g3" style={{ marginBottom: 18 }}>
+          <Mini label="TVA collectée" value={m(collected)} valueClass="pos" />
+          <Mini label="TVA déductible" value={m(deductible)} valueClass="neg" />
+          <Mini label={net >= 0 ? "TVA à payer" : "Crédit TVA"} value={m(Math.abs(net))} tone={net >= 0 ? "warn" : "info"} />
+        </div>
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Soldes fiscaux</h3><span className="tiny">Depuis le ledger</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
-      <PageHead eyebrow="Déclaration · juin 2026" title="TVA & taxes" action="Préparer la déclaration" actionIcon="fileCheck" onAction={() => notify()} />
-      <div className="g3" style={{ marginBottom: 18 }}>
-        <div className="card pad"><div className="kpi-label">TVA collectée (16 %)</div><div className="font-display num pos" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>3 632 000</div><div className="tiny">sur ventes / prestations</div></div>
-        <div className="card pad"><div className="kpi-label">TVA déductible</div><div className="font-display num neg" style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>1 410 000</div><div className="tiny">sur achats</div></div>
-        <div className="card pad warn"><div className="kpi-label" style={{ color: "var(--amber-700)" }}>TVA à payer</div><div className="font-display num" style={{ fontSize: 22, fontWeight: 700, marginTop: 4, color: "var(--amber-700)" }}>2 222 000</div><div className="tiny" style={{ color: "var(--amber-600)" }}>échéance 15 juil. 2026</div></div>
-      </div>
-      <div className="card pad table-card tbl-scroll">
-        <h3 className="block-title font-display">Détail par taux</h3>
-        <table className="tbl num" style={{ minWidth: 520 }}>
-          <thead><tr><th>Taux</th><th className="r">Base HT</th><th className="r">TVA</th><th className="r">Sens</th></tr></thead>
-          <tbody>
-            {fbTva.map((t, i) => (
-              <tr key={i}><td style={{ fontVariantNumeric: "normal" }}>{t.taux}</td><td className="r">{nf.format(t.base)}</td><td className={`r ${t.cls || "muted"}`}>{t.tva ? nf.format(t.tva) : "—"}</td><td className="r"><span className={`chip ${t.chip}`}>{t.sens}</span></td></tr>
-            ))}
-          </tbody>
-          <tfoot><tr><td>Net à payer</td><td></td><td className="r" style={{ color: "var(--amber-700)" }}>2 222 000</td><td></td></tr></tfoot>
-        </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> TVA RDC à 16 %. Les dons/subventions sont exonérés. Déclaration mensuelle à la DGI.</p>
-      </div>
+      <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+      <EmptyState title="TVA non calculée" detail="Les bases HT, TVA collectée, TVA déductible et échéances doivent venir d'un endpoint fiscal réel." icon="receipt" />
     </>
   );
 }
@@ -1241,7 +1205,7 @@ function FField({ label, value, onChange, type = "text", required = false }) {
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 function FSelect({ label, value, onChange, rows }) {
-  return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>;
+  return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{accountLabel(r)}</option>)}</select></label>;
 }
 function defaults(kind, accounts, mainAccounts) {
   if (kind === "account") return { name: "", accountId: mainAccounts[0]?.id || 1 };
