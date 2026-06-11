@@ -837,32 +837,92 @@ function Immo() {
   );
 }
 
-/* ── Analytique ────────────────────────────────────────────────────────── */
+/* ── Analytique (projets / bailleurs) ──────────────────────────────────── */
 function Analytique() {
+  const [projects, setProjects] = React.useState(null);
+  const [reports, setReports] = React.useState({}); // id -> rapport
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.projects();
+      const arr = Array.isArray(list) ? list : [];
+      setProjects(arr);
+      const entries = await Promise.all(arr.map(async (p) => {
+        try { return [p.id, await api.projectReport(p.id)]; } catch { return [p.id, null]; }
+      }));
+      setReports(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setProjects([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const newProject = async () => {
+    const name = window.prompt("Nom du projet :"); if (!name) return;
+    const donor = window.prompt("Bailleur (optionnel) :") || undefined;
+    const budgetStr = window.prompt("Budget (optionnel) :") || "";
+    const budgetAmount = budgetStr ? Number(budgetStr.replace(/\s/g, "")) : undefined;
+    setBusy(true);
+    try { await api.createProject({ name, donor, budgetAmount }); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Aucun projet réel (ou API indispo) → aperçu de démonstration existant.
+  if (projects && projects.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
+        <div className="g3" style={{ marginBottom: 18 }}>
+          {analytiqueCards.map((c) => (
+            <div className={`card pad ${c.warn ? "warn" : ""}`} key={c.name}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span><span className={`chip ${c.chip}`}>{c.pct} %</span></div>
+              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {c.bailleur}</div>
+              <div className="bar"><span className={c.grad === "amber" ? "" : c.grad} style={{ width: `${c.pct}%`, background: c.grad === "amber" ? "var(--amber-500)" : undefined }} /></div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {c.depense}</span><span>Budget {c.budget}</span></div>
+            </div>
+          ))}
+        </div>
+        <p className="tiny" style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Crée un projet pour suivre produits/charges et consommation budgétaire par bailleur (depuis le grand livre).</p>
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Rapport bailleur" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Suivi par projet / bailleur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {projects === null && <div className="card pad muted">Chargement…</div>}
       <div className="g3" style={{ marginBottom: 18 }}>
-        {analytiqueCards.map((c) => (
-          <div className={`card pad ${c.warn ? "warn" : ""}`} key={c.name}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{c.name}</span><span className={`chip ${c.chip}`}>{c.pct} %</span></div>
-            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {c.bailleur}</div>
-            <div className="bar"><span className={c.grad === "amber" ? "" : c.grad} style={{ width: `${c.pct}%`, background: c.grad === "amber" ? "var(--amber-500)" : undefined }} /></div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {c.depense}</span><span>Budget {c.budget}</span></div>
-          </div>
-        ))}
+        {(projects || []).map((p) => {
+          const r = reports[p.id];
+          const pct = r && r.consumptionPct != null ? r.consumptionPct : 0;
+          const warn = pct >= 90;
+          return (
+            <div className={`card pad ${warn ? "warn" : ""}`} key={p.id}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
+              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {p.donor || "—"}</div>
+              {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
+            </div>
+          );
+        })}
       </div>
       <div className="card pad table-card tbl-scroll">
-        <h3 className="block-title font-display">Produits & charges par axe analytique</h3>
+        <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Axe (projet / bailleur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (bailleur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
-            {analytiqueRows.map((r, i) => (
-              <tr key={i}><td style={{ fontWeight: 500 }}>{r.axe}</td><td className="r pos">{dash(r.prod)}</td><td className="r neg">{nf.format(r.charge)}</td><td className="r" style={{ fontWeight: 600, color: r.solde < 0 ? "var(--rose-600)" : undefined }}>{signed(r.solde)}</td></tr>
-            ))}
+            {(projects || []).map((p) => {
+              const r = reports[p.id];
+              const prod = r ? r.totalRevenue : 0, charge = r ? r.totalExpenses : 0, solde = r ? r.net : 0;
+              return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+            })}
           </tbody>
         </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chaque écriture porte un axe analytique (via le type de transaction) → reporting par bailleur/projet en un clic.</p>
+        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport bailleur en temps réel.</p>
       </div>
     </>
   );

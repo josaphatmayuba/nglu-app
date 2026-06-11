@@ -53,6 +53,11 @@ export const api = {
   ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
   ledgerIncomeStatement: () => jsonFetch("/ledger/income-statement"),
   ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
+
+  // ── Projets / Bailleurs (analytique) ─────────────────────────────────
+  projects: () => jsonFetch("/projects"),
+  createProject: (body) => jsonFetch("/projects", { method: "POST", body: JSON.stringify(body) }),
+  projectReport: (id) => jsonFetch(`/projects/${id}/report`),
   reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
 
   // ── Approbations (gate + workflow) ───────────────────────────────────

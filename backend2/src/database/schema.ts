@@ -179,6 +179,25 @@ export const documentLinks = mysqlTable("document_links", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// === Module Projects ERP/SIFA (migration 0115) — axe analytique + bailleur ===
+export const projects = mysqlTable("projects", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  code: varchar("code", { length: 64 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  donor: varchar("donor", { length: 255 }),
+  description: text("description"),
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  budgetAmount: decimal("budget_amount", { precision: 18, scale: 2 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  status: varchar("status", { length: 32 }).default("active").notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 // === Module Procurement + Stock ERP/SIFA (migration 0113) ===
 export const warehouses = mysqlTable("warehouses", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **ERP/SIFA P2 — Comptabilité analytique : module Projets / Bailleurs** : table `projects` (migration `0115`, dans le journal Drizzle → auto au boot) — code, nom, bailleur, dates, budget, devise. `ProjectsService` : CRUD (soft delete via is_active/status) + **rapport analytique live** `ledgerReport()` qui ventile produits/charges du grand livre filtrés sur `journal_entry_lines.project_id` (+ consommation budgétaire %). Endpoints `/projects` (+ `/:id`, `/:id/report`). Route whitelistée (middleware, désormais dans le CI). UI `comptabilite-app` → écran « Comptabilité analytique » branché : cartes par projet (dépensé/budget/%), tableau produits-charges-solde par projet, création de projet ; fallback démo si aucun projet. Pivot des rapports bailleurs ONG. [3.46.0]
 - **ERP/SIFA P2 — États financiers depuis le grand livre moderne** : `LedgerService.incomeStatement()` (compte de résultat : produits Revenue − charges Expense = résultat net) et `balanceSheet()` (bilan : Actif = Passif + Capitaux propres + résultat de l'exercice, avec contrôle d'équilibre) calculés depuis `journal_entry_lines` par type de compte. Endpoints `GET /ledger/income-statement` et `GET /ledger/balance-sheet` (déclarés avant `/ledger/:id`). UI `comptabilite-app` → écran « États financiers » : onglets Compte de résultat et Bilan branchés sur ces endpoints (résultat excédent/déficit, équilibre Actif=Passif+CP), fallback démo si grand livre vide/API indispo. Premier chantier P2. [3.45.0]
 
 ### Fixed
