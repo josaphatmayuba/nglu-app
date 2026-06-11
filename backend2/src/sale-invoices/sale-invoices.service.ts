@@ -12,6 +12,7 @@ import {
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import {
   CreatePaymentSaleInvoiceDto,
   CreateSaleInvoiceDto,
@@ -31,7 +32,10 @@ function generateInvoiceId(prefix: string, length = 13): string {
 
 @Injectable()
 export class SaleInvoicesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async create(input: CreateSaleInvoiceDto, orgId: number) {
     // 1. Validate products and stock
@@ -220,6 +224,45 @@ export class SaleInvoicesService {
         });
       }
     }
+
+    // 5 bis. Ecriture comptable moderne (partie double, header + lignes) via LedgerService.
+    // Ecrit en parallele des transactions plates ci-dessus (dual-write strangler) ;
+    // les lecteurs basculeront sur journal_entry_lines en Phase 4. Idempotent par facture.
+    const ledgerLines: LedgerLineInput[] = [
+      // Cost of sales: debit 9 / credit 3
+      { accountId: 9, side: "DEBIT", amount: totalPurchasePrice, description: `Cost of sales ${invoiceId}` },
+      { accountId: 3, side: "CREDIT", amount: totalPurchasePrice, description: `Inventory ${invoiceId}` },
+      // Account receivable (TTC): debit 4 / credit 8
+      { accountId: 4, side: "DEBIT", amount: totalAmount + totalTaxAmount, description: `Account receivable ${invoiceId}` },
+      { accountId: 8, side: "CREDIT", amount: totalAmount + totalTaxAmount, description: `Sale invoice ${invoiceId}` },
+    ];
+    if (totalTaxAmount > 0) {
+      // VAT: debit 16 / credit 8
+      ledgerLines.push(
+        { accountId: 16, side: "DEBIT", amount: totalTaxAmount, description: `VAT ${invoiceId}` },
+        { accountId: 8, side: "CREDIT", amount: totalTaxAmount, description: `VAT for sale invoice ${invoiceId}` },
+      );
+    }
+    for (const payment of input.paidAmount ?? []) {
+      if (payment.amount > 0) {
+        // Payment: debit cash/bank (paymentType) / credit receivable 4
+        ledgerLines.push(
+          { accountId: payment.paymentType ?? 1, side: "DEBIT", amount: payment.amount, description: `Payment ${invoiceId}` },
+          { accountId: 4, side: "CREDIT", amount: payment.amount, description: `Payment for sale invoice ${invoiceId}` },
+        );
+      }
+    }
+    await this.ledger.post(
+      {
+        reference: `SALE-${invoiceId}`,
+        particulars: `Sale invoice ${invoiceId}`,
+        sourceModule: "sale",
+        relatedId: invoiceId,
+        idempotencyKey: `sale:${invoiceId}`,
+        lines: ledgerLines,
+      },
+      orgId,
+    );
 
     // 6. Update product stock
     for (let i = 0; i < input.saleInvoiceProduct.length; i++) {
