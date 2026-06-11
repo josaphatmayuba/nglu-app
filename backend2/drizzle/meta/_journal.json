@@ -610,6 +610,13 @@
       "when": 1780326000000,
       "tag": "0106_ledger_seed_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "5",
+      "when": 1780329600000,
+      "tag": "0107_ledger_seed_rules_fix",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Seed des règles comptables non effectif sur dev** : la migration `0106` (INSERT … WHERE NOT EXISTS) n'a pas inséré les règles (échec silencieux au boot, dépendant de l'ordre repair/migrate). Migration `0107_ledger_seed_rules_fix.sql` : contrainte UNIQUE `(organization_id, type, role)` + `INSERT … ON DUPLICATE KEY UPDATE`, idempotente et insensible à l'ordre de boot. `postByRules` pourra résoudre les types `sale`/`purchase`. [3.32.1]
+
 ### Added
 - **Cœur comptable moderne ERP/SIFA — Phase 3 (règles paramétrables)** : `LedgerService.postByRules(type, amountsByRole)` résout compte+sens de chaque rôle métier depuis `transaction_type_rules` (plus de comptes en dur) ; montants ≤0 ignorés. Endpoint `POST /ledger/by-rules`. Migration `0106_ledger_seed_rules.sql` (idempotente) seede les règles par défaut pour `sale` et `purchase` (org 1) d'après les comptes observés. Les paiements (compte = moyen de paiement) restent gérés ligne à ligne. [3.32.0]
 - **Cœur comptable moderne ERP/SIFA — Phase 2 (farmos + hr câblés)** : FarmOS (ventes `farmos_sale:<id>`, dépenses `farmos_expense:<id>`) et HR (salaires `salary:<id>`) écrivent aussi en partie double via `LedgerService` (dual-write, idempotent par ID métier). Comptes dynamiques des types de transaction préservés ; HR salaire débit charge (10) / crédit caisse|banque. `FarmosModule` et `HrModule` importent `LedgerModule`. **Tous les services écrivains métier sont désormais câblés** (sale/purchase-invoices, property-management, farmos, hr) — il reste le seeding des règles (Phase 3) et la bascule des lecteurs (Phase 4). [3.31.0]
