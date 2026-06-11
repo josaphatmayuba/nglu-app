@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — bouton flottant (+) du menu mobile : ouvre désormais un **menu d'actions rapides** (nouvel animal, traitement, production, reproduction, stock, mortalité) en bottom sheet — grandes cibles tactiles adaptées au terrain — au lieu d'ouvrir directement « nouvel animal ». Conforme au principe UX du prompt design (actions rapides à une main).
+
 ## [3.21.0] - 2026-06-10
 
 ### Added
