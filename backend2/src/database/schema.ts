@@ -90,6 +90,70 @@ export const transactionTypes = mysqlTable("transaction_types", {
   updatedAt: timestamp("updated_at"),
 });
 
+// === Coeur comptable moderne ERP/SIFA (migration 0105) ===
+export const accountingPeriods = mysqlTable("accounting_periods", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 64 }).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: varchar("status", { length: 16 }).default("open").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const journalEntries = mysqlTable("journal_entries", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  date: datetime("date").notNull(),
+  reference: varchar("reference", { length: 64 }),
+  particulars: varchar("particulars", { length: 255 }).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }),
+  relatedId: varchar("related_id", { length: 255 }),
+  status: varchar("status", { length: 16 }).default("posted").notNull(),
+  reversalOfId: bigint("reversal_of_id", { mode: "number", unsigned: true }),
+  reversedById: bigint("reversed_by_id", { mode: "number", unsigned: true }),
+  reason: varchar("reason", { length: 255 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  exchangeRate: decimal("exchange_rate", { precision: 18, scale: 6 }),
+  periodId: bigint("period_id", { mode: "number", unsigned: true }),
+  idempotencyKey: varchar("idempotency_key", { length: 128 }),
+  totalDebit: decimal("total_debit", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalCredit: decimal("total_credit", { precision: 18, scale: 2 }).default("0").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const journalEntryLines = mysqlTable("journal_entry_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  entryId: bigint("entry_id", { mode: "number", unsigned: true }).notNull(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  side: varchar("side", { length: 6 }).notNull(),
+  amount: decimal("amount", { precision: 18, scale: 2 }).notNull(),
+  siteId: bigint("site_id", { mode: "number" }),
+  departmentId: bigint("department_id", { mode: "number" }),
+  projectId: bigint("project_id", { mode: "number" }),
+  activityId: bigint("activity_id", { mode: "number" }),
+  description: varchar("description", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const transactionTypeRules = mysqlTable("transaction_type_rules", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  type: varchar("type", { length: 64 }).notNull(),
+  role: varchar("role", { length: 64 }).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  side: varchar("side", { length: 6 }).notNull(),
+  formula: varchar("formula", { length: 255 }),
+  sortOrder: int("sort_order").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export const customers = mysqlTable("customer", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

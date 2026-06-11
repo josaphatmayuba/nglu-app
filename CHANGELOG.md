@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **Cœur comptable moderne ERP/SIFA — Phase 0 (schéma)** : migration `0105_ledger_core.sql` créant `journal_entries`, `journal_entry_lines` (partie double, 1 compte + 1 sens, `decimal(18,2)`), `transaction_type_rules` (comptes paramétrables) et `accounting_periods`. Idempotence via `journal_entries.idempotency_key` (unique par organisation). Tables Drizzle ajoutées à `backend2/src/database/schema.ts`. Voir `livrables ERP-SIFA produits/PLAN_CŒUR_COMPTABLE_MODERNE.md`. [3.26.0]
+
 ## [3.25.0] - 2026-06-11
 
 ### Added
