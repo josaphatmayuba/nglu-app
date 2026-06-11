@@ -399,6 +399,67 @@ export class LedgerService {
     return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
   }
 
+  /** Arrondi 2 decimales (centimes). */
+  private round2(n: number): number {
+    return Math.round(n * 100) / 100;
+  }
+
+  /**
+   * Compte de resultat moderne depuis le grand livre.
+   * Produits (Revenue, solde crediteur) - Charges (Expense, solde debiteur) = resultat net.
+   * Convention balance = debit - credit : charges > 0, produits < 0 (on affiche en valeur positive).
+   */
+  async incomeStatement(orgId: number) {
+    const items = await this.subAccountBalances(orgId);
+    const revenue = items
+      .filter((i) => i.accountType === "Revenue" && i.balance !== 0)
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+    const expenses = items
+      .filter((i) => i.accountType === "Expense" && i.balance !== 0)
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+    const totalRevenue = this.round2(revenue.reduce((t, i) => t + i.amount, 0));
+    const totalExpenses = this.round2(expenses.reduce((t, i) => t + i.amount, 0));
+    const netIncome = this.round2(totalRevenue - totalExpenses);
+    return { revenue, expenses, totalRevenue, totalExpenses, netIncome };
+  }
+
+  /**
+   * Bilan moderne depuis le grand livre.
+   * Actif (solde debiteur) = Passif + Capitaux propres + resultat de l'exercice.
+   * Le resultat net (produits - charges) est integre aux capitaux propres pour equilibrer.
+   */
+  async balanceSheet(orgId: number) {
+    const items = await this.subAccountBalances(orgId);
+    const assets = items
+      .filter((i) => i.accountType === "Asset" && i.balance !== 0)
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+    const liabilities = items
+      .filter((i) => i.accountType === "Liability" && i.balance !== 0)
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+    const equity = items
+      .filter((i) => i.accountType === "Equity" && i.balance !== 0)
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+
+    const totalAssets = this.round2(assets.reduce((t, i) => t + i.amount, 0));
+    const totalLiabilities = this.round2(liabilities.reduce((t, i) => t + i.amount, 0));
+    const equityBase = this.round2(equity.reduce((t, i) => t + i.amount, 0));
+    // Resultat de l'exercice (produits - charges), rattache aux capitaux propres.
+    const { netIncome } = await this.incomeStatement(orgId);
+    const totalEquity = this.round2(equityBase + netIncome);
+    const totalLiabilitiesAndEquity = this.round2(totalLiabilities + totalEquity);
+    return {
+      assets,
+      liabilities,
+      equity,
+      netIncome,
+      totalAssets,
+      totalLiabilities,
+      totalEquity,
+      totalLiabilitiesAndEquity,
+      balanced: totalAssets === totalLiabilitiesAndEquity,
+    };
+  }
+
   // ─── Gate d'approbation (centralise) ─────────────────────────────────────────
 
   /** Liste les modules exigeant une approbation pour l'organisation. */

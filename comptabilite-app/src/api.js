@@ -51,6 +51,8 @@ export const api = {
   ledgerEntries: () => jsonFetch("/ledger"),
   ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
   ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
+  ledgerIncomeStatement: () => jsonFetch("/ledger/income-statement"),
+  ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
   reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
 
   // ── Approbations (gate + workflow) ───────────────────────────────────

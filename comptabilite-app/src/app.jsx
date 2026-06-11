@@ -1015,41 +1015,71 @@ function Dot({ c }) { return <span style={{ display: "inline-block", width: 10, 
 function Etats({ is, bs }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
-  const rev = Number(is.totalRevenue) || fbResultat.totalProduits;
-  const exp = Math.abs(Number(is.totalExpense)) || fbResultat.totalCharges;
-  const profit = Number(is.profit ?? rev - exp);
+  // États réels depuis le grand livre moderne (fallback sur les props/démo si vide ou API indispo).
+  const [liveIs, setLiveIs] = React.useState(null);
+  const [liveBs, setLiveBs] = React.useState(null);
+  React.useEffect(() => {
+    api.ledgerIncomeStatement().then(setLiveIs).catch(() => setLiveIs(null));
+    api.ledgerBalanceSheet().then(setLiveBs).catch(() => setLiveBs(null));
+  }, []);
+  const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
+  const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
+
+  const rev = hasLiveIs ? Number(liveIs.totalRevenue) : (Number(is.totalRevenue) || fbResultat.totalProduits);
+  const exp = hasLiveIs ? Number(liveIs.totalExpenses) : (Math.abs(Number(is.totalExpense)) || fbResultat.totalCharges);
+  const profit = hasLiveIs ? Number(liveIs.netIncome) : Number(is.profit ?? rev - exp);
   return (
     <>
-      <PageHead eyebrow="Exercice 2026 · au 30 juin" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow={hasLiveIs || hasLiveBs ? "Depuis le grand livre" : "Exercice 2026"} title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
       <div className="segtabs">{tabs.map(([id, lbl]) => <button key={id} className={`segtab ${tab === id ? "active grad-accent" : ""}`} onClick={() => setTab(id)}>{lbl}</button>)}</div>
 
       {tab === "resultat" && (
         <div className="card pad" style={{ maxWidth: 680 }}>
-          <h3 className="block-title font-display">Compte de résultat <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(cumul 2026)</span></h3>
+          <h3 className="block-title font-display">Compte de résultat {!hasLiveIs && <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(démonstration)</span>}</h3>
           <div className="stmt num">
-            {fbResultat.produits.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span className="pos">{nf.format(v)}</span></div>)}
+            {hasLiveIs
+              ? liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{nf.format(r.amount)}</span></div>)
+              : fbResultat.produits.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span className="pos">{nf.format(v)}</span></div>)}
             <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
-            {fbResultat.charges.map(([l, v]) => <div className="ln" key={l} style={{ marginTop: 0 }}><span className="muted">{l}</span><span className="neg">{nf.format(v)}</span></div>)}
+            {hasLiveIs
+              ? liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{nf.format(r.amount)}</span></div>)
+              : fbResultat.charges.map(([l, v]) => <div className="ln" key={l} style={{ marginTop: 0 }}><span className="muted">{l}</span><span className="neg">{nf.format(v)}</span></div>)}
             <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
-            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (excédent)</span><span className="pos">{signed(profit)} {CUR}</span></div>
+            <div className="ln total" style={{ background: profit >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}><span style={{ color: profit >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Résultat ({profit >= 0 ? "excédent" : "déficit"})</span><span className={profit >= 0 ? "pos" : "neg"}>{signed(profit)} {CUR}</span></div>
           </div>
         </div>
       )}
 
       {tab === "bilan" && (
         <div className="card pad" style={{ maxWidth: 820 }}>
-          <h3 className="block-title font-display">Bilan <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(au 30/06/2026)</span></h3>
+          <h3 className="block-title font-display">Bilan {!hasLiveBs && <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(démonstration)</span>}</h3>
           <div className="g2">
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
-              <div className="stmt num">{fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(fbBilan.totalActif)} {CUR}</span></div></div>
+              <div className="stmt num">
+                {hasLiveBs
+                  ? liveBs.assets.map((r) => <div className="ln" key={`a${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>)
+                  : fbBilan.actif.map(([l, v]) => <div className="ln" key={l}><span className="muted">{l}</span><span>{nf.format(v)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(hasLiveBs ? liveBs.totalAssets : fbBilan.totalActif)} {CUR}</span></div>
+              </div>
             </div>
             <div>
-              <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif</div>
-              <div className="stmt num">{fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}<div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif</span><span>{nf.format(fbBilan.totalPassif)} {CUR}</span></div></div>
+              <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif + Capitaux propres</div>
+              <div className="stmt num">
+                {hasLiveBs
+                  ? [...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
+                     ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
+                     <div className="ln" key="netinc"><span className="muted">Résultat de l'exercice</span><span className={liveBs.netIncome >= 0 ? "pos" : "neg"}>{nf.format(liveBs.netIncome)}</span></div>]
+                  : fbBilan.passif.map(([l, v], i) => <div className="ln" key={l}><span className="muted">{l}</span><span className={i === 1 ? "pos" : ""}>{nf.format(v)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span>{nf.format(hasLiveBs ? liveBs.totalLiabilitiesAndEquity : fbBilan.totalPassif)} {CUR}</span></div>
+              </div>
             </div>
           </div>
-          <div style={{ marginTop: 12 }}><span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif</span></div>
+          <div style={{ marginTop: 12 }}>
+            {(hasLiveBs ? liveBs.balanced : true)
+              ? <span className="chip emerald"><Icon name="check" style={{ width: 11, height: 11 }} /> Bilan équilibré · Actif = Passif + CP</span>
+              : <span className="chip" style={{ background: "var(--rose-50)", color: "var(--rose-600)" }}>Écart de bilan à vérifier</span>}
+          </div>
         </div>
       )}
 
