@@ -114,6 +114,8 @@ const KIND_INVALIDATES = {
   signVetExam:            ["vetExams"],
   deleteVetExam:          ["vetExams"],
   createMortalityEvent:   ["mortalityEvents", "animals"],
+  createWeighing:         ["weighings", "animals"],
+  deleteWeighing:         ["weighings"],
   createFarmosStaff:      ["staff"],
   createSemenStraw:       ["semenStraws"],
   updateSemenStraw:       ["semenStraws"],
@@ -257,6 +259,9 @@ export const api = {
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
   getMortalityStats: () => jsonFetch("/mortality-events/stats"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
+  listWeighings: (animalId) => jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`),
+  createWeighing: (body) => mutate({ kind: "createWeighing", method: "POST", path: "/weighings", body }),
+  deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
   // Bâtiments

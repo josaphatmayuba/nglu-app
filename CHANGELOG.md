@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.23.0] - 2026-06-10
+
+### Added
+
+- FarmOS — module pesées / courbe de croissance. Nouvelle table `farmos_weighings` (migration `0104`, journal idx 84) + endpoints `GET/POST/DELETE /weighings`. Onglet « Poids » dans la fiche animal : saisie rapide d'une pesée, courbe de croissance (SVG), historique avec suppression. La dernière pesée met à jour le poids courant de l'animal.
+
 ## [3.22.0] - 2026-06-10
 
 ### Changed

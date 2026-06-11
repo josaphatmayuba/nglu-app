@@ -589,6 +589,13 @@
       "when": 1780315200000,
       "tag": "0103_farmos_mortality_enrich",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "5",
+      "when": 1780318800000,
+      "tag": "0104_farmos_weighings",
+      "breakpoints": true
     }
   ]
 }

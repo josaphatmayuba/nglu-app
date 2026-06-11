@@ -336,6 +336,14 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class CreateWeighingDto {
+  @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() weigh_date: string;
+  @ApiProperty({ example: 612 }) @Type(() => Number) @IsNumber() @Min(0) weight: number;
+  @ApiPropertyOptional({ default: "kg" }) @IsOptional() @IsString() weight_unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 export class CreateWorkLogDto {
   @ApiProperty() @IsDateString() work_date: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() user_id?: number;

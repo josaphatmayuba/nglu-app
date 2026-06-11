@@ -27,6 +27,7 @@ import {
   CreateExpenseDto,
   CreateMedicineDto,
   CreateMortalityEventDto,
+  CreateWeighingDto,
   CreateVaccinationDto,
   CreateVetExamDto,
   SignVetExamDto,
@@ -558,6 +559,25 @@ export class FarmosController {
   @Post("mortality-events")
   createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createMortalityEvent(body, orgId);
+  }
+
+  // ─── Pesées ──────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("weighings")
+  listWeighings(@CurrentOrg() orgId: number, @Query("animal_id") animalId?: string) {
+    return this.farmos.listWeighings(orgId, animalId ? Number(animalId) : undefined);
+  }
+
+  @Permissions("create-farmos")
+  @Post("weighings")
+  createWeighing(@Body() body: CreateWeighingDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createWeighing(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("weighings/:id")
+  deleteWeighing(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteWeighing(id, orgId);
   }
 
   @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 ChatGPT integration)." })

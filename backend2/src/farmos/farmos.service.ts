@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -17,6 +17,7 @@ import type {
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
+  CreateWeighingDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
   UpdateMedicineDto,
@@ -1696,6 +1697,44 @@ export class FarmosService {
     }
     await this.publishFarmosUpdate("createMortalityEvent", ["mortalityEvents", "animals"], "created", res.id, orgId);
     return { id: res.id };
+  }
+
+  // ─── Pesées / courbe de croissance ──────────────────────────────────────
+  async listWeighings(orgId: number, animalId?: number) {
+    const conditions = [eq(farmosWeighings.organizationId, orgId), eq(farmosWeighings.isActive, 1)];
+    if (animalId) conditions.push(eq(farmosWeighings.animalId, animalId));
+    return this.db
+      .select()
+      .from(farmosWeighings)
+      .where(and(...conditions))
+      .orderBy(farmosWeighings.weighDate);
+  }
+
+  async createWeighing(input: CreateWeighingDto, orgId: number) {
+    const [res] = await this.db.insert(farmosWeighings).values({
+      organizationId: orgId,
+      animalId: input.animal_id,
+      weighDate: input.weigh_date,
+      weight: String(input.weight),
+      weightUnit: input.weight_unit ?? "kg",
+      notes: input.notes ?? null,
+    }).$returningId();
+    // Met à jour le poids courant de l'animal avec la dernière pesée.
+    await this.db
+      .update(farmosAnimals)
+      .set({ weight: String(input.weight), weightUnit: input.weight_unit ?? "kg" })
+      .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)));
+    await this.publishFarmosUpdate("createWeighing", ["weighings", "animals"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async deleteWeighing(id: number, orgId: number) {
+    await this.db
+      .update(farmosWeighings)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosWeighings.id, id), eq(farmosWeighings.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteWeighing", ["weighings"], "deleted", id, orgId);
+    return { message: "Pesée supprimée." };
   }
 
   async listAiInsights(orgId: number) {

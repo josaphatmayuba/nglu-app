@@ -322,7 +322,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
-  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], finance: null, loading: true });
+  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
   const reloadPhotos = React.useCallback(() => {
     if (!animal._pk) { setPhotos([]); return; }
@@ -335,7 +335,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     return () => window.removeEventListener("farmos:photo-uploaded", h);
   }, [reloadPhotos, animal._pk]);
   React.useEffect(() => {
-    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], finance: null, loading: false }); return; }
+    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
     Promise.all([
       api.listTreatments(),
@@ -343,8 +343,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       api.listProductionLogs(),
       api.listDocuments(animal._pk).catch(() => []),
       api.getProfitability().catch(() => null),
+      api.listWeighings(animal._pk).catch(() => []),
     ])
-      .then(([t, r, p, docs, prof]) => {
+      .then(([t, r, p, docs, prof, weighings]) => {
         if (cancel) return;
         const matchAnimal = (row) => (row.animalId ?? row.animal_id) === animal._pk;
         const finance = prof && Array.isArray(prof.byAnimal)
@@ -368,6 +369,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           production: (Array.isArray(p) ? p : []).filter(matchAnimal),
           documents:  (Array.isArray(docs) ? docs : []),
           alerts,
+          weighings:  (Array.isArray(weighings) ? weighings : []),
           finance,
           loading: false,
         });
@@ -470,6 +472,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             { id: "health",   fr: "Santé",         en: "Health",      count: related.treatments.length },
             { id: "repro",    fr: "Reproduction",  en: "Reproduction", count: related.repro.length },
             { id: "prod",     fr: "Production",    en: "Production",  count: related.production.length },
+            { id: "weight",   fr: "Poids",         en: "Weight",      count: related.weighings.length },
             { id: "finance",  fr: "Finances",      en: "Finance",     count: null },
             { id: "documents", fr: "Documents",    en: "Documents",   count: related.documents.length },
             { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length },
@@ -561,6 +564,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         )}
         {!editing && tab === "prod" && (
           <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
+        )}
+        {!editing && tab === "weight" && (
+          <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading}
+            onChanged={() => window.dispatchEvent(new CustomEvent("farmos:animal-created"))}/>
         )}
         {!editing && tab === "finance" && (() => {
           if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
@@ -659,6 +666,89 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         })()}
       </div>
     </aside>
+  );
+};
+
+// Onglet Poids / croissance : courbe d'évolution + historique + saisie d'une pesée.
+const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), weight: "" });
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const rows = (weighings || []).slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
+  const points = rows.map((w) => Number(w.weight)).filter((n) => !Number.isNaN(n));
+  const submit = async () => {
+    if (saving || !animal._pk) return;
+    if (form.weight === "" || Number(form.weight) <= 0) { setErr(lang === "fr" ? "Poids requis." : "Weight required."); return; }
+    setSaving(true); setErr(null);
+    try {
+      await api.createWeighing({ animal_id: animal._pk, weigh_date: form.date, weight: Number(form.weight), weight_unit: "kg" });
+      setForm({ date: new Date().toISOString().slice(0, 10), weight: "" });
+      onChanged && onChanged();
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+  const del = async (id) => {
+    if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
+    try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
+  };
+  // Mini-courbe SVG.
+  const Curve = () => {
+    if (points.length < 2) return null;
+    const w = 280, h = 70, pad = 4;
+    const min = Math.min(...points), max = Math.max(...points);
+    const span = max - min || 1;
+    const dx = (w - pad * 2) / (points.length - 1);
+    const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * dx} ${h - pad - ((p - min) / span) * (h - pad * 2)}`).join(" ");
+    return (
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} preserveAspectRatio="none">
+        <path d={path} fill="none" stroke="var(--forest-700)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Saisie rapide */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date" : "Date"}</span>
+          <input className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 100px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Poids (kg)" : "Weight (kg)"}</span>
+          <input className="input mono" type="number" step="0.1" min="0" value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}/>
+        </label>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          <Icon name="plus" size={13} color="#ECF1EC"/>{saving ? "…" : (lang === "fr" ? "Pesée" : "Weigh-in")}
+        </button>
+      </div>
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+
+      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
+      {!loading && rows.length > 0 && (
+        <>
+          {points.length >= 2 && (
+            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{lang === "fr" ? "Courbe de croissance" : "Growth curve"}</div>
+              <Curve/>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
+                <span className="mono">{Math.min(...points)} kg</span>
+                <span className="mono">{Math.max(...points)} kg</span>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {rows.slice().reverse().map((w, i, arr) => (
+              <div key={w.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
+                <Icon name="weight" size={14} color="var(--ink-700)"/>
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(w.weighDate || w.weigh_date).slice(0, 10)}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{Number(w.weight)} {w.weightUnit || w.weight_unit || "kg"}</span>
+                <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
