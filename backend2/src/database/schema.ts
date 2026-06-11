@@ -154,6 +154,83 @@ export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// === Module Procurement + Stock ERP/SIFA (migration 0113) ===
+export const warehouses = mysqlTable("warehouses", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  code: varchar("code", { length: 32 }),
+  siteId: bigint("site_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const stockMovements = mysqlTable("stock_movements", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  movementType: varchar("movement_type", { length: 16 }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 2 }),
+  reference: varchar("reference", { length: 64 }),
+  sourceModule: varchar("source_module", { length: 64 }),
+  relatedId: varchar("related_id", { length: 64 }),
+  note: varchar("note", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const purchaseOrders = mysqlTable("purchase_orders", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  reference: varchar("reference", { length: 64 }),
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }),
+  status: varchar("status", { length: 16 }).default("draft").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+  expectedDate: date("expected_date"),
+  note: varchar("note", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const purchaseOrderLines = mysqlTable("purchase_order_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  purchaseOrderId: bigint("purchase_order_id", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 18, scale: 2 }).default("0").notNull(),
+  receivedQuantity: decimal("received_quantity", { precision: 18, scale: 3 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const goodsReceipts = mysqlTable("goods_receipts", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  purchaseOrderId: bigint("purchase_order_id", { mode: "number", unsigned: true }).notNull(),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }).notNull(),
+  reference: varchar("reference", { length: 64 }),
+  receivedBy: bigint("received_by", { mode: "number" }),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const goodsReceiptLines = mysqlTable("goods_receipt_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  goodsReceiptId: bigint("goods_receipt_id", { mode: "number", unsigned: true }).notNull(),
+  purchaseOrderLineId: bigint("purchase_order_line_id", { mode: "number", unsigned: true }),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Ecritures comptables en attente d'approbation (migration 0112).
 export const ledgerPendingEntries = mysqlTable("ledger_pending_entries", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

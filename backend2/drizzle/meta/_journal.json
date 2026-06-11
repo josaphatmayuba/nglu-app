@@ -652,6 +652,13 @@
       "when": 1780347600000,
       "tag": "0112_ledger_pending_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "5",
+      "when": 1780351200000,
+      "tag": "0113_procurement_stock",
+      "breakpoints": true
     }
   ]
 }

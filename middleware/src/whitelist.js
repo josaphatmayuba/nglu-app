@@ -106,6 +106,7 @@ module.exports = [
   { method: '*',    prefix: '/ledger',                        auth: true  },
   { method: '*',    prefix: '/workflow',                      auth: true  },
   { method: '*',    prefix: '/budget',                        auth: true  },
+  { method: '*',    prefix: '/procurement',                   auth: true  },
   { method: '*',    prefix: '/transaction',                   auth: true  },
   { method: '*',    prefix: '/transaction-type',              auth: true  },
   { method: '*',    prefix: '/uom',                           auth: true  },
