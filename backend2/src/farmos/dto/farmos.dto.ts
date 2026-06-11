@@ -344,6 +344,22 @@ export class CreateWeighingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class UpdateFarmosStaffDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string | null;
+  @ApiPropertyOptional({ example: "Vétérinaire" }) @IsOptional() @IsString() designation?: string | null;
+}
+
+export class SetFarmosStaffStatusDto {
+  @ApiProperty({ enum: ["active", "left", "resigned"], example: "resigned" })
+  @IsIn(["active", "left", "resigned"])
+  status: "active" | "left" | "resigned";
+
+  @ApiPropertyOptional({ example: "2026-06-30" }) @IsOptional() @IsDateString() leave_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() leave_reason?: string | null;
+}
+
 export class CreateWorkLogDto {
   @ApiProperty() @IsDateString() work_date: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() user_id?: number;

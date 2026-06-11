@@ -28,6 +28,8 @@ import {
   CreateMedicineDto,
   CreateMortalityEventDto,
   CreateWeighingDto,
+  UpdateFarmosStaffDto,
+  SetFarmosStaffStatusDto,
   CreateVaccinationDto,
   CreateVetExamDto,
   SignVetExamDto,
@@ -648,6 +650,20 @@ export class FarmosController {
   @Post("staff")
   createFarmosStaff(@Body() body: CreateFarmosStaffDto, @CurrentOrg() orgId: number) {
     return this.farmos.createFarmosStaff(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a FarmOS staff member (name, phone, designation)." })
+  @Permissions("update-farmos")
+  @Put("staff/:id")
+  updateFarmosStaff(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateFarmosStaffDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateFarmosStaff(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Set a FarmOS staff member status: active / left / resigned." })
+  @Permissions("update-farmos")
+  @Patch("staff/:id/status")
+  setFarmosStaffStatus(@Param("id", ParseIntPipe) id: number, @Body() body: SetFarmosStaffStatusDto, @CurrentOrg() orgId: number) {
+    return this.farmos.setFarmosStaffStatus(id, body, orgId);
   }
 
   @ApiOperation({ summary: "List daily work logs. Optional ?user_id, ?from, ?to (YYYY-MM-DD)." })

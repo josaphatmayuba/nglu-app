@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+## [3.24.0] - 2026-06-10
+
+### Added
+
+- FarmOS — voir / modifier un employé + gestion du statut. Les cartes employés de l'écran Équipe sont cliquables : modal d'édition (prénom, nom, téléphone, rôle/désignation) et changement de statut **actif / parti / démissionné** (avec motif et date de départ). Backend : `PUT /staff/:id` (update) et `PATCH /staff/:id/status` (réutilise `status`/`leaveDate`/`leaveReason` de `users`, sans migration).
+
 ## [3.23.1] - 2026-06-10
 
 ### Fixed

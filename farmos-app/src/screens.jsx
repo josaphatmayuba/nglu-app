@@ -2459,6 +2459,7 @@ const EmployeesScreen = ({ lang }) => {
   const [search, setSearch] = React.useState("");
   const [roleFilter, setRoleFilter] = React.useState("");
   const [addOpen, setAddOpen] = React.useState(false);
+  const [editStaff, setEditStaff] = React.useState(null);
 
   const refresh = useDataRefresh(["staff"]);
   const reload = React.useCallback(() => {
@@ -2547,7 +2548,8 @@ const EmployeesScreen = ({ lang }) => {
           const color = colorFor(u.designation);
           const leave = onLeave(u);
           return (
-            <div key={u.id} className="card" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <button key={u.id} className="card" onClick={() => setEditStaff(u)}
+              style={{ display: "flex", gap: 12, alignItems: "center", textAlign: "left", cursor: "pointer", border: "1px solid var(--border-1)", background: "var(--paper)" }}>
               <div style={{ width: 44, height: 44, borderRadius: 10, background: color, color: "var(--parchment-50)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18, flexShrink: 0 }}>
                 {initials(u)}
               </div>
@@ -2567,13 +2569,105 @@ const EmployeesScreen = ({ lang }) => {
                   {u.department && <span className="tag">{u.department}</span>}
                 </div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {editStaff && (
+        <StaffEditModal lang={lang} staff={editStaff}
+          onClose={() => setEditStaff(null)}
+          onSaved={() => { setEditStaff(null); reload(); }}/>
+      )}
     </div>
   );
 };
+
+// Modal voir / modifier un employé + changer son statut (actif / parti / démissionné).
+function StaffEditModal({ lang, staff, onClose, onSaved }) {
+  const [firstName, setFirstName] = React.useState(staff.firstName || "");
+  const [lastName, setLastName] = React.useState(staff.lastName || "");
+  const [phone, setPhone] = React.useState(staff.phone || "");
+  const [designation, setDesignation] = React.useState(staff.designation || "");
+  const [saving, setSaving] = React.useState(false);
+  const [statusBusy, setStatusBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const lbl = { fontSize: 12, color: "var(--fg-2)" };
+  const inputStyle = { width: "100%", marginTop: 4 };
+  const isActive = !staff.leaveDate || new Date(staff.leaveDate) > new Date();
+
+  const save = async () => {
+    setSaving(true); setError("");
+    try {
+      await api.updateFarmosStaff(staff.id, {
+        firstName: firstName.trim() || null,
+        lastName: lastName.trim() || null,
+        phone: phone.trim() || null,
+        designation: designation.trim() || null,
+      });
+      onSaved();
+    } catch (e) { setError(e.message || "Erreur"); setSaving(false); }
+  };
+  const setStatus = async (status) => {
+    const labels = { active: lang === "fr" ? "réactiver" : "reactivate", left: lang === "fr" ? "marquer comme parti" : "mark as left", resigned: lang === "fr" ? "marquer comme démissionné" : "mark as resigned" };
+    if (!window.confirm(`${lang === "fr" ? "Confirmer :" : "Confirm:"} ${labels[status]} ${[firstName, lastName].filter(Boolean).join(" ")} ?`)) return;
+    setStatusBusy(true); setError("");
+    try {
+      const body = { status };
+      if (status !== "active") {
+        const reason = window.prompt(lang === "fr" ? "Motif (optionnel) :" : "Reason (optional):", status === "resigned" ? (lang === "fr" ? "Démission" : "Resignation") : (lang === "fr" ? "Départ" : "Departure"));
+        if (reason != null) body.leave_reason = reason;
+      }
+      await api.setFarmosStaffStatus(staff.id, body);
+      onSaved();
+    } catch (e) { setError(e.message || "Erreur"); setStatusBusy(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 480, maxWidth: "100%", maxHeight: "92vh", overflow: "auto", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, marginBottom: 4 }}>{lang === "fr" ? "Employé" : "Employee"}</h3>
+        <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 16 }}>{staff.email || `#${staff.id}`} · {staff.department || "—"}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label style={lbl}>{lang === "fr" ? "Prénom" : "First name"}
+              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className="input" style={inputStyle}/>
+            </label>
+            <label style={lbl}>{lang === "fr" ? "Nom" : "Last name"}
+              <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="input" style={inputStyle}/>
+            </label>
+          </div>
+          <label style={lbl}>{lang === "fr" ? "Téléphone" : "Phone"}
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} className="input" style={inputStyle}/>
+          </label>
+          <label style={lbl}>{lang === "fr" ? "Rôle / désignation" : "Role / designation"}
+            <input value={designation} onChange={(e) => setDesignation(e.target.value)} className="input" style={inputStyle} placeholder={lang === "fr" ? "Vétérinaire, Éleveur…" : "Vet, Breeder…"}/>
+          </label>
+
+          <div style={{ borderTop: "1px dashed var(--border-1)", paddingTop: 12 }}>
+            <div style={{ ...lbl, marginBottom: 8 }}>{lang === "fr" ? "Statut" : "Status"} : <strong style={{ color: isActive ? "var(--health-700)" : "var(--oxblood-700)" }}>{isActive ? (lang === "fr" ? "Actif" : "Active") : (lang === "fr" ? "Inactif" : "Inactive")}</strong>{staff.leaveDate && <span style={{ color: "var(--fg-3)" }}> · {String(staff.leaveDate).slice(0, 10)}{staff.leaveReason ? ` (${staff.leaveReason})` : ""}</span>}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {isActive ? (
+                <>
+                  <button className="btn btn-sm" style={{ color: "var(--clay-700)", borderColor: "var(--clay-700)" }} onClick={() => setStatus("left")} disabled={statusBusy}>{lang === "fr" ? "Parti" : "Left"}</button>
+                  <button className="btn btn-sm" style={{ color: "var(--oxblood-700)", borderColor: "var(--oxblood-700)" }} onClick={() => setStatus("resigned")} disabled={statusBusy}>{lang === "fr" ? "Démissionné" : "Resigned"}</button>
+                </>
+              ) : (
+                <button className="btn btn-sm" style={{ color: "var(--health-700)", borderColor: "var(--health-700)" }} onClick={() => setStatus("active")} disabled={statusBusy}>{lang === "fr" ? "Réactiver" : "Reactivate"}</button>
+              )}
+            </div>
+          </div>
+
+          {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            <button className="btn" onClick={onClose} disabled={saving || statusBusy}>{lang === "fr" ? "Fermer" : "Close"}</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving || statusBusy}>{saving ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── SETTINGS (placeholder) ──────────────────────────────────────────────
 // ─── Localisations manager (bâtiments + salles) ──────────────────────────

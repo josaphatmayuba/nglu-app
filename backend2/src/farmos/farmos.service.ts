@@ -18,7 +18,9 @@ import type {
   CreateSemenStrawDto,
   CreateTreatmentDto,
   CreateWeighingDto,
+  SetFarmosStaffStatusDto,
   UpdateAnimalDto,
+  UpdateFarmosStaffDto,
   UpdateDiseaseDto,
   UpdateMedicineDto,
   UpdateSemenStrawDto,
@@ -315,6 +317,52 @@ export class FarmosService {
 
     await this.publishFarmosUpdate("createFarmosStaff", ["staff"], "created", created?.id ?? input.email, orgId);
     return { user: created, generatedPassword: input.password ? null : generatedPassword };
+  }
+
+  // Modifie un employé FarmOS (nom, téléphone, désignation/rôle métier).
+  async updateFarmosStaff(id: number, input: UpdateFarmosStaffDto, orgId: number) {
+    const [existing] = await this.db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId))).limit(1);
+    if (!existing) throw new NotFoundException("Employé introuvable.");
+    const patch: Record<string, unknown> = {};
+    if (input.firstName !== undefined) patch.firstName = input.firstName;
+    if (input.lastName !== undefined) patch.lastName = input.lastName;
+    if (input.phone !== undefined) patch.phone = input.phone;
+    if (input.designation !== undefined && input.designation) {
+      const [d] = await this.db.select({ id: designations.id }).from(designations)
+        .where(sql`LOWER(${designations.name}) = ${input.designation.toLowerCase()}`).limit(1);
+      let designationId = d?.id;
+      if (!designationId) {
+        const [r] = await this.db.insert(designations).values({ name: input.designation } as any).$returningId();
+        designationId = (r as any).id;
+      }
+      patch.designationId = designationId;
+    }
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(users).set(patch).where(eq(users.id, id));
+    }
+    await this.publishFarmosUpdate("updateFarmosStaff", ["staff"], "updated", id, orgId);
+    return { ok: true };
+  }
+
+  // Change le statut d'un employé : active / left (parti) / resigned (démissionné).
+  // Inactif => status="false" (n'apparaît plus dans la liste active) + leaveDate/reason.
+  async setFarmosStaffStatus(id: number, input: SetFarmosStaffStatusDto, orgId: number) {
+    const [existing] = await this.db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId))).limit(1);
+    if (!existing) throw new NotFoundException("Employé introuvable.");
+    if (input.status === "active") {
+      await this.db.update(users).set({ status: "true", leaveDate: null, leaveReason: null }).where(eq(users.id, id));
+    } else {
+      const reason = input.leave_reason ?? (input.status === "resigned" ? "Démission" : "Départ");
+      await this.db.update(users).set({
+        status: "false",
+        leaveDate: input.leave_date ? new Date(input.leave_date) : new Date(),
+        leaveReason: reason,
+      }).where(eq(users.id, id));
+    }
+    await this.publishFarmosUpdate("setFarmosStaffStatus", ["staff"], "updated", id, orgId);
+    return { ok: true };
   }
 
   // ─── Animals ─────────────────────────────────────────────────────────────
