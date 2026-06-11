@@ -104,7 +104,34 @@ export function Reglages({ device }) {
           </section>
         </SettingsGroup>
       )}
+
+      <SettingsGroup label="À propos">
+        <AboutCard />
+      </SettingsGroup>
     </div>
+  );
+}
+
+// Carte « À propos » — version applicative (source unique monorepo) + dernière mise à jour.
+function AboutCard() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(host) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
+  return (
+    <section className="card settings-card">
+      <h3>À propos</h3>
+      <div className="setting-row"><span>Version</span><b>v{base}</b></div>
+      <div className="setting-row"><span>Build</span><b>{build}</b></div>
+      <div className="setting-row"><span>Commit</span><b>{commit}</b></div>
+      <div className="setting-row"><span>Dernière mise à jour</span><b>{lastUpdate}</b></div>
+      <div className="setting-row"><span>Environnement</span><b>{env}</b></div>
+    </section>
   );
 }
 

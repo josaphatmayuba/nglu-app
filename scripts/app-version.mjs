@@ -46,5 +46,7 @@ export function versionDefine() {
     "import.meta.env.VITE_APP_BASE_VERSION": JSON.stringify(base),
     "import.meta.env.VITE_APP_BUILD_VERSION": JSON.stringify(build),
     "import.meta.env.VITE_APP_COMMIT": JSON.stringify(commit),
+    // Date/heure du build (ISO) — affichée comme « dernière mise à jour » dans les Paramètres.
+    "import.meta.env.VITE_APP_BUILD_DATE": JSON.stringify(new Date().toISOString()),
   };
 }
