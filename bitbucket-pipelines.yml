@@ -225,11 +225,11 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist $APP/domus-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist"
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
-                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
-                - $SSH $SERVER "find $APP/domus-app/dist -mindepth 1 -delete && cp -r /tmp/domus-app-dist/. $APP/domus-app/dist/ && rm -rf /tmp/domus-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                # PROD: html-domus-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: FarmOS → prod
@@ -239,11 +239,11 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/farmos-app-dist && mkdir -p /tmp/farmos-app-dist $APP/farmos-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/farmos-app-dist && mkdir -p /tmp/farmos-app-dist"
                 - scp -o StrictHostKeyChecking=no -r farmos-app/dist/* $SERVER:/tmp/farmos-app-dist/
-                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
-                - $SSH $SERVER "find $APP/farmos-app/dist -mindepth 1 -delete && cp -r /tmp/farmos-app-dist/. $APP/farmos-app/dist/ && rm -rf /tmp/farmos-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                # PROD: html-farmos-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-farmos-prod -mindepth 1 -delete' && docker cp /tmp/farmos-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-farmos-prod/ && rm -rf /tmp/farmos-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: BatiPro → prod
@@ -253,11 +253,11 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist $APP/batipro-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist"
                 - scp -o StrictHostKeyChecking=no -r batipro-app/dist/* $SERVER:/tmp/batipro-app-dist/
-                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
-                - $SSH $SERVER "find $APP/batipro-app/dist -mindepth 1 -delete && cp -r /tmp/batipro-app-dist/. $APP/batipro-app/dist/ && rm -rf /tmp/batipro-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                # PROD: html-batipro-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-batipro-prod -mindepth 1 -delete 2>/dev/null; mkdir -p /usr/share/nginx/html-batipro-prod' && docker cp /tmp/batipro-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-prod/ && rm -rf /tmp/batipro-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: HR → prod
