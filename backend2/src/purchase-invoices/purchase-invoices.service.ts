@@ -10,6 +10,7 @@ import {
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -26,7 +27,10 @@ function generateInvoiceId(prefix: string, length = 13): string {
 
 @Injectable()
 export class PurchaseInvoicesService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async create(input: CreatePurchaseInvoiceDto, orgId: number) {
     // 1. Validate supplier
@@ -143,6 +147,45 @@ export class PurchaseInvoicesService {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         });
       }
+    }
+
+    // 5 bis. Ecriture comptable moderne (partie double) via LedgerService.
+    // Dual-write strangler ; idempotent par facture. Lignes alignees sur les
+    // transactions plates ci-dessus (achat: debit 3/credit 5, tva: debit 15/credit 5,
+    // paiement: debit 5/credit cash). Globalement equilibree.
+    const ledgerLines: LedgerLineInput[] = [];
+    if (totalPurchasePrice > 0) {
+      ledgerLines.push(
+        { accountId: 3, side: "DEBIT", amount: totalPurchasePrice, description: `Inventory ${invoiceId}` },
+        { accountId: 5, side: "CREDIT", amount: totalPurchasePrice, description: `Purchase invoice ${invoiceId}` },
+      );
+    }
+    if (totalTax > 0) {
+      ledgerLines.push(
+        { accountId: 15, side: "DEBIT", amount: totalTax, description: `VAT input ${invoiceId}` },
+        { accountId: 5, side: "CREDIT", amount: totalTax, description: `Tax for purchase invoice ${invoiceId}` },
+      );
+    }
+    for (const payment of input.paidAmount ?? []) {
+      if (payment.amount > 0) {
+        ledgerLines.push(
+          { accountId: 5, side: "DEBIT", amount: payment.amount, description: `Payment ${invoiceId}` },
+          { accountId: payment.paymentType ?? 1, side: "CREDIT", amount: payment.amount, description: `Payment for purchase invoice ${invoiceId}` },
+        );
+      }
+    }
+    if (ledgerLines.length >= 2) {
+      await this.ledger.post(
+        {
+          reference: `PURCH-${invoiceId}`,
+          particulars: `Purchase invoice ${invoiceId}`,
+          sourceModule: "purchase",
+          relatedId: invoiceId,
+          idempotencyKey: `purchase:${invoiceId}`,
+          lines: ledgerLines,
+        },
+        orgId,
+      );
     }
 
     // 6. Update product stock (increase and recalculate avg purchase price)
