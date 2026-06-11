@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **Cœur comptable moderne ERP/SIFA — Phase 4 (rapports modernes en parallèle)** : `LedgerService.subAccountBalances()` et `trialBalance()` calculent les soldes par sous-compte depuis le grand livre moderne (`journal_entry_lines`, `side` DEBIT/CREDIT). Endpoints `GET /ledger/balances` et `GET /ledger/trial-balance` (déclarés avant `/ledger/:id` pour le routing). Ajoutés **en parallèle** des rapports table-plate existants (`accounts.service`) — pas de bascule sèche : les lecteurs actuels restent intacts tant que l'historique n'est pas migré (esprit strangler). [3.33.0]
+
 ### Fixed
 - **Seed des règles comptables non effectif sur dev** : la migration `0106` (INSERT … WHERE NOT EXISTS) n'a pas inséré les règles (échec silencieux au boot, dépendant de l'ordre repair/migrate). Migration `0107_ledger_seed_rules_fix.sql` : contrainte UNIQUE `(organization_id, type, role)` + `INSERT … ON DUPLICATE KEY UPDATE`, idempotente et insensible à l'ordre de boot. `postByRules` pourra résoudre les types `sale`/`purchase`. [3.32.1]
 

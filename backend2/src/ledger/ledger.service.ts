@@ -9,8 +9,10 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   accountingPeriods,
+  accounts,
   journalEntries,
   journalEntryLines,
+  subAccounts,
   transactionTypeRules,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -318,6 +320,61 @@ export class LedgerService {
       return { ...r, balance: balanceCents / 100 };
     });
     return { accountId, balance: balanceCents / 100, lines };
+  }
+
+  /**
+   * Soldes par sous-compte calcules depuis le grand livre moderne (journal_entry_lines).
+   * Equivalent moderne de accounts.subAccountBalances() (table plate) — sert de base
+   * a la bascule des rapports (Phase 4). balance = somme(debit) - somme(credit).
+   */
+  async subAccountBalances(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: subAccounts.id,
+        account: accounts.name,
+        accountType: accounts.type,
+        subAccount: subAccounts.name,
+        totalDebit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
+        totalCredit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
+      })
+      .from(subAccounts)
+      .leftJoin(accounts, eq(accounts.id, subAccounts.accountId))
+      .leftJoin(
+        journalEntryLines,
+        and(
+          eq(journalEntryLines.accountId, subAccounts.id),
+          eq(journalEntryLines.organizationId, orgId),
+        ),
+      )
+      .groupBy(subAccounts.id)
+      .orderBy(desc(subAccounts.id));
+
+    return rows.map((row) => {
+      const totalDebit = Math.round(Number(row.totalDebit) * 100) / 100;
+      const totalCredit = Math.round(Number(row.totalCredit) * 100) / 100;
+      return {
+        id: row.id,
+        account: row.account,
+        accountType: row.accountType,
+        subAccount: row.subAccount,
+        totalDebit,
+        totalCredit,
+        balance: Math.round((totalDebit - totalCredit) * 100) / 100,
+      };
+    });
+  }
+
+  /**
+   * Balance generale (trial balance) moderne : debits/credits par sous-compte
+   * a partir du grand livre. match = true si total debit == total credit.
+   */
+  async trialBalance(orgId: number) {
+    const items = await this.subAccountBalances(orgId);
+    const debits = items.filter((i) => i.balance > 0);
+    const credits = items.filter((i) => i.balance < 0);
+    const totalDebit = Math.round(debits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
+    const totalCredit = Math.round(credits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
+    return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
   }
 
   /** Trouve la periode ouverte couvrant la date (ou null si aucune). */

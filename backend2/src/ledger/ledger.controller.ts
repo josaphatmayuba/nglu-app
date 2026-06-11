@@ -59,6 +59,22 @@ export class LedgerController {
     return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0);
   }
 
+  @ApiOperation({ summary: "Soldes par sous-compte (grand livre moderne)" })
+  @ApiOkResponse({ description: "Soldes" })
+  @Permissions("readAll-transaction")
+  @Get("balances")
+  balances(@CurrentOrg() orgId: number) {
+    return this.ledger.subAccountBalances(orgId);
+  }
+
+  @ApiOperation({ summary: "Balance generale (trial balance) moderne" })
+  @ApiOkResponse({ description: "Trial balance" })
+  @Permissions("readAll-transaction")
+  @Get("trial-balance")
+  trialBalance(@CurrentOrg() orgId: number) {
+    return this.ledger.trialBalance(orgId);
+  }
+
   @ApiOperation({ summary: "Grand livre d'un compte (lignes + solde)" })
   @ApiOkResponse({ description: "Grand livre" })
   @ApiParam({ name: "accountId", type: Number })
