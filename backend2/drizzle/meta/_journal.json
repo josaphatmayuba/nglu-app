@@ -659,6 +659,13 @@
       "when": 1780351200000,
       "tag": "0113_procurement_stock",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "5",
+      "when": 1780354800000,
+      "tag": "0114_documents",
+      "breakpoints": true
     }
   ]
 }

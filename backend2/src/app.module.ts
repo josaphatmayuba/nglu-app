@@ -45,6 +45,7 @@ import { LedgerModule } from "./ledger/ledger.module";
 import { WorkflowModule } from "./workflow/workflow.module";
 import { BudgetModule } from "./budget/budget.module";
 import { ProcurementModule } from "./procurement/procurement.module";
+import { DocumentsModule } from "./documents/documents.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
 
@@ -94,6 +95,7 @@ import { UsersModule } from "./users/users.module";
     WorkflowModule,
     BudgetModule,
     ProcurementModule,
+    DocumentsModule,
     TransactionTypesModule,
     UomModule,
     UsersModule,

@@ -154,6 +154,31 @@ export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// === Module Documents ERP/SIFA (migration 0114) ===
+export const documents = mysqlTable("documents", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  type: varchar("type", { length: 64 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  fileUrl: varchar("file_url", { length: 512 }),
+  mimeType: varchar("mime_type", { length: 128 }),
+  contentHash: varchar("content_hash", { length: 128 }),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  uploadedBy: bigint("uploaded_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const documentLinks = mysqlTable("document_links", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  documentId: bigint("document_id", { mode: "number", unsigned: true }).notNull(),
+  entityType: varchar("entity_type", { length: 64 }).notNull(),
+  entityId: varchar("entity_id", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // === Module Procurement + Stock ERP/SIFA (migration 0113) ===
 export const warehouses = mysqlTable("warehouses", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
