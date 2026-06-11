@@ -34,6 +34,7 @@ export default defineConfig({
     "import.meta.env.VITE_APP_BUILD_VERSION": JSON.stringify(buildVersion),
     "import.meta.env.VITE_APP_COMMIT": JSON.stringify(commit),
     "import.meta.env.VITE_APP_CHANGELOG": JSON.stringify(changelog),
+    "import.meta.env.VITE_APP_BUILD_DATE": JSON.stringify(new Date().toISOString()),
   },
   resolve: {
     alias: {
