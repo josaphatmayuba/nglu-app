@@ -177,6 +177,9 @@ export class LedgerService {
       );
     }
 
+    if (!input.amountsByRole || typeof input.amountsByRole !== "object") {
+      throw new BadRequestException("amountsByRole est requis (objet role -> montant).");
+    }
     const lines: LedgerLineInput[] = [];
     for (const role of Object.keys(input.amountsByRole)) {
       const amount = input.amountsByRole[role];

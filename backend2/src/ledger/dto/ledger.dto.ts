@@ -7,6 +7,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsOptional,
   IsPositive,
   IsString,
@@ -116,6 +117,8 @@ export class PostByRulesDto {
   type!: string;
 
   @ApiProperty({ description: "Montants par role (ex: { receivable: 116, revenue: 100, vat_output: 16 })" })
+  @IsObject()
+  @IsNotEmpty()
   amountsByRole!: Record<string, number>;
 
   @ApiProperty()
