@@ -322,7 +322,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
-  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], loading: true });
+  const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
   const reloadPhotos = React.useCallback(() => {
     if (!animal._pk) { setPhotos([]); return; }
@@ -335,22 +335,48 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     return () => window.removeEventListener("farmos:photo-uploaded", h);
   }, [reloadPhotos, animal._pk]);
   React.useEffect(() => {
-    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], loading: false }); return; }
+    if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
-    Promise.all([api.listTreatments(), api.listReproductionEvents(), api.listProductionLogs()])
-      .then(([t, r, p]) => {
+    Promise.all([
+      api.listTreatments(),
+      api.listReproductionEvents(),
+      api.listProductionLogs(),
+      api.listDocuments(animal._pk).catch(() => []),
+      api.getProfitability().catch(() => null),
+      api.listWeighings(animal._pk).catch(() => []),
+    ])
+      .then(([t, r, p, docs, prof, weighings]) => {
         if (cancel) return;
         const matchAnimal = (row) => (row.animalId ?? row.animal_id) === animal._pk;
+        const finance = prof && Array.isArray(prof.byAnimal)
+          ? prof.byAnimal.find((x) => Number(x.animalId) === Number(animal._pk)) || null
+          : null;
+        // Alertes par animal : délai de retrait en cours (date calculée par le backend, portée par l'animal).
+        const today = new Date().toISOString().slice(0, 10);
+        const myTreatments = (Array.isArray(t) ? t : []).filter(matchAnimal);
+        const alerts = [];
+        const wd = animal.withdrawal;
+        if (wd && wd.until && String(wd.until).slice(0, 10) >= today) {
+          const kindLabel = wd.kind === "meat" ? (lang === "fr" ? "Retrait viande" : "Meat withdrawal")
+            : wd.kind === "milk" ? (lang === "fr" ? "Retrait lait" : "Milk withdrawal")
+            : wd.kind === "eggs" ? (lang === "fr" ? "Retrait œufs" : "Eggs withdrawal")
+            : (lang === "fr" ? "Délai de retrait" : "Withdrawal period");
+          alerts.push({ type: wd.kind || "withdrawal", until: wd.until, label: kindLabel });
+        }
         setRelated({
-          treatments: (Array.isArray(t) ? t : []).filter(matchAnimal),
+          treatments: myTreatments,
           repro:      (Array.isArray(r) ? r : []).filter(matchAnimal),
           production: (Array.isArray(p) ? p : []).filter(matchAnimal),
+          documents:  (Array.isArray(docs) ? docs : []),
+          alerts,
+          weighings:  (Array.isArray(weighings) ? weighings : []),
+          finance,
           loading: false,
         });
       })
       .catch(() => setRelated((s) => ({ ...s, loading: false })));
     return () => { cancel = true; };
-  }, [animal._pk]);
+  }, [animal._pk, lang]);
   const onDelete = async () => {
     if (!animal._pk) return;
     if (!window.confirm(lang === "fr" ? `Supprimer ${animal.name || animal.id} ?` : `Delete ${animal.name || animal.id}?`)) return;
@@ -438,14 +464,19 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {/* Withdrawal warning right at the top */}
         {animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
 
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 0, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22 }}>
+        {/* Tabs — wrap sur plusieurs lignes : tous les onglets restent visibles
+            sans scroll horizontal caché (peu découvrable sur panneau étroit). */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0 4px", rowGap: 2, marginTop: 16, borderBottom: "1px solid var(--border-1)", marginLeft: -22, marginRight: -22, paddingLeft: 22, paddingRight: 22 }}>
           {[
             { id: "details",  fr: "Détails",       en: "Details",     count: null },
             { id: "health",   fr: "Santé",         en: "Health",      count: related.treatments.length },
             { id: "repro",    fr: "Reproduction",  en: "Reproduction", count: related.repro.length },
             { id: "prod",     fr: "Production",    en: "Production",  count: related.production.length },
+            { id: "weight",   fr: "Poids",         en: "Weight",      count: related.weighings.length },
+            { id: "finance",  fr: "Finances",      en: "Finance",     count: null },
+            { id: "documents", fr: "Documents",    en: "Documents",   count: related.documents.length },
             { id: "history",  fr: "Historique",    en: "History",     count: related.treatments.length + related.repro.length + related.production.length },
+            { id: "alerts",   fr: "Alertes",       en: "Alerts",      count: related.alerts.length },
           ].map((tb) => {
             const active = tab === tb.id;
             return (
@@ -454,6 +485,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
                 color: active ? "var(--ink-950)" : "var(--ink-500)",
                 borderBottom: active ? "2px solid var(--oxblood-700)" : "2px solid transparent",
                 cursor: "pointer", marginBottom: -1, display: "inline-flex", alignItems: "center", gap: 5,
+                flexShrink: 0, whiteSpace: "nowrap",
               }}>
                 {lang === "fr" ? tb.fr : tb.en}
                 {tb.count != null && tb.count > 0 && (
@@ -472,6 +504,26 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         )}
         {!editing && tab === "details" && (
           <>
+            {(animal.motherId || animal.fatherId || animal.estimatedValue != null) && (
+              <div>
+                <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "Filiation & valeur" : "Lineage & value"}</div>
+                <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 12 }}>
+                  {[
+                    { fr: "Mère", en: "Mother", icon: "fingerprint", val: animal.motherId },
+                    { fr: "Père", en: "Father", icon: "fingerprint", val: animal.fatherId },
+                    { fr: "Valeur estimée", en: "Estimated value", icon: "coins", val: animal.estimatedValue != null ? `${Number(animal.estimatedValue).toLocaleString("fr-CA")} $` : null, mono: true },
+                  ].filter((f) => f.val != null && f.val !== "").map((f) => (
+                    <div key={f.fr} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <Icon name={f.icon} size={12} color="var(--fg-3)"/>
+                        <span style={{ fontSize: 10.5, color: "var(--fg-3)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>{lang === "fr" ? f.fr : f.en}</span>
+                      </div>
+                      <div className={f.mono ? "mono" : ""} style={{ fontSize: 14, fontWeight: 600, color: "var(--ink-900)" }}>{f.val}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {Object.entries(groups).map(([gkey, fkeys]) => (
               <div key={gkey}>
                 <div className="overline" style={{ marginBottom: 10 }}>
@@ -513,6 +565,82 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {!editing && tab === "prod" && (
           <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
         )}
+        {!editing && tab === "weight" && (
+          <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading}
+            onChanged={() => window.dispatchEvent(new CustomEvent("farmos:animal-created"))}/>
+        )}
+        {!editing && tab === "finance" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          const f = related.finance;
+          if (!f) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune donnée financière pour cet animal (ni vente ni dépense liée)." : "No financial data for this animal (no linked sale or expense)."}</div>;
+          const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
+          const cards = [
+            { fr: "Revenus", en: "Revenue", val: f.revenue, color: "var(--money-500)" },
+            { fr: "Coûts", en: "Costs", val: f.cost, color: "var(--rust-700)" },
+            { fr: "Profit", en: "Profit", val: f.profit, color: f.profit >= 0 ? "var(--health-700)" : "var(--oxblood-700)" },
+          ];
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                {cards.map((c) => (
+                  <div key={c.fr} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 10.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 4 }}>{lang === "fr" ? c.fr : c.en}</div>
+                    <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: c.color }}>{money(c.val)}</div>
+                  </div>
+                ))}
+              </div>
+              {f.costByCategory && Object.keys(f.costByCategory).length > 0 && (
+                <div>
+                  <div className="overline" style={{ marginBottom: 8 }}>{lang === "fr" ? "Coûts par catégorie" : "Costs by category"}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    {Object.entries(f.costByCategory).map(([cat, amount], i, arr) => (
+                      <div key={cat} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none" }}>
+                        <span style={{ fontSize: 13, color: "var(--ink-900)" }}>{cat}</span>
+                        <span className="mono" style={{ fontSize: 13 }}>{money(amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {!editing && tab === "documents" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.documents.length === 0) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucun document pour cet animal." : "No document for this animal."}</div>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {related.documents.map((d, i, arr) => (
+                <button key={d.id} onClick={() => api.downloadDocument(d.id, d.fileName || d.file_name || d.title)}
+                  style={{ textAlign: "left", border: 0, background: "transparent", display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center", cursor: "pointer" }}>
+                  <Icon name="report" size={14} color="var(--ink-700)"/>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--ink-900)" }}>{d.title || d.fileName || d.file_name || `#${d.id}`}</div>
+                    {(d.docType || d.doc_type) && <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{d.docType || d.doc_type}</div>}
+                  </div>
+                  <Icon name="download" size={13} color="var(--ink-500)"/>
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+        {!editing && tab === "alerts" && (() => {
+          if (related.loading) return <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>;
+          if (related.alerts.length === 0) return <div style={{ color: "var(--health-700)", fontSize: 13 }}>{lang === "fr" ? "Aucune alerte active (pas de délai de retrait en cours)." : "No active alert (no ongoing withdrawal period)."}</div>;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {related.alerts.map((a, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--rust-50)", border: "1px solid var(--rust-200, var(--border-1))", borderRadius: 8 }}>
+                  <Icon name="bell" size={15} color="var(--oxblood-700)"/>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--oxblood-900, var(--ink-900))" }}>{a.label}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg-2)" }}>{lang === "fr" ? "Jusqu'au" : "Until"} <span className="mono">{String(a.until).slice(0, 10)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         {!editing && tab === "history" && (() => {
           const events = [
             ...related.treatments.map((t) => ({ kind: "health", date: t.startDate || t.start_date, label: `${lang === "fr" ? "Traitement" : "Treatment"} · ${t.medicineName || t.medicine_name || "—"}`, sub: t.status })),
@@ -541,6 +669,89 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   );
 };
 
+// Onglet Poids / croissance : courbe d'évolution + historique + saisie d'une pesée.
+const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), weight: "" });
+  const [saving, setSaving] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const rows = (weighings || []).slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
+  const points = rows.map((w) => Number(w.weight)).filter((n) => !Number.isNaN(n));
+  const submit = async () => {
+    if (saving || !animal._pk) return;
+    if (form.weight === "" || Number(form.weight) <= 0) { setErr(lang === "fr" ? "Poids requis." : "Weight required."); return; }
+    setSaving(true); setErr(null);
+    try {
+      await api.createWeighing({ animal_id: animal._pk, weigh_date: form.date, weight: Number(form.weight), weight_unit: "kg" });
+      setForm({ date: new Date().toISOString().slice(0, 10), weight: "" });
+      onChanged && onChanged();
+    } catch (e) { setErr(e.message); } finally { setSaving(false); }
+  };
+  const del = async (id) => {
+    if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
+    try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
+  };
+  // Mini-courbe SVG.
+  const Curve = () => {
+    if (points.length < 2) return null;
+    const w = 280, h = 70, pad = 4;
+    const min = Math.min(...points), max = Math.max(...points);
+    const span = max - min || 1;
+    const dx = (w - pad * 2) / (points.length - 1);
+    const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${pad + i * dx} ${h - pad - ((p - min) / span) * (h - pad * 2)}`).join(" ");
+    return (
+      <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} preserveAspectRatio="none">
+        <path d={path} fill="none" stroke="var(--forest-700)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    );
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Saisie rapide */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date" : "Date"}</span>
+          <input className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 100px" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Poids (kg)" : "Weight (kg)"}</span>
+          <input className="input mono" type="number" step="0.1" min="0" value={form.weight} onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}/>
+        </label>
+        <button className="btn btn-primary" onClick={submit} disabled={saving}>
+          <Icon name="plus" size={13} color="#ECF1EC"/>{saving ? "…" : (lang === "fr" ? "Pesée" : "Weigh-in")}
+        </button>
+      </div>
+      {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
+
+      {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
+      {!loading && rows.length === 0 && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Aucune pesée enregistrée." : "No weighing recorded."}</div>}
+      {!loading && rows.length > 0 && (
+        <>
+          {points.length >= 2 && (
+            <div style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 8 }}>{lang === "fr" ? "Courbe de croissance" : "Growth curve"}</div>
+              <Curve/>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
+                <span className="mono">{Math.min(...points)} kg</span>
+                <span className="mono">{Math.max(...points)} kg</span>
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            {rows.slice().reverse().map((w, i, arr) => (
+              <div key={w.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
+                <Icon name="weight" size={14} color="var(--ink-700)"/>
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(w.weighDate || w.weigh_date).slice(0, 10)}</span>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{Number(w.weight)} {w.weightUnit || w.weight_unit || "kg"}</span>
+                <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 // Inline edit card — patch only the fields editable from FarmOS (the rest
 // lives in CRM screens). Sends PATCH /api/farmos/animals/:id.
 const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
@@ -554,6 +765,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
     lot: animal.lot || "",
     barn: animal.barn || "",
     status: animal.status || "healthy",
+    motherId: animal.motherId || "",
+    fatherId: animal.fatherId || "",
+    estimatedValue: animal.estimatedValue ?? "",
   });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
@@ -573,6 +787,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         lot: form.lot || null,
         barn: form.barn || null,
         status: form.status || null,
+        mother_id: form.motherId || null,
+        father_id: form.fatherId || null,
+        estimated_value: form.estimatedValue === "" ? null : Number(form.estimatedValue),
       });
       onSaved();
     } catch (e) {
@@ -627,6 +844,18 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
             <option value="quarantine">{lang === "fr" ? "Quarantaine" : "Quarantine"}</option>
             <option value="withdrawal">{lang === "fr" ? "Délai retrait" : "Withdrawal"}</option>
           </select>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mère (ID / nom)" : "Mother (ID / name)"}</span>
+          <input className="input" value={form.motherId} onChange={(e) => set("motherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2022-0007" : "e.g. BQ-2022-0007"}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Père (ID / nom)" : "Father (ID / name)"}</span>
+          <input className="input" value={form.fatherId} onChange={(e) => set("fatherId", e.target.value)} placeholder={lang === "fr" ? "ex. BQ-2021-0003" : "e.g. BQ-2021-0003"}/>
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Valeur estimée ($)" : "Estimated value ($)"}</span>
+          <input className="input mono" type="number" step="0.01" min="0" value={form.estimatedValue} onChange={(e) => set("estimatedValue", e.target.value)}/>
         </label>
       </div>
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}

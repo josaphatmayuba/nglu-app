@@ -1,4 +1,9 @@
 FROM node:20-alpine
+
+# La génération PDF est déléguée au microservice `pdf-service` (chromium isolé
+# là-bas). backend2 n'embarque donc plus chromium ni puppeteer : image légère,
+# plus d'OOM au build.
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

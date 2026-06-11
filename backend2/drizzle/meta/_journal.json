@@ -554,6 +554,118 @@
       "when": 1780297200000,
       "tag": "0098_farmos_vet_exam_clinical",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "5",
+      "when": 1780300800000,
+      "tag": "0099_farmos_disease_library",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "5",
+      "when": 1780304400000,
+      "tag": "0100_farmos_animal_lineage",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1780308000000,
+      "tag": "0101_farmos_roles_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1780311600000,
+      "tag": "0102_farmos_disease_causes_exams",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "5",
+      "when": 1780315200000,
+      "tag": "0103_farmos_mortality_enrich",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "5",
+      "when": 1780318800000,
+      "tag": "0104_farmos_weighings",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "5",
+      "when": 1780322400000,
+      "tag": "0105_ledger_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "5",
+      "when": 1780326000000,
+      "tag": "0106_ledger_seed_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "5",
+      "when": 1780329600000,
+      "tag": "0107_ledger_seed_rules_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "5",
+      "when": 1780333200000,
+      "tag": "0108_workflow_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "5",
+      "when": 1780336800000,
+      "tag": "0109_budget_core",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "5",
+      "when": 1780340400000,
+      "tag": "0110_workflow_core_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "5",
+      "when": 1780344000000,
+      "tag": "0111_ledger_approval_requirements",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "5",
+      "when": 1780347600000,
+      "tag": "0112_ledger_pending_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "5",
+      "when": 1780351200000,
+      "tag": "0113_procurement_stock",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "5",
+      "when": 1780354800000,
+      "tag": "0114_documents",
+      "breakpoints": true
     }
   ]
 }

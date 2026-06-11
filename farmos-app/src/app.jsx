@@ -118,6 +118,7 @@ function App() {
   const [entry, setEntry] = React.useState({ open: false, tab: "animal" });
   const [toast, setToast] = React.useState(null);
   const [mobileNav, setMobileNav] = React.useState(false);
+  const [actionsOpen, setActionsOpen] = React.useState(false);
   const layoutMode = useLayoutMode(tweaks.deviceMode);
   const isMobile = layoutMode === "mobile";
   const isTablet = layoutMode === "tablet";
@@ -210,7 +211,7 @@ function App() {
       case "finances":   return <FinancesScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
-      case "settings":   return <SettingsScreen {...props}/>;
+      case "settings":   return <SettingsScreen {...props} tweaks={tweaks} setTweak={setTweak}/>;
       default:           return <Dashboard {...props}/>;
     }
   };
@@ -261,8 +262,16 @@ function App() {
             </div>
           </div>
 
-          {isMobile && <MobileTabBar route={route} onNav={setRoute} onPlus={() => openEntry("animal")} lang={lang}/>}
+          {isMobile && <MobileTabBar route={route} onNav={setRoute} onPlus={() => setActionsOpen(true)} lang={lang}/>}
         </main>
+
+        {actionsOpen && (
+          <QuickActionsSheet
+            lang={lang}
+            onClose={() => setActionsOpen(false)}
+            onPick={(tab) => { setActionsOpen(false); openEntry(tab); }}
+          />
+        )}
 
         <QuickEntryDrawer
           open={entry.open}
@@ -277,7 +286,8 @@ function App() {
 
         {toast && <Toast message={toast.message} severity={toast.severity} onClose={() => setToast(null)}/>}
       </div>
-      <FarmTweaks tweaks={tweaks} setTweak={setTweak}/>
+      {/* Panneau Tweaks (⚙ flottant) désactivé : options visuelles déplacées
+          dans l'écran Paramètres (carte « Apparence »). */}
       <PwaUpdateBanner lang={tweaks.lang}/>
       <PwaInstallBanner lang={tweaks.lang}/>
       <AiAssistant/>
@@ -330,6 +340,41 @@ const MobileTabBar = ({ route, onNav, onPlus, lang }) => {
         );
       })}
     </nav>
+  );
+};
+
+// Bottom sheet d'actions rapides (ouvert par le bouton + du tab bar mobile).
+// Chaque action ouvre le bon onglet de saisie rapide — adapté au travail terrain
+// (une main) : grandes cibles tactiles, peu de texte.
+const QuickActionsSheet = ({ lang, onClose, onPick }) => {
+  const actions = [
+    { tab: "animal",     icon: "layers",      fr: "Nouvel animal",  en: "New animal",  bg: "var(--forest-50)",  fg: "var(--forest-700)" },
+    { tab: "health",     icon: "pill",        fr: "Traitement",     en: "Treatment",   bg: "var(--clay-50, #f6ece2)", fg: "var(--clay-700)" },
+    { tab: "production", icon: "chart",       fr: "Production",     en: "Production",  bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "repro",      icon: "fingerprint", fr: "Reproduction",   en: "Reproduction",bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "stock",      icon: "package",     fr: "Stock",          en: "Stock",       bg: "var(--bg-sunken)",  fg: "var(--ink-800)" },
+    { tab: "death",      icon: "alert",       fr: "Mortalité",      en: "Mortality",   bg: "var(--rust-50, #f7e9e4)", fg: "var(--oxblood-700)" },
+  ];
+  return (
+    <div onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", zIndex: 1200, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "var(--paper)", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: "14px 16px calc(16px + env(safe-area-inset-bottom))", boxShadow: "0 -8px 30px -8px rgba(0,0,0,0.3)" }}>
+        <div style={{ width: 40, height: 4, borderRadius: 999, background: "var(--border-2)", margin: "0 auto 14px" }}/>
+        <div style={{ fontSize: 12, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 12 }}>
+          {lang === "fr" ? "Action rapide" : "Quick action"}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {actions.map((a) => (
+            <button key={a.tab} onClick={() => onPick(a.tab)}
+              style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 56, border: "1px solid var(--border-1)", background: a.bg, color: a.fg, borderRadius: 12, padding: "10px 14px", cursor: "pointer", fontWeight: 700, fontSize: 14 }}>
+              <Icon name={a.icon} size={20} color={a.fg}/>
+              <span>{lang === "fr" ? a.fr : a.en}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 

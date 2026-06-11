@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import { renderPdfViaService } from "../common/pdf-client";
 import { and, count, desc, eq, inArray, like, ne, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
@@ -44,6 +45,8 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import {
   CreateAwardDto,
   CreateAwardHistoryDto,
@@ -106,7 +109,23 @@ export class HrService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly emails: SystemEmailService,
+    private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
+
+  /** Approuve une paie ; comptabilise l'ecriture en attente a l'approbation finale. */
+  async approveSalary(salaryHistoryId: number, comment: string | undefined, orgId = 1, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "payroll" && i.entityId === String(salaryHistoryId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette paie.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("payroll", String(salaryHistoryId), orgId, userId);
+    }
+    return { salaryHistoryId, approval: result };
+  }
 
   listDesignations(q: Record<string, string>) {
     return this.listSimple(q, designations, "getAllDesignation", "totalDesignation");
@@ -371,6 +390,35 @@ export class HrService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    // Ecriture moderne (dual-write) : debit charge salaire (10) / credit caisse ou banque.
+    // orgId par defaut 1 (cohérent avec l'insert plat ; createSalaryHistory n'a pas d'orgId).
+    await this.ledger.post(
+      {
+        date: input.salaryStartDate ? new Date(input.salaryStartDate) : undefined,
+        reference: `SALARY-${salaryHistoryId}`,
+        particulars: input.salaryComment || `Salary payment${input.salaryStartDate ? ` — ${input.salaryStartDate}` : ""}`,
+        sourceModule: "payroll",
+        relatedId: String(salaryHistoryId),
+        currencyId: currencyId ?? undefined,
+        idempotencyKey: `salary:${salaryHistoryId}`,
+        lines: [
+          { accountId: 10, side: "DEBIT", amount: Number(input.salary), description: "Salary expense" },
+          { accountId: creditAccountId, side: "CREDIT", amount: Number(input.salary), description: creditAccountId === 1 ? "Cash" : "Bank" },
+        ],
+      },
+      1,
+    );
+
+    // Soumet la paie au circuit d'approbation (effectif si le module payroll est gate).
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "payroll", entityId: String(salaryHistoryId) },
+        1,
+      );
+    } catch (err) {
+      console.warn("[HR] submit payroll approval skipped:", (err as Error).message);
+    }
+
     return this.findSalaryHistory(salaryHistoryId);
   }
 
@@ -536,33 +584,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
 
   // Rendu HTML -> PDF via Puppeteer (mutualisé entre fiches de paie et documents RH).
   private async htmlToPdf(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const puppeteer = require("puppeteer");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    // Alpine: le binaire chromium peut etre /usr/bin/chromium OU /usr/bin/chromium-browser.
-    // On resout le 1er chemin existant (la var d'env peut pointer un chemin absent -> 500).
-    const candidates = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      "/usr/bin/chromium",
-      "/usr/bin/chromium-browser",
-    ].filter(Boolean) as string[];
-    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-    try {
-      const page = await browser.newPage();
-      // Retire le script d'auto-impression éventuel avant la génération PDF.
-      const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
-      await page.setContent(cleanHtml, { waitUntil: "networkidle0" });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
-      return Buffer.from(pdfBuffer);
-    } finally {
-      await browser.close();
-    }
+    // Retire le script d'auto-impression éventuel avant la génération PDF.
+    const cleanHtml = html.replace(/<script>window\.onload.*?<\/script>/s, "");
+    return renderPdfViaService(cleanHtml, "HR");
   }
 
   async generatePayrollPdf(id: number): Promise<Buffer> {

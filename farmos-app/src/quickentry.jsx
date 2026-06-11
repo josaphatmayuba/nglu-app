@@ -821,6 +821,8 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     date: new Date().toISOString().slice(0, 10),
     species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
+    // Pré-sélection du type d'application depuis le bouton d'origine (Individuel / Lot).
+    scope: context?.scope || "individual",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
@@ -918,6 +920,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
       disease_id: toNumericId(selectedDisease),
       medicine_id: toNumericId(selectedMed),
       medicine_name: selectedMed?.name || null,
+      medicine_quantity: form.medQty ? Number(form.medQty) : null, // décrémente le stock
       dosage: form.dosage || null,
       route: form.route || null,
       start_date: startDate,
@@ -1017,6 +1020,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
                 category="route"
                 placeholder={lang === "fr" ? "Rechercher ou ajouter une voie…" : "Search or add a route…"}
               />
+            </FormField>
+            <FormField label={lang === "fr" ? "Qté prélevée du stock" : "Qty taken from stock"}>
+              <input className="input mono" type="number" min="0" step="any" placeholder="0"
+                value={form.medQty || ""} onChange={(e) => set("medQty", e.target.value)}/>
             </FormField>
           </FormGrid>
           <FormGrid cols={3}>
@@ -1332,6 +1339,31 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     const sex = a.sex;
     return sp === form.species && (sex === "F" || sex === "Mixte" || !sex);
   });
+
+  // Détection de consanguinité : compare la filiation (mother_id/father_id, qui
+  // référencent un external_id ou un nom) de la femelle et du mâle choisi.
+  // Retourne une raison FR/EN si apparentés, sinon null. Non bloquant.
+  const inbreedingWarning = (female, maleExtId) => {
+    if (!female || !maleExtId || !liveAnimals) return null;
+    const idOf = (a) => String(a.external_id ?? a.externalId ?? a.id);
+    const male = liveAnimals.find((a) => idOf(a) === String(maleExtId) || String(a.id) === String(maleExtId));
+    const fMother = female.mother_id ?? female.motherId;
+    const fFather = female.father_id ?? female.fatherId;
+    const femaleKeys = [idOf(female), female.name].filter(Boolean).map(String);
+    // 1) le mâle est le père de la femelle
+    if (fFather && male && (idOf(male) === String(fFather) || male.name === fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    if (fFather && String(maleExtId) === String(fFather)) return lang === "fr" ? "le mâle est le père de la femelle" : "the male is the female's father";
+    // 2) la femelle est la mère du mâle
+    if (male) {
+      const mMother = male.mother_id ?? male.motherId;
+      if (mMother && femaleKeys.includes(String(mMother))) return lang === "fr" ? "la femelle est la mère du mâle" : "the female is the male's mother";
+      // 3) même mère ou même père (fratrie)
+      const mFather = male.father_id ?? male.fatherId;
+      if (fMother && mMother && String(fMother) === String(mMother)) return lang === "fr" ? "même mère (fratrie)" : "same mother (siblings)";
+      if (fFather && mFather && String(fFather) === String(mFather)) return lang === "fr" ? "même père (fratrie)" : "same father (siblings)";
+    }
+    return null;
+  };
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -1339,6 +1371,18 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     if (!selected || !liveAnimals) {
       onSaved && onSaved({ kind: "repro", severity: "error", message: lang === "fr" ? "Selectionne un animal existant en BD." : "Select an animal that exists in the database." });
       return;
+    }
+    // Anti-consanguinité : pour une saillie/IA naturelle avec un mâle identifié,
+    // avertir si la femelle et le mâle sont apparentés (non bloquant).
+    if (kind === "ai") {
+      const maleRef = form.sire_animal_id || form.male;
+      const warn = inbreedingWarning(selected, maleRef);
+      if (warn) {
+        const msg = (lang === "fr"
+          ? `⚠ Risque de consanguinité : ${warn}. Confirmer l'accouplement quand même ?`
+          : `⚠ Inbreeding risk: ${warn}. Confirm mating anyway?`);
+        if (!window.confirm(msg)) return;
+      }
     }
     setSaving(true);
     const eventType = kind === "heat" ? "heat" : kind === "ai" ? "insemination" : "birthing";
@@ -1552,6 +1596,14 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         count: form.count ? Number(form.count) : 1,
         cause: form.cause,
         necropsy_requested: !!form.necropsy,
+        event_time: form.time || null,
+        barn: form.barn || null,
+        lot: form.lot || null,
+        confirmed_cause: form.confirmed_cause || null,
+        pre_death_symptoms: form.symptoms || null,
+        vet_consulted: form.vet || null,
+        estimated_loss: form.loss === "" || form.loss == null ? null : Number(form.loss),
+        necropsy_done: !!form.necropsy_done,
         notes: form.notes || null,
       });
       onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` });
@@ -1626,6 +1678,40 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
             {lang === "fr" ? "Autopsie / nécropsie demandée" : "Necropsy requested"}
           </label>
         </FormField>
+      </FormSection>
+
+      <FormSection label={lang === "fr" ? "Détails avancés" : "Advanced details"}>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Heure" : "Time"}>
+            <input className="input mono" type="time" value={form.time || ""} onChange={(e) => set("time", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Perte estimée ($)" : "Estimated loss ($)"}>
+            <input className="input mono" type="number" min="0" step="0.01" value={form.loss || ""} onChange={(e) => set("loss", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Bâtiment" : "Barn"}>
+            <input className="input" value={form.barn || ""} onChange={(e) => set("barn", e.target.value)}/>
+          </FormField>
+          <FormField label={lang === "fr" ? "Lot" : "Lot"}>
+            <input className="input" value={form.lot || ""} onChange={(e) => set("lot", e.target.value)}/>
+          </FormField>
+        </FormGrid>
+        <FormField label={lang === "fr" ? "Cause confirmée (post-mortem)" : "Confirmed cause (post-mortem)"}>
+          <input className="input" value={form.confirmed_cause || ""} onChange={(e) => set("confirmed_cause", e.target.value)} placeholder={lang === "fr" ? "Après autopsie / labo…" : "After necropsy / lab…"}/>
+        </FormField>
+        <FormField label={lang === "fr" ? "Symptômes avant décès" : "Pre-death symptoms"}>
+          <textarea className="input" style={{ height: 60, padding: 10 }} value={form.symptoms || ""} onChange={(e) => set("symptoms", e.target.value)}/>
+        </FormField>
+        <FormGrid cols={2}>
+          <FormField label={lang === "fr" ? "Vétérinaire consulté" : "Vet consulted"}>
+            <input className="input" value={form.vet || ""} onChange={(e) => set("vet", e.target.value)}/>
+          </FormField>
+          <FormField label="">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink-800)", marginTop: 22 }}>
+              <input type="checkbox" checked={form.necropsy_done || false} onChange={(e) => set("necropsy_done", e.target.checked)}/>
+              {lang === "fr" ? "Autopsie réalisée" : "Necropsy done"}
+            </label>
+          </FormField>
+        </FormGrid>
       </FormSection>
 
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>

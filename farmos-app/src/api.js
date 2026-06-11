@@ -114,7 +114,11 @@ const KIND_INVALIDATES = {
   signVetExam:            ["vetExams"],
   deleteVetExam:          ["vetExams"],
   createMortalityEvent:   ["mortalityEvents", "animals"],
+  createWeighing:         ["weighings", "animals"],
+  deleteWeighing:         ["weighings"],
   createFarmosStaff:      ["staff"],
+  updateFarmosStaff:      ["staff"],
+  setFarmosStaffStatus:   ["staff"],
   createSemenStraw:       ["semenStraws"],
   updateSemenStraw:       ["semenStraws"],
   deleteSemenStraw:       ["semenStraws"],
@@ -124,6 +128,8 @@ const KIND_INVALIDATES = {
   updatePrice:            ["priceList"],
   deletePrice:            ["priceList"],
   createDisease:          ["diseases"],
+  updateDisease:          ["diseases"],
+  deleteDisease:          ["diseases"],
 };
 
 async function invalidateAndBroadcast(kind) {
@@ -253,7 +259,11 @@ export const api = {
   downloadVetExamPdf: (id) => downloadBlob(`/vet-exams/${id}/pdf`, `dossier-vet-${id}.pdf`),
   downloadFinancePdf: () => downloadBlob(`/reports/finance/pdf`, `rentabilite.pdf`),
   listMortalityEvents: cachedList("mortalityEvents", "/mortality-events"),
+  getMortalityStats: () => jsonFetch("/mortality-events/stats"),
   createMortalityEvent: (body) => mutate({ kind: "createMortalityEvent", method: "POST", path: "/mortality-events", body }),
+  listWeighings: (animalId) => jsonFetch(`/weighings${animalId ? `?animal_id=${animalId}` : ""}`),
+  createWeighing: (body) => mutate({ kind: "createWeighing", method: "POST", path: "/weighings", body }),
+  deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
   // Bâtiments
@@ -273,8 +283,13 @@ export const api = {
   createLookup: (body) => jsonMutate("createLookup", "/lookups", { method: "POST", body: JSON.stringify(body) }),
   deleteLookup: (id) => jsonMutate("deleteLookup", `/lookups/${id}`, { method: "DELETE" }),
   createDisease: (body) => jsonMutate("createDisease", "/diseases", { method: "POST", body: JSON.stringify(body) }),
+  updateDisease: (id, body) => jsonMutate("updateDisease", `/diseases/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteDisease: (id) => jsonMutate("deleteDisease", `/diseases/${id}`, { method: "DELETE" }),
   listFarmosStaff: (role) => cachedList("staff", `/staff${role ? `?role=${encodeURIComponent(role)}` : ""}`)(),
+  listAssignableRoles: () => jsonFetch("/staff/roles"),
   createFarmosStaff: (body) => mutate({ kind: "createFarmosStaff", method: "POST", path: "/staff", body }),
+  updateFarmosStaff: (id, body) => mutate({ kind: "updateFarmosStaff", method: "PUT", path: `/staff/${id}`, body }),
+  setFarmosStaffStatus: (id, body) => mutate({ kind: "setFarmosStaffStatus", method: "PATCH", path: `/staff/${id}/status`, body }),
   listAnimalPhotos: (animalId) => jsonFetch(`/animals/${animalId}/photos`),
   listAnimalsWithPhotos: (perAnimal = 3) => jsonFetch(`/animals-with-photos?perAnimal=${perAnimal}`),
   uploadAnimalPhoto: (animalId, body) => jsonFetch(`/animals/${animalId}/photos`, { method: "POST", body: JSON.stringify(body) }),
@@ -463,6 +478,9 @@ export function adaptAnimal(row) {
     lot: row.lot,
     barn: row.barn,
     status: row.status || "healthy",
+    motherId: row.motherId ?? row.mother_id ?? null,
+    fatherId: row.fatherId ?? row.father_id ?? null,
+    estimatedValue: (row.estimatedValue ?? row.estimated_value) != null ? Number(row.estimatedValue ?? row.estimated_value) : null,
     lastEvent: last,
     withdrawal: wUntil
       ? { until: String(wUntil).slice(0, 10), kind: wKind, med: null }

@@ -30,7 +30,10 @@ export function appVersion() {
   } catch {
     // garde le défaut
   }
-  const commit = git("rev-parse --short HEAD", "unknown");
+  // Le pipeline Bitbucket build hors dépôt git -> git échoue. On lit alors le
+  // hash fourni par l'env CI (BITBUCKET_COMMIT) avant de retomber sur git/unknown.
+  const ciCommit = process.env.BITBUCKET_COMMIT || process.env.CI_COMMIT_SHA || "";
+  const commit = (ciCommit ? ciCommit.slice(0, 7) : "") || git("rev-parse --short HEAD", "unknown");
   const dirty = Boolean(git("status --short --untracked-files=no", ""));
   const build = `${base}+${commit}${dirty ? ".dirty" : ""}`;
   return { base, build, commit };

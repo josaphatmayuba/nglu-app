@@ -66,6 +66,7 @@ const NAV = [
   { id: "situations", label: "Situations & avenants", icon: "receipt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
+  { id: "parametres", label: "Paramètres", icon: "clipboard" },
 ];
 const MOB_PRIMARY = ["dashboard", "chantiers", "plan3d", "materiaux"];
 const MOB_MORE = ["planning", "situations", "soustraitants"];
@@ -138,6 +139,7 @@ function App() {
     situations: <Situations />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
     soustraitants: <SousTraitants />,
+    parametres: <Parametres />,
   };
 
   return (
@@ -408,6 +410,31 @@ function Journal({ accent, label, sub }) {
 }
 
 /* ── Planning (Gantt) ──────────────────────────────────────────────────── */
+function Parametres() {
+  const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
+  const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
+  const commit = import.meta.env.VITE_APP_COMMIT || "—";
+  const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const Row = ({ k, v }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
+      <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
+      <span style={{ fontFamily: "ui-monospace,Menlo,monospace", fontSize: 13 }}>{v}</span>
+    </div>
+  );
+  return (
+    <section>
+      <h1 className="page-title font-display" style={{ marginBottom: 16 }}>Paramètres</h1>
+      <div className="card" style={{ maxWidth: 560, padding: 18 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>À propos</div>
+        <Row k="Version" v={`v${base}`} />
+        <Row k="Build" v={build} />
+        <Row k="Commit" v={commit} />
+        <Row k="Environnement" v={env} />
+      </div>
+    </section>
+  );
+}
+
 function Planning() {
   const rows = [
     { label: "Études & permis", left: 0, width: 25, color: "bg-emerald", solid: "var(--emerald-500)" },

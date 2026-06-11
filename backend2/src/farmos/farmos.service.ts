@@ -1,10 +1,13 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { renderPdfViaService } from "../common/pdf-client";
 import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   CreateAnimalDto,
@@ -16,7 +19,10 @@ import type {
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
+  CreateWeighingDto,
+  SetFarmosStaffStatusDto,
   UpdateAnimalDto,
+  UpdateFarmosStaffDto,
   UpdateDiseaseDto,
   UpdateMedicineDto,
   UpdateSemenStrawDto,
@@ -31,6 +37,8 @@ export class FarmosService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly usersService: UsersService,
     private readonly realtime: RealtimeDataPublisher,
+    private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
 
   async getDashboardSnapshot(orgId: number) {
@@ -315,6 +323,68 @@ export class FarmosService {
     return { user: created, generatedPassword: input.password ? null : generatedPassword };
   }
 
+  // Modifie un employé FarmOS (nom, téléphone, désignation/rôle métier).
+  async updateFarmosStaff(id: number, input: UpdateFarmosStaffDto, orgId: number) {
+    const [existing] = await this.db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId))).limit(1);
+    if (!existing) throw new NotFoundException("Employé introuvable.");
+    const patch: Record<string, unknown> = {};
+    if (input.firstName !== undefined) patch.firstName = input.firstName;
+    if (input.lastName !== undefined) patch.lastName = input.lastName;
+    if (input.phone !== undefined) patch.phone = input.phone;
+    if (input.designation !== undefined && input.designation) {
+      const [d] = await this.db.select({ id: designations.id }).from(designations)
+        .where(sql`LOWER(${designations.name}) = ${input.designation.toLowerCase()}`).limit(1);
+      let designationId = d?.id;
+      if (!designationId) {
+        const [r] = await this.db.insert(designations).values({ name: input.designation } as any).$returningId();
+        designationId = (r as any).id;
+      }
+      patch.designationId = designationId;
+    }
+    if (input.role_id !== undefined && input.role_id != null) {
+      // Vérifie que le rôle existe avant de l'assigner (permissions de l'employé).
+      const [r] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.id, input.role_id)).limit(1);
+      if (!r) throw new BadRequestException("Rôle introuvable.");
+      patch.roleId = input.role_id;
+    }
+    if (Object.keys(patch).length > 0) {
+      await this.db.update(users).set(patch).where(eq(users.id, id));
+    }
+    await this.publishFarmosUpdate("updateFarmosStaff", ["staff"], "updated", id, orgId);
+    return { ok: true };
+  }
+
+  // Change le statut d'un employé : active / left (parti) / resigned (démissionné).
+  // Inactif => status="false" (n'apparaît plus dans la liste active) + leaveDate/reason.
+  async setFarmosStaffStatus(id: number, input: SetFarmosStaffStatusDto, orgId: number) {
+    const [existing] = await this.db.select({ id: users.id }).from(users)
+      .where(and(eq(users.id, id), eq(users.organizationId, orgId))).limit(1);
+    if (!existing) throw new NotFoundException("Employé introuvable.");
+    if (input.status === "active") {
+      await this.db.update(users).set({ status: "true", leaveDate: null, leaveReason: null }).where(eq(users.id, id));
+    } else {
+      const reason = input.leave_reason ?? (input.status === "resigned" ? "Démission" : "Départ");
+      await this.db.update(users).set({
+        status: "false",
+        leaveDate: input.leave_date ? new Date(input.leave_date) : new Date(),
+        leaveReason: reason,
+      }).where(eq(users.id, id));
+    }
+    await this.publishFarmosUpdate("setFarmosStaffStatus", ["staff"], "updated", id, orgId);
+    return { ok: true };
+  }
+
+  // Rôles assignables à un employé (gestion des permissions). On expose tous les
+  // rôles actifs sauf super-admin (non assignable depuis FarmOS).
+  async listAssignableRoles() {
+    const rows = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.status, "true"));
+    return rows.filter((r) => (r.name || "").toLowerCase() !== "super-admin");
+  }
+
   // ─── Animals ─────────────────────────────────────────────────────────────
 
   async listAnimals(orgId: number) {
@@ -352,6 +422,9 @@ export class FarmosService {
       room: input.room ?? null,
       type: input.type ?? null,
       status: input.status ?? "healthy",
+      motherId: input.mother_id ?? null,
+      fatherId: input.father_id ?? null,
+      estimatedValue: input.estimated_value != null ? String(input.estimated_value) : null,
       lastEvent: input.last_event ?? null,
     });
     const id = Number(result.insertId);
@@ -376,6 +449,9 @@ export class FarmosService {
     if (input.room !== undefined) patch.room = input.room;
     if (input.type !== undefined) patch.type = input.type;
     if (input.status !== undefined) patch.status = input.status;
+    if (input.mother_id !== undefined) patch.motherId = input.mother_id;
+    if (input.father_id !== undefined) patch.fatherId = input.father_id;
+    if (input.estimated_value !== undefined) patch.estimatedValue = input.estimated_value != null ? String(input.estimated_value) : null;
     if (input.last_event !== undefined) patch.lastEvent = input.last_event;
     if (Object.keys(patch).length === 0) return this.getAnimal(id, orgId);
     await this.db.update(farmosAnimals).set(patch).where(eq(farmosAnimals.id, id));
@@ -534,6 +610,12 @@ export class FarmosService {
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
+    // Associer le médicament au stock : si le traitement référence un médicament
+    // du stock + une quantité consommée, on décrémente le stock (prompt #275).
+    if (input.medicine_id && Number(input.medicine_quantity) > 0) {
+      await this.consumeMedicine(input.medicine_id, Number(input.medicine_quantity), orgId).catch((e) =>
+        console.warn("[FarmOS] consume on treatment failed:", (e as Error).message));
+    }
     await this.recomputeAnimalWithdrawal(input.animal_id, orgId);
     await this.publishFarmosUpdate("createTreatment", ["treatments", "medicines", "animals"], "created", id, orgId);
     return this.getTreatment(id, orgId);
@@ -613,6 +695,14 @@ export class FarmosService {
       contagious: input.contagious ? 1 : 0,
       severityDefault: input.severity_default ?? null,
       commonRoute: input.common_route ?? null,
+      urgencyLevel: input.urgency_level ?? null,
+      symptoms: input.symptoms ?? null,
+      prevention: input.prevention ?? null,
+      vaccineAvailable: input.vaccine_available ? 1 : 0,
+      mortalityRisk: input.mortality_risk ?? null,
+      recommendedProtocol: input.recommended_protocol ?? null,
+      possibleCauses: input.possible_causes ?? null,
+      recommendedExams: input.recommended_exams ?? null,
       notes: input.notes ?? null,
     });
     const id = Number(result.insertId);
@@ -632,6 +722,14 @@ export class FarmosService {
     if (input.contagious !== undefined) patch.contagious = input.contagious ? 1 : 0;
     if (input.severity_default !== undefined) patch.severityDefault = input.severity_default;
     if (input.common_route !== undefined) patch.commonRoute = input.common_route;
+    if (input.urgency_level !== undefined) patch.urgencyLevel = input.urgency_level;
+    if (input.symptoms !== undefined) patch.symptoms = input.symptoms;
+    if (input.prevention !== undefined) patch.prevention = input.prevention;
+    if (input.vaccine_available !== undefined) patch.vaccineAvailable = input.vaccine_available ? 1 : 0;
+    if (input.mortality_risk !== undefined) patch.mortalityRisk = input.mortality_risk;
+    if (input.recommended_protocol !== undefined) patch.recommendedProtocol = input.recommended_protocol;
+    if (input.possible_causes !== undefined) patch.possibleCauses = input.possible_causes;
+    if (input.recommended_exams !== undefined) patch.recommendedExams = input.recommended_exams;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (Object.keys(patch).length === 0) return disease;
     await this.db.update(farmosDiseases).set(patch).where(eq(farmosDiseases.id, id));
@@ -831,6 +929,9 @@ export class FarmosService {
     if (txId) {
       await this.db.update(farmosExpenses).set({ transactionId: txId }).where(eq(farmosExpenses.id, res.id));
     }
+    // Soumet au circuit d'approbation (effectif seulement si un workflow exp_approval existe
+    // et que le module est sous gate ; sinon no-op et la compta a deja eu lieu).
+    await this.submitExpenseForApproval(res.id, orgId);
     await this.publishFarmosUpdate("createExpense", ["expenses", "medicines"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
   }
@@ -1462,44 +1563,9 @@ export class FarmosService {
     return { message: "Bâtiment supprimé." };
   }
 
-  // ─── Rapports PDF (#3) — réutilise Puppeteer (déjà dép. via le module HR) ────
+  // ─── Rapports PDF — délégués au microservice pdf-service (voir pdf-client) ───
   private async htmlToPdf(html: string): Promise<Buffer> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const puppeteer = require("puppeteer");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    // Le Dockerfile (Alpine) installe chromium ; selon la version le binaire est
-    // /usr/bin/chromium ou /usr/bin/chromium-browser. On résout le 1er existant
-    // (la var d'env peut pointer un chemin absent → crash 500).
-    const candidates = [
-      process.env.PUPPETEER_EXECUTABLE_PATH,
-      "/usr/bin/chromium",
-      "/usr/bin/chromium-browser",
-    ].filter(Boolean) as string[];
-    const executablePath = candidates.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
-    let browser: any;
-    try {
-      browser = await puppeteer.launch({
-        headless: true,
-        executablePath,
-        protocolTimeout: 60000,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-      });
-      const page = await browser.newPage();
-      // 'load' (pas 'networkidle0') : les images base64 inline (signature) ne
-      // déclenchent pas de requête réseau et faisaient timeouter networkidle0.
-      await page.setContent(html, { waitUntil: "load", timeout: 30000 });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true, margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" } });
-      return Buffer.from(pdfBuffer);
-    } catch (err) {
-      // Expose la vraie cause (chemin Chromium, lib manquante, timeout…) au lieu
-      // d'un 500 générique, pour diagnostiquer sans accès aux logs du conteneur.
-      const msg = (err as Error)?.message || String(err);
-      console.error("[FarmOS] htmlToPdf failed:", msg, "| executablePath=", executablePath);
-      throw new BadRequestException(`PDF generation failed: ${msg} (chromium=${executablePath ?? "introuvable"})`);
-    } finally {
-      if (browser) await browser.close();
-    }
+    return renderPdfViaService(html, "FarmOS");
   }
 
   private esc(v: any): string {
@@ -1639,6 +1705,40 @@ export class FarmosService {
       .orderBy(desc(farmosMortalityEvents.eventDate));
   }
 
+  // Stats mortalité (prompt design) : décès par mois / espèce / cause, totaux,
+  // perte financière. Calcul en mémoire (volumétrie faible) à partir des events.
+  async getMortalityStats(orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(farmosMortalityEvents)
+      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1)));
+    const byMonth: Record<string, number> = {};
+    const bySpecies: Record<string, number> = {};
+    const byCause: Record<string, number> = {};
+    let totalDeaths = 0;
+    let totalLoss = 0;
+    for (const r of rows) {
+      const n = Number(r.count ?? 1);
+      totalDeaths += n;
+      totalLoss += Number(r.estimatedLoss ?? 0);
+      const month = String(r.eventDate ?? "").slice(0, 7);
+      if (month) byMonth[month] = (byMonth[month] ?? 0) + n;
+      if (r.species) bySpecies[r.species] = (bySpecies[r.species] ?? 0) + n;
+      const cause = (r.confirmedCause || r.cause || "—") as string;
+      byCause[cause] = (byCause[cause] ?? 0) + n;
+    }
+    const sortDesc = (obj: Record<string, number>) =>
+      Object.entries(obj).map(([key, value]) => ({ key, value })).sort((a, b) => b.value - a.value);
+    return {
+      totalDeaths,
+      totalLoss: Math.round(totalLoss),
+      eventsCount: rows.length,
+      byMonth: Object.entries(byMonth).map(([key, value]) => ({ key, value })).sort((a, b) => a.key.localeCompare(b.key)),
+      bySpecies: sortDesc(bySpecies),
+      byCause: sortDesc(byCause),
+    };
+  }
+
   async createMortalityEvent(input: any, orgId: number) {
     const [res] = await this.db.insert(farmosMortalityEvents).values({
       organizationId: orgId,
@@ -1648,6 +1748,15 @@ export class FarmosService {
       count: input.count ?? 1,
       cause: input.cause ?? null,
       necropsyRequested: input.necropsy_requested ? 1 : 0,
+      eventTime: input.event_time ?? null,
+      barn: input.barn ?? null,
+      lot: input.lot ?? null,
+      confirmedCause: input.confirmed_cause ?? null,
+      relatedDiseaseId: input.related_disease_id ?? null,
+      preDeathSymptoms: input.pre_death_symptoms ?? null,
+      vetConsulted: input.vet_consulted ?? null,
+      estimatedLoss: input.estimated_loss != null ? String(input.estimated_loss) : null,
+      necropsyDone: input.necropsy_done ? 1 : 0,
       notes: input.notes ?? null,
     }).$returningId();
     // Marquer l'animal comme décédé si un ID précis est fourni.
@@ -1659,6 +1768,44 @@ export class FarmosService {
     }
     await this.publishFarmosUpdate("createMortalityEvent", ["mortalityEvents", "animals"], "created", res.id, orgId);
     return { id: res.id };
+  }
+
+  // ─── Pesées / courbe de croissance ──────────────────────────────────────
+  async listWeighings(orgId: number, animalId?: number) {
+    const conditions = [eq(farmosWeighings.organizationId, orgId), eq(farmosWeighings.isActive, 1)];
+    if (animalId) conditions.push(eq(farmosWeighings.animalId, animalId));
+    return this.db
+      .select()
+      .from(farmosWeighings)
+      .where(and(...conditions))
+      .orderBy(farmosWeighings.weighDate);
+  }
+
+  async createWeighing(input: CreateWeighingDto, orgId: number) {
+    const [res] = await this.db.insert(farmosWeighings).values({
+      organizationId: orgId,
+      animalId: input.animal_id,
+      weighDate: input.weigh_date,
+      weight: String(input.weight),
+      weightUnit: input.weight_unit ?? "kg",
+      notes: input.notes ?? null,
+    }).$returningId();
+    // Met à jour le poids courant de l'animal avec la dernière pesée.
+    await this.db
+      .update(farmosAnimals)
+      .set({ weight: String(input.weight), weightUnit: input.weight_unit ?? "kg" })
+      .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)));
+    await this.publishFarmosUpdate("createWeighing", ["weighings", "animals"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async deleteWeighing(id: number, orgId: number) {
+    await this.db
+      .update(farmosWeighings)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosWeighings.id, id), eq(farmosWeighings.organizationId, orgId)));
+    await this.publishFarmosUpdate("deleteWeighing", ["weighings"], "deleted", id, orgId);
+    return { message: "Pesée supprimée." };
   }
 
   async listAiInsights(orgId: number) {
@@ -1845,10 +1992,13 @@ export class FarmosService {
         designation: designations.name,
         departmentId: users.departmentId,
         department: departments.name,
+        roleId: users.roleId,
+        role: roles.name,
       })
       .from(users)
       .leftJoin(designations, eq(users.designationId, designations.id))
       .leftJoin(departments, eq(users.departmentId, departments.id))
+      .leftJoin(roles, eq(users.roleId, roles.id))
       .where(
         and(
           eq(users.organizationId, orgId),
@@ -1934,7 +2084,7 @@ export class FarmosService {
   async getProfitability(orgId: number) {
     const [animals, sales, expenses] = await Promise.all([
       this.db
-        .select({ id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species, lot: farmosAnimals.lot })
+        .select({ id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species, lot: farmosAnimals.lot, barn: farmosAnimals.barn })
         .from(farmosAnimals)
         .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
       this.db
@@ -1970,7 +2120,7 @@ export class FarmosService {
         const revenue = Math.round(revenueByAnimal.get(id) ?? 0);
         const cost = Math.round(costByAnimal.get(id) ?? 0);
         return {
-          animalId: id, name: a.name, species: a.species, lot: a.lot,
+          animalId: id, name: a.name, species: a.species, lot: a.lot, barn: a.barn,
           revenue, cost, profit: revenue - cost,
           costByCategory: costByCategory.get(id) ?? {},
         };
@@ -1978,23 +2128,28 @@ export class FarmosService {
       .filter((r) => r.revenue !== 0 || r.cost !== 0)
       .sort((x, y) => y.profit - x.profit);
 
-    const lotMap = new Map<string, { lot: string; revenue: number; cost: number; count: number }>();
-    for (const r of byAnimal) {
-      const key = r.lot || "—";
-      const agg = lotMap.get(key) ?? { lot: key, revenue: 0, cost: 0, count: 0 };
-      agg.revenue += r.revenue; agg.cost += r.cost; agg.count += 1;
-      lotMap.set(key, agg);
-    }
-    const byLot = Array.from(lotMap.values())
-      .map((l) => ({ ...l, profit: l.revenue - l.cost }))
-      .sort((x, y) => y.profit - x.profit);
+    // Agrégation générique par clé (lot ou bâtiment).
+    const groupBy = (keyOf: (r: typeof byAnimal[number]) => string, keyName: "lot" | "building") => {
+      const map = new Map<string, any>();
+      for (const r of byAnimal) {
+        const key = keyOf(r) || "—";
+        const agg = map.get(key) ?? { [keyName]: key, revenue: 0, cost: 0, count: 0 };
+        agg.revenue += r.revenue; agg.cost += r.cost; agg.count += 1;
+        map.set(key, agg);
+      }
+      return Array.from(map.values())
+        .map((l) => ({ ...l, profit: l.revenue - l.cost }))
+        .sort((x, y) => y.profit - x.profit);
+    };
+    const byLot = groupBy((r) => r.lot ?? "", "lot");
+    const byBuilding = groupBy((r) => r.barn ?? "", "building");
 
     const totals = byAnimal.reduce(
       (acc, r) => ({ revenue: acc.revenue + r.revenue, cost: acc.cost + r.cost, profit: acc.profit + r.profit }),
       { revenue: 0, cost: 0, profit: 0 },
     );
 
-    return { byAnimal, byLot, totals };
+    return { byAnimal, byLot, byBuilding, totals };
   }
 
   private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {
@@ -2014,6 +2169,23 @@ export class FarmosService {
         type: txTypeName,
         relatedId: `farmos_sale:${saleId}:${input.sale_source ?? this.resolveFarmosSaleSource(input)}:${input.product_type ?? input.species ?? "item"}`,
       }).$returningId();
+      // Ecriture moderne (dual-write) via LedgerService, idempotent par vente.
+      await this.ledger.post(
+        {
+          date: new Date(input.sale_date),
+          reference: `FARMSALE-${saleId}`,
+          particulars: this.buildFarmosSaleParticulars(input, txTypeName),
+          sourceModule: "farmos_sale",
+          relatedId: String(saleId),
+          currencyId: input.currency_id ?? undefined,
+          idempotencyKey: `farmos_sale:${saleId}`,
+          lines: [
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.total_amount), description: txTypeName },
+            { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.total_amount), description: txTypeName },
+          ],
+        },
+        orgId,
+      );
       return res.id;
     } catch (err) {
       console.warn("[FarmOS] syncSaleToTransaction failed:", (err as Error).message);
@@ -2069,10 +2241,87 @@ export class FarmosService {
         type: "FarmOS Expense",
         relatedId: `farmos_expense:${expenseId}`,
       }).$returningId();
+      // Ecriture moderne (dual-write) via LedgerService, idempotent par depense.
+      await this.ledger.post(
+        {
+          date: new Date(input.expense_date),
+          reference: `FARMEXP-${expenseId}`,
+          particulars,
+          sourceModule: "farmos_expense",
+          relatedId: String(expenseId),
+          currencyId: input.currency_id ?? undefined,
+          idempotencyKey: `farmos_expense:${expenseId}`,
+          lines: [
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense" },
+            { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.amount), description: "FarmOS Expense" },
+          ],
+        },
+        orgId,
+      );
       return res.id;
     } catch (err) {
+      // Inclut le cas "gate d'approbation" (422) : depense creee, comptabilisation
+      // moderne reportee a l'approbation. Le dual-write plat reste en place.
       console.warn("[FarmOS] syncExpenseToTransaction failed:", (err as Error).message);
       return null;
     }
+  }
+
+  /** Comptabilise une depense via le grand livre, en bypassant le gate (post-approbation). */
+  private async postExpenseLedgerApproved(expenseId: number, orgId: number) {
+    const [exp] = await this.db
+      .select()
+      .from(farmosExpenses)
+      .where(and(eq(farmosExpenses.id, expenseId), eq(farmosExpenses.organizationId, orgId)))
+      .limit(1);
+    if (!exp) throw new NotFoundException("Dépense introuvable.");
+    const type = await this.findTransactionType("FarmOS Expense");
+    if (!type) return null;
+    const particulars = `Dépense FarmOS · ${exp.category}${exp.supplier ? ` · ${exp.supplier}` : ""}`.slice(0, 250);
+    return this.ledger.post(
+      {
+        date: exp.expenseDate ? new Date(exp.expenseDate as any) : undefined,
+        reference: `FARMEXP-${expenseId}`,
+        particulars,
+        sourceModule: "farmos_expense",
+        relatedId: String(expenseId),
+        currencyId: exp.currencyId ?? undefined,
+        idempotencyKey: `farmos_expense:${expenseId}`,
+        skipApprovalGate: true,
+        lines: [
+          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+          { accountId: type.creditAccountId, side: "CREDIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+        ],
+      },
+      orgId,
+    );
+  }
+
+  /** Soumet une depense au circuit d'approbation (no-op si le workflow n'existe pas). */
+  async submitExpenseForApproval(expenseId: number, orgId: number, userId?: number) {
+    try {
+      return await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "farmos_expense", entityId: String(expenseId) },
+        orgId,
+        userId,
+      );
+    } catch (err) {
+      console.warn("[FarmOS] submitExpenseForApproval skipped:", (err as Error).message);
+      return null;
+    }
+  }
+
+  /** Approuve une etape de l'instance liee a la depense ; comptabilise si approuvee. */
+  async approveExpense(expenseId: number, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "farmos_expense" && i.entityId === String(expenseId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette dépense.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.postExpenseLedgerApproved(expenseId, orgId);
+    }
+    return { expenseId, approval: result };
   }
 }

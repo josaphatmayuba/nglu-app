@@ -36,7 +36,15 @@ export async function restoreSession() {
       setToken(data.token);
       if (data.role) localStorage.setItem("role", data.role);
       if (data.roleId != null) localStorage.setItem("roleId", String(data.roleId));
+      // Le refresh-token expose désormais firstName/lastName/username/email/id :
+      // on les stocke comme le login formulaire pour que le UserChip affiche
+      // l'utilisateur (sinon « Non connecté » alors qu'on est connecté).
+      const display = [data.firstName, data.lastName].filter(Boolean).join(" ").trim() || data.username || data.email || "";
+      if (display) localStorage.setItem("user", display);
+      if (data.id != null) localStorage.setItem("id", String(data.id));
+      if (data.email) localStorage.setItem("email", data.email);
       localStorage.setItem("isLogged", "true");
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
       return data.token;
     }
   } catch {}
@@ -152,11 +160,10 @@ export function LoginScreen({ lang = "fr" }) {
         borderRadius: 14, padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Brand size={48} color="#0E2418" accent="#D7AA45"/>
-          <div style={{ fontFamily: "var(--font-display, Georgia)", fontWeight: 500, fontSize: 22, color: "var(--ink-950, #0E2418)" }}>
-            FarmOS<span style={{ color: "#D7AA45" }}> Pro</span>
-          </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, marginBottom: 4 }}>
+          <Brand size={64}/>
+          {/* Wordmark officiel (image) au lieu du texte CSS, pour rester fidèle à la charte. */}
+          <img src="/farmos/farmos-wordmark.png" alt="FarmOS" style={{ height: 26, width: "auto", display: "block" }}/>
           <div style={{ fontSize: 12, color: "var(--fg-3, #6b6b6b)", textAlign: "center" }}>
             {lang === "fr" ? "Connecte-toi pour accéder à l'élevage" : "Sign in to access your herd"}
           </div>

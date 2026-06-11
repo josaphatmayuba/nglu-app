@@ -396,6 +396,17 @@ export class PropertyManagementController {
     return this.propertyManagementService.listMaintenanceCosts(id, orgId);
   }
 
+  @ApiOperation({ summary: "Approuve un cout de maintenance (comptabilise a l'approbation finale)" })
+  @Permissions("update-maintenance-cost")
+  @Post("maintenance-cost/:costId/approve")
+  approveMaintenanceCost(
+    @Param("costId", ParseIntPipe) costId: number,
+    @Body() body: { comment?: string },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.approveMaintenanceCost(costId, body?.comment, orgId);
+  }
+
   @ApiOperation({ summary: "Record a cost on a maintenance ticket" })
   @Permissions("create-maintenance-cost")
   @UseInterceptors(FileInterceptor("receipt", {

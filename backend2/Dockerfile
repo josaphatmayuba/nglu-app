@@ -1,17 +1,7 @@
 FROM node:20-alpine
 
-# Chromium dependencies for puppeteer PDF generation
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
-
-# Alpine installe le binaire en /usr/bin/chromium (le code resout aussi chromium-browser en repli).
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Génération PDF déléguée au microservice `pdf-service` (chromium isolé là-bas).
+# backend2 n'embarque plus chromium/puppeteer.
 
 WORKDIR /app
 

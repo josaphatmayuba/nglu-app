@@ -56,7 +56,19 @@ export const api = {
   // Téléchargement authentifié (un <a href> ne porte pas le JWT -> 401).
   downloadAuth: async (path, filename) => {
     const res = await fetch(`${API_ROOT}${path}`, { headers: { ...authHeaders() } });
-    if (!res.ok) throw new Error(`API ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      // Récupère le message explicite du backend (JSON) au lieu d'un "API 400" brut.
+      let msg = `API ${res.status} ${res.statusText}`;
+      try {
+        const body = await res.clone().json();
+        if (body?.message) {
+          msg = body.message === "This document has no content to render."
+            ? "Ce document n'a pas de contenu à générer (aucun modèle/HTML enregistré)."
+            : body.message;
+        }
+      } catch { /* corps non-JSON : on garde le message générique */ }
+      throw new Error(msg);
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

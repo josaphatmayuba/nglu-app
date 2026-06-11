@@ -90,6 +90,270 @@ export const transactionTypes = mysqlTable("transaction_types", {
   updatedAt: timestamp("updated_at"),
 });
 
+// === Coeur comptable moderne ERP/SIFA (migration 0105) ===
+export const accountingPeriods = mysqlTable("accounting_periods", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 64 }).notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  status: varchar("status", { length: 16 }).default("open").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const journalEntries = mysqlTable("journal_entries", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  date: datetime("date").notNull(),
+  reference: varchar("reference", { length: 64 }),
+  particulars: varchar("particulars", { length: 255 }).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }),
+  relatedId: varchar("related_id", { length: 255 }),
+  status: varchar("status", { length: 16 }).default("posted").notNull(),
+  reversalOfId: bigint("reversal_of_id", { mode: "number", unsigned: true }),
+  reversedById: bigint("reversed_by_id", { mode: "number", unsigned: true }),
+  reason: varchar("reason", { length: 255 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  exchangeRate: decimal("exchange_rate", { precision: 18, scale: 6 }),
+  periodId: bigint("period_id", { mode: "number", unsigned: true }),
+  idempotencyKey: varchar("idempotency_key", { length: 128 }),
+  totalDebit: decimal("total_debit", { precision: 18, scale: 2 }).default("0").notNull(),
+  totalCredit: decimal("total_credit", { precision: 18, scale: 2 }).default("0").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const journalEntryLines = mysqlTable("journal_entry_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  entryId: bigint("entry_id", { mode: "number", unsigned: true }).notNull(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  side: varchar("side", { length: 6 }).notNull(),
+  amount: decimal("amount", { precision: 18, scale: 2 }).notNull(),
+  siteId: bigint("site_id", { mode: "number" }),
+  departmentId: bigint("department_id", { mode: "number" }),
+  projectId: bigint("project_id", { mode: "number" }),
+  activityId: bigint("activity_id", { mode: "number" }),
+  description: varchar("description", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const transactionTypeRules = mysqlTable("transaction_type_rules", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  type: varchar("type", { length: 64 }).notNull(),
+  role: varchar("role", { length: 64 }).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  side: varchar("side", { length: 6 }).notNull(),
+  formula: varchar("formula", { length: 255 }),
+  sortOrder: int("sort_order").default(0).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// === Module Documents ERP/SIFA (migration 0114) ===
+export const documents = mysqlTable("documents", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  type: varchar("type", { length: 64 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  fileUrl: varchar("file_url", { length: 512 }),
+  mimeType: varchar("mime_type", { length: 128 }),
+  contentHash: varchar("content_hash", { length: 128 }),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  uploadedBy: bigint("uploaded_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const documentLinks = mysqlTable("document_links", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  documentId: bigint("document_id", { mode: "number", unsigned: true }).notNull(),
+  entityType: varchar("entity_type", { length: 64 }).notNull(),
+  entityId: varchar("entity_id", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// === Module Procurement + Stock ERP/SIFA (migration 0113) ===
+export const warehouses = mysqlTable("warehouses", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  code: varchar("code", { length: 32 }),
+  siteId: bigint("site_id", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const stockMovements = mysqlTable("stock_movements", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  movementType: varchar("movement_type", { length: 16 }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 2 }),
+  reference: varchar("reference", { length: 64 }),
+  sourceModule: varchar("source_module", { length: 64 }),
+  relatedId: varchar("related_id", { length: 64 }),
+  note: varchar("note", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const purchaseOrders = mysqlTable("purchase_orders", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  reference: varchar("reference", { length: 64 }),
+  supplierId: bigint("supplier_id", { mode: "number" }),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }),
+  status: varchar("status", { length: 16 }).default("draft").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  totalAmount: decimal("total_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+  expectedDate: date("expected_date"),
+  note: varchar("note", { length: 255 }),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const purchaseOrderLines = mysqlTable("purchase_order_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  purchaseOrderId: bigint("purchase_order_id", { mode: "number", unsigned: true }).notNull(),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitPrice: decimal("unit_price", { precision: 18, scale: 2 }).default("0").notNull(),
+  receivedQuantity: decimal("received_quantity", { precision: 18, scale: 3 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const goodsReceipts = mysqlTable("goods_receipts", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  purchaseOrderId: bigint("purchase_order_id", { mode: "number", unsigned: true }).notNull(),
+  warehouseId: bigint("warehouse_id", { mode: "number", unsigned: true }).notNull(),
+  reference: varchar("reference", { length: 64 }),
+  receivedBy: bigint("received_by", { mode: "number" }),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const goodsReceiptLines = mysqlTable("goods_receipt_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  goodsReceiptId: bigint("goods_receipt_id", { mode: "number", unsigned: true }).notNull(),
+  purchaseOrderLineId: bigint("purchase_order_line_id", { mode: "number", unsigned: true }),
+  productId: bigint("product_id", { mode: "number" }).notNull(),
+  quantity: decimal("quantity", { precision: 18, scale: 3 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 18, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Ecritures comptables en attente d'approbation (migration 0112).
+export const ledgerPendingEntries = mysqlTable("ledger_pending_entries", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }).notNull(),
+  relatedId: varchar("related_id", { length: 64 }).notNull(),
+  payload: json("payload").notNull(),
+  status: varchar("status", { length: 16 }).default("pending").notNull(),
+  journalEntryId: bigint("journal_entry_id", { mode: "number", unsigned: true }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// Gate d'approbation centralisé (migration 0111) : modules exigeant une approbation workflow.
+export const ledgerApprovalRequirements = mysqlTable("ledger_approval_requirements", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }).notNull(),
+  workflowKey: varchar("workflow_key", { length: 64 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+// === Module Workflow ERP/SIFA (migration 0108) ===
+export const workflows = mysqlTable("workflows", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  key: varchar("key", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  steps: json("steps").notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const workflowInstances = mysqlTable("workflow_instances", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  workflowId: bigint("workflow_id", { mode: "number", unsigned: true }).notNull(),
+  entityType: varchar("entity_type", { length: 64 }).notNull(),
+  entityId: varchar("entity_id", { length: 64 }).notNull(),
+  currentStep: int("current_step").default(0).notNull(),
+  status: varchar("status", { length: 16 }).default("pending").notNull(),
+  submittedBy: bigint("submitted_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const workflowApprovals = mysqlTable("workflow_approvals", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  instanceId: bigint("instance_id", { mode: "number", unsigned: true }).notNull(),
+  step: int("step").notNull(),
+  approverId: bigint("approver_id", { mode: "number" }),
+  decision: varchar("decision", { length: 16 }).notNull(),
+  comment: varchar("comment", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// === Module Budget ERP/SIFA (migration 0109) ===
+export const budgets = mysqlTable("budgets", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  periodId: bigint("period_id", { mode: "number", unsigned: true }),
+  projectId: bigint("project_id", { mode: "number" }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  status: varchar("status", { length: 16 }).default("open").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const budgetLines = mysqlTable("budget_lines", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  budgetId: bigint("budget_id", { mode: "number", unsigned: true }).notNull(),
+  accountId: bigint("account_id", { mode: "number" }).notNull(),
+  siteId: bigint("site_id", { mode: "number" }),
+  departmentId: bigint("department_id", { mode: "number" }),
+  projectId: bigint("project_id", { mode: "number" }),
+  activityId: bigint("activity_id", { mode: "number" }),
+  plannedAmount: decimal("planned_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+  label: varchar("label", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const budgetConsumptions = mysqlTable("budget_consumptions", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  budgetLineId: bigint("budget_line_id", { mode: "number", unsigned: true }).notNull(),
+  journalEntryId: bigint("journal_entry_id", { mode: "number", unsigned: true }),
+  amount: decimal("amount", { precision: 18, scale: 2 }).notNull(),
+  note: varchar("note", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const customers = mysqlTable("customer", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
@@ -1483,6 +1747,9 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
   withdrawalUntil: date("withdrawal_until", { mode: "string" }),
   withdrawalKind: varchar("withdrawal_kind", { length: 20 }),
+  motherId: varchar("mother_id", { length: 100 }),
+  fatherId: varchar("father_id", { length: 100 }),
+  estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
   lastEvent: varchar("last_event", { length: 255 }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1578,6 +1845,14 @@ export const farmosDiseases = mysqlTable("farmos_diseases", {
   contagious: tinyint("contagious").default(0).notNull(),
   severityDefault: varchar("severity_default", { length: 20 }),
   commonRoute: varchar("common_route", { length: 50 }),
+  urgencyLevel: varchar("urgency_level", { length: 20 }),
+  symptoms: text("symptoms"),
+  prevention: text("prevention"),
+  vaccineAvailable: tinyint("vaccine_available").default(0).notNull(),
+  mortalityRisk: varchar("mortality_risk", { length: 20 }),
+  recommendedProtocol: text("recommended_protocol"),
+  possibleCauses: text("possible_causes"),
+  recommendedExams: text("recommended_exams"),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1746,6 +2021,15 @@ export const farmosMortalityEvents = mysqlTable("farmos_mortality_events", {
   count: int("count").default(1).notNull(),
   cause: varchar("cause", { length: 255 }),
   necropsyRequested: tinyint("necropsy_requested").default(0).notNull(),
+  eventTime: varchar("event_time", { length: 8 }),
+  barn: varchar("barn", { length: 100 }),
+  lot: varchar("lot", { length: 100 }),
+  confirmedCause: varchar("confirmed_cause", { length: 255 }),
+  relatedDiseaseId: bigint("related_disease_id", { mode: "number" }),
+  preDeathSymptoms: text("pre_death_symptoms"),
+  vetConsulted: varchar("vet_consulted", { length: 255 }),
+  estimatedLoss: decimal("estimated_loss", { precision: 12, scale: 2 }),
+  necropsyDone: tinyint("necropsy_done").default(0).notNull(),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1855,6 +2139,19 @@ export const farmosProductionLogs = mysqlTable("farmos_production_logs", {
   quantity: decimal("quantity", { precision: 12, scale: 2 }).notNull(),
   unit: varchar("unit", { length: 20 }),
   quality: json("quality"),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosWeighings = mysqlTable("farmos_weighings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  animalId: bigint("animal_id", { mode: "number" }).notNull(),
+  weighDate: date("weigh_date", { mode: "string" }).notNull(),
+  weight: decimal("weight", { precision: 10, scale: 2 }).notNull(),
+  weightUnit: varchar("weight_unit", { length: 10 }).default("kg"),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

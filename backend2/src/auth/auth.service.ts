@@ -361,7 +361,7 @@ export class AuthService {
 
     // ── Valid (active, or rotated within grace = concurrent tab). Load user. ──
     const [user] = await this.db
-      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, status: users.status })
+      .select({ id: users.id, roleId: users.roleId, organizationId: users.organizationId, status: users.status, firstName: users.firstName, lastName: users.lastName, username: users.username, email: users.email })
       .from(users)
       .where(eq(users.id, row.userId))
       .limit(1);
@@ -401,6 +401,11 @@ export class AuthService {
       roleId: role?.id,
       role: role?.name ?? null,
       organizationId: user.organizationId,
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      email: user.email,
     };
   }
 

@@ -13,7 +13,8 @@ export default defineConfig({
       base: "/farmos/",
       scope: "/farmos/",
       includeAssets: [
-        "farmos-icon.svg",
+        "farmos-logo.png",
+        "farmos-wordmark.png",
         "apple-touch-icon.png",
         "styles/app.css",
         "styles/farm-tokens.css",
@@ -36,7 +37,6 @@ export default defineConfig({
           { src: "farmos-icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "farmos-icon-512.png", sizes: "512x512", type: "image/png" },
           { src: "farmos-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-          { src: "farmos-icon.svg", sizes: "any", type: "image/svg+xml" },
         ],
       },
       workbox: {

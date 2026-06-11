@@ -10,6 +10,236 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **ERP/SIFA — Chantier P1 : module Documents (justificatifs centralisés)** : tables `documents` (fichier + hash + métadonnées) et `document_links` (rattachement polymorphe à N entités) — migration `0114`. `DocumentsService` : enregistrer un document (+ liens), rattacher à une entité (idempotent), lister les justificatifs d'une entité (`GET /documents/entity?entityType=&entityId=`), soft-delete. Permet d'attacher une pièce (facture scannée, reçu, contrat) à toute écriture/facture/commande. Endpoints `/documents`. Route whitelistée. [3.43.0]
+- **ERP/SIFA — Chantier P1 : module Procurement + Stock (le « A » de SIFA)** : 6 tables (migration `0113`) — `warehouses`, `stock_movements`, `purchase_orders` (+lignes), `goods_receipts` (+lignes). `ProcurementService` : entrepôts, bons de commande (création + statuts draft/ordered/received/cancelled), **réception** (`receiveOrder` → goods_receipt + stock_movements IN + maj `received_quantity` + stock produit, marque la commande received si tout reçu), niveaux de stock (somme IN−OUT par produit/entrepôt), mouvements manuels. Chaîne demande→commande→réception→stock complète. Endpoints `/procurement/*` (warehouses, orders, orders/:id/receive, movements, stock). Route whitelistée. [3.42.0]
+- **ERP/SIFA — HR paie + Domus maintenance câblés au workflow** : `hr` (paie, `sourceModule=payroll`) et `property-management` (coût de maintenance, `sourceModule=maintenance`) soumettent automatiquement au circuit `exp_approval` à la création ; endpoints `POST /salary-history/:id/approve` et `POST /property-management/maintenance-cost/:costId/approve` comptabilisent via `ledger.approveAndPost` à l'approbation finale. **Les 4 modules de dépense (FarmOS, achats, paie, maintenance) sont désormais branchés** sur le gate d'approbation centralisé. [3.41.0]
+- **ERP/SIFA — Écritures comptables en attente + purchase-invoices câblé au workflow** : nouvelle table `ledger_pending_entries` (migration `0112`). `LedgerService.post()` ne lève plus 422 quand un module est gaté : il **persiste l'écriture en attente** (idempotent par entité) et renvoie `{deferred:true}`. `approveAndPost(sourceModule, relatedId)` rejoue le payload avec `skipApprovalGate` à l'approbation finale — abstraction générique réutilisable par tous les modules, sans dupliquer la logique. `purchase-invoices` câblé (soumission auto au circuit `exp_approval` à la création, endpoint `POST /purchase-invoice/:id/approve`). Contre-passation forcée non différée (`skipApprovalGate`). [3.40.0]
+- **ERP/SIFA — Budget branché sur le grand livre (consommation réelle live)** : `BudgetService.statusFromLedger()` calcule la consommation de chaque ligne budgétaire directement depuis `journal_entry_lines` (somme nette débit−crédit sur compte + dimensions projet/site/département/activité), sans saisie manuelle. Reflète la réalité comptabilisée + alerte dépassement. Endpoint `GET /budget/:id/status-ledger`. Le couplage est en *pull* (Budget lit le grand livre) → pas de dépendance Ledger→Budget. [3.39.0]
+- **ERP/SIFA — FarmOS câblé au workflow d'approbation (module pilote)** : à la création d'une dépense FarmOS, soumission automatique au circuit `exp_approval` (`submitExpenseForApproval`, no-op si le workflow/gate n'existe pas). Si le module `farmos_expense` est sous gate, la comptabilisation moderne est reportée (le 422 est toléré). Endpoint `POST /farmos/expenses/:id/approve` : approuve l'étape courante puis, à l'approbation finale, comptabilise via le grand livre avec `skipApprovalGate`. Modèle réplicable aux autres modules. [3.38.0]
+- **ERP/SIFA — Gate d'approbation centralisé (dépense → approbation avant comptabilisation)** : table `ledger_approval_requirements` (migration `0111`, **vide par défaut = aucun blocage**, activation progressive par module). `LedgerService.post()` refuse (422) la comptabilisation d'une écriture dont le `sourceModule` exige une approbation tant qu'il n'existe pas d'instance workflow `approved` pour l'entité (`entityType=sourceModule`, `entityId=relatedId`). Bypass interne `skipApprovalGate` pour la comptabilisation déclenchée par l'approbation. Endpoints `GET/POST /ledger/approval-requirements`. Point de contrôle unique pour « toute dépense approuvée avant comptabilisation », activable module par module. [3.37.0]
+- **ERP/SIFA — Chantier P1 : module Budget (engagement)** : tables `budgets`, `budget_lines` (par compte + dimensions, montant planifié), `budget_consumptions` (rattachée à une écriture du grand livre) — migration `0109_budget_core.sql`. `BudgetService` : créer budget + lignes, enregistrer une consommation, état consolidé (planifié/consommé/restant + alerte dépassement). Endpoints `/budget` (+ `/:id/lines`, `/:id/status`, `/lines/:lineId/consume`). Route whitelistée. Base des rapports bailleurs ONG. [3.36.0]
+- **ERP/SIFA — Chantier P1 : module Workflow (approbations)** : moteur d'approbation générique transverse. Tables `workflows` (définition : clé unique/org, étapes JSON), `workflow_instances` (entité métier rattachée, étape courante, statut pending/approved/rejected), `workflow_approvals` (décisions tracées par étape) — migration `0108_workflow_core.sql`. `WorkflowService` : créer un circuit, soumettre une entité, approuver (avance ou clôt à la dernière étape) / rejeter, lister instances par statut. Endpoints `/workflow`, `/workflow/instances` (+ `/:id/approve`, `/:id/reject`). Route whitelistée (middleware). Réutilisable par achat/dépense/paie avant comptabilisation. [3.35.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 6 (périodes & clôture)** : gestion des `accounting_periods` dans `LedgerService` — `listPeriods`, `createPeriod` (refuse le chevauchement de dates), `closePeriod`, `reopenPeriod`. **Intégrité comptable** : `post()` refuse (409) toute écriture dont la date tombe dans une période clôturée (`assertPeriodNotClosed`), contre-passation incluse. Endpoints `GET/POST /ledger/periods`, `POST /ledger/periods/:id/close`, `POST /ledger/periods/:id/reopen` (déclarés avant `/ledger/:id`). [3.34.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 4 (rapports modernes en parallèle)** : `LedgerService.subAccountBalances()` et `trialBalance()` calculent les soldes par sous-compte depuis le grand livre moderne (`journal_entry_lines`, `side` DEBIT/CREDIT). Endpoints `GET /ledger/balances` et `GET /ledger/trial-balance` (déclarés avant `/ledger/:id` pour le routing). Ajoutés **en parallèle** des rapports table-plate existants (`accounts.service`) — pas de bascule sèche : les lecteurs actuels restent intacts tant que l'historique n'est pas migré (esprit strangler). [3.33.0]
+
+### Fixed
+- **Tables Workflow (0108) non créées sur dev + cause racine du split SQL** : `splitSqlStatements` (migrate.ts, repair au boot) suit les quotes `'` mais ne retirait pas les commentaires `--` ; une apostrophe dans un commentaire (« d'approbation ») faussait le suivi des quotes → `ER_PARSE_ERROR`, migration sautée (touchait aussi 0106/0101). Correctif durable : `splitSqlStatements` ignore désormais les commentaires pleine ligne `--`. Migration `0110_workflow_core_fix.sql` (commentaires sans apostrophe) recrée les tables workflow. [3.36.1]
+- **`POST /ledger/by-rules` renvoyait 500** : le `ValidationPipe` global (`whitelist: true`) supprimait `amountsByRole` (champ sans décorateur class-validator) → `Object.keys(undefined)` dans `postByRules`. Ajout de `@IsObject()` + `@IsNotEmpty()` sur le champ DTO + garde défensive (400 explicite si manquant). Diagnostic confirmé par stack trace backend dev + inspection DB (règles 0107 correctement seedées, 10 règles sale/purchase). [3.33.1]
+- **Seed des règles comptables non effectif sur dev** : la migration `0106` (INSERT … WHERE NOT EXISTS) n'a pas inséré les règles (échec silencieux au boot, dépendant de l'ordre repair/migrate). Migration `0107_ledger_seed_rules_fix.sql` : contrainte UNIQUE `(organization_id, type, role)` + `INSERT … ON DUPLICATE KEY UPDATE`, idempotente et insensible à l'ordre de boot. `postByRules` pourra résoudre les types `sale`/`purchase`. [3.32.1]
+
+### Added
+- **Cœur comptable moderne ERP/SIFA — Phase 3 (règles paramétrables)** : `LedgerService.postByRules(type, amountsByRole)` résout compte+sens de chaque rôle métier depuis `transaction_type_rules` (plus de comptes en dur) ; montants ≤0 ignorés. Endpoint `POST /ledger/by-rules`. Migration `0106_ledger_seed_rules.sql` (idempotente) seede les règles par défaut pour `sale` et `purchase` (org 1) d'après les comptes observés. Les paiements (compte = moyen de paiement) restent gérés ligne à ligne. [3.32.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 2 (farmos + hr câblés)** : FarmOS (ventes `farmos_sale:<id>`, dépenses `farmos_expense:<id>`) et HR (salaires `salary:<id>`) écrivent aussi en partie double via `LedgerService` (dual-write, idempotent par ID métier). Comptes dynamiques des types de transaction préservés ; HR salaire débit charge (10) / crédit caisse|banque. `FarmosModule` et `HrModule` importent `LedgerModule`. **Tous les services écrivains métier sont désormais câblés** (sale/purchase-invoices, property-management, farmos, hr) — il reste le seeding des règles (Phase 3) et la bascule des lecteurs (Phase 4). [3.31.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 2 (property-management câblé)** : les 4 opérations comptables de Domus écrivent aussi en partie double via `LedgerService` (dual-write, idempotent par ID métier) : paiement de loyer + part de taxe (`rent-payment:<id>`), caution reçue (`deposit-receipt:<id>`), restitution de caution avec retenue regroupée en une écriture équilibrée (`deposit-return:<id>`), coût de maintenance (`maintenance-cost:<id>`). Comptes dynamiques préservés (types de transaction, sous-comptes Tenant Deposits/Maintenance). `PropertyManagementModule` importe `LedgerModule`. [3.30.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 2 (purchase-invoices câblé)** : `purchase-invoices.service.create()` génère aussi une écriture moderne en partie double via `LedgerService` (dual-write, idempotent `purchase:<invoiceId>`). Lignes alignées sur les transactions plates (achat débit 3/crédit 5, TVA débit 15/crédit 5, paiements débit 5/crédit caisse), construites conditionnellement, écriture émise seulement si ≥2 lignes. `PurchaseInvoicesModule` importe `LedgerModule`. [3.29.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 2 (sale-invoices câblé)** : `sale-invoices.service.create()` génère désormais aussi une écriture moderne en partie double via `LedgerService` (dual-write strangler — les transactions plates restent en place jusqu'à la bascule des lecteurs en Phase 4). Chaque mouvement (cost of sales, créance TTC, TVA, paiements) devient 2 lignes débit/crédit regroupées sous une écriture unique par facture, idempotente (`sale:<invoiceId>`). `SaleInvoicesModule` importe `LedgerModule`. [3.28.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 1 (LedgerService + API)** : module `ledger` (backend2). `LedgerService.post()` comptabilise une écriture en partie double avec validation Σdébit=Σcrédit (calcul en centimes, ≥2 lignes), idempotence par `idempotencyKey`, résolution de période ouverte, le tout dans une transaction DB. `reverse()` = contre-passation (écriture inverse liée, aucun DELETE). Endpoints : `POST /ledger`, `GET /ledger`, `GET /ledger/:id`, `GET /ledger/account/:accountId` (grand livre + solde), `POST /ledger/:id/reverse`. Route `/ledger` ajoutée à la whitelist middleware. [3.27.0]
+- **Cœur comptable moderne ERP/SIFA — Phase 0 (schéma)** : migration `0105_ledger_core.sql` créant `journal_entries`, `journal_entry_lines` (partie double, 1 compte + 1 sens, `decimal(18,2)`), `transaction_type_rules` (comptes paramétrables) et `accounting_periods`. Idempotence via `journal_entries.idempotency_key` (unique par organisation). Tables Drizzle ajoutées à `backend2/src/database/schema.ts`. Voir `livrables ERP-SIFA produits/PLAN_CŒUR_COMPTABLE_MODERNE.md`. [3.26.0]
+
+## [3.25.0] - 2026-06-11
+
+### Added
+
+- FarmOS — gestion des permissions par employé. Le modal employé permet d'assigner un **rôle** (qui détermine les permissions via le RBAC) parmi les rôles disponibles (Admin Ferme, Gestionnaire Ferme, Éleveur, Vétérinaire, Superviseur Ferme, Employé Ferme, Lecture Ferme…). Backend : `GET /staff/roles` (rôles assignables, hors super-admin) ; `PUT /staff/:id` accepte `role_id` ; la liste des employés expose le rôle courant.
+
+## [3.24.0] - 2026-06-10
+
+### Added
+
+- FarmOS — voir / modifier un employé + gestion du statut. Les cartes employés de l'écran Équipe sont cliquables : modal d'édition (prénom, nom, téléphone, rôle/désignation) et changement de statut **actif / parti / démissionné** (avec motif et date de départ). Backend : `PUT /staff/:id` (update) et `PATCH /staff/:id/status` (réutilise `status`/`leaveDate`/`leaveReason` de `users`, sans migration).
+
+## [3.23.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — la barre latérale affichait « Non connecté » alors que l'utilisateur était connecté (arrivée depuis le CRM via cookie refresh). L'endpoint `GET /auth/refresh-token` expose désormais `id`/`firstName`/`lastName`/`username`/`email` ; `restoreSession` les stocke (comme le login formulaire) et le `UserChip` se rafraîchit sur l'événement `farmos:auth-changed`.
+
+## [3.23.0] - 2026-06-10
+
+### Added
+
+- FarmOS — module pesées / courbe de croissance. Nouvelle table `farmos_weighings` (migration `0104`, journal idx 84) + endpoints `GET/POST/DELETE /weighings`. Onglet « Poids » dans la fiche animal : saisie rapide d'une pesée, courbe de croissance (SVG), historique avec suppression. La dernière pesée met à jour le poids courant de l'animal.
+
+## [3.22.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — bouton flottant (+) du menu mobile : ouvre désormais un **menu d'actions rapides** (nouvel animal, traitement, production, reproduction, stock, mortalité) en bottom sheet — grandes cibles tactiles adaptées au terrain — au lieu d'ouvrir directement « nouvel animal ». Conforme au principe UX du prompt design (actions rapides à une main).
+
+## [3.21.0] - 2026-06-10
+
+### Added
+
+- FarmOS — statistiques de mortalité (UI). Nouvelle section « Mortalité — statistiques » dans l'écran Santé : total des décès, perte financière estimée, et graphiques à barres par espèce / par cause / par mois (consomme l'endpoint `GET /mortality-events/stats` ajouté en 3.18.0).
+
+## [3.20.4] - 2026-06-10
+
+### Changed
+
+- FarmOS — wordmark officiel. Extraction du wordmark « FarmOS » (Farm vert + OS terracotta) de la planche officielle vers `farmos-wordmark.png`. Utilisé sur l'écran de connexion (lockup : icône tête-de-vache + wordmark image) à la place du texte CSS « FarmOS Pro ».
+
+## [3.20.3] - 2026-06-10
+
+### Changed
+
+- FarmOS — vrai logo. Le composant `Brand` et toutes les icônes (favicon, app-icon PWA 192/512, maskable, apple-touch, `farmos-icon.svg`, assets Android) utilisent désormais le **vrai logo** (tête de vache réaliste + épis + herbe dans un cercle), extrait de la planche officielle `farmos-brand-concept.png` vers `farmos-logo.png`. Remplace les versions SVG approximatives précédentes (tracé fait main + ancien `farmos-icon.svg`) qui ne correspondaient pas à la charte.
+
+## [3.20.2] - 2026-06-10
+
+### Fixed
+
+- FarmOS — écran Santé : les boutons « Individuel » et « Lot » ouvraient le même formulaire sans différence (et un 3e bouton « Nouveau » redondant). Désormais « Individuel » et « Lot » pré-sélectionnent le type d'application (`scope`) dans le formulaire de traitement ; le bouton « Nouveau » redondant est retiré.
+
+## [3.20.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — responsive mobile : débordement horizontal (scroll + zone blanche à droite) sur l'écran Alertes et autres. La barre de filtres de sévérité scrolle maintenant horizontalement (boutons `flex-shrink:0`) au lieu de pousser la page ; garde CSS globale mobile (`overflow-x:hidden` sur la racine, `max-width:100%` sur les cartes, césure des compteurs mono longs).
+
+## [3.20.0] - 2026-06-10
+
+### Changed
+
+- PDF — architecture centralisée : nouveau **microservice `pdf-service`** (Express + puppeteer-core + chromium isolé) qui génère les PDF (HTML→PDF) pour toutes les apps. backend2 n'embarque **plus** chromium ni puppeteer (Dockerfiles allégés, `puppeteer` retiré du package.json → fin des OOM/échecs de build sur l'installation chromium). HR et FarmOS appellent le service via HTTP (`backend2/src/common/pdf-client.ts`, `PDF_SERVICE_URL`, défaut `http://pdf-service:8002`). Le service lance chromium **à la demande** puis le ferme (empreinte mémoire ~nulle au repos, adapté aux petites instances). Compose dev+prod : service `pdf-service` (mem_limit 320m) ; pipeline : steps « PDF Service → dev/prod ». ⚠️ Déploiement effectif suspendu à la RAM de l'instance (cf. NOTES).
+
+## [3.19.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — panneau Tweaks (⚙ flottant) désactivé en dev et prod. Ses options visuelles utiles (Thème, Densité, Barre latérale, Langue) sont déplacées dans l'écran Paramètres, nouvelle carte « Apparence ». L'aperçu device et la navigation rapide (outils de dev) ne sont pas repris.
+
+## [3.18.0] - 2026-06-10
+
+### Added
+
+- FarmOS — module mortalité enrichi (prompt design). Migration `0103` (journal idx 83) : `event_time`, `barn`, `lot`, `confirmed_cause`, `related_disease_id`, `pre_death_symptoms`, `vet_consulted`, `estimated_loss`, `necropsy_done` sur `farmos_mortality_events`. Section « Détails avancés » dans le formulaire de mortalité (heure, perte estimée $, bâtiment, lot, cause confirmée post-mortem, symptômes avant décès, vétérinaire, autopsie réalisée). Endpoint stats `GET /mortality-events/stats` : décès par mois/espèce/cause, total décès, perte financière totale. (UI des stats à brancher dans un écran dédié — endpoint + données prêts.)
+
+### Fixed
+
+- PDF — corrige le symlink chromium circulaire (`/usr/bin/chromium -> /usr/bin/chromium`) introduit en 3.16.1 : on ne crée le lien que si le binaire réel diffère de `/usr/bin/chromium` (priorité à `chromium-browser`).
+
+## [3.17.0] - 2026-06-10
+
+### Added
+
+- FarmOS — reproduction : alerte anti-consanguinité. Lors d'une saillie/IA avec un mâle identifié (saillie naturelle ou partenaire), si la femelle et le mâle sont apparentés (le mâle est le père de la femelle, la femelle est la mère du mâle, ou fratrie via même mère/père), une confirmation `⚠ Risque de consanguinité` s'affiche avant l'enregistrement. Non bloquant (l'éleveur peut confirmer). Basé sur `mother_id`/`father_id` (ajoutés en 3.12.0).
+
+## [3.16.1] - 2026-06-10
+
+### Fixed
+
+- PDF / pipeline — le bloc d'installation chromium dans `Dockerfile`/`Dockerfile.prod` est rendu NON bloquant (`set +e` + `|| echo WARN` + `exit 0`). L'instance dev a peu de RAM (442 Mio) et le pipeline build l'image sur le serveur (`up -d --build`) → l'`apk add chromium` (206 paquets) échouait en OOM (exit 127) et **cassait tout le déploiement backend**. Désormais le build réussit toujours : si chromium s'installe, le symlink `/usr/bin/chromium` est créé (PDF OK) ; sinon le backend démarre quand même et seul le PDF reste indisponible (échec propre au runtime). À régler définitivement : agrandir l'instance ou déporter le build de l'image (cf. NOTES).
+
+## [3.16.0] - 2026-06-10
+
+### Changed
+
+- FarmOS — icônes animaux : `AnimalGlyph` rend désormais des emojis natifs colorés par espèce (🐄 vache, 🐖 porc, 🐔 poulet, 🐟 poisson, 🐐 chèvre, 🐑 mouton, 🐇 lapin, 🦆 canard, 🦃 dinde) au lieu des tracés SVG schématiques. Rendu « réaliste » et reconnaissable partout (cartes KPI, listes, sidebar, fiche animal). Fallback SVG conservé pour toute espèce sans emoji.
+
+## [3.15.3] - 2026-06-10
+
+### Fixed
+
+- FarmOS — onglets fiche animal : le scroll horizontal des onglets était peu découvrable et difficile à utiliser. Remplacé par un retour à la ligne (`flex-wrap`) : tous les onglets restent visibles sans scroll caché, sur 1-2 lignes selon la largeur du panneau.
+
+## [3.15.2] - 2026-06-10
+
+### Fixed
+
+- PDF — le build de l'image backend2 échouait (exit 127) sur `&& /usr/bin/chromium --version` dans `Dockerfile`/`Dockerfile.prod` : exécuter chromium en root dans Alpine au build retourne un code non-zéro et casse le build (donc le pipeline aussi). Remplacé par `test -x /usr/bin/chromium` (vérifie la présence/exécutabilité sans lancer le binaire). Puppeteer lance déjà chromium avec `--no-sandbox` au runtime. Débloque le rebuild de l'image avec chromium.
+
+## [3.15.1] - 2026-06-10
+
+### Fixed
+
+- FarmOS — responsive fiche animal : le panneau de détail débordait hors écran à droite (sur desktop/tablette). Cause : grilles à panneau latéral utilisant `1fr` (min-width:auto implicite) → le contenu large (tableaux) empêchait la colonne fluide de rétrécir. Passage à `minmax(0, 1fr)` pour `--cols-main`, `--cols-main-detail`, `--cols-main-cal`, `--cols-main-15` (+ surcharges media/force-tablet). Barre d'onglets de la fiche animal : scroll horizontal (`overflow-x:auto`, onglets `flex-shrink:0`) pour les 8 onglets.
+
+## [3.15.0] - 2026-06-10
+
+### Added
+
+- FarmOS — bibliothèque maladies : champs `causes possibles` et `examens recommandés` (complète les champs du prompt design). Migration idempotente `0102` (journal idx 82) + schema/DTO/service + 2 textareas dans le DiseaseFormModal. Backward-compatible.
+
+## [3.14.1] - 2026-06-10
+
+### Fixed
+
+- PDF (HR + FarmOS) 500 « chromium=introuvable » : `backend2/Dockerfile.prod` (utilisé par docker-compose dev ET prod) n'installait pas chromium — le fix précédent (ca540a30) n'était que dans `Dockerfile`, non utilisé par le compose. Ajout du bloc `apk add chromium …` + symlink `/usr/bin/chromium` + `PUPPETEER_EXECUTABLE_PATH` dans `Dockerfile.prod` (build échoue si chromium absent). Vérifié sur serveur dev : chromium absent du conteneur actuel, `PUPPETEER_EXECUTABLE_PATH` vide → cause racine confirmée. Nécessite un rebuild d'image (le `apk add` neuf invalide le cache à partir de cette couche).
+
+## [3.14.0] - 2026-06-10
+
+### Added
+
+- FarmOS — 3 modes UI (Éleveur / Vétérinaire / Gestionnaire) + Tout. Sélecteur de mode dans la barre latérale qui filtre la navigation principale selon le profil (Éleveur : quotidien terrain ; Vétérinaire : clinique ; Gestionnaire : direction/finance ; Tout : comportement historique, défaut). Mode persistant en localStorage (`farmos_mode`). Purement visuel : ne remplace pas les permissions backend (rôles), et le routing direct/deep-links mobile (`/farmos/<slug>`) reste accessible quel que soit le mode. Si l'écran actif sort du mode choisi, retour au tableau de bord.
+
+## [3.13.0] - 2026-06-10
+
+### Added
+
+- FarmOS — rôles fins + permissions farmos. Migration idempotente `0101` (journal idx 81, rejouée auto au boot car idx ≥ 70) : crée les permissions `create/readAll/readSingle/update/delete-farmos` (qui n'étaient jamais seedées — le système marchait via les rôles `isSystem` qui bypassent le PermissionsGuard), les 7 rôles métier (Admin Ferme, Gestionnaire Ferme, Éleveur, Vétérinaire, Superviseur Ferme, Employé Ferme, Lecture Ferme) et leurs liaisons rôle↔permission (Admin/Gestionnaire = CRUD complet ; Vét/Superviseur/Éleveur = read+create+update ; Employé = read+create ; Lecture = read seul). `INSERT IGNORE` + `WHERE NOT EXISTS` → sûr sur bases déjà seedées, ne touche aucun rôle/permission existant. Assignation d'un rôle à un utilisateur via l'UI Rôles du CRM.
+
+## [3.12.0] - 2026-06-10
+
+### Added
+
+- FarmOS — fiche animal : filiation (mère / père) + valeur estimée. Migration idempotente `0100` (journal idx 80) : colonnes `mother_id`, `father_id`, `estimated_value` sur `farmos_animals`. Backend schema/DTO/service (create + update). UI : champs Mère/Père/Valeur estimée dans le formulaire d'édition, carte « Filiation & valeur » dans l'onglet Détails (valeur au format devise `$`). Colonnes optionnelles → backward-compatible.
+
+## [3.11.0] - 2026-06-10
+
+### Added
+
+- FarmOS — fiche animal enrichie : 3 nouveaux onglets dans le tiroir de détail animal. **Finances** (revenus/coûts/profit de l'animal + coûts par catégorie, via `getProfitability().byAnimal`), **Documents** (liste téléchargeable via `listDocuments(animalId)`), **Alertes** (délai de retrait viande/lait/œufs en cours, dérivé de `animal.withdrawal`). Réutilise les API existantes, aucun changement backend. Montants au format devise existant (`$`).
+
+## [3.10.0] - 2026-06-10
+
+### Added
+
+- FarmOS — éditeur de bibliothèque maladies (UI) : carte « Bibliothèque maladies » dans l'écran Santé avec liste cliquable (filtrée par espèce) + bouton Ajouter, et modal `DiseaseFormModal` create/edit/remove exposant tous les champs enrichis (nom FR/EN, espèce, urgence, sévérité, risque de mortalité, voie de transmission, symptômes, prévention, protocole recommandé, contagieuse, vaccin disponible, notes). API front `updateDisease`/`deleteDisease` ajoutées (le backend exposait déjà PUT/PATCH/DELETE). Build farmos-app OK.
+
+## [3.9.0] - 2026-06-10
+
+### Added
+
+- FarmOS — bibliothèque maladies enrichie : nouveaux champs `urgency_level`, `symptoms`, `prevention`, `vaccine_available`, `mortality_risk`, `recommended_protocol` sur `farmos_diseases` (migration idempotente `0099`, journal idx 79). Backend : schema Drizzle, `CreateDiseaseDto`/`UpdateDiseaseDto`, `createDisease`/`updateDisease` persistent ces champs. UI éditeur de maladie à venir (champs déjà exposés par l'API). Colonnes optionnelles → backward-compatible.
+
+## [3.8.0] - 2026-06-10
+
+### Added
+
+- FarmOS — association médicament ↔ stock : à la création d'un traitement avec un médicament et une « Qté prélevée du stock », le stock du médicament est décrémenté automatiquement (réutilise `consumeMedicine`). Champ ajouté au formulaire de traitement (quickentry).
+
+## [3.7.2] - 2026-06-10
+
+### Fixed
+
+- HR — téléchargement PDF : `downloadAuth` affiche désormais le message explicite du backend au lieu d'un « API 400 » brut. Un document sans contenu HTML (ex. contrat sans modèle) affiche « Ce document n'a pas de contenu à générer » au lieu d'une erreur cryptique.
+
+## [3.7.1] - 2026-06-10
+
+### Fixed
+
+- PDF (cause racine enfin identifiée) : `chrome ENOENT … (chromium=introuvable)` — Chromium n'était pas présent dans l'image backend2 déployée. Dockerfile durci : localise le binaire réel après `apk add chromium` (chromium/chromium-browser), crée un lien stable `/usr/bin/chromium`, et **fait échouer le build si Chromium est absent** (garantit que l'image en prod l'a). Détection runtime élargie (htmlToPdf HR+FarmOS) à `/usr/lib/chromium/*`.
+- Version « commit: unknown » en dev/prod : le build pipeline tourne hors dépôt git. `app-version.mjs` lit désormais `BITBUCKET_COMMIT` (puis `CI_COMMIT_SHA`) avant de retomber sur git.
+
+## [3.7.0] - 2026-06-10
+
+### Added
+
+- Toutes les apps (hr, domus, batipro, comptabilite) : badge version affiché en bas **en mode dev uniquement** (`version-badge.js`, monté depuis main.jsx) + version dans l'écran **Paramètres/Réglages** (visible en prod). Écran Paramètres créé pour hr-app, batipro-app et comptabilite-app (n'en avaient pas) ; carte « À propos » ajoutée aux Réglages Domus. Le CRM (frontend) affichait déjà la version dans Réglages → À propos. Source unique : fichier racine VERSION.
+
+## [3.6.0] - 2026-06-10
+
+### Added
+
+- FarmOS — rentabilité par bâtiment : `/profitability` renvoie désormais aussi `byBuilding` (regroupement via `animal.barn`), et la section Finances propose une 3ᵉ vue « Par bâtiment » en plus d'animal/lot.
+
+## [3.5.2] - 2026-06-10
+
+### Fixed
+
+- HR PDF (fiches de paie / documents) : même correctif que FarmOS appliqué au `htmlToPdf` de hr.service — `waitUntil:"load"`, `protocolTimeout`, `--disable-gpu`, et exposition de la vraie cause Puppeteer dans la réponse au lieu d'un 500 générique (le bouton PDF de la paie renvoyait « API 500 »).
+
 ## [3.5.1] - 2026-06-10
 
 ### Fixed

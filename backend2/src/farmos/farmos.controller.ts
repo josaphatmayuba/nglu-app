@@ -27,6 +27,9 @@ import {
   CreateExpenseDto,
   CreateMedicineDto,
   CreateMortalityEventDto,
+  CreateWeighingDto,
+  UpdateFarmosStaffDto,
+  SetFarmosStaffStatusDto,
   CreateVaccinationDto,
   CreateVetExamDto,
   SignVetExamDto,
@@ -381,6 +384,17 @@ export class FarmosController {
     return this.farmos.deleteExpense(id, orgId);
   }
 
+  @Permissions("update-farmos")
+  @Post("expenses/:id/approve")
+  approveExpense(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { comment?: string },
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.farmos.approveExpense(id, body?.comment, orgId, userId);
+  }
+
   @Permissions("create-farmos")
   @Post("reproduction-events")
   createReproductionEvent(@Body() body: CreateReproductionEventDto, @CurrentOrg() orgId: number) {
@@ -548,10 +562,35 @@ export class FarmosController {
     return this.farmos.listMortalityEvents(orgId);
   }
 
+  @Permissions("readAll-farmos")
+  @Get("mortality-events/stats")
+  getMortalityStats(@CurrentOrg() orgId: number) {
+    return this.farmos.getMortalityStats(orgId);
+  }
+
   @Permissions("create-farmos")
   @Post("mortality-events")
   createMortalityEvent(@Body() body: CreateMortalityEventDto, @CurrentOrg() orgId: number) {
     return this.farmos.createMortalityEvent(body, orgId);
+  }
+
+  // ─── Pesées ──────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("weighings")
+  listWeighings(@CurrentOrg() orgId: number, @Query("animal_id") animalId?: string) {
+    return this.farmos.listWeighings(orgId, animalId ? Number(animalId) : undefined);
+  }
+
+  @Permissions("create-farmos")
+  @Post("weighings")
+  createWeighing(@Body() body: CreateWeighingDto, @CurrentOrg() orgId: number) {
+    return this.farmos.createWeighing(body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("weighings/:id")
+  deleteWeighing(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteWeighing(id, orgId);
   }
 
   @ApiOperation({ summary: "List AI insights (placeholder until SCRUM-233 ChatGPT integration)." })
@@ -617,11 +656,32 @@ export class FarmosController {
     return this.farmos.listFarmosStaff(orgId, role || null);
   }
 
+  @ApiOperation({ summary: "Roles assignable to a staff member (permission management)." })
+  @Permissions("readAll-farmos")
+  @Get("staff/roles")
+  listAssignableRoles() {
+    return this.farmos.listAssignableRoles();
+  }
+
   @ApiOperation({ summary: "Onboard a FarmOS staff member (also visible in CRM /staff)." })
   @Permissions("create-farmos")
   @Post("staff")
   createFarmosStaff(@Body() body: CreateFarmosStaffDto, @CurrentOrg() orgId: number) {
     return this.farmos.createFarmosStaff(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a FarmOS staff member (name, phone, designation)." })
+  @Permissions("update-farmos")
+  @Put("staff/:id")
+  updateFarmosStaff(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateFarmosStaffDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateFarmosStaff(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Set a FarmOS staff member status: active / left / resigned." })
+  @Permissions("update-farmos")
+  @Patch("staff/:id/status")
+  setFarmosStaffStatus(@Param("id", ParseIntPipe) id: number, @Body() body: SetFarmosStaffStatusDto, @CurrentOrg() orgId: number) {
+    return this.farmos.setFarmosStaffStatus(id, body, orgId);
   }
 
   @ApiOperation({ summary: "List daily work logs. Optional ?user_id, ?from, ?to (YYYY-MM-DD)." })

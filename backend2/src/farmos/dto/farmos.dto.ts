@@ -150,6 +150,23 @@ export class CreateAnimalDto {
   @IsString()
   status?: string | null;
 
+  @ApiPropertyOptional({ example: "BQ-2022-0007", description: "Mère (external_id ou nom de l'animal mère)." })
+  @IsOptional()
+  @IsString()
+  mother_id?: string | null;
+
+  @ApiPropertyOptional({ example: "BQ-2021-0003", description: "Père (external_id ou nom de l'animal père)." })
+  @IsOptional()
+  @IsString()
+  father_id?: string | null;
+
+  @ApiPropertyOptional({ example: 1500, description: "Valeur estimée de l'animal." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  estimated_value?: number | null;
+
   @ApiPropertyOptional({ example: "Insémination · 14 déc." })
   @IsOptional()
   @IsString()
@@ -171,6 +188,9 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() room?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() type?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() mother_id?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() father_id?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimated_value?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() last_event?: string | null;
 }
 
@@ -304,7 +324,41 @@ export class CreateMortalityEventDto {
   @ApiPropertyOptional({ default: 1 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) count?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() cause?: string | null;
   @ApiPropertyOptional({ default: false }) @IsOptional() necropsy_requested?: boolean;
+  @ApiPropertyOptional({ example: "06:30" }) @IsOptional() @IsString() event_time?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() barn?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() confirmed_cause?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_disease_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() pre_death_symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() vet_consulted?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) estimated_loss?: number | null;
+  @ApiPropertyOptional({ default: false }) @IsOptional() necropsy_done?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class CreateWeighingDto {
+  @ApiProperty() @Type(() => Number) @IsInt() animal_id: number;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() weigh_date: string;
+  @ApiProperty({ example: 612 }) @Type(() => Number) @IsNumber() @Min(0) weight: number;
+  @ApiPropertyOptional({ default: "kg" }) @IsOptional() @IsString() weight_unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class UpdateFarmosStaffDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string | null;
+  @ApiPropertyOptional({ example: "Vétérinaire" }) @IsOptional() @IsString() designation?: string | null;
+  @ApiPropertyOptional({ description: "Rôle CRM (permissions) à assigner." }) @IsOptional() @Type(() => Number) @IsInt() role_id?: number | null;
+}
+
+export class SetFarmosStaffStatusDto {
+  @ApiProperty({ enum: ["active", "left", "resigned"], example: "resigned" })
+  @IsIn(["active", "left", "resigned"])
+  status: "active" | "left" | "resigned";
+
+  @ApiPropertyOptional({ example: "2026-06-30" }) @IsOptional() @IsDateString() leave_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() leave_reason?: string | null;
 }
 
 export class CreateWorkLogDto {
@@ -374,6 +428,15 @@ export class CreateDiseaseDto {
   @IsString()
   common_route?: string | null;
 
+  @ApiPropertyOptional() @IsOptional() @IsString() urgency_level?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() prevention?: string | null;
+  @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
+  @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() possible_causes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_exams?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -387,6 +450,14 @@ export class UpdateDiseaseDto {
   @ApiPropertyOptional() @IsOptional() contagious?: boolean | number;
   @ApiPropertyOptional() @IsOptional() @IsString() severity_default?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() common_route?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() urgency_level?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() symptoms?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() prevention?: string | null;
+  @ApiPropertyOptional() @IsOptional() vaccine_available?: boolean | number;
+  @ApiPropertyOptional() @IsOptional() @IsString() mortality_risk?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_protocol?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() possible_causes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() recommended_exams?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
@@ -402,6 +473,7 @@ export class CreateTreatmentDto {
   disease_id: number;
 
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() medicine_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() medicine_quantity?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() medicine_name?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() dosage?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() route?: string | null;
