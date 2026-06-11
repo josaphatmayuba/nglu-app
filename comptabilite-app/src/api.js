@@ -45,5 +45,22 @@ export const api = {
   balanceSheet: () => jsonFetch("/account?query=bs"),
   incomeStatement: () => jsonFetch("/account?query=is"),
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
-  createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) })
+  createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
+
+  // ── Grand livre moderne (partie double) ──────────────────────────────
+  ledgerEntries: () => jsonFetch("/ledger"),
+  ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
+  ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
+  reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
+
+  // ── Approbations (gate + workflow) ───────────────────────────────────
+  approvalRequirements: () => jsonFetch("/ledger/approval-requirements"),
+  setApprovalRequirement: (body) => jsonFetch("/ledger/approval-requirements", { method: "POST", body: JSON.stringify(body) }),
+  pendingApprovals: () => jsonFetch("/workflow/instances?status=pending"),
+  approveInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+  rejectInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
+
+  // ── Budget (live depuis le grand livre) ──────────────────────────────
+  budgets: () => jsonFetch("/budget"),
+  budgetStatus: (id) => jsonFetch(`/budget/${id}/status`)
 };
