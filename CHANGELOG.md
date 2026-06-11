@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Déploiement front : ancien build servi malgré un pipeline « réussi » (piège bind-mount/inode)** : les steps de déploiement bind-montés (frontend CRM, Domus, FarmOS en dev+prod, BatiPro prod) faisaient `scp -r app/dist $SERVER:$APP/app/`, ce qui **remplaçait le dossier** monté → nouvel inode orphelin → le conteneur nginx continuait de servir l'ancien build (symptôme vécu : date de MAJ FarmOS déployée mais bundle `h3XnP6TL` inchangé). Correctif `bitbucket-pipelines.yml` : scp vers `/tmp/<app>-dist/` puis `find $APP/<app>/dist -mindepth 1 -delete && cp -r /tmp/<app>-dist/.` — on vide le **contenu** du dist en **préservant l'inode** du bind-mount. Les steps hr/comptabilite/batipro-dev (déjà en `docker cp dist/.`) ne sont pas concernés. [3.44.3]
+
 ### Added
 - **Date de dernière mise à jour dans le CRM (frontend)** : ajout de `VITE_APP_BUILD_DATE` au `define` du `frontend/vite.config.js` (qui n'utilise pas `versionDefine()`) et d'une tuile « Dernière mise à jour » dans l'onglet Paramètres → À propos (`AboutPanel`), à côté de Version/Build/Commit. Complète la même feature livrée sur les 5 apps métier. [3.44.2]
 - **Date/heure de dernière mise à jour dans les Paramètres (5 apps)** : `versionDefine()` (source partagée `scripts/app-version.mjs`) injecte désormais `VITE_APP_BUILD_DATE` (date ISO du build). L'écran Paramètres/Réglages de chaque app créée — comptabilité, HR, BâtiPro, FarmOS (bilingue), Domus (nouvelle carte « À propos ») — affiche « Dernière mise à jour » formatée en local (ex. « 11 juin 2026 à 18:30 »). Reflète automatiquement la date du dernier déploiement, sans saisie. [3.44.1]
