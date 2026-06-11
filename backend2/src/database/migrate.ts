@@ -211,7 +211,13 @@ async function applyOperationalRepairs() {
 function splitSqlStatements(sqlText: string) {
   const source = sqlText
     .split(/\r?\n/)
-    .filter((line) => !line.trim().startsWith("--> statement-breakpoint"))
+    // Retire les breakpoints Drizzle ET les commentaires pleine ligne `--`.
+    // Une apostrophe dans un commentaire (ex. "d'approbation") cassait sinon le
+    // suivi des quotes ci-dessous -> ER_PARSE_ERROR (cf. 0106/0108).
+    .filter((line) => {
+      const t = line.trim();
+      return !t.startsWith("--> statement-breakpoint") && !t.startsWith("--");
+    })
     .join("\n");
   const statements: string[] = [];
   let current = "";
