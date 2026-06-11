@@ -11,6 +11,7 @@ import {
 } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
+import { WorkflowService } from "../workflow/workflow.service";
 import {
   CreatePaymentPurchaseInvoiceDto,
   CreatePurchaseInvoiceDto,
@@ -30,7 +31,35 @@ export class PurchaseInvoicesService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly ledger: LedgerService,
+    private readonly workflow: WorkflowService,
   ) {}
+
+  /** Soumet la facture d'achat au circuit d'approbation (no-op si pas de workflow). */
+  private async submitForApproval(invoiceId: string, orgId: number, userId?: number) {
+    try {
+      await this.workflow.submit(
+        { workflowKey: "exp_approval", entityType: "purchase", entityId: String(invoiceId) },
+        orgId,
+        userId,
+      );
+    } catch (err) {
+      console.warn("[PurchaseInvoices] submitForApproval skipped:", (err as Error).message);
+    }
+  }
+
+  /** Approuve une facture d'achat ; comptabilise l'ecriture en attente a l'approbation finale. */
+  async approveInvoice(invoiceId: string, comment: string | undefined, orgId: number, userId?: number) {
+    const instances = await this.workflow.listInstances(orgId, "pending");
+    const inst = instances.find(
+      (i: any) => i.entityType === "purchase" && i.entityId === String(invoiceId),
+    );
+    if (!inst) throw new NotFoundException("Aucune instance d'approbation en attente pour cette facture.");
+    const result = await this.workflow.approve((inst as any).id, comment, orgId, userId);
+    if (result.status === "approved") {
+      await this.ledger.approveAndPost("purchase", String(invoiceId), orgId, userId);
+    }
+    return { invoiceId, approval: result };
+  }
 
   async create(input: CreatePurchaseInvoiceDto, orgId: number) {
     // 1. Validate supplier
@@ -223,6 +252,9 @@ export class PurchaseInvoicesService {
           .where(eq(products.id, item.productId));
       }
     }
+
+    // Soumet au circuit d'approbation (effectif si le module purchase est gate).
+    await this.submitForApproval(invoiceId, orgId);
 
     return this.findOne(invoiceId, orgId);
   }

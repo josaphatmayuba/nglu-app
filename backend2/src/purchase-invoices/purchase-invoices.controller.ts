@@ -32,6 +32,18 @@ export class PurchaseInvoicesController {
 
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Approuve une facture d'achat (comptabilise a l'approbation finale)" })
+  @Post(":id/approve")
+  approve(
+    @Param("id") id: string,
+    @Body() body: { comment?: string },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.purchaseInvoicesService.approveInvoice(id, body?.comment, orgId);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "List purchase invoices (query=info for aggregates)" })
   @Get()
   findAll(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {

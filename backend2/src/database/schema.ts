@@ -154,6 +154,19 @@ export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// Ecritures comptables en attente d'approbation (migration 0112).
+export const ledgerPendingEntries = mysqlTable("ledger_pending_entries", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  sourceModule: varchar("source_module", { length: 64 }).notNull(),
+  relatedId: varchar("related_id", { length: 64 }).notNull(),
+  payload: json("payload").notNull(),
+  status: varchar("status", { length: 16 }).default("pending").notNull(),
+  journalEntryId: bigint("journal_entry_id", { mode: "number", unsigned: true }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 // Gate d'approbation centralisé (migration 0111) : modules exigeant une approbation workflow.
 export const ledgerApprovalRequirements = mysqlTable("ledger_approval_requirements", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

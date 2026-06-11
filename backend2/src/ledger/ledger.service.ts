@@ -4,7 +4,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
@@ -14,6 +13,7 @@ import {
   journalEntries,
   journalEntryLines,
   ledgerApprovalRequirements,
+  ledgerPendingEntries,
   subAccounts,
   transactionTypeRules,
   workflowInstances,
@@ -85,10 +85,15 @@ export class LedgerService {
       );
     }
 
-    // Gate d'approbation centralise : si le module exige une approbation, l'entite
-    // doit avoir une instance workflow "approved". Bypass interne post-approbation.
+    // Gate d'approbation centralise : si le module est gate et l'entite non encore
+    // approuvee, l'ecriture est PERSISTEE en attente (ledger_pending_entries) au lieu
+    // d'etre comptabilisee. approveAndPost la rejouera. Bypass interne post-approbation.
     if (!input.skipApprovalGate) {
-      await this.assertApprovedIfRequired(orgId, input.sourceModule, input.relatedId);
+      const gated = await this.isGatedAndNotApproved(orgId, input.sourceModule, input.relatedId);
+      if (gated) {
+        await this.savePending(orgId, input);
+        return { id: 0, deferred: true };
+      }
     }
 
     const entryDate = input.date ? new Date(input.date) : new Date();
@@ -259,6 +264,7 @@ export class LedgerService {
           projectId: l.projectId ?? undefined,
           activityId: l.activityId ?? undefined,
         })),
+        skipApprovalGate: true,
       },
       orgId,
       userId,
@@ -438,13 +444,13 @@ export class LedgerService {
     return { id: row.id, sourceModule: input.sourceModule, isActive };
   }
 
-  /** Refuse (422) la comptabilisation si le module exige une approbation non validee. */
-  private async assertApprovedIfRequired(
+  /** true si le module est gate ET l'entite n'a pas (encore) d'approbation validee. */
+  private async isGatedAndNotApproved(
     orgId: number,
     sourceModule?: string,
     relatedId?: string,
-  ) {
-    if (!sourceModule) return;
+  ): Promise<boolean> {
+    if (!sourceModule || !relatedId) return false;
     const [req] = await this.db
       .select({ id: ledgerApprovalRequirements.id })
       .from(ledgerApprovalRequirements)
@@ -456,13 +462,8 @@ export class LedgerService {
         ),
       )
       .limit(1);
-    if (!req) return; // module non soumis a approbation
+    if (!req) return false; // module non gate
 
-    if (!relatedId) {
-      throw new BadRequestException(
-        `Comptabilisation du module "${sourceModule}" exige une entite liee (relatedId) pour l'approbation.`,
-      );
-    }
     const [inst] = await this.db
       .select({ id: workflowInstances.id })
       .from(workflowInstances)
@@ -475,11 +476,59 @@ export class LedgerService {
         ),
       )
       .limit(1);
-    if (!inst) {
-      throw new UnprocessableEntityException(
-        `Comptabilisation refusee : le module "${sourceModule}" (entite ${relatedId}) exige une approbation workflow validee.`,
-      );
-    }
+    return !inst; // gate actif et pas d'approbation -> differer
+  }
+
+  /** Persiste une ecriture en attente d'approbation (idempotent par entite). */
+  private async savePending(orgId: number, input: PostEntryInput) {
+    if (!input.sourceModule || !input.relatedId) return;
+    const [existing] = await this.db
+      .select({ id: ledgerPendingEntries.id })
+      .from(ledgerPendingEntries)
+      .where(
+        and(
+          eq(ledgerPendingEntries.organizationId, orgId),
+          eq(ledgerPendingEntries.sourceModule, input.sourceModule),
+          eq(ledgerPendingEntries.relatedId, input.relatedId),
+        ),
+      )
+      .limit(1);
+    if (existing) return; // deja en attente
+    await this.db.insert(ledgerPendingEntries).values({
+      organizationId: orgId,
+      sourceModule: input.sourceModule,
+      relatedId: input.relatedId,
+      payload: input as any,
+      status: "pending",
+    });
+  }
+
+  /**
+   * Comptabilise une ecriture en attente apres approbation (rejoue le payload avec
+   * skipApprovalGate). Appele par les modules a l'approbation finale. Idempotent.
+   */
+  async approveAndPost(sourceModule: string, relatedId: string, orgId: number, userId?: number) {
+    const [pending] = await this.db
+      .select()
+      .from(ledgerPendingEntries)
+      .where(
+        and(
+          eq(ledgerPendingEntries.organizationId, orgId),
+          eq(ledgerPendingEntries.sourceModule, sourceModule),
+          eq(ledgerPendingEntries.relatedId, relatedId),
+          eq(ledgerPendingEntries.status, "pending"),
+        ),
+      )
+      .limit(1);
+    if (!pending) return { posted: false, reason: "aucune ecriture en attente" };
+
+    const payload = pending.payload as PostEntryInput;
+    const res = await this.post({ ...payload, skipApprovalGate: true }, orgId, userId);
+    await this.db
+      .update(ledgerPendingEntries)
+      .set({ status: "posted", journalEntryId: res.id })
+      .where(eq(ledgerPendingEntries.id, pending.id));
+    return { posted: true, journalEntryId: res.id };
   }
 
   // ─── Periodes comptables (Phase 6) ──────────────────────────────────────────

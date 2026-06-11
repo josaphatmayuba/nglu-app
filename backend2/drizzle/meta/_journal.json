@@ -645,6 +645,13 @@
       "when": 1780344000000,
       "tag": "0111_ledger_approval_requirements",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "5",
+      "when": 1780347600000,
+      "tag": "0112_ledger_pending_entries",
+      "breakpoints": true
     }
   ]
 }
