@@ -42,6 +42,7 @@ import { SystemEmailModule } from "./system-email/system-email.module";
 import { TransactionTypesModule } from "./transaction-types/transaction-types.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { LedgerModule } from "./ledger/ledger.module";
+import { WorkflowModule } from "./workflow/workflow.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
 
@@ -88,6 +89,7 @@ import { UsersModule } from "./users/users.module";
     SystemEmailModule,
     TransactionsModule,
     LedgerModule,
+    WorkflowModule,
     TransactionTypesModule,
     UomModule,
     UsersModule,

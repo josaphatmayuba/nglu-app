@@ -104,6 +104,7 @@ module.exports = [
   { method: '*',    prefix: '/customer',                      auth: true  },
   { method: '*',    prefix: '/customer-profile-image',        auth: true  },
   { method: '*',    prefix: '/ledger',                        auth: true  },
+  { method: '*',    prefix: '/workflow',                      auth: true  },
   { method: '*',    prefix: '/transaction',                   auth: true  },
   { method: '*',    prefix: '/transaction-type',              auth: true  },
   { method: '*',    prefix: '/uom',                           auth: true  },

@@ -154,6 +154,42 @@ export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
+// === Module Workflow ERP/SIFA (migration 0108) ===
+export const workflows = mysqlTable("workflows", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  key: varchar("key", { length: 64 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  steps: json("steps").notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const workflowInstances = mysqlTable("workflow_instances", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  workflowId: bigint("workflow_id", { mode: "number", unsigned: true }).notNull(),
+  entityType: varchar("entity_type", { length: 64 }).notNull(),
+  entityId: varchar("entity_id", { length: 64 }).notNull(),
+  currentStep: int("current_step").default(0).notNull(),
+  status: varchar("status", { length: 16 }).default("pending").notNull(),
+  submittedBy: bigint("submitted_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
+export const workflowApprovals = mysqlTable("workflow_approvals", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  instanceId: bigint("instance_id", { mode: "number", unsigned: true }).notNull(),
+  step: int("step").notNull(),
+  approverId: bigint("approver_id", { mode: "number" }),
+  decision: varchar("decision", { length: 16 }).notNull(),
+  comment: varchar("comment", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const customers = mysqlTable("customer", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
