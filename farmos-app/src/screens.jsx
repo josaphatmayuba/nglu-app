@@ -3426,6 +3426,10 @@ const AboutCard = ({ lang }) => {
   const commit = import.meta.env.VITE_APP_COMMIT || "—";
   const host = typeof window !== "undefined" ? window.location.hostname : "";
   const env = /dev\.|localhost|127\.0\.0\.1/.test(host) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString(lang === "fr" ? "fr-FR" : "en-US", { dateStyle: "long", timeStyle: "short" })
+    : "—";
   const row = (k, v) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--border-1)" }}>
       <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{k}</span>
@@ -3438,6 +3442,7 @@ const AboutCard = ({ lang }) => {
       {row(lang === "fr" ? "Version" : "Version", `v${base}`)}
       {row(lang === "fr" ? "Build" : "Build", build)}
       {row(lang === "fr" ? "Commit" : "Commit", commit)}
+      {row(lang === "fr" ? "Dernière mise à jour" : "Last update", lastUpdate)}
       {row(lang === "fr" ? "Environnement" : "Environment", env)}
     </section>
   );

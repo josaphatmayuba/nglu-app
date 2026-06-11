@@ -1396,6 +1396,10 @@ function Parametres() {
   const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
   const commit = import.meta.env.VITE_APP_COMMIT || "—";
   const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
   const Row = ({ k, v }) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
       <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
@@ -1410,6 +1414,7 @@ function Parametres() {
         <Row k="Version" v={`v${base}`} />
         <Row k="Build" v={build} />
         <Row k="Commit" v={commit} />
+        <Row k="Dernière mise à jour" v={lastUpdate} />
         <Row k="Environnement" v={env} />
       </div>
     </>

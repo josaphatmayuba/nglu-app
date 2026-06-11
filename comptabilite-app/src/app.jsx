@@ -70,6 +70,7 @@ function Icon({ name, className = "ic", style }) {
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "dashboard" },
   { section: "Saisie" },
+  { id: "approbations", label: "Approbations", icon: "bellRing" },
   { id: "journaux", label: "Journaux", icon: "bookText" },
   { id: "ecritures", label: "Écritures", icon: "penLine" },
   { id: "types", label: "Types de transaction", icon: "shapes" },
@@ -227,6 +228,7 @@ function App() {
     journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types />,
+    approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre />,
     plan: <Plan accounts={data.accounts} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
     tiers: <Tiers />,
@@ -310,6 +312,10 @@ function Parametres() {
   const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
   const commit = import.meta.env.VITE_APP_COMMIT || "—";
   const env = /dev\.|localhost|127\.0\.0\.1/.test(window.location.hostname) ? "dev" : "prod";
+  const buildDate = import.meta.env.VITE_APP_BUILD_DATE;
+  const lastUpdate = buildDate
+    ? new Date(buildDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "—";
   const Row = ({ k, v }) => (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--border, #e5e7eb)" }}>
       <span style={{ color: "#6b7280", fontSize: 13 }}>{k}</span>
@@ -324,6 +330,7 @@ function Parametres() {
         <Row k="Version" v={`v${base}`} />
         <Row k="Build" v={build} />
         <Row k="Commit" v={commit} />
+        <Row k="Dernière mise à jour" v={lastUpdate} />
         <Row k="Environnement" v={env} />
       </div>
     </>
@@ -539,26 +546,170 @@ function Types() {
 }
 
 /* ── Grand livre ───────────────────────────────────────────────────────── */
-function GrandLivre() {
-  const [sel, setSel] = React.useState(0);
+/* ── Approbations (gate de dépense + workflow) ─────────────────────────── */
+const MODULE_LABELS = {
+  farmos_expense: "Dépense FarmOS",
+  payroll: "Paie (HR)",
+  purchase: "Facture d'achat",
+  maintenance: "Maintenance (immobilier)",
+};
+function Approbations({ canMutate }) {
+  const [pending, setPending] = React.useState(null);
+  const [reqs, setReqs] = React.useState([]);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [p, r] = await Promise.all([
+        api.pendingApprovals().catch(() => []),
+        api.approvalRequirements().catch(() => []),
+      ]);
+      setPending(Array.isArray(p) ? p : []);
+      setReqs(Array.isArray(r) ? r : []);
+    } catch (e) { setError(String(e.message || e)); setPending([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const decide = async (id, action) => {
+    const comment = window.prompt(action === "approve" ? "Commentaire d'approbation (optionnel) :" : "Motif du rejet :") ?? "";
+    if (action === "reject" && !comment) return;
+    setBusy(true);
+    try {
+      if (action === "approve") await api.approveInstance(id, comment);
+      else await api.rejectInstance(id, comment);
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
-      <PageHead eyebrow="Détail par compte" title="Grand livre" action="Exporter" actionIcon="download" onAction={() => notify()} ghost />
-      <div className="segtabs">
-        {grandLivreAccounts.map((a, i) => <button key={a.code} className={`segtab ${i === sel ? "active grad-accent" : ""}`} onClick={() => setSel(i)}>{a.code} · {a.name}</button>)}
-      </div>
-      <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Compte 521 · Banque FC</h3><span className="tiny">Solde : <b className="num" style={{ color: "var(--ink-800)" }}>{`39 100 000 ${CUR}`}</b></span></div>
-        <div className="searchbar"><div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div></div>
+      <PageHead eyebrow="Gate de comptabilisation" title="Approbations" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Dépenses en attente d'approbation</h3><span className="tiny">{pending ? `${pending.length} en attente` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 640 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+            <thead><tr><th>Soumis le</th><th>Module</th><th>Référence</th><th>Étape</th><th className="r">Action</th></tr></thead>
             <tbody>
-              {fbGrandLivre.map((r, i) => r.report
-                ? <tr key={i} className="grp"><td colSpan={5}>{r.label}</td><td className="r">{nf.format(r.solde)}</td></tr>
-                : <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td><td className="r">{nf.format(r.solde)}</td></tr>)}
+              {(pending || []).map((i) => (
+                <tr key={i.id}>
+                  <td>{(i.createdAt || "").slice(0, 10)}</td>
+                  <td><span className="chip">{MODULE_LABELS[i.entityType] || i.entityType}</span></td>
+                  <td className="muted">#{i.entityId}</td>
+                  <td>étape {Number(i.currentStep) + 1}</td>
+                  <td className="r">
+                    {canMutate ? (
+                      <span style={{ display: "inline-flex", gap: 6 }}>
+                        <button className="btn-sm grad-accent" disabled={busy} onClick={() => decide(i.id, "approve")}>Approuver</button>
+                        <button className="btn-sm" disabled={busy} onClick={() => decide(i.id, "reject")}>Rejeter</button>
+                      </span>
+                    ) : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {pending && pending.length === 0 && <tr><td colSpan={5} className="muted">Aucune dépense en attente. 🎉</td></tr>}
+              {pending === null && <tr><td colSpan={5} className="muted">Chargement…</td></tr>}
             </tbody>
-            <tfoot><tr><td colSpan={3}>Totaux période</td><td className="r">9 240 000</td><td className="r">17 685 000</td><td className="r">39 100 000</td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Modules sous approbation obligatoire</h3></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 420 }}>
+            <thead><tr><th>Module</th><th>Statut</th></tr></thead>
+            <tbody>
+              {reqs.map((r) => (
+                <tr key={r.id}><td>{MODULE_LABELS[r.sourceModule] || r.sourceModule}</td><td>{r.isActive ? <span className="chip pos">actif</span> : <span className="chip">inactif</span>}</td></tr>
+              ))}
+              {reqs.length === 0 && <tr><td colSpan={2} className="muted">Aucun gate configuré.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function GrandLivre() {
+  const [entries, setEntries] = React.useState(null); // null = chargement
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const rows = await api.ledgerEntries();
+      setEntries(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setError(String(e.message || e));
+      setEntries([]); // bascule sur le fallback local
+    }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const reverse = async (id) => {
+    const reason = window.prompt("Motif de la contre-passation ?");
+    if (!reason) return;
+    setBusy(true);
+    try { await api.reverseEntry(id, reason); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Pas encore d'écriture moderne (ou API indispo) → on garde l'aperçu local existant.
+  if (entries && entries.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API grand livre indisponible.</b> <span className="tiny">{error}</span></div>}
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Aperçu (données de démonstration)</h3></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 640 }}>
+              <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>
+                {fbGrandLivre.map((r, i) => r.report
+                  ? <tr key={i} className="grp"><td colSpan={5}>{r.label}</td><td className="r">{nf.format(r.solde)}</td></tr>
+                  : <tr key={i}><td>{r.date}</td><td className="muted">{r.piece}</td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r pos">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r neg">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td><td className="r">{nf.format(r.solde)}</td></tr>)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const fmt = (v) => nf.format(Number(v || 0));
+  return (
+    <>
+      <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} écriture(s)` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl num" style={{ minWidth: 720 }}>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
+            <tbody>
+              {(entries || []).map((e) => (
+                <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
+                  <td>{(e.date || "").slice(0, 10)}</td>
+                  <td className="muted">{e.reference || `#${e.id}`}</td>
+                  <td style={{ fontVariantNumeric: "normal" }}>{e.particulars}</td>
+                  <td><span className="chip">{e.sourceModule || "—"}</span></td>
+                  <td className="r pos">{fmt(e.totalDebit)}</td>
+                  <td className="r neg">{fmt(e.totalCredit)}</td>
+                  <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
+                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => reverse(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
+                </tr>
+              ))}
+              {entries === null && <tr><td colSpan={8} className="muted">Chargement…</td></tr>}
+            </tbody>
           </table>
         </div>
       </div>
@@ -719,23 +870,78 @@ function Analytique() {
 
 /* ── Budget ────────────────────────────────────────────────────────────── */
 function Budget() {
+  const [budgets, setBudgets] = React.useState(null);
+  const [statuses, setStatuses] = React.useState({}); // id -> status live
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.budgets();
+        const arr = Array.isArray(list) ? list : [];
+        setBudgets(arr);
+        const entries = await Promise.all(arr.map(async (b) => {
+          try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
+        }));
+        setStatuses(Object.fromEntries(entries));
+      } catch (e) { setError(String(e.message || e)); setBudgets([]); }
+    })();
+  }, []);
+
+  // Pas de budget réel (ou API indispo) → aperçu de démonstration existant.
+  if (budgets && budgets.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Suivi budgétaire" title="Budget vs réalisé" />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API budget indisponible.</b> <span className="tiny">{error}</span></div>}
+        <div className="g4 kpis" style={{ marginBottom: 18 }}>
+          <Mini label="Budget total" value="160 000 000" /><Mini label="Réalisé" value="98 000 000" tone="info" />
+          <Mini label="Disponible" value="62 000 000" valueClass="pos" /><Mini label="Consommé" value="61 %" />
+        </div>
+        <div className="card pad">
+          <h3 className="block-title font-display">Lignes budgétaires (démonstration)</h3>
+          {budgetLines.map((b, i) => (
+            <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{b.name}</span><span className="num" style={b.warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{b.txt}</span></div>
+              <div className="bar"><span className={b.grad === "rose" ? "" : b.grad} style={{ width: `${b.pct}%`, background: b.grad === "rose" ? "var(--rose-500)" : undefined }} /></div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  const fmt = (v) => nf.format(Number(v || 0));
   return (
     <>
-      <PageHead eyebrow="Suivi budgétaire 2026" title="Budget vs réalisé" action="Nouvelle ligne" onAction={() => notify()} />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Budget total" value="160 000 000" /><Mini label="Réalisé" value="98 000 000" valueClass="" tone="info" />
-        <Mini label="Disponible" value="62 000 000" valueClass="pos" /><Mini label="Consommé" value="61 %" />
-      </div>
-      <div className="card pad">
-        <h3 className="block-title font-display">Lignes budgétaires</h3>
-        {budgetLines.map((b, i) => (
-          <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}><span style={{ fontWeight: 500 }}>{b.name}</span><span className="num" style={b.warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{b.txt}</span></div>
-            <div className="bar"><span className={b.grad === "rose" ? "" : b.grad} style={{ width: `${b.pct}%`, background: b.grad === "rose" ? "var(--rose-500)" : undefined }} /></div>
+      <PageHead eyebrow="Suivi budgétaire · live grand livre" title="Budget vs réalisé" />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {budgets === null && <div className="card pad muted">Chargement…</div>}
+      {(budgets || []).map((b) => {
+        const st = statuses[b.id];
+        const lines = (st && st.lines) || [];
+        return (
+          <div className="card pad" key={b.id} style={{ marginBottom: 16 }}>
+            <div className="section-head"><h3 className="font-display">{b.name}</h3><span className="tiny">{b.fiscalYear || b.period || ""}</span></div>
+            {lines.length === 0 && <p className="muted tiny">Aucune ligne budgétaire.</p>}
+            {lines.map((l, i) => {
+              const allocated = Number(l.allocated ?? l.allocatedAmount ?? 0);
+              const consumed = Number(l.consumed ?? l.consumedAmount ?? 0);
+              const pct = allocated > 0 ? Math.min(100, Math.round((consumed / allocated) * 100)) : 0;
+              const warn = pct >= 90;
+              return (
+                <div key={i} style={{ marginBottom: 16, fontSize: 13 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ fontWeight: 500 }}>{l.label || l.name || `Ligne ${i + 1}`}</span>
+                    <span className="num" style={warn ? { color: "var(--rose-600)" } : { color: "var(--ink-500)" }}>{fmt(consumed)} / {fmt(allocated)} {CUR} · {pct}%</span>
+                  </div>
+                  <div className="bar"><span style={{ width: `${pct}%`, background: warn ? "var(--rose-500)" : undefined }} /></div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-        <p className="tiny" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}><Icon name="alertTriangle" style={{ width: 13, height: 13, color: "var(--rose-500)" }} /> « Fonctionnement & admin » à 94 % — proche du dépassement, à surveiller.</p>
-      </div>
+        );
+      })}
     </>
   );
 }
