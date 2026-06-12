@@ -1512,6 +1512,8 @@ export class PropertyManagementService {
         projectId: realEstateMaintenanceRequests.projectId,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
+        createdAt: realEstateMaintenanceRequests.createdAt,
+        updatedAt: realEstateMaintenanceRequests.updatedAt,
       })
       .from(realEstateMaintenanceRequests)
       .leftJoin(maintenanceProperty, eq(maintenanceProperty.id, realEstateMaintenanceRequests.propertyId))

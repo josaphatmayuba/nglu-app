@@ -144,6 +144,7 @@ export const api = {
   deleteMaintenance: (id) => del(`/maintenance/${id}`),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
+  deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),
 
   // Caution / dépôt de garantie (cycle complet : encaissement + restitution).
   deposits: () => get("/deposits"),
