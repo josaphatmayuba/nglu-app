@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Comptabilité — plan comptable : Revenue et Expense mal typés en `Equity` (compte de résultat aveugle, sélecteur de charges vide)** : le seeder créait les comptes racine `Revenue` et `Expense` avec `type='Equity'`. Conséquence : le ledger filtrant sur `accountType='Revenue'`/`'Expense'` ne voyait **aucun** produit ni charge (compte de résultat vide), et l'`ExchangeModal` ne proposait aucun compte de frais. Migration idempotente `0132_fix_account_types` (dans le journal Drizzle → auto-appliquée dev **et** prod) qui corrige `type` sur les comptes `Revenue`/`Expense`, et seeder corrigé pour les bases neuves. Tous les sous-comptes rattachés (Salary, Rent, Utilities, Maintenance, Exchange Fees, FarmOS Expenses/Sales, Rental Revenue…) redeviennent des charges/produits. [3.59.7]
+- **Comptabilité — échange de devise : sélecteur « Compte de frais » alimenté** : l'`ExchangeModal` lisait les comptes depuis les *balances* du grand livre, qui excluent les sous-comptes sans écriture (`/ledger/balances` filtre les soldes nuls) → le compte de frais de change (jamais mouvementé) n'apparaissait pas. `Change` charge désormais la liste complète des sous-comptes (`/account?type=sa`) pour les sélecteurs, avec repli sur les balances. [3.59.7]
+
 ### Changed
 - **Comptabilité — échange de devise : référence générée automatiquement** : le champ « Référence » de l'`ExchangeModal` n'est plus saisi à la main. Il est désormais auto-généré (lecture seule) au format `CHG-AAAA-MM-NNN`, où `NNN` est la séquence du mois courant calculée depuis les échanges existants (premier du mois = `001`). Évite les références oubliées ou incohérentes. [3.59.6]
 

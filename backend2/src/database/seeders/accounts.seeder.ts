@@ -7,8 +7,8 @@ const ACCOUNTS = [
   { name: "Liability", type: "Liability" },
   { name: "Equity", type: "Equity" },
   { name: "Withdrawal", type: "Equity" },
-  { name: "Revenue", type: "Equity" },
-  { name: "Expense", type: "Equity" },
+  { name: "Revenue", type: "Revenue" },
+  { name: "Expense", type: "Expense" },
 ];
 
 export async function seedAccounts() {

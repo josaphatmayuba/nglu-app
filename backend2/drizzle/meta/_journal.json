@@ -785,6 +785,13 @@
       "when": 1780416000000,
       "tag": "0131_exchange_subaccounts",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "5",
+      "when": 1780419600000,
+      "tag": "0132_fix_account_types",
+      "breakpoints": true
     }
   ]
 }

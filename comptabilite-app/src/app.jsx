@@ -375,7 +375,7 @@ function App() {
     ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
-    grandlivre: <GrandLivre />,
+    grandlivre: <GrandLivre curFilter={curFilter} />,
     plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
     tiers: <Tiers accounts={fc.accounts} />,
     tresorerie: <Tresorerie accounts={fc.accounts} />,
@@ -641,6 +641,8 @@ function Ecritures({ transactions, onNew, canMutate }) {
     journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
+    currencyCode: t.currencyCode,
+    currencyId: t.currencyId,
     status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
   const list = rows;
@@ -667,7 +669,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
             <thead><tr><th>Date</th><th>Journal</th><th>Libellé</th><th className="r">Montant</th><th className="r">Statut</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{nf.format(r.amount)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
+                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
               {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
@@ -923,8 +925,8 @@ function Approbations({ canMutate }) {
   );
 }
 
-function GrandLivre() {
-  const [entries, setEntries] = React.useState(null); // null = chargement
+function GrandLivre({ curFilter }) {
+  const [allEntries, setAllEntries] = React.useState(null); // null = chargement
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -932,13 +934,20 @@ function GrandLivre() {
     try {
       setError("");
       const rows = await api.ledgerEntries();
-      setEntries(Array.isArray(rows) ? rows : []);
+      setAllEntries(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setError(String(e.message || e));
-      setEntries([]);
+      setAllEntries([]);
     }
   }, []);
   React.useEffect(() => { load(); }, [load]);
+
+  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion).
+  const entries = React.useMemo(() => {
+    if (allEntries === null) return null;
+    if (!curFilter) return allEntries;
+    return allEntries.filter((e) => String(e?.currencyId ?? "") === curFilter);
+  }, [allEntries, curFilter]);
 
   const reverse = async (id) => {
     const reason = window.prompt("Motif de la contre-passation ?");
@@ -1134,11 +1143,19 @@ function Change({ accounts = [], currencies = [], canMutate }) {
   const [showNew, setShowNew] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
+  // Liste complete des sous-comptes (y compris ceux sans ecriture, absents des
+  // balances) pour alimenter les selecteurs du modal — ex. compte de frais de change.
+  const [allAccounts, setAllAccounts] = React.useState(null);
 
   const load = React.useCallback(() => {
     api.exchanges().then((r) => setRows(asArray(r, "exchanges"))).catch(() => setRows([]));
   }, []);
   React.useEffect(() => load(), [load]);
+  React.useEffect(() => {
+    api.accounts().then((r) => setAllAccounts(asArray(r, "getAllAccount"))).catch(() => setAllAccounts(null));
+  }, []);
+  // Comptes pour les selecteurs : liste complete si dispo, sinon repli sur les balances.
+  const modalAccounts = (allAccounts && allAccounts.length) ? allAccounts : accounts;
 
   async function create(form) {
     setBusy(true); setError("");
@@ -1200,7 +1217,7 @@ function Change({ accounts = [], currencies = [], canMutate }) {
           </div>
         </div>
       )}
-      {showNew && <ExchangeModal accounts={accounts} currencies={currencies} exchanges={list} busy={busy} error={error}
+      {showNew && <ExchangeModal accounts={modalAccounts} currencies={currencies} exchanges={list} busy={busy} error={error}
         onSave={create} onClose={() => setShowNew(false)} />}
     </>
   );
