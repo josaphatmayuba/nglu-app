@@ -2176,10 +2176,8 @@ function Paie({ data, staff, masse, setModal, reload }) {
         {generateError && <div className="chip amber" style={{ marginBottom: 8 }}>{generateError}</div>}
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un employe, matricule, poste..." /></label>
-          <select className="pillbtn" value={employeeFilter} onChange={(e) => { setEmployeeFilter(e.target.value); setGenerateError(""); }} aria-label="Filtrer par employe">
-            <option value="">Tous les employes</option>
-            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-          </select>
+          <Autocomplete value={employeeFilter} onChange={(v) => { setEmployeeFilter(v); setGenerateError(""); }}
+            placeholder="Tous les employes" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           <select className="pillbtn" value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value)} aria-label="Filtrer par periode">
             <option value="">Toutes les periodes</option>
             {availablePeriods.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -2359,10 +2357,8 @@ function Dossiers({ data, staff, setModal, reload }) {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, color: "var(--muted)" }}>Employe</label>
-            <select className="pillbtn" value={genForm.userId} onChange={(e) => { setGenForm((f) => ({ ...f, userId: e.target.value })); setGenError(""); }} style={{ minWidth: 180 }}>
-              <option value="">-- Choisir un employe --</option>
-              {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-            </select>
+            <Autocomplete value={genForm.userId} onChange={(v) => { setGenForm((f) => ({ ...f, userId: v })); setGenError(""); }} style={{ minWidth: 180 }}
+              placeholder="-- Choisir un employe --" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 12, color: "var(--muted)" }}>Type de document</label>
@@ -2384,10 +2380,8 @@ function Dossiers({ data, staff, setModal, reload }) {
         </div>
         <div className="searchbar">
           <label className="search-input"><Icon name="search" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher employe, type, reference..." /></label>
-          <select className="pillbtn" value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)}>
-            <option value="">Tous les employes</option>
-            {staff.map((u) => <option key={u.id} value={u.id}>{fullName(u)}</option>)}
-          </select>
+          <Autocomplete value={employeeFilter} onChange={setEmployeeFilter}
+            placeholder="Tous les employes" options={staff.map((u) => ({ value: u.id, label: fullName(u) }))} />
           <select className="pillbtn" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">Tous les types</option>
             {docTypes.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -2812,15 +2806,11 @@ function Recrutement({ data, reload, setModal }) {
               <label className="field-label" style={{ marginTop: 10 }}>Mot de passe initial (optionnel)</label>
               <input className="input" type="password" placeholder="Par défaut: nom+année" value={convertForm.password} onChange={(e) => setConvertForm((f) => ({ ...f, password: e.target.value }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Rôle</label>
-              <select className="select" value={convertForm.roleId} onChange={(e) => setConvertForm((f) => ({ ...f, roleId: e.target.value }))}>
-                <option value="">-- Rôle par défaut (Employé) --</option>
-                {(data.roles || []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
+              <Autocomplete className="select" value={convertForm.roleId} onChange={(v) => setConvertForm((f) => ({ ...f, roleId: v }))} style={{ display: "block" }}
+                placeholder="-- Rôle par défaut (Employé) --" options={(data.roles || []).map((r) => ({ value: r.id, label: r.name }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Département</label>
-              <select className="select" value={convertForm.departmentId} onChange={(e) => setConvertForm((f) => ({ ...f, departmentId: e.target.value }))}>
-                <option value="">-- Aucun --</option>
-                {(data.departments || []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
+              <Autocomplete className="select" value={convertForm.departmentId} onChange={(v) => setConvertForm((f) => ({ ...f, departmentId: v }))} style={{ display: "block" }}
+                placeholder="-- Aucun --" options={(data.departments || []).map((d) => ({ value: d.id, label: d.name }))} />
               <label className="field-label" style={{ marginTop: 10 }}>Date d'entrée</label>
               <input className="input" type="date" value={convertForm.joinDate} onChange={(e) => setConvertForm((f) => ({ ...f, joinDate: e.target.value }))} />
             </div>
