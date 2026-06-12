@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **Comptabilité — Écran Approbations : pilotage des gates des 4 modules de dépense** : le tableau « Modules sous approbation obligatoire » devient **actionnable**. Il affiche les 4 modules de dépense connus (Dépense FarmOS, Paie, Facture d'achat, Maintenance) avec leur état dérivé des `approval-requirements`, et un bouton **Activer / Désactiver** par module (via `setApprovalRequirement`, confirmation explicite). Les gates de test (`test_*`) ne polluent plus la liste. Accompagne l'activation des 4 gates de dépense côté ledger (un comptable peut désormais piloter quels modules sont en comptabilisation différée sans passer par l'API). [3.50.4]
+
 ### Fixed
 - **FarmOS — ETL vaccins : URL réelle du CSV ACIA + parsing colonnes officielles** : le 1er run de synchronisation sur dev a journalisé `ACIA HTTP 404` (URL par défaut erronée). Corrigé vers l'endpoint officiel `apps.inspection.canada.ca/webapps/veterinary-biologics-product-list/Home/GetAllCSV` (vérifié : HTTP 200, `text/csv`, ~158 Ko). Parser adapté aux vraies colonnes ACIA (`tradeName`, `manufacturer`, `species`, `statusCodeName`, `ccvbNumber`) : extraction du nom anglais quand `tradeName` est bilingue (séparateur `[]`), n° de licence `ccvbNumber` utilisé comme `source_ref`. Le pipeline E2E est validé : run journalisé, région Canada auto-créée, gestion d'erreur fonctionnelle. [3.50.3]
 

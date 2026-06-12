@@ -630,6 +630,25 @@ function Approbations({ canMutate }) {
     finally { setBusy(false); }
   };
 
+  // Active/désactive le gate d'approbation d'un module (comptabilisation différée).
+  const toggleGate = async (sourceModule, isActive) => {
+    if (!window.confirm(isActive
+      ? `Activer l'approbation obligatoire pour « ${MODULE_LABELS[sourceModule] || sourceModule} » ? Les écritures seront différées jusqu'à validation.`
+      : `Désactiver l'approbation pour « ${MODULE_LABELS[sourceModule] || sourceModule} » ? Les écritures seront comptabilisées directement.`)) return;
+    setBusy(true);
+    try {
+      await api.setApprovalRequirement({ sourceModule, workflowKey: "exp_approval", isActive });
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  // Vue des 4 modules de dépense connus (état dérivé des requirements ; ignore les gates de test).
+  const gateState = Object.keys(MODULE_LABELS).map((mod) => {
+    const r = reqs.find((x) => x.sourceModule === mod);
+    return { sourceModule: mod, isActive: !!(r && r.isActive) };
+  });
+
   return (
     <>
       <PageHead eyebrow="Gate de comptabilisation" title="Approbations" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
@@ -665,18 +684,26 @@ function Approbations({ canMutate }) {
       </div>
 
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Modules sous approbation obligatoire</h3></div>
+        <div className="section-head"><h3 className="font-display">Modules sous approbation obligatoire</h3><span className="tiny">Gate de comptabilisation différée</span></div>
         <div className="tbl-scroll">
-          <table className="tbl" style={{ minWidth: 420 }}>
-            <thead><tr><th>Module</th><th>Statut</th></tr></thead>
+          <table className="tbl" style={{ minWidth: 480 }}>
+            <thead><tr><th>Module de dépense</th><th>Statut</th><th className="r">Action</th></tr></thead>
             <tbody>
-              {reqs.map((r) => (
-                <tr key={r.id}><td>{MODULE_LABELS[r.sourceModule] || r.sourceModule}</td><td>{r.isActive ? <span className="chip pos">actif</span> : <span className="chip">inactif</span>}</td></tr>
+              {gateState.map((g) => (
+                <tr key={g.sourceModule}>
+                  <td>{MODULE_LABELS[g.sourceModule]}</td>
+                  <td>{g.isActive ? <span className="chip pos">actif</span> : <span className="chip">inactif</span>}</td>
+                  <td className="r">
+                    {canMutate
+                      ? <button className={`btn-sm ${g.isActive ? "" : "grad-accent"}`} disabled={busy} onClick={() => toggleGate(g.sourceModule, !g.isActive)}>{g.isActive ? "Désactiver" : "Activer"}</button>
+                      : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
               ))}
-              {reqs.length === 0 && <tr><td colSpan={2} className="muted">Aucun gate configuré.</td></tr>}
             </tbody>
           </table>
         </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Gate actif = toute écriture du module est différée (mise en attente) jusqu'à approbation du workflow, puis comptabilisée. Gate inactif = comptabilisation directe.</p>
       </div>
     </>
   );
