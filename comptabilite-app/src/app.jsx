@@ -144,6 +144,53 @@ function exportCsv(filename, cols, rows) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+
+/* Autocomplete recherchable (remplace les <select> de listes de données).
+   options = [{ value, label }]. onChange reçoit la valeur. */
+function Autocomplete({ value, onChange, options, placeholder = "—", allowClear = true, style }) {
+  const norm = (options || []).map((o) => ({ value: o.value, label: o.label }));
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const wrapRef = React.useRef(null);
+  const selected = norm.find((o) => String(o.value) === String(value));
+  const display = open ? query : (selected ? selected.label : "");
+  const q = query.trim().toLowerCase();
+  const filtered = !open ? norm : (q ? norm.filter((o) => o.label.toLowerCase().includes(q)) : norm);
+  React.useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(""); } };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const pick = (o) => { onChange(o.value); setOpen(false); setQuery(""); };
+  return (
+    <div ref={wrapRef} style={{ position: "relative", ...style }}>
+      <input className="ac-input" autoComplete="off" placeholder={placeholder} value={display}
+        onFocus={() => { setQuery(""); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } else if (e.key === "Enter" && filtered.length) { e.preventDefault(); pick(filtered[0]); } }}
+        style={{ width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1, #d8d5cc)", fontSize: 13 }} />
+      {allowClear && value && !open && (
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); onChange(""); }} aria-label="effacer"
+          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: 0, cursor: "pointer", color: "var(--ink-500)", padding: 4, lineHeight: 1 }}>
+          <Icon name="x" style={{ width: 11, height: 11 }} />
+        </button>
+      )}
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", border: "1px solid var(--border-1, #d8d5cc)", borderRadius: 8, boxShadow: "0 8px 24px -8px rgba(14,36,24,0.18)", maxHeight: 240, overflowY: "auto", zIndex: 200 }}>
+          {filtered.length === 0 && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)" }}>—</div>}
+          {filtered.map((o) => (
+            <div key={o.value} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+              style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer", background: String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken, #f4f3ef)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent")}>
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function Toaster() {
   const [msg, setMsg] = React.useState(null);
   React.useEffect(() => {
@@ -678,9 +725,8 @@ function TypeRuleModal({ initial, accounts, busy, onSave, onClose }) {
           {lines.map((l, i) => (
             <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
               <input style={{ flex: 1 }} placeholder="rôle (ex. cash)" value={l.role} onChange={(e) => setLine(i, "role", e.target.value)} required />
-              <select style={{ flex: 1.4 }} value={l.accountId} onChange={(e) => setLine(i, "accountId", e.target.value)}>
-                {accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
-              </select>
+              <Autocomplete style={{ flex: 1.4 }} value={l.accountId} onChange={(v) => setLine(i, "accountId", v)} placeholder="Compte…"
+                options={accounts.map((a) => ({ value: a.id, label: accountLabel(a) }))} />
               <select style={{ width: 96 }} value={l.side} onChange={(e) => setLine(i, "side", e.target.value)}>
                 <option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option>
               </select>
@@ -1661,7 +1707,10 @@ function FField({ label, value, onChange, type = "text", required = false }) {
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 function FSelect({ label, value, onChange, rows }) {
-  return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{accountLabel(r)}</option>)}</select></label>;
+  return <label className="field"><span>{label}</span>
+    <Autocomplete value={value} onChange={onChange} placeholder="Rechercher un compte…"
+      options={(rows || []).map((r) => ({ value: r.id, label: accountLabel(r) }))} />
+  </label>;
 }
 
 /* Modal générique (remplace window.prompt) : titre + champs configurables. */

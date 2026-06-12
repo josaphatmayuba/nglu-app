@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **Comptabilité — sélecteurs de comptes en autocomplete** : les `<select>` de listes de données (choix de compte dans les modals d'écriture/compte et dans l'éditeur de règles SIFA) deviennent des **autocomplete recherchables** (nouveau composant `Autocomplete` local : filtrage par texte, effacement, clavier). Les enums courts (journal, statut, débit/crédit) restent en select natif. Premier jalon de la conversion select→autocomplete par app. [3.53.2]
+
 ### Fixed
 - **CRM Dashboard — devises ambiguës ($ identique pour USD et CAD)** : la carte « Chiffre d'affaires » affichait deux lignes en « $ » indistinguables. Diagnostic : le code groupe correctement par devise (`revenue.byCurrency`), mais en base **CAD et USD partageaient le symbole `$`**. Corrigé sur deux fronts : (1) le dashboard expose maintenant `currencyCode` par devise et le `KpiCard` multi-devises **préfixe le code** (`USD $…`, `CAD CA$…`) → toujours non ambigu ; (2) symbole CAD corrigé en base dev (`$` → `CA$`). Le total brut multi-devises n'est jamais additionné à tort (déjà séparé par devise côté backend). [3.53.1]
 
