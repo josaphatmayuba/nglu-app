@@ -806,6 +806,7 @@ export class FarmosService {
       await this.assertProductionSaleAvailable(input, orgId);
     } else {
       this.assertNotUnderMeatWithdrawal(animal);
+      this.assertAnimalSaleAvailable(animal, input);
     }
     const [res] = await this.db.insert(farmosSales).values({
       organizationId: orgId,
@@ -827,7 +828,7 @@ export class FarmosService {
       await this.db.update(farmosSales).set({ transactionId: txId }).where(eq(farmosSales.id, res.id));
     }
     if (animal) {
-      await this.applyAnimalSale(animal, Number(input.quantity), orgId);
+      await this.applyAnimalSale(animal, input, orgId);
     }
     await this.publishFarmosUpdate("createSale", ["sales", "animals"], "created", res.id, orgId);
     return { id: res.id, transactionId: txId };
@@ -846,9 +847,17 @@ export class FarmosService {
     }
   }
 
-  private async applyAnimalSale(animal: any, quantity: number, orgId: number) {
+  private async applyAnimalSale(animal: any, input: CreateSaleDto, orgId: number) {
+    const quantity = Number(input.quantity);
     const soldQty = Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
     const currentCount = Number(animal.count ?? 0);
+    if (this.isWeightSaleUnit(input.unit)) {
+      await this.db
+        .update(farmosAnimals)
+        .set({ count: currentCount > 0 ? 0 : animal.count, status: "sold" })
+        .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+      return;
+    }
     if (currentCount > soldQty) {
       await this.db
         .update(farmosAnimals)
@@ -860,6 +869,30 @@ export class FarmosService {
       .update(farmosAnimals)
       .set({ count: currentCount > 0 ? 0 : animal.count, status: "sold" })
       .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+  }
+
+  private assertAnimalSaleAvailable(animal: any, input: CreateSaleDto) {
+    const qty = Number(input.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new BadRequestException("Quantite vendue requise.");
+    }
+    if (this.isWeightSaleUnit(input.unit)) {
+      const maxWeight = this.weightInSaleUnit(animal.weight, animal.weightUnit ?? animal.weight_unit ?? "kg", input.unit);
+      if (maxWeight == null || maxWeight <= 0) {
+        throw new BadRequestException("Poids actuel requis pour vendre cet animal au poids.");
+      }
+      if (qty > maxWeight + 0.000001) {
+        throw new BadRequestException(`Quantite superieure au poids actuel. Maximum: ${this.formatQuantity(maxWeight)} ${input.unit ?? "kg"}.`);
+      }
+      return;
+    }
+    if (this.normalizeSaleUnit(input.unit) !== "lot") {
+      const currentCount = Number(animal.count ?? 0);
+      const maxCount = currentCount > 0 ? currentCount : 1;
+      if (qty > maxCount + 0.000001) {
+        throw new BadRequestException(`Quantite superieure au disponible. Maximum: ${this.formatQuantity(maxCount)} ${input.unit ?? ""}.`);
+      }
+    }
   }
 
   private async assertProductionSaleAvailable(input: CreateSaleDto, orgId: number) {
@@ -906,6 +939,34 @@ export class FarmosService {
       .toLowerCase()
       .replaceAll("œ", "oe")
       .replaceAll("å“", "oe");
+  }
+
+  private isWeightSaleUnit(unit: string | null | undefined) {
+    return ["kg", "kilo", "kilos", "kilogram", "kilograms", "kilogramme", "kilogrammes", "g", "gram", "grams", "gramme", "grammes", "lb", "lbs", "livre", "livres", "t", "tonne", "tonnes"].includes(this.normalizeSaleUnit(unit));
+  }
+
+  private weightAsKg(weight: unknown, unit: string | null | undefined) {
+    const value = Number(weight);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const normalized = this.normalizeSaleUnit(unit || "kg");
+    if (["g", "gram", "grams", "gramme", "grammes"].includes(normalized)) return value / 1000;
+    if (["lb", "lbs", "livre", "livres"].includes(normalized)) return value * 0.45359237;
+    if (["t", "tonne", "tonnes"].includes(normalized)) return value * 1000;
+    return value;
+  }
+
+  private weightInSaleUnit(weight: unknown, fromUnit: string | null | undefined, saleUnit: string | null | undefined) {
+    const kg = this.weightAsKg(weight, fromUnit);
+    if (kg == null) return null;
+    const normalized = this.normalizeSaleUnit(saleUnit || "kg");
+    if (["g", "gram", "grams", "gramme", "grammes"].includes(normalized)) return kg * 1000;
+    if (["lb", "lbs", "livre", "livres"].includes(normalized)) return kg / 0.45359237;
+    if (["t", "tonne", "tonnes"].includes(normalized)) return kg / 1000;
+    return kg;
+  }
+
+  private formatQuantity(value: number) {
+    return Number(value.toFixed(2)).toString();
   }
 
   async deleteSale(id: number, orgId: number) {

@@ -10,6 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
+import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -1580,6 +1581,43 @@ function normalizeSaleUnit(unit) {
     .replaceAll("å“", "oe");
 }
 
+function isWeightSaleUnit(unit) {
+  return ["kg", "kilo", "kilos", "kilogram", "kilograms", "kilogramme", "kilogrammes", "g", "gram", "grams", "gramme", "grammes", "lb", "lbs", "livre", "livres", "t", "tonne", "tonnes"].includes(normalizeSaleUnit(unit));
+}
+
+function weightAsKg(value, unit) {
+  const weight = Number(value);
+  if (!Number.isFinite(weight) || weight <= 0) return null;
+  const normalized = normalizeSaleUnit(unit || "kg");
+  if (["g", "gram", "grams", "gramme", "grammes"].includes(normalized)) return weight / 1000;
+  if (["lb", "lbs", "livre", "livres"].includes(normalized)) return weight * 0.45359237;
+  if (["t", "tonne", "tonnes"].includes(normalized)) return weight * 1000;
+  return weight;
+}
+
+function weightInSaleUnit(weight, fromUnit, saleUnit) {
+  const kg = weightAsKg(weight, fromUnit);
+  if (kg == null) return null;
+  const normalized = normalizeSaleUnit(saleUnit || "kg");
+  if (["g", "gram", "grams", "gramme", "grammes"].includes(normalized)) return kg * 1000;
+  if (["lb", "lbs", "livre", "livres"].includes(normalized)) return kg / 0.45359237;
+  if (["t", "tonne", "tonnes"].includes(normalized)) return kg / 1000;
+  return kg;
+}
+
+function animalAvailableForUnit(animal, unit) {
+  if (normalizeSaleUnit(unit) === "lot") return 1;
+  if (isWeightSaleUnit(unit)) {
+    return weightInSaleUnit(animal?.weight, animal?.weightUnit || animal?.weight_unit || "kg", unit) || 0;
+  }
+  return Number(animal?.count) > 0 ? Number(animal.count) : 1;
+}
+
+function formatSaleQuantity(value) {
+  const n = Number(value || 0);
+  return n.toLocaleString("fr-CA", { maximumFractionDigits: n >= 10 ? 1 : 2 });
+}
+
 function saleUnitFor(productType, fallback) {
   return fallback || SALE_PRODUCT_LABELS[productType]?.unit || "";
 }
@@ -1733,11 +1771,13 @@ function buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang }) {
       title: a.name || a.externalId || a.external_id || a.lot || `#${a.id}`,
       subtitle: [a.lot, a.race, a.barn].filter(Boolean).join(" - "),
       unit: "tete",
+      weight: a.weight,
+      weightUnit: a.weightUnit || a.weight_unit || "kg",
       speciesLabel: sp ? (lang === "fr" ? sp.fr : sp.en) : a.species,
     };
     const price = findAnimalListingPrice(prices, item);
     const unit = price?.unit || "tete";
-    const available = normalizeSaleUnit(unit) === "lot" ? 1 : (Number(a.count) > 0 ? Number(a.count) : 1);
+    const available = animalAvailableForUnit(a, unit);
     return { ...item, unit, available, unitPrice: price ? priceValue(price) : "", currencyId: priceCurrencyId(price) };
   });
 
@@ -1779,7 +1819,7 @@ function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
   const [packKey, setPackKey] = React.useState(packagings[0]?.key || "unit");
   const pack = packagings.find((p) => p.key === packKey) || packagings[0];
   const eggsPerPack = pack?.eggs || 1;
-  const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(Math.min(1, item.available || 1)) : "");
+  const [quantity, setQuantity] = React.useState(item?.source === "animal" ? String(isWeightSaleUnit(item.unit) ? (item.available || "") : Math.min(1, item.available || 1)) : "");
   const [buyer, setBuyer] = React.useState("");
   const [saleDate, setSaleDate] = React.useState(today);
   const [notes, setNotes] = React.useState("");
@@ -1797,6 +1837,9 @@ function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
   const price = Number(pack?.price || 0);              // prix par conditionnement
   const total = Number.isFinite(packs) && Number.isFinite(price) ? packs * price : 0;
   const isPack = eggsPerPack > 1;                       // conditionnement plateau
+  const maxSaleQty = Number(item.available ?? 0);
+  const hasSaleMax = Number.isFinite(maxSaleQty) && maxSaleQty >= 0;
+  const inputMaxQty = hasSaleMax && isPack ? Math.floor(maxSaleQty / eggsPerPack) : maxSaleQty;
   const sp = speciesById(item.species);
   const activeCurrencyId = currencyId || pack?.currencyId || item.currencyId || currencyMeta?.defaultCurrencyId || "";
   const activeSymbol = symbolFor(activeCurrencyId, currencyMeta?.currencies || [], currencyMeta?.fallbackSymbol || "");
@@ -1810,8 +1853,10 @@ function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
       setError(lang === "fr" ? "Quantite et prix requis." : "Quantity and price required.");
       return;
     }
-    if (item.available && stockQty > item.available) {
-      setError(lang === "fr" ? "Quantite superieure au disponible." : "Quantity exceeds available stock.");
+    if (hasSaleMax && stockQty > maxSaleQty + 0.000001) {
+      setError(lang === "fr"
+        ? `Quantite superieure au maximum: ${formatSaleQuantity(maxSaleQty)} ${item.unit || ""}.`
+        : `Quantity exceeds maximum: ${formatSaleQuantity(maxSaleQty)} ${item.unit || ""}.`);
       return;
     }
     if ((currencyMeta?.currencies || []).length && !activeCurrencyId) {
@@ -1898,20 +1943,26 @@ function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{isPack ? (lang === "fr" ? "Nombre de plateaux" : "Number of trays") : (lang === "fr" ? "Quantite" : "Quantity")}
-            <input className="input" type="number" min="0" step={isPack ? "1" : "0.01"} value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+            <input className="input" type="number" min="0" max={hasSaleMax ? inputMaxQty : undefined} step={isPack || ["tete", "unite", "lot"].includes(normalizeSaleUnit(item.unit)) ? "1" : "0.01"} value={quantity} onChange={(e) => setQuantity(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
             {isPack && packs > 0 && (
               <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)", marginTop: 3 }}>= {stockQty} {item.unit || "oeufs"}</span>
             )}
+            {item.source === "animal" && hasSaleMax && (
+              <span style={{ display: "block", fontSize: 11, color: "var(--fg-3)", marginTop: 3 }}>
+                {lang === "fr" ? "Maximum" : "Maximum"}: {formatSaleQuantity(maxSaleQty)} {item.unit || ""}
+              </span>
+            )}
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{isPack ? (lang === "fr" ? "Prix par plateau" : "Price per tray") : (lang === "fr" ? "Prix unitaire configure" : "Configured unit price")}
-            <input className="input" type="number" value={pack?.price != null ? pack.price : ""} readOnly disabled
-              placeholder={lang === "fr" ? "A configurer dans Gestion de vente" : "Configure in Sales management"}
-              style={{ width: "100%", marginTop: 4, background: "var(--bg-sunken)", color: configuredPrice ? "var(--ink-950)" : "var(--rust-700)" }}/>
-          </label>
-          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
-            <div style={{ marginTop: 4 }}>
-              <CurrencySelect lang={lang} value={activeCurrencyId} onChange={setCurrencyId} currencies={currencyMeta?.currencies || []}/>
-            </div>
+            <AmountCurrencyInput
+              amount={pack?.price != null ? pack.price : ""}
+              onAmountChange={() => {}}
+              currencyId={activeCurrencyId}
+              onCurrencyChange={setCurrencyId}
+              currencies={currencyMeta?.currencies || []}
+              amountDisabled
+              amountReadOnly
+            />
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Acheteur" : "Buyer"}
             <input className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
@@ -1996,6 +2047,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
       const soldQty = Number(sale.quantity || 0);
       setAnimals((prev) => prev.map((animal) => {
         if (animal.id !== sale.animal_id) return animal;
+        if (isWeightSaleUnit(sale.unit)) return { ...animal, count: Number(animal.count || 0) > 0 ? 0 : animal.count, status: "sold" };
         const current = Number(animal.count || 0);
         if (current > soldQty) return { ...animal, count: Math.max(0, current - soldQty) };
         return { ...animal, count: current > 0 ? 0 : animal.count, status: "sold" };
@@ -2970,6 +3022,7 @@ function SaleListingModal({ lang, animal, prices, currencyMeta, onClose, onSaved
   const sp = speciesById(animal.species);
   const title = animal.name || animal.externalId || animal.external_id || animal.lot || `#${animal.id}`;
   const listingNote = [animalListingNote(animal.id), notes.trim()].filter(Boolean).join(" · ");
+  const weightLimit = isWeightSaleUnit(unit) ? animalAvailableForUnit(animal, unit) : null;
   const unitOptions = [
     { id: "tete", fr: "Par tete", en: "Per head" },
     { id: "lot", fr: "Par lot complet", en: "Whole batch" },
@@ -3031,12 +3084,13 @@ function SaleListingModal({ lang, animal, prices, currencyMeta, onClose, onSaved
             </select>
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire" : "Unit price"}
-            <input className="input" type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
-          </label>
-          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
-            <div style={{ marginTop: 4 }}>
-              <CurrencySelect lang={lang} value={currencyId} onChange={setCurrencyId} currencies={currencyMeta?.currencies || []}/>
-            </div>
+            <AmountCurrencyInput
+              amount={unitPrice}
+              onAmountChange={setUnitPrice}
+              currencyId={currencyId}
+              onCurrencyChange={setCurrencyId}
+              currencies={currencyMeta?.currencies || []}
+            />
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)", gridColumn: "1 / -1" }}>{lang === "fr" ? "Notes de vente" : "Sale notes"}
             <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%", marginTop: 4, minHeight: 70, resize: "vertical" }}/>
@@ -3044,9 +3098,13 @@ function SaleListingModal({ lang, animal, prices, currencyMeta, onClose, onSaved
         </div>
 
         <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: "var(--bg-sunken)", fontSize: 12, color: "var(--fg-2)" }}>
-          {lang === "fr"
-            ? "Cette configuration sera utilisee automatiquement par la caisse POS pour cet animal ou ce lot."
-            : "This configuration will be used automatically by the POS register for this animal or batch."}
+          {isWeightSaleUnit(unit)
+            ? (lang === "fr"
+              ? `Vente au poids: maximum vendable ${formatSaleQuantity(weightLimit || 0)} ${unit}.`
+              : `Weight sale: maximum sellable ${formatSaleQuantity(weightLimit || 0)} ${unit}.`)
+            : (lang === "fr"
+              ? "Cette configuration sera utilisee automatiquement par la caisse POS pour cet animal ou ce lot."
+              : "This configuration will be used automatically by the POS register for this animal or batch.")}
         </div>
         {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
@@ -3330,7 +3388,7 @@ function PriceListSettings({ lang }) {
           {lang === "fr" ? "Configuration des prix utilises automatiquement par la caisse." : "Price configuration used automatically by the register."}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr .75fr .75fr .8fr auto", gap: 8, alignItems: "end" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr .75fr 1.2fr auto", gap: 8, alignItems: "end" }}>
         <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Produit" : "Product"}
           <select className="input" value={form.product_type} onChange={(e) => chooseProduct(e.target.value)} style={{ width: "100%", marginTop: 4 }}>
             {PRICE_PRODUCT_OPTIONS.map((o) => <option key={o.product_type} value={o.product_type}>{lang === "fr" ? o.fr : o.en}</option>)}
@@ -3346,12 +3404,13 @@ function PriceListSettings({ lang }) {
           <input className="input" value={form.unit} onChange={(e) => set("unit", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
         </label>
         <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix" : "Price"}
-          <input className="input" type="number" min="0" step="0.01" value={form.unit_price} onChange={(e) => set("unit_price", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
-        </label>
-        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
-          <div style={{ marginTop: 4 }}>
-            <CurrencySelect lang={lang} value={form.currency_id} onChange={(v) => set("currency_id", v)} currencies={currencyMeta.currencies}/>
-          </div>
+          <AmountCurrencyInput
+            amount={form.unit_price}
+            onAmountChange={(value) => set("unit_price", value)}
+            currencyId={form.currency_id}
+            onCurrencyChange={(value) => set("currency_id", value)}
+            currencies={currencyMeta.currencies}
+          />
         </label>
         <button className="btn btn-primary" disabled={saving} onClick={save}>
           <Icon name="check" size={13} color="currentColor"/>

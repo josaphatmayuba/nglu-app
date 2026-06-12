@@ -520,6 +520,7 @@ export function adaptAnimal(row) {
     sex: row.sex,
     dob: dob ? String(dob).slice(0, 10) : null,
     weight: row.weight != null ? Number(row.weight) : null,
+    weightUnit: row.weightUnit ?? row.weight_unit ?? "kg",
     count: row.count != null ? Number(row.count) : null,
     lot: row.lot,
     barn: row.barn,

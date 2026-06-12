@@ -4,8 +4,9 @@ import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
 import { api } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
-import { currencyOptions, defaultCurrencyId, defaultSymbol, symbolFor } from "./currency";
+import { defaultCurrencyId, defaultSymbol } from "./currency";
 import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
+import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
@@ -1236,7 +1237,6 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [currencies, setCurrencies] = React.useState([]);
   const [fallbackCurrencyId, setFallbackCurrencyId] = React.useState(null);
-  const [fallbackSymbol, setFallbackSymbol] = React.useState("");
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [lots, setLots] = React.useState([]);
   const [invoiceDirty, setInvoiceDirty] = React.useState(false);
@@ -1249,7 +1249,6 @@ const StockForm = ({ lang, onSaved, onClose }) => {
         const defaultId = defaultCurrencyId(setting.value, list);
         setCurrencies(list);
         setFallbackCurrencyId(defaultId);
-        setFallbackSymbol(defaultSymbol(setting.value, list));
         setForm((f) => f.currency_id || !defaultId ? f : { ...f, currency_id: defaultId });
       })
       .catch(() => {});
@@ -1388,16 +1387,14 @@ const StockForm = ({ lang, onSaved, onClose }) => {
               <input className="input" placeholder="Coop Agri-Pro" value={form.supplier || ""} onChange={(e) => set("supplier", e.target.value)}/>
             </FormField>
             <ProjectSelect lang={lang} value={form.project_id} onChange={(v) => set("project_id", v)} />
-            <FormField label={`${lang === "fr" ? "Coût total" : "Total cost"} (${symbolFor(form.currency_id || fallbackCurrencyId, currencies, fallbackSymbol)})`}>
-              <input className="input mono" type="number" placeholder={`4320 ${symbolFor(form.currency_id || fallbackCurrencyId, currencies, fallbackSymbol)}`} value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
-            </FormField>
-            <FormField label={lang === "fr" ? "Devise" : "Currency"}>
-              <select className="input" value={form.currency_id || ""} onChange={(e) => set("currency_id", e.target.value ? Number(e.target.value) : "")}>
-                <option value="">{lang === "fr" ? "Choisir" : "Select"}</option>
-                {currencyOptions(currencies).map((currency) => (
-                  <option key={currency.id} value={currency.id}>{currency.label}</option>
-                ))}
-              </select>
+            <FormField label={lang === "fr" ? "Coût total" : "Total cost"}>
+              <AmountCurrencyInput
+                amount={form.cost || ""}
+                onAmountChange={(value) => set("cost", value)}
+                currencyId={form.currency_id || fallbackCurrencyId || ""}
+                onCurrencyChange={(value) => set("currency_id", value)}
+                currencies={currencies}
+              />
             </FormField>
             <FormField label={lang === "fr" ? "N° facture" : "Invoice #"}>
               <div style={{ display: "flex", gap: 6 }}>
