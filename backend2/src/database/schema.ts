@@ -140,6 +140,37 @@ export const journalEntryLines = mysqlTable("journal_entry_lines", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Echange de devise (modele bancaire). Une operation = 2 ou 3 ecritures liees,
+// chacune equilibree dans SA devise (pas de melange) : sortie devise source,
+// entree devise cible, et frais optionnels. On stocke les VRAIS montants des
+// deux cotes + le taux reel (jamais une valeur estimee). Le pont comptable est
+// un sous-compte "Compte de change" par devise (l'ecart de change y apparait).
+export const currencyExchanges = mysqlTable("currency_exchanges", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  date: datetime("date").notNull(),
+  reference: varchar("reference", { length: 64 }),
+  note: varchar("note", { length: 255 }),
+  fromCurrencyId: bigint("from_currency_id", { mode: "number" }).notNull(),
+  fromAccountId: bigint("from_account_id", { mode: "number" }).notNull(),
+  fromAmount: decimal("from_amount", { precision: 18, scale: 2 }).notNull(),
+  toCurrencyId: bigint("to_currency_id", { mode: "number" }).notNull(),
+  toAccountId: bigint("to_account_id", { mode: "number" }).notNull(),
+  toAmount: decimal("to_amount", { precision: 18, scale: 2 }).notNull(),
+  rate: decimal("rate", { precision: 18, scale: 6 }).notNull(),
+  feeAmount: decimal("fee_amount", { precision: 18, scale: 2 }).default("0").notNull(),
+  feeCurrencyId: bigint("fee_currency_id", { mode: "number" }),
+  feeAccountId: bigint("fee_account_id", { mode: "number" }),
+  fromEntryId: bigint("from_entry_id", { mode: "number", unsigned: true }),
+  toEntryId: bigint("to_entry_id", { mode: "number", unsigned: true }),
+  feeEntryId: bigint("fee_entry_id", { mode: "number", unsigned: true }),
+  idempotencyKey: varchar("idempotency_key", { length: 128 }),
+  status: varchar("status", { length: 16 }).default("posted").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export const transactionTypeRules = mysqlTable("transaction_type_rules", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

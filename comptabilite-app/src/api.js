@@ -62,6 +62,12 @@ export const api = {
   ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
   ledgerPeriods: () => jsonFetch("/ledger/periods"),
 
+  // ── Échange de devise (modèle bancaire : vrais montants + taux réel) ──
+  exchanges: () => jsonFetch("/ledger/exchanges"),
+  exchange: (id) => jsonFetch(`/ledger/exchanges/${id}`),
+  createExchange: (body) => jsonFetch("/ledger/exchanges", { method: "POST", body: JSON.stringify(body) }),
+  reverseExchange: (id, reason) => jsonFetch(`/ledger/exchanges/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
+
   // ── Projets / Bailleurs (analytique) ─────────────────────────────────
   projects: () => jsonFetch("/projects"),
   createProject: (body) => jsonFetch("/projects", { method: "POST", body: JSON.stringify(body) }),

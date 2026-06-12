@@ -771,6 +771,13 @@
       "when": 1780408800000,
       "tag": "0129_projects_source_ref_org_index",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "5",
+      "when": 1780412400000,
+      "tag": "0130_currency_exchanges",
+      "breakpoints": true
     }
   ]
 }
