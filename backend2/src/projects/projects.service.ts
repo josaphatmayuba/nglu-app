@@ -90,6 +90,53 @@ export class ProjectsService {
         and c.project_id is null
         and m.project_id is not null
     `);
+    await this.db.execute(sql`
+      update ${journalEntryLines} l
+      join ${journalEntries} e
+        on e.id = l.entry_id
+       and e.organization_id = l.organization_id
+      join ${realEstateMaintenanceCosts} c
+        on c.organization_id = l.organization_id
+       and e.related_id = cast(c.id as char) collate utf8mb4_0900_ai_ci
+      left join ${realEstateMaintenanceRequests} m
+        on m.id = c.ticket_id
+       and m.organization_id = c.organization_id
+      set l.project_id = coalesce(c.project_id, m.project_id)
+      where l.organization_id = ${orgId}
+        and e.source_module = 'maintenance'
+        and l.project_id is null
+        and coalesce(c.is_active, 1) = 1
+        and coalesce(c.project_id, m.project_id) is not null
+    `);
+  }
+
+  private async maintenanceCostsMissingFromLedger(projectId: number, orgId: number) {
+    const [row] = await this.db
+      .select({
+        amount: sql<string>`coalesce(sum(${realEstateMaintenanceCosts.amount}), 0)`,
+        count: sql<string>`count(*)`,
+      })
+      .from(realEstateMaintenanceCosts)
+      .where(
+        and(
+          eq(realEstateMaintenanceCosts.organizationId, orgId),
+          eq(realEstateMaintenanceCosts.projectId, projectId),
+          eq(realEstateMaintenanceCosts.isActive, 1),
+          sql`not exists (
+            select 1
+            from ${journalEntries} e
+            where e.organization_id = ${orgId}
+              and e.source_module = 'maintenance'
+              and e.related_id = cast(${realEstateMaintenanceCosts.id} as char) collate utf8mb4_0900_ai_ci
+              and e.status = 'posted'
+          )`,
+        ),
+      );
+
+    return {
+      amount: this.round2(Number(row?.amount ?? 0)),
+      count: Number(row?.count ?? 0),
+    };
   }
 
   async findOne(id: number, orgId: number) {
@@ -199,6 +246,13 @@ export class ProjectsService {
    * par sous-compte, filtres sur journal_entry_lines.project_id. Sert de base au rapport bailleur.
    */
   async ledgerReport(projectId: number, orgId: number) {
+    try {
+      await this.ensureMaintenanceProjects(orgId);
+    } catch (err) {
+      this.logger.warn(
+        `ensureMaintenanceProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
+      );
+    }
     const project = await this.findOne(projectId, orgId);
     const rows = await this.db
       .select({
@@ -233,6 +287,16 @@ export class ProjectsService {
         if (amount !== 0) revenue.push({ subAccount: r.subAccount, account: r.account, amount });
       }
     }
+    const unpostedMaintenance = await this.maintenanceCostsMissingFromLedger(projectId, orgId);
+    if (unpostedMaintenance.amount !== 0) {
+      expenses.push({
+        subAccount: "Maintenance",
+        account: "Couts maintenance saisis",
+        amount: unpostedMaintenance.amount,
+        source: "maintenance_costs",
+        count: unpostedMaintenance.count,
+      });
+    }
     const totalExpenses = this.round2(expenses.reduce((t, i) => t + i.amount, 0));
     const totalRevenue = this.round2(revenue.reduce((t, i) => t + i.amount, 0));
     const budget = project.budgetAmount != null ? Number(project.budgetAmount) : null;
@@ -245,6 +309,10 @@ export class ProjectsService {
       totalRevenue,
       totalExpenses,
       net: this.round2(totalRevenue - totalExpenses),
+      maintenanceCosts: {
+        unpostedExpense: unpostedMaintenance.amount,
+        unpostedCount: unpostedMaintenance.count,
+      },
       budget,
       consumptionPct,
     };
