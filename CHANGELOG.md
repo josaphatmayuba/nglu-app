@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **Comptabilité/SIFA — filtre par devise global** : sélecteur « Devise » dans la barre du haut du module compta (`comptabilite-app`). « Toutes les devises » par défaut ; en choisissant une devise, tous les écrans branchés (Dashboard, Journaux, Écritures, Plan comptable, Tiers, Trésorerie, Immobilisations, États financiers, TVA, Capacité) ne montrent que les écritures/comptes/totaux de cette devise. Aucune conversion (principe SIFA) : filtrage côté front sur `currencyId` (transactions, comptes et listes `*ByCurrency`), pas de re-fetch. [3.59.2]
 - **Comptabilité/SIFA — sous-comptes de change créés par migration (plus de SQL manuel)** : migration Drizzle `0131` (idempotente, dans le journal → auto-appliquée au boot sur dev **et** prod) qui insère les 2 sous-comptes de l'échange de devise : « Currency Exchange Clearing » (compte de virement interne, `accountId=1` Asset) et « Exchange Fees » (frais de change, `accountId=6` Expense). Ces comptes n'étaient créés que par le seeder (base vide uniquement) ; la migration garantit leur présence partout sans geste manuel. Le formulaire d'échange (`ExchangeModal`) **pré-remplit** désormais ces comptes (pont de change + compte de frais) : le comptable n'a plus qu'à saisir montants et devises. Filtres de détection affinés (pont = clearing/virement, hors comptes de frais). [3.59.1]
 
 ### Changed

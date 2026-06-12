@@ -281,6 +281,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyId (string)
   const isMobile = useIsMobile();
 
   const [, forceCur] = React.useState(0);
@@ -341,25 +342,52 @@ function App() {
   }
 
   const newEntry = () => setModal({ kind: "transaction" });
+
+  // Filtre par devise (SIFA — on ne convertit jamais, on restreint l'affichage à une devise).
+  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyId.
+  const matchCur = React.useCallback(
+    (row) => !curFilter || String(row?.currencyId ?? "") === curFilter,
+    [curFilter]
+  );
+  const fc = React.useMemo(() => {
+    if (!curFilter) return data;
+    const keepCur = (list) => (Array.isArray(list) ? list.filter(matchCur) : list);
+    // Recopie les champs *ByCurrency d'un rapport en les filtrant sur la devise choisie.
+    const filterReport = (rep) => {
+      if (!rep || typeof rep !== "object") return rep;
+      const out = { ...rep };
+      Object.keys(out).forEach((k) => { if (/byCurrency$/i.test(k)) out[k] = keepCur(out[k]); });
+      return out;
+    };
+    return {
+      ...data,
+      transactions: keepCur(data.transactions),
+      accounts: keepCur(data.accounts),
+      trialBalance: filterReport(data.trialBalance),
+      balanceSheet: filterReport(data.balanceSheet),
+      incomeStatement: filterReport(data.incomeStatement),
+    };
+  }, [data, curFilter, matchCur]);
+
   const views = {
-    dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
-    journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
+    dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
+    journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
+    ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre />,
-    plan: <Plan accounts={data.accounts} trialBalance={data.trialBalance} incomeStatement={data.incomeStatement} balanceSheet={data.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
-    tiers: <Tiers accounts={data.accounts} />,
-    tresorerie: <Tresorerie accounts={data.accounts} />,
+    plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
+    tiers: <Tiers accounts={fc.accounts} />,
+    tresorerie: <Tresorerie accounts={fc.accounts} />,
     change: <Change accounts={data.accounts} currencies={data.currencies} canMutate={canMutate} />,
-    immo: <Immo accounts={data.accounts} />,
+    immo: <Immo accounts={fc.accounts} />,
     analytique: <Analytique />,
     budget: <Budget />,
-    capacite: <Capacite accounts={data.accounts} />,
+    capacite: <Capacite accounts={fc.accounts} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
-    etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva accounts={data.accounts} canMutate={canMutate} />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} />,
+    tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -392,7 +420,17 @@ function App() {
 
       <main className="main">
         <div className="content">
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
+              <Icon name="landmark" style={{ width: 14, height: 14 }} /> Devise
+              <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
+                <option value="">Toutes les devises</option>
+                {(data.currencies || []).map((c) => {
+                  const id = String(c.currencyId ?? c.id);
+                  return <option key={id} value={id}>{c.currencyCode || c.currencyName || cleanCurrencySymbol(c)}</option>;
+                })}
+              </select>
+            </label>
             <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Démo locale"}</span>
           </div>
           {error && <div className="inline-error">{error}</div>}
