@@ -11,6 +11,8 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Comptabilité — synchro maintenance : conflit de collation corrigé (cause racine du 500 Analytique)** : la comparaison `p.external_ref = cast(m.id as char)` dans `ensureMaintenanceProjects()` mélangeait deux collations (`utf8mb4_0900_ai_ci` de la colonne vs `utf8mb4_general_ci` du CAST) → `ER_CANT_AGGREGATE_2COLLATIONS`, faisant planter `/projects` en 500. Ajout de `collate utf8mb4_0900_ai_ci` sur les deux comparaisons (INSERT not-exists + UPDATE join) pour que la synchro s'exécute réellement. Complète le garde-fou best-effort [3.59.3]. [3.59.5]
+- **Comptabilité — boutons actifs invisibles (segtabs + boutons `+`)** : la règle CSS `.segtab { background:#fff }` (et `.btn-sm { background:#fff }`) était définie **après** `.grad-accent` à spécificité égale, écrasant donc le dégradé du bouton actif → texte blanc sur fond blanc = bouton invisible (ex. onglet « Montant reçu » dans l'échange de devise, bouton « + Nouveau taux »). Le dégradé est désormais porté directement par `.segtab.active` et `.btn-sm.grad-accent` (spécificité supérieure). [3.59.4]
 - **Comptabilité — Analytique (projets) ne renvoie plus 500** : la liste `/projects` appelait `ensureMaintenanceProjects()` (synchro auxiliaire des projets de maintenance) sans garde ; un drift de schéma (colonne/table manquante sur un env) faisait planter tout l'écran Analytique en 500. La synchro est désormais best-effort (try/catch + warning loggé) : la liste des projets répond toujours, même en cas de drift. [3.59.3]
 
 ### Added

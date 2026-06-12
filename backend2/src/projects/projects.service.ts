@@ -67,7 +67,7 @@ export class ProjectsService {
           from ${projects} p
           where p.organization_id = m.organization_id
             and p.source_system = 'maintenance'
-            and p.external_ref = cast(m.id as char)
+            and p.external_ref = cast(m.id as char) collate utf8mb4_0900_ai_ci
         )
     `);
     await this.db.execute(sql`
@@ -75,7 +75,7 @@ export class ProjectsService {
       join ${projects} p
         on p.organization_id = m.organization_id
        and p.source_system = 'maintenance'
-       and p.external_ref = cast(m.id as char)
+       and p.external_ref = cast(m.id as char) collate utf8mb4_0900_ai_ci
       set m.project_id = p.id
       where m.organization_id = ${orgId}
         and m.project_id is null
