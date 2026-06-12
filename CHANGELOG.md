@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **Comptabilité — échange de devise : référence générée automatiquement** : le champ « Référence » de l'`ExchangeModal` n'est plus saisi à la main. Il est désormais auto-généré (lecture seule) au format `CHG-AAAA-MM-NNN`, où `NNN` est la séquence du mois courant calculée depuis les échanges existants (premier du mois = `001`). Évite les références oubliées ou incohérentes. [3.59.6]
+
 ### Fixed
 - **Comptabilité — synchro maintenance : conflit de collation corrigé (cause racine du 500 Analytique)** : la comparaison `p.external_ref = cast(m.id as char)` dans `ensureMaintenanceProjects()` mélangeait deux collations (`utf8mb4_0900_ai_ci` de la colonne vs `utf8mb4_general_ci` du CAST) → `ER_CANT_AGGREGATE_2COLLATIONS`, faisant planter `/projects` en 500. Ajout de `collate utf8mb4_0900_ai_ci` sur les deux comparaisons (INSERT not-exists + UPDATE join) pour que la synchro s'exécute réellement. Complète le garde-fou best-effort [3.59.3]. [3.59.5]
 - **Comptabilité — boutons actifs invisibles (segtabs + boutons `+`)** : la règle CSS `.segtab { background:#fff }` (et `.btn-sm { background:#fff }`) était définie **après** `.grad-accent` à spécificité égale, écrasant donc le dégradé du bouton actif → texte blanc sur fond blanc = bouton invisible (ex. onglet « Montant reçu » dans l'échange de devise, bouton « + Nouveau taux »). Le dégradé est désormais porté directement par `.segtab.active` et `.btn-sm.grad-accent` (spécificité supérieure). [3.59.4]

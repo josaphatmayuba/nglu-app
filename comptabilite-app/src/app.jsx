@@ -1200,7 +1200,7 @@ function Change({ accounts = [], currencies = [], canMutate }) {
           </div>
         </div>
       )}
-      {showNew && <ExchangeModal accounts={accounts} currencies={currencies} busy={busy} error={error}
+      {showNew && <ExchangeModal accounts={accounts} currencies={currencies} exchanges={list} busy={busy} error={error}
         onSave={create} onClose={() => setShowNew(false)} />}
     </>
   );
@@ -1208,15 +1208,29 @@ function Change({ accounts = [], currencies = [], canMutate }) {
 
 /* Modal d'échange : saisie flexible (montant reçu OU taux), frais optionnels.
    Devise déduite du sous-compte si renseignée, sinon sélecteur de devise. */
-function ExchangeModal({ accounts, currencies, busy, error, onSave, onClose }) {
+function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, onClose }) {
   const acctOpts = (accounts || []).map((a) => ({ value: String(a.id), label: `${accountLabel(a)}${a.currencyCode ? " · " + a.currencyCode : ""}` }));
   const curOpts = (currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }));
   // Pont de change = clearing/virement (exclut les comptes de frais).
   const exchangeAccts = (accounts || []).filter((a) => /clearing|virement|compte de change/i.test(accountText(a)));
   const feeAccts = (accounts || []).filter((a) => /frais|fee/i.test(accountText(a)));
 
+  // Référence générée automatiquement : CHG-AAAA-MM-NNN (N = séquence du mois).
+  const autoRef = React.useMemo(() => {
+    const d = new Date();
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const prefix = `CHG-${ym}-`;
+    const max = (exchanges || []).reduce((m, r) => {
+      const ref = String(r.reference || "");
+      if (!ref.startsWith(prefix)) return m;
+      const n = parseInt(ref.slice(prefix.length), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  }, [exchanges]);
+
   const [f, setF] = React.useState({
-    date: new Date().toISOString().slice(0, 10), reference: "", note: "",
+    date: new Date().toISOString().slice(0, 10), reference: autoRef, note: "",
     fromCurrencyId: "", fromAccountId: "", fromAmount: "",
     toCurrencyId: "", toAccountId: "", mode: "amount", toAmount: "", rate: "",
     feeAmount: "", feeAccountId: feeAccts[0] ? String(feeAccts[0].id) : "",
@@ -1264,7 +1278,7 @@ function ExchangeModal({ accounts, currencies, busy, error, onSave, onClose }) {
         <div className="modal-body" style={{ display: "grid", gap: 12 }}>
           <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="Date"><input type="date" style={inp} value={f.date} onChange={(e) => set("date", e.target.value)} /></Field>
-            <Field label="Référence"><input style={inp} value={f.reference} placeholder="ex. BCDC-2026-04" onChange={(e) => set("reference", e.target.value)} /></Field>
+            <Field label="Référence (auto)"><input style={{ ...inp, background: "var(--ink-50, #f4f3ef)", color: "var(--ink-500)" }} value={f.reference} readOnly title="Référence générée automatiquement" /></Field>
           </div>
 
           <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Devise vendue (sortie)</div>
