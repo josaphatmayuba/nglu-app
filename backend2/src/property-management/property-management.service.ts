@@ -34,6 +34,7 @@ import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
@@ -76,6 +77,7 @@ export class PropertyManagementService {
     private readonly sms: CompatService,
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
+    private readonly projects: ProjectsService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -1543,7 +1545,31 @@ export class PropertyManagementService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findMaintenance(Number(result.insertId));
+    const ticketId = Number(result.insertId);
+
+    // Un chantier de travaux = un projet analytique. On cree (ou reutilise, via le
+    // registre partage source_system=maintenance) un projet et on lie le ticket.
+    try {
+      const proj = await this.projects.create(
+        {
+          name: `Travaux: ${input.title}`,
+          code: `MNT-${ticketId}`,
+          budgetAmount: input.estimatedCost ? Number(input.estimatedCost) : undefined,
+          currencyId: input.currencyId ?? undefined,
+          sourceSystem: "maintenance",
+          externalRef: String(ticketId),
+        },
+        orgId,
+        userId,
+      );
+      await this.db
+        .update(realEstateMaintenanceRequests)
+        .set({ projectId: proj.id })
+        .where(eq(realEstateMaintenanceRequests.id, ticketId));
+    } catch (err) {
+      this.logger.warn(`createMaintenance: liaison projet ignoree: ${(err as Error).message}`);
+    }
+    return this.findMaintenance(ticketId);
   }
 
   async updateMaintenance(id: number, input: UpdateMaintenanceDto, orgId: number) {
@@ -1687,6 +1713,14 @@ export class PropertyManagementService {
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.findMaintenance(ticketId, orgId);
 
+    // Projet analytique du chantier (pour ventiler la depense au grand livre).
+    const [ticket] = await this.db
+      .select({ projectId: realEstateMaintenanceRequests.projectId })
+      .from(realEstateMaintenanceRequests)
+      .where(eq(realEstateMaintenanceRequests.id, ticketId))
+      .limit(1);
+    const projectId = ticket?.projectId ?? null;
+
     const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
 
     const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
@@ -1700,6 +1734,7 @@ export class PropertyManagementService {
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,
       receiptUrl,
+      projectId,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1739,7 +1774,8 @@ export class PropertyManagementService {
         currencyId: input.currencyId ?? undefined,
         idempotencyKey: `maintenance-cost:${maintenanceCostId}`,
         lines: [
-          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense" },
+          // La charge porte le projet du chantier (ventilation analytique).
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense", projectId: projectId ?? undefined },
           { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
         ],
       },

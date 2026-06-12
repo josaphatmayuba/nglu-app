@@ -832,6 +832,8 @@ export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance
   currencyId: bigint("currency_id", { mode: "number" }),
   assigneeId: bigint("assignee_id", { mode: "number" }),
   description: text("description"),
+  // Chantier de travaux = projet analytique (lie au module Projets de la compta).
+  projectId: bigint("project_id", { mode: "number" }),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
@@ -850,6 +852,8 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   paymentDate: date("payment_date", { mode: "string" }),
   notes: text("notes"),
   receiptUrl: varchar("receipt_url", { length: 500 }),
+  // Ventilation analytique : la depense est portee sur le projet du chantier.
+  projectId: bigint("project_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
