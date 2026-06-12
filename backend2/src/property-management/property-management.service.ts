@@ -1506,6 +1506,8 @@ export class PropertyManagementService {
         currencyId: realEstateMaintenanceRequests.currencyId,
         // Somme des coûts réels déjà saisis pour ce ticket, dans SA devise (SIFA : pas de mélange).
         spentCost: sql<string>`coalesce((select sum(${realEstateMaintenanceCosts.amount}) from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 and (${realEstateMaintenanceCosts.currencyId} = ${realEstateMaintenanceRequests.currencyId} or ${realEstateMaintenanceCosts.currencyId} is null)), 0)`,
+        // Dépense réelle groupée PAR devise (SIFA : pas de somme inter-devises) : [{ currencyId, symbol, amount }].
+        spentByCurrency: sql<string>`coalesce((select json_arrayagg(json_object('currencyId', mc.currencyId, 'symbol', cur.currencySymbol, 'amount', mc.total)) from (select coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId}) as currencyId, sum(${realEstateMaintenanceCosts.amount}) as total from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 group by coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId})) mc left join ${currencies} cur on cur.id = mc.currencyId), json_array())`,
         assigneeId: realEstateMaintenanceRequests.assigneeId,
         assigneeFirstName: maintenanceAssignee.firstName,
         assigneeLastName: maintenanceAssignee.lastName,

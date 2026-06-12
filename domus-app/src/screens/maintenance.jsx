@@ -94,6 +94,25 @@ function toMoney(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Dépense réelle groupée par devise renvoyée par le backend (SIFA : pas de somme inter-devises).
+// Repli : si le backend ne fournit rien mais que spentCost > 0, on utilise la devise du ticket.
+function spentEntries(ticket, fallbackSymbol) {
+  let raw = ticket?.spentByCurrency;
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch { raw = null; }
+  }
+  const list = Array.isArray(raw)
+    ? raw.map((e) => ({
+        symbol: cleanCurrencySymbol({ currencySymbol: e.symbol }) || fallbackSymbol,
+        amount: Number(e.amount || 0),
+      }))
+    : [];
+  const filtered = list.filter((e) => e.amount > 0);
+  if (filtered.length) return filtered;
+  const spent = Number(ticket?.spentCost || 0);
+  return spent > 0 ? [{ symbol: fallbackSymbol, amount: spent }] : [];
+}
+
 export function Maintenance() {
   const dateRange = useDateRange();
   const [query, setQuery] = useState("");
@@ -160,10 +179,15 @@ export function Maintenance() {
     const map = new Map();
     tickets.forEach((ticket) => {
       const sym = costSymbol(ticket);
-      const cur = map.get(sym) || { symbol: sym, estimated: 0, spent: 0 };
-      cur.estimated += Number(ticket.estimatedCost || 0);
-      cur.spent += Number(ticket.spentCost || 0);
-      map.set(sym, cur);
+      const est = map.get(sym) || { symbol: sym, estimated: 0, spent: 0 };
+      est.estimated += Number(ticket.estimatedCost || 0);
+      map.set(sym, est);
+      // Dépense ventilée par devise réelle du coût (peut différer de la devise du ticket).
+      spentEntries(ticket, sym).forEach((e) => {
+        const cur = map.get(e.symbol) || { symbol: e.symbol, estimated: 0, spent: 0 };
+        cur.spent += e.amount;
+        map.set(e.symbol, cur);
+      });
     });
     return [...map.values()].filter((c) => c.estimated || c.spent);
   }, [tickets, costSymbol]);
@@ -468,7 +492,7 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
   const assignee = assigneeName(ticket);
   const next = NEXT_STATUS[ticket.status];
   const sym = costSymbol ? costSymbol(ticket) : undefined;
-  const spent = Number(ticket.spentCost || 0);
+  const spent = spentEntries(ticket, sym);
   return (
     <article className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}>
       <div className="ticket-head">
@@ -494,7 +518,9 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
         <span><User size={14} /> {assignee || "Non assigne"}</span>
         <span><CalendarDays size={14} /> {compactDate(ticketDate(ticket))}</span>
         {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {money(ticket.estimatedCost, sym)}</span>}
-        {spent > 0 && <span title="Coût réel déjà dépensé"><CircleDollarSign size={14} /> {money(spent, sym)} dépensé</span>}
+        {spent.map((e) => (
+          <span key={e.symbol} title="Coût réel déjà dépensé"><CircleDollarSign size={14} /> {money(e.amount, e.symbol)} dépensé</span>
+        ))}
       </div>
       {next && (
         <button className="immo-btn maintenance-next" disabled={busy} onClick={() => onAdvance(ticket)}>
@@ -537,7 +563,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
         <tbody>
           {tickets.map((ticket) => {
             const sym = costSymbol ? costSymbol(ticket) : currencySymbol;
-            const spent = Number(ticket.spentCost || 0);
+            const spent = spentEntries(ticket, sym);
             return (
             <tr key={ticket.id}>
               <td style={{ fontWeight: 700 }}>{ticket.title}</td>
@@ -547,7 +573,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
               <td>{assigneeName(ticket) || "Non assigne"}</td>
               <td>{compactDate(ticketDate(ticket))}</td>
               <td className="r">{money(ticket.estimatedCost, sym)}</td>
-              <td className="r">{spent > 0 ? money(spent, sym) : <span className="muted">-</span>}</td>
+              <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{money(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
               <td className="r">
                 <button className="immo-link" onClick={() => onCost(ticket, "view")}>Couts</button>
                 <button className="immo-link" onClick={() => onEdit(ticket)}>Modifier</button>

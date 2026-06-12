@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **Domus — somme dépensée affichée sur la carte maintenance (SIFA)** : le backend renvoie désormais `spentByCurrency` (dépense réelle groupée par devise du coût) sur `GET /property-management/maintenance` ; la carte/liste/tableau du Kanban maintenance affichent « <montant> dépensé » par devise même quand les coûts sont saisis dans une devise différente de celle du ticket (ex. ticket CDF avec coûts USD). Récap « Priorités » ventilé par devise réelle. Aucune somme inter-devises. [3.59.13]
 - **FarmOS — retirer un animal de la vente (sans vente enregistrée)** : nouvel endpoint `DELETE /farmos/animals/:id/listing` (`unlistAnimalFromSale`) qui désactive l'annonce POS liée (`farmos_price_list.isActive=0`, soft-delete) et remet l'animal en statut `healthy` s'il était listé, à condition qu'aucune `farmos_sales` active ni statut `sold` n'existe. Bouton « Retirer » dans l'inventaire de vente (`SaleInventorySettings`), avec confirmation et mise à jour optimiste (animals + priceList). [3.59.10]
 
 ### Added
