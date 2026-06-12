@@ -7,6 +7,7 @@ import { api } from "./api";
 import { nextStrawCode } from "./id-gen";
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
+import { Autocomplete } from "./quickentry";
 
 const STATUS_LABEL = {
   active: { fr: "Active", en: "Active" },
@@ -382,10 +383,12 @@ const StrawForm = ({ lang, straw, onClose, onSaved }) => {
           <input className="input" value={form.breed || ""} onChange={(e) => set("breed", e.target.value)} placeholder="Holstein"/>
         </Field>
         <Field label={lang === "fr" ? "Fournisseur" : "Supplier"}>
-          <select className="input" value={form.supplier_id || form.supplierId || ""} onChange={(e) => set("supplier_id", e.target.value)}>
-            <option value="">—</option>
-            {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          <Autocomplete
+            value={form.supplier_id || form.supplierId || ""}
+            onChange={(v) => set("supplier_id", v)}
+            placeholder="—"
+            options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
+          />
         </Field></Row>
 
         <Row><Field label={lang === "fr" ? "Pays" : "Country"}>

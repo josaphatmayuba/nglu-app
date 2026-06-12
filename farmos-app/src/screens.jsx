@@ -7,6 +7,7 @@ import { api, adaptMedicine, adaptTreatment, adaptReproEvent, adaptSaleAsTransac
 import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
+import { Autocomplete } from "./quickentry";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -2650,10 +2651,12 @@ function StaffEditModal({ lang, staff, onClose, onSaved }) {
             <input value={designation} onChange={(e) => setDesignation(e.target.value)} className="input" style={inputStyle} placeholder={lang === "fr" ? "Vétérinaire, Éleveur…" : "Vet, Breeder…"}/>
           </label>
           <label style={lbl}>{lang === "fr" ? "Rôle & permissions" : "Role & permissions"}
-            <select value={roleId} onChange={(e) => setRoleId(e.target.value)} className="input" style={inputStyle}>
-              <option value="">{lang === "fr" ? "— Aucun rôle —" : "— No role —"}</option>
-              {assignableRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
+            <Autocomplete
+              value={roleId || ""}
+              onChange={(v) => setRoleId(v)}
+              placeholder={lang === "fr" ? "— Aucun rôle —" : "— No role —"}
+              options={assignableRoles.map((r) => ({ value: r.id, label: r.name }))}
+            />
             <span style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{lang === "fr" ? "Détermine les permissions de l'employé (ex. Lecture Ferme, Vétérinaire, Admin Ferme)." : "Determines the employee's permissions."}</span>
           </label>
 

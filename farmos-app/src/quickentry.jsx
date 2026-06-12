@@ -1886,4 +1886,4 @@ const Toast = ({ message, severity, onClose }) => {
   );
 };
 
-export { QuickEntryDrawer, Toast };
+export { QuickEntryDrawer, Toast, AutocompleteDB, Autocomplete };
