@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **ERP/SIFA — Reprise des anciennes transactions plates vers le grand livre (dry-run d'abord)** : `LedgerService.migrateLegacyTransactions()` convertit chaque transaction de la table plate `transaction` en écriture moderne (1 `journal_entry` + 2 lignes débit/crédit), réutilisant `post()` (périodes, équilibre, idempotence). **Idempotent** par `idempotency_key = legacy:tx:<id>` (rejeu sans doublon). Ignore les transactions déjà migrées, inactives, à montant nul, ou dont un compte n'existe plus. Endpoint `POST /ledger/migrate-legacy` avec **`dryRun` par défaut = true** (compte/échantillonne sans écrire ; il faut explicitement `{dryRun:false}` pour appliquer). `sourceModule='legacy_migration'`. [3.55.0]
 - **Comptabilité — Gestion des taux de taxe (réutilise l'API existante, pas de doublon)** : l'écran « TVA & taxes » permet maintenant de **créer/lister des taux de taxe** (libellé + pourcentage + statut). Réutilise l'API `product-vat` déjà présente (CRUD `GET/POST/PATCH /product-vat`, table `productVat`) au lieu de créer une table `tax_rates` redondante — principe SIFA : ne pas dupliquer une API qui existe. Panneau de taux affiché même sans compte fiscal mouvementé ; création via modal. [3.54.0]
 
 ### Fixed

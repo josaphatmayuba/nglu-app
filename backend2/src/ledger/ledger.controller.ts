@@ -78,6 +78,20 @@ export class LedgerController {
     return this.ledger.deleteType(type, orgId);
   }
 
+  @ApiOperation({ summary: "Reprise des transactions plates vers le grand livre (dry-run par defaut)" })
+  @Permissions("create-transaction")
+  @Post("migrate-legacy")
+  migrateLegacy(
+    @Body() body: { dryRun?: boolean; limit?: number },
+    @CurrentOrg() orgId: number,
+  ) {
+    // dryRun par defaut = true ; il faut explicitement { dryRun: false } pour ecrire.
+    return this.ledger.migrateLegacyTransactions(orgId, {
+      dryRun: body?.dryRun !== false,
+      limit: body?.limit,
+    });
+  }
+
   @ApiOperation({ summary: "Liste des ecritures" })
   @ApiOkResponse({ description: "Ecritures" })
   @Permissions("readAll-transaction")

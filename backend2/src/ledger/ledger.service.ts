@@ -16,6 +16,7 @@ import {
   ledgerPendingEntries,
   subAccounts,
   transactionTypeRules,
+  transactions,
   workflowInstances,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -642,6 +643,79 @@ export class LedgerService {
       .set({ isActive: 0 })
       .where(and(eq(transactionTypeRules.organizationId, orgId), eq(transactionTypeRules.type, type)));
     return { type, deleted: true };
+  }
+
+  /**
+   * Reprise des anciennes transactions plates (table `transaction`) vers le grand livre
+   * moderne (journal_entries + lines). Chaque transaction = 1 ecriture a 2 lignes
+   * (debit/credit). Idempotent par idempotency_key = legacy:tx:<id> (rejeu sans doublon).
+   * dryRun = compte/liste sans rien ecrire. Ignore les transactions deja migrees, inactives,
+   * a montant nul, ou dont un compte n'existe pas.
+   */
+  async migrateLegacyTransactions(orgId: number, opts: { dryRun?: boolean; limit?: number } = {}) {
+    const dryRun = opts.dryRun !== false; // securite : dry-run par defaut.
+    const legacy = await this.db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")))
+      .orderBy(transactions.date)
+      .limit(opts.limit ?? 100000);
+
+    // Comptes valides (sous-comptes existants) pour ignorer les references cassees.
+    const subs = await this.db.select({ id: subAccounts.id }).from(subAccounts);
+    const validAccounts = new Set(subs.map((s) => s.id));
+
+    const report = {
+      dryRun,
+      total: legacy.length,
+      migrated: 0,
+      skippedAlready: 0,
+      skippedZero: 0,
+      skippedBadAccount: 0,
+      samples: [] as Array<{ id: number; date: any; debit: number; credit: number; amount: number; particulars: string }>,
+    };
+
+    for (const t of legacy) {
+      const key = `legacy:tx:${t.id}`;
+      const amount = Number(t.amount || 0);
+      if (!(amount > 0)) { report.skippedZero++; continue; }
+      if (!validAccounts.has(t.debitId) || !validAccounts.has(t.creditId)) {
+        report.skippedBadAccount++;
+        continue;
+      }
+      // Deja migree ? (idempotency_key present)
+      const [exists] = await this.db
+        .select({ id: journalEntries.id })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.organizationId, orgId), eq(journalEntries.idempotencyKey, key)))
+        .limit(1);
+      if (exists) { report.skippedAlready++; continue; }
+
+      if (report.samples.length < 10) {
+        report.samples.push({ id: t.id, date: t.date, debit: t.debitId, credit: t.creditId, amount, particulars: t.particulars });
+      }
+
+      if (!dryRun) {
+        await this.post(
+          {
+            date: t.date as any,
+            particulars: t.particulars,
+            sourceModule: "legacy_migration",
+            relatedId: String(t.id),
+            currencyId: t.currencyId ?? undefined,
+            idempotencyKey: key,
+            skipApprovalGate: true,
+            lines: [
+              { accountId: t.debitId, side: "DEBIT" as LedgerSide, amount },
+              { accountId: t.creditId, side: "CREDIT" as LedgerSide, amount },
+            ],
+          },
+          orgId,
+        );
+      }
+      report.migrated++;
+    }
+    return report;
   }
 
   /**
