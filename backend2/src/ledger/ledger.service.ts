@@ -316,6 +316,8 @@ export class LedgerService {
         currencyId: journalEntries.currencyId,
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
+        totalDebit: sql<string>`coalesce((select sum(${journalEntryLines.amount}) from ${journalEntryLines} where ${journalEntryLines.entryId} = ${journalEntries.id} and ${journalEntryLines.side} = 'DEBIT'), 0)`,
+        totalCredit: sql<string>`coalesce((select sum(${journalEntryLines.amount}) from ${journalEntryLines} where ${journalEntryLines.entryId} = ${journalEntries.id} and ${journalEntryLines.side} = 'CREDIT'), 0)`,
         reversalOfId: journalEntries.reversalOfId,
         reversedById: journalEntries.reversedById,
         createdAt: journalEntries.createdAt,

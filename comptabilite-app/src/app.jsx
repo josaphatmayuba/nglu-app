@@ -637,7 +637,7 @@ function Journaux({ transactions, onNew, canMutate }) {
 /* ── Écritures ─────────────────────────────────────────────────────────── */
 function Ecritures({ transactions, onNew, canMutate }) {
   const rows = (transactions || []).map((t) => ({
-    date: String(t.date || "").slice(5).split("-").reverse().join("/"),
+    date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
     journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
@@ -645,6 +645,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
     currencyId: t.currencyId,
     status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
+  rows.forEach((r) => { r.montant = mc(r.amount, r); });
   const list = rows;
   return (
     <>
@@ -658,7 +659,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["amount", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
           <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
           <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
