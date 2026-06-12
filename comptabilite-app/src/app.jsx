@@ -386,7 +386,7 @@ function App() {
     capacite: <Capacite accounts={fc.accounts} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
-    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} curFilter={curFilter} />,
     tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
@@ -1877,25 +1877,40 @@ function Stock() {
 }
 
 /* ── États financiers ──────────────────────────────────────────────────── */
-function Etats({ is, bs }) {
+function Etats({ is, bs, curFilter = "" }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
   // États réels depuis le grand livre moderne.
-  const [liveIs, setLiveIs] = React.useState(null);
-  const [liveBs, setLiveBs] = React.useState(null);
-  const [liveTb, setLiveTb] = React.useState(null);
+  const [rawIs, setRawIs] = React.useState(null);
+  const [rawBs, setRawBs] = React.useState(null);
+  const [rawTb, setRawTb] = React.useState(null);
   React.useEffect(() => {
-    api.ledgerIncomeStatement().then(setLiveIs).catch(() => setLiveIs(null));
-    api.ledgerBalanceSheet().then(setLiveBs).catch(() => setLiveBs(null));
-    api.ledgerTrialBalance().then(setLiveTb).catch(() => setLiveTb(null));
+    api.ledgerIncomeStatement().then(setRawIs).catch(() => setRawIs(null));
+    api.ledgerBalanceSheet().then(setRawBs).catch(() => setRawBs(null));
+    api.ledgerTrialBalance().then(setRawTb).catch(() => setRawTb(null));
   }, []);
+  // Filtre devise global (SIFA, sans conversion) : on restreint chaque liste du rapport
+  // — lignes ET totaux *ByCurrency — à la devise choisie. Les scalaires (totaux toutes
+  // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
+  const filterReport = React.useCallback((rep) => {
+    if (!rep || !curFilter) return rep;
+    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyId ?? "") === curFilter) : l);
+    const out = { ...rep };
+    Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
+    return out;
+  }, [curFilter]);
+  const liveIs = React.useMemo(() => filterReport(rawIs), [rawIs, filterReport]);
+  const liveBs = React.useMemo(() => filterReport(rawBs), [rawBs, filterReport]);
+  const liveTb = React.useMemo(() => filterReport(rawTb), [rawTb, filterReport]);
   const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
   const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
   const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);
 
-  const rev = hasLiveIs ? Number(liveIs.totalRevenue) : 0;
-  const exp = hasLiveIs ? Number(liveIs.totalExpenses) : 0;
-  const profit = hasLiveIs ? Number(liveIs.netIncome) : 0;
+  // En mono-devise les scalaires (toutes devises) ne s'appliquent plus : on somme les byCurrency filtrés.
+  const sumBy = (list) => (Array.isArray(list) ? list.reduce((s, c) => s + Number(c.total ?? c.amount ?? 0), 0) : 0);
+  const rev = hasLiveIs ? (curFilter ? sumBy(liveIs.revenueByCurrency) : Number(liveIs.totalRevenue)) : 0;
+  const exp = hasLiveIs ? (curFilter ? sumBy(liveIs.expensesByCurrency) : Number(liveIs.totalExpenses)) : 0;
+  const profit = hasLiveIs ? (curFilter ? rev - exp : Number(liveIs.netIncome)) : 0;
 
   // Export CSV de l'onglet courant (depuis le grand livre).
   const exportCurrent = () => {
