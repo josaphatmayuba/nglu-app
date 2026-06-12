@@ -15,6 +15,7 @@ import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 
 async function loadContractsModule() {
   const [contracts, leases, templates] = await Promise.all([
@@ -538,23 +539,13 @@ export function Contrats() {
             <div style={{ padding: "0 24px 20px" }}>
               <label className="domus-property-field">
                 <span>Bail associé <b>*</b></span>
-                <select value={createLeaseId} onChange={(e) => setCreateLeaseId(e.target.value)}>
-                  <option value="">Choisir un bail</option>
-                  {createLeaseOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}{o.hasContract ? " (contrat existant)" : ""}
-                    </option>
-                  ))}
-                </select>
+                <Autocomplete value={createLeaseId} onChange={setCreateLeaseId} placeholder="Choisir un bail"
+                  options={createLeaseOptions.map((o) => ({ value: o.id, label: `${o.label}${o.hasContract ? " (contrat existant)" : ""}` }))} />
               </label>
               <label className="domus-property-field" style={{ marginTop: 14 }}>
                 <span>Modèle (optionnel)</span>
-                <select value={createTemplateId} onChange={(e) => setCreateTemplateId(e.target.value)}>
-                  <option value="">Modèle actif par défaut</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}{t.isActive ? " · actif" : ""}</option>
-                  ))}
-                </select>
+                <Autocomplete value={createTemplateId} onChange={setCreateTemplateId} placeholder="Modèle actif par défaut"
+                  options={templates.map((t) => ({ value: t.id, label: `${t.name}${t.isActive ? " · actif" : ""}` }))} />
               </label>
               <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
                 Le contenu est généré automatiquement à partir du bail et du modèle.

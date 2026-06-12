@@ -564,6 +564,86 @@ export class LedgerService {
     });
   }
 
+  // ─── Regles de type de transaction (modele SIFA, multi-lignes) ──────────────
+
+  /** Liste les regles actives groupees par type, avec le libelle de chaque compte. */
+  async listTypeRules(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: transactionTypeRules.id,
+        type: transactionTypeRules.type,
+        role: transactionTypeRules.role,
+        accountId: transactionTypeRules.accountId,
+        side: transactionTypeRules.side,
+        formula: transactionTypeRules.formula,
+        sortOrder: transactionTypeRules.sortOrder,
+        accountName: subAccounts.name,
+      })
+      .from(transactionTypeRules)
+      .leftJoin(subAccounts, eq(subAccounts.id, transactionTypeRules.accountId))
+      .where(and(eq(transactionTypeRules.organizationId, orgId), eq(transactionTypeRules.isActive, 1)))
+      .orderBy(transactionTypeRules.type, transactionTypeRules.sortOrder);
+
+    const byType = new Map<string, { type: string; lines: typeof rows }>();
+    for (const r of rows) {
+      if (!byType.has(r.type)) byType.set(r.type, { type: r.type, lines: [] });
+      byType.get(r.type)!.lines.push(r);
+    }
+    return Array.from(byType.values());
+  }
+
+  /**
+   * Cree ou remplace integralement les lignes d'un type. Equilibre verifie
+   * (au moins un DEBIT et un CREDIT). Les anciennes lignes du type sont desactivees.
+   */
+  async saveType(
+    input: { type: string; lines: Array<{ role: string; accountId: number; side: string; formula?: string }> },
+    orgId: number,
+  ) {
+    const type = (input.type || "").trim();
+    if (!type) throw new BadRequestException("Le type est requis.");
+    if (!input.lines?.length) throw new BadRequestException("Au moins une ligne est requise.");
+    const sides = new Set(input.lines.map((l) => String(l.side).toUpperCase()));
+    if (!sides.has("DEBIT") || !sides.has("CREDIT")) {
+      throw new BadRequestException("Le type doit comporter au moins un DEBIT et un CREDIT.");
+    }
+    for (const l of input.lines) {
+      if (!l.role?.trim()) throw new BadRequestException("Chaque ligne doit avoir un role.");
+      if (!l.accountId) throw new BadRequestException("Chaque ligne doit cibler un compte.");
+    }
+
+    return this.db.transaction(async (tx) => {
+      // Desactive les lignes existantes du type (soft, conserve l'historique).
+      await tx
+        .update(transactionTypeRules)
+        .set({ isActive: 0 })
+        .where(and(eq(transactionTypeRules.organizationId, orgId), eq(transactionTypeRules.type, type)));
+      // Insere les nouvelles lignes.
+      await tx.insert(transactionTypeRules).values(
+        input.lines.map((l, i) => ({
+          organizationId: orgId,
+          type,
+          role: l.role.trim(),
+          accountId: l.accountId,
+          side: String(l.side).toUpperCase(),
+          formula: l.formula?.trim() || "amount",
+          sortOrder: i,
+          isActive: 1,
+        })),
+      );
+      return { type, lines: input.lines.length };
+    });
+  }
+
+  /** Desactive toutes les lignes d'un type (soft delete). */
+  async deleteType(type: string, orgId: number) {
+    await this.db
+      .update(transactionTypeRules)
+      .set({ isActive: 0 })
+      .where(and(eq(transactionTypeRules.organizationId, orgId), eq(transactionTypeRules.type, type)));
+    return { type, deleted: true };
+  }
+
   /**
    * Comptabilise une ecriture en attente apres approbation (rejoue le payload avec
    * skipApprovalGate). Appele par les modules a l'approbation finale. Idempotent.

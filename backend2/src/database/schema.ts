@@ -191,6 +191,10 @@ export const projects = mysqlTable("projects", {
   endDate: date("end_date"),
   budgetAmount: decimal("budget_amount", { precision: 18, scale: 2 }),
   currencyId: bigint("currency_id", { mode: "number" }),
+  // Registre partage : source autoritaire du projet (principe SIFA). La future app de
+  // gestion de projet posera source_system='project_mgmt' + external_ref = son id.
+  sourceSystem: varchar("source_system", { length: 40 }).default("comptabilite").notNull(),
+  externalRef: varchar("external_ref", { length: 120 }),
   status: varchar("status", { length: 32 }).default("active").notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdBy: bigint("created_by", { mode: "number" }),

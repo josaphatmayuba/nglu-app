@@ -9,7 +9,7 @@ import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
 // Species-aware forms (e.g., milk entry only for milk-producing species).
 
-// ProjectSelect — rattache une depense a un projet/bailleur (axe analytique).
+// ProjectSelect — rattache une depense a un projet/financeur (axe analytique).
 function ProjectSelect({ lang, value, onChange }) {
   const [projects, setProjects] = React.useState([]);
   React.useEffect(() => {
@@ -17,7 +17,7 @@ function ProjectSelect({ lang, value, onChange }) {
   }, []);
   if (projects.length === 0) return null; // pas de projet defini → champ masque
   return (
-    <FormField label={lang === "fr" ? "Projet / bailleur" : "Project / donor"}>
+    <FormField label={lang === "fr" ? "Projet / financeur" : "Project / donor"}>
       <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
         <option value="">{lang === "fr" ? "— Aucun —" : "— None —"}</option>
         {projects.map((p) => (

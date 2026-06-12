@@ -10,6 +10,7 @@ import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { buildLeaseCards } from "./loyers.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 
 const STORAGE_TENANT = "domus-portail-tenant-id";
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -204,12 +205,8 @@ export function Portail({ go }) {
         <label className="portail-tenant-pick">
           <span className="muted" style={{ fontSize: 12 }}>Locataire</span>
           <div className="portail-tenant-select">
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              {tenantOptions.length === 0 && <option value="">Aucun locataire</option>}
-              {tenantOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
+            <Autocomplete value={tenantId} onChange={setTenantId} placeholder={tenantOptions.length ? "Choisir un locataire" : "Aucun locataire"}
+              options={tenantOptions.map((o) => ({ value: o.id, label: o.label }))} />
             <ChevronDown size={16} aria-hidden />
           </div>
         </label>

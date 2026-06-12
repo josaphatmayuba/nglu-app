@@ -33,6 +33,7 @@ import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 
 const TYPES = ["Tous", "Appartement", "Maison", "Bureau", "Commerce"];
 const TYPE_MAP = {
@@ -820,9 +821,7 @@ export function DomusPropertySelect({ label, value, options, onChange, required 
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-        {options.map(([val, text]) => <option key={val} value={val}>{text}</option>)}
-      </select>
+      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder="Choisir…" />
     </label>
   );
 }

@@ -47,6 +47,10 @@ export const api = {
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
   createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
   transactionTypes: () => jsonFetch("/transaction-type"),
+  // ── Types SIFA (règles multi-lignes paramétrables) ───────────────────
+  typeRules: () => jsonFetch("/ledger/type-rules"),
+  saveType: (body) => jsonFetch("/ledger/type-rules", { method: "POST", body: JSON.stringify(body) }),
+  deleteType: (type) => jsonFetch(`/ledger/type-rules/${encodeURIComponent(type)}/delete`, { method: "POST" }),
 
   // ── Grand livre moderne (partie double) ──────────────────────────────
   ledgerEntries: () => jsonFetch("/ledger"),
@@ -71,6 +75,11 @@ export const api = {
   approveInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
   rejectInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
 
+  // ── Taux de taxe (réutilise l'API product-vat existante) ─────────────
+  taxRates: () => jsonFetch("/product-vat"),
+  createTaxRate: (body) => jsonFetch("/product-vat", { method: "POST", body: JSON.stringify(body) }),
+  updateTaxRate: (id, body) => jsonFetch(`/product-vat/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
   budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
@@ -84,5 +93,7 @@ export const api = {
   warehouses: () => jsonFetch("/procurement/warehouses"),
   warehouseStock: (id) => jsonFetch(`/procurement/warehouses/${id}/stock`),
   purchaseOrders: () => jsonFetch("/procurement/orders"),
+  purchaseOrder: (id) => jsonFetch(`/procurement/orders/${id}`),
+  setOrderStatus: (id, status) => jsonFetch(`/procurement/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   receiveOrder: (id, body) => jsonFetch(`/procurement/orders/${id}/receive`, { method: "POST", body: JSON.stringify(body || {}) })
 };

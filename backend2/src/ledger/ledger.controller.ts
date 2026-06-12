@@ -53,6 +53,31 @@ export class LedgerController {
     return this.ledger.postByRules(body, orgId, userId);
   }
 
+  @ApiOperation({ summary: "Liste les types de transaction (regles SIFA multi-lignes), groupes" })
+  @Permissions("readAll-transaction")
+  @Get("type-rules")
+  listTypeRules(@CurrentOrg() orgId: number) {
+    return this.ledger.listTypeRules(orgId);
+  }
+
+  @ApiOperation({ summary: "Cree ou remplace un type de transaction (lignes-regles)" })
+  @Permissions("create-transaction")
+  @Post("type-rules")
+  saveType(
+    @Body() body: { type: string; lines: Array<{ role: string; accountId: number; side: string; formula?: string }> },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.ledger.saveType(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Desactive un type de transaction" })
+  @ApiParam({ name: "type", type: String })
+  @Permissions("delete-transaction")
+  @Post("type-rules/:type/delete")
+  deleteType(@Param("type") type: string, @CurrentOrg() orgId: number) {
+    return this.ledger.deleteType(type, orgId);
+  }
+
   @ApiOperation({ summary: "Liste des ecritures" })
   @ApiOkResponse({ description: "Ecritures" })
   @Permissions("readAll-transaction")

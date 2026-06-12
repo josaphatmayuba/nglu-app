@@ -144,6 +144,53 @@ function exportCsv(filename, cols, rows) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+
+/* Autocomplete recherchable (remplace les <select> de listes de données).
+   options = [{ value, label }]. onChange reçoit la valeur. */
+function Autocomplete({ value, onChange, options, placeholder = "—", allowClear = true, style }) {
+  const norm = (options || []).map((o) => ({ value: o.value, label: o.label }));
+  const [open, setOpen] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+  const wrapRef = React.useRef(null);
+  const selected = norm.find((o) => String(o.value) === String(value));
+  const display = open ? query : (selected ? selected.label : "");
+  const q = query.trim().toLowerCase();
+  const filtered = !open ? norm : (q ? norm.filter((o) => o.label.toLowerCase().includes(q)) : norm);
+  React.useEffect(() => {
+    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setQuery(""); } };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+  const pick = (o) => { onChange(o.value); setOpen(false); setQuery(""); };
+  return (
+    <div ref={wrapRef} style={{ position: "relative", ...style }}>
+      <input className="ac-input" autoComplete="off" placeholder={placeholder} value={display}
+        onFocus={() => { setQuery(""); setOpen(true); }}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onKeyDown={(e) => { if (e.key === "Escape") { setOpen(false); setQuery(""); } else if (e.key === "Enter" && filtered.length) { e.preventDefault(); pick(filtered[0]); } }}
+        style={{ width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1, #d8d5cc)", fontSize: 13 }} />
+      {allowClear && value && !open && (
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); onChange(""); }} aria-label="effacer"
+          style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "transparent", border: 0, cursor: "pointer", color: "var(--ink-500)", padding: 4, lineHeight: 1 }}>
+          <Icon name="x" style={{ width: 11, height: 11 }} />
+        </button>
+      )}
+      {open && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#fff", border: "1px solid var(--border-1, #d8d5cc)", borderRadius: 8, boxShadow: "0 8px 24px -8px rgba(14,36,24,0.18)", maxHeight: 240, overflowY: "auto", zIndex: 200 }}>
+          {filtered.length === 0 && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "var(--ink-500)" }}>—</div>}
+          {filtered.map((o) => (
+            <div key={o.value} onMouseDown={(e) => { e.preventDefault(); pick(o); }}
+              style={{ padding: "8px 12px", fontSize: 13.5, cursor: "pointer", background: String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-sunken, #f4f3ef)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = String(o.value) === String(value) ? "var(--bg-sunken, #f4f3ef)" : "transparent")}>
+              {o.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function Toaster() {
   const [msg, setMsg] = React.useState(null);
   React.useEffect(() => {
@@ -286,7 +333,7 @@ function App() {
     dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    types: <Types canMutate={canMutate} />,
+    types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre />,
     plan: <Plan accounts={data.accounts} trialBalance={data.trialBalance} incomeStatement={data.incomeStatement} balanceSheet={data.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
@@ -299,7 +346,7 @@ function App() {
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva accounts={data.accounts} />,
+    tva: <Tva accounts={data.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -568,29 +615,75 @@ function Ecritures({ transactions, onNew, canMutate }) {
   );
 }
 /* ── Types de transaction ──────────────────────────────────────────────── */
-function Types({ canMutate }) {
+function Types({ canMutate, accounts = [] }) {
   const [types, setTypes] = React.useState(null);
+  const [rules, setRules] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [editing, setEditing] = React.useState(null); // type SIFA en édition (objet) ou null
 
   const load = React.useCallback(async () => {
     try {
       setError("");
-      const rows = await api.transactionTypes();
-      setTypes(Array.isArray(rows) ? rows : []);
-    } catch (e) {
-      setError(String(e.message || e));
-      setTypes([]);
-    }
+      const [legacy, sifa] = await Promise.all([
+        api.transactionTypes().catch(() => []),
+        api.typeRules().catch(() => []),
+      ]);
+      setTypes(Array.isArray(legacy) ? legacy : []);
+      setRules(Array.isArray(sifa) ? sifa : []);
+    } catch (e) { setError(String(e.message || e)); setTypes([]); setRules([]); }
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  const saveType = async (form) => {
+    setBusy(true);
+    try { await api.saveType(form); setEditing(null); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+  const removeType = async (type) => {
+    if (!window.confirm(`Désactiver le type « ${type} » ?`)) return;
+    setBusy(true);
+    try { await api.deleteType(type); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
-      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Rafraîchir" actionIcon="download" onAction={load} ghost disabled={!canMutate} />
-      <Note>Ces types viennent de l'API legacy `/transaction-type`. La cible ERP/SIFA reste `transaction_type_rules` pour générer les lignes comptables par rôle métier.</Note>
+      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action={canMutate ? "Nouveau type (SIFA)" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"} onAction={canMutate ? () => setEditing({ type: "", lines: [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }, { role: "credit", accountId: accounts[0]?.id || "", side: "CREDIT" }] }) : load} />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {/* Types SIFA modernes (règles multi-lignes paramétrables). */}
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Types SIFA (règles multi-lignes) <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({rules ? rules.length : "..."})</span></h3><span className="tiny">Comptes par rôle métier · partie double</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 640 }}>
+            <thead><tr><th>Type</th><th>Lignes (rôle · compte · sens)</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {(rules || []).map((r) => (
+                <tr key={r.type}>
+                  <td style={{ fontWeight: 500 }}>{r.type}</td>
+                  <td className="tiny">{r.lines.map((l) => `${l.role}: ${l.accountName || `#${l.accountId}`} (${l.side})`).join(" · ")}</td>
+                  <td className="r">
+                    {canMutate ? <span style={{ display: "inline-flex", gap: 6 }}>
+                      <button className="btn-sm" disabled={busy} onClick={() => setEditing({ type: r.type, lines: r.lines.map((l) => ({ role: l.role, accountId: l.accountId, side: l.side })) })}>Éditer</button>
+                      <button className="btn-sm" disabled={busy} onClick={() => removeType(r.type)}>Suppr.</button>
+                    </span> : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {rules && rules.length === 0 && <tr><td colSpan={3} className="muted">Aucun type SIFA. Cliquez « Nouveau type (SIFA) » pour en créer un (ex. Dépense = Débit charge / Crédit caisse).</td></tr>}
+              {rules === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Un type SIFA génère des écritures en partie double : chaque ligne nomme un <b>rôle métier</b> (résolu en compte + sens). Les modules comptabilisent en fournissant les montants par rôle.</p>
+      </div>
+
+      {/* Types legacy (lecture seule, débit/crédit fixe). */}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3></div>
+        <div className="section-head"><h3 className="font-display">Types legacy <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3><span className="tiny">débit/crédit fixe · lecture</span></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 680 }}>
             <thead><tr><th>Activité (type)</th><th>Compte débit</th><th>Compte crédit</th><th>Statut</th><th>Description</th></tr></thead>
@@ -598,14 +691,54 @@ function Types({ canMutate }) {
               {(types || []).map((t) => (
                 <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.name}</td><td>{t.debitAccount?.name || "—"}</td><td>{t.creditAccount?.name || "—"}</td><td><span className={`chip ${t.isActive ? "emerald-soft" : "ink"}`}>{t.isActive ? "actif" : "inactif"}</span></td><td className="muted">{t.description || "—"}</td></tr>
               ))}
-              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type réel configuré.</td></tr>}
+              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type legacy.</td></tr>}
               {types === null && <tr><td colSpan={5} className="muted">Chargement...</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Dette restante : remplacer debit/credit fixes par des règles paramétrables multi-lignes.</p>
       </div>
+
+      {editing && <TypeRuleModal initial={editing} accounts={accounts} busy={busy} onSave={saveType} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+/* Modal d'édition d'un type SIFA : nom + N lignes (rôle / compte / sens). */
+function TypeRuleModal({ initial, accounts, busy, onSave, onClose }) {
+  const [type, setType] = React.useState(initial.type || "");
+  const [lines, setLines] = React.useState(initial.lines?.length ? initial.lines : [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
+  const addLine = () => setLines((ls) => [...ls, { role: "", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const delLine = (i) => setLines((ls) => ls.filter((_, j) => j !== i));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!type.trim()) return;
+    onSave({ type: type.trim(), lines: lines.map((l) => ({ role: l.role, accountId: Number(l.accountId), side: l.side, formula: "amount" })) });
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{initial.type ? "Modifier le type" : "Nouveau type (SIFA)"}</h2><p>Règles multi-lignes · partie double</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div style={{ padding: "0 4px" }}>
+          <label className="field"><span>Nom du type (identifiant)</span><input value={type} onChange={(e) => setType(e.target.value)} placeholder="ex. farm_expense" required disabled={!!initial.type} /></label>
+          <div style={{ marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "var(--ink-600)" }}>Lignes comptables</div>
+          {lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={{ flex: 1 }} placeholder="rôle (ex. cash)" value={l.role} onChange={(e) => setLine(i, "role", e.target.value)} required />
+              <Autocomplete style={{ flex: 1.4 }} value={l.accountId} onChange={(v) => setLine(i, "accountId", v)} placeholder="Compte…"
+                options={accounts.map((a) => ({ value: a.id, label: accountLabel(a) }))} />
+              <select style={{ width: 96 }} value={l.side} onChange={(e) => setLine(i, "side", e.target.value)}>
+                <option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option>
+              </select>
+              {lines.length > 1 && <button type="button" className="icon-btn" onClick={() => delLine(i)}><Icon name="x" /></button>}
+            </div>
+          ))}
+          <button type="button" className="link" onClick={addLine}><Icon name="plus" style={{ width: 13, height: 13 }} /> Ajouter une ligne</button>
+          <p className="tiny muted" style={{ marginTop: 8 }}>Au moins un Débit et un Crédit. Le rôle est l'identifiant métier (ex. expense, cash) que les modules fournissent à la saisie.</p>
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
   );
 }
 
@@ -931,12 +1064,13 @@ function Immo({ accounts = [] }) {
   );
 }
 
-/* ── Analytique (projets / bailleurs) ──────────────────────────────────── */
+/* ── Analytique (projets / financeurs) ─────────────────────────────────── */
 function Analytique() {
   const [projects, setProjects] = React.useState(null);
   const [reports, setReports] = React.useState({}); // id -> rapport
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
@@ -952,31 +1086,48 @@ function Analytique() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
-  const newProject = async () => {
-    const name = window.prompt("Nom du projet :"); if (!name) return;
-    const donor = window.prompt("Bailleur (optionnel) :") || undefined;
-    const budgetStr = window.prompt("Budget (optionnel) :") || "";
-    const budgetAmount = budgetStr ? Number(budgetStr.replace(/\s/g, "")) : undefined;
+  const newProject = () => setShowNew(true);
+  const submitProject = async (form) => {
+    const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
     setBusy(true);
-    try { await api.createProject({ name, donor, budgetAmount }); await load(); }
-    catch (e) { setError(String(e.message || e)); }
+    try {
+      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount });
+      setShowNew(false);
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
+  const projectModal = showNew && (
+    <FormModal
+      title="Nouveau projet"
+      subtitle="Axe analytique / financeur"
+      submitLabel="Créer le projet"
+      busy={busy}
+      onClose={() => setShowNew(false)}
+      onSubmit={submitProject}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true },
+        { key: "donor", label: "Financeur (optionnel)" },
+        { key: "budget", label: "Budget (optionnel)", type: "number" },
+      ]}
+    />
+  );
 
   // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
   if (projects && projects.length === 0) {
     return (
       <>
-        <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+        <PageHead eyebrow="Suivi par projet / financeur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
-        <EmptyState title="Aucun projet analytique" detail="Les rapports bailleurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
+        <EmptyState title="Aucun projet analytique" detail="Les rapports financeurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
+        {projectModal}
       </>
     );
   }
 
   return (
     <>
-      <PageHead eyebrow="Suivi par projet / bailleur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+      <PageHead eyebrow="Suivi par projet / financeur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       {projects === null && <div className="card pad muted">Chargement…</div>}
       <div className="g3" style={{ marginBottom: 18 }}>
@@ -987,7 +1138,7 @@ function Analytique() {
           return (
             <div className={`card pad ${warn ? "warn" : ""}`} key={p.id}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
-              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {p.donor || "—"}</div>
+              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
             </div>
@@ -997,7 +1148,7 @@ function Analytique() {
       <div className="card pad table-card tbl-scroll">
         <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Projet (bailleur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
             {(projects || []).map((p) => {
               const r = reports[p.id];
@@ -1006,8 +1157,9 @@ function Analytique() {
             })}
           </tbody>
         </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport bailleur en temps réel.</p>
+        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport financeur en temps réel.</p>
       </div>
+      {projectModal}
     </>
   );
 }
@@ -1234,17 +1386,24 @@ function Achats({ canMutate }) {
 }
 
 /* ── Stock & entrepôts ─────────────────────────────────────────────────── */
+const ORDER_STATUS_FR = { draft: "Brouillon", ordered: "Commandé", received: "Reçu", cancelled: "Annulé" };
 function Stock() {
   const [warehouses, setWarehouses] = React.useState(null);
   const [stockByWh, setStockByWh] = React.useState({});
+  const [orders, setOrders] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
       setError("");
-      const whs = await api.warehouses();
+      const [whs, ords] = await Promise.all([
+        api.warehouses(),
+        api.purchaseOrders().catch(() => []),
+      ]);
       const arr = Array.isArray(whs) ? whs : (whs?.data || []);
       setWarehouses(arr);
+      setOrders(Array.isArray(ords) ? ords : (ords?.data || []));
       const entries = await Promise.all(arr.map(async (w) => {
         try { return [w.id, await api.warehouseStock(w.id)]; } catch { return [w.id, []]; }
       }));
@@ -1253,12 +1412,31 @@ function Stock() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
-  if (warehouses && warehouses.length === 0) {
+  // Réception : récupère les lignes restant à recevoir et appelle receiveOrder.
+  const receive = async (orderId) => {
+    setBusy(true);
+    try {
+      const detail = await api.purchaseOrder(orderId);
+      const order = detail.order || detail;
+      const lines = (detail.lines || []).map((l) => ({
+        productId: l.productId,
+        purchaseOrderLineId: l.id,
+        quantity: Math.max(0, Number(l.quantity || 0) - Number(l.receivedQuantity || 0)),
+        unitCost: Number(l.unitPrice || 0),
+      })).filter((l) => l.quantity > 0);
+      if (!lines.length) { notify("Rien à recevoir (déjà tout reçu)."); return; }
+      await api.receiveOrder(orderId, { warehouseId: order.warehouseId, lines });
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  if (warehouses && warehouses.length === 0 && (!orders || orders.length === 0)) {
     return (
       <>
         <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
-        <EmptyState title="Aucun entrepôt" detail="Connecté à /procurement/warehouses : les entrepôts et leurs niveaux de stock s'afficheront après création." icon="warehouse" />
+        <EmptyState title="Aucun entrepôt ni commande" detail="Connecté à /procurement : les entrepôts, niveaux de stock et bons de commande s'afficheront après création." icon="warehouse" />
       </>
     );
   }
@@ -1267,6 +1445,34 @@ function Stock() {
     <>
       <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {orders && orders.length > 0 && (
+        <div className="card pad table-card" style={{ marginBottom: 16 }}>
+          <div className="section-head"><h3 className="font-display">Bons de commande</h3><span className="tiny">{orders.length} commande(s)</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Réf.</th><th>Fournisseur</th><th>Statut</th><th className="r">Total</th><th className="r">Action</th></tr></thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="muted">{o.reference || `PO-${o.id}`}</td>
+                    <td>{o.supplierName || (o.supplierId ? `Fournisseur #${o.supplierId}` : "—")}</td>
+                    <td><span className={`chip ${o.status === "received" ? "pos" : o.status === "cancelled" ? "" : "ink"}`}>{ORDER_STATUS_FR[o.status] || o.status}</span></td>
+                    <td className="r">{nf.format(Number(o.totalAmount || 0))}</td>
+                    <td className="r">
+                      {o.status !== "received" && o.status !== "cancelled"
+                        ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => receive(o.id)}>Recevoir</button>
+                        : <span className="muted tiny">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="tiny muted" style={{ marginTop: 10 }}>Recevoir une commande crée les mouvements de stock et incrémente les quantités en entrepôt.</p>
+        </div>
+      )}
+
       {warehouses === null && <div className="card pad muted">Chargement…</div>}
       {(warehouses || []).map((w) => {
         const stock = stockByWh[w.id] || [];
@@ -1431,15 +1637,58 @@ function Etats({ is, bs }) {
 }
 
 /* ── TVA ───────────────────────────────────────────────────────────────── */
-function Tva({ accounts = [] }) {
+function Tva({ accounts = [], canMutate = true }) {
   const rows = accounts.filter(isTaxAccount);
   const deductible = rows.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
   const collected = rows.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
   const net = collected - deductible;
+
+  // Taux de taxe paramétrables (réutilise l'API product-vat existante).
+  const [rates, setRates] = React.useState(null);
+  const [showNew, setShowNew] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const loadRates = React.useCallback(async () => {
+    try { const r = await api.taxRates(); setRates(Array.isArray(r) ? r : (r?.data || [])); }
+    catch (e) { setError(String(e.message || e)); setRates([]); }
+  }, []);
+  React.useEffect(() => { loadRates(); }, [loadRates]);
+  const createRate = async (form) => {
+    setBusy(true);
+    try { await api.createTaxRate({ title: form.title, percentage: Number(form.percentage) }); setShowNew(false); await loadRates(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const ratesPanel = (
+    <>
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Taux de taxe</h3>{canMutate && <button className="btn-sm grad-accent" onClick={() => setShowNew(true)}>+ Nouveau taux</button>}</div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 360 }}>
+            <thead><tr><th>Libellé</th><th className="r">Taux</th><th>Statut</th></tr></thead>
+            <tbody>
+              {(rates || []).map((t) => (
+                <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.title}</td><td className="r">{Number(t.percentage)} %</td><td><span className={`chip ${String(t.status) === "true" ? "emerald-soft" : "ink"}`}>{String(t.status) === "true" ? "actif" : "inactif"}</span></td></tr>
+              ))}
+              {rates && rates.length === 0 && <tr><td colSpan={3} className="muted">Aucun taux. Créez-en un (ex. TVA 16 %).</td></tr>}
+              {rates === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {showNew && <FormModal title="Nouveau taux de taxe" subtitle="TVA / autre taxe" submitLabel="Créer le taux" busy={busy}
+        onClose={() => setShowNew(false)} onSubmit={createRate}
+        fields={[{ key: "title", label: "Libellé (ex. TVA 16%)", required: true }, { key: "percentage", label: "Taux (%)", type: "number", required: true }]} />}
+    </>
+  );
+
   if (rows.length) {
     return (
       <>
         <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+        {ratesPanel}
         <div className="g3" style={{ marginBottom: 18 }}>
           <Mini label="TVA collectée" value={m(collected)} valueClass="pos" />
           <Mini label="TVA déductible" value={m(deductible)} valueClass="neg" />
@@ -1460,7 +1709,8 @@ function Tva({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
-      <EmptyState title="TVA non calculée" detail="Les bases HT, TVA collectée, TVA déductible et échéances doivent venir d'un endpoint fiscal réel." icon="receipt" />
+      {ratesPanel}
+      <EmptyState title="Aucun compte de taxe mouvementé" detail="Connecté au grand livre : les soldes TVA collectée/déductible s'afficheront dès qu'un sous-compte de taxe aura des écritures. Les taux ci-dessus servent à paramétrer la taxe." icon="receipt" />
     </>
   );
 }
@@ -1501,7 +1751,34 @@ function FField({ label, value, onChange, type = "text", required = false }) {
   return <label className="field"><span>{label}</span><input required={required} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
 }
 function FSelect({ label, value, onChange, rows }) {
-  return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{accountLabel(r)}</option>)}</select></label>;
+  return <label className="field"><span>{label}</span>
+    <Autocomplete value={value} onChange={onChange} placeholder="Rechercher un compte…"
+      options={(rows || []).map((r) => ({ value: r.id, label: accountLabel(r) }))} />
+  </label>;
+}
+
+/* Modal générique (remplace window.prompt) : titre + champs configurables. */
+function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy, onSubmit, onClose }) {
+  const [form, setForm] = React.useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (fields.some((f) => f.required && !String(form[f.key] ?? "").trim())) return;
+    onSubmit(form);
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{title}</h2><p>{subtitle || "Compta NgoluApp"}</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="form-grid">
+          {fields.map((f) => f.type === "textarea"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : submitLabel}</button></div>
+      </form>
+    </div>
+  );
 }
 function defaults(kind, accounts, mainAccounts) {
   if (kind === "account") return { name: "", accountId: mainAccounts[0]?.id || 1 };
