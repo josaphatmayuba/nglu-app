@@ -778,6 +778,13 @@
       "when": 1780412400000,
       "tag": "0130_currency_exchanges",
       "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "5",
+      "when": 1780416000000,
+      "tag": "0131_exchange_subaccounts",
+      "breakpoints": true
     }
   ]
 }

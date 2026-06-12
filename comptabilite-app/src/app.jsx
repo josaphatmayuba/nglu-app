@@ -1173,14 +1173,15 @@ function Change({ accounts = [], currencies = [], canMutate }) {
 function ExchangeModal({ accounts, currencies, busy, error, onSave, onClose }) {
   const acctOpts = (accounts || []).map((a) => ({ value: String(a.id), label: `${accountLabel(a)}${a.currencyCode ? " · " + a.currencyCode : ""}` }));
   const curOpts = (currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }));
-  const exchangeAccts = (accounts || []).filter((a) => /change|clearing|virement/i.test(accountText(a)));
-  const feeAccts = (accounts || []).filter((a) => /frais|fee|change/i.test(accountText(a)));
+  // Pont de change = clearing/virement (exclut les comptes de frais).
+  const exchangeAccts = (accounts || []).filter((a) => /clearing|virement|compte de change/i.test(accountText(a)));
+  const feeAccts = (accounts || []).filter((a) => /frais|fee/i.test(accountText(a)));
 
   const [f, setF] = React.useState({
     date: new Date().toISOString().slice(0, 10), reference: "", note: "",
     fromCurrencyId: "", fromAccountId: "", fromAmount: "",
     toCurrencyId: "", toAccountId: "", mode: "amount", toAmount: "", rate: "",
-    feeAmount: "", feeAccountId: "",
+    feeAmount: "", feeAccountId: feeAccts[0] ? String(feeAccts[0].id) : "",
     fromExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
     toExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
   });
