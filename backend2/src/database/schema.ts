@@ -367,6 +367,36 @@ export const vxSynonymMap = mysqlTable("vx_synonym_map", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// === ETL : fouillage periodique des sources mondiales (migration 0125) ===
+export const vxSyncRuns = mysqlTable("vx_sync_runs", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  sourceSystem: varchar("source_system", { length: 40 }).notNull(),
+  status: varchar("status", { length: 20 }).default("running").notNull(),
+  triggerMode: varchar("trigger_mode", { length: 20 }).default("manual").notNull(),
+  rowsFetched: int("rows_fetched").default(0),
+  rowsStaged: int("rows_staged").default(0),
+  rowsUpserted: int("rows_upserted").default(0),
+  rowsUnmapped: int("rows_unmapped").default(0),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  finishedAt: timestamp("finished_at"),
+});
+
+export const vxStagingProducts = mysqlTable("vx_staging_products", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  syncRunId: bigint("sync_run_id", { mode: "number", unsigned: true }).notNull(),
+  sourceSystem: varchar("source_system", { length: 40 }).notNull(),
+  sourceRef: varchar("source_ref", { length: 120 }),
+  rawProductName: varchar("raw_product_name", { length: 300 }),
+  rawManufacturer: varchar("raw_manufacturer", { length: 200 }),
+  rawSpecies: varchar("raw_species", { length: 300 }),
+  rawStatus: varchar("raw_status", { length: 60 }),
+  rawPayload: json("raw_payload"),
+  rowHash: varchar("row_hash", { length: 64 }).notNull(),
+  processed: tinyint("processed").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // === Module Procurement + Stock ERP/SIFA (migration 0113) ===
 export const warehouses = mysqlTable("warehouses", {
   id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),

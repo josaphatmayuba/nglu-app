@@ -66,4 +66,14 @@ export const env = {
     // Daily run time, server timezone. Default 09:00.
     cron: process.env.RENT_REMINDER_CRON || "0 9 * * *",
   },
+  vaccineSync: {
+    // Desactive par defaut : aucun appel reseau sortant tant que non active.
+    enabled: process.env.VACCINE_SYNC_ENABLED === "true",
+    // Mensuel : le 1er de chaque mois a 03:00, fuseau serveur.
+    cron: process.env.VACCINE_SYNC_CRON || "0 3 1 * *",
+    // URL de la source pilote ACIA (CSV des biologiques veterinaires licencies au Canada).
+    aciaCsvUrl:
+      process.env.VACCINE_SYNC_ACIA_URL ||
+      "https://active.inspection.gc.ca/netapp/lvbmcbi/lvbmcbisearch_csv.aspx?lang=eng",
+  },
 };

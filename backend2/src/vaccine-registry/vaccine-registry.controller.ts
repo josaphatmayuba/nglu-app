@@ -1,15 +1,19 @@
-import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { VaccineRegistryService } from "./vaccine-registry.service";
+import { VaccineSyncService } from "./vaccine-sync.service";
 
 @ApiTags("vaccine-registry")
 @Controller("vaccine-registry")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class VaccineRegistryController {
-  constructor(private readonly registry: VaccineRegistryService) {}
+  constructor(
+    private readonly registry: VaccineRegistryService,
+    private readonly sync: VaccineSyncService,
+  ) {}
 
   @ApiOperation({ summary: "Especes du referentiel" })
   @Permissions("readAll-farmos")
@@ -67,5 +71,19 @@ export class VaccineRegistryController {
       productionType,
       pregnant: pregnant === "true",
     });
+  }
+
+  @ApiOperation({ summary: "Declenche manuellement le fouillage de la source ACIA" })
+  @Permissions("update-farmos")
+  @Post("sync")
+  triggerSync() {
+    return this.sync.syncAcia("manual");
+  }
+
+  @ApiOperation({ summary: "Historique des executions de synchronisation" })
+  @Permissions("readAll-farmos")
+  @Get("sync/runs")
+  syncRuns(@Query("limit") limit?: string) {
+    return this.sync.listRuns(limit ? Number(limit) : 20);
   }
 }

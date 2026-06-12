@@ -736,6 +736,13 @@
       "when": 1780390800000,
       "tag": "0124_vaccine_registry_seed_protocols",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "5",
+      "when": 1780394400000,
+      "tag": "0125_vaccine_sync_etl",
+      "breakpoints": true
     }
   ]
 }
