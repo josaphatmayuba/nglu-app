@@ -346,7 +346,7 @@ function App() {
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva accounts={data.accounts} />,
+    tva: <Tva accounts={data.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -1637,15 +1637,58 @@ function Etats({ is, bs }) {
 }
 
 /* ── TVA ───────────────────────────────────────────────────────────────── */
-function Tva({ accounts = [] }) {
+function Tva({ accounts = [], canMutate = true }) {
   const rows = accounts.filter(isTaxAccount);
   const deductible = rows.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
   const collected = rows.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
   const net = collected - deductible;
+
+  // Taux de taxe paramétrables (réutilise l'API product-vat existante).
+  const [rates, setRates] = React.useState(null);
+  const [showNew, setShowNew] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const loadRates = React.useCallback(async () => {
+    try { const r = await api.taxRates(); setRates(Array.isArray(r) ? r : (r?.data || [])); }
+    catch (e) { setError(String(e.message || e)); setRates([]); }
+  }, []);
+  React.useEffect(() => { loadRates(); }, [loadRates]);
+  const createRate = async (form) => {
+    setBusy(true);
+    try { await api.createTaxRate({ title: form.title, percentage: Number(form.percentage) }); setShowNew(false); await loadRates(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const ratesPanel = (
+    <>
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Taux de taxe</h3>{canMutate && <button className="btn-sm grad-accent" onClick={() => setShowNew(true)}>+ Nouveau taux</button>}</div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 360 }}>
+            <thead><tr><th>Libellé</th><th className="r">Taux</th><th>Statut</th></tr></thead>
+            <tbody>
+              {(rates || []).map((t) => (
+                <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.title}</td><td className="r">{Number(t.percentage)} %</td><td><span className={`chip ${String(t.status) === "true" ? "emerald-soft" : "ink"}`}>{String(t.status) === "true" ? "actif" : "inactif"}</span></td></tr>
+              ))}
+              {rates && rates.length === 0 && <tr><td colSpan={3} className="muted">Aucun taux. Créez-en un (ex. TVA 16 %).</td></tr>}
+              {rates === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {showNew && <FormModal title="Nouveau taux de taxe" subtitle="TVA / autre taxe" submitLabel="Créer le taux" busy={busy}
+        onClose={() => setShowNew(false)} onSubmit={createRate}
+        fields={[{ key: "title", label: "Libellé (ex. TVA 16%)", required: true }, { key: "percentage", label: "Taux (%)", type: "number", required: true }]} />}
+    </>
+  );
+
   if (rows.length) {
     return (
       <>
         <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
+        {ratesPanel}
         <div className="g3" style={{ marginBottom: 18 }}>
           <Mini label="TVA collectée" value={m(collected)} valueClass="pos" />
           <Mini label="TVA déductible" value={m(deductible)} valueClass="neg" />
@@ -1666,7 +1709,8 @@ function Tva({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
-      <EmptyState title="TVA non calculée" detail="Les bases HT, TVA collectée, TVA déductible et échéances doivent venir d'un endpoint fiscal réel." icon="receipt" />
+      {ratesPanel}
+      <EmptyState title="Aucun compte de taxe mouvementé" detail="Connecté au grand livre : les soldes TVA collectée/déductible s'afficheront dès qu'un sous-compte de taxe aura des écritures. Les taux ci-dessus servent à paramétrer la taxe." icon="receipt" />
     </>
   );
 }

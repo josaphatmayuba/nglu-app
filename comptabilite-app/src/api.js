@@ -75,6 +75,11 @@ export const api = {
   approveInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
   rejectInstance: (id, comment) => jsonFetch(`/workflow/instances/${id}/reject`, { method: "POST", body: JSON.stringify({ comment }) }),
 
+  // ── Taux de taxe (réutilise l'API product-vat existante) ─────────────
+  taxRates: () => jsonFetch("/product-vat"),
+  createTaxRate: (body) => jsonFetch("/product-vat", { method: "POST", body: JSON.stringify(body) }),
+  updateTaxRate: (id, body) => jsonFetch(`/product-vat/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
   budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),

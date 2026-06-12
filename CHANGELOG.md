@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **Comptabilité — Gestion des taux de taxe (réutilise l'API existante, pas de doublon)** : l'écran « TVA & taxes » permet maintenant de **créer/lister des taux de taxe** (libellé + pourcentage + statut). Réutilise l'API `product-vat` déjà présente (CRUD `GET/POST/PATCH /product-vat`, table `productVat`) au lieu de créer une table `tax_rates` redondante — principe SIFA : ne pas dupliquer une API qui existe. Panneau de taux affiché même sans compte fiscal mouvementé ; création via modal. [3.54.0]
+
 ### Fixed
 - **Dashboard — devise par défaut lue du paramètre, plus aucune constante en dur** : `salesByCurrency` retombait sur `"CDF"`/`"FC"` codés en dur quand une vente n'avait pas de devise. Remplacé par une résolution de la **devise par défaut depuis le paramètre** (`appSetting.currencyId` → table `currency`). Si aucune devise par défaut n'est configurée, les champs restent `null` (pas de devise inventée). La devise par défaut se règle dans les paramètres, jamais dans le code. [3.53.3]
 
