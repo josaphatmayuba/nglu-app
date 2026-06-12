@@ -1,7 +1,15 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { accounts, journalEntries, journalEntryLines, projects, subAccounts } from "../database/schema";
+import {
+  accounts,
+  journalEntries,
+  journalEntryLines,
+  projects,
+  realEstateMaintenanceCosts,
+  realEstateMaintenanceRequests,
+  subAccounts,
+} from "../database/schema";
 import type { Database } from "../database/types";
 
 @Injectable()
@@ -14,11 +22,64 @@ export class ProjectsService {
 
   /** Liste les projets actifs de l'organisation. */
   async list(orgId: number) {
+    await this.ensureMaintenanceProjects(orgId);
     return this.db
       .select()
       .from(projects)
       .where(and(eq(projects.organizationId, orgId), eq(projects.isActive, 1)))
       .orderBy(desc(projects.id));
+  }
+
+  private async ensureMaintenanceProjects(orgId: number) {
+    await this.db.execute(sql`
+      insert into ${projects} (
+        organization_id,
+        code,
+        name,
+        budget_amount,
+        currency_id,
+        source_system,
+        external_ref
+      )
+      select
+        m.organization_id,
+        concat('MNT-', m.id),
+        concat('Travaux: ', m.title),
+        if(coalesce(m.estimated_cost, 0) > 0, m.estimated_cost, null),
+        m.currency_id,
+        'maintenance',
+        cast(m.id as char)
+      from ${realEstateMaintenanceRequests} m
+      where m.organization_id = ${orgId}
+        and coalesce(m.is_active, 1) = 1
+        and not exists (
+          select 1
+          from ${projects} p
+          where p.organization_id = m.organization_id
+            and p.source_system = 'maintenance'
+            and p.external_ref = cast(m.id as char)
+        )
+    `);
+    await this.db.execute(sql`
+      update ${realEstateMaintenanceRequests} m
+      join ${projects} p
+        on p.organization_id = m.organization_id
+       and p.source_system = 'maintenance'
+       and p.external_ref = cast(m.id as char)
+      set m.project_id = p.id
+      where m.organization_id = ${orgId}
+        and m.project_id is null
+    `);
+    await this.db.execute(sql`
+      update ${realEstateMaintenanceCosts} c
+      join ${realEstateMaintenanceRequests} m
+        on m.id = c.ticket_id
+       and m.organization_id = c.organization_id
+      set c.project_id = m.project_id
+      where c.organization_id = ${orgId}
+        and c.project_id is null
+        and m.project_id is not null
+    `);
   }
 
   async findOne(id: number, orgId: number) {
