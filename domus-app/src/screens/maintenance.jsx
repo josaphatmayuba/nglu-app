@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -19,7 +19,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useDateRange } from "../dateRange.jsx";
-import { money, normalizeCurrencyModule, useApi } from "../data.js";
+import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
@@ -129,6 +129,15 @@ export function Maintenance() {
     [currenciesApi.data, settingApi.data],
   );
 
+  // Symbole de la devise PROPRE au ticket (SIFA : jamais le défaut global).
+  // Résout currencyId -> devise via la table des devises ; repli sur les champs
+  // portés par le ticket puis sur la devise par défaut.
+  const costSymbol = useCallback((ticket) => {
+    const byId = ticket?.currencyId != null ? currency.currencyById?.get(Number(ticket.currencyId)) : null;
+    const fromId = byId ? cleanCurrencySymbol(byId) : "";
+    return fromId || cleanCurrencySymbol(ticket) || currency.defaultCurrencySymbol;
+  }, [currency]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tickets.filter((ticket) => {
@@ -146,7 +155,18 @@ export function Maintenance() {
   const urgentTickets = tickets.filter(isUrgent);
   const inProgressTickets = tickets.filter((ticket) => ticket.status === "in_progress");
   const doneTickets = tickets.filter(isDone);
-  const totalCost = tickets.reduce((sum, ticket) => sum + Number(ticket.estimatedCost || 0), 0);
+  // Totaux estimé + dépensé GROUPÉS par devise (SIFA : jamais de somme inter-devises).
+  const costTotalsByCurrency = useMemo(() => {
+    const map = new Map();
+    tickets.forEach((ticket) => {
+      const sym = costSymbol(ticket);
+      const cur = map.get(sym) || { symbol: sym, estimated: 0, spent: 0 };
+      cur.estimated += Number(ticket.estimatedCost || 0);
+      cur.spent += Number(ticket.spentCost || 0);
+      map.set(sym, cur);
+    });
+    return [...map.values()].filter((c) => c.estimated || c.spent);
+  }, [tickets, costSymbol]);
 
   const filterChips = [
     { key: "all", label: "Tous", count: tickets.length },
@@ -305,6 +325,7 @@ export function Maintenance() {
           busyId={busyId}
           menuId={menuId}
           setMenuId={setMenuId}
+          costSymbol={costSymbol}
           onAdvance={advance}
           onStatusChange={changeStatus}
           onEdit={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
@@ -321,6 +342,7 @@ export function Maintenance() {
               index={index}
               busy={busyId === ticket.id}
               menuOpen={menuId === ticket.id}
+              costSymbol={costSymbol}
               onMenu={() => setMenuId(menuId === ticket.id ? null : ticket.id)}
               onAdvance={advance}
               onEdit={() => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
@@ -335,6 +357,7 @@ export function Maintenance() {
         <TableView
           tickets={filtered}
           currencySymbol={currency.defaultCurrencySymbol}
+          costSymbol={costSymbol}
           onEdit={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))}
           onDelete={deleteTicket}
           onCost={(ticket, mode) => setCostModal({ ticket, mode })}
@@ -344,7 +367,14 @@ export function Maintenance() {
 
       <div className="card ops-panel maintenance-summary-card">
         <div className="panel-title">Priorites</div>
-        <div className="ops-score"><span>Cout estime total</span><b>{money(totalCost, currency.defaultCurrencySymbol)}</b></div>
+        {costTotalsByCurrency.length === 0
+          ? <div className="ops-score"><span>Cout estime total</span><b>{money(0, currency.defaultCurrencySymbol)}</b></div>
+          : costTotalsByCurrency.map((c) => (
+              <div className="ops-score" key={c.symbol}>
+                <span>Couts {c.symbol}</span>
+                <b>{money(c.estimated, c.symbol)} estimé{c.spent > 0 ? ` · ${money(c.spent, c.symbol)} dépensé` : ""}</b>
+              </div>
+            ))}
         <div className="ops-track"><span style={{ width: `${Math.min(100, urgentTickets.length * 20)}%` }} /></div>
         <div className="ops-list">
           {urgentTickets.slice(0, 3).map((ticket, index) => (
@@ -432,11 +462,13 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
   );
 }
 
-function TicketCard({ ticket, compact = false, busy, menuOpen, onMenu, onAdvance, onEdit, onDelete, onCost, onMove }) {
+function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMenu, onAdvance, onEdit, onDelete, onCost, onMove }) {
   const urgent = isUrgent(ticket);
   const done = isDone(ticket);
   const assignee = assigneeName(ticket);
   const next = NEXT_STATUS[ticket.status];
+  const sym = costSymbol ? costSymbol(ticket) : undefined;
+  const spent = Number(ticket.spentCost || 0);
   return (
     <article className={`ticket-card maintenance-ticket ${urgent ? "urgent" : ""} ${done ? "done" : ""}`}>
       <div className="ticket-head">
@@ -461,7 +493,8 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, onMenu, onAdvance
       <div className="ticket-meta">
         <span><User size={14} /> {assignee || "Non assigne"}</span>
         <span><CalendarDays size={14} /> {compactDate(ticketDate(ticket))}</span>
-        {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {money(ticket.estimatedCost)}</span>}
+        {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {money(ticket.estimatedCost, sym)}</span>}
+        {spent > 0 && <span title="Coût réel déjà dépensé"><CircleDollarSign size={14} /> {money(spent, sym)} dépensé</span>}
       </div>
       {next && (
         <button className="immo-btn maintenance-next" disabled={busy} onClick={() => onAdvance(ticket)}>
@@ -493,16 +526,19 @@ function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove }) {
   );
 }
 
-function TableView({ tickets, currencySymbol, onEdit, onDelete, onCost }) {
+function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCost }) {
   if (!tickets.length) return <EmptyMaintenance />;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
       <table className="tbl" style={{ width: "100%", minWidth: 860 }}>
         <thead>
-          <tr><th>Ticket</th><th>Bien</th><th>Priorite</th><th>Statut</th><th>Assigne</th><th>Date</th><th className="r">Cout</th><th></th></tr>
+          <tr><th>Ticket</th><th>Bien</th><th>Priorite</th><th>Statut</th><th>Assigne</th><th>Date</th><th className="r">Cout estime</th><th className="r">Depense</th><th></th></tr>
         </thead>
         <tbody>
-          {tickets.map((ticket) => (
+          {tickets.map((ticket) => {
+            const sym = costSymbol ? costSymbol(ticket) : currencySymbol;
+            const spent = Number(ticket.spentCost || 0);
+            return (
             <tr key={ticket.id}>
               <td style={{ fontWeight: 700 }}>{ticket.title}</td>
               <td>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</td>
@@ -510,14 +546,16 @@ function TableView({ tickets, currencySymbol, onEdit, onDelete, onCost }) {
               <td>{STATUS_LABEL[ticket.status] || ticket.status}</td>
               <td>{assigneeName(ticket) || "Non assigne"}</td>
               <td>{compactDate(ticketDate(ticket))}</td>
-              <td className="r">{money(ticket.estimatedCost, currencySymbol)}</td>
+              <td className="r">{money(ticket.estimatedCost, sym)}</td>
+              <td className="r">{spent > 0 ? money(spent, sym) : <span className="muted">-</span>}</td>
               <td className="r">
                 <button className="immo-link" onClick={() => onCost(ticket, "view")}>Couts</button>
                 <button className="immo-link" onClick={() => onEdit(ticket)}>Modifier</button>
                 <button className="immo-link danger" onClick={() => onDelete(ticket)}>Supprimer</button>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -601,7 +639,14 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
   const [form, setForm] = useState({ ...emptyCost, currencyId: ticket.currencyId || defaultCurrencyId || "" });
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const costs = Array.isArray(costsApi.data) ? costsApi.data : costsApi.data?.data || [];
-  const total = costs.reduce((sum, cost) => sum + Number(cost.amount || 0), 0);
+  // Symbole porté par le coût lui-même (repli sur la devise par défaut).
+  const costSym = (cost) => cleanCurrencySymbol(cost) || defaultCurrencySymbol;
+  // Total GROUPÉ par devise (SIFA : pas de somme inter-devises).
+  const totalsByCur = [...costs.reduce((map, cost) => {
+    const sym = costSym(cost);
+    map.set(sym, (map.get(sym) || 0) + Number(cost.amount || 0));
+    return map;
+  }, new Map()).entries()];
   return (
     <Modal title={`Couts - ${ticket.title}`} subtitle={ticket.propertyName || ""} icon={<CircleDollarSign size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
@@ -611,13 +656,17 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
               {costs.map((cost) => (
                 <div key={cost.id}>
                   <strong>{cost.description}</strong>
-                  <span>{money(cost.amount, defaultCurrencySymbol)} - {cost.vendorName || cost.type}</span>
+                  <span>{money(cost.amount, costSym(cost))} - {cost.vendorName || cost.type}</span>
                 </div>
               ))}
               {costs.length === 0 && <p className="muted">Aucun cout enregistre.</p>}
             </div>
           )}
-          <div className="ops-score"><span>Total</span><b>{money(total, defaultCurrencySymbol)}</b></div>
+          {totalsByCur.length === 0
+            ? <div className="ops-score"><span>Total</span><b>{money(0, defaultCurrencySymbol)}</b></div>
+            : totalsByCur.map(([sym, amount]) => (
+                <div className="ops-score" key={sym}><span>Total {sym}</span><b>{money(amount, sym)}</b></div>
+              ))}
         </FormSection>
         {mode !== "view" && (
           <FormSection icon={<Plus size={14} />} title="Nouveau cout">

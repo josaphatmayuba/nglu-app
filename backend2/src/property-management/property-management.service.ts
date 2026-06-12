@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { and, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -1504,6 +1504,8 @@ export class PropertyManagementService {
         scheduledDate: realEstateMaintenanceRequests.scheduledDate,
         estimatedCost: realEstateMaintenanceRequests.estimatedCost,
         currencyId: realEstateMaintenanceRequests.currencyId,
+        // Somme des coûts réels déjà saisis pour ce ticket, dans SA devise (SIFA : pas de mélange).
+        spentCost: sql<string>`coalesce((select sum(${realEstateMaintenanceCosts.amount}) from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 and (${realEstateMaintenanceCosts.currencyId} = ${realEstateMaintenanceRequests.currencyId} or ${realEstateMaintenanceCosts.currencyId} is null)), 0)`,
         assigneeId: realEstateMaintenanceRequests.assigneeId,
         assigneeFirstName: maintenanceAssignee.firstName,
         assigneeLastName: maintenanceAssignee.lastName,
@@ -1695,8 +1697,14 @@ export class PropertyManagementService {
   async listMaintenanceCosts(ticketId: number, orgId: number) {
     await this.findMaintenance(ticketId, orgId);
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(realEstateMaintenanceCosts),
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(realEstateMaintenanceCosts)
+      .leftJoin(currencies, eq(currencies.id, realEstateMaintenanceCosts.currencyId))
       .where(and(eq(realEstateMaintenanceCosts.ticketId, ticketId), eq(realEstateMaintenanceCosts.isActive, 1)))
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
