@@ -84,5 +84,7 @@ export const api = {
   warehouses: () => jsonFetch("/procurement/warehouses"),
   warehouseStock: (id) => jsonFetch(`/procurement/warehouses/${id}/stock`),
   purchaseOrders: () => jsonFetch("/procurement/orders"),
+  purchaseOrder: (id) => jsonFetch(`/procurement/orders/${id}`),
+  setOrderStatus: (id, status) => jsonFetch(`/procurement/orders/${id}/status`, { method: "POST", body: JSON.stringify({ status }) }),
   receiveOrder: (id, body) => jsonFetch(`/procurement/orders/${id}/receive`, { method: "POST", body: JSON.stringify(body || {}) })
 };

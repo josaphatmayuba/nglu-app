@@ -1234,17 +1234,24 @@ function Achats({ canMutate }) {
 }
 
 /* ── Stock & entrepôts ─────────────────────────────────────────────────── */
+const ORDER_STATUS_FR = { draft: "Brouillon", ordered: "Commandé", received: "Reçu", cancelled: "Annulé" };
 function Stock() {
   const [warehouses, setWarehouses] = React.useState(null);
   const [stockByWh, setStockByWh] = React.useState({});
+  const [orders, setOrders] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
       setError("");
-      const whs = await api.warehouses();
+      const [whs, ords] = await Promise.all([
+        api.warehouses(),
+        api.purchaseOrders().catch(() => []),
+      ]);
       const arr = Array.isArray(whs) ? whs : (whs?.data || []);
       setWarehouses(arr);
+      setOrders(Array.isArray(ords) ? ords : (ords?.data || []));
       const entries = await Promise.all(arr.map(async (w) => {
         try { return [w.id, await api.warehouseStock(w.id)]; } catch { return [w.id, []]; }
       }));
@@ -1253,12 +1260,31 @@ function Stock() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
-  if (warehouses && warehouses.length === 0) {
+  // Réception : récupère les lignes restant à recevoir et appelle receiveOrder.
+  const receive = async (orderId) => {
+    setBusy(true);
+    try {
+      const detail = await api.purchaseOrder(orderId);
+      const order = detail.order || detail;
+      const lines = (detail.lines || []).map((l) => ({
+        productId: l.productId,
+        purchaseOrderLineId: l.id,
+        quantity: Math.max(0, Number(l.quantity || 0) - Number(l.receivedQuantity || 0)),
+        unitCost: Number(l.unitPrice || 0),
+      })).filter((l) => l.quantity > 0);
+      if (!lines.length) { notify("Rien à recevoir (déjà tout reçu)."); return; }
+      await api.receiveOrder(orderId, { warehouseId: order.warehouseId, lines });
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  if (warehouses && warehouses.length === 0 && (!orders || orders.length === 0)) {
     return (
       <>
         <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
-        <EmptyState title="Aucun entrepôt" detail="Connecté à /procurement/warehouses : les entrepôts et leurs niveaux de stock s'afficheront après création." icon="warehouse" />
+        <EmptyState title="Aucun entrepôt ni commande" detail="Connecté à /procurement : les entrepôts, niveaux de stock et bons de commande s'afficheront après création." icon="warehouse" />
       </>
     );
   }
@@ -1267,6 +1293,34 @@ function Stock() {
     <>
       <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {orders && orders.length > 0 && (
+        <div className="card pad table-card" style={{ marginBottom: 16 }}>
+          <div className="section-head"><h3 className="font-display">Bons de commande</h3><span className="tiny">{orders.length} commande(s)</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 560 }}>
+              <thead><tr><th>Réf.</th><th>Fournisseur</th><th>Statut</th><th className="r">Total</th><th className="r">Action</th></tr></thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id}>
+                    <td className="muted">{o.reference || `PO-${o.id}`}</td>
+                    <td>{o.supplierName || (o.supplierId ? `Fournisseur #${o.supplierId}` : "—")}</td>
+                    <td><span className={`chip ${o.status === "received" ? "pos" : o.status === "cancelled" ? "" : "ink"}`}>{ORDER_STATUS_FR[o.status] || o.status}</span></td>
+                    <td className="r">{nf.format(Number(o.totalAmount || 0))}</td>
+                    <td className="r">
+                      {o.status !== "received" && o.status !== "cancelled"
+                        ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => receive(o.id)}>Recevoir</button>
+                        : <span className="muted tiny">—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="tiny muted" style={{ marginTop: 10 }}>Recevoir une commande crée les mouvements de stock et incrémente les quantités en entrepôt.</p>
+        </div>
+      )}
+
       {warehouses === null && <div className="card pad muted">Chargement…</div>}
       {(warehouses || []).map((w) => {
         const stock = stockByWh[w.id] || [];
