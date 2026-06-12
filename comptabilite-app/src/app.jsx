@@ -931,12 +931,13 @@ function Immo({ accounts = [] }) {
   );
 }
 
-/* ── Analytique (projets / bailleurs) ──────────────────────────────────── */
+/* ── Analytique (projets / financeurs) ─────────────────────────────────── */
 function Analytique() {
   const [projects, setProjects] = React.useState(null);
   const [reports, setReports] = React.useState({}); // id -> rapport
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [showNew, setShowNew] = React.useState(false);
 
   const load = React.useCallback(async () => {
     try {
@@ -952,31 +953,48 @@ function Analytique() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
-  const newProject = async () => {
-    const name = window.prompt("Nom du projet :"); if (!name) return;
-    const donor = window.prompt("Bailleur (optionnel) :") || undefined;
-    const budgetStr = window.prompt("Budget (optionnel) :") || "";
-    const budgetAmount = budgetStr ? Number(budgetStr.replace(/\s/g, "")) : undefined;
+  const newProject = () => setShowNew(true);
+  const submitProject = async (form) => {
+    const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
     setBusy(true);
-    try { await api.createProject({ name, donor, budgetAmount }); await load(); }
-    catch (e) { setError(String(e.message || e)); }
+    try {
+      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount });
+      setShowNew(false);
+      await load();
+    } catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
+  const projectModal = showNew && (
+    <FormModal
+      title="Nouveau projet"
+      subtitle="Axe analytique / financeur"
+      submitLabel="Créer le projet"
+      busy={busy}
+      onClose={() => setShowNew(false)}
+      onSubmit={submitProject}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true },
+        { key: "donor", label: "Financeur (optionnel)" },
+        { key: "budget", label: "Budget (optionnel)", type: "number" },
+      ]}
+    />
+  );
 
   // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
   if (projects && projects.length === 0) {
     return (
       <>
-        <PageHead eyebrow="Suivi par projet / bailleur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+        <PageHead eyebrow="Suivi par projet / financeur" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
-        <EmptyState title="Aucun projet analytique" detail="Les rapports bailleurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
+        <EmptyState title="Aucun projet analytique" detail="Les rapports financeurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
+        {projectModal}
       </>
     );
   }
 
   return (
     <>
-      <PageHead eyebrow="Suivi par projet / bailleur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
+      <PageHead eyebrow="Suivi par projet / financeur · live grand livre" title="Comptabilité analytique" action="Nouveau projet" onAction={newProject} disabled={busy} />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       {projects === null && <div className="card pad muted">Chargement…</div>}
       <div className="g3" style={{ marginBottom: 18 }}>
@@ -987,7 +1005,7 @@ function Analytique() {
           return (
             <div className={`card pad ${warn ? "warn" : ""}`} key={p.id}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
-              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Bailleur : {p.donor || "—"}</div>
+              <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
             </div>
@@ -997,7 +1015,7 @@ function Analytique() {
       <div className="card pad table-card tbl-scroll">
         <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Projet (bailleur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
             {(projects || []).map((p) => {
               const r = reports[p.id];
@@ -1006,8 +1024,9 @@ function Analytique() {
             })}
           </tbody>
         </table>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport bailleur en temps réel.</p>
+        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport financeur en temps réel.</p>
       </div>
+      {projectModal}
     </>
   );
 }
@@ -1556,6 +1575,30 @@ function FField({ label, value, onChange, type = "text", required = false }) {
 }
 function FSelect({ label, value, onChange, rows }) {
   return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{(rows || []).map((r) => <option key={r.id} value={r.id}>{accountLabel(r)}</option>)}</select></label>;
+}
+
+/* Modal générique (remplace window.prompt) : titre + champs configurables. */
+function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy, onSubmit, onClose }) {
+  const [form, setForm] = React.useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+  const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const submit = (e) => {
+    e.preventDefault();
+    if (fields.some((f) => f.required && !String(form[f.key] ?? "").trim())) return;
+    onSubmit(form);
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{title}</h2><p>{subtitle || "Compta NgoluApp"}</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="form-grid">
+          {fields.map((f) => f.type === "textarea"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : submitLabel}</button></div>
+      </form>
+    </div>
+  );
 }
 function defaults(kind, accounts, mainAccounts) {
   if (kind === "account") return { name: "", accountId: mainAccounts[0]?.id || 1 };

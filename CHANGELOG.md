@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **Comptabilité — « Bailleur » → « Financeur » + modal au lieu des popups navigateur** : dans le module analytique (projets), « bailleur » (ambigu avec le bailleur immobilier de Domus) devient **« Financeur »** (libellés UI compta + FarmOS ; le bailleur immobilier de Domus est inchangé). Le « Nouveau projet » utilisait trois `window.prompt` natifs en cascade (popups moches du navigateur) ; remplacés par un **vrai modal** (`FormModal` générique réutilisable : nom / financeur / budget). [3.51.2]
+
 ### Added
 - **ERP/SIFA P1 — Procurement : bons de commande + réception (boucle achat complète)** : l'écran Stock expose désormais les **bons de commande** (`/procurement/orders`) avec réf., fournisseur, statut (brouillon/commandé/reçu/annulé) et total. Bouton **Recevoir** : récupère les lignes restant à recevoir (`quantity - receivedQuantity`) et appelle `/orders/:id/receive`, ce qui crée les mouvements de stock et incrémente les quantités en entrepôt. Boucle le cycle achat SIFA : commande → réception → stock → facture → comptabilisation. [3.51.1]
 - **ERP/SIFA P1 — Comptabilité : écrans Achats (factures fournisseurs) + Stock & entrepôts** : le backend P1 (purchase-invoices, procurement) était complet mais non exposé dans `comptabilite-app`. Deux nouveaux écrans branchés sur l'API réelle. **Factures fournisseurs** (`/purchase-invoice`) : liste (date, pièce, fournisseur, total, reste dû) + KPIs (nombre, total facturé, payé, reste dû via `query=info`) + **bouton Approuver** qui déclenche la comptabilisation de l'écriture différée (module gaté « purchase », cohérent avec le workflow SIFA). **Stock & entrepôts** (`/procurement/warehouses` + `/:id/stock`) : niveaux de stock par entrepôt, EmptyState honnête si aucun entrepôt. Nouvelle section de nav « Achats & stock ». Routes déjà whitelistées (middleware). [3.51.0]
