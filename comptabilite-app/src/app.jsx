@@ -99,6 +99,10 @@ let CUR = "CDF";
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
 const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
+// Principe SIFA : chaque montant garde SA devise, jamais de conversion ni de melange.
+// La devise est portee par la ligne (currencyCode renvoye par l'API) ; CUR = repli.
+const curOf = (row) => (row && (row.currencyCode || row.currencyId != null)) ? (row.currencyCode || "") : CUR;
+const mc = (v, row) => `${nf.format(Math.round(Number(v || 0)))} ${curOf(row) || CUR}`.trim();
 const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
 const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
 const EMPTY_INCOME = { totalRevenue: 0, totalExpense: 0, profit: 0, revenue: [], expense: [], expenses: [] };
@@ -906,7 +910,7 @@ function GrandLivre() {
         <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} écriture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               {(entries || []).map((e) => (
                 <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
@@ -914,13 +918,14 @@ function GrandLivre() {
                   <td className="muted">{e.reference || `#${e.id}`}</td>
                   <td style={{ fontVariantNumeric: "normal" }}>{e.particulars}</td>
                   <td><span className="chip">{e.sourceModule || "—"}</span></td>
+                  <td><span className="chip">{e.currencyCode || "—"}</span></td>
                   <td className="r pos">{fmt(e.totalDebit)}</td>
                   <td className="r neg">{fmt(e.totalCredit)}</td>
                   <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
                   <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => reverse(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
                 </tr>
               ))}
-              {entries === null && <tr><td colSpan={8} className="muted">Chargement…</td></tr>}
+              {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
             </tbody>
           </table>
         </div>
@@ -931,33 +936,77 @@ function GrandLivre() {
 
 /* ── Plan comptable ────────────────────────────────────────────────────── */
 function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate, onNew }) {
-  const totalAssets = Number(balanceSheet?.totalAssets ?? balanceSheet?.totalAsset ?? 0);
-  const totalLiabilities = Number(balanceSheet?.totalLiabilities ?? balanceSheet?.totalLiability ?? 0);
-  const totalRevenue = Number(incomeStatement?.totalRevenue ?? 0);
-  const totalExpenses = Number(incomeStatement?.totalExpenses ?? incomeStatement?.totalExpense ?? 0);
+  // SIFA : pas de melange de devises. On affiche les totaux par devise.
+  const assetsCur = balanceSheet?.assetsByCurrency || [];
+  const liabCur = balanceSheet?.liabilitiesByCurrency || [];
+  const revCur = incomeStatement?.revenueByCurrency || [];
+  const expCur = incomeStatement?.expenseByCurrency || incomeStatement?.expensesByCurrency || [];
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actif" value={mM(totalAssets)} /><Mini label="Passif" value={mM(totalLiabilities)} />
-        <Mini label="Produits (cumul)" value={mM(totalRevenue)} valueClass="pos" /><Mini label="Charges (cumul)" value={mM(totalExpenses)} valueClass="neg" />
+        <Mini label="Actif" value={<ByCur list={assetsCur} />} />
+        <Mini label="Passif" value={<ByCur list={liabCur} />} />
+        <Mini label="Produits (cumul)" value={<ByCur list={revCur} />} valueClass="pos" />
+        <Mini label="Charges (cumul)" value={<ByCur list={expCur} />} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
-            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th className="r">Solde</th></tr></thead>
+            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
             <tbody>
               {(accounts || []).map((a) => (
-                <tr key={a.id}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{nf.format(Number(a.balance || 0))}</td></tr>
+                <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
-              {(!accounts || accounts.length === 0) && <tr><td colSpan={4} className="muted">Aucun sous-compte réel disponible.</td></tr>}
+              {(!accounts || accounts.length === 0) && <tr><td colSpan={5} className="muted">Aucun sous-compte réel disponible.</td></tr>}
             </tbody>
-            <tfoot><tr><td colSpan={2}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td><td className="r">{nf.format(Number(trialBalance?.totalDebit || 0))} / {nf.format(Number(trialBalance?.totalCredit || 0))}</td></tr></tfoot>
+            <tfoot>
+              <tr><td colSpan={4}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td></tr>
+              {(trialBalance?.byCurrency || []).map((c) => (
+                <tr key={`tb-${c.currencyId ?? "x"}`}><td colSpan={4} className="muted">Débit / Crédit ({c.currencyCode || "—"})</td><td className="r">{nf.format(Number(c.totalDebit || 0))} / {nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+              ))}
+            </tfoot>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} sous-compte(s) connectés à l'API.</p>
+        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} ligne(s) (sous-compte × devise) connectées à l'API.</p>
       </div>
     </>
+  );
+}
+
+/* Additionne plusieurs listes "par devise" en restant separe par devise (SIFA). */
+function sumByCurrency(...lists) {
+  const map = new Map();
+  lists.forEach((list) => (list || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total += Number(c.total || 0);
+    map.set(k, acc);
+  }));
+  return [...map.values()];
+}
+
+/* Resultat net par devise = produits − charges, devise par devise (SIFA, pas de conversion). */
+function netByCurrency(revByCur, expByCur) {
+  const map = new Map();
+  (revByCur || []).forEach((c) => map.set(String(c.currencyId ?? "null"), { currencyId: c.currencyId, currencyCode: c.currencyCode, total: Number(c.total || 0) }));
+  (expByCur || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total -= Number(c.total || 0);
+    map.set(k, acc);
+  });
+  return [...map.values()];
+}
+
+/* Totaux par devise (SIFA — jamais de conversion). Affiche une valeur par devise. */
+function ByCur({ list }) {
+  const arr = (list || []).filter((c) => Number(c.total || 0) !== 0);
+  if (arr.length === 0) return <>{nf.format(0)} {CUR}</>;
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
+      {arr.map((c) => <span key={c.currencyId ?? "x"}>{nf.format(Math.round(Number(c.total || 0)))} {c.currencyCode || CUR}</span>)}
+    </span>
   );
 }
 
@@ -1015,8 +1064,8 @@ function Tresorerie({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes banque & caisse</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -1549,11 +1598,11 @@ function Etats({ is, bs }) {
         hasLiveIs ? <div className="card pad" style={{ maxWidth: 680 }}>
           <h3 className="block-title font-display">Compte de résultat</h3>
           <div className="stmt num">
-            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{nf.format(r.amount)}</span></div>)}
-            <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
-            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{nf.format(r.amount)}</span></div>)}
-            <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
-            <div className="ln total" style={{ background: profit >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}><span style={{ color: profit >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Résultat ({profit >= 0 ? "excédent" : "déficit"})</span><span className={profit >= 0 ? "pos" : "neg"}>{signed(profit)} {CUR}</span></div>
+            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total produits</span><span className="pos"><ByCur list={liveIs.revenueByCurrency} /></span></div>
+            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}-${r.currencyId ?? "x"}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total charges</span><span className="neg"><ByCur list={liveIs.expensesByCurrency} /></span></div>
+            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (par devise)</span><span><ByCur list={netByCurrency(liveIs.revenueByCurrency, liveIs.expensesByCurrency)} /></span></div>
           </div>
         </div> : <EmptyState title="Compte de résultat vide" detail="Aucune ligne produit/charge réelle n'est disponible dans le grand livre." icon="barChart" />
       )}
@@ -1565,17 +1614,16 @@ function Etats({ is, bs }) {
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
               <div className="stmt num">
-                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>)}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(liveBs.totalAssets)} {CUR}</span></div>
+                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span><ByCur list={liveBs.assetsByCurrency} /></span></div>
               </div>
             </div>
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif + Capitaux propres</div>
               <div className="stmt num">
-                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                  <div className="ln" key="netinc"><span className="muted">Résultat de l'exercice</span><span className={liveBs.netIncome >= 0 ? "pos" : "neg"}>{nf.format(liveBs.netIncome)}</span></div>]}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span>{nf.format(liveBs.totalLiabilitiesAndEquity)} {CUR}</span></div>
+                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>),
+                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)]}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span><ByCur list={sumByCurrency(liveBs.liabilitiesByCurrency, liveBs.equityByCurrency)} /></span></div>
               </div>
             </div>
           </div>
@@ -1592,13 +1640,17 @@ function Etats({ is, bs }) {
           <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]], [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })), ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))])}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
+              <thead><tr><th>Compte</th><th>Intitulé</th><th>Devise</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
               <tbody>
                 {[...(liveTb.debits || []).map((r) => ({ ...r, debit: r.balance, credit: null })), ...(liveTb.credits || []).map((r) => ({ ...r, debit: null, credit: Math.abs(r.balance) }))].map((r) => (
-                  <tr key={r.id}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                  <tr key={`${r.id}-${r.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td><span className="chip">{r.currencyCode || "—"}</span></td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
                 ))}
               </tbody>
-              <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">{nf.format(Number(liveTb.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(liveTb.totalCredit || 0)))}</td></tr></tfoot>
+              <tfoot>
+                {(liveTb.byCurrency || []).map((c) => (
+                  <tr key={`tot-${c.currencyId ?? "x"}`}><td colSpan={2}>Totaux</td><td><span className="chip">{c.currencyCode || "—"}</span></td><td className="r">{nf.format(Number(c.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+                ))}
+              </tfoot>
             </table>
           </div>
           <div style={{ marginTop: 12 }}><span className={`chip ${liveTb.match ? "emerald" : "amber"}`}><Icon name={liveTb.match ? "check" : "alertTriangle"} style={{ width: 11, height: 11 }} /> {liveTb.match ? "Balance équilibrée" : "Balance à vérifier"}</span></div>

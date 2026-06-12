@@ -10,6 +10,7 @@ import { DRIZZLE } from "../database/database.constants";
 import {
   accountingPeriods,
   accounts,
+  currencies,
   journalEntries,
   journalEntryLines,
   ledgerApprovalRequirements,
@@ -301,11 +302,26 @@ export class LedgerService {
     return { entry, lines };
   }
 
-  /** Liste paginee des ecritures de l'organisation. */
+  /** Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete). */
   async findAll(orgId: number, limit = 50, offset = 0) {
     return this.db
-      .select()
+      .select({
+        id: journalEntries.id,
+        date: journalEntries.date,
+        reference: journalEntries.reference,
+        particulars: journalEntries.particulars,
+        sourceModule: journalEntries.sourceModule,
+        relatedId: journalEntries.relatedId,
+        status: journalEntries.status,
+        currencyId: journalEntries.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+        reversalOfId: journalEntries.reversalOfId,
+        reversedById: journalEntries.reversedById,
+        createdAt: journalEntries.createdAt,
+      })
       .from(journalEntries)
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
       .where(eq(journalEntries.organizationId, orgId))
       .orderBy(desc(journalEntries.date), desc(journalEntries.id))
       .limit(limit)
@@ -351,12 +367,17 @@ export class LedgerService {
    * a la bascule des rapports (Phase 4). balance = somme(debit) - somme(credit).
    */
   async subAccountBalances(orgId: number) {
+    // Une ligne par (sous-compte x devise) : aucune conversion, chaque devise
+    // a son propre solde. La devise est portee par l'en-tete journal_entries.
     const rows = await this.db
       .select({
         id: subAccounts.id,
         account: accounts.name,
         accountType: accounts.type,
         subAccount: subAccounts.name,
+        currencyId: journalEntries.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
         totalDebit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
         totalCredit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
       })
@@ -369,22 +390,30 @@ export class LedgerService {
           eq(journalEntryLines.organizationId, orgId),
         ),
       )
-      .groupBy(subAccounts.id)
+      .leftJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
+      .groupBy(subAccounts.id, journalEntries.currencyId)
       .orderBy(desc(subAccounts.id));
 
-    return rows.map((row) => {
-      const totalDebit = Math.round(Number(row.totalDebit) * 100) / 100;
-      const totalCredit = Math.round(Number(row.totalCredit) * 100) / 100;
-      return {
-        id: row.id,
-        account: row.account,
-        accountType: row.accountType,
-        subAccount: row.subAccount,
-        totalDebit,
-        totalCredit,
-        balance: Math.round((totalDebit - totalCredit) * 100) / 100,
-      };
-    });
+    return rows
+      // Exclut la ligne "sans devise" generee par le leftJoin pour un compte sans ecriture.
+      .filter((row) => !(row.currencyId == null && Number(row.totalDebit) === 0 && Number(row.totalCredit) === 0))
+      .map((row) => {
+        const totalDebit = Math.round(Number(row.totalDebit) * 100) / 100;
+        const totalCredit = Math.round(Number(row.totalCredit) * 100) / 100;
+        return {
+          id: row.id,
+          account: row.account,
+          accountType: row.accountType,
+          subAccount: row.subAccount,
+          currencyId: row.currencyId ?? null,
+          currencyCode: row.currencyCode ?? null,
+          currencySymbol: row.currencySymbol ?? null,
+          totalDebit,
+          totalCredit,
+          balance: Math.round((totalDebit - totalCredit) * 100) / 100,
+        };
+      });
   }
 
   /**
@@ -395,14 +424,64 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const debits = items.filter((i) => i.balance > 0);
     const credits = items.filter((i) => i.balance < 0);
-    const totalDebit = Math.round(debits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
-    const totalCredit = Math.round(credits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
-    return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
+    // Totaux par devise : on ne somme jamais deux devises ensemble (pas de conversion).
+    const byCurrency = this.totalsByCurrency(items);
+    const match = byCurrency.every((c) => c.match);
+    const totalDebit = this.round2(debits.reduce((t, i) => t + i.balance, 0));
+    const totalCredit = this.round2(credits.reduce((t, i) => t + i.balance, 0));
+    return { match, byCurrency, totalDebit, totalCredit, debits, credits };
+  }
+
+  /**
+   * Regroupe des lignes de solde par devise (currencyId). Pour chaque devise :
+   * total debit, total credit, et match (Sigma debit == Sigma credit aux centimes).
+   * Aucune conversion : chaque devise est un sous-livre independant.
+   */
+  private totalsByCurrency(
+    items: Array<{ currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; balance: number }>,
+  ) {
+    const map = new Map<
+      string,
+      { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; totalDebit: number; totalCredit: number }
+    >();
+    for (const i of items) {
+      const key = String(i.currencyId ?? "null");
+      const acc =
+        map.get(key) ??
+        { currencyId: i.currencyId, currencyCode: i.currencyCode, currencySymbol: i.currencySymbol, totalDebit: 0, totalCredit: 0 };
+      if (i.balance > 0) acc.totalDebit += i.balance;
+      else if (i.balance < 0) acc.totalCredit += i.balance;
+      map.set(key, acc);
+    }
+    return [...map.values()].map((c) => {
+      const totalDebit = this.round2(c.totalDebit);
+      const totalCredit = this.round2(c.totalCredit);
+      return { ...c, totalDebit, totalCredit, match: -totalDebit === totalCredit };
+    });
   }
 
   /** Arrondi 2 decimales (centimes). */
   private round2(n: number): number {
     return Math.round(n * 100) / 100;
+  }
+
+  /** Champs devise repris tels quels sur une ligne de rapport (jamais de conversion). */
+  private currencyOf(i: { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null }) {
+    return { currencyId: i.currencyId ?? null, currencyCode: i.currencyCode ?? null, currencySymbol: i.currencySymbol ?? null };
+  }
+
+  /** Somme un champ `amount` par devise (pas de melange entre devises). */
+  private amountByCurrency(
+    lines: Array<{ currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; amount: number }>,
+  ) {
+    const map = new Map<string, { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; total: number }>();
+    for (const l of lines) {
+      const key = String(l.currencyId ?? "null");
+      const acc = map.get(key) ?? { ...this.currencyOf(l), total: 0 };
+      acc.total += l.amount;
+      map.set(key, acc);
+    }
+    return [...map.values()].map((c) => ({ ...c, total: this.round2(c.total) }));
   }
 
   /**
@@ -414,14 +493,17 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const revenue = items
       .filter((i) => i.accountType === "Revenue" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
     const expenses = items
       .filter((i) => i.accountType === "Expense" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(i.balance) }));
     const totalRevenue = this.round2(revenue.reduce((t, i) => t + i.amount, 0));
     const totalExpenses = this.round2(expenses.reduce((t, i) => t + i.amount, 0));
     const netIncome = this.round2(totalRevenue - totalExpenses);
-    return { revenue, expenses, totalRevenue, totalExpenses, netIncome };
+    // Totaux par devise (sans conversion).
+    const revenueByCurrency = this.amountByCurrency(revenue);
+    const expensesByCurrency = this.amountByCurrency(expenses);
+    return { revenue, expenses, totalRevenue, totalExpenses, netIncome, revenueByCurrency, expensesByCurrency };
   }
 
   /**
@@ -433,14 +515,17 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const assets = items
       .filter((i) => i.accountType === "Asset" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(i.balance) }));
     const liabilities = items
       .filter((i) => i.accountType === "Liability" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
     const equity = items
       .filter((i) => i.accountType === "Equity" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
 
+    const assetsByCurrency = this.amountByCurrency(assets);
+    const liabilitiesByCurrency = this.amountByCurrency(liabilities);
+    const equityByCurrency = this.amountByCurrency(equity);
     const totalAssets = this.round2(assets.reduce((t, i) => t + i.amount, 0));
     const totalLiabilities = this.round2(liabilities.reduce((t, i) => t + i.amount, 0));
     const equityBase = this.round2(equity.reduce((t, i) => t + i.amount, 0));
@@ -457,6 +542,9 @@ export class LedgerService {
       totalLiabilities,
       totalEquity,
       totalLiabilitiesAndEquity,
+      assetsByCurrency,
+      liabilitiesByCurrency,
+      equityByCurrency,
       balanced: totalAssets === totalLiabilitiesAndEquity,
     };
   }
