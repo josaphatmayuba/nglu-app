@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -14,6 +14,8 @@ import type { Database } from "../database/types";
 
 @Injectable()
 export class ProjectsService {
+  private readonly logger = new Logger(ProjectsService.name);
+
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   private round2(n: number): number {
@@ -22,7 +24,15 @@ export class ProjectsService {
 
   /** Liste les projets actifs de l'organisation. */
   async list(orgId: number) {
-    await this.ensureMaintenanceProjects(orgId);
+    // Synchro auxiliaire des projets de maintenance : best-effort. Un drift de
+    // schema (colonne/table manquante sur un env) ne doit pas casser la liste.
+    try {
+      await this.ensureMaintenanceProjects(orgId);
+    } catch (err) {
+      this.logger.warn(
+        `ensureMaintenanceProjects ignore (org ${orgId}): ${(err as Error)?.message}`,
+      );
+    }
     return this.db
       .select()
       .from(projects)
