@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **FarmOS — ETL vaccins : bornage des longueurs de colonne (run ACIA réel)** : le 1er run téléchargeant le vrai CSV ACIA a échoué sur `Failed query insert vx_registrations` car certaines lignes ACIA ont un `tradeName`/`ccvbNumber` très long (liste de produits) dépassant les `varchar`. Bornage à l'insert : `product_name` tronqué à 200, `registration_number` à 80. Lignes au nom vide ignorées. Le pipeline télécharge et parse désormais le CSV ACIA de bout en bout. [3.50.5]
+
 ### Changed
 - **Comptabilité — Écran Approbations : pilotage des gates des 4 modules de dépense** : le tableau « Modules sous approbation obligatoire » devient **actionnable**. Il affiche les 4 modules de dépense connus (Dépense FarmOS, Paie, Facture d'achat, Maintenance) avec leur état dérivé des `approval-requirements`, et un bouton **Activer / Désactiver** par module (via `setApprovalRequirement`, confirmation explicite). Les gates de test (`test_*`) ne polluent plus la liste. Accompagne l'activation des 4 gates de dépense côté ledger (un comptable peut désormais piloter quels modules sont en comptabilisation différée sans passer par l'API). [3.50.4]
 

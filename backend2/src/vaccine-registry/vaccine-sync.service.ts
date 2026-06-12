@@ -206,11 +206,15 @@ export class VaccineSyncService {
         continue;
       }
 
+      // Nom borne a la longueur de colonne (vx_vaccines.product_name = varchar(200)).
+      const productName = (s.rawProductName ?? "").slice(0, 200);
+      if (!productName) { unmapped++; continue; }
+
       // Upsert du vaccin (cle naturelle : product_name).
       const [existing] = await this.db
         .select({ id: vxVaccines.id })
         .from(vxVaccines)
-        .where(eq(vxVaccines.productName, s.rawProductName!))
+        .where(eq(vxVaccines.productName, productName))
         .limit(1);
 
       let vaccineId: number;
@@ -224,7 +228,7 @@ export class VaccineSyncService {
         }
       } else {
         const [ins] = await this.db.insert(vxVaccines).values({
-          productName: s.rawProductName!,
+          productName,
           manufacturerId: manufacturerId ?? null,
           sourceSystem: SOURCE_ACIA,
           sourceUrl: env.vaccineSync.aciaCsvUrl,
@@ -246,7 +250,8 @@ export class VaccineSyncService {
         await this.db.insert(vxRegistrations).values({
           vaccineId,
           regionId: region,
-          registrationNumber: s.sourceRef ?? null,
+          // Tronque a la longueur de colonne (registration_number = varchar(80)).
+          registrationNumber: s.sourceRef ? s.sourceRef.slice(0, 80) : null,
           status,
           sourceSystem: SOURCE_ACIA,
           sourceDocumentUrl: env.vaccineSync.aciaCsvUrl,
