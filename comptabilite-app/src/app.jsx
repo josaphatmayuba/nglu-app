@@ -1209,7 +1209,7 @@ function Budget() {
             <div className="section-head"><h3 className="font-display">{b.name}</h3><span className="tiny">{b.fiscalYear || b.period || ""}</span></div>
             {lines.length === 0 && <p className="muted tiny">Aucune ligne budgétaire.</p>}
             {lines.map((l, i) => {
-              const allocated = Number(l.allocated ?? l.allocatedAmount ?? 0);
+              const allocated = Number(l.allocated ?? l.allocatedAmount ?? l.planned ?? l.plannedAmount ?? 0);
               const consumed = Number(l.consumed ?? l.consumedAmount ?? 0);
               const pct = allocated > 0 ? Math.min(100, Math.round((consumed / allocated) * 100)) : 0;
               const warn = pct >= 90;
