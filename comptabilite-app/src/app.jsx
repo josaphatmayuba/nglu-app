@@ -286,7 +286,7 @@ function App() {
     dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    types: <Types canMutate={canMutate} />,
+    types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre />,
     plan: <Plan accounts={data.accounts} trialBalance={data.trialBalance} incomeStatement={data.incomeStatement} balanceSheet={data.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
@@ -568,29 +568,75 @@ function Ecritures({ transactions, onNew, canMutate }) {
   );
 }
 /* ── Types de transaction ──────────────────────────────────────────────── */
-function Types({ canMutate }) {
+function Types({ canMutate, accounts = [] }) {
   const [types, setTypes] = React.useState(null);
+  const [rules, setRules] = React.useState(null);
   const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [editing, setEditing] = React.useState(null); // type SIFA en édition (objet) ou null
 
   const load = React.useCallback(async () => {
     try {
       setError("");
-      const rows = await api.transactionTypes();
-      setTypes(Array.isArray(rows) ? rows : []);
-    } catch (e) {
-      setError(String(e.message || e));
-      setTypes([]);
-    }
+      const [legacy, sifa] = await Promise.all([
+        api.transactionTypes().catch(() => []),
+        api.typeRules().catch(() => []),
+      ]);
+      setTypes(Array.isArray(legacy) ? legacy : []);
+      setRules(Array.isArray(sifa) ? sifa : []);
+    } catch (e) { setError(String(e.message || e)); setTypes([]); setRules([]); }
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  const saveType = async (form) => {
+    setBusy(true);
+    try { await api.saveType(form); setEditing(null); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+  const removeType = async (type) => {
+    if (!window.confirm(`Désactiver le type « ${type} » ?`)) return;
+    setBusy(true);
+    try { await api.deleteType(type); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
   return (
     <>
-      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action="Rafraîchir" actionIcon="download" onAction={load} ghost disabled={!canMutate} />
-      <Note>Ces types viennent de l'API legacy `/transaction-type`. La cible ERP/SIFA reste `transaction_type_rules` pour générer les lignes comptables par rôle métier.</Note>
+      <PageHead eyebrow="Paramétrage · le cœur du système" title="Types de transaction" action={canMutate ? "Nouveau type (SIFA)" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"} onAction={canMutate ? () => setEditing({ type: "", lines: [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }, { role: "credit", accountId: accounts[0]?.id || "", side: "CREDIT" }] }) : load} />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+
+      {/* Types SIFA modernes (règles multi-lignes paramétrables). */}
+      <div className="card pad table-card" style={{ marginBottom: 16 }}>
+        <div className="section-head"><h3 className="font-display">Types SIFA (règles multi-lignes) <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({rules ? rules.length : "..."})</span></h3><span className="tiny">Comptes par rôle métier · partie double</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 640 }}>
+            <thead><tr><th>Type</th><th>Lignes (rôle · compte · sens)</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {(rules || []).map((r) => (
+                <tr key={r.type}>
+                  <td style={{ fontWeight: 500 }}>{r.type}</td>
+                  <td className="tiny">{r.lines.map((l) => `${l.role}: ${l.accountName || `#${l.accountId}`} (${l.side})`).join(" · ")}</td>
+                  <td className="r">
+                    {canMutate ? <span style={{ display: "inline-flex", gap: 6 }}>
+                      <button className="btn-sm" disabled={busy} onClick={() => setEditing({ type: r.type, lines: r.lines.map((l) => ({ role: l.role, accountId: l.accountId, side: l.side })) })}>Éditer</button>
+                      <button className="btn-sm" disabled={busy} onClick={() => removeType(r.type)}>Suppr.</button>
+                    </span> : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {rules && rules.length === 0 && <tr><td colSpan={3} className="muted">Aucun type SIFA. Cliquez « Nouveau type (SIFA) » pour en créer un (ex. Dépense = Débit charge / Crédit caisse).</td></tr>}
+              {rules === null && <tr><td colSpan={3} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Un type SIFA génère des écritures en partie double : chaque ligne nomme un <b>rôle métier</b> (résolu en compte + sens). Les modules comptabilisent en fournissant les montants par rôle.</p>
+      </div>
+
+      {/* Types legacy (lecture seule, débit/crédit fixe). */}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Types configurés <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3></div>
+        <div className="section-head"><h3 className="font-display">Types legacy <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>({types ? types.length : "..."})</span></h3><span className="tiny">débit/crédit fixe · lecture</span></div>
         <div className="tbl-scroll">
           <table className="tbl" style={{ minWidth: 680 }}>
             <thead><tr><th>Activité (type)</th><th>Compte débit</th><th>Compte crédit</th><th>Statut</th><th>Description</th></tr></thead>
@@ -598,14 +644,55 @@ function Types({ canMutate }) {
               {(types || []).map((t) => (
                 <tr key={t.id}><td style={{ fontWeight: 500 }}>{t.name}</td><td>{t.debitAccount?.name || "—"}</td><td>{t.creditAccount?.name || "—"}</td><td><span className={`chip ${t.isActive ? "emerald-soft" : "ink"}`}>{t.isActive ? "actif" : "inactif"}</span></td><td className="muted">{t.description || "—"}</td></tr>
               ))}
-              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type réel configuré.</td></tr>}
+              {types && types.length === 0 && <tr><td colSpan={5} className="muted">Aucun type legacy.</td></tr>}
               {types === null && <tr><td colSpan={5} className="muted">Chargement...</td></tr>}
             </tbody>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Dette restante : remplacer debit/credit fixes par des règles paramétrables multi-lignes.</p>
       </div>
+
+      {editing && <TypeRuleModal initial={editing} accounts={accounts} busy={busy} onSave={saveType} onClose={() => setEditing(null)} />}
     </>
+  );
+}
+
+/* Modal d'édition d'un type SIFA : nom + N lignes (rôle / compte / sens). */
+function TypeRuleModal({ initial, accounts, busy, onSave, onClose }) {
+  const [type, setType] = React.useState(initial.type || "");
+  const [lines, setLines] = React.useState(initial.lines?.length ? initial.lines : [{ role: "debit", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const setLine = (i, k, v) => setLines((ls) => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
+  const addLine = () => setLines((ls) => [...ls, { role: "", accountId: accounts[0]?.id || "", side: "DEBIT" }]);
+  const delLine = (i) => setLines((ls) => ls.filter((_, j) => j !== i));
+  const submit = (e) => {
+    e.preventDefault();
+    if (!type.trim()) return;
+    onSave({ type: type.trim(), lines: lines.map((l) => ({ role: l.role, accountId: Number(l.accountId), side: l.side, formula: "amount" })) });
+  };
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">{initial.type ? "Modifier le type" : "Nouveau type (SIFA)"}</h2><p>Règles multi-lignes · partie double</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div style={{ padding: "0 4px" }}>
+          <label className="field"><span>Nom du type (identifiant)</span><input value={type} onChange={(e) => setType(e.target.value)} placeholder="ex. farm_expense" required disabled={!!initial.type} /></label>
+          <div style={{ marginTop: 12, marginBottom: 6, fontSize: 12, fontWeight: 600, color: "var(--ink-600)" }}>Lignes comptables</div>
+          {lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={{ flex: 1 }} placeholder="rôle (ex. cash)" value={l.role} onChange={(e) => setLine(i, "role", e.target.value)} required />
+              <select style={{ flex: 1.4 }} value={l.accountId} onChange={(e) => setLine(i, "accountId", e.target.value)}>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{accountLabel(a)}</option>)}
+              </select>
+              <select style={{ width: 96 }} value={l.side} onChange={(e) => setLine(i, "side", e.target.value)}>
+                <option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option>
+              </select>
+              {lines.length > 1 && <button type="button" className="icon-btn" onClick={() => delLine(i)}><Icon name="x" /></button>}
+            </div>
+          ))}
+          <button type="button" className="link" onClick={addLine}><Icon name="plus" style={{ width: 13, height: 13 }} /> Ajouter une ligne</button>
+          <p className="tiny muted" style={{ marginTop: 8 }}>Au moins un Débit et un Crédit. Le rôle est l'identifiant métier (ex. expense, cash) que les modules fournissent à la saisie.</p>
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
   );
 }
 

@@ -47,6 +47,10 @@ export const api = {
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
   createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
   transactionTypes: () => jsonFetch("/transaction-type"),
+  // ── Types SIFA (règles multi-lignes paramétrables) ───────────────────
+  typeRules: () => jsonFetch("/ledger/type-rules"),
+  saveType: (body) => jsonFetch("/ledger/type-rules", { method: "POST", body: JSON.stringify(body) }),
+  deleteType: (type) => jsonFetch(`/ledger/type-rules/${encodeURIComponent(type)}/delete`, { method: "POST" }),
 
   // ── Grand livre moderne (partie double) ──────────────────────────────
   ledgerEntries: () => jsonFetch("/ledger"),

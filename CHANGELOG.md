@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **ERP/SIFA — Création de types de transaction modernes (règles multi-lignes) depuis l'app** : la table `transaction_type_rules` (modèle SIFA, consommée par `postByRules`) n'avait aucun endpoint de gestion — impossible de créer un type sans SQL. Ajout du CRUD : `GET /ledger/type-rules` (types groupés avec libellés de comptes), `POST /ledger/type-rules` (crée/remplace un type, **équilibre vérifié : au moins un DEBIT et un CREDIT**, soft delete des anciennes lignes), `POST /ledger/type-rules/:type/delete`. UI `comptabilite-app` : l'écran « Types de transaction » distingue désormais **Types SIFA** (règles multi-lignes éditables : chaque ligne = rôle métier · compte · sens) et **Types legacy** (débit/crédit fixe, lecture). Modal de création/édition multi-lignes (ajout/suppression de lignes, choix du compte et du sens). On peut enfin définir ses propres schémas comptables par rôle métier sans toucher la base. [3.52.0]
+
 ### Changed
 - **Comptabilité — « Bailleur » → « Financeur » + modal au lieu des popups navigateur** : dans le module analytique (projets), « bailleur » (ambigu avec le bailleur immobilier de Domus) devient **« Financeur »** (libellés UI compta + FarmOS ; le bailleur immobilier de Domus est inchangé). Le « Nouveau projet » utilisait trois `window.prompt` natifs en cascade (popups moches du navigateur) ; remplacés par un **vrai modal** (`FormModal` générique réutilisable : nom / financeur / budget). [3.51.2]
 
