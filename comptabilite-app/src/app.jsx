@@ -125,9 +125,22 @@ const isPayableAccount = (a) => hasAny(a, ["fournisseur", "supplier", "payable",
 const isTaxAccount = (a) => hasAny(a, ["tva", "vat", "tax", "dgi"]);
 const isFixedAssetAccount = (a) => hasAny(a, ["immobil", "asset", "équipement", "equipement", "matériel", "materiel", "véhicule", "vehicule"]);
 
-// Toast léger — fait répondre tous les boutons sans endpoint dédié.
+// Toast léger.
 const DEMO = "Action à connecter au backend.";
 function notify(msg) { try { window.dispatchEvent(new CustomEvent("compta:toast", { detail: msg || DEMO })); } catch {} }
+
+// Export CSV réel côté client (pas d'endpoint requis) : rows = tableau d'objets, cols = [[clé,libellé]].
+function exportCsv(filename, cols, rows) {
+  if (!rows || !rows.length) { notify("Rien à exporter."); return; }
+  const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = cols.map((c) => esc(c[1])).join(",");
+  const body = rows.map((r) => cols.map((c) => esc(typeof c[0] === "function" ? c[0](r) : r[c[0]])).join(",")).join("\n");
+  const csv = "﻿" + head + "\n" + body; // BOM pour Excel/accents
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 function Toaster() {
   const [msg, setMsg] = React.useState(null);
   React.useEffect(() => {
@@ -528,7 +541,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["amount", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
           <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
           <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
@@ -842,7 +855,7 @@ function Tiers({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
-      <EmptyState title="Balance tiers non connectée" detail="Aucun endpoint comptable dédié ne fournit encore les créances, dettes et échéances clients/fournisseurs." icon="contact" />
+      <EmptyState title="Aucun compte tiers mouvementé" detail="Connecté au grand livre : les créances (clients) et dettes (fournisseurs) s'afficheront dès qu'un sous-compte de tiers aura des écritures." icon="contact" />
     </>
   );
 }
@@ -875,7 +888,7 @@ function Tresorerie({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
-      <EmptyState title="Trésorerie non connectée" detail="Les soldes banque/caisse et le rapprochement bancaire doivent être branchés sur un endpoint réel avant affichage." icon="landmark" />
+      <EmptyState title="Aucun compte de trésorerie mouvementé" detail="Connecté au grand livre : les soldes banque/caisse s'afficheront dès qu'un sous-compte de trésorerie (Cash, Bank…) aura des écritures." icon="landmark" />
     </>
   );
 }
@@ -908,7 +921,7 @@ function Immo({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
-      <EmptyState title="Immobilisations non connectées" detail="Le registre des biens, amortissements et dotations doit venir d'un module backend dédié avant affichage." icon="warehouse" />
+      <EmptyState title="Aucune immobilisation au grand livre" detail="Connecté au grand livre : les comptes d'actif immobilisé s'afficheront dès qu'un sous-compte d'immobilisation aura des écritures (le registre détaillé amortissements viendra d'un module dédié)." icon="warehouse" />
     </>
   );
 }
@@ -1159,9 +1172,32 @@ function Etats({ is, bs }) {
   const rev = hasLiveIs ? Number(liveIs.totalRevenue) : 0;
   const exp = hasLiveIs ? Number(liveIs.totalExpenses) : 0;
   const profit = hasLiveIs ? Number(liveIs.netIncome) : 0;
+
+  // Export CSV de l'onglet courant (depuis le grand livre).
+  const exportCurrent = () => {
+    if (tab === "resultat" && hasLiveIs) {
+      const rows = [
+        ...liveIs.revenue.map((r) => ({ poste: r.subAccount || r.account, sens: "Produit", montant: r.amount })),
+        ...liveIs.expenses.map((r) => ({ poste: r.subAccount || r.account, sens: "Charge", montant: r.amount })),
+        { poste: "Résultat net", sens: profit >= 0 ? "Excédent" : "Déficit", montant: profit },
+      ];
+      exportCsv("compte-resultat.csv", [["poste", "Poste"], ["sens", "Sens"], ["montant", "Montant"]], rows);
+    } else if (tab === "bilan" && hasLiveBs) {
+      const rows = [
+        ...(liveBs.assets || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Actif", montant: r.amount })),
+        ...(liveBs.liabilities || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Passif", montant: r.amount })),
+        ...(liveBs.equity || []).map((r) => ({ poste: r.subAccount || r.account, classe: "Capitaux", montant: r.amount })),
+      ];
+      exportCsv("bilan.csv", [["poste", "Poste"], ["classe", "Classe"], ["montant", "Montant"]], rows);
+    } else if (tab === "balance" && hasLiveTb) {
+      exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]],
+        [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })),
+         ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))]);
+    } else { notify("Rien à exporter sur cet onglet."); }
+  };
   return (
     <>
-      <PageHead eyebrow="Depuis le grand livre" title="États financiers" action="Exporter PDF" actionIcon="download" onAction={() => notify()} ghost />
+      <PageHead eyebrow="Depuis le grand livre" title="États financiers" action="Exporter (CSV)" actionIcon="download" onAction={exportCurrent} ghost />
       <div className="segtabs">{tabs.map(([id, lbl]) => <button key={id} className={`segtab ${tab === id ? "active grad-accent" : ""}`} onClick={() => setTab(id)}>{lbl}</button>)}</div>
 
       {tab === "resultat" && (
@@ -1208,7 +1244,7 @@ function Etats({ is, bs }) {
 
       {tab === "balance" && (
         hasLiveTb ? <div className="card pad table-card">
-          <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => notify()}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+          <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]], [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })), ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))])}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
