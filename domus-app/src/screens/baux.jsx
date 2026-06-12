@@ -30,6 +30,7 @@ import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRang
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { Autocomplete } from "../components/Autocomplete.jsx";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -992,10 +993,7 @@ function LeaseSelect({ label, value, options, onChange, required = false }) {
   return (
     <label className="domus-property-field">
       <span>{label}{required ? <b> *</b> : null}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
-        <option value="">Choisir</option>
-        {options.map(([val, text]) => <option key={val} value={val}>{text}</option>)}
-      </select>
+      <Autocomplete value={value ?? ""} onChange={onChange} options={options} placeholder="Choisir…" />
     </label>
   );
 }
