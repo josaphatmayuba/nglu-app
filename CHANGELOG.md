@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **FarmOS — retirer un animal de la vente (sans vente enregistrée)** : nouvel endpoint `DELETE /farmos/animals/:id/listing` (`unlistAnimalFromSale`) qui désactive l'annonce POS liée (`farmos_price_list.isActive=0`, soft-delete) et remet l'animal en statut `healthy` s'il était listé, à condition qu'aucune `farmos_sales` active ni statut `sold` n'existe. Bouton « Retirer » dans l'inventaire de vente (`SaleInventorySettings`), avec confirmation et mise à jour optimiste (animals + priceList). [3.59.10]
+
 ### Fixed
 - **Comptabilité — Écritures/Grand livre : montant à 0 et devise manquante** : la liste des écritures (`ledger.findAll`) ne renvoyait pas `totalDebit`/`totalCredit` (calculés par ligne), donc l'écran « Écritures » et le « Grand livre » affichaient `0` partout. Ajout de deux sous-requêtes corrélées (`sum` des lignes par `side`) au `select` de `findAll`. Front « Écritures » : la colonne Montant affiche désormais la devise de l'écriture à côté du montant (`mc(amount, row)`, pattern SIFA — devise portée par la ligne, repli `CUR`), export CSV inclus, et la date ISO complète est correctement formatée (`slice(0,10)` au lieu d'un `slice(5)` qui produisait `12T00:50:21.000Z/06`). [3.59.9]
 - **Comptabilité/SIFA — Grand livre ne respectait pas le filtre devise global** : l'écran « Grand livre » était le seul rendu sans le filtre devise de la barre du haut — il chargeait ses propres écritures via `api.ledgerEntries()` et les affichait toutes, quelle que soit la devise sélectionnée. `GrandLivre` reçoit désormais `curFilter` et filtre les écritures côté front sur `currencyId` (`String(e.currencyId ?? "") === curFilter`), même prédicat SIFA que les autres écrans (aucune conversion, simple restriction d'affichage). Chaque écriture `/ledger` porte bien `currencyId`/`currencyCode`. [3.59.8]

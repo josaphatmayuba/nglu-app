@@ -181,6 +181,13 @@ export class FarmosController {
     return this.farmos.updateAnimal(id, body, orgId);
   }
 
+  @ApiOperation({ summary: "Remove an animal from POS sale listing when no sale exists." })
+  @Permissions("update-farmos")
+  @Delete("animals/:id/listing")
+  unlistAnimalFromSale(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.unlistAnimalFromSale(id, orgId);
+  }
+
   @ApiOperation({ summary: "Soft-delete a FarmOS animal" })
   @Permissions("delete-farmos")
   @Delete("animals/:id")

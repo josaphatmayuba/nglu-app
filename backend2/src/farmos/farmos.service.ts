@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { renderPdfViaService } from "../common/pdf-client";
-import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
@@ -43,6 +43,14 @@ export class FarmosService {
 
   private isSaleLockedStatus(status: unknown) {
     return ["available_sale", "for_sale", "a_vendre", "sold"].includes(String(status || "").trim().toLowerCase());
+  }
+
+  private isSaleListedStatus(status: unknown) {
+    return ["available_sale", "for_sale", "a_vendre"].includes(String(status || "").trim().toLowerCase());
+  }
+
+  private animalListingNote(animalId: number) {
+    return `animal:${animalId}`;
   }
 
   private assertAnimalWritable(animal: { status?: unknown } | null | undefined) {
@@ -269,6 +277,42 @@ export class FarmosService {
     await this.db.update(farmosPriceList).set({ isActive: 0 }).where(and(eq(farmosPriceList.id, id), eq(farmosPriceList.organizationId, orgId)));
     await this.publishFarmosUpdate("deletePrice", ["priceList"], "deleted", id, orgId);
     return { message: "Prix supprimé." };
+  }
+
+  async unlistAnimalFromSale(id: number, orgId: number) {
+    const animal = await this.getAnimal(id, orgId);
+    if (String(animal.status || "").trim().toLowerCase() === "sold") {
+      throw new BadRequestException("Impossible de retirer de la vente: l'animal est déjà vendu.");
+    }
+
+    const [activeSale] = await this.db
+      .select({ id: farmosSales.id })
+      .from(farmosSales)
+      .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1), eq(farmosSales.animalId, id)))
+      .limit(1);
+    if (activeSale) {
+      throw new BadRequestException("Impossible de retirer de la vente: une vente existe déjà pour cet animal.");
+    }
+
+    const marker = this.animalListingNote(id);
+    const linkedListing = and(
+      eq(farmosPriceList.organizationId, orgId),
+      eq(farmosPriceList.isActive, 1),
+      eq(farmosPriceList.saleSource, "animal"),
+      eq(farmosPriceList.productType, "animal"),
+      or(eq(farmosPriceList.notes, marker), like(farmosPriceList.notes, `${marker} %`)),
+    );
+    await this.db.update(farmosPriceList).set({ isActive: 0 }).where(linkedListing);
+
+    if (this.isSaleListedStatus(animal.status)) {
+      await this.db
+        .update(farmosAnimals)
+        .set({ status: "healthy" })
+        .where(and(eq(farmosAnimals.id, id), eq(farmosAnimals.organizationId, orgId)));
+    }
+
+    await this.publishFarmosUpdate("unlistAnimalSale", ["animals", "priceList"], "updated", id, orgId);
+    return { message: "Animal retiré de la vente.", animal: await this.getAnimal(id, orgId) };
   }
 
   private async getPrice(id: number, orgId: number) {

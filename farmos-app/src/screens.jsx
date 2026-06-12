@@ -3129,6 +3129,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   const [availableLimit, setAvailableLimit] = React.useState(24);
   const [candidateLimit, setCandidateLimit] = React.useState(24);
   const [listingAnimal, setListingAnimal] = React.useState(null);
+  const [unlistingId, setUnlistingId] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
   const currencyMeta = useCurrencyCatalog();
@@ -3193,6 +3194,33 @@ function SaleInventorySettings({ lang, speciesFilter }) {
     setReloadKey((k) => k + 1);
   };
 
+  const handleListingRemoved = async (item) => {
+    if (!item?.animalId) return;
+    const ok = window.confirm(lang === "fr"
+      ? "Retirer cet animal de la vente ? Cette action est possible seulement si aucune vente n'a été enregistrée."
+      : "Remove this animal from sale? This is only possible if no sale has been recorded.");
+    if (!ok) return;
+    setUnlistingId(item.animalId);
+    try {
+      const res = await api.unlistAnimalFromSale(item.animalId);
+      const marker = animalListingNote(item.animalId);
+      const isLinkedListing = (price) => {
+        const notes = String(price.notes || "");
+        const saleSource = price.saleSource || price.sale_source || "production";
+        const productType = price.productType || price.product_type;
+        return saleSource === "animal" && productType === "animal" && (notes === marker || notes.startsWith(`${marker} `));
+      };
+      setAnimals((prev) => prev.map((a) => (a.id === item.animalId ? { ...a, status: res?.animal?.status || "healthy" } : a)));
+      setPrices((prev) => prev.filter((p) => !isLinkedListing(p)));
+      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e.message || (lang === "fr" ? "Retrait impossible." : "Unable to remove listing."));
+    } finally {
+      setUnlistingId(null);
+    }
+  };
+
   const sourceOptions = [
     { id: "all", fr: "Tous", en: "All" },
     { id: "production", fr: "Productions", en: "Production" },
@@ -3223,6 +3251,15 @@ function SaleInventorySettings({ lang, speciesFilter }) {
             }}>
               <Icon name="edit" size={12} color="currentColor"/>
               {lang === "fr" ? "Modifier prix" : "Edit price"}
+            </button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => handleListingRemoved(item)}
+              disabled={unlistingId === item.animalId}
+              style={{ color: "var(--oxblood-700)" }}
+            >
+              <Icon name="x" size={12} color="currentColor"/>
+              {unlistingId === item.animalId ? "..." : (lang === "fr" ? "Retirer" : "Remove")}
             </button>
           </div>
         )}
