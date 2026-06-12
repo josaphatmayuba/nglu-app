@@ -9,6 +9,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { workflowApprovals, workflowInstances, workflows } from "../database/schema";
 import type { Database } from "../database/types";
+import { LedgerService } from "../ledger/ledger.service";
 
 /** Une etape de circuit : ordre + role/permission requis pour approuver. */
 export interface WorkflowStep {
@@ -19,7 +20,10 @@ export interface WorkflowStep {
 
 @Injectable()
 export class WorkflowService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   // ─── Definitions ────────────────────────────────────────────────────────────
 
@@ -100,7 +104,7 @@ export class WorkflowService {
     orgId: number,
     userId?: number,
   ) {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const [inst] = await tx
         .select()
         .from(workflowInstances)
@@ -152,8 +156,22 @@ export class WorkflowService {
         id: instanceId,
         status: isLast ? "approved" : "pending",
         currentStep: isLast ? inst.currentStep : nextStep,
+        // Pour declencher la comptabilisation differee une fois la transaction commitee.
+        entityType: inst.entityType,
+        entityId: inst.entityId,
       };
     });
+
+    // Une fois le circuit entierement approuve, comptabilise l'ecriture differee
+    // (ledger_pending_entries -> journal). Hors transaction workflow ; no-op si rien en attente.
+    if (result.status === "approved" && result.entityType && result.entityId) {
+      await this.ledger.approveAndPost(result.entityType, String(result.entityId), orgId, userId);
+    }
+    return {
+      id: result.id,
+      status: result.status,
+      currentStep: result.currentStep,
+    };
   }
 
   /** Detail d'une instance + historique des approbations. */

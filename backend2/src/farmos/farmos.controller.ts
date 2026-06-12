@@ -443,6 +443,27 @@ export class FarmosController {
     return this.farmos.createVaccination(body, orgId);
   }
 
+  @ApiOperation({ summary: "Base de donnees de vaccins (catalogue, filtrable par espece)." })
+  @Permissions("readAll-farmos")
+  @Get("vaccines")
+  listVaccines(@CurrentOrg() orgId: number, @Query("species") species?: string) {
+    return this.farmos.listVaccines(orgId, species);
+  }
+
+  @ApiOperation({ summary: "Fiche complete d'un vaccin (specifications)." })
+  @Permissions("readAll-farmos")
+  @Get("vaccines/:id")
+  getVaccine(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getVaccine(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Ajoute un vaccin a la base (personnalise)." })
+  @Permissions("create-farmos")
+  @Post("vaccines")
+  createVaccine(@Body() body: any, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createVaccine(body, orgId, userId);
+  }
+
   @Permissions("readAll-farmos")
   @Get("vet-exams")
   listVetExams(@CurrentOrg() orgId: number) {

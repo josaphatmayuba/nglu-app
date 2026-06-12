@@ -46,11 +46,22 @@ export const api = {
   incomeStatement: () => jsonFetch("/account?query=is"),
   createTransaction: (body) => jsonFetch("/transaction", { method: "POST", body: JSON.stringify(body) }),
   createAccount: (body) => jsonFetch("/account", { method: "POST", body: JSON.stringify(body) }),
+  transactionTypes: () => jsonFetch("/transaction-type"),
 
   // ── Grand livre moderne (partie double) ──────────────────────────────
   ledgerEntries: () => jsonFetch("/ledger"),
   ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
+  ledgerBalances: () => jsonFetch("/ledger/balances"),
+  ledgerAccount: (accountId) => jsonFetch(`/ledger/account/${accountId}`),
   ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
+  ledgerIncomeStatement: () => jsonFetch("/ledger/income-statement"),
+  ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
+  ledgerPeriods: () => jsonFetch("/ledger/periods"),
+
+  // ── Projets / Bailleurs (analytique) ─────────────────────────────────
+  projects: () => jsonFetch("/projects"),
+  createProject: (body) => jsonFetch("/projects", { method: "POST", body: JSON.stringify(body) }),
+  projectReport: (id) => jsonFetch(`/projects/${id}/report`),
   reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
 
   // ── Approbations (gate + workflow) ───────────────────────────────────
@@ -62,5 +73,16 @@ export const api = {
 
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
-  budgetStatus: (id) => jsonFetch(`/budget/${id}/status`)
+  budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
+
+  // ── Achats / Factures fournisseurs (purchase-invoices) ───────────────
+  purchaseInvoices: () => jsonFetch("/purchase-invoice"),
+  purchaseInvoicesInfo: () => jsonFetch("/purchase-invoice?query=info"),
+  approvePurchaseInvoice: (id, comment) => jsonFetch(`/purchase-invoice/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+
+  // ── Procurement / Stock (entrepôts, mouvements, commandes) ───────────
+  warehouses: () => jsonFetch("/procurement/warehouses"),
+  warehouseStock: (id) => jsonFetch(`/procurement/warehouses/${id}/stock`),
+  purchaseOrders: () => jsonFetch("/procurement/orders"),
+  receiveOrder: (id, body) => jsonFetch(`/procurement/orders/${id}/receive`, { method: "POST", body: JSON.stringify(body || {}) })
 };

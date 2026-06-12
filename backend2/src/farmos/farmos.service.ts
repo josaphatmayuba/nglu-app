@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -906,6 +906,7 @@ export class FarmosService {
       expenseDate: input.expense_date,
       relatedAnimalId: input.related_animal_id ?? null,
       relatedMedicineId: input.related_medicine_id ?? null,
+      projectId: input.project_id ?? null,
       notes: input.notes ?? null,
     }).$returningId();
     // Stock-in : si la dépense est liée à un médicament/aliment et porte une
@@ -1285,6 +1286,65 @@ export class FarmosService {
       notes: input.notes ?? null,
     }).$returningId();
     await this.publishFarmosUpdate("createVaccination", ["vaccinations"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  // ─── Base de donnees de vaccins (catalogue + specifications) ───────────────
+  async listVaccines(orgId: number, species?: string) {
+    const conds = [eq(farmosVaccines.organizationId, orgId), eq(farmosVaccines.isActive, 1)];
+    if (species) conds.push(sql`${farmosVaccines.species} like ${"%" + species + "%"}`);
+    return this.db
+      .select({
+        id: farmosVaccines.id,
+        name: farmosVaccines.name,
+        species: farmosVaccines.species,
+        targetDiseases: farmosVaccines.targetDiseases,
+        manufacturer: farmosVaccines.manufacturer,
+        isSeed: farmosVaccines.isSeed,
+      })
+      .from(farmosVaccines)
+      .where(and(...conds))
+      .orderBy(farmosVaccines.name);
+  }
+
+  async getVaccine(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosVaccines)
+      .where(and(eq(farmosVaccines.id, id), eq(farmosVaccines.organizationId, orgId)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Vaccin introuvable.");
+    return row;
+  }
+
+  async createVaccine(input: any, orgId: number, userId?: number) {
+    const [res] = await this.db.insert(farmosVaccines).values({
+      organizationId: orgId,
+      name: input.name,
+      commercialNames: input.commercial_names ?? input.commercialNames ?? null,
+      manufacturer: input.manufacturer ?? null,
+      species: input.species ?? null,
+      targetDiseases: input.target_diseases ?? input.targetDiseases ?? null,
+      vaccineType: input.vaccine_type ?? input.vaccineType ?? null,
+      dose: input.dose ?? null,
+      route: input.route ?? null,
+      primoAge: input.primo_age ?? input.primoAge ?? null,
+      boosterSchedule: input.booster_schedule ?? input.boosterSchedule ?? null,
+      protectionDuration: input.protection_duration ?? input.protectionDuration ?? null,
+      treatmentDuration: input.treatment_duration ?? input.treatmentDuration ?? null,
+      withdrawalMeat: input.withdrawal_meat ?? input.withdrawalMeat ?? null,
+      withdrawalMilk: input.withdrawal_milk ?? input.withdrawalMilk ?? null,
+      withdrawalEggs: input.withdrawal_eggs ?? input.withdrawalEggs ?? null,
+      sideEffects: input.side_effects ?? input.sideEffects ?? null,
+      contraindications: input.contraindications ?? null,
+      precautions: input.precautions ?? null,
+      storage: input.storage ?? null,
+      packaging: input.packaging ?? null,
+      sourceUrl: input.source_url ?? input.sourceUrl ?? null,
+      registrationNo: input.registration_no ?? input.registrationNo ?? null,
+      notes: input.notes ?? null,
+      createdBy: userId,
+    }).$returningId();
     return { id: res.id };
   }
 
@@ -2252,7 +2312,7 @@ export class FarmosService {
           currencyId: input.currency_id ?? undefined,
           idempotencyKey: `farmos_expense:${expenseId}`,
           lines: [
-            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense" },
+            { accountId: type.debitAccountId, side: "DEBIT", amount: Number(input.amount), description: "FarmOS Expense", projectId: input.project_id ?? undefined },
             { accountId: type.creditAccountId, side: "CREDIT", amount: Number(input.amount), description: "FarmOS Expense" },
           ],
         },
@@ -2289,7 +2349,7 @@ export class FarmosService {
         idempotencyKey: `farmos_expense:${expenseId}`,
         skipApprovalGate: true,
         lines: [
-          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense" },
+          { accountId: type.debitAccountId, side: "DEBIT", amount: Number(exp.amount), description: "FarmOS Expense", projectId: exp.projectId ?? undefined },
           { accountId: type.creditAccountId, side: "CREDIT", amount: Number(exp.amount), description: "FarmOS Expense" },
         ],
       },

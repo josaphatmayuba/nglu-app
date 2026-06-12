@@ -81,6 +81,22 @@ export class LedgerController {
     return this.ledger.trialBalance(orgId);
   }
 
+  @ApiOperation({ summary: "Compte de resultat moderne (produits - charges)" })
+  @ApiOkResponse({ description: "Income statement" })
+  @Permissions("readAll-transaction")
+  @Get("income-statement")
+  incomeStatement(@CurrentOrg() orgId: number) {
+    return this.ledger.incomeStatement(orgId);
+  }
+
+  @ApiOperation({ summary: "Bilan moderne (actif = passif + capitaux propres)" })
+  @ApiOkResponse({ description: "Balance sheet" })
+  @Permissions("readAll-transaction")
+  @Get("balance-sheet")
+  balanceSheet(@CurrentOrg() orgId: number) {
+    return this.ledger.balanceSheet(orgId);
+  }
+
   @ApiOperation({ summary: "Liste des modules exigeant une approbation avant comptabilisation" })
   @ApiOkResponse({ description: "Exigences d'approbation" })
   @Permissions("readAll-transaction")

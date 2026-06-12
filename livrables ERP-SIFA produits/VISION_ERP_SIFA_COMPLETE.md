@@ -8,26 +8,35 @@ Finance · Approvisionnement · Stock · Ventes · RH · Immobilier · Construct
 
 ---
 
-## 0. État d'avancement (mise à jour 2026-06-11) — VERSION 3.39.0
+## 0. État d'avancement (mise à jour 2026-06-11) — VERSION 3.44.x
 
-Tout sur branche `develop`, déployé dev, **validé en réel** sur dev.ongdngolu.org.
+P0 + P1 **EN PRODUCTION** (ongdngolu.org), validés en réel. Démarrage P2.
 
-**P0 — Cœur comptable moderne (module `backend2/src/ledger/`)** : ✅ COMPLET
+**P0 — Cœur comptable moderne (`backend2/src/ledger/`)** : ✅ COMPLET, EN PROD
 - partie double + équilibre Σdébit=Σcrédit, idempotence, contre-passation (sans DELETE)
 - règles paramétrables (`transaction_type_rules` + `postByRules`)
 - rapports modernes (`/ledger/balances`, `/ledger/trial-balance`)
 - périodes & clôture (blocage écriture sur période close, 409)
-- dual-write strangler depuis 5 modules écrivains (sale/purchase-invoices, property-management, farmos, hr)
+- dual-write strangler depuis les modules écrivains
 
-**P1 — Modules transverses** : ✅ Workflow · ✅ Budget · ✅ Gate d'approbation centralisé
-- **Workflow** (`backend2/src/workflow/`) : circuits multi-étapes, soumission, approbation/rejet — validé
-- **Budget** (`backend2/src/budget/`) : enveloppe + lignes + consommation + alerte dépassement ; **consommation live depuis le grand livre** (`/budget/:id/status-ledger`) — validé
-- **Gate d'approbation** (dans LedgerService) : « toute dépense approuvée avant comptabilisation », activable par module (`ledger_approval_requirements`), refus 422 si non approuvé — validé
-- **FarmOS câblé** (module pilote) : dépense → soumission auto au workflow → comptabilisation reportée → approbation → écriture générée — **validé bout en bout**
+**P1 — Modules transverses** : ✅ COMPLET, EN PROD
+- **Workflow** (`backend2/src/workflow/`) : circuits multi-étapes, soumission, approbation/rejet
+- **Budget** (`backend2/src/budget/`) : enveloppe + lignes + consommation live depuis le grand livre
+- **Gate d'approbation** : « toute dépense approuvée avant comptabilisation », activé en prod sur farmos_expense/payroll/purchase/maintenance
+- **Procurement + Stock** (`backend2/src/procurement/`) : entrepôts, bons de commande, réception → stock_movements, niveaux de stock — le « A » de SIFA ✅
+- **Documents** (`backend2/src/documents/`) : justificatifs + liens polymorphes ✅
+- **4 modules de dépense câblés** au workflow (FarmOS, achats, paie HR, maintenance Domus) — flux validé bout-en-bout en prod (écriture 250/250 équilibrée)
+- **UI compta** : écrans Grand livre / Approbations / Budget branchés sur le backend réel (`comptabilite-app`)
+- Config prod : sous-compte « Farm Expenses » + type « FarmOS Expense » créés ; devise Franc Congolais = FC
 
-**Reste** : répliquer le câblage workflow aux autres modules (purchase-invoices, maintenance, paie) ; Procurement+Stock et Documents (P1 non démarrés) ; migration historique table plate→grand livre + bascule des lecteurs (prod) ; plan de comptes OHANGE/dimensions analytiques avancées.
+**P2 — Maturité produit (EN COURS)** :
+1. **Rapports financiers** unifiés : bilan, compte de résultat, balance générale, grand livre, exports (aujourd'hui seul le trial-balance brut existe)
+2. **Comptabilité analytique** : dimensions sites/projets/activités (colonnes présentes dans journal_entry_lines, mais pas de module/UI de pilotage)
+3. **NGO Projects / Bailleurs** : suivi projet + rapport bailleur (absent — clé pour une ONG)
+4. **UI** des modules restants (procurement/stock, documents, périodes/clôture)
+5. **Bascule des lecteurs** : les rapports legacy (`accounts.service`) ne lisent pas encore le nouveau grand livre (mode « ledger à neuf » retenu → pas de migration historique)
 
-Détail technique : voir `MEMORY.md` → [project_erp_sifa_ledger].
+Détail technique : voir `MEMORY.md` → [project_erp_sifa_ledger], [project_erp_sifa_prod_cutover].
 
 ---
 

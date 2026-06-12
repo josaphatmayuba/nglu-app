@@ -532,6 +532,7 @@ export class CreateExpenseDto {
   @ApiProperty() @IsDateString() expense_date: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_animal_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() related_medicine_id?: number | null;
+  @ApiPropertyOptional({ description: "Projet/bailleur (axe analytique)." }) @IsOptional() @Type(() => Number) @IsInt() project_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 

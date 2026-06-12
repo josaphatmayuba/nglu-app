@@ -1,10 +1,10 @@
 /* ============================================================================
-   Assistant IA — module réutilisable (MAQUETTE, réponses simulées)
+   Assistant IA — module réutilisable avec mode déconnecté.
    Autonome : injecte son propre CSS, indépendant du framework CSS de l'app.
    mountAiWidget(config) crée le FAB + le panneau (chat + recommandations) et
    renvoie une fonction de démontage. Le même moteur sert dans toutes les apps —
-   seule la `config` métier change. Le branchement d'un vrai LLM se fera dans
-   reply()/send() (remplacer la réponse simulée par un appel backend).
+   seule la `config` métier change. Tant qu'un vrai LLM n'est pas branché,
+   config.disabled évite de produire des réponses métier inventées.
 ============================================================================ */
 const PREFIX = "aiw";
 
@@ -30,6 +30,9 @@ export function mountAiWidget(config = {}) {
   const RECO = config.reco || [];
   const PROMPTS = config.prompts || [];
   const REPLIES = config.replies || [];
+  const DISABLED = config.disabled === true;
+  const DISABLED_MESSAGE = config.disabledMessage ||
+    "Assistant IA non connecté au backend. Aucune recommandation automatique n'est disponible pour le moment.";
   const GREET = config.greeting ||
     `Bonjour 👋 Je suis ton assistant IA. Je peux analyser ${APP} et te proposer des pistes pour améliorer ton projet. Pose-moi une question, ou ouvre l’onglet Recommandations.`;
 
@@ -109,7 +112,7 @@ export function mountAiWidget(config = {}) {
         `<div class="${PREFIX}-msgs" data-msgs></div>` +
         `<div class="${PREFIX}-chips" data-chips></div>` +
         `<form class="${PREFIX}-input" data-form><input data-text placeholder="Pose ta question…" autocomplete="off"/><button class="${PREFIX}-send" type="submit">${SEND}</button></form>` +
-        `<div class="${PREFIX}-foot">Maquette — réponses simulées · branchement LLM à venir</div>` +
+        `<div class="${PREFIX}-foot">${DISABLED ? "Assistant IA non connecté au backend" : "Réponses automatiques à valider avant usage"}</div>` +
       `</section>` +
       `<section class="${PREFIX}-pane" data-pane="reco"><div class="${PREFIX}-recolist" data-recolist></div></section>` +
     `</aside>`;
@@ -139,6 +142,7 @@ export function mountAiWidget(config = {}) {
   }
   function add(text, who) { const d = document.createElement("div"); d.className = `${PREFIX}-msg ${who}`; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
   function reply(q) {
+    if (DISABLED) return DISABLED_MESSAGE;
     const lc = (q || "").toLowerCase();
     const found = REPLIES.find((r) => (r.k || []).some((k) => lc.indexOf(k) !== -1));
     return found ? found.a

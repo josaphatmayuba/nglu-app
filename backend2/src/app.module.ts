@@ -46,6 +46,8 @@ import { WorkflowModule } from "./workflow/workflow.module";
 import { BudgetModule } from "./budget/budget.module";
 import { ProcurementModule } from "./procurement/procurement.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { ProjectsModule } from "./projects/projects.module";
+import { VaccineRegistryModule } from "./vaccine-registry/vaccine-registry.module";
 import { UomModule } from "./uom/uom.module";
 import { UsersModule } from "./users/users.module";
 
@@ -96,6 +98,8 @@ import { UsersModule } from "./users/users.module";
     BudgetModule,
     ProcurementModule,
     DocumentsModule,
+    ProjectsModule,
+    VaccineRegistryModule,
     TransactionTypesModule,
     UomModule,
     UsersModule,

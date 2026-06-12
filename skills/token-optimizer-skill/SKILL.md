@@ -1,3 +1,8 @@
+---
+name: token-optimizer-skill
+description: Reduce token use during Codex or Claude Code software development. Use when the user asks to optimize token consumption, choose an effort/risk profile before a task, limit context bloat, run targeted project searches, summarize diffs, or follow token-efficient coding workflows.
+---
+
 # Skill: Token Optimizer pour Codex / Claude Code
 
 ## Objectif
