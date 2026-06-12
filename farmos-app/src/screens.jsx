@@ -3715,6 +3715,13 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   );
 };
 
+const BuildingEditorField = ({ label, children }) => (
+  <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 }}>
+    <span className="overline" style={{ fontSize: 10 }}>{label}</span>
+    {children}
+  </label>
+);
+
 const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
   const [form, setForm] = React.useState(() => building
     ? { name: building.name || "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
@@ -3735,7 +3742,6 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
     } catch (e) { setErr((lang === "fr" ? "Échec : " : "Failed: ") + (e.message || e)); } finally { setBusy(false); }
   };
   const del = async () => { if (!building?.id) return; try { await api.deleteBuilding(building.id); onSaved(); } catch (e) { setErr(e.message); } };
-  const Field = ({ label, children }) => (<label style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 }}><span className="overline" style={{ fontSize: 10 }}>{label}</span>{children}</label>);
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 1000, padding: 20, overflowY: "auto" }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 520, padding: 20, display: "flex", flexDirection: "column", gap: 12, margin: "20px 0" }}>
@@ -3743,31 +3749,31 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
           <div className="overline">{building ? (lang === "fr" ? "Modifier le bâtiment" : "Edit building") : (lang === "fr" ? "Nouveau bâtiment" : "New building")}</div>
           <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
         </div>
-        <Field label={lang === "fr" ? "Nom" : "Name"}><input value={form.name} onChange={set("name")} style={inputStyle}/></Field>
+        <BuildingEditorField label={lang === "fr" ? "Nom" : "Name"}><input value={form.name} onChange={set("name")} style={inputStyle}/></BuildingEditorField>
         <div style={{ display: "flex", gap: 8 }}>
-          <Field label={lang === "fr" ? "Espèce" : "Species"}>
+          <BuildingEditorField label={lang === "fr" ? "Espèce" : "Species"}>
             <select value={form.species} onChange={set("species")} style={inputStyle}>
               <option value="">—</option>
               {SPECIES.map((s) => <option key={s.id} value={s.id}>{lang === "fr" ? s.fr : s.en}</option>)}
             </select>
-          </Field>
-          <Field label={lang === "fr" ? "Type" : "Type"}><input value={form.type} onChange={set("type")} placeholder={lang === "fr" ? "Étable, poulailler…" : "Barn, henhouse…"} style={inputStyle}/></Field>
+          </BuildingEditorField>
+          <BuildingEditorField label={lang === "fr" ? "Type" : "Type"}><input value={form.type} onChange={set("type")} placeholder={lang === "fr" ? "Étable, poulailler…" : "Barn, henhouse…"} style={inputStyle}/></BuildingEditorField>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <Field label={lang === "fr" ? "Capacité" : "Capacity"}><input type="number" value={form.capacity} onChange={set("capacity")} style={inputStyle}/></Field>
-          <Field label={lang === "fr" ? "Température °C" : "Temperature °C"}><input type="number" step="0.1" value={form.temperature} onChange={set("temperature")} style={inputStyle}/></Field>
-          <Field label={lang === "fr" ? "Humidité %" : "Humidity %"}><input type="number" step="0.1" value={form.humidity} onChange={set("humidity")} style={inputStyle}/></Field>
+          <BuildingEditorField label={lang === "fr" ? "Capacité" : "Capacity"}><input type="number" value={form.capacity} onChange={set("capacity")} style={inputStyle}/></BuildingEditorField>
+          <BuildingEditorField label={lang === "fr" ? "Température °C" : "Temperature °C"}><input type="number" step="0.1" value={form.temperature} onChange={set("temperature")} style={inputStyle}/></BuildingEditorField>
+          <BuildingEditorField label={lang === "fr" ? "Humidité %" : "Humidity %"}><input type="number" step="0.1" value={form.humidity} onChange={set("humidity")} style={inputStyle}/></BuildingEditorField>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <Field label={lang === "fr" ? "Responsable" : "Manager"}><input value={form.manager} onChange={set("manager")} style={inputStyle}/></Field>
-          <Field label={lang === "fr" ? "Hygiène" : "Hygiene"}>
+          <BuildingEditorField label={lang === "fr" ? "Responsable" : "Manager"}><input value={form.manager} onChange={set("manager")} style={inputStyle}/></BuildingEditorField>
+          <BuildingEditorField label={lang === "fr" ? "Hygiène" : "Hygiene"}>
             <select value={form.hygiene_status} onChange={set("hygiene_status")} style={inputStyle}>
               <option value="">—</option>
               <option value="clean">{lang === "fr" ? "Propre" : "Clean"}</option>
               <option value="ok">{lang === "fr" ? "Correct" : "OK"}</option>
               <option value="needs_cleaning">{lang === "fr" ? "À nettoyer" : "Needs cleaning"}</option>
             </select>
-          </Field>
+          </BuildingEditorField>
         </div>
         {err && <div style={{ color: "var(--oxblood-700)", fontSize: 12 }}>{err}</div>}
         <div style={{ display: "flex", gap: 6 }}>
