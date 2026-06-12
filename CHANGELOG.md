@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **ERP/SIFA — Comptabilisation après approbation : le workflow déclenche enfin le post du ledger (bug critique)** : `WorkflowService.decide()` passait l'instance à `approved` mais **n'appelait jamais `LedgerService.approveAndPost()`** — l'écriture différée par le gate (`ledger_pending_entries`) n'était donc **jamais comptabilisée** même après approbation complète du circuit. Workflow et ledger étaient déconnectés. Désormais, quand un circuit atteint `approved`, le service rejoue l'écriture en attente (`entityType`/`entityId` → `approveAndPost`, hors transaction workflow, idempotent / no-op si rien en attente). `WorkflowModule` importe `LedgerModule`. C'était le blocage réel des 4 modules de dépense (farmos_expense/payroll/purchase/maintenance) sur dev ET prod. [3.50.6]
 - **FarmOS — ETL vaccins : bornage des longueurs de colonne (run ACIA réel)** : le 1er run téléchargeant le vrai CSV ACIA a échoué sur `Failed query insert vx_registrations` car certaines lignes ACIA ont un `tradeName`/`ccvbNumber` très long (liste de produits) dépassant les `varchar`. Bornage à l'insert : `product_name` tronqué à 200, `registration_number` à 80. Lignes au nom vide ignorées. Le pipeline télécharge et parse désormais le CSV ACIA de bout en bout. [3.50.5]
 
 ### Changed
