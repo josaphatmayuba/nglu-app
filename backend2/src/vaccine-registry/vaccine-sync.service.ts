@@ -108,19 +108,24 @@ export class VaccineSyncService {
     const header = this.splitCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
 
     const idx = (...keys: string[]) =>
-      header.findIndex((h) => keys.some((k) => h.includes(k)));
-    const iProduct = idx("product", "tradename", "trade name", "produit", "nom");
+      header.findIndex((h) => keys.some((k) => h === k || h.includes(k)));
+    // tradename = colonne ACIA reelle ; statuscodename = statut ACIA ; ccvbnumber = n licence.
+    const iProduct = idx("tradename", "trade name", "product", "produit", "nom");
     const iMaker = idx("manufacturer", "company", "licensee", "fabricant", "titulaire");
     const iSpecies = idx("species", "espece", "espèce");
-    const iStatus = idx("status", "statut");
+    const iStatus = idx("statuscodename", "status", "statut");
+    const iRef = idx("ccvbnumber", "usdacode", "licence", "license");
 
     const out: RawProduct[] = [];
     for (let i = 1; i < lines.length; i++) {
       const cols = this.splitCsvLine(lines[i]);
-      const productName = (iProduct >= 0 ? cols[iProduct] : cols[0])?.trim();
+      // tradeName ACIA peut etre bilingue separe par []: on garde la partie anglaise.
+      let productName = (iProduct >= 0 ? cols[iProduct] : cols[0])?.trim();
+      if (productName?.includes("[]")) productName = productName.split("[]")[0].trim();
       if (!productName) continue;
+      const ref = iRef >= 0 ? cols[iRef]?.trim() : undefined;
       out.push({
-        sourceRef: productName.slice(0, 120),
+        sourceRef: (ref || productName).slice(0, 120),
         productName,
         manufacturer: iMaker >= 0 ? cols[iMaker]?.trim() : undefined,
         species: iSpecies >= 0 ? cols[iSpecies]?.trim() : undefined,

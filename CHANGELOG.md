@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **FarmOS — ETL vaccins : URL réelle du CSV ACIA + parsing colonnes officielles** : le 1er run de synchronisation sur dev a journalisé `ACIA HTTP 404` (URL par défaut erronée). Corrigé vers l'endpoint officiel `apps.inspection.canada.ca/webapps/veterinary-biologics-product-list/Home/GetAllCSV` (vérifié : HTTP 200, `text/csv`, ~158 Ko). Parser adapté aux vraies colonnes ACIA (`tradeName`, `manufacturer`, `species`, `statusCodeName`, `ccvbNumber`) : extraction du nom anglais quand `tradeName` est bilingue (séparateur `[]`), n° de licence `ccvbNumber` utilisé comme `source_ref`. Le pipeline E2E est validé : run journalisé, région Canada auto-créée, gestion d'erreur fonctionnelle. [3.50.3]
+
 ### Changed
 - **FarmOS — Champ Vétérinaire et listes de données passés en autocomplete** : le champ « Vétérinaire » du dossier vétérinaire (`vetdossier.jsx`, ex-input « Dr… ») devient un **autocomplete branché sur la liste RH des vétérinaires** (`api.listFarmosStaff("vétérinaire")`), cohérent avec la saisie rapide. Les `<select>` portant de vraies **listes de données** (animal/lot dans le dossier et les documents vét., fournisseur de paillettes dans la banque de semence, rôle à l'assignation d'un employé) deviennent des **autocomplete recherchables** (composants `Autocomplete`/`AutocompleteDB` exportés depuis `quickentry.jsx`). Les enums courts fixes (espèce, urgence, statut, type, unité) restent en select natif (meilleure UX mobile). Champs verrouillés après signature : affichage en lecture seule préservé. [3.50.2]
 

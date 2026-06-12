@@ -74,6 +74,6 @@ export const env = {
     // URL de la source pilote ACIA (CSV des biologiques veterinaires licencies au Canada).
     aciaCsvUrl:
       process.env.VACCINE_SYNC_ACIA_URL ||
-      "https://active.inspection.gc.ca/netapp/lvbmcbi/lvbmcbisearch_csv.aspx?lang=eng",
+      "https://apps.inspection.canada.ca/webapps/veterinary-biologics-product-list/Home/GetAllCSV",
   },
 };
