@@ -41,6 +41,23 @@ export class FarmosService {
     private readonly workflow: WorkflowService,
   ) {}
 
+  private isSaleLockedStatus(status: unknown) {
+    return ["available_sale", "for_sale", "a_vendre", "sold"].includes(String(status || "").trim().toLowerCase());
+  }
+
+  private assertAnimalWritable(animal: { status?: unknown } | null | undefined) {
+    if (this.isSaleLockedStatus(animal?.status)) {
+      throw new BadRequestException("Ce dossier est verrouille: l'animal est en vente ou vendu.");
+    }
+  }
+
+  private async assertAnimalWritableById(animalId: number | null | undefined, orgId: number) {
+    if (animalId == null) return null;
+    const animal = await this.getAnimal(Number(animalId), orgId);
+    this.assertAnimalWritable(animal);
+    return animal;
+  }
+
   async getDashboardSnapshot(orgId: number) {
     const [
       animals,
@@ -433,7 +450,8 @@ export class FarmosService {
   }
 
   async updateAnimal(id: number, input: UpdateAnimalDto, orgId: number) {
-    await this.getAnimal(id, orgId);
+    const current = await this.getAnimal(id, orgId);
+    this.assertAnimalWritable(current);
     const patch: Record<string, unknown> = {};
     if (input.external_id !== undefined) patch.externalId = input.external_id;
     if (input.name !== undefined) patch.name = input.name;
@@ -460,7 +478,8 @@ export class FarmosService {
   }
 
   async deleteAnimal(id: number, orgId: number) {
-    await this.getAnimal(id, orgId);
+    const current = await this.getAnimal(id, orgId);
+    this.assertAnimalWritable(current);
     await this.db.update(farmosAnimals).set({ isActive: 0 }).where(eq(farmosAnimals.id, id));
     await this.publishFarmosUpdate("deleteAnimal", ["animals"], "deleted", id, orgId);
     return { message: "Animal supprimé." };
@@ -570,11 +589,12 @@ export class FarmosService {
   async createTreatment(input: CreateTreatmentDto, orgId: number) {
     // ensure animal belongs to the same organization
     const [animal] = await this.db
-      .select({ id: farmosAnimals.id, species: farmosAnimals.species })
+      .select({ id: farmosAnimals.id, species: farmosAnimals.species, status: farmosAnimals.status })
       .from(farmosAnimals)
       .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)))
       .limit(1);
     if (!animal) throw new NotFoundException("Animal not found.");
+    this.assertAnimalWritable(animal);
 
     // disease must exist either in global catalogue or in the same organization
     const [disease] = await this.db
@@ -623,6 +643,10 @@ export class FarmosService {
 
   async updateTreatment(id: number, input: UpdateTreatmentDto, orgId: number) {
     const previous = await this.getTreatment(id, orgId);
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
+    if (input.animal_id !== undefined && Number(input.animal_id) !== Number(previous.animalId)) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     const patch: Record<string, unknown> = {};
     if (input.animal_id !== undefined) patch.animalId = input.animal_id;
     if (input.disease_id !== undefined) patch.diseaseId = input.disease_id;
@@ -650,6 +674,7 @@ export class FarmosService {
 
   async deleteTreatment(id: number, orgId: number) {
     const previous = await this.getTreatment(id, orgId);
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
     await this.db.update(farmosTreatments).set({ isActive: 0 }).where(eq(farmosTreatments.id, id));
     await this.recomputeAnimalWithdrawal(Number(previous.animalId), orgId);
     await this.publishFarmosUpdate("deleteTreatment", ["treatments", "animals"], "deleted", id, orgId);
@@ -885,6 +910,9 @@ export class FarmosService {
 
   async deleteSale(id: number, orgId: number) {
     const [row] = await this.db.select().from(farmosSales).where(and(eq(farmosSales.id, id), eq(farmosSales.organizationId, orgId))).limit(1);
+    if (row?.animalId != null) {
+      await this.assertAnimalWritableById(Number(row.animalId), orgId);
+    }
     await this.db.update(farmosSales).set({ isActive: 0 }).where(and(eq(farmosSales.id, id), eq(farmosSales.organizationId, orgId)));
     if (row?.transactionId) {
       await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
@@ -894,6 +922,9 @@ export class FarmosService {
   }
 
   async createExpense(input: CreateExpenseDto, orgId: number) {
+    if (input.related_animal_id != null) {
+      await this.assertAnimalWritableById(Number(input.related_animal_id), orgId);
+    }
     const [res] = await this.db.insert(farmosExpenses).values({
       organizationId: orgId,
       category: input.category,
@@ -939,6 +970,9 @@ export class FarmosService {
 
   async deleteExpense(id: number, orgId: number) {
     const [row] = await this.db.select().from(farmosExpenses).where(and(eq(farmosExpenses.id, id), eq(farmosExpenses.organizationId, orgId))).limit(1);
+    if (row?.relatedAnimalId != null) {
+      await this.assertAnimalWritableById(Number(row.relatedAnimalId), orgId);
+    }
     await this.db.update(farmosExpenses).set({ isActive: 0 }).where(and(eq(farmosExpenses.id, id), eq(farmosExpenses.organizationId, orgId)));
     if (row?.transactionId) {
       await this.db.update(transactions).set({ status: "false" }).where(eq(transactions.id, row.transactionId));
@@ -951,6 +985,7 @@ export class FarmosService {
     // Validate the animal belongs to the organisation.
     const [a] = await this.db.select().from(farmosAnimals).where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId))).limit(1);
     if (!a) throw new NotFoundException("Animal not found in this organisation.");
+    this.assertAnimalWritable(a);
 
     const breedingType = (input.breeding_type ?? "unknown");
 
@@ -999,6 +1034,9 @@ export class FarmosService {
   }
 
   async deleteReproductionEvent(id: number, orgId: number) {
+    const [previous] = await this.db.select().from(farmosReproductionEvents).where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId))).limit(1);
+    if (!previous) throw new NotFoundException("Reproduction event not found.");
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
     await this.db.update(farmosReproductionEvents).set({ isActive: 0 }).where(and(eq(farmosReproductionEvents.id, id), eq(farmosReproductionEvents.organizationId, orgId)));
     await this.publishFarmosUpdate("deleteReproductionEvent", ["reproductionEvents"], "deleted", id, orgId);
     return { message: "Événement supprimé." };
@@ -1207,6 +1245,9 @@ export class FarmosService {
   }
 
   async createProductionLog(input: CreateProductionLogDto, orgId: number) {
+    if (input.animal_id != null) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     const [res] = await this.db.insert(farmosProductionLogs).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
@@ -1224,6 +1265,11 @@ export class FarmosService {
   }
 
   async deleteProductionLog(id: number, orgId: number) {
+    const [previous] = await this.db.select().from(farmosProductionLogs).where(and(eq(farmosProductionLogs.id, id), eq(farmosProductionLogs.organizationId, orgId))).limit(1);
+    if (!previous) throw new NotFoundException("Production log not found.");
+    if (previous.animalId != null) {
+      await this.assertAnimalWritableById(Number(previous.animalId), orgId);
+    }
     await this.db.update(farmosProductionLogs).set({ isActive: 0 }).where(and(eq(farmosProductionLogs.id, id), eq(farmosProductionLogs.organizationId, orgId)));
     await this.publishFarmosUpdate("deleteProductionLog", ["productionLogs"], "deleted", id, orgId);
     return { message: "Production supprimée." };
@@ -1372,6 +1418,9 @@ export class FarmosService {
   }
 
   async createVetExam(input: any, orgId: number) {
+    if (input.animal_id != null) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     const [res] = await this.db.insert(farmosVetExams).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
@@ -1402,6 +1451,12 @@ export class FarmosService {
 
   async updateVetExam(id: number, input: any, orgId: number) {
     const exam = await this.getVetExam(id, orgId);
+    if (exam.animalId != null) {
+      await this.assertAnimalWritableById(Number(exam.animalId), orgId);
+    }
+    if (input.animal_id !== undefined && input.animal_id != null && Number(input.animal_id) !== Number(exam.animalId)) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     if (exam.signedAt) throw new BadRequestException("Examen signé — modification interdite.");
     const patch: Record<string, unknown> = {};
     if (input.animal_id !== undefined) patch.animalId = input.animal_id;
@@ -1436,6 +1491,9 @@ export class FarmosService {
   // Signature vétérinaire — verrouille l'examen (cf. workflow signature HR).
   async signVetExam(id: number, input: any, orgId: number) {
     const exam = await this.getVetExam(id, orgId);
+    if (exam.animalId != null) {
+      await this.assertAnimalWritableById(Number(exam.animalId), orgId);
+    }
     if (exam.signedAt) throw new BadRequestException("Examen déjà signé.");
     if (!input.signature) throw new BadRequestException("Signature requise.");
     await this.db
@@ -1447,7 +1505,10 @@ export class FarmosService {
   }
 
   async deleteVetExam(id: number, orgId: number) {
-    await this.getVetExam(id, orgId);
+    const exam = await this.getVetExam(id, orgId);
+    if (exam.animalId != null) {
+      await this.assertAnimalWritableById(Number(exam.animalId), orgId);
+    }
     await this.db.update(farmosVetExams).set({ isActive: 0 }).where(eq(farmosVetExams.id, id));
     await this.publishFarmosUpdate("deleteVetExam", ["vetExams"], "deleted", id, orgId);
     return { message: "Examen supprimé." };
@@ -1515,6 +1576,9 @@ export class FarmosService {
   async createDocument(input: any, orgId: number, currentUserId?: number) {
     if (!input.data_url) throw new BadRequestException("data_url requis.");
     if (!input.title) throw new BadRequestException("title requis.");
+    if (input.animal_id != null) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     const [res] = await this.db.insert(farmosDocuments).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
@@ -1534,7 +1598,10 @@ export class FarmosService {
   }
 
   async deleteDocument(id: number, orgId: number) {
-    await this.getDocument(id, orgId);
+    const previous = await this.getDocument(id, orgId);
+    if (previous.animalId != null) {
+      await this.assertAnimalWritableById(Number(previous.animalId), orgId);
+    }
     await this.db.update(farmosDocuments).set({ isActive: 0 }).where(eq(farmosDocuments.id, id));
     await this.publishFarmosUpdate("deleteDocument", ["documents"], "deleted", id, orgId);
     return { message: "Document supprimé." };
@@ -1800,6 +1867,9 @@ export class FarmosService {
   }
 
   async createMortalityEvent(input: any, orgId: number) {
+    if (input.animal_id) {
+      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+    }
     const [res] = await this.db.insert(farmosMortalityEvents).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
@@ -1842,6 +1912,7 @@ export class FarmosService {
   }
 
   async createWeighing(input: CreateWeighingDto, orgId: number) {
+    await this.assertAnimalWritableById(Number(input.animal_id), orgId);
     const [res] = await this.db.insert(farmosWeighings).values({
       organizationId: orgId,
       animalId: input.animal_id,
@@ -1860,6 +1931,9 @@ export class FarmosService {
   }
 
   async deleteWeighing(id: number, orgId: number) {
+    const [previous] = await this.db.select().from(farmosWeighings).where(and(eq(farmosWeighings.id, id), eq(farmosWeighings.organizationId, orgId))).limit(1);
+    if (!previous) throw new NotFoundException("Weighing not found.");
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
     await this.db
       .update(farmosWeighings)
       .set({ isActive: 0 })
@@ -2008,6 +2082,7 @@ export class FarmosService {
     orgId: number,
     userId?: number | null,
   ) {
+    await this.assertAnimalWritableById(animalId, orgId);
     if (!input?.data_url || !input.data_url.startsWith("data:")) {
       throw new BadRequestException("data_url required (data:image/*;base64,…)");
     }
@@ -2027,6 +2102,13 @@ export class FarmosService {
   }
 
   async deleteAnimalPhoto(id: number, orgId: number) {
+    const [previous] = await this.db
+      .select()
+      .from(farmosAnimalPhotos)
+      .where(and(eq(farmosAnimalPhotos.id, id), eq(farmosAnimalPhotos.organizationId, orgId)))
+      .limit(1);
+    if (!previous) throw new NotFoundException("Animal photo not found.");
+    await this.assertAnimalWritableById(Number(previous.animalId), orgId);
     await this.db
       .update(farmosAnimalPhotos)
       .set({ isActive: 0 })

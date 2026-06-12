@@ -8,8 +8,41 @@ import { useDataRefresh } from "./use-data-refresh";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
+import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
+import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
+
+function useCurrencyCatalog() {
+  const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        if (cancel) return;
+        const currencies = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        setState({
+          currencies,
+          defaultCurrencyId: defaultCurrencyId(setting.value, currencies),
+          fallbackSymbol: defaultSymbol(setting.value, currencies),
+        });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+  return state;
+}
+
+function CurrencySelect({ lang, value, onChange, currencies }) {
+  return (
+    <select className="input" value={value || ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : "")}>
+      <option value="">{lang === "fr" ? "Choisir" : "Select"}</option>
+      {currencyOptions(currencies).map((currency) => (
+        <option key={currency.id} value={currency.id}>{currency.label}</option>
+      ))}
+    </select>
+  );
+}
 
 // ─── HEALTH & TREATMENTS ─────────────────────────────────────────────────
 const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
@@ -21,6 +54,9 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [editingDisease, setEditingDisease] = React.useState(null); // null=fermé, {}=nouveau, row=édition
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
+  const currencyMeta = useCurrencyCatalog();
+  const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
+  const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const refresh = useDataRefresh(["treatments", "animals", "diseases", "expenses", "vetExams"]);
   React.useEffect(() => {
     let cancel = false;
@@ -73,6 +109,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     if (cat !== "medicine" && cat !== "médicament" && cat !== "med") return false;
     const d = e.expenseDate || e.expense_date;
     if (!inDateRange(d, dateRange)) return false;
+    if (activeCurrencyId && String(rowCurrencyId(e) ?? currencyMeta.defaultCurrencyId ?? "") !== activeCurrencyId) return false;
     return true;
   });
   const medCostMonth = medExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -102,7 +139,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         <KpiCard label={lang === "fr" ? "Traitements actifs" : "Active treatments"} value={running.length} unit="" icon="pill" accent="var(--health-500)"/>
         <KpiCard label={lang === "fr" ? "Animaux en quarantaine" : "Animals in quarantine"} value={quarantineCount} unit="" icon="shield" accent={quarantineCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
         <KpiCard label={lang === "fr" ? "Délais de retrait actifs" : "Active withdrawals"} value={withdrawalCount} unit="" icon="clock" accent={withdrawalCount > 0 ? "var(--rust-700)" : "var(--ink-500)"}/>
-        <KpiCard label={lang === "fr" ? "Coût médicaments · période" : "Medicine cost · period"} sublabel={rangeLabel(dateRange, lang)} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit="$" icon="coins"/>
+        <KpiCard label={lang === "fr" ? "Coût médicaments · période" : "Medicine cost · period"} sublabel={rangeLabel(dateRange, lang)} value={medCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} unit={moneyUnit} icon="coins"/>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-main-15)", gap: 16 }}>
@@ -122,6 +159,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             {treatments.map((tr, i) => {
               const sp = speciesById(tr.species);
               const ongoing = tr.status === "running";
+              const locked = isSaleLockedStatus(tr.animalStatus);
               return (
                 <div key={tr.id} style={{
                   display: "grid", gridTemplateColumns: "32px 1fr auto", gap: 14, padding: "14px 18px",
@@ -161,7 +199,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     <span className="tag" style={{ background: ongoing ? "var(--autorite-50)" : "var(--solidite-50)", color: ongoing ? "var(--autorite-900)" : "var(--solidite-900)" }}>
                       {ongoing ? (lang === "fr" ? "En cours" : "Running") : (lang === "fr" ? "Terminé" : "Completed")}
                     </span>
-                    {tr._pk && (
+                    {tr._pk && !locked && (
                       <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} title={lang === "fr" ? "Supprimer" : "Delete"}
                         onClick={async () => {
                           if (!window.confirm(lang === "fr" ? `Supprimer le traitement ${tr.id} ?` : `Delete treatment ${tr.id}?`)) return;
@@ -288,6 +326,8 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 const MortalityStatsSection = ({ lang, speciesFilter }) => {
   const [stats, setStats] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const currencyMeta = useCurrencyCatalog();
+  const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const refresh = useDataRefresh(["mortalityEvents"]);
   React.useEffect(() => {
     let cancel = false;
@@ -299,7 +339,7 @@ const MortalityStatsSection = ({ lang, speciesFilter }) => {
     return () => { cancel = true; };
   }, [refresh]);
 
-  const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} $`;
+  const money = (n) => `${Number(n || 0).toLocaleString("fr-CA")} ${moneyUnit}`;
   const speciesLabel = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.fr : s.en) : id; };
   const maxOf = (arr) => Math.max(1, ...(arr || []).map((x) => x.value));
 
@@ -542,6 +582,9 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const [addOpen, setAddOpen] = React.useState(null); // null | "feed" | "med"
   const [editing, setEditing] = React.useState(null); // medicine row in edit mode
+  const currencyMeta = useCurrencyCatalog();
+  const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
+  const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const refresh = useDataRefresh(["medicines", "expenses", "animals", "feedForecasts"]);
   React.useEffect(() => {
     let cancel = false;
@@ -573,7 +616,8 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
   const feedCostMonth = allExpenses.reduce((s, e) => {
     const cat = String(e.category || "").toLowerCase();
     const d = e.expenseDate || e.expense_date;
-    if ((cat === "feed" || cat === "alimentation") && inDateRange(d, dateRange)) {
+    if ((cat === "feed" || cat === "alimentation") && inDateRange(d, dateRange)
+      && (!activeCurrencyId || String(rowCurrencyId(e) ?? currencyMeta.defaultCurrencyId ?? "") === activeCurrencyId)) {
       return s + Number(e.amount || 0);
     }
     return s;
@@ -599,7 +643,7 @@ const StockScreen = ({ lang, speciesFilter, onSpeciesFilter, kindFilter }) => {
         {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Stock aliment" : "Feed stock"} value={`${(filteredFeed.reduce((a,b)=>a+b.qty,0)/1000).toFixed(1)} t`} icon="wheat" accent="var(--health-500)"/>}
         {kindFilter !== "feed" && <KpiCard label={lang === "fr" ? "Médicaments" : "Medicines"} value={filteredMed.length} unit="réf." icon="pill"/>}
         <KpiCard label={lang === "fr" ? "Stock faible" : "Low stock"} value={visible.filter(s => s.lowStock).length} unit="" icon="alert" accent={visible.some(s => s.lowStock) ? "var(--rust-700)" : "var(--ink-500)"}/>
-        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Coût alimentation · période" : "Feed cost · period"} sublabel={rangeLabel(dateRange, lang)} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit="$" icon="coins" accent="var(--money-500)"/>}
+        {kindFilter !== "med" && <KpiCard label={lang === "fr" ? "Coût alimentation · période" : "Feed cost · period"} sublabel={rangeLabel(dateRange, lang)} value={feedCostMonth > 0 ? feedCostMonth.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"} unit={moneyUnit} icon="coins" accent="var(--money-500)"/>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: kindFilter ? "1fr" : "var(--cols-2)", gap: 16 }}>
@@ -1105,6 +1149,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           {gestations.map((g) => {
             const sp = speciesById(g.species);
             const pct = (g.day / g.total) * 100;
+            const locked = isSaleLockedStatus(g.animalStatus);
             return (
               <div key={g.id} style={{ display: "grid", gridTemplateColumns: "32px 160px 1fr 120px 32px", gap: 14, alignItems: "center" }}>
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1138,7 +1183,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     </>
                   )}
                 </div>
-                {g._pk ? (
+                {g._pk && !locked ? (
                   <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Supprimer" : "Delete"}
                     onClick={async () => {
                       if (!window.confirm(lang === "fr" ? `Supprimer l'événement ${g.animal} ?` : `Delete event ${g.animal}?`)) return;
@@ -1549,7 +1594,7 @@ const EGG_PACKAGINGS = [
 ];
 
 // Cherche un prix configuré pour un conditionnement donné (par tokens d'unité).
-function packagingPrice(prices, item, pk) {
+function packagingPriceRow(prices, item, pk) {
   const tokens = pk.unitTokens.map(normalizeSaleUnit);
   const candidates = (prices || []).filter((p) => {
     const saleSource = p.saleSource || p.sale_source || "production";
@@ -1558,7 +1603,7 @@ function packagingPrice(prices, item, pk) {
     return tokens.includes(normalizeSaleUnit(p.unit));
   });
   const row = candidates.find((p) => p.species === item.species) || candidates.find((p) => !p.species);
-  return row ? priceValue(row) : null;
+  return row || null;
 }
 
 // Liste des conditionnements applicables à un article, avec prix résolu.
@@ -1568,14 +1613,16 @@ function packagingsFor(item, prices, lang) {
     const perEgg = item.unitPrice !== "" && item.unitPrice != null && Number.isFinite(Number(item.unitPrice))
       ? Number(item.unitPrice) : null;
     return EGG_PACKAGINGS.map((pk) => {
-      const configured = pk.key === "unit" ? perEgg : packagingPrice(prices, item, pk);
+      const configuredRow = pk.key === "unit" ? null : packagingPriceRow(prices, item, pk);
+      const configured = pk.key === "unit" ? perEgg : (configuredRow ? priceValue(configuredRow) : null);
+      const currencyId = pk.key === "unit" ? item.currencyId : (priceCurrencyId(configuredRow) ?? item.currencyId ?? null);
       // Repli : si pas de prix plateau configuré, on dérive du prix à l'unité.
       const price = configured != null ? configured : (perEgg != null ? perEgg * pk.eggs : null);
-      return { key: pk.key, eggs: pk.eggs, label: lang === "fr" ? pk.fr : pk.en, price, isConfigured: configured != null };
+      return { key: pk.key, eggs: pk.eggs, label: lang === "fr" ? pk.fr : pk.en, price, currencyId, isConfigured: configured != null };
     });
   }
   const p = item.unitPrice !== "" && item.unitPrice != null && Number.isFinite(Number(item.unitPrice)) ? Number(item.unitPrice) : null;
-  return [{ key: "unit", eggs: 1, label: item.unit || "", price: p, isConfigured: p != null, generic: true }];
+  return [{ key: "unit", eggs: 1, label: item.unit || "", price: p, currencyId: item.currencyId ?? null, isConfigured: p != null, generic: true }];
 }
 
 function buildPosProductionItems(logs, sales, speciesFilter) {
@@ -1625,6 +1672,10 @@ function buildPosProductionItems(logs, sales, speciesFilter) {
 
 function priceValue(row) {
   return Number(row?.unitPrice ?? row?.unit_price ?? 0);
+}
+
+function priceCurrencyId(row) {
+  return row?.currencyId ?? row?.currency_id ?? null;
 }
 
 function findPosPrice(prices, item) {
@@ -1687,7 +1738,7 @@ function buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang }) {
     const price = findAnimalListingPrice(prices, item);
     const unit = price?.unit || "tete";
     const available = normalizeSaleUnit(unit) === "lot" ? 1 : (Number(a.count) > 0 ? Number(a.count) : 1);
-    return { ...item, unit, available, unitPrice: price ? priceValue(price) : "" };
+    return { ...item, unit, available, unitPrice: price ? priceValue(price) : "", currencyId: priceCurrencyId(price) };
   });
 
   const productionRows = buildPosProductionItems(logs, sales, speciesFilter)
@@ -1702,7 +1753,7 @@ function buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang }) {
     })
     .map((item) => {
       const price = findPosPrice(prices, item);
-      return { ...item, unitPrice: price ? priceValue(price) : "" };
+      return { ...item, unitPrice: price ? priceValue(price) : "", currencyId: priceCurrencyId(price) };
     });
 
   return [...animalRows, ...productionRows];
@@ -1722,7 +1773,7 @@ function matchesSaleQuery(item, query) {
   ].filter(Boolean).join(" ").toLowerCase().includes(q);
 }
 
-function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
+function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
   const today = new Date().toISOString().slice(0, 10);
   const packagings = React.useMemo(() => packagingsFor(item || {}, prices, lang), [item, prices, lang]);
   const [packKey, setPackKey] = React.useState(packagings[0]?.key || "unit");
@@ -1732,8 +1783,12 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
   const [buyer, setBuyer] = React.useState("");
   const [saleDate, setSaleDate] = React.useState(today);
   const [notes, setNotes] = React.useState("");
+  const [currencyId, setCurrencyId] = React.useState(pack?.currencyId ?? item?.currencyId ?? currencyMeta?.defaultCurrencyId ?? "");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    setCurrencyId(pack?.currencyId ?? item?.currencyId ?? currencyMeta?.defaultCurrencyId ?? "");
+  }, [pack?.currencyId, item?.currencyId, currencyMeta?.defaultCurrencyId]);
   if (!item) return null;
 
   const configuredPrice = pack && pack.price != null && Number.isFinite(Number(pack.price));
@@ -1743,6 +1798,8 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
   const total = Number.isFinite(packs) && Number.isFinite(price) ? packs * price : 0;
   const isPack = eggsPerPack > 1;                       // conditionnement plateau
   const sp = speciesById(item.species);
+  const activeCurrencyId = currencyId || pack?.currencyId || item.currencyId || currencyMeta?.defaultCurrencyId || "";
+  const activeSymbol = symbolFor(activeCurrencyId, currencyMeta?.currencies || [], currencyMeta?.fallbackSymbol || "");
 
   const save = async () => {
     if (!configuredPrice) {
@@ -1755,6 +1812,10 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
     }
     if (item.available && stockQty > item.available) {
       setError(lang === "fr" ? "Quantite superieure au disponible." : "Quantity exceeds available stock.");
+      return;
+    }
+    if ((currencyMeta?.currencies || []).length && !activeCurrencyId) {
+      setError(lang === "fr" ? "Devise requise." : "Currency is required.");
       return;
     }
     setSaving(true);
@@ -1773,6 +1834,7 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
         unit: item.unit || null,
         unit_price: effectiveUnitPrice,
         total_amount: total,
+        currency_id: activeCurrencyId ? Number(activeCurrencyId) : null,
         buyer: buyer.trim() || null,
         sale_date: saleDate,
         notes: [notes.trim() || null, packNote].filter(Boolean).join(" · ") || null,
@@ -1816,7 +1878,7 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
                     }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-950)" }}>{pk.label}</div>
                     <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>
-                      {pk.price != null ? `${Number(pk.price).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $` : (lang === "fr" ? "prix à définir" : "set price")}
+                      {pk.price != null ? formatMoney(pk.price, pk.currencyId || activeCurrencyId, currencyMeta?.currencies || [], activeSymbol, 2) : (lang === "fr" ? "prix à définir" : "set price")}
                       {pk.eggs > 1 ? ` · ${pk.eggs} ${item.unit || "oeufs"}` : ""}
                       {pk.price != null && !pk.isConfigured ? (lang === "fr" ? " · auto" : " · auto") : ""}
                     </div>
@@ -1846,6 +1908,11 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
               placeholder={lang === "fr" ? "A configurer dans Gestion de vente" : "Configure in Sales management"}
               style={{ width: "100%", marginTop: 4, background: "var(--bg-sunken)", color: configuredPrice ? "var(--ink-950)" : "var(--rust-700)" }}/>
           </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
+            <div style={{ marginTop: 4 }}>
+              <CurrencySelect lang={lang} value={activeCurrencyId} onChange={setCurrencyId} currencies={currencyMeta?.currencies || []}/>
+            </div>
+          </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Acheteur" : "Buyer"}
             <input className="input" value={buyer} onChange={(e) => setBuyer(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
           </label>
@@ -1859,7 +1926,7 @@ function PosSaleModal({ lang, item, prices, onClose, onSaved }) {
 
         <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "var(--bg-sunken)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <span style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Total a encaisser" : "Total to collect"}</span>
-          <span className="mono tnum" style={{ fontSize: 22, fontWeight: 700, color: "var(--ink-950)" }}>{total.toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $</span>
+          <span className="mono tnum" style={{ fontSize: 22, fontWeight: 700, color: "var(--ink-950)" }}>{formatMoney(total, activeCurrencyId, currencyMeta?.currencies || [], activeSymbol, 2)}</span>
         </div>
         {error && <div style={{ color: "var(--rust-700)", fontSize: 12, marginTop: 10 }}>{error}</div>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
@@ -1885,6 +1952,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
   const [modalItem, setModalItem] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
+  const currencyMeta = useCurrencyCatalog();
 
   React.useEffect(() => {
     let cancel = false;
@@ -1963,7 +2031,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
           <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
             <span className="tag">{item.source === "animal" ? (lang === "fr" ? "Animal" : "Animal") : saleProductLabel(item.productType, lang)}</span>
             <span className="tag">{Number(item.available || 0).toLocaleString("fr-CA")} {item.unit}</span>
-            {item.unitPrice !== "" && <span className="tag">{Number(item.unitPrice).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $/{item.unit}</span>}
+            {item.unitPrice !== "" && <span className="tag">{formatMoney(item.unitPrice, item.currencyId || currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}/{item.unit}</span>}
           </div>
         </div>
       </button>
@@ -2026,7 +2094,7 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
               <div style={{ fontSize: 18, fontWeight: 800, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedItem.title}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 <span className="tag">{Number(selectedItem.available || 0).toLocaleString("fr-CA")} {selectedItem.unit}</span>
-                {selectedItem.unitPrice !== "" && <span className="tag">{Number(selectedItem.unitPrice).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $/{selectedItem.unit}</span>}
+                {selectedItem.unitPrice !== "" && <span className="tag">{formatMoney(selectedItem.unitPrice, selectedItem.currencyId || currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}/{selectedItem.unit}</span>}
               </div>
             </div>
             <button className="btn btn-primary" onClick={() => openSale(selectedItem)}>
@@ -2049,14 +2117,14 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
         </div>
       </section>
 
-      {modalItem && <PosSaleModal lang={lang} item={modalItem} prices={prices} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
+      {modalItem && <PosSaleModal lang={lang} item={modalItem} prices={prices} currencyMeta={currencyMeta} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
     </div>
   );
 };
 
 // ─── FINANCES ────────────────────────────────────────────────────────────
 // Rentabilité par animal / lot (#4) — tableau revenu / coût / profit.
-const ProfitabilitySection = ({ lang, data }) => {
+const ProfitabilitySection = ({ lang, data, currencySymbol = "" }) => {
   const [view, setView] = React.useState("animal"); // animal | lot | building
   const money = (n) => Number(n || 0).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
   const rows = view === "animal" ? data.byAnimal : view === "lot" ? data.byLot : (data.byBuilding || []);
@@ -2075,9 +2143,9 @@ const ProfitabilitySection = ({ lang, data }) => {
         </div>
       </div>
       <div style={{ padding: "10px 18px", display: "flex", gap: 18, fontSize: 12, color: "var(--fg-2)", borderBottom: "1px solid var(--border-1)" }}>
-        <span>{lang === "fr" ? "Revenu total" : "Total revenue"} : <strong>{money(data.totals.revenue)} $</strong></span>
-        <span>{lang === "fr" ? "Coût total" : "Total cost"} : <strong>{money(data.totals.cost)} $</strong></span>
-        <span>{lang === "fr" ? "Profit" : "Profit"} : <strong style={{ color: profitColor(data.totals.profit) }}>{money(data.totals.profit)} $</strong></span>
+        <span>{lang === "fr" ? "Revenu total" : "Total revenue"} : <strong>{money(data.totals.revenue)} {currencySymbol}</strong></span>
+        <span>{lang === "fr" ? "Coût total" : "Total cost"} : <strong>{money(data.totals.cost)} {currencySymbol}</strong></span>
+        <span>{lang === "fr" ? "Profit" : "Profit"} : <strong style={{ color: profitColor(data.totals.profit) }}>{money(data.totals.profit)} {currencySymbol}</strong></span>
       </div>
       <div style={{ maxHeight: 320, overflow: "auto" }}>
         {rows.length === 0 ? (
@@ -2095,9 +2163,9 @@ const ProfitabilitySection = ({ lang, data }) => {
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{title}</div>
               <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{view === "animal" ? r.species : `${r.count} ${lang === "fr" ? "animaux" : "animals"}`}</div>
             </div>
-            <span className="mono" style={{ fontSize: 12, textAlign: "right" }}>{money(r.revenue)} $</span>
-            <span className="mono" style={{ fontSize: 12, textAlign: "right", color: "var(--oxblood-700)" }}>{money(r.cost)} $</span>
-            <span className="mono" style={{ fontSize: 13, textAlign: "right", fontWeight: 700, color: profitColor(r.profit) }}>{money(r.profit)} $</span>
+            <span className="mono" style={{ fontSize: 12, textAlign: "right" }}>{money(r.revenue)} {currencySymbol}</span>
+            <span className="mono" style={{ fontSize: 12, textAlign: "right", color: "var(--oxblood-700)" }}>{money(r.cost)} {currencySymbol}</span>
+            <span className="mono" style={{ fontSize: 13, textAlign: "right", fontWeight: 700, color: profitColor(r.profit) }}>{money(r.profit)} {currencySymbol}</span>
           </div>
           );
         })}
@@ -2106,6 +2174,50 @@ const ProfitabilitySection = ({ lang, data }) => {
   );
 };
 
+function buildFinanceSummaryByCurrency(sales, expenses) {
+  const now = new Date();
+  const startMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1));
+  const buckets = [];
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + i, 1));
+    buckets.push({ key: d.toISOString().slice(0, 7), revenue: 0, expense: 0 });
+  }
+  const idxFor = (iso) => buckets.findIndex((b) => b.key === String(iso || "").slice(0, 7));
+  (sales || []).forEach((sale) => {
+    const i = idxFor(sale.saleDate || sale.sale_date);
+    if (i >= 0) buckets[i].revenue += Number(sale.totalAmount ?? sale.total_amount ?? 0);
+  });
+  (expenses || []).forEach((expense) => {
+    const i = idxFor(expense.expenseDate || expense.expense_date);
+    if (i >= 0) buckets[i].expense += Number(expense.amount ?? 0);
+  });
+  const colors = {
+    milk: "var(--pertinence-500)",
+    eggs: "var(--autorite-500)",
+    meat: "var(--oxblood-500)",
+    wool: "var(--solidite-500)",
+    fish: "var(--pertinence-300)",
+  };
+  const byCategoryMap = new Map();
+  (sales || []).forEach((sale) => {
+    const key = sale.productType || sale.product_type || sale.species || "other";
+    byCategoryMap.set(key, (byCategoryMap.get(key) || 0) + Number(sale.totalAmount ?? sale.total_amount ?? 0));
+  });
+  const byCategory = Array.from(byCategoryMap.entries()).map(([cat, amount]) => ({
+    cat,
+    amount,
+    fr: saleProductLabel(cat, "fr") || cat,
+    en: saleProductLabel(cat, "en") || cat,
+    color: colors[cat] || "var(--ink-400)",
+  }));
+  return {
+    months: buckets.map((b) => b.key),
+    revenue: buckets.map((b) => Math.round(b.revenue)),
+    expense: buckets.map((b) => Math.round(b.expense)),
+    byCategory,
+  };
+}
+
 const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [summary, setSummary] = React.useState({ months: [], revenue: [], expense: [], byCategory: [] });
   const totalRev = summary.byCategory.reduce((a,b)=>a+b.amount,0);
@@ -2113,25 +2225,37 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [transactions, setTransactions] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
+  const currencyMeta = useCurrencyCatalog();
+  const [currencyFilter, setCurrencyFilter] = React.useState("");
+  React.useEffect(() => {
+    if (!currencyFilter && currencyMeta.defaultCurrencyId) setCurrencyFilter(String(currencyMeta.defaultCurrencyId));
+  }, [currencyFilter, currencyMeta.defaultCurrencyId]);
+  const activeCurrencyId = currencyFilter || (currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "");
+  const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const monthLabel = new Date().toLocaleDateString(lang === "fr" ? "fr-CA" : "en-CA", { month: "long", year: "numeric" });
   const refresh = useDataRefresh(["sales", "expenses"]);
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listSales(), api.listExpenses(), api.getFinanceSummary(), api.getProfitability()])
-      .then(([sales, expenses, sumry, prof]) => {
+    Promise.all([api.listSales(), api.listExpenses(), api.getProfitability()])
+      .then(([sales, expenses, prof]) => {
         if (cancel) return;
+        const saleRows = Array.isArray(sales) ? sales : [];
+        const expenseRows = Array.isArray(expenses) ? expenses : [];
+        const keepCurrency = (row) => !activeCurrencyId || String(rowCurrencyId(row) ?? currencyMeta.defaultCurrencyId ?? "") === String(activeCurrencyId);
+        const filteredSales = saleRows.filter(keepCurrency);
+        const filteredExpenses = expenseRows.filter(keepCurrency);
         const merged = [
-          ...(Array.isArray(sales) ? sales : []).map((s) => adaptSaleAsTransaction(s, lang)),
-          ...(Array.isArray(expenses) ? expenses : []).map((e) => adaptExpenseAsTransaction(e, lang)),
+          ...filteredSales.map((s) => adaptSaleAsTransaction(s, lang)),
+          ...filteredExpenses.map((e) => adaptExpenseAsTransaction(e, lang)),
         ].filter((t) => inDateRange(t.isoDate, dateRange))
           .sort((a, b) => (b.isoDate || "").localeCompare(a.isoDate || ""));
         setTransactions(merged.slice(0, 12));
-        if (sumry && typeof sumry === "object") setSummary(sumry);
+        setSummary(buildFinanceSummaryByCurrency(filteredSales, filteredExpenses));
         if (prof && typeof prof === "object") setProfitability(prof);
       })
       .catch((e) => console.warn("listSales/Expenses failed:", e.message));
     return () => { cancel = true; };
-  }, [lang, reloadKey, refresh, dateRange]);
+  }, [lang, reloadKey, refresh, dateRange, activeCurrencyId, currencyMeta.defaultCurrencyId]);
   React.useEffect(() => {
     const onCreated = () => setReloadKey((k) => k + 1);
     window.addEventListener("farmos:expense-created", onCreated);
@@ -2152,7 +2276,10 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
-        <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <CurrencySelect lang={lang} value={activeCurrencyId} onChange={(v) => setCurrencyFilter(v ? String(v) : "")} currencies={currencyMeta.currencies}/>
+          <DateRangeFilter lang={lang} value={dateRange} onChange={setDateRange}/>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
@@ -2162,9 +2289,9 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           const profit = totalR - totalE;
           const margin = totalR > 0 ? (profit / totalR) * 100 : 0;
           return <>
-            <KpiCard label={t(lang, "revenue")} sublabel={rangeLabel(dateRange, lang)} value={totalR.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
-            <KpiCard label={t(lang, "expense")} sublabel={rangeLabel(dateRange, lang)} value={totalE.toLocaleString("fr-CA")} unit="$" trend={summary.expense.length ? summary.expense : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="wallet"/>
-            <KpiCard label={t(lang, "profit")} sublabel={rangeLabel(dateRange, lang)} value={profit.toLocaleString("fr-CA")} unit="$" trend={summary.revenue.length ? summary.revenue.map((v, i) => v - (summary.expense[i] || 0)) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chart" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "revenue")} sublabel={rangeLabel(dateRange, lang)} value={totalR.toLocaleString("fr-CA")} unit={moneyUnit} trend={summary.revenue.length ? summary.revenue : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="coins" accent="var(--money-500)"/>
+            <KpiCard label={t(lang, "expense")} sublabel={rangeLabel(dateRange, lang)} value={totalE.toLocaleString("fr-CA")} unit={moneyUnit} trend={summary.expense.length ? summary.expense : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="wallet"/>
+            <KpiCard label={t(lang, "profit")} sublabel={rangeLabel(dateRange, lang)} value={profit.toLocaleString("fr-CA")} unit={moneyUnit} trend={summary.revenue.length ? summary.revenue.map((v, i) => v - (summary.expense[i] || 0)) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chart" accent="var(--money-500)"/>
             <KpiCard label={t(lang, "margin")} sublabel={rangeLabel(dateRange, lang)} value={margin.toFixed(1).replace(".", ",")} unit="%" trend={summary.revenue.length ? summary.revenue.map((v, i) => { const e = summary.expense[i] || 0; return v > 0 ? ((v - e) / v) * 100 : 0; }) : [0,0,0,0,0,0,0,0,0,0,0,0]} icon="chartPie" accent="var(--money-500)"/>
           </>;
         })()}
@@ -2174,23 +2301,23 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         <div className="card">
           <div className="bilang" style={{ marginBottom: 14 }}>
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20 }}>{lang === "fr" ? "Revenus vs dépenses · 12 mois" : "Revenue vs expenses · 12 months"}</h3>
-            <span className="sec">{lang === "fr" ? "en milliers $" : "in thousands $"}</span>
+            <span className="sec">{lang === "fr" ? `en milliers ${moneyUnit}` : `in thousands ${moneyUnit}`}</span>
           </div>
           <RevExpChart lang={lang} summary={summary}/>
         </div>
         <div className="card">
           <div className="bilang" style={{ marginBottom: 14 }}>
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20 }}>{lang === "fr" ? "Sources de revenus" : "Revenue sources"}</h3>
-            <span className="sec">{totalRev.toLocaleString("fr-CA")} $</span>
+            <span className="sec">{formatMoney(totalRev, activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol)}</span>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {summary.byCategory.map((c, i) => {
-              const pct = (c.amount / totalRev) * 100;
+              const pct = totalRev > 0 ? (c.amount / totalRev) * 100 : 0;
               return (
                 <div key={i}>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
                     <span style={{ fontSize: 13, color: "var(--ink-800)", fontWeight: 500 }}>{lang === "fr" ? c.fr : c.en}</span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--ink-900)" }}>{c.amount.toLocaleString("fr-CA")} $ · {pct.toFixed(0)}%</span>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--ink-900)" }}>{formatMoney(c.amount, activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol)} · {pct.toFixed(0)}%</span>
                   </div>
                   <div style={{ height: 6, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: c.color }}/>
@@ -2204,7 +2331,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       {/* Rentabilité par animal / lot (#4) */}
       {(profitability.byAnimal.length > 0 || profitability.byLot.length > 0) && (
-        <ProfitabilitySection lang={lang} data={profitability}/>
+        <ProfitabilitySection lang={lang} data={profitability} currencySymbol={moneyUnit}/>
       )}
 
       {/* Recent transactions */}
@@ -2234,7 +2361,7 @@ const FinancesScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 )}
               </div>
             </div>
-            <span className="mono tnum" style={{ fontSize: 14, fontWeight: 600, color: tr.kind === "rev" ? "var(--solidite-700)" : "var(--oxblood-700)", textAlign: "right" }}>{tr.amount} $</span>
+            <span className="mono tnum" style={{ fontSize: 14, fontWeight: 600, color: tr.kind === "rev" ? "var(--solidite-700)" : "var(--oxblood-700)", textAlign: "right" }}>{tr.amount} {symbolFor(tr.currencyId || activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol)}</span>
             {tr._pk && tr._kind ? (
               <button className="btn btn-sm btn-ghost" style={{ justifySelf: "end" }} title={lang === "fr" ? "Supprimer" : "Delete"}
                 onClick={async () => {
@@ -2818,7 +2945,7 @@ const PRICE_PRODUCT_OPTIONS = [
   { product_type: "animal", sale_source: "animal", unit: "tete", fr: "Animal / lot", en: "Animal / batch" },
 ];
 
-function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
+function SaleListingModal({ lang, animal, prices, currencyMeta, onClose, onSaved }) {
   const linkedPrice = React.useMemo(() => animal ? findLinkedAnimalListingPrice(prices, animal.id) : null, [animal, prices]);
   const defaultPrice = React.useMemo(() => {
     if (!animal) return null;
@@ -2832,9 +2959,13 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
   }, [animal, prices]);
   const [unit, setUnit] = React.useState((linkedPrice || defaultPrice)?.unit || (Number(animal?.count || 0) > 1 ? "tete" : "tete"));
   const [unitPrice, setUnitPrice] = React.useState((linkedPrice || defaultPrice) ? String(priceValue(linkedPrice || defaultPrice)) : "");
+  const [currencyId, setCurrencyId] = React.useState(priceCurrencyId(linkedPrice || defaultPrice) ?? currencyMeta?.defaultCurrencyId ?? "");
   const [notes, setNotes] = React.useState(linkedPrice?.notes ? String(linkedPrice.notes).replace(animalListingNote(animal?.id), "").replace(/^ · /, "") : "");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
+  React.useEffect(() => {
+    setCurrencyId(priceCurrencyId(linkedPrice || defaultPrice) ?? currencyMeta?.defaultCurrencyId ?? "");
+  }, [linkedPrice?.id, defaultPrice?.id, currencyMeta?.defaultCurrencyId]);
   if (!animal) return null;
   const sp = speciesById(animal.species);
   const title = animal.name || animal.externalId || animal.external_id || animal.lot || `#${animal.id}`;
@@ -2852,6 +2983,10 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
       setError(lang === "fr" ? "Methode et prix unitaire requis." : "Method and unit price required.");
       return;
     }
+    if ((currencyMeta?.currencies || []).length && !currencyId) {
+      setError(lang === "fr" ? "Devise requise." : "Currency is required.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -2861,10 +2996,13 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
         product_type: "animal",
         unit,
         unit_price: price,
+        currency_id: currencyId ? Number(currencyId) : null,
         notes: listingNote,
       };
       const savedPrice = linkedPrice?.id ? await api.updatePrice(linkedPrice.id, payload) : await api.createPrice(payload);
-      await api.updateAnimal(animal.id, { status: "available_sale" });
+      if (!isSaleLockedAnimal(animal)) {
+        await api.updateAnimal(animal.id, { status: "available_sale" });
+      }
       onSaved && onSaved(savedPrice);
     } catch (e) {
       setError(e.message || "Erreur");
@@ -2894,6 +3032,11 @@ function SaleListingModal({ lang, animal, prices, onClose, onSaved }) {
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix unitaire" : "Unit price"}
             <input className="input" type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
+            <div style={{ marginTop: 4 }}>
+              <CurrencySelect lang={lang} value={currencyId} onChange={setCurrencyId} currencies={currencyMeta?.currencies || []}/>
+            </div>
           </label>
           <label style={{ fontSize: 12, color: "var(--fg-2)", gridColumn: "1 / -1" }}>{lang === "fr" ? "Notes de vente" : "Sale notes"}
             <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%", marginTop: 4, minHeight: 70, resize: "vertical" }}/>
@@ -2927,10 +3070,10 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   const [sourceFilter, setSourceFilter] = React.useState("all");
   const [availableLimit, setAvailableLimit] = React.useState(24);
   const [candidateLimit, setCandidateLimit] = React.useState(24);
-  const [busyId, setBusyId] = React.useState(null);
   const [listingAnimal, setListingAnimal] = React.useState(null);
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
+  const currencyMeta = useCurrencyCatalog();
 
   React.useEffect(() => {
     let cancel = false;
@@ -2992,23 +3135,6 @@ function SaleInventorySettings({ lang, speciesFilter }) {
     setReloadKey((k) => k + 1);
   };
 
-  const removeFromSale = async (item) => {
-    if (item.source !== "animal" || !item.animalId) return;
-    setBusyId(item.animalId);
-    try {
-      await api.updateAnimal(item.animalId, { status: "healthy" });
-      setAnimals((prev) => prev.map((animal) => (
-        animal.id === item.animalId ? { ...animal, status: "healthy" } : animal
-      )));
-      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
-      setReloadKey((k) => k + 1);
-    } catch (e) {
-      window.alert(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const sourceOptions = [
     { id: "all", fr: "Tous", en: "All" },
     { id: "production", fr: "Productions", en: "Production" },
@@ -3028,7 +3154,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
             <span className="tag">{item.source === "animal" ? (lang === "fr" ? "Animal" : "Animal") : saleProductLabel(item.productType, lang)}</span>
             <span className="tag">{Number(item.available || 0).toLocaleString("fr-CA")} {item.unit}</span>
-            {item.unitPrice !== "" && <span className="tag">{Number(item.unitPrice).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $/{item.unit}</span>}
+            {item.unitPrice !== "" && <span className="tag">{formatMoney(item.unitPrice, item.currencyId || currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}/{item.unit}</span>}
           </div>
         </div>
         {item.source === "animal" && (
@@ -3039,9 +3165,6 @@ function SaleInventorySettings({ lang, speciesFilter }) {
             }}>
               <Icon name="edit" size={12} color="currentColor"/>
               {lang === "fr" ? "Modifier prix" : "Edit price"}
-            </button>
-            <button className="btn btn-sm" disabled={busyId === item.animalId} onClick={() => removeFromSale(item)}>
-              {busyId === item.animalId ? "..." : (lang === "fr" ? "Retirer" : "Remove")}
             </button>
           </div>
         )}
@@ -3054,7 +3177,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
       <div>
         <div className="overline">{lang === "fr" ? "Gestion de vente" : "Sales management"}</div>
         <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 4 }}>
-          {lang === "fr" ? "Prepare les produits vendables, retire les articles du POS, et retrouve les lots par recherche." : "Prepare sellable products, remove items from POS, and find batches by search."}
+          {lang === "fr" ? "Prepare les produits vendables et retrouve les lots par recherche." : "Prepare sellable products and find batches by search."}
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -3104,7 +3227,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
                   <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[a.lot, a.race, a.status].filter(Boolean).join(" - ")}</div>
                 </div>
-                <button className="btn btn-sm" disabled={busyId === a.id} onClick={() => setListingAnimal(a)}>
+                <button className="btn btn-sm" onClick={() => setListingAnimal(a)}>
                   <Icon name="plus" size={12} color="currentColor"/>
                   {lang === "fr" ? "Configurer" : "Configure"}
                 </button>
@@ -3123,6 +3246,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
           lang={lang}
           animal={listingAnimal}
           prices={prices}
+          currencyMeta={currencyMeta}
           onClose={() => setListingAnimal(null)}
           onSaved={handleListingSaved}
         />
@@ -3132,7 +3256,8 @@ function SaleInventorySettings({ lang, speciesFilter }) {
 }
 
 function PriceListSettings({ lang }) {
-  const empty = { id: null, sale_source: "production", species: "", product_type: "eggs", unit: "oeufs", unit_price: "", notes: "" };
+  const currencyMeta = useCurrencyCatalog();
+  const empty = React.useMemo(() => ({ id: null, sale_source: "production", species: "", product_type: "eggs", unit: "oeufs", unit_price: "", currency_id: currencyMeta.defaultCurrencyId || "", notes: "" }), [currencyMeta.defaultCurrencyId]);
   const [prices, setPrices] = React.useState([]);
   const [form, setForm] = React.useState(empty);
   const [saving, setSaving] = React.useState(false);
@@ -3141,6 +3266,9 @@ function PriceListSettings({ lang }) {
     api.listPrices().then((rows) => setPrices(Array.isArray(rows) ? rows : [])).catch((e) => setMessage({ type: "err", text: e.message }));
   }, []);
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    setForm((prev) => prev.currency_id || !currencyMeta.defaultCurrencyId ? prev : { ...prev, currency_id: currencyMeta.defaultCurrencyId });
+  }, [currencyMeta.defaultCurrencyId]);
   const set = (k, v) => setForm((prev) => ({ ...prev, [k]: v }));
   const chooseProduct = (productType) => {
     const opt = PRICE_PRODUCT_OPTIONS.find((o) => o.product_type === productType) || PRICE_PRODUCT_OPTIONS[0];
@@ -3152,6 +3280,10 @@ function PriceListSettings({ lang }) {
       setMessage({ type: "err", text: lang === "fr" ? "Produit et prix requis." : "Product and price required." });
       return;
     }
+    if (currencyMeta.currencies.length && !form.currency_id) {
+      setMessage({ type: "err", text: lang === "fr" ? "Devise requise." : "Currency is required." });
+      return;
+    }
     setSaving(true); setMessage(null);
     const payload = {
       sale_source: form.sale_source || "production",
@@ -3159,6 +3291,7 @@ function PriceListSettings({ lang }) {
       product_type: form.product_type,
       unit: form.unit || null,
       unit_price: price,
+      currency_id: form.currency_id ? Number(form.currency_id) : null,
       notes: form.notes || null,
     };
     try {
@@ -3180,6 +3313,7 @@ function PriceListSettings({ lang }) {
     product_type: row.productType || row.product_type || "eggs",
     unit: row.unit || "",
     unit_price: String(row.unitPrice ?? row.unit_price ?? ""),
+    currency_id: row.currencyId ?? row.currency_id ?? currencyMeta.defaultCurrencyId ?? "",
     notes: row.notes || "",
   });
   const remove = async (row) => {
@@ -3196,7 +3330,7 @@ function PriceListSettings({ lang }) {
           {lang === "fr" ? "Configuration des prix utilises automatiquement par la caisse." : "Price configuration used automatically by the register."}
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr .8fr .8fr auto", gap: 8, alignItems: "end" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr .75fr .75fr .8fr auto", gap: 8, alignItems: "end" }}>
         <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Produit" : "Product"}
           <select className="input" value={form.product_type} onChange={(e) => chooseProduct(e.target.value)} style={{ width: "100%", marginTop: 4 }}>
             {PRICE_PRODUCT_OPTIONS.map((o) => <option key={o.product_type} value={o.product_type}>{lang === "fr" ? o.fr : o.en}</option>)}
@@ -3213,6 +3347,11 @@ function PriceListSettings({ lang }) {
         </label>
         <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Prix" : "Price"}
           <input className="input" type="number" min="0" step="0.01" value={form.unit_price} onChange={(e) => set("unit_price", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+        </label>
+        <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Devise" : "Currency"}
+          <div style={{ marginTop: 4 }}>
+            <CurrencySelect lang={lang} value={form.currency_id} onChange={(v) => set("currency_id", v)} currencies={currencyMeta.currencies}/>
+          </div>
         </label>
         <button className="btn btn-primary" disabled={saving} onClick={save}>
           <Icon name="check" size={13} color="currentColor"/>
@@ -3247,7 +3386,7 @@ function PriceListSettings({ lang }) {
             <div key={row.id} style={{ border: "1px solid var(--border-1)", borderRadius: 8, padding: 10, display: "flex", gap: 10, alignItems: "center" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{saleProductLabel(product, lang)}{sp ? ` - ${lang === "fr" ? sp.fr : sp.en}` : ""}</div>
-                <div className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>{Number(row.unitPrice ?? row.unit_price ?? 0).toLocaleString("fr-CA", { minimumFractionDigits: 2 })} $ / {row.unit || "-"}</div>
+                <div className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>{formatMoney(row.unitPrice ?? row.unit_price ?? 0, row.currencyId ?? row.currency_id ?? currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)} / {row.unit || "-"}</div>
               </div>
               <button className="btn btn-sm" onClick={() => edit(row)}><Icon name="edit" size={12} color="currentColor"/></button>
               <button className="btn btn-sm btn-ghost" onClick={() => remove(row)}><Icon name="trash" size={12} color="var(--oxblood-700)"/></button>

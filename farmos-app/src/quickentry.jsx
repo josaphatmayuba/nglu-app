@@ -4,6 +4,8 @@ import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById } from "./data";
 import { api } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
+import { currencyOptions, defaultCurrencyId, defaultSymbol, symbolFor } from "./currency";
+import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
 // Tabs: Animal · Production · Santé · Stock · Repro · Mortalité
@@ -759,6 +761,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
     api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
   }, []);
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
@@ -767,6 +770,10 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
       return;
     }
     const selectedAnimal = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
+    if (selectedAnimal && isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind: "production", severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
     const unit = productKind === "milk" ? "L" : productKind === "eggs" ? "œufs" : productKind === "wool" ? "kg" : "kg";
     const flockCount = selectedAnimal?.count ?? selectedAnimal?.animalCount ?? null;
     const eggs = Number(form.value) || 0;
@@ -842,7 +849,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-              options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
           {productKind === "milk" && (
@@ -955,6 +962,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     return () => window.removeEventListener("farmos:lookup-created", refetch);
   }, [loadAll]);
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const medsForSpecies = (liveMeds || []).filter((s) => s.kind === "med" && s.species?.includes(form.species));
   const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
   const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : [];
@@ -1015,6 +1023,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     }
     if (!selectedAnimal || !toNumericId(selectedAnimal)) {
       onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis un animal ou un lot existant en base avant d'enregistrer." : "Select an existing database animal or batch before saving." });
+      return;
+    }
+    if (isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind, severity: "error", message: lockedAnimalMessage(lang) });
       return;
     }
     if (!selectedDisease || !selectedDisease.id) {
@@ -1094,7 +1106,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
             value={form.animal || ""}
             onChange={(v) => set("animal", v)}
             placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-            options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+            options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
           />
         </FormField>
       </FormSection>
@@ -1222,9 +1234,27 @@ const StockForm = ({ lang, onSaved, onClose }) => {
   const [mode, setMode] = React.useState("in");
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [currencies, setCurrencies] = React.useState([]);
+  const [fallbackCurrencyId, setFallbackCurrencyId] = React.useState(null);
+  const [fallbackSymbol, setFallbackSymbol] = React.useState("");
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [lots, setLots] = React.useState([]);
   const [invoiceDirty, setInvoiceDirty] = React.useState(false);
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        if (cancel) return;
+        const list = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        const defaultId = defaultCurrencyId(setting.value, list);
+        setCurrencies(list);
+        setFallbackCurrencyId(defaultId);
+        setFallbackSymbol(defaultSymbol(setting.value, list));
+        setForm((f) => f.currency_id || !defaultId ? f : { ...f, currency_id: defaultId });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
   React.useEffect(() => {
     api.listExpenses().then((rows) => {
       if (invoiceDirty) return;
@@ -1284,6 +1314,10 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       return;
     }
     const category = selectedMed?.kind === "feed" ? "feed" : "medicine";
+    if (currencies.length && !form.currency_id) {
+      onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Devise requise." : "Currency is required." });
+      return;
+    }
     if (!form.cost || !form.date) {
       onSaved && onSaved({ kind: "stock", severity: "error", message: lang === "fr" ? "Coût et date requis." : "Cost and date are required." });
       return;
@@ -1295,6 +1329,7 @@ const StockForm = ({ lang, onSaved, onClose }) => {
       quantity: form.qty ? Number(form.qty) : null,
       unit: selectedMed?.unit || null,
       amount: Number(form.cost),
+      currency_id: form.currency_id ? Number(form.currency_id) : null,
       supplier: form.supplier || null,
       expense_date: form.date,
       related_medicine_id: toNumericId(selectedMed),
@@ -1353,8 +1388,16 @@ const StockForm = ({ lang, onSaved, onClose }) => {
               <input className="input" placeholder="Coop Agri-Pro" value={form.supplier || ""} onChange={(e) => set("supplier", e.target.value)}/>
             </FormField>
             <ProjectSelect lang={lang} value={form.project_id} onChange={(v) => set("project_id", v)} />
-            <FormField label={lang === "fr" ? "Coût total ($)" : "Total cost ($)"}>
-              <input className="input mono" type="number" placeholder="4320" value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
+            <FormField label={`${lang === "fr" ? "Coût total" : "Total cost"} (${symbolFor(form.currency_id || fallbackCurrencyId, currencies, fallbackSymbol)})`}>
+              <input className="input mono" type="number" placeholder={`4320 ${symbolFor(form.currency_id || fallbackCurrencyId, currencies, fallbackSymbol)}`} value={form.cost || ""} onChange={(e) => set("cost", e.target.value)}/>
+            </FormField>
+            <FormField label={lang === "fr" ? "Devise" : "Currency"}>
+              <select className="input" value={form.currency_id || ""} onChange={(e) => set("currency_id", e.target.value ? Number(e.target.value) : "")}>
+                <option value="">{lang === "fr" ? "Choisir" : "Select"}</option>
+                {currencyOptions(currencies).map((currency) => (
+                  <option key={currency.id} value={currency.id}>{currency.label}</option>
+                ))}
+              </select>
             </FormField>
             <FormField label={lang === "fr" ? "N° facture" : "Invoice #"}>
               <div style={{ display: "flex", gap: 6 }}>
@@ -1450,6 +1493,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     const sex = a.sex;
     return sp === form.species && (sex === "F" || sex === "Mixte" || !sex);
   });
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
 
   // Détection de consanguinité : compare la filiation (mother_id/father_id, qui
   // référencent un external_id ou un nom) de la femelle et du mâle choisi.
@@ -1481,6 +1525,10 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
     const selected = animalsForSpecies.find((a) => String(a.id) === String(form.animal) || String(a.external_id || a.externalId) === String(form.animal));
     if (!selected || !liveAnimals) {
       onSaved && onSaved({ kind: "repro", severity: "error", message: lang === "fr" ? "Selectionne un animal existant en BD." : "Select an animal that exists in the database." });
+      return;
+    }
+    if (isSaleLockedAnimal(selected)) {
+      onSaved && onSaved({ kind: "repro", severity: "error", message: lockedAnimalMessage(lang) });
       return;
     }
     // Anti-consanguinité : pour une saillie/IA naturelle avec un mâle identifié,
@@ -1552,7 +1600,7 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher une femelle…" : "Search a female…"}
-              options={animalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
         </FormGrid>
@@ -1687,10 +1735,19 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), species: normalizeDefaultSpecies(defaultSpecies, enabledSpecies) });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);
+  const [lossCurrencySymbol, setLossCurrencySymbol] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   React.useEffect(() => {
     api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        const list = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        setLossCurrencySymbol(defaultSymbol(setting.value, list));
+      })
+      .catch(() => {});
   }, []);
+  const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === form.species);
+  const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const submit = async () => {
     if (saving) return;
     if (!form.date || !form.cause) {
@@ -1698,6 +1755,10 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
       return;
     }
     const selectedAnimal = (liveAnimals || []).find((a) => String(a.id) === String(form.animal) || String(a.externalId || a.external_id) === String(form.animal));
+    if (selectedAnimal && isSaleLockedAnimal(selectedAnimal)) {
+      onSaved && onSaved({ kind: "death", severity: "error", message: lockedAnimalMessage(lang) });
+      return;
+    }
     setSaving(true);
     try {
       await api.createMortalityEvent({
@@ -1755,7 +1816,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
               value={form.animal || ""}
               onChange={(v) => set("animal", v)}
               placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-              options={(liveAnimals || []).filter((a) => a.species === form.species).map((a) => ({ value: a.id, label: animalLabel(a) }))}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
             />
           </FormField>
         </FormGrid>
@@ -1796,7 +1857,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
           <FormField label={lang === "fr" ? "Heure" : "Time"}>
             <input className="input mono" type="time" value={form.time || ""} onChange={(e) => set("time", e.target.value)}/>
           </FormField>
-          <FormField label={lang === "fr" ? "Perte estimée ($)" : "Estimated loss ($)"}>
+          <FormField label={`${lang === "fr" ? "Perte estimée" : "Estimated loss"} (${lossCurrencySymbol})`}>
             <input className="input mono" type="number" min="0" step="0.01" value={form.loss || ""} onChange={(e) => set("loss", e.target.value)}/>
           </FormField>
           <FormField label={lang === "fr" ? "Bâtiment" : "Barn"}>
