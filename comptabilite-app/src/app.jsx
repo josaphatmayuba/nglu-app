@@ -279,7 +279,7 @@ function App() {
     immo: <Immo accounts={data.accounts} />,
     analytique: <Analytique />,
     budget: <Budget />,
-    capacite: <Capacite />,
+    capacite: <Capacite accounts={data.accounts} />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
     tva: <Tva accounts={data.accounts} />,
     parametres: <Parametres />,
@@ -1034,11 +1034,81 @@ function Budget() {
 }
 
 /* ── Plan de trésorerie & capacité ─────────────────────────────────────── */
-function Capacite() {
+function Capacite({ accounts = [] }) {
+  const [budgets, setBudgets] = React.useState(null);
+  const [statuses, setStatuses] = React.useState({});
+
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.budgets();
+        const arr = Array.isArray(list) ? list : [];
+        setBudgets(arr);
+        const entries = await Promise.all(arr.map(async (b) => {
+          try { return [b.id, await api.budgetStatus(b.id)]; } catch { return [b.id, null]; }
+        }));
+        setStatuses(Object.fromEntries(entries));
+      } catch { setBudgets([]); }
+    })();
+  }, []);
+
+  const treasury = accounts.filter(isTreasuryAccount);
+  const cash = treasury.reduce((s, a) => s + balanceOf(a), 0);
+  const payables = accounts.filter(isPayableAccount).reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
+  const receivables = accounts.filter(isReceivableAccount).reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
+  // Reste à engager sur budgets = somme des (alloué − consommé) encore disponibles.
+  const remainingBudget = Object.values(statuses).reduce((s, st) => {
+    if (!st || !Array.isArray(st.lines)) return s;
+    return s + st.lines.reduce((acc, l) => acc + Math.max(0, Number(l.allocated || 0) - Number(l.consumed || 0)), 0);
+  }, 0);
+  const netNow = cash - payables;           // disponible immédiat
+  const netProjected = cash + receivables - payables; // après encaissement créances
+
+  if (!treasury.length && !payables && !receivables) {
+    return (
+      <>
+        <PageHead eyebrow="Disponibilité financière" title="Plan de trésorerie & capacité" />
+        <EmptyState title="Capacité non calculable" detail="Aucun compte de trésorerie, dette ou créance n'existe encore dans le grand livre." icon="gauge" />
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHead eyebrow="Disponibilité financière" title="Plan de trésorerie & capacité" />
-      <EmptyState title="Capacité non calculée" detail="Le disponible réel doit être calculé depuis les soldes bancaires, dettes, budgets affectés et prévisions validées." icon="gauge" />
+      <PageHead eyebrow="Disponibilité financière · depuis le grand livre" title="Plan de trésorerie & capacité" />
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Trésorerie (banque + caisse)" value={m(cash)} valueClass={cash >= 0 ? "pos" : "neg"} />
+        <Mini label="Dettes fournisseurs" value={m(payables)} valueClass="neg" />
+        <Mini label="Créances à encaisser" value={m(receivables)} valueClass="pos" />
+        <Mini label={netNow >= 0 ? "Disponible immédiat" : "Découvert"} value={m(Math.abs(netNow))} tone={netNow >= 0 ? "info" : "warn"} />
+      </div>
+      <div className="card pad" style={{ maxWidth: 680, marginBottom: 18 }}>
+        <h3 className="block-title font-display">Capacité financière</h3>
+        <div className="stmt num">
+          <div className="ln"><span className="muted">Trésorerie disponible</span><span className={cash >= 0 ? "pos" : "neg"}>{nf.format(cash)}</span></div>
+          <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(payables)}</span></div>
+          <div className="ln bold"><span>= Disponible immédiat</span><span className={netNow >= 0 ? "pos" : "neg"}>{nf.format(netNow)}</span></div>
+          <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(receivables)}</span></div>
+          <div className="ln total" style={{ background: netProjected >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
+            <span style={{ color: netProjected >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Disponible projeté</span>
+            <span className={netProjected >= 0 ? "pos" : "neg"}>{signed(netProjected)} {CUR}</span>
+          </div>
+        </div>
+      </div>
+      {budgets && budgets.length > 0 && (
+        <div className="card pad">
+          <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
+            <span className="muted">Budget encore disponible (toutes lignes)</span>
+            <span className={remainingBudget > netNow ? "neg" : "pos"}>{m(remainingBudget)}</span>
+          </div>
+          {remainingBudget > netNow && (
+            <div className="tiny" style={{ color: "var(--rose-600)", marginTop: 6 }}>
+              ⚠ Les engagements budgétaires restants ({m(remainingBudget)}) dépassent le disponible immédiat ({m(netNow)}).
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -1127,9 +1197,33 @@ function Etats({ is, bs }) {
         </div> : <EmptyState title="Balance générale vide" detail="Aucun solde réel n'est disponible dans `/ledger/trial-balance`." icon="barChart" />
       )}
 
-      {tab === "flux" && (
-        <EmptyState title="Flux de trésorerie non connecté" detail="Il manque encore un endpoint réel pour construire le tableau des flux à partir du grand livre et de la trésorerie." icon="wallet" />
-      )}
+      {tab === "flux" && (() => {
+        // Flux de trésorerie (méthode indirecte simplifiée) à partir d'éléments réels :
+        // résultat net (compte de résultat) + position de trésorerie (bilan).
+        const treasury = hasLiveBs ? (liveBs.assets || []).filter((a) => /banque|bank|caisse|cash|trésor|tresor/i.test(a.subAccount || a.account || "")) : [];
+        const cashPos = treasury.reduce((s, a) => s + Number(a.amount || 0), 0);
+        if (!hasLiveIs && !treasury.length) {
+          return <EmptyState title="Flux de trésorerie indisponible" detail="Aucun résultat ni compte de trésorerie réel dans le grand livre pour construire le tableau des flux." icon="wallet" />;
+        }
+        return (
+          <div className="card pad" style={{ maxWidth: 680 }}>
+            <h3 className="block-title font-display">Flux de trésorerie (méthode indirecte)</h3>
+            <div className="stmt num">
+              <div className="ln bold"><span>Activités opérationnelles</span><span /></div>
+              <div className="ln"><span className="muted">Résultat net de l'exercice</span><span className={profit >= 0 ? "pos" : "neg"}>{nf.format(profit)}</span></div>
+              <div className="ln bold" style={{ marginTop: 10 }}><span>Position de trésorerie</span><span /></div>
+              {treasury.length
+                ? treasury.map((a, i) => <div className="ln" key={i}><span className="muted">{a.subAccount || a.account}</span><span className={Number(a.amount) >= 0 ? "pos" : "neg"}>{nf.format(Number(a.amount || 0))}</span></div>)
+                : <div className="ln"><span className="muted">Aucun compte de trésorerie</span><span className="muted">—</span></div>}
+              <div className="ln total" style={{ background: cashPos >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
+                <span style={{ color: cashPos >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Trésorerie de clôture</span>
+                <span className={cashPos >= 0 ? "pos" : "neg"}>{signed(cashPos)} {CUR}</span>
+              </div>
+            </div>
+            <p className="tiny muted" style={{ marginTop: 10 }}>Méthode indirecte simplifiée : résultat net + position de trésorerie du bilan. La variation période-à-période nécessitera un historique daté.</p>
+          </div>
+        );
+      })()}
     </>
   );
 }
