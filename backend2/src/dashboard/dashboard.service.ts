@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { and, between, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
   currencies,
   customers,
   products,
@@ -295,6 +296,26 @@ export class DashboardService {
     return Math.round(((curr - prev) / prev) * 100 * 10) / 10;
   }
 
+  /** Devise par defaut lue depuis le parametre (appSetting.currencyId). Jamais codee en dur. */
+  private async defaultCurrency() {
+    const [setting] = await this.db
+      .select({ currencyId: appSettings.currencyId })
+      .from(appSettings)
+      .limit(1);
+    if (!setting?.currencyId) return null;
+    const [cur] = await this.db
+      .select({
+        id: currencies.id,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
+      .from(currencies)
+      .where(eq(currencies.id, setting.currencyId))
+      .limit(1);
+    return cur ?? null;
+  }
+
   private async salesByCurrency(start: Date, end: Date) {
     const rows = await this.db
       .select({
@@ -309,11 +330,13 @@ export class DashboardService {
       .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
       .groupBy(saleInvoices.currencyId, currencies.currencyCode, currencies.currencyName, currencies.currencySymbol);
 
+    // Fallback = devise par defaut du parametre (pas une constante en dur).
+    const def = await this.defaultCurrency();
     return rows.map((r) => ({
-      currencyId: r.currencyId,
-      currencyCode: r.currencyCode ?? "CDF",
-      currencyName: r.currencyName ?? "Franc Congolais",
-      currencySymbol: r.currencySymbol ?? "FC",
+      currencyId: r.currencyId ?? def?.id ?? null,
+      currencyCode: r.currencyCode ?? def?.currencyCode ?? null,
+      currencyName: r.currencyName ?? def?.currencyName ?? null,
+      currencySymbol: r.currencySymbol ?? def?.currencySymbol ?? null,
       amount: Math.round(Number(r.total)),
     }));
   }

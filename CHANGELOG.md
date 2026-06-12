@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Dashboard — devise par défaut lue du paramètre, plus aucune constante en dur** : `salesByCurrency` retombait sur `"CDF"`/`"FC"` codés en dur quand une vente n'avait pas de devise. Remplacé par une résolution de la **devise par défaut depuis le paramètre** (`appSetting.currencyId` → table `currency`). Si aucune devise par défaut n'est configurée, les champs restent `null` (pas de devise inventée). La devise par défaut se règle dans les paramètres, jamais dans le code. [3.53.3]
+
 ### Changed
 - **Comptabilité — sélecteurs de comptes en autocomplete** : les `<select>` de listes de données (choix de compte dans les modals d'écriture/compte et dans l'éditeur de règles SIFA) deviennent des **autocomplete recherchables** (nouveau composant `Autocomplete` local : filtrage par texte, effacement, clavier). Les enums courts (journal, statut, débit/crédit) restent en select natif. Premier jalon de la conversion select→autocomplete par app. [3.53.2]
 
