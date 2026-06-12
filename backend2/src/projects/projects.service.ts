@@ -41,10 +41,40 @@ export class ProjectsService {
       endDate?: string;
       budgetAmount?: number;
       currencyId?: number;
+      // Registre partage : renseignes par la future app de gestion de projet.
+      sourceSystem?: string;
+      externalRef?: string;
     },
     orgId: number,
     userId?: number,
   ) {
+    // Upsert par (source_system, external_ref) : si le projet vient d'une app source
+    // autoritaire et existe deja, on met a jour au lieu de creer un doublon.
+    if (input.sourceSystem && input.externalRef) {
+      const [existing] = await this.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(
+          and(
+            eq(projects.organizationId, orgId),
+            eq(projects.sourceSystem, input.sourceSystem),
+            eq(projects.externalRef, input.externalRef),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        await this.db
+          .update(projects)
+          .set({
+            name: input.name,
+            donor: input.donor,
+            description: input.description,
+            budgetAmount: input.budgetAmount != null ? String(input.budgetAmount) : undefined,
+          })
+          .where(eq(projects.id, existing.id));
+        return { id: existing.id, updated: true };
+      }
+    }
     const [res] = await this.db
       .insert(projects)
       .values({
@@ -57,6 +87,8 @@ export class ProjectsService {
         endDate: input.endDate ? new Date(input.endDate) : undefined,
         budgetAmount: input.budgetAmount != null ? String(input.budgetAmount) : undefined,
         currencyId: input.currencyId,
+        sourceSystem: input.sourceSystem || "comptabilite",
+        externalRef: input.externalRef,
         createdBy: userId,
       })
       .$returningId();
