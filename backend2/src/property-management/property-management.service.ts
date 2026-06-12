@@ -1509,6 +1509,7 @@ export class PropertyManagementService {
         assigneeLastName: maintenanceAssignee.lastName,
         assigneeUsername: maintenanceAssignee.username,
         description: realEstateMaintenanceRequests.description,
+        projectId: realEstateMaintenanceRequests.projectId,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
       })
