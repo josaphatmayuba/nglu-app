@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **ERP/SIFA P1 — Comptabilité : écrans Achats (factures fournisseurs) + Stock & entrepôts** : le backend P1 (purchase-invoices, procurement) était complet mais non exposé dans `comptabilite-app`. Deux nouveaux écrans branchés sur l'API réelle. **Factures fournisseurs** (`/purchase-invoice`) : liste (date, pièce, fournisseur, total, reste dû) + KPIs (nombre, total facturé, payé, reste dû via `query=info`) + **bouton Approuver** qui déclenche la comptabilisation de l'écriture différée (module gaté « purchase », cohérent avec le workflow SIFA). **Stock & entrepôts** (`/procurement/warehouses` + `/:id/stock`) : niveaux de stock par entrepôt, EmptyState honnête si aucun entrepôt. Nouvelle section de nav « Achats & stock ». Routes déjà whitelistées (middleware). [3.51.0]
+
 ### Changed
 - **Comptabilité — Écrans Tiers/Trésorerie/Immo : libellés corrigés + exports CSV réels** : ces écrans étaient **déjà connectés** au grand livre (`/ledger/balances`), mais leurs EmptyState « non connectée » laissaient croire à un manque d'API. Wording corrigé pour refléter la réalité (« connecté au grand livre, en attente d'écritures sur un sous-compte de trésorerie/tiers/immo »). Les 3 boutons « Exporter » factices (toast « à connecter au backend ») deviennent de **vrais exports CSV côté client** (écritures, balance générale, et états financiers — compte de résultat / bilan / balance selon l'onglet), avec BOM UTF-8 pour Excel. Plus aucune action factice dans l'app. [3.50.7]
 

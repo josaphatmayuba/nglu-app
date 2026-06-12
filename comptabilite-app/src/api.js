@@ -73,5 +73,16 @@ export const api = {
 
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
-  budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`)
+  budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
+
+  // ── Achats / Factures fournisseurs (purchase-invoices) ───────────────
+  purchaseInvoices: () => jsonFetch("/purchase-invoice"),
+  purchaseInvoicesInfo: () => jsonFetch("/purchase-invoice?query=info"),
+  approvePurchaseInvoice: (id, comment) => jsonFetch(`/purchase-invoice/${id}/approve`, { method: "POST", body: JSON.stringify({ comment }) }),
+
+  // ── Procurement / Stock (entrepôts, mouvements, commandes) ───────────
+  warehouses: () => jsonFetch("/procurement/warehouses"),
+  warehouseStock: (id) => jsonFetch(`/procurement/warehouses/${id}/stock`),
+  purchaseOrders: () => jsonFetch("/procurement/orders"),
+  receiveOrder: (id, body) => jsonFetch(`/procurement/orders/${id}/receive`, { method: "POST", body: JSON.stringify(body || {}) })
 };

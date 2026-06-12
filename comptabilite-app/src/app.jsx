@@ -79,6 +79,9 @@ const NAV = [
   { id: "analytique", label: "Analytique (projets)", icon: "pieChart" },
   { id: "budget", label: "Budget", icon: "piggyBank" },
   { id: "capacite", label: "Plan de trésorerie", icon: "gauge" },
+  { section: "Achats & stock" },
+  { id: "achats", label: "Factures fournisseurs", icon: "receipt" },
+  { id: "stock", label: "Stock & entrepôts", icon: "warehouse" },
   { section: "États" },
   { id: "etats", label: "États financiers", icon: "barChart" },
   { id: "tva", label: "TVA & taxes", icon: "receipt" },
@@ -293,6 +296,8 @@ function App() {
     analytique: <Analytique />,
     budget: <Budget />,
     capacite: <Capacite accounts={data.accounts} />,
+    achats: <Achats canMutate={canMutate} />,
+    stock: <Stock />,
     etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
     tva: <Tva accounts={data.accounts} />,
     parametres: <Parametres />,
@@ -1152,6 +1157,140 @@ function Capacite({ accounts = [] }) {
     </>
   );
 }
+
+/* ── Achats / Factures fournisseurs ────────────────────────────────────── */
+function Achats({ canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [info, setInfo] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const [list, agg] = await Promise.all([
+        api.purchaseInvoices().catch(() => []),
+        api.purchaseInvoicesInfo().catch(() => null),
+      ]);
+      // findAll renvoie { data, total } ou un tableau selon la version : on normalise.
+      const arr = Array.isArray(list) ? list : (list?.data || list?.rows || []);
+      setRows(Array.isArray(arr) ? arr : []);
+      setInfo(agg && agg._sum ? agg : null);
+    } catch (e) { setError(String(e.message || e)); setRows([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const approve = async (id) => {
+    const comment = window.prompt("Commentaire d'approbation (optionnel) :") ?? "";
+    setBusy(true);
+    try { await api.approvePurchaseInvoice(id, comment); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+    finally { setBusy(false); }
+  };
+
+  const totalAmount = info?._sum?.totalAmount ?? (rows || []).reduce((s, r) => s + Number(r.totalAmount || 0), 0);
+  const totalDue = info?._sum?.dueAmount ?? (rows || []).reduce((s, r) => s + Number(r.dueAmount || 0), 0);
+  const totalPaid = info?._sum?.paidAmount ?? (rows || []).reduce((s, r) => s + Number(r.paidAmount || 0), 0);
+
+  return (
+    <>
+      <PageHead eyebrow="Comptes fournisseurs · gate purchase" title="Factures fournisseurs" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Factures" value={(rows || []).length} />
+        <Mini label="Total facturé" value={m(totalAmount)} />
+        <Mini label="Payé" value={m(totalPaid)} valueClass="pos" />
+        <Mini label="Reste dû" value={m(totalDue)} valueClass={Number(totalDue) > 0 ? "neg" : "pos"} />
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Liste des factures d'achat</h3><span className="tiny">{rows ? `${rows.length} facture(s)` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl num" style={{ minWidth: 720 }}>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {(rows || []).map((r) => (
+                <tr key={r.id}>
+                  <td>{String(r.date || "").slice(0, 10)}</td>
+                  <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
+                  <td style={{ fontWeight: 500 }}>{r.supplierName || `Fournisseur #${r.supplierId}`}</td>
+                  <td className="r">{nf.format(Number(r.totalAmount || 0))}</td>
+                  <td className={`r ${Number(r.dueAmount) > 0 ? "neg" : "pos"}`}>{nf.format(Number(r.dueAmount || 0))}</td>
+                  <td className="r">
+                    {canMutate
+                      ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => approve(r.id)}>Approuver</button>
+                      : <span className="muted tiny">lecture seule</span>}
+                  </td>
+                </tr>
+              ))}
+              {rows && rows.length === 0 && <tr><td colSpan={6} className="muted">Aucune facture d'achat. Connecté à <code>/purchase-invoice</code>.</td></tr>}
+              {rows === null && <tr><td colSpan={6} className="muted">Chargement…</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="tiny muted" style={{ marginTop: 10 }}>Module gaté (sourceModule « purchase ») : l'approbation déclenche la comptabilisation de l'écriture différée via le workflow.</p>
+      </div>
+    </>
+  );
+}
+
+/* ── Stock & entrepôts ─────────────────────────────────────────────────── */
+function Stock() {
+  const [warehouses, setWarehouses] = React.useState(null);
+  const [stockByWh, setStockByWh] = React.useState({});
+  const [error, setError] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const whs = await api.warehouses();
+      const arr = Array.isArray(whs) ? whs : (whs?.data || []);
+      setWarehouses(arr);
+      const entries = await Promise.all(arr.map(async (w) => {
+        try { return [w.id, await api.warehouseStock(w.id)]; } catch { return [w.id, []]; }
+      }));
+      setStockByWh(Object.fromEntries(entries));
+    } catch (e) { setError(String(e.message || e)); setWarehouses([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  if (warehouses && warehouses.length === 0) {
+    return (
+      <>
+        <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+        {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+        <EmptyState title="Aucun entrepôt" detail="Connecté à /procurement/warehouses : les entrepôts et leurs niveaux de stock s'afficheront après création." icon="warehouse" />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <PageHead eyebrow="Inventaire · procurement" title="Stock & entrepôts" action="Rafraîchir" actionIcon="bellRing" onAction={load} ghost />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {warehouses === null && <div className="card pad muted">Chargement…</div>}
+      {(warehouses || []).map((w) => {
+        const stock = stockByWh[w.id] || [];
+        return (
+          <div className="card pad table-card" key={w.id} style={{ marginBottom: 16 }}>
+            <div className="section-head"><h3 className="font-display">{w.name}{w.code ? ` · ${w.code}` : ""}</h3><span className="tiny">{stock.length} référence(s)</span></div>
+            <div className="tbl-scroll">
+              <table className="tbl num" style={{ minWidth: 480 }}>
+                <thead><tr><th>Article</th><th className="r">Quantité</th><th>Unité</th></tr></thead>
+                <tbody>
+                  {stock.map((s, i) => (
+                    <tr key={s.id || i}><td style={{ fontWeight: 500 }}>{s.itemName || s.name || s.productName || `Article #${s.itemId || s.id}`}</td><td className="r">{nf.format(Number(s.quantity ?? s.qty ?? 0))}</td><td>{s.unit || "—"}</td></tr>
+                  ))}
+                  {stock.length === 0 && <tr><td colSpan={3} className="muted">Aucun mouvement de stock.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /* ── États financiers ──────────────────────────────────────────────────── */
 function Etats({ is, bs }) {
   const [tab, setTab] = React.useState("resultat");
