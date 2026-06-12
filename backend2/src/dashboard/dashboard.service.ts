@@ -299,6 +299,7 @@ export class DashboardService {
     const rows = await this.db
       .select({
         currencyId: saleInvoices.currencyId,
+        currencyCode: currencies.currencyCode,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
         total: sql<number>`COALESCE(SUM(${saleInvoices.totalAmount}), 0)`,
@@ -306,12 +307,13 @@ export class DashboardService {
       .from(saleInvoices)
       .leftJoin(currencies, eq(currencies.id, saleInvoices.currencyId))
       .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
-      .groupBy(saleInvoices.currencyId, currencies.currencyName, currencies.currencySymbol);
+      .groupBy(saleInvoices.currencyId, currencies.currencyCode, currencies.currencyName, currencies.currencySymbol);
 
     return rows.map((r) => ({
       currencyId: r.currencyId,
-      currencyName: r.currencyName ?? "CDF",
-      currencySymbol: r.currencySymbol ?? "CDF",
+      currencyCode: r.currencyCode ?? "CDF",
+      currencyName: r.currencyName ?? "Franc Congolais",
+      currencySymbol: r.currencySymbol ?? "FC",
       amount: Math.round(Number(r.total)),
     }));
   }
