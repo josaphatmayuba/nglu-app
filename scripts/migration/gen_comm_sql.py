@@ -34,10 +34,10 @@ def bp():
     out("--> statement-breakpoint")
 
 
-# CDF=franc congolais (symbole FC), USD=dollar (symbole $). On cible le SYMBOLE (non
-# ambigu : 'FRANC' id 12 existe aussi). currencyCode est NULL en base.
-CUR_USD = "(SELECT id FROM currency WHERE currencySymbol = '$' ORDER BY id LIMIT 1)"
-CUR_CDF = "(SELECT id FROM currency WHERE currencySymbol = 'FC' ORDER BY id LIMIT 1)"
+# Devise par currencyName EXACT + MIN(id) actif (aligne sur migration 0143). CDF =
+# 'FRANC CONGOLAIS', USD = 'DOLLAR'. Pas de symbole (mojibake) ni de LIKE (ambigu 'FRANC').
+CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND status = 'true')"
+CUR_CDF = "(SELECT MIN(id) FROM currency WHERE currencyName = 'FRANC CONGOLAIS' AND status = 'true')"
 
 
 def cur_sub(devise_id):

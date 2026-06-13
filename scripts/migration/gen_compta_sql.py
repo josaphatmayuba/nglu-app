@@ -37,11 +37,12 @@ def bp():
 
 
 # Sous-requetes devise (currencyCode NULL en base -> on cible par NOM).
-# CDF = franc congolais (symbole FC) ; USD = dollar (symbole $). On cible le SYMBOLE,
-# non ambigu : la table a aussi un 'FRANC' (id 12) -> un LIKE 'FRANC%' le matcherait par
-# erreur. currencyCode est NULL en base, d'ou le symbole comme cle.
-CUR_CDF = "(SELECT id FROM currency WHERE currencySymbol = 'FC' ORDER BY id LIMIT 1)"
-CUR_USD = "(SELECT id FROM currency WHERE currencySymbol = '$' ORDER BY id LIMIT 1)"
+# Devise par currencyName EXACT + MIN(id) actif : aligne sur la migration 0143
+# (merge_currency_duplicates) qui regroupe par currencyName vers MIN(id) et DECONSEILLE
+# le symbole (mojibake -> '?'). CDF = 'FRANC CONGOLAIS', USD = 'DOLLAR'. PAS de LIKE
+# (eviterait de matcher 'FRANC' id 12). MIN(id) = l'id canonique apres fusion 0143.
+CUR_CDF = "(SELECT MIN(id) FROM currency WHERE currencyName = 'FRANC CONGOLAIS' AND status = 'true')"
+CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND status = 'true')"
 
 
 def cur_sub(devise_id):
