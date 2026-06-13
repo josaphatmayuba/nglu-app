@@ -1602,7 +1602,15 @@ function Analytique() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
               <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)} {curCode(currencies, p.currencyId) || CUR}</span><span>Budget {r && r.budget ? `${nf.format(r.budget)} ${curCode(currencies, p.currencyId) || CUR}` : "—"}</span></div>
+              {/* SIFA : depense ventilee par devise (jamais d'addition inter-devises). */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 8, gap: 8 }} className="tiny num">
+                <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {(r && r.byCurrency && r.byCurrency.length)
+                    ? r.byCurrency.filter((b) => b.totalExpenses).map((b) => <span key={b.currencyId ?? "x"}>Dépensé {nf.format(b.totalExpenses)} {b.currencyCode || curCode(currencies, b.currencyId) || CUR}</span>)
+                    : <span>Dépensé 0 {curCode(currencies, p.currencyId) || CUR}</span>}
+                </span>
+                <span>Budget {r && r.budget ? `${nf.format(r.budget)} ${curCode(currencies, p.currencyId) || CUR}` : "—"}</span>
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
                 <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>
@@ -1614,12 +1622,17 @@ function Analytique() {
       <div className="card pad table-card tbl-scroll">
         <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Devise</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
-            {(projects || []).map((p) => {
+            {/* SIFA : une ligne par (projet, devise) — aucun melange inter-devises. */}
+            {(projects || []).flatMap((p) => {
               const r = reports[p.id];
-              const prod = r ? r.totalRevenue : 0, charge = r ? r.totalExpenses : 0, solde = r ? r.net : 0;
-              return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+              const cur = (r && r.byCurrency && r.byCurrency.length) ? r.byCurrency : [{ currencyId: p.currencyId, currencyCode: curCode(currencies, p.currencyId), totalRevenue: 0, totalExpenses: 0, net: 0 }];
+              return cur.map((b, i) => {
+                const prod = b.totalRevenue || 0, charge = b.totalExpenses || 0, solde = b.net || 0;
+                const code = b.currencyCode || curCode(currencies, b.currencyId) || CUR;
+                return <tr key={`${p.id}-${b.currencyId ?? i}`}><td style={{ fontWeight: 500 }}>{i === 0 ? <>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</> : ""}</td><td className="r"><span className="chip">{code}</span></td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+              });
             })}
           </tbody>
         </table>

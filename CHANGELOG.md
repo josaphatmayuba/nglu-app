@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **Comptabilité/Analytique — rapport projet ventilé par devise (SIFA)** : `ProjectsService.ledgerReport` ne sommait plus correctement quand un projet mélangeait plusieurs devises (`totalExpenses` additionnait CDF+USD → faux). Désormais le grand livre est groupé par `(account_id, journal_entries.currency_id)` avec join `currency` ; sortie **`byCurrency[]`** = un bucket par devise `{ currencyId, currencyCode, expenses[], revenue[], totalExpenses, totalRevenue, net }`, **jamais d'addition inter-devises**. Les coûts de maintenance non comptabilisés (`maintenanceCostsMissingFromLedger`) sont aussi ventilés par devise et ajoutés dans leur bucket. La **consommation budget** (`consumptionPct`) est comparée uniquement dans la **devise du budget** (`project.currencyId`). Champs plats (`totalExpenses`/`revenue`/`net`/`currencyCode`) conservés pour compat = devise du budget (ou devise unique). Frontend : carte affiche « Dépensé <montant> <devise> » par devise ; tableau « Produits & charges » a une colonne **Devise** avec une ligne par (projet, devise). [3.61.0]
+
 ### Fixed
 - **Comptabilité — sélecteur de devise affichait l'id « 1 » + champ montant+devise au standard app (SCRUM)** : dans les modals analytiques, le `select` devise utilisait `c.code` (champ inexistant) → repli sur l'id (« 1 ») au lieu de `CDF`/`USD`. Corrigé : label via `cleanCurrencySymbol(c) || c.currencyCode || c.currencyName`. Nouveau type de champ **`money`** dans `FormModal` : input montant à gauche + select devise à droite **sur une ligne** (devise en accent), conforme au standard de l'app (classe `.money-row`). Appliqué aux modals **Dépense**, **Nouveau projet** et **Modifier le projet** (montant/budget + devise groupés). `FormModal` initialise désormais aussi la clé devise (`curKey`/`curDefault`) du champ money. [3.60.2]
 
