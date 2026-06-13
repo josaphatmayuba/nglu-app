@@ -1145,6 +1145,10 @@ export const hrProjects = mysqlTable("hr_projects", {
   endDate: date("endDate", { mode: "string" }),
   hrBudget: double("hrBudget").default(0).notNull(),
   currencyId: bigint("currencyId", { mode: "number" }),
+  // Reflet du registre partage `projects` (principe SIFA). source_system='projects'
+  // + external_ref = projects.id quand le projet vient de la compta/app projet.
+  sourceSystem: varchar("source_system", { length: 40 }).default("hr").notNull(),
+  externalRef: varchar("external_ref", { length: 120 }),
   status: varchar("status", { length: 30 }).default("active").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at"),
