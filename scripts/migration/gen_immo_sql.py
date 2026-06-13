@@ -37,8 +37,10 @@ def bp():
 
 
 # Devises par NOM (currencyCode NULL en base). USD = DOLLAR.
-CUR_USD = "(SELECT id FROM currency WHERE currencyName LIKE 'DOLLAR%' ORDER BY id LIMIT 1)"
-CUR_CDF = "(SELECT id FROM currency WHERE currencyName LIKE 'FRANC%' ORDER BY id LIMIT 1)"
+# CDF=franc congolais (symbole FC), USD=dollar (symbole $). On cible le SYMBOLE (non
+# ambigu : 'FRANC' id 12 existe aussi). currencyCode est NULL en base.
+CUR_USD = "(SELECT id FROM currency WHERE currencySymbol = '$' ORDER BY id LIMIT 1)"
+CUR_CDF = "(SELECT id FROM currency WHERE currencySymbol = 'FC' ORDER BY id LIMIT 1)"
 
 # realestate_type -> property_type / unit_type Domus
 TYPE_MAP = {
