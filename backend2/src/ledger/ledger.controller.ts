@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentRoleId } from "../auth/decorators/current-role-id.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -103,10 +104,11 @@ export class LedgerController {
   @Get()
   findAll(
     @CurrentOrg() orgId: number,
+    @CurrentRoleId() roleId: number,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
   ) {
-    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0);
+    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0, roleId);
   }
 
   @ApiOperation({ summary: "Soldes par sous-compte (grand livre moderne)" })
@@ -199,8 +201,9 @@ export class LedgerController {
   ledgerForAccount(
     @Param("accountId", ParseIntPipe) accountId: number,
     @CurrentOrg() orgId: number,
+    @CurrentRoleId() roleId: number,
   ) {
-    return this.ledger.ledgerForAccount(accountId, orgId);
+    return this.ledger.ledgerForAccount(accountId, orgId, roleId);
   }
 
   // ─── Echange de devise (modele bancaire) ────────────────────────────────────
@@ -258,8 +261,8 @@ export class LedgerController {
   @ApiParam({ name: "id", type: Number })
   @Permissions("read-transaction")
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.ledger.findOne(id, orgId);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentRoleId() roleId: number) {
+    return this.ledger.findOne(id, orgId, roleId);
   }
 
   @ApiOperation({ summary: "Contre-passe une ecriture (extourne)" })

@@ -84,6 +84,9 @@ const ENDPOINTS = [
 
 const PERMISSION_TYPES = ["create", "readAll", "readSingle", "update", "delete"];
 
+// Permissions ponctuelles hors schema {type}-{endpoint}. Voir migration 0138.
+const EXTRA_PERMISSIONS = [{ name: "view-reversed-entries", type: "account" }];
+
 export async function seedPermissions() {
   const existing = await db.select({ id: permissions.id }).from(permissions).limit(1);
   if (existing.length) {
@@ -91,14 +94,22 @@ export async function seedPermissions() {
     return;
   }
 
-  const rows = ENDPOINTS.flatMap((endpoint) =>
-    PERMISSION_TYPES.map((pType) => ({
-      name: `${pType}-${endpoint.name}`,
-      type: endpoint.type,
+  const rows = [
+    ...ENDPOINTS.flatMap((endpoint) =>
+      PERMISSION_TYPES.map((pType) => ({
+        name: `${pType}-${endpoint.name}`,
+        type: endpoint.type,
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })),
+    ),
+    ...EXTRA_PERMISSIONS.map((p) => ({
+      name: p.name,
+      type: p.type,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })),
-  );
+  ];
 
   // Insert in chunks of 50 to avoid query size limits
   const CHUNK = 50;

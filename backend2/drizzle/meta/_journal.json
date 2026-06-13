@@ -827,6 +827,13 @@
       "when": 1780437600000,
       "tag": "0137_legacy_users_devis",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "5",
+      "when": 1780441200000,
+      "tag": "0138_view_reversed_entries_permission",
+      "breakpoints": true
     }
   ]
 }
