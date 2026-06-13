@@ -13,6 +13,7 @@ import PlanComptablePanel   from "./panels/PlanComptablePanel";
 import EtatsFinanciersPanel from "./panels/EtatsFinanciersPanel";
 import TvaPanel             from "./panels/TvaPanel";
 import EcritureFormModal    from "./EcritureFormModal";
+import DateRangeFilter, { defaultDateRange } from "./DateRangeFilter";
 
 const TABS = [
   { key: "overview",  label: "Overview" },
@@ -22,8 +23,6 @@ const TABS = [
   { key: "etats",     label: "Financial Statements" },
   { key: "tva",       label: "Tax" },
 ];
-
-const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
 const decodeHTML = (str) => {
   if (typeof document === "undefined" || !str) return str ?? "";
@@ -88,7 +87,7 @@ function MultiKpiCard({ icon: Icon, label, colorKey, lines }) {
 export default function AccountingPage() {
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState("overview");
-  const [exercice, setExercice]   = useState(new Date().getFullYear());
+  const [dateRange, setDateRange] = useState(() => defaultDateRange("year"));
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
@@ -108,20 +107,21 @@ export default function AccountingPage() {
   );
 
   const transactionQuery = useMemo(
-    () => ({ startDate: `${exercice}-01-01`, endDate: `${exercice}-12-31`, status: "true", count: 1000, offset: 0 }),
-    [exercice]
+    () => ({ startDate: dateRange.from || undefined, endDate: dateRange.to || undefined, status: "true", count: 1000, offset: 0 }),
+    [dateRange]
   );
 
   const reloadTransactions = () => dispatch(loadAllTransaction(transactionQuery));
 
   useEffect(() => {
+    const reportParams = { startDate: dateRange.from || undefined, endDate: dateRange.to || undefined };
     dispatch(loadAllTransaction(transactionQuery));
     dispatch(loadAllAccount());
-    dispatch(loadIncomeStatement());
-    dispatch(loadTrailBalance());
+    dispatch(loadIncomeStatement(reportParams));
+    dispatch(loadTrailBalance(reportParams));
     dispatch(loadAllTransactionType());
-    dispatch(loadBalanceSheet());
-  }, [dispatch, transactionQuery]);
+    dispatch(loadBalanceSheet(reportParams));
+  }, [dispatch, transactionQuery, dateRange]);
 
   const openCreateModal = () => {
     setEditingTransaction(null);
@@ -194,14 +194,8 @@ export default function AccountingPage() {
             <h1 className="text-xl font-bold text-ink-900">Accounting</h1>
             <p className="text-xs text-ink-500 mt-0.5">Double-entry bookkeeping</p>
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={exercice}
-              onChange={(e) => setExercice(Number(e.target.value))}
-              className="text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white"
-            >
-              {YEARS.map((y) => <option key={y} value={y}>Fiscal year {y}</option>)}
-            </select>
+          <div className="flex items-center gap-2 flex-wrap">
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
             <button type="button" className="flex items-center gap-1.5 text-sm border border-ink-200 rounded-lg px-3 py-1.5 hover:bg-ink-50 transition text-ink-700">
               <Download className="w-4 h-4" /> Export
             </button>

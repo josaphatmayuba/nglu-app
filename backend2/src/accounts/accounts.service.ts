@@ -5,6 +5,8 @@ import { accounts, currencies, subAccounts, transactions } from "../database/sch
 import type { Database } from "../database/types";
 import { AccountQueryDto, CreateSubAccountDto, UpdateSubAccountDto } from "./dto/account.dto";
 
+type DateRange = { startDate?: string; endDate?: string };
+
 @Injectable()
 export class AccountsService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -24,9 +26,10 @@ export class AccountsService {
   }
 
   async findAll(query: AccountQueryDto) {
-    if (query.query === "tb") return this.trialBalance();
-    if (query.query === "bs") return this.balanceSheet();
-    if (query.query === "is") return this.incomeStatement();
+    const range = { startDate: query.startDate, endDate: query.endDate };
+    if (query.query === "tb") return this.trialBalance(range);
+    if (query.query === "bs") return this.balanceSheet(range);
+    if (query.query === "is") return this.incomeStatement(range);
     if (query.query === "ma") return this.mainAccounts();
     if (query.type === "sa" && query.query === "all") return this.subAccountsForPicker();
     if (query.type === "sa" && query.query === "search") return this.searchSubAccounts(query);
@@ -103,8 +106,8 @@ export class AccountsService {
     }));
   }
 
-  private async trialBalance() {
-    const items = await this.subAccountBalances();
+  private async trialBalance(range?: DateRange) {
+    const items = await this.subAccountBalances(range);
     const debits = items.filter((item) => item.balance > 0);
     const credits = items.filter((item) => item.balance < 0);
     const totalDebit = this.round(debits.reduce((total, item) => total + item.balance, 0));
@@ -122,8 +125,8 @@ export class AccountsService {
     };
   }
 
-  private async balanceSheet() {
-    const items = await this.subAccountBalances();
+  private async balanceSheet(range?: DateRange) {
+    const items = await this.subAccountBalances(range);
     const assets = items.filter((item) => item.accountType === "Asset" && item.balance !== 0);
     const liabilities = items
       .filter((item) => item.accountType === "Liability" && item.balance !== 0)
@@ -149,8 +152,8 @@ export class AccountsService {
     };
   }
 
-  private async incomeStatement() {
-    const items = await this.subAccountBalances();
+  private async incomeStatement(range?: DateRange) {
+    const items = await this.subAccountBalances(range);
     const revenue = items
       .filter((item) => item.account === "Revenue" && item.balance !== 0)
       .map((item) => ({ ...item, balance: -item.balance }));
@@ -232,7 +235,14 @@ export class AccountsService {
       .leftJoin(accounts, eq(accounts.id, subAccounts.accountId));
   }
 
-  private async subAccountBalances() {
+  private async subAccountBalances(range?: DateRange) {
+    // Bornes de date (incluses) appliquees a la date de l'ecriture; sans borne = tout l'historique.
+    const start = range?.startDate ? new Date(range.startDate) : null;
+    const end = range?.endDate ? new Date(range.endDate) : null;
+    const inRange = sql`
+      (${start ? sql`${transactions.date} >= ${start}` : sql`1=1`})
+      and (${end ? sql`${transactions.date} <= ${end}` : sql`1=1`})`;
+
     // Une ligne par (sous-compte x devise) : aucune conversion, chaque devise garde son solde.
     const rows = await this.db
       .select({
@@ -243,8 +253,8 @@ export class AccountsService {
         currencyId: transactions.currencyId,
         currencyCode: currencies.currencyCode,
         currencySymbol: currencies.currencySymbol,
-        totalDebit: sql<string>`coalesce(sum(case when ${transactions.status} = 'true' and ${transactions.debitId} = ${subAccounts.id} then ${transactions.amount} else 0 end), 0)`,
-        totalCredit: sql<string>`coalesce(sum(case when ${transactions.status} = 'true' and ${transactions.creditId} = ${subAccounts.id} then ${transactions.amount} else 0 end), 0)`,
+        totalDebit: sql<string>`coalesce(sum(case when ${transactions.status} = 'true' and ${transactions.debitId} = ${subAccounts.id} and ${inRange} then ${transactions.amount} else 0 end), 0)`,
+        totalCredit: sql<string>`coalesce(sum(case when ${transactions.status} = 'true' and ${transactions.creditId} = ${subAccounts.id} and ${inRange} then ${transactions.amount} else 0 end), 0)`,
       })
       .from(subAccounts)
       .leftJoin(accounts, eq(accounts.id, subAccounts.accountId))
