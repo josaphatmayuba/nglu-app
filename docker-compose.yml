@@ -134,6 +134,9 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      # vite.config.js importe ../scripts/app-version.mjs (dossier scripts/ racine du repo).
+      # Le mount ./frontend:/app n'inclut pas ce parent -> on le monte explicitement en RO.
+      - ./scripts:/scripts:ro
     environment:
       VITE_APP_API: ${VITE_APP_API:-http://localhost:8001}
       VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
