@@ -32,7 +32,7 @@ def out(line=""):
 
 
 def bp():
-    """Separateur de statement compatible Drizzle migrate() ET le repair (split sur ;)."""
+    """Separateur de statement pour le pipeline (Drizzle migrate + repair le retirent)."""
     out("--> statement-breakpoint")
 
 
@@ -78,10 +78,10 @@ def emit_header():
     out("-- ============================================================")
     out("-- Migration compta legacy -> ledger moderne (GENERE, NE PAS EDITER A LA MAIN)")
     out("-- Genere par scripts/migration/gen_compta_sql.py")
-    out("-- Cible : migration Drizzle (pipeline). Statements AUTONOMES separes par")
-    out("-- --> statement-breakpoint, sans variables de session (@var) : robuste car")
-    out("-- migrate() execute chaque statement independamment. Idempotent (NOT EXISTS).")
-    out("-- Devises : sous-requete sur currency (CDF/USD par NOM, currencyCode NULL en base).")
+    out("-- Devises : sous-requete sur currency par SYMBOLE (FC=CDF, $=USD), non ambigu.")
+    out("")
+    out("-- Statements autonomes (pas de @var), separes par --> statement-breakpoint,")
+    out("-- idempotents par cle naturelle. Applique au boot par le pipeline.")
     out("-- ============================================================")
     out("CREATE TABLE IF NOT EXISTS legacy_subaccount_map (legacy_id INT PRIMARY KEY, new_id BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
     bp()

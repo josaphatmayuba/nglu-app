@@ -1,10 +1,10 @@
 -- ============================================================
 -- Migration compta legacy -> ledger moderne (GENERE, NE PAS EDITER A LA MAIN)
 -- Genere par scripts/migration/gen_compta_sql.py
--- Cible : migration Drizzle (pipeline). Statements AUTONOMES separes par
--- --> statement-breakpoint, sans variables de session (@var) : robuste car
--- migrate() execute chaque statement independamment. Idempotent (NOT EXISTS).
--- Devises : sous-requete sur currency (CDF/USD par NOM, currencyCode NULL en base).
+-- Devises : sous-requete sur currency par SYMBOLE (FC=CDF, $=USD), non ambigu.
+
+-- Statements autonomes (pas de @var), separes par --> statement-breakpoint,
+-- idempotents par cle naturelle. Applique au boot par le pipeline.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS legacy_subaccount_map (legacy_id INT PRIMARY KEY, new_id BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 --> statement-breakpoint
