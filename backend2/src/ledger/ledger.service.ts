@@ -15,6 +15,9 @@ import {
   journalEntryLines,
   ledgerApprovalRequirements,
   ledgerPendingEntries,
+  permissions,
+  rolePermissions,
+  roles,
   subAccounts,
   transactionTypeRules,
   transactions,
@@ -286,13 +289,42 @@ export class LedgerService {
   }
 
   /** Une ecriture + ses lignes. */
-  async findOne(entryId: number, orgId: number) {
+  /**
+   * Permission "view-reversed-entries" : par defaut les ecritures contre-passees
+   * (originale `reversed` + sa contre-passation) sont MASQUEES de la liste/grand livre.
+   * Seuls les roles systeme ou ceux portant cette permission les voient.
+   * Memes regles que PermissionsGuard (roles.isSystem = bypass).
+   */
+  private async roleCanViewReversed(roleId?: number): Promise<boolean> {
+    if (!roleId) return false;
+    const [roleRow] = await this.db
+      .select({ isSystem: roles.isSystem })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1);
+    if (roleRow?.isSystem === 1) return true;
+    const [perm] = await this.db
+      .select({ id: permissions.id })
+      .from(rolePermissions)
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(and(eq(rolePermissions.roleId, roleId), eq(permissions.name, "view-reversed-entries")))
+      .limit(1);
+    return !!perm;
+  }
+
+  async findOne(entryId: number, orgId: number, roleId?: number) {
     const [entry] = await this.db
       .select()
       .from(journalEntries)
       .where(and(eq(journalEntries.id, entryId), eq(journalEntries.organizationId, orgId)))
       .limit(1);
     if (!entry) throw new NotFoundException(`Ecriture #${entryId} introuvable.`);
+
+    // Sans la permission, une ecriture contre-passee (ou sa contre-passation) est invisible.
+    const isReversal = entry.status === "reversed" || entry.reversedById != null || entry.reversalOfId != null;
+    if (isReversal && !(await this.roleCanViewReversed(roleId))) {
+      throw new NotFoundException(`Ecriture #${entryId} introuvable.`);
+    }
 
     const lines = await this.db
       .select()
@@ -303,7 +335,16 @@ export class LedgerService {
   }
 
   /** Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete). */
-  async findAll(orgId: number, limit = 50, offset = 0) {
+  async findAll(orgId: number, limit = 50, offset = 0, roleId?: number) {
+    const canViewReversed = await this.roleCanViewReversed(roleId);
+    const where = canViewReversed
+      ? eq(journalEntries.organizationId, orgId)
+      : and(
+          eq(journalEntries.organizationId, orgId),
+          // Masque l'originale contre-passee ET sa contre-passation.
+          sql`${journalEntries.status} <> 'reversed'`,
+          sql`${journalEntries.reversalOfId} is null`,
+        );
     return this.db
       .select({
         id: journalEntries.id,
@@ -324,7 +365,7 @@ export class LedgerService {
       })
       .from(journalEntries)
       .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
-      .where(eq(journalEntries.organizationId, orgId))
+      .where(where)
       .orderBy(desc(journalEntries.date), desc(journalEntries.id))
       .limit(limit)
       .offset(offset);
@@ -333,7 +374,21 @@ export class LedgerService {
   /**
    * Grand livre d'un compte : toutes ses lignes + solde courant (debit - credit cumule).
    */
-  async ledgerForAccount(accountId: number, orgId: number) {
+  async ledgerForAccount(accountId: number, orgId: number, roleId?: number) {
+    const canViewReversed = await this.roleCanViewReversed(roleId);
+    // Sans permission : on masque l'originale contre-passee ET sa contre-passation
+    // ensemble — leur effet net etant nul, le solde courant reste juste.
+    const where = canViewReversed
+      ? and(
+          eq(journalEntryLines.accountId, accountId),
+          eq(journalEntryLines.organizationId, orgId),
+        )
+      : and(
+          eq(journalEntryLines.accountId, accountId),
+          eq(journalEntryLines.organizationId, orgId),
+          sql`${journalEntries.status} <> 'reversed'`,
+          sql`${journalEntries.reversalOfId} is null`,
+        );
     const rows = await this.db
       .select({
         entryId: journalEntryLines.entryId,
@@ -346,12 +401,7 @@ export class LedgerService {
       })
       .from(journalEntryLines)
       .innerJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
-      .where(
-        and(
-          eq(journalEntryLines.accountId, accountId),
-          eq(journalEntryLines.organizationId, orgId),
-        ),
-      )
+      .where(where)
       .orderBy(journalEntries.date, journalEntryLines.id);
 
     let balanceCents = 0;

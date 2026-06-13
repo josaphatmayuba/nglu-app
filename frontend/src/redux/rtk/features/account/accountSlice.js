@@ -105,11 +105,12 @@ export const loadAllAccountPaginated = createAsyncThunk(
 // Trail Balance
 export const loadTrailBalance = createAsyncThunk(
   "account/loadTrailBalance",
-  async () => {
+  async (params = {}) => {
     try {
       const { data } = await axios({
         method: "get",
-        url: `account?query=tb`,
+        url: `account`,
+        params: { query: "tb", ...params },
       });
       return successHandler(data);
     } catch (error) {
@@ -120,11 +121,12 @@ export const loadTrailBalance = createAsyncThunk(
 // Balance sheet
 export const loadBalanceSheet = createAsyncThunk(
   "account/loadBalanceSheet",
-  async () => {
+  async (params = {}) => {
     try {
       const { data } = await axios({
         method: "get",
-        url: `account?query=bs`,
+        url: `account`,
+        params: { query: "bs", ...params },
       });
       return successHandler(data);
     } catch (error) {
@@ -135,11 +137,12 @@ export const loadBalanceSheet = createAsyncThunk(
 // Income Statement
 export const loadIncomeStatement = createAsyncThunk(
   "account/IncomeStatement",
-  async () => {
+  async (params = {}) => {
     try {
       const { data } = await axios({
         method: "get",
-        url: `account?query=is`,
+        url: `account`,
+        params: { query: "is", ...params },
       });
       return successHandler(data);
     } catch (error) {

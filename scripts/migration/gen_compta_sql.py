@@ -37,8 +37,11 @@ def bp():
 
 
 # Sous-requetes devise (currencyCode NULL en base -> on cible par NOM).
-CUR_CDF = "(SELECT id FROM currency WHERE currencyName LIKE 'FRANC%' ORDER BY id LIMIT 1)"
-CUR_USD = "(SELECT id FROM currency WHERE currencyName LIKE 'DOLLAR%' ORDER BY id LIMIT 1)"
+# CDF = franc congolais (symbole FC) ; USD = dollar (symbole $). On cible le SYMBOLE,
+# non ambigu : la table a aussi un 'FRANC' (id 12) -> un LIKE 'FRANC%' le matcherait par
+# erreur. currencyCode est NULL en base, d'ou le symbole comme cle.
+CUR_CDF = "(SELECT id FROM currency WHERE currencySymbol = 'FC' ORDER BY id LIMIT 1)"
+CUR_USD = "(SELECT id FROM currency WHERE currencySymbol = '$' ORDER BY id LIMIT 1)"
 
 
 def cur_sub(devise_id):
