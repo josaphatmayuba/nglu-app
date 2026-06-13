@@ -87,7 +87,7 @@ function MultiKpiCard({ icon: Icon, label, colorKey, lines }) {
 export default function AccountingPage() {
   const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState("overview");
-  const [dateRange, setDateRange] = useState(() => defaultDateRange("year"));
+  const [dateRange, setDateRange] = useState(() => defaultDateRange());
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
 

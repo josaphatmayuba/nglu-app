@@ -24,8 +24,9 @@ export function presetRange(preset) {
   return { from: "", to: "" };
 }
 
-export function defaultDateRange(preset = "year") {
-  return { preset, ...presetRange(preset) };
+// Plage par defaut au chargement : du 01/01/2022 -> aujourd'hui.
+export function defaultDateRange() {
+  return { preset: "custom", from: "2022-01-01", to: isoDate(startOfToday()) };
 }
 
 const PRESETS = [
