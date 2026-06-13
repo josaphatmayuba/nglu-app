@@ -834,6 +834,13 @@
       "when": 1780441200000,
       "tag": "0142_legacy_users_devis",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "5",
+      "when": 1780444800000,
+      "tag": "0143_merge_currency_duplicates",
+      "breakpoints": true
     }
   ]
 }
