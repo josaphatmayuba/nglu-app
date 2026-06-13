@@ -799,6 +799,34 @@
       "when": 1780423200000,
       "tag": "0133_hr_projects_source_ref",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "5",
+      "when": 1780426800000,
+      "tag": "0134_legacy_compta",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "5",
+      "when": 1780430400000,
+      "tag": "0135_legacy_immo",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "5",
+      "when": 1780434000000,
+      "tag": "0136_legacy_comm",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "5",
+      "when": 1780437600000,
+      "tag": "0137_legacy_users_devis",
+      "breakpoints": true
     }
   ]
 }
