@@ -227,6 +227,10 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
 .field { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-600); }
 .field input, .field select { border: 1px solid var(--ink-200); border-radius: 8px; min-height: 40px; padding: 0 11px; width: 100%; font-weight: 400; background: #fff; }
+/* Montant + devise sur une ligne (standard app) : input a gauche, devise a droite. */
+.money-row { display: flex; gap: 8px; align-items: stretch; }
+.money-row input { flex: 1 1 auto; }
+.money-row select { flex: 0 0 auto; width: auto; min-width: 88px; font-weight: 600; color: var(--accent-600, #0d9488); }
 .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ── Mobile bottom nav + plus sheet ────────────────────────────────────── */

@@ -1517,8 +1517,7 @@ function Analytique() {
     finally { setBusy(false); }
   };
 
-  const curField = { key: "currencyId", label: "Devise", type: "select", required: true,
-    options: currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: c.code || c.name || c.symbol || String(c.currencyId ?? c.id) })), default: defCur };
+  const curOptions = currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyCode || c.currencyName || String(c.currencyId ?? c.id) }));
 
   const projectModal = showNew && (
     <FormModal
@@ -1531,8 +1530,8 @@ function Analytique() {
       fields={[
         { key: "name", label: "Nom du projet", required: true },
         { key: "donor", label: "Financeur (optionnel)" },
-        { key: "budget", label: "Budget (optionnel)", type: "number" },
-        { ...curField, label: "Devise du budget", required: false },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curOptions: curOptions, curDefault: defCur },
       ]}
     />
   );
@@ -1547,8 +1546,9 @@ function Analytique() {
       fields={[
         { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
         { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
-        { key: "budget", label: "Budget (optionnel)", type: "number", default: edit.budgetAmount != null ? String(edit.budgetAmount) : "" },
-        { ...curField, label: "Devise du budget", required: false, default: edit.currencyId != null ? String(edit.currencyId) : defCur },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          default: edit.budgetAmount != null ? String(edit.budgetAmount) : "",
+          curKey: "currencyId", curOptions: curOptions, curDefault: edit.currencyId != null ? String(edit.currencyId) : defCur },
       ]}
     />
   );
@@ -1563,8 +1563,8 @@ function Analytique() {
       fields={[
         { key: "date", label: "Date", type: "date", default: new Date().toISOString().slice(0, 10), required: true },
         { key: "particulars", label: "Libellé", default: "" },
-        { key: "amount", label: "Montant", type: "number", required: true },
-        curField,
+        { key: "amount", label: "Montant", type: "money", required: true, placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curRequired: true, curOptions: curOptions, default: "", curDefault: defCur },
         { key: "expenseId", label: "Compte de charge (débit)", type: "select", required: true,
           options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
         { key: "creditId", label: "Payé depuis (caisse/banque)", type: "select", required: true,
@@ -2282,7 +2282,14 @@ function FSelect({ label, value, onChange, rows }) {
 
 /* Modal générique (remplace window.prompt) : titre + champs configurables. */
 function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy, onSubmit, onClose }) {
-  const [form, setForm] = React.useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+  const [form, setForm] = React.useState(() => {
+    const init = {};
+    for (const f of fields) {
+      init[f.key] = f.default ?? "";
+      if (f.type === "money" && f.curKey) init[f.curKey] = f.curDefault ?? "";
+    }
+    return init;
+  });
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const submit = (e) => {
     e.preventDefault();
@@ -2296,6 +2303,8 @@ function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy,
         <div className="form-grid">
           {fields.map((f) => f.type === "textarea"
             ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : f.type === "money"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><div className="money-row"><input type="number" placeholder={f.placeholder} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /><select value={form[f.curKey]} onChange={(e) => set(f.curKey, e.target.value)} required={f.curRequired}>{(f.curOptions || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div></label>
             : f.type === "select"
             ? <label className="field" key={f.key}><span>{f.label}</span><select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
             : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
