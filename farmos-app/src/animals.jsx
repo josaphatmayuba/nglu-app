@@ -9,6 +9,7 @@ import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
+import { animalStatusColor, animalStatusLabel, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
 
 const FIELD_DEFS = {
@@ -207,11 +208,12 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
         {animals.map((a) => {
           const sp = speciesById(a.species);
           const sel = selectedId === a.id;
-          const statusColor = a.status === "healthy" ? "var(--solidite-500)" : a.status === "treatment" ? "var(--autorite-500)" : a.status === "alert" ? "var(--oxblood-700)" : "var(--ink-400)";
-          const statusLbl = { healthy: lang === "fr" ? "Sain" : "Healthy", treatment: lang === "fr" ? "Traitement" : "Treatment", alert: lang === "fr" ? "Alerte" : "Alert" }[a.status] || a.status;
+          const locked = isSaleLockedAnimal(a);
+          const statusColor = animalStatusColor(a.status);
+          const statusLbl = animalStatusLabel(a.status, lang);
           return (
             <div key={a.id} onClick={() => onSelect(a.id)} style={{
-              background: a.withdrawal ? "rgba(122, 31, 43, 0.04)" : "var(--paper)",
+              background: locked || a.withdrawal ? "rgba(122, 31, 43, 0.04)" : "var(--paper)",
               border: `1px solid ${sel ? "var(--oxblood-700)" : "var(--border-1)"}`,
               borderRadius: 10, padding: "10px 12px", cursor: "pointer",
               display: "flex", gap: 10, alignItems: "center", boxShadow: "var(--shadow-1)",
@@ -222,10 +224,10 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
                   <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
-                  {a.withdrawal && (
+                  {(locked || a.withdrawal) && (
                     <span className="tag tag-danger" style={{ fontSize: 9.5, padding: "1px 6px" }}>
                       <Icon name="shield" size={9} color="var(--oxblood-700)"/>
-                      {lang === "fr" ? "Retrait" : "Withdrawal"}
+                      {locked ? animalStatusLabel(a.status, lang) : (lang === "fr" ? "Retrait" : "Withdrawal")}
                     </span>
                   )}
                 </div>
@@ -269,14 +271,15 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
       {animals.map((a) => {
         const sp = speciesById(a.species);
         const sel = selectedId === a.id;
-        const statusColor = a.status === "healthy" ? "var(--solidite-500)" : a.status === "treatment" ? "var(--autorite-500)" : a.status === "alert" ? "var(--oxblood-700)" : "var(--ink-400)";
-        const statusLbl = { healthy: lang==="fr"?"Sain":"Healthy", treatment: lang==="fr"?"Traitement":"Treatment", alert: lang==="fr"?"Alerte":"Alert" }[a.status] || a.status;
+        const locked = isSaleLockedAnimal(a);
+        const statusColor = animalStatusColor(a.status);
+        const statusLbl = animalStatusLabel(a.status, lang);
         return (
           <div key={a.id} onClick={() => onSelect(a.id)} style={{
             display: "grid", gridTemplateColumns: "32px 1fr 130px 80px 100px 130px 120px 80px",
             padding: `${(rowH-28)/2}px 14px`, alignItems: "center",
             borderBottom: "1px solid var(--border-1)",
-            background: sel ? "var(--bg-sunken)" : a.withdrawal ? "rgba(122, 31, 43, 0.03)" : "var(--paper)",
+            background: sel ? "var(--bg-sunken)" : locked || a.withdrawal ? "rgba(122, 31, 43, 0.03)" : "var(--paper)",
             cursor: "pointer", transition: "background 80ms",
             position: "relative",
           }}>
@@ -287,9 +290,9 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
             <div style={{ minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                 <span className="italic-serif" style={{ fontSize: 14.5, color: "var(--ink-950)" }}>{a.name}</span>
-                {a.withdrawal && <span className="tag tag-danger" style={{ fontSize: 9.5, padding: "1px 6px" }}>
+                {(locked || a.withdrawal) && <span className="tag tag-danger" style={{ fontSize: 9.5, padding: "1px 6px" }}>
                   <Icon name="shield" size={9} color="var(--oxblood-700)"/>
-                  {lang === "fr" ? "Retrait" : "Withdrawal"}
+                  {locked ? animalStatusLabel(a.status, lang) : (lang === "fr" ? "Retrait" : "Withdrawal")}
                 </span>}
               </div>
               <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 1 }}>{a.id}</div>
@@ -319,11 +322,15 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const sp = speciesById(animal.species);
   const groups = groupFields(sp.fields);
+  const readOnly = isSaleLockedAnimal(animal);
   const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
+  React.useEffect(() => {
+    if (readOnly && editing) setEditing(false);
+  }, [readOnly, editing]);
   const reloadPhotos = React.useCallback(() => {
     if (!animal._pk) { setPhotos([]); return; }
     api.listAnimalPhotos(animal._pk).then((rows) => setPhotos(Array.isArray(rows) ? rows : [])).catch(() => {});
@@ -379,6 +386,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   }, [animal._pk, lang]);
   const onDelete = async () => {
     if (!animal._pk) return;
+    if (readOnly) {
+      window.alert(lockedAnimalMessage(lang));
+      return;
+    }
     if (!window.confirm(lang === "fr" ? `Supprimer ${animal.name || animal.id} ?` : `Delete ${animal.name || animal.id}?`)) return;
     try {
       await api.deleteAnimal(animal._pk);
@@ -419,6 +430,8 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             <span className="tag">{animal.lot}</span>
           </div>
           <div style={{ display: "flex", gap: 4 }}>
+            {!readOnly && (
+              <>
             <button className="btn btn-sm btn-ghost" onClick={() => setShowQr(true)} title={lang === "fr" ? "Générer QR" : "Generate QR"}>
               <Icon name="qr" size={13} color="var(--ink-700)"/>
             </button>
@@ -431,6 +444,8 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               <button className="btn btn-sm btn-ghost" onClick={onDelete} title={lang === "fr" ? "Supprimer" : "Delete"}>
                 <Icon name="trash" size={13} color="var(--oxblood-700)"/>
               </button>
+            )}
+              </>
             )}
             <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
           </div>
@@ -462,7 +477,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         </div>
 
         {/* Withdrawal warning right at the top */}
-        {animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
+        {readOnly ? <SaleLockChip lang={lang} status={animal.status}/> : animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
 
         {/* Tabs — wrap sur plusieurs lignes : tous les onglets restent visibles
             sans scroll horizontal caché (peu découvrable sur panneau étroit). */}
@@ -499,7 +514,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
 
       {/* Body */}
       <div style={{ padding: "16px 22px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
-        {editing && (
+        {!readOnly && editing && (
           <AnimalEditCard lang={lang} animal={animal} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}/>
         )}
         {!editing && tab === "details" && (
@@ -553,7 +568,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             ))}
           </>
         )}
-        {!editing && (tab === "health" || tab === "repro" || tab === "prod") && (
+        {!editing && !readOnly && (tab === "health" || tab === "repro" || tab === "prod") && (
           <AddForAnimalButton lang={lang} tab={tab} animal={animal}/>
         )}
         {!editing && tab === "health" && (
@@ -566,7 +581,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
           <RelatedList lang={lang} loading={related.loading} items={related.production} kind="prod" emptyFr="Aucune production enregistrée." emptyEn="No production recorded."/>
         )}
         {!editing && tab === "weight" && (
-          <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading}
+          <WeightTab lang={lang} animal={animal} weighings={related.weighings} loading={related.loading} readOnly={readOnly}
             onChanged={() => window.dispatchEvent(new CustomEvent("farmos:animal-created"))}/>
         )}
         {!editing && tab === "finance" && (() => {
@@ -670,14 +685,14 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
 };
 
 // Onglet Poids / croissance : courbe d'évolution + historique + saisie d'une pesée.
-const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
+const WeightTab = ({ lang, animal, weighings, loading, onChanged, readOnly = false }) => {
   const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), weight: "" });
   const [saving, setSaving] = React.useState(false);
   const [err, setErr] = React.useState(null);
   const rows = (weighings || []).slice().sort((a, b) => String(a.weighDate || a.weigh_date).localeCompare(String(b.weighDate || b.weigh_date)));
   const points = rows.map((w) => Number(w.weight)).filter((n) => !Number.isNaN(n));
   const submit = async () => {
-    if (saving || !animal._pk) return;
+    if (readOnly || saving || !animal._pk) return;
     if (form.weight === "" || Number(form.weight) <= 0) { setErr(lang === "fr" ? "Poids requis." : "Weight required."); return; }
     setSaving(true); setErr(null);
     try {
@@ -687,6 +702,7 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
     } catch (e) { setErr(e.message); } finally { setSaving(false); }
   };
   const del = async (id) => {
+    if (readOnly) return;
     if (!window.confirm(lang === "fr" ? "Supprimer cette pesée ?" : "Delete this weighing?")) return;
     try { await api.deleteWeighing(id); onChanged && onChanged(); } catch (e) { window.alert(e.message); }
   };
@@ -707,7 +723,8 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Saisie rapide */}
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+      {!readOnly && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px" }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date" : "Date"}</span>
           <input className="input" type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}/>
@@ -719,7 +736,8 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
         <button className="btn btn-primary" onClick={submit} disabled={saving}>
           <Icon name="plus" size={13} color="#ECF1EC"/>{saving ? "…" : (lang === "fr" ? "Pesée" : "Weigh-in")}
         </button>
-      </div>
+        </div>
+      )}
       {err && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{err}</div>}
 
       {loading && <div style={{ color: "var(--fg-3)", fontSize: 13 }}>{lang === "fr" ? "Chargement…" : "Loading…"}</div>}
@@ -738,11 +756,11 @@ const WeightTab = ({ lang, animal, weighings, loading, onChanged }) => {
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
             {rows.slice().reverse().map((w, i, arr) => (
-              <div key={w.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
+              <div key={w.id} style={{ display: "grid", gridTemplateColumns: readOnly ? "auto 1fr auto" : "auto 1fr auto auto", gap: 10, padding: "10px 0", borderBottom: i < arr.length - 1 ? "1px dashed var(--border-1)" : "none", alignItems: "center" }}>
                 <Icon name="weight" size={14} color="var(--ink-700)"/>
                 <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{String(w.weighDate || w.weigh_date).slice(0, 10)}</span>
                 <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)" }}>{Number(w.weight)} {w.weightUnit || w.weight_unit || "kg"}</span>
-                <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>
+                {!readOnly && <button className="btn btn-sm btn-ghost" style={{ padding: "0 6px" }} onClick={() => del(w.id)}><Icon name="trash" size={13} color="var(--oxblood-700)"/></button>}
               </div>
             ))}
           </div>
@@ -886,6 +904,7 @@ const AllLotsDataList = () => {
 };
 
 const AddForAnimalButton = ({ lang, tab, animal }) => {
+  if (isSaleLockedAnimal(animal)) return null;
   const tabMap = { health: "health", repro: "repro", prod: "production" };
   const labels = {
     health:  { fr: "Ajouter un traitement / soin", en: "Add treatment / care" },
@@ -1005,6 +1024,20 @@ function sampleValue(fkey, a) {
     default: return "—";
   }
 }
+
+const SaleLockChip = ({ lang, status }) => (
+  <div className="withdrawal-banner pulse-critical" style={{ marginTop: 14, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>
+    <Icon name="shield" size={16} color="#ECF1EC"/>
+    <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#ECF1EC" }}>
+        {saleLockTitle(status, lang)}
+      </div>
+      <div style={{ fontSize: 11, color: "#F0D6CB", marginTop: 1 }}>
+        {saleLockSubtitle(status, lang)}
+      </div>
+    </div>
+  </div>
+);
 
 const WithdrawalChip = ({ lang, w }) => (
   <div className="withdrawal-banner pulse-critical" style={{ marginTop: 14, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10 }}>

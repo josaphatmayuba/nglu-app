@@ -11,6 +11,7 @@ const NATIVE = typeof window !== "undefined"
   && (window.Capacitor?.isNativePlatform?.() === true
       || /^capacitor:\/\//.test(window.location?.protocol || ""));
 const API_HOST = (typeof window !== "undefined" && window.FARMOS_API_HOST) || "https://dev.ongdngolu.org";
+const API_ROOT = (NATIVE ? API_HOST : "") + "/api";
 const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
 const inFlightReads = new Map();
 let requestQueue = Promise.resolve();
@@ -55,6 +56,35 @@ async function doJsonFetch(path, init = {}, retried = false) {
 
 async function jsonFetch(path, init = {}) {
   return enqueueRequest(() => doJsonFetch(path, init));
+}
+
+async function doGlobalJsonFetch(path, init = {}, retried = false) {
+  const res = await fetch(`${API_ROOT}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      if (!retried) {
+        const token = await restoreSession();
+        if (token) return doGlobalJsonFetch(path, init, true);
+      }
+      clearAuth();
+      window.dispatchEvent(new CustomEvent("farmos:auth-changed"));
+    }
+    const body = await res.text().catch(() => "");
+    throw new Error(`API ${res.status} ${res.statusText} - ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function globalJsonFetch(path, init = {}) {
+  return enqueueRequest(() => doGlobalJsonFetch(path, init));
 }
 
 // Télécharge un binaire (PDF / fichier) en portant le token via header (pas en
@@ -127,6 +157,7 @@ const KIND_INVALIDATES = {
   createPrice:            ["priceList"],
   updatePrice:            ["priceList"],
   deletePrice:            ["priceList"],
+  unlistAnimalSale:       ["animals", "priceList"],
   createDisease:          ["diseases"],
   updateDisease:          ["diseases"],
   deleteDisease:          ["diseases"],
@@ -211,6 +242,8 @@ async function jsonMutate(kind, path, init = {}) {
 }
 
 export const api = {
+  getAppSetting: () => globalJsonFetch("/setting"),
+  listCurrencies: () => globalJsonFetch("/currency?query=all"),
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
@@ -218,6 +251,7 @@ export const api = {
   createPrice: (body) => jsonMutate("createPrice", "/prices", { method: "POST", body: JSON.stringify(body) }),
   updatePrice: (id, body) => jsonMutate("updatePrice", `/prices/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deletePrice: (id) => jsonMutate("deletePrice", `/prices/${id}`, { method: "DELETE" }),
+  unlistAnimalFromSale: (id) => mutate({ kind: "unlistAnimalSale", method: "DELETE", path: `/animals/${id}/listing` }),
   listAnimals:    cachedList("animals", "/animals"),
   listMedicines:  cachedList("medicines", "/medicines"),
   listTreatments: cachedList("treatments", "/treatments"),
@@ -354,6 +388,7 @@ export function adaptSaleAsTransaction(row, lang = "fr") {
     label: `${row.buyer || "—"}${product ? ` · ${REV_CATEGORY_FR[product] || product}` : ""}`,
     amount: `+${amount.toLocaleString("fr-CA")}`,
     rawAmount: amount,
+    currencyId: row.currencyId ?? row.currency_id ?? null,
     category: REV_CATEGORY_FR[product] || product || "Revenu",
     species: sp || null,
   };
@@ -372,6 +407,7 @@ export function adaptExpenseAsTransaction(row, lang = "fr") {
     label: row.description || row.supplier || "Dépense",
     amount: `−${amount.toLocaleString("fr-CA")}`,
     rawAmount: -amount,
+    currencyId: row.currencyId ?? row.currency_id ?? null,
     category: EXP_CATEGORY_FR[row.category] || row.category || "Dépense",
     species: null,
   };
@@ -397,6 +433,7 @@ export function adaptReproEvent(row, animalById) {
     _pk: row.id,
     animal: a?.name || a?.externalId || a?.external_id || "—",
     species: a?.species || null,
+    animalStatus: a?.status || null,
     start: evDate ? String(evDate).slice(0, 10) : "—",
     due: due ? String(due).slice(0, 10) : "—",
     day,
@@ -454,6 +491,7 @@ export function adaptTreatment(row, animalById, diseaseById) {
     id: `T-${row.id}`,
     _pk: row.id,
     species: a?.species || null,
+    animalStatus: a?.status || null,
     animal: a?.name || a?.externalId || a?.external_id || "—",
     med: row.medicineName || row.medicine_name || "—",
     reason: d ? (d.nameFr || d.name_fr) : "—",
@@ -484,6 +522,7 @@ export function adaptAnimal(row) {
     sex: row.sex,
     dob: dob ? String(dob).slice(0, 10) : null,
     weight: row.weight != null ? Number(row.weight) : null,
+    weightUnit: row.weightUnit ?? row.weight_unit ?? "kg",
     count: row.count != null ? Number(row.count) : null,
     lot: row.lot,
     barn: row.barn,

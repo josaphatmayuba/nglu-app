@@ -47,7 +47,7 @@ export class BudgetService {
     },
     orgId: number,
   ) {
-    await this.getBudgetOrThrow(budgetId, orgId);
+    const budget = await this.getBudgetOrThrow(budgetId, orgId);
     const [row] = await this.db
       .insert(budgetLines)
       .values({
@@ -58,7 +58,7 @@ export class BudgetService {
         label: input.label,
         siteId: input.siteId,
         departmentId: input.departmentId,
-        projectId: input.projectId,
+        projectId: input.projectId ?? budget.projectId ?? undefined,
         activityId: input.activityId,
       })
       .$returningId();
@@ -116,7 +116,7 @@ export class BudgetService {
    * Refete la realite comptable sans saisie manuelle de consommation.
    */
   async statusFromLedger(budgetId: number, orgId: number) {
-    await this.getBudgetOrThrow(budgetId, orgId);
+    const budget = await this.getBudgetOrThrow(budgetId, orgId);
     const lines = await this.db
       .select()
       .from(budgetLines)
@@ -128,7 +128,8 @@ export class BudgetService {
         eq(journalEntryLines.organizationId, orgId),
         eq(journalEntryLines.accountId, l.accountId),
       ];
-      if (l.projectId != null) conds.push(eq(journalEntryLines.projectId, l.projectId));
+      const projectId = l.projectId ?? budget.projectId;
+      if (projectId != null) conds.push(eq(journalEntryLines.projectId, projectId));
       if (l.siteId != null) conds.push(eq(journalEntryLines.siteId, l.siteId));
       if (l.departmentId != null) conds.push(eq(journalEntryLines.departmentId, l.departmentId));
       if (l.activityId != null) conds.push(eq(journalEntryLines.activityId, l.activityId));
@@ -145,6 +146,7 @@ export class BudgetService {
       result.push({
         lineId: l.id,
         accountId: l.accountId,
+        projectId,
         label: l.label,
         planned,
         consumed,

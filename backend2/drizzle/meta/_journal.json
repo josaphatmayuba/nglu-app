@@ -750,6 +750,48 @@
       "when": 1780398000000,
       "tag": "0126_projects_shared_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "5",
+      "when": 1780401600000,
+      "tag": "0127_maintenance_project_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "5",
+      "when": 1780405200000,
+      "tag": "0128_backfill_maintenance_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "5",
+      "when": 1780408800000,
+      "tag": "0129_projects_source_ref_org_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "5",
+      "when": 1780412400000,
+      "tag": "0130_currency_exchanges",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "5",
+      "when": 1780416000000,
+      "tag": "0131_exchange_subaccounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "5",
+      "when": 1780419600000,
+      "tag": "0132_fix_account_types",
+      "breakpoints": true
     }
   ]
 }

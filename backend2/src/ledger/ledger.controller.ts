@@ -16,18 +16,23 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   ApprovalRequirementDto,
+  CreateExchangeDto,
   CreateJournalEntryDto,
   CreatePeriodDto,
   PostByRulesDto,
   ReverseEntryDto,
 } from "./dto/ledger.dto";
+import { ExchangeService } from "./exchange.service";
 import { LedgerService } from "./ledger.service";
 
 @ApiTags("ledger")
 @Controller("ledger")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class LedgerController {
-  constructor(private readonly ledger: LedgerService) {}
+  constructor(
+    private readonly ledger: LedgerService,
+    private readonly exchange: ExchangeService,
+  ) {}
 
   @ApiOperation({ summary: "Comptabilise une ecriture en partie double" })
   @ApiCreatedResponse({ description: "Ecriture creee" })
@@ -76,6 +81,20 @@ export class LedgerController {
   @Post("type-rules/:type/delete")
   deleteType(@Param("type") type: string, @CurrentOrg() orgId: number) {
     return this.ledger.deleteType(type, orgId);
+  }
+
+  @ApiOperation({ summary: "Reprise des transactions plates vers le grand livre (dry-run par defaut)" })
+  @Permissions("create-transaction")
+  @Post("migrate-legacy")
+  migrateLegacy(
+    @Body() body: { dryRun?: boolean; limit?: number },
+    @CurrentOrg() orgId: number,
+  ) {
+    // dryRun par defaut = true ; il faut explicitement { dryRun: false } pour ecrire.
+    return this.ledger.migrateLegacyTransactions(orgId, {
+      dryRun: body?.dryRun !== false,
+      limit: body?.limit,
+    });
   }
 
   @ApiOperation({ summary: "Liste des ecritures" })
@@ -182,6 +201,56 @@ export class LedgerController {
     @CurrentOrg() orgId: number,
   ) {
     return this.ledger.ledgerForAccount(accountId, orgId);
+  }
+
+  // ─── Echange de devise (modele bancaire) ────────────────────────────────────
+  // Place AVANT @Get(":id") sinon "/ledger/exchanges" matcherait la route :id.
+
+  @ApiOperation({ summary: "Enregistre un echange de devise (vrais montants des deux cotes + taux reel)" })
+  @ApiCreatedResponse({ description: "Echange enregistre" })
+  @Permissions("create-transaction")
+  @Post("exchanges")
+  createExchange(
+    @Body() body: CreateExchangeDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.exchange.create(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Liste des echanges de devise" })
+  @ApiOkResponse({ description: "Echanges" })
+  @Permissions("readAll-transaction")
+  @Get("exchanges")
+  findAllExchanges(
+    @CurrentOrg() orgId: number,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string,
+  ) {
+    return this.exchange.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0);
+  }
+
+  @ApiOperation({ summary: "Detail d'un echange de devise" })
+  @ApiOkResponse({ description: "Echange" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("read-transaction")
+  @Get("exchanges/:id")
+  findOneExchange(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.exchange.findOne(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Annule un echange (contre-passe les ecritures liees)" })
+  @ApiCreatedResponse({ description: "Echange annule" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-transaction")
+  @Post("exchanges/:id/reverse")
+  reverseExchange(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: ReverseEntryDto,
+    @CurrentOrg() orgId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.exchange.reverse(id, body.reason, orgId, userId);
   }
 
   @ApiOperation({ summary: "Detail d'une ecriture (header + lignes)" })

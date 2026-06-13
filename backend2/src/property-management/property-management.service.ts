@@ -3,7 +3,7 @@ import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { and, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -34,6 +34,7 @@ import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import { SystemEmailService } from "../system-email/system-email.service";
 import { LedgerService } from "../ledger/ledger.service";
+import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
@@ -76,6 +77,7 @@ export class PropertyManagementService {
     private readonly sms: CompatService,
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
+    private readonly projects: ProjectsService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -1502,13 +1504,20 @@ export class PropertyManagementService {
         scheduledDate: realEstateMaintenanceRequests.scheduledDate,
         estimatedCost: realEstateMaintenanceRequests.estimatedCost,
         currencyId: realEstateMaintenanceRequests.currencyId,
+        // Somme des coûts réels déjà saisis pour ce ticket, dans SA devise (SIFA : pas de mélange).
+        spentCost: sql<string>`coalesce((select sum(${realEstateMaintenanceCosts.amount}) from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 and (${realEstateMaintenanceCosts.currencyId} = ${realEstateMaintenanceRequests.currencyId} or ${realEstateMaintenanceCosts.currencyId} is null)), 0)`,
+        // Dépense réelle groupée PAR devise (SIFA : pas de somme inter-devises) : [{ currencyId, symbol, amount }].
+        spentByCurrency: sql<string>`coalesce((select json_arrayagg(json_object('currencyId', mc.currencyId, 'symbol', cur.currencySymbol, 'amount', mc.total)) from (select coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId}) as currencyId, sum(${realEstateMaintenanceCosts.amount}) as total from ${realEstateMaintenanceCosts} where ${realEstateMaintenanceCosts.ticketId} = ${realEstateMaintenanceRequests.id} and ${realEstateMaintenanceCosts.isActive} = 1 group by coalesce(${realEstateMaintenanceCosts.currencyId}, ${realEstateMaintenanceRequests.currencyId})) mc left join ${currencies} cur on cur.id = mc.currencyId), json_array())`,
         assigneeId: realEstateMaintenanceRequests.assigneeId,
         assigneeFirstName: maintenanceAssignee.firstName,
         assigneeLastName: maintenanceAssignee.lastName,
         assigneeUsername: maintenanceAssignee.username,
         description: realEstateMaintenanceRequests.description,
+        projectId: realEstateMaintenanceRequests.projectId,
         propertyName: maintenanceProperty.name,
         unitName: maintenanceUnit.name,
+        createdAt: realEstateMaintenanceRequests.createdAt,
+        updatedAt: realEstateMaintenanceRequests.updatedAt,
       })
       .from(realEstateMaintenanceRequests)
       .leftJoin(maintenanceProperty, eq(maintenanceProperty.id, realEstateMaintenanceRequests.propertyId))
@@ -1543,7 +1552,31 @@ export class PropertyManagementService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findMaintenance(Number(result.insertId));
+    const ticketId = Number(result.insertId);
+
+    // Un chantier de travaux = un projet analytique. On cree (ou reutilise, via le
+    // registre partage source_system=maintenance) un projet et on lie le ticket.
+    try {
+      const proj = await this.projects.create(
+        {
+          name: `Travaux: ${input.title}`,
+          code: `MNT-${ticketId}`,
+          budgetAmount: input.estimatedCost ? Number(input.estimatedCost) : undefined,
+          currencyId: input.currencyId ?? undefined,
+          sourceSystem: "maintenance",
+          externalRef: String(ticketId),
+        },
+        orgId,
+        userId,
+      );
+      await this.db
+        .update(realEstateMaintenanceRequests)
+        .set({ projectId: proj.id })
+        .where(eq(realEstateMaintenanceRequests.id, ticketId));
+    } catch (err) {
+      this.logger.warn(`createMaintenance: liaison projet ignoree: ${(err as Error).message}`);
+    }
+    return this.findMaintenance(ticketId);
   }
 
   async updateMaintenance(id: number, input: UpdateMaintenanceDto, orgId: number) {
@@ -1666,8 +1699,14 @@ export class PropertyManagementService {
   async listMaintenanceCosts(ticketId: number, orgId: number) {
     await this.findMaintenance(ticketId, orgId);
     return this.db
-      .select()
+      .select({
+        ...getTableColumns(realEstateMaintenanceCosts),
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
+      })
       .from(realEstateMaintenanceCosts)
+      .leftJoin(currencies, eq(currencies.id, realEstateMaintenanceCosts.currencyId))
       .where(and(eq(realEstateMaintenanceCosts.ticketId, ticketId), eq(realEstateMaintenanceCosts.isActive, 1)))
       .orderBy(desc(realEstateMaintenanceCosts.id));
   }
@@ -1687,6 +1726,14 @@ export class PropertyManagementService {
   async createMaintenanceCost(ticketId: number, input: CreateMaintenanceCostDto, orgId: number, receipt?: any, publicApiBase?: string) {
     await this.findMaintenance(ticketId, orgId);
 
+    // Projet analytique du chantier (pour ventiler la depense au grand livre).
+    const [ticket] = await this.db
+      .select({ projectId: realEstateMaintenanceRequests.projectId })
+      .from(realEstateMaintenanceRequests)
+      .where(eq(realEstateMaintenanceRequests.id, ticketId))
+      .limit(1);
+    const projectId = ticket?.projectId ?? null;
+
     const receiptUrl = this.saveReceiptFile(receipt, publicApiBase) ?? input.receiptUrl ?? null;
 
     const [result] = await this.db.insert(realEstateMaintenanceCosts).values({
@@ -1700,6 +1747,7 @@ export class PropertyManagementService {
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,
       receiptUrl,
+      projectId,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1739,7 +1787,8 @@ export class PropertyManagementService {
         currencyId: input.currencyId ?? undefined,
         idempotencyKey: `maintenance-cost:${maintenanceCostId}`,
         lines: [
-          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense" },
+          // La charge porte le projet du chantier (ventilation analytique).
+          { accountId: debitId, side: "DEBIT", amount: Number(input.amount), description: "Maintenance expense", projectId: projectId ?? undefined },
           { accountId: creditId, side: "CREDIT", amount: Number(input.amount), description: input.paymentMethod === "bank" ? "Bank" : "Cash" },
         ],
       },

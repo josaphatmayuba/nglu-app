@@ -85,7 +85,7 @@ button, input, select, textarea { font: inherit; }
 .btn-ghost { background: #fff; border: 1px solid var(--ink-200); color: var(--ink-700); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .btn-sm { height: 28px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--ink-200); background: #fff; color: var(--ink-700); cursor: pointer; font-size: 12px; font-weight: 600; }
-.btn-sm.grad-accent { color: #fff; border: 0; }
+.btn-sm.grad-accent { color: #fff; border: 0; background: linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%); }
 .btn-sm:disabled { opacity: .55; cursor: not-allowed; }
 
 /* Cards & chips */
@@ -157,7 +157,7 @@ button, input, select, textarea { font: inherit; }
 /* segmented tabs */
 .segtabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .segtab { height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ink-200); background: #fff; color: var(--ink-600); font-size: 13px; font-weight: 600; cursor: pointer; }
-.segtab.active { color: #fff; border: 0; }
+.segtab.active { color: #fff; border: 0; background: linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%); }
 
 /* tables */
 .table-card { overflow: hidden; }

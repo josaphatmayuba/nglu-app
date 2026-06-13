@@ -19,6 +19,9 @@ const SUB_ACCOUNTS = [
   { name: "Discount Earned", accountId: 5 },
   { name: "Discount Given", accountId: 6 },
   { name: "Tax", accountId: 2 },
+  // Echange de devise : compte de virement interne (pont entre devises) + charge frais.
+  { name: "Currency Exchange Clearing", accountId: 1 },
+  { name: "Exchange Fees", accountId: 6 },
 ];
 
 export async function seedSubAccounts() {

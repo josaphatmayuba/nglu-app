@@ -10,12 +10,14 @@ import { DRIZZLE } from "../database/database.constants";
 import {
   accountingPeriods,
   accounts,
+  currencies,
   journalEntries,
   journalEntryLines,
   ledgerApprovalRequirements,
   ledgerPendingEntries,
   subAccounts,
   transactionTypeRules,
+  transactions,
   workflowInstances,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -300,11 +302,28 @@ export class LedgerService {
     return { entry, lines };
   }
 
-  /** Liste paginee des ecritures de l'organisation. */
+  /** Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete). */
   async findAll(orgId: number, limit = 50, offset = 0) {
     return this.db
-      .select()
+      .select({
+        id: journalEntries.id,
+        date: journalEntries.date,
+        reference: journalEntries.reference,
+        particulars: journalEntries.particulars,
+        sourceModule: journalEntries.sourceModule,
+        relatedId: journalEntries.relatedId,
+        status: journalEntries.status,
+        currencyId: journalEntries.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
+        totalDebit: sql<string>`coalesce((select sum(${journalEntryLines.amount}) from ${journalEntryLines} where ${journalEntryLines.entryId} = ${journalEntries.id} and ${journalEntryLines.side} = 'DEBIT'), 0)`,
+        totalCredit: sql<string>`coalesce((select sum(${journalEntryLines.amount}) from ${journalEntryLines} where ${journalEntryLines.entryId} = ${journalEntries.id} and ${journalEntryLines.side} = 'CREDIT'), 0)`,
+        reversalOfId: journalEntries.reversalOfId,
+        reversedById: journalEntries.reversedById,
+        createdAt: journalEntries.createdAt,
+      })
       .from(journalEntries)
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
       .where(eq(journalEntries.organizationId, orgId))
       .orderBy(desc(journalEntries.date), desc(journalEntries.id))
       .limit(limit)
@@ -350,12 +369,17 @@ export class LedgerService {
    * a la bascule des rapports (Phase 4). balance = somme(debit) - somme(credit).
    */
   async subAccountBalances(orgId: number) {
+    // Une ligne par (sous-compte x devise) : aucune conversion, chaque devise
+    // a son propre solde. La devise est portee par l'en-tete journal_entries.
     const rows = await this.db
       .select({
         id: subAccounts.id,
         account: accounts.name,
         accountType: accounts.type,
         subAccount: subAccounts.name,
+        currencyId: journalEntries.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencySymbol: currencies.currencySymbol,
         totalDebit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
         totalCredit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
       })
@@ -368,22 +392,30 @@ export class LedgerService {
           eq(journalEntryLines.organizationId, orgId),
         ),
       )
-      .groupBy(subAccounts.id)
+      .leftJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
+      .groupBy(subAccounts.id, journalEntries.currencyId)
       .orderBy(desc(subAccounts.id));
 
-    return rows.map((row) => {
-      const totalDebit = Math.round(Number(row.totalDebit) * 100) / 100;
-      const totalCredit = Math.round(Number(row.totalCredit) * 100) / 100;
-      return {
-        id: row.id,
-        account: row.account,
-        accountType: row.accountType,
-        subAccount: row.subAccount,
-        totalDebit,
-        totalCredit,
-        balance: Math.round((totalDebit - totalCredit) * 100) / 100,
-      };
-    });
+    return rows
+      // Exclut la ligne "sans devise" generee par le leftJoin pour un compte sans ecriture.
+      .filter((row) => !(row.currencyId == null && Number(row.totalDebit) === 0 && Number(row.totalCredit) === 0))
+      .map((row) => {
+        const totalDebit = Math.round(Number(row.totalDebit) * 100) / 100;
+        const totalCredit = Math.round(Number(row.totalCredit) * 100) / 100;
+        return {
+          id: row.id,
+          account: row.account,
+          accountType: row.accountType,
+          subAccount: row.subAccount,
+          currencyId: row.currencyId ?? null,
+          currencyCode: row.currencyCode ?? null,
+          currencySymbol: row.currencySymbol ?? null,
+          totalDebit,
+          totalCredit,
+          balance: Math.round((totalDebit - totalCredit) * 100) / 100,
+        };
+      });
   }
 
   /**
@@ -394,14 +426,64 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const debits = items.filter((i) => i.balance > 0);
     const credits = items.filter((i) => i.balance < 0);
-    const totalDebit = Math.round(debits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
-    const totalCredit = Math.round(credits.reduce((t, i) => t + i.balance, 0) * 100) / 100;
-    return { match: -totalDebit === totalCredit, totalDebit, totalCredit, debits, credits };
+    // Totaux par devise : on ne somme jamais deux devises ensemble (pas de conversion).
+    const byCurrency = this.totalsByCurrency(items);
+    const match = byCurrency.every((c) => c.match);
+    const totalDebit = this.round2(debits.reduce((t, i) => t + i.balance, 0));
+    const totalCredit = this.round2(credits.reduce((t, i) => t + i.balance, 0));
+    return { match, byCurrency, totalDebit, totalCredit, debits, credits };
+  }
+
+  /**
+   * Regroupe des lignes de solde par devise (currencyId). Pour chaque devise :
+   * total debit, total credit, et match (Sigma debit == Sigma credit aux centimes).
+   * Aucune conversion : chaque devise est un sous-livre independant.
+   */
+  private totalsByCurrency(
+    items: Array<{ currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; balance: number }>,
+  ) {
+    const map = new Map<
+      string,
+      { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; totalDebit: number; totalCredit: number }
+    >();
+    for (const i of items) {
+      const key = String(i.currencyId ?? "null");
+      const acc =
+        map.get(key) ??
+        { currencyId: i.currencyId, currencyCode: i.currencyCode, currencySymbol: i.currencySymbol, totalDebit: 0, totalCredit: 0 };
+      if (i.balance > 0) acc.totalDebit += i.balance;
+      else if (i.balance < 0) acc.totalCredit += i.balance;
+      map.set(key, acc);
+    }
+    return [...map.values()].map((c) => {
+      const totalDebit = this.round2(c.totalDebit);
+      const totalCredit = this.round2(c.totalCredit);
+      return { ...c, totalDebit, totalCredit, match: -totalDebit === totalCredit };
+    });
   }
 
   /** Arrondi 2 decimales (centimes). */
   private round2(n: number): number {
     return Math.round(n * 100) / 100;
+  }
+
+  /** Champs devise repris tels quels sur une ligne de rapport (jamais de conversion). */
+  private currencyOf(i: { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null }) {
+    return { currencyId: i.currencyId ?? null, currencyCode: i.currencyCode ?? null, currencySymbol: i.currencySymbol ?? null };
+  }
+
+  /** Somme un champ `amount` par devise (pas de melange entre devises). */
+  private amountByCurrency(
+    lines: Array<{ currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; amount: number }>,
+  ) {
+    const map = new Map<string, { currencyId: number | null; currencyCode: string | null; currencySymbol: string | null; total: number }>();
+    for (const l of lines) {
+      const key = String(l.currencyId ?? "null");
+      const acc = map.get(key) ?? { ...this.currencyOf(l), total: 0 };
+      acc.total += l.amount;
+      map.set(key, acc);
+    }
+    return [...map.values()].map((c) => ({ ...c, total: this.round2(c.total) }));
   }
 
   /**
@@ -413,14 +495,17 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const revenue = items
       .filter((i) => i.accountType === "Revenue" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
     const expenses = items
       .filter((i) => i.accountType === "Expense" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(i.balance) }));
     const totalRevenue = this.round2(revenue.reduce((t, i) => t + i.amount, 0));
     const totalExpenses = this.round2(expenses.reduce((t, i) => t + i.amount, 0));
     const netIncome = this.round2(totalRevenue - totalExpenses);
-    return { revenue, expenses, totalRevenue, totalExpenses, netIncome };
+    // Totaux par devise (sans conversion).
+    const revenueByCurrency = this.amountByCurrency(revenue);
+    const expensesByCurrency = this.amountByCurrency(expenses);
+    return { revenue, expenses, totalRevenue, totalExpenses, netIncome, revenueByCurrency, expensesByCurrency };
   }
 
   /**
@@ -432,14 +517,17 @@ export class LedgerService {
     const items = await this.subAccountBalances(orgId);
     const assets = items
       .filter((i) => i.accountType === "Asset" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(i.balance) }));
     const liabilities = items
       .filter((i) => i.accountType === "Liability" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
     const equity = items
       .filter((i) => i.accountType === "Equity" && i.balance !== 0)
-      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, amount: this.round2(-i.balance) }));
+      .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
 
+    const assetsByCurrency = this.amountByCurrency(assets);
+    const liabilitiesByCurrency = this.amountByCurrency(liabilities);
+    const equityByCurrency = this.amountByCurrency(equity);
     const totalAssets = this.round2(assets.reduce((t, i) => t + i.amount, 0));
     const totalLiabilities = this.round2(liabilities.reduce((t, i) => t + i.amount, 0));
     const equityBase = this.round2(equity.reduce((t, i) => t + i.amount, 0));
@@ -456,6 +544,9 @@ export class LedgerService {
       totalLiabilities,
       totalEquity,
       totalLiabilitiesAndEquity,
+      assetsByCurrency,
+      liabilitiesByCurrency,
+      equityByCurrency,
       balanced: totalAssets === totalLiabilitiesAndEquity,
     };
   }
@@ -642,6 +733,79 @@ export class LedgerService {
       .set({ isActive: 0 })
       .where(and(eq(transactionTypeRules.organizationId, orgId), eq(transactionTypeRules.type, type)));
     return { type, deleted: true };
+  }
+
+  /**
+   * Reprise des anciennes transactions plates (table `transaction`) vers le grand livre
+   * moderne (journal_entries + lines). Chaque transaction = 1 ecriture a 2 lignes
+   * (debit/credit). Idempotent par idempotency_key = legacy:tx:<id> (rejeu sans doublon).
+   * dryRun = compte/liste sans rien ecrire. Ignore les transactions deja migrees, inactives,
+   * a montant nul, ou dont un compte n'existe pas.
+   */
+  async migrateLegacyTransactions(orgId: number, opts: { dryRun?: boolean; limit?: number } = {}) {
+    const dryRun = opts.dryRun !== false; // securite : dry-run par defaut.
+    const legacy = await this.db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")))
+      .orderBy(transactions.date)
+      .limit(opts.limit ?? 100000);
+
+    // Comptes valides (sous-comptes existants) pour ignorer les references cassees.
+    const subs = await this.db.select({ id: subAccounts.id }).from(subAccounts);
+    const validAccounts = new Set(subs.map((s) => s.id));
+
+    const report = {
+      dryRun,
+      total: legacy.length,
+      migrated: 0,
+      skippedAlready: 0,
+      skippedZero: 0,
+      skippedBadAccount: 0,
+      samples: [] as Array<{ id: number; date: any; debit: number; credit: number; amount: number; particulars: string }>,
+    };
+
+    for (const t of legacy) {
+      const key = `legacy:tx:${t.id}`;
+      const amount = Number(t.amount || 0);
+      if (!(amount > 0)) { report.skippedZero++; continue; }
+      if (!validAccounts.has(t.debitId) || !validAccounts.has(t.creditId)) {
+        report.skippedBadAccount++;
+        continue;
+      }
+      // Deja migree ? (idempotency_key present)
+      const [exists] = await this.db
+        .select({ id: journalEntries.id })
+        .from(journalEntries)
+        .where(and(eq(journalEntries.organizationId, orgId), eq(journalEntries.idempotencyKey, key)))
+        .limit(1);
+      if (exists) { report.skippedAlready++; continue; }
+
+      if (report.samples.length < 10) {
+        report.samples.push({ id: t.id, date: t.date, debit: t.debitId, credit: t.creditId, amount, particulars: t.particulars });
+      }
+
+      if (!dryRun) {
+        await this.post(
+          {
+            date: t.date as any,
+            particulars: t.particulars,
+            sourceModule: "legacy_migration",
+            relatedId: String(t.id),
+            currencyId: t.currencyId ?? undefined,
+            idempotencyKey: key,
+            skipApprovalGate: true,
+            lines: [
+              { accountId: t.debitId, side: "DEBIT" as LedgerSide, amount },
+              { accountId: t.creditId, side: "CREDIT" as LedgerSide, amount },
+            ],
+          },
+          orgId,
+        );
+      }
+      report.migrated++;
+    }
+    return report;
   }
 
   /**

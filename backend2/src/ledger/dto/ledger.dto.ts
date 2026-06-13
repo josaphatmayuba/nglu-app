@@ -143,6 +143,84 @@ export class CreatePeriodDto {
   endDate!: string;
 }
 
+export class CreateExchangeDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  date?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @ApiProperty({ description: "Devise vendue (qui sort)" })
+  @IsInt()
+  fromCurrencyId!: number;
+
+  @ApiProperty({ description: "Sous-compte source debite (caisse/banque devise source)" })
+  @IsInt()
+  fromAccountId!: number;
+
+  @ApiProperty({ description: "Montant reel sorti dans la devise source" })
+  @IsNumber()
+  @IsPositive()
+  fromAmount!: number;
+
+  @ApiProperty({ description: "Devise achetee (qui entre)" })
+  @IsInt()
+  toCurrencyId!: number;
+
+  @ApiProperty({ description: "Sous-compte cible credite (caisse/banque devise cible)" })
+  @IsInt()
+  toAccountId!: number;
+
+  @ApiPropertyOptional({ description: "Montant reel recu (sinon deduit du taux)" })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  toAmount?: number;
+
+  @ApiPropertyOptional({ description: "Taux applique (sinon deduit des montants reels)" })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  rate?: number;
+
+  @ApiPropertyOptional({ description: "Frais de change (commission), 0 si aucun" })
+  @IsOptional()
+  @IsNumber()
+  feeAmount?: number;
+
+  @ApiPropertyOptional({ description: "Sous-compte de charge Frais de change (requis si frais)" })
+  @IsOptional()
+  @IsInt()
+  feeAccountId?: number;
+
+  @ApiPropertyOptional({ description: "Devise des frais (defaut: devise source)" })
+  @IsOptional()
+  @IsInt()
+  feeCurrencyId?: number;
+
+  @ApiProperty({ description: "Sous-compte de change (pont) pour la devise source" })
+  @IsInt()
+  fromExchangeAccountId!: number;
+
+  @ApiProperty({ description: "Sous-compte de change (pont) pour la devise cible" })
+  @IsInt()
+  toExchangeAccountId!: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
 export class PostByRulesDto {
   @ApiProperty({ description: "Type metier (ex: sale, purchase)" })
   @IsString()

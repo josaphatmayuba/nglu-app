@@ -7,6 +7,7 @@ import { speciesById, t, SPECIES } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore } from "./shell";
 import { api } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
+import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
 
 function formatLongDate(d, lang) {
@@ -15,6 +16,26 @@ function formatLongDate(d, lang) {
   } catch {
     return d.toISOString().slice(0, 10);
   }
+}
+
+function useCurrencyCatalog() {
+  const [state, setState] = React.useState({ currencies: [], defaultCurrencyId: null, fallbackSymbol: "" });
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
+      .then(([setting, currencyList]) => {
+        if (cancel) return;
+        const currencies = currencyList.value?.getAllCurrency || (Array.isArray(currencyList.value) ? currencyList.value : []);
+        setState({
+          currencies,
+          defaultCurrencyId: defaultCurrencyId(setting.value, currencies),
+          fallbackSymbol: defaultSymbol(setting.value, currencies),
+        });
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+  return state;
 }
 
 function deriveDashFinanceKpis(summary) {
@@ -94,14 +115,15 @@ function useDashboardData() {
   return data;
 }
 
-function computeDashboardKpis(d, speciesFilter, lang, dateRange) {
+function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyId) {
   if (!d.ready) return null;
   const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
+  const keepCurrency = (row) => !activeCurrencyId || String(rowCurrencyId(row) ?? activeCurrencyId) === String(activeCurrencyId);
   const animals = filterSp(d.animals, (a) => a.species);
   const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
   const total = animals.length;
-  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && inDateRange(s.saleDate || s.sale_date, dateRange));
-  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
+  const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && keepCurrency(s) && inDateRange(s.saleDate || s.sale_date, dateRange));
+  const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && keepCurrency(e) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
   const expMonth = expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
   const lowStock = d.medicines.filter((m) => m.minQuantity != null && Number(m.quantity) < Number(m.minQuantity)).length;
@@ -117,7 +139,10 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const isAll = !species;
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
   const live = useDashboardData();
-  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange);
+  const currencyMeta = useCurrencyCatalog();
+  const activeCurrencyId = currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "";
+  const moneyUnit = symbolFor(activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
+  const k = computeDashboardKpis(live, speciesFilter, lang, dateRange, activeCurrencyId);
   const fin = deriveDashFinanceKpis(live.finance);
   const ALERTS = deriveDashAlerts(live, lang);
   const aiFiltered = live.aiInsights.map((i) => ({
@@ -133,8 +158,8 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
     { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
     { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
-    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
-    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: "$", delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
+    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
+    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
     { label: lang==="fr"?"Stock faible":"Low stock", value: k.lowStock, unit: lang==="fr"?"réf.":"refs", delta: null, trend: [k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock], icon: "wheat", accent: k.lowStock > 0 ? "var(--rust-700)" : "var(--health-500)" },
     { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
   ] : null;
@@ -147,14 +172,14 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     }).length;
     const vaccUpcomingSp = live.vaccinations.filter((v) => v.species === species.id && v.status !== "done").length;
     const revSp = (live.sales || [])
-      .filter((s) => s.species === species.id && inDateRange(s.saleDate || s.sale_date, dateRange))
+      .filter((s) => s.species === species.id && (!activeCurrencyId || String(rowCurrencyId(s) ?? activeCurrencyId) === String(activeCurrencyId)) && inDateRange(s.saleDate || s.sale_date, dateRange))
       .reduce((sum, s) => sum + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
     return [
       { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: animalsSp.length.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(animalsSp.length), icon: "layers", accent: species.accent },
       { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },
-      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: "$", delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
+      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
     ];
   })() : null;
   const kpis = isAll ? (liveKpis || []) : (speciesKpis || []);

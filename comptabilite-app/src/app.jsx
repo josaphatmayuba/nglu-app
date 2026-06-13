@@ -2,7 +2,7 @@ import React from "react";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
-import { defaultSymbol } from "./currency.js";
+import { cleanCurrencySymbol, defaultSymbol } from "./currency.js";
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -74,6 +74,7 @@ const NAV = [
   { id: "tiers", label: "Tiers (clients/fourn.)", icon: "contact" },
   { section: "Trésorerie & immo." },
   { id: "tresorerie", label: "Trésorerie", icon: "landmark" },
+  { id: "change", label: "Change (devises)", icon: "landmark" },
   { id: "immo", label: "Immobilisations", icon: "warehouse" },
   { section: "Pilotage" },
   { id: "analytique", label: "Analytique (projets)", icon: "pieChart" },
@@ -99,6 +100,10 @@ let CUR = "CDF";
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const m = (v) => `${nf.format(Math.round(Number(v || 0)))} ${CUR}`;
 const mM = (v) => `${(Number(v || 0) / 1e6).toFixed(1).replace(".", ",")} M ${CUR}`;
+// Principe SIFA : chaque montant garde SA devise, jamais de conversion ni de melange.
+// La devise est portee par la ligne (currencyCode renvoye par l'API) ; CUR = repli.
+const curOf = (row) => (row && (row.currencyCode || row.currencyId != null)) ? (row.currencyCode || "") : CUR;
+const mc = (v, row) => `${nf.format(Math.round(Number(v || 0)))} ${curOf(row) || CUR}`.trim();
 const signed = (v) => `${v >= 0 ? "+" : "−"}${nf.format(Math.abs(Math.round(v)))}`;
 const initialsOf = (s) => (s || "U").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "U";
 const EMPTY_INCOME = { totalRevenue: 0, totalExpense: 0, profit: 0, revenue: [], expense: [], expenses: [] };
@@ -108,6 +113,7 @@ const EMPTY_DATA = {
   transactions: [],
   accounts: [],
   mainAccounts: [],
+  currencies: [],
   trialBalance: EMPTY_TRIAL,
   balanceSheet: EMPTY_BALANCE,
   incomeStatement: EMPTY_INCOME,
@@ -118,6 +124,12 @@ const asArray = (value, key) => {
   return [];
 };
 const accountLabel = (a) => a.subAccount || a.name || a.account || "Compte";
+// Message clair quand le backend refuse l'action faute de permission (PermissionsGuard → 403).
+const permError = (e, action) => {
+  const msg = String(e?.message || e);
+  if (/\b403\b|Forbidden/i.test(msg)) return `Vous n'avez pas la permission de ${action}.`;
+  return msg;
+};
 const accountType = (a) => a.accountType || a.account?.type || a.type || "—";
 const accountText = (a) => `${accountLabel(a)} ${a.account || ""} ${accountType(a)}`.toLowerCase();
 const balanceOf = (a) => Number((a.balance ?? (Number(a.totalDebit || 0) - Number(a.totalCredit || 0))) || 0);
@@ -275,6 +287,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyId (string)
   const isMobile = useIsMobile();
 
   const [, forceCur] = React.useState(0);
@@ -299,6 +312,8 @@ function App() {
           transactions: txs,
           accounts,
           mainAccounts,
+          currencies: curList || [],
+          defaultCurrencyId: setting.value?.currencyId ?? (curList && (curList[0]?.currencyId ?? curList[0]?.id)) ?? null,
           trialBalance: tb.value || EMPTY_TRIAL,
           balanceSheet: bs.value || EMPTY_BALANCE,
           incomeStatement: is.value || EMPTY_INCOME,
@@ -318,10 +333,14 @@ function App() {
   async function save(kind, form) {
     setBusy(true); setError("");
     try {
-      if (kind === "transaction") await api.createTransaction({
-        date: new Date(form.date).toISOString(), debitId: Number(form.debitId), creditId: Number(form.creditId),
-        particulars: form.particulars, amount: Number(form.amount), type: form.type || "transaction", relatedId: "0", status: "true",
-      });
+      if (kind === "transaction") {
+        if (!form.currencyId) { setError("La devise est obligatoire."); setBusy(false); return; }
+        await api.createTransaction({
+          date: new Date(form.date).toISOString(), debitId: Number(form.debitId), creditId: Number(form.creditId),
+          particulars: form.particulars, amount: Number(form.amount), currencyId: Number(form.currencyId),
+          type: form.type || "transaction", relatedId: "0", status: "true",
+        });
+      }
       if (kind === "account") await api.createAccount({ name: form.name, accountId: Number(form.accountId) });
       setModal(null); load();
     } catch (err) { setError(err.message || String(err)); }
@@ -329,24 +348,52 @@ function App() {
   }
 
   const newEntry = () => setModal({ kind: "transaction" });
+
+  // Filtre par devise (SIFA — on ne convertit jamais, on restreint l'affichage à une devise).
+  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyId.
+  const matchCur = React.useCallback(
+    (row) => !curFilter || String(row?.currencyId ?? "") === curFilter,
+    [curFilter]
+  );
+  const fc = React.useMemo(() => {
+    if (!curFilter) return data;
+    const keepCur = (list) => (Array.isArray(list) ? list.filter(matchCur) : list);
+    // Recopie les champs *ByCurrency d'un rapport en les filtrant sur la devise choisie.
+    const filterReport = (rep) => {
+      if (!rep || typeof rep !== "object") return rep;
+      const out = { ...rep };
+      Object.keys(out).forEach((k) => { if (/byCurrency$/i.test(k)) out[k] = keepCur(out[k]); });
+      return out;
+    };
+    return {
+      ...data,
+      transactions: keepCur(data.transactions),
+      accounts: keepCur(data.accounts),
+      trialBalance: filterReport(data.trialBalance),
+      balanceSheet: filterReport(data.balanceSheet),
+      incomeStatement: filterReport(data.incomeStatement),
+    };
+  }, [data, curFilter, matchCur]);
+
   const views = {
-    dashboard: <Dashboard is={data.incomeStatement} transactions={data.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
-    journaux: <Journaux transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
-    ecritures: <Ecritures transactions={data.transactions} onNew={newEntry} canMutate={canMutate} />,
+    dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
+    journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
+    ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
-    grandlivre: <GrandLivre />,
-    plan: <Plan accounts={data.accounts} trialBalance={data.trialBalance} incomeStatement={data.incomeStatement} balanceSheet={data.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
-    tiers: <Tiers accounts={data.accounts} />,
-    tresorerie: <Tresorerie accounts={data.accounts} />,
-    immo: <Immo accounts={data.accounts} />,
+    grandlivre: <GrandLivre curFilter={curFilter} />,
+    plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
+    tiers: <Tiers accounts={fc.accounts} />,
+    tresorerie: <Tresorerie accounts={fc.accounts} />,
+    change: <Change accounts={data.accounts} currencies={data.currencies} canMutate={canMutate} />,
+    immo: <Immo accounts={fc.accounts} />,
     analytique: <Analytique />,
     budget: <Budget />,
-    capacite: <Capacite accounts={data.accounts} />,
+    capacite: <Capacite accounts={fc.accounts} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
-    etats: <Etats is={data.incomeStatement} bs={data.balanceSheet} />,
-    tva: <Tva accounts={data.accounts} canMutate={canMutate} />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} curFilter={curFilter} />,
+    tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
 
@@ -379,7 +426,17 @@ function App() {
 
       <main className="main">
         <div className="content">
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
+              <Icon name="landmark" style={{ width: 14, height: 14 }} /> Devise
+              <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
+                <option value="">Toutes les devises</option>
+                {(data.currencies || []).map((c) => {
+                  const id = String(c.currencyId ?? c.id);
+                  return <option key={id} value={id}>{c.currencyCode || c.currencyName || cleanCurrencySymbol(c)}</option>;
+                })}
+              </select>
+            </label>
             <span className={`source-pill ${apiStatus}`}>{apiStatus === "api" ? "Données live" : "Démo locale"}</span>
           </div>
           {error && <div className="inline-error">{error}</div>}
@@ -407,7 +464,7 @@ function App() {
         </div>
       )}
 
-      {modal && <RecordModal modal={modal} accounts={data.accounts} mainAccounts={data.mainAccounts} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
+      {modal && <RecordModal modal={modal} accounts={data.accounts} mainAccounts={data.mainAccounts} currencies={data.currencies} defaultCurrencyId={data.defaultCurrencyId} busy={busy} error={error} onSave={save} onClose={() => setModal(null)} />}
       <Toaster />
       <AiAssistant />
     </div>
@@ -450,6 +507,10 @@ function Dashboard({ is, transactions, go, onNew, canMutate }) {
   const rev = Number(is.totalRevenue || 0) || txs.filter(txRev).reduce((s, t) => s + Number(t.totalCredit || t.amount || 0), 0);
   const exp = Math.abs(Number(is.totalExpenses ?? is.totalExpense ?? 0)) || txs.filter(txExp).reduce((s, t) => s + Number(t.totalDebit || t.amount || 0), 0);
   const profit = Number(is.netIncome ?? is.profit ?? rev - exp);
+  // Par devise (SIFA) depuis le compte de résultat live ; repli mono-devise si absent.
+  const revByCur = is.revenueByCurrency || (rev ? [{ currencyId: null, currencyCode: CUR, total: rev }] : []);
+  const expByCur = is.expensesByCurrency || is.expenseByCurrency || (exp ? [{ currencyId: null, currencyCode: CUR, total: exp }] : []);
+  const profitByCur = netByCurrency(revByCur, expByCur);
   const brouillons = txs.filter((t) => /brouillon|draft|false/i.test(`${t.status ?? ""}`)).length;
   const MN = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 
@@ -470,9 +531,9 @@ function Dashboard({ is, transactions, go, onNew, canMutate }) {
     <>
       <PageHead eyebrow={`Exercice ${now.getFullYear()}`} title="Comptabilité" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 16 }}>
-        <KPI label="Produits" value={mM(rev)} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
-        <KPI label="Charges" value={mM(exp)} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
-        <KPI label="Résultat net" value={`${profit >= 0 ? "+" : "−"}${mM(Math.abs(profit))}`} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
+        <KPI label="Produits" value={<ByCur list={revByCur} />} sub="dons, loyers, ventes" valueClass="pos" icon="trendingUp" />
+        <KPI label="Charges" value={<ByCur list={expByCur} />} sub="salaires, terrain, logistique" valueClass="neg" icon="trendingDown" />
+        <KPI label="Résultat net" value={<ByCur list={profitByCur} />} sub={profit >= 0 ? "excédent" : "déficit"} valueClass={profit >= 0 ? "pos" : "neg"} icon="scale" tone={profit >= 0 ? "good" : "danger"} />
         <KPI label="Écritures" value={txs.length} sub={`${brouillons} brouillon(s)`} icon="penLine" />
       </div>
       <div className="g3">
@@ -532,8 +593,16 @@ function Journaux({ transactions, onNew, canMutate }) {
   // Journaux agrégés en temps réel depuis les écritures.
   const JMETA = { CA: { name: "Caisse (CA)", icon: "coins", tone: "accent" }, BQ: { name: "Banque (BQ)", icon: "landmark", tone: "accent" }, VE: { name: "Ventes (VE)", icon: "trendingUp", tone: "emerald" }, AC: { name: "Achats (AC)", icon: "trendingDown", tone: "rose" }, OD: { name: "Opérations diverses (OD)", icon: "shuffle", tone: "ink" } };
   const agg = {};
-  txs.forEach((t) => { const k = JMETA[codeFor(t)] ? codeFor(t) : "OD"; (agg[k] = agg[k] || { count: 0, sum: 0 }).count++; agg[k].sum += Number(t.totalDebit ?? t.amount ?? 0); });
-  const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, sum: agg[k].sum }));
+  txs.forEach((t) => {
+    const k = JMETA[codeFor(t)] ? codeFor(t) : "OD";
+    const a = (agg[k] = agg[k] || { count: 0, byCur: new Map() });
+    a.count++;
+    const ck = String(t.currencyId ?? "null");
+    const acc = a.byCur.get(ck) || { currencyId: t.currencyId ?? null, currencyCode: t.currencyCode || CUR, total: 0 };
+    acc.total += Number(t.totalDebit ?? t.amount ?? 0);
+    a.byCur.set(ck, acc);
+  });
+  const real = Object.keys(JMETA).filter((k) => agg[k]).map((k) => ({ code: k, ...JMETA[k], count: agg[k].count, byCur: [...agg[k].byCur.values()] }));
   const cards = real;
   const toneBg = { emerald: "var(--emerald-100)", rose: "var(--rose-100)", ink: "var(--ink-100)" };
   const toneFg = { emerald: "var(--emerald-600)", rose: "var(--rose-600)", ink: "var(--ink-600)" };
@@ -548,7 +617,7 @@ function Journaux({ transactions, onNew, canMutate }) {
               <span style={{ fontWeight: 600, fontSize: 14 }}>{j.name}</span>
               <span className="chip ink" style={{ marginLeft: "auto" }}>{j.count} mvts</span>
             </div>
-            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}>{j.valStr || m(j.sum)}</b></div>
+            <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)" }}>Cumul : <b className="num" style={{ color: "var(--ink-800)" }}><ByCur list={j.byCur} /></b></div>
           </div>
         ))}
       </div> : <div style={{ marginBottom: 18 }}><EmptyState title="Aucun journal alimenté" detail="Les journaux se rempliront avec les écritures du grand livre." action={canMutate ? "Créer une écriture" : undefined} onAction={onNew} /></div>}
@@ -574,12 +643,15 @@ function Journaux({ transactions, onNew, canMutate }) {
 /* ── Écritures ─────────────────────────────────────────────────────────── */
 function Ecritures({ transactions, onNew, canMutate }) {
   const rows = (transactions || []).map((t) => ({
-    date: String(t.date || "").slice(5).split("-").reverse().join("/"),
+    date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
     journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
+    currencyCode: t.currencyCode,
+    currencyId: t.currencyId,
     status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
+  rows.forEach((r) => { r.montant = mc(r.amount, r); });
   const list = rows;
   return (
     <>
@@ -593,7 +665,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["amount", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
           <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
           <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
@@ -604,7 +676,7 @@ function Ecritures({ transactions, onNew, canMutate }) {
             <thead><tr><th>Date</th><th>Journal</th><th>Libellé</th><th className="r">Montant</th><th className="r">Statut</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{nf.format(r.amount)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
+                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
               {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
             </tbody>
@@ -860,8 +932,8 @@ function Approbations({ canMutate }) {
   );
 }
 
-function GrandLivre() {
-  const [entries, setEntries] = React.useState(null); // null = chargement
+function GrandLivre({ curFilter }) {
+  const [allEntries, setAllEntries] = React.useState(null); // null = chargement
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -869,13 +941,20 @@ function GrandLivre() {
     try {
       setError("");
       const rows = await api.ledgerEntries();
-      setEntries(Array.isArray(rows) ? rows : []);
+      setAllEntries(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setError(String(e.message || e));
-      setEntries([]);
+      setAllEntries([]);
     }
   }, []);
   React.useEffect(() => { load(); }, [load]);
+
+  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion).
+  const entries = React.useMemo(() => {
+    if (allEntries === null) return null;
+    if (!curFilter) return allEntries;
+    return allEntries.filter((e) => String(e?.currencyId ?? "") === curFilter);
+  }, [allEntries, curFilter]);
 
   const reverse = async (id) => {
     const reason = window.prompt("Motif de la contre-passation ?");
@@ -906,7 +985,7 @@ function GrandLivre() {
         <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} écriture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               {(entries || []).map((e) => (
                 <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
@@ -914,13 +993,14 @@ function GrandLivre() {
                   <td className="muted">{e.reference || `#${e.id}`}</td>
                   <td style={{ fontVariantNumeric: "normal" }}>{e.particulars}</td>
                   <td><span className="chip">{e.sourceModule || "—"}</span></td>
+                  <td><span className="chip">{e.currencyCode || "—"}</span></td>
                   <td className="r pos">{fmt(e.totalDebit)}</td>
                   <td className="r neg">{fmt(e.totalCredit)}</td>
                   <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
                   <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => reverse(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
                 </tr>
               ))}
-              {entries === null && <tr><td colSpan={8} className="muted">Chargement…</td></tr>}
+              {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
             </tbody>
           </table>
         </div>
@@ -931,34 +1011,92 @@ function GrandLivre() {
 
 /* ── Plan comptable ────────────────────────────────────────────────────── */
 function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate, onNew }) {
-  const totalAssets = Number(balanceSheet?.totalAssets ?? balanceSheet?.totalAsset ?? 0);
-  const totalLiabilities = Number(balanceSheet?.totalLiabilities ?? balanceSheet?.totalLiability ?? 0);
-  const totalRevenue = Number(incomeStatement?.totalRevenue ?? 0);
-  const totalExpenses = Number(incomeStatement?.totalExpenses ?? incomeStatement?.totalExpense ?? 0);
+  // SIFA : pas de melange de devises. On affiche les totaux par devise.
+  const assetsCur = balanceSheet?.assetsByCurrency || [];
+  const liabCur = balanceSheet?.liabilitiesByCurrency || [];
+  const revCur = incomeStatement?.revenueByCurrency || [];
+  const expCur = incomeStatement?.expenseByCurrency || incomeStatement?.expensesByCurrency || [];
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Actif" value={mM(totalAssets)} /><Mini label="Passif" value={mM(totalLiabilities)} />
-        <Mini label="Produits (cumul)" value={mM(totalRevenue)} valueClass="pos" /><Mini label="Charges (cumul)" value={mM(totalExpenses)} valueClass="neg" />
+        <Mini label="Actif" value={<ByCur list={assetsCur} />} />
+        <Mini label="Passif" value={<ByCur list={liabCur} />} />
+        <Mini label="Produits (cumul)" value={<ByCur list={revCur} />} valueClass="pos" />
+        <Mini label="Charges (cumul)" value={<ByCur list={expCur} />} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 560 }}>
-            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th className="r">Solde</th></tr></thead>
+            <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
             <tbody>
               {(accounts || []).map((a) => (
-                <tr key={a.id}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{nf.format(Number(a.balance || 0))}</td></tr>
+                <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
-              {(!accounts || accounts.length === 0) && <tr><td colSpan={4} className="muted">Aucun sous-compte réel disponible.</td></tr>}
+              {(!accounts || accounts.length === 0) && <tr><td colSpan={5} className="muted">Aucun sous-compte réel disponible.</td></tr>}
             </tbody>
-            <tfoot><tr><td colSpan={2}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td><td className="r">{nf.format(Number(trialBalance?.totalDebit || 0))} / {nf.format(Number(trialBalance?.totalCredit || 0))}</td></tr></tfoot>
+            <tfoot>
+              <tr><td colSpan={4}>Balance</td><td className="r">{trialBalance?.match ? "équilibrée" : "à vérifier"}</td></tr>
+              {(trialBalance?.byCurrency || []).map((c) => (
+                <tr key={`tb-${c.currencyId ?? "x"}`}><td colSpan={4} className="muted">Débit / Crédit ({c.currencyCode || "—"})</td><td className="r">{nf.format(Number(c.totalDebit || 0))} / {nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+              ))}
+            </tfoot>
           </table>
         </div>
-        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} sous-compte(s) connectés à l'API.</p>
+        <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} ligne(s) (sous-compte × devise) connectées à l'API.</p>
       </div>
     </>
   );
+}
+
+/* Additionne plusieurs listes "par devise" en restant separe par devise (SIFA). */
+function sumByCurrency(...lists) {
+  const map = new Map();
+  lists.forEach((list) => (list || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total += Number(c.total || 0);
+    map.set(k, acc);
+  }));
+  return [...map.values()];
+}
+
+/* Resultat net par devise = produits − charges, devise par devise (SIFA, pas de conversion). */
+function netByCurrency(revByCur, expByCur) {
+  const map = new Map();
+  (revByCur || []).forEach((c) => map.set(String(c.currencyId ?? "null"), { currencyId: c.currencyId, currencyCode: c.currencyCode, total: Number(c.total || 0) }));
+  (expByCur || []).forEach((c) => {
+    const k = String(c.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: c.currencyId, currencyCode: c.currencyCode, total: 0 };
+    acc.total -= Number(c.total || 0);
+    map.set(k, acc);
+  });
+  return [...map.values()];
+}
+
+/* Totaux par devise (SIFA — jamais de conversion). Affiche une valeur par devise. */
+function ByCur({ list }) {
+  const arr = (list || []).filter((c) => Number(c.total || 0) !== 0);
+  if (arr.length === 0) return <>{nf.format(0)} {CUR}</>;
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", lineHeight: 1.2 }}>
+      {arr.map((c) => <span key={c.currencyId ?? "x"}>{nf.format(Math.round(Number(c.total || 0)))} {c.currencyCode || CUR}</span>)}
+    </span>
+  );
+}
+
+/* Regroupe des comptes (balance + devise par ligne) en totaux par devise,
+   au format attendu par <ByCur>. SIFA : aucune conversion, une valeur par devise.
+   pick = fonction qui extrait le montant signé d'un compte (défaut: balanceOf). */
+function accBalByCur(rows, pick = balanceOf) {
+  const map = new Map();
+  (rows || []).forEach((a) => {
+    const k = String(a.currencyId ?? "null");
+    const acc = map.get(k) || { currencyId: a.currencyId ?? null, currencyCode: a.currencyCode || null, total: 0 };
+    acc.total += Number(pick(a) || 0);
+    map.set(k, acc);
+  });
+  return [...map.values()];
 }
 
 /* ── Tiers ─────────────────────────────────────────────────────────────── */
@@ -966,15 +1104,16 @@ function Tiers({ accounts = [] }) {
   const receivables = accounts.filter(isReceivableAccount);
   const payables = accounts.filter(isPayableAccount);
   const rows = [...receivables.map((a) => ({ ...a, family: "Créance" })), ...payables.map((a) => ({ ...a, family: "Dette" }))];
-  const totalReceivable = receivables.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
-  const totalPayable = payables.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
+  // Totaux par devise (SIFA) : créances = soldes débiteurs, dettes = soldes créditeurs.
+  const receivableByCur = accBalByCur(receivables, (a) => Math.max(0, balanceOf(a)));
+  const payableByCur = accBalByCur(payables, (a) => Math.abs(Math.min(0, balanceOf(a))));
   if (rows.length) {
     return (
       <>
         <PageHead eyebrow="Comptes auxiliaires" title="Tiers — clients & fournisseurs" />
         <div className="g4 kpis" style={{ marginBottom: 18 }}>
-          <Mini label="Créances clients" value={m(totalReceivable)} valueClass="pos" />
-          <Mini label="Dettes fournisseurs" value={m(totalPayable)} valueClass="neg" />
+          <Mini label="Créances clients" value={<ByCur list={receivableByCur} />} valueClass="pos" />
+          <Mini label="Dettes fournisseurs" value={<ByCur list={payableByCur} />} valueClass="neg" />
           <Mini label="Comptes clients" value={receivables.length} />
           <Mini label="Comptes fournisseurs" value={payables.length} />
         </div>
@@ -982,8 +1121,8 @@ function Tiers({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes auxiliaires</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 620 }}>
-              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.family}-${a.id}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -998,16 +1137,232 @@ function Tiers({ accounts = [] }) {
   );
 }
 
+/* ── Change (échange de devise — modèle bancaire) ──────────────────────────
+   Une opération enregistre les VRAIS montants des deux côtés (devise vendue /
+   devise reçue) + le taux réel + des frais optionnels. Aucune conversion estimée :
+   le backend pose 2-3 écritures liées via un sous-compte « Compte de change ». */
+function curCode(currencies, id) {
+  const c = (currencies || []).find((x) => (x.currencyId ?? x.id) === Number(id));
+  return c ? (cleanCurrencySymbol(c) || c.currencyCode || "") : "";
+}
+function Change({ accounts = [], currencies = [], canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [showNew, setShowNew] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  // Liste complete des sous-comptes (y compris ceux sans ecriture, absents des
+  // balances) pour alimenter les selecteurs du modal — ex. compte de frais de change.
+  const [allAccounts, setAllAccounts] = React.useState(null);
+
+  const load = React.useCallback(() => {
+    api.exchanges().then((r) => setRows(asArray(r, "exchanges"))).catch(() => setRows([]));
+  }, []);
+  React.useEffect(() => load(), [load]);
+  React.useEffect(() => {
+    api.accounts().then((r) => setAllAccounts(asArray(r, "getAllAccount"))).catch(() => setAllAccounts(null));
+  }, []);
+  // Comptes pour les selecteurs : liste complete si dispo, sinon repli sur les balances.
+  const modalAccounts = (allAccounts && allAccounts.length) ? allAccounts : accounts;
+
+  async function create(form) {
+    setBusy(true); setError("");
+    try {
+      await api.createExchange(form);
+      setShowNew(false); load();
+    } catch (err) { setError(err.message || String(err)); }
+    finally { setBusy(false); }
+  }
+  async function reverse(id) {
+    const reason = window.prompt("Motif d'annulation de cet échange ?");
+    if (!reason) return;
+    try { await api.reverseExchange(id, reason); load(); }
+    catch (err) { notify(err.message || String(err)); }
+  }
+
+  const list = rows || [];
+  const posted = list.filter((r) => r.status !== "reversed");
+  const code = (id) => curCode(currencies, id);
+
+  return (
+    <>
+      <PageHead eyebrow="Trésorerie · multi-devises" title="Change (devises)"
+        action={canMutate ? "Nouvel échange" : undefined} onAction={() => setShowNew(true)} disabled={!canMutate} />
+      <Note icon="lightbulb">
+        Comme une banque : on enregistre les <strong>montants réels des deux côtés</strong> (devise vendue → devise reçue),
+        le <strong>taux réel</strong> et les <strong>frais</strong>. Aucune valeur n'est estimée.
+      </Note>
+      <div className="g3" style={{ margin: "14px 0 18px" }}>
+        <Mini label="Échanges" value={posted.length} />
+        <Mini label="Annulés" value={list.length - posted.length} tone={list.length - posted.length ? "warn" : undefined} />
+        <Mini label="Source" value="Ledger" tone="info" />
+      </div>
+      {rows === null ? (
+        <div className="card pad muted">Chargement…</div>
+      ) : list.length === 0 ? (
+        <EmptyState title="Aucun échange de devise" detail="Enregistrez un achat/vente de devise (ex. USD → CDF) : les deux montants réels, le taux et les frais seront comptabilisés." icon="landmark"
+          action={canMutate ? "Nouvel échange" : undefined} onAction={() => setShowNew(true)} />
+      ) : (
+        <div className="card pad table-card">
+          <div className="section-head"><h3 className="font-display">Opérations de change</h3><span className="tiny">Montants réels des deux côtés</span></div>
+          <div className="tbl-scroll">
+            <table className="tbl num" style={{ minWidth: 720 }}>
+              <thead><tr><th>Date</th><th>Réf.</th><th className="r">Vendu</th><th></th><th className="r">Reçu</th><th className="r">Taux</th><th className="r">Frais</th><th>État</th><th></th></tr></thead>
+              <tbody>{list.map((r) => (
+                <tr key={r.id} style={r.status === "reversed" ? { opacity: 0.5, textDecoration: "line-through" } : undefined}>
+                  <td>{String(r.date || "").slice(0, 10)}</td>
+                  <td>{r.reference || r.note || "—"}</td>
+                  <td className="r neg">{nf.format(Number(r.fromAmount || 0))} <span className="chip">{code(r.fromCurrencyId)}</span></td>
+                  <td style={{ color: "var(--ink-500)" }}>→</td>
+                  <td className="r pos">{nf.format(Number(r.toAmount || 0))} <span className="chip">{code(r.toCurrencyId)}</span></td>
+                  <td className="r">{Number(r.rate || 0).toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</td>
+                  <td className="r">{Number(r.feeAmount || 0) > 0 ? nf.format(Number(r.feeAmount)) : "—"}</td>
+                  <td>{r.status === "reversed" ? <span className="chip">annulé</span> : <span className="chip" style={{ background: "var(--blue-100)", color: "var(--blue-600)" }}>comptabilisé</span>}</td>
+                  <td>{canMutate && r.status !== "reversed" && <button className="btn btn-ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => reverse(r.id)}>Annuler</button>}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      {showNew && <ExchangeModal accounts={modalAccounts} currencies={currencies} exchanges={list} busy={busy} error={error}
+        onSave={create} onClose={() => setShowNew(false)} />}
+    </>
+  );
+}
+
+/* Modal d'échange : saisie flexible (montant reçu OU taux), frais optionnels.
+   Devise déduite du sous-compte si renseignée, sinon sélecteur de devise. */
+function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, onClose }) {
+  const acctOpts = (accounts || []).map((a) => ({ value: String(a.id), label: `${accountLabel(a)}${a.currencyCode ? " · " + a.currencyCode : ""}` }));
+  const curOpts = (currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }));
+  // Pont de change = clearing/virement (exclut les comptes de frais).
+  const exchangeAccts = (accounts || []).filter((a) => /clearing|virement|compte de change/i.test(accountText(a)));
+  const feeAccts = (accounts || []).filter((a) => /frais|fee/i.test(accountText(a)));
+
+  // Référence générée automatiquement : CHG-AAAA-MM-NNN (N = séquence du mois).
+  const autoRef = React.useMemo(() => {
+    const d = new Date();
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const prefix = `CHG-${ym}-`;
+    const max = (exchanges || []).reduce((m, r) => {
+      const ref = String(r.reference || "");
+      if (!ref.startsWith(prefix)) return m;
+      const n = parseInt(ref.slice(prefix.length), 10);
+      return Number.isFinite(n) && n > m ? n : m;
+    }, 0);
+    return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  }, [exchanges]);
+
+  const [f, setF] = React.useState({
+    date: new Date().toISOString().slice(0, 10), reference: autoRef, note: "",
+    fromCurrencyId: "", fromAccountId: "", fromAmount: "",
+    toCurrencyId: "", toAccountId: "", mode: "amount", toAmount: "", rate: "",
+    feeAmount: "", feeAccountId: feeAccts[0] ? String(feeAccts[0].id) : "",
+    fromExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
+    toExchangeAccountId: exchangeAccts[0] ? String(exchangeAccts[0].id) : "",
+  });
+  const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+  // Devise auto depuis le sous-compte choisi (si l'API la fournit).
+  const acctCur = (id) => { const a = (accounts || []).find((x) => String(x.id) === String(id)); return a && a.currencyId != null ? String(a.currencyId) : ""; };
+
+  const from = Number(f.fromAmount) || 0;
+  const rate = Number(f.rate) || 0;
+  const toAmt = Number(f.toAmount) || 0;
+  // Aperçu live : le 3ᵉ champ déduit (mêmes règles que le backend).
+  const previewTo = f.mode === "amount" ? toAmt : (from > 0 && rate > 0 ? from * rate : 0);
+  const previewRate = f.mode === "amount" ? (from > 0 && toAmt > 0 ? toAmt / from : 0) : rate;
+  const fromCode = curCode(currencies, f.fromCurrencyId) || "?";
+  const toCode = curCode(currencies, f.toCurrencyId) || "?";
+
+  function submit(e) {
+    e.preventDefault();
+    const body = {
+      date: new Date(f.date).toISOString(),
+      reference: f.reference || undefined, note: f.note || undefined,
+      fromCurrencyId: Number(f.fromCurrencyId), fromAccountId: Number(f.fromAccountId), fromAmount: from,
+      toCurrencyId: Number(f.toCurrencyId), toAccountId: Number(f.toAccountId),
+      fromExchangeAccountId: Number(f.fromExchangeAccountId), toExchangeAccountId: Number(f.toExchangeAccountId),
+    };
+    if (f.mode === "amount") body.toAmount = toAmt; else body.rate = rate;
+    if (Number(f.feeAmount) > 0) { body.feeAmount = Number(f.feeAmount); body.feeAccountId = Number(f.feeAccountId); }
+    onSave(body);
+  }
+  const valid = f.fromCurrencyId && f.toCurrencyId && f.fromCurrencyId !== f.toCurrencyId
+    && f.fromAccountId && f.toAccountId && from > 0 && f.fromExchangeAccountId && f.toExchangeAccountId
+    && (f.mode === "amount" ? toAmt > 0 : rate > 0)
+    && (!(Number(f.feeAmount) > 0) || f.feeAccountId);
+
+  const Field = ({ label, children }) => <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)" }}>{label}<div style={{ marginTop: 4 }}>{children}</div></label>;
+  const inp = { width: "100%", padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1, #d8d5cc)", fontSize: 13 };
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 680 }} onSubmit={submit}>
+        <div className="modal-head"><div><h2 className="font-display">Nouvel échange de devise</h2><p>Vrais montants des deux côtés · taux réel</p></div><button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button></div>
+        <div className="modal-body" style={{ display: "grid", gap: 12 }}>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Date"><input type="date" style={inp} value={f.date} onChange={(e) => set("date", e.target.value)} /></Field>
+            <Field label="Référence (auto)"><input style={{ ...inp, background: "var(--ink-50, #f4f3ef)", color: "var(--ink-500)" }} value={f.reference} readOnly title="Référence générée automatiquement" /></Field>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Devise vendue (sortie)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <Field label="Compte source"><Autocomplete value={f.fromAccountId} options={acctOpts} placeholder="Caisse/banque…" onChange={(v) => setF((s) => ({ ...s, fromAccountId: v, fromCurrencyId: acctCur(v) || s.fromCurrencyId }))} /></Field>
+            <Field label="Devise"><Autocomplete value={f.fromCurrencyId} options={curOpts} placeholder="USD…" onChange={(v) => set("fromCurrencyId", v)} /></Field>
+            <Field label="Montant sorti"><input type="number" step="0.01" min="0" style={inp} value={f.fromAmount} onChange={(e) => set("fromAmount", e.target.value)} /></Field>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Devise reçue (entrée)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Field label="Compte cible"><Autocomplete value={f.toAccountId} options={acctOpts} placeholder="Caisse/banque…" onChange={(v) => setF((s) => ({ ...s, toAccountId: v, toCurrencyId: acctCur(v) || s.toCurrencyId }))} /></Field>
+            <Field label="Devise"><Autocomplete value={f.toCurrencyId} options={curOpts} placeholder="CDF…" onChange={(v) => set("toCurrencyId", v)} /></Field>
+          </div>
+          <div className="segtabs" style={{ display: "inline-flex", gap: 4 }}>
+            <button type="button" className={`segtab ${f.mode === "amount" ? "active grad-accent" : ""}`} onClick={() => set("mode", "amount")}>Montant reçu</button>
+            <button type="button" className={`segtab ${f.mode === "rate" ? "active grad-accent" : ""}`} onClick={() => set("mode", "rate")}>Taux</button>
+          </div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {f.mode === "amount"
+              ? <Field label={`Montant reçu (${toCode})`}><input type="number" step="0.01" min="0" style={inp} value={f.toAmount} onChange={(e) => set("toAmount", e.target.value)} /></Field>
+              : <Field label={`Taux (1 ${fromCode} = ? ${toCode})`}><input type="number" step="0.000001" min="0" style={inp} value={f.rate} onChange={(e) => set("rate", e.target.value)} /></Field>}
+            <div style={{ alignSelf: "end", fontSize: 12.5, color: "var(--ink-600)", padding: "7px 0" }}>
+              {from > 0 && (previewTo > 0) ? <>≈ <strong>{nf.format(Math.round(previewTo))} {toCode}</strong> · taux <strong>{previewRate.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}</strong></> : "Aperçu après saisie"}
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 12, color: "var(--ink-600)", textTransform: "uppercase", letterSpacing: 0.4 }}>Frais (optionnel)</div>
+          <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+            <Field label={`Frais (${fromCode})`}><input type="number" step="0.01" min="0" style={inp} value={f.feeAmount} onChange={(e) => set("feeAmount", e.target.value)} /></Field>
+            <Field label="Compte de frais"><Autocomplete value={f.feeAccountId} options={acctOpts} placeholder={feeAccts[0] ? "Frais de change…" : "Compte de charge…"} onChange={(v) => set("feeAccountId", v)} /></Field>
+          </div>
+
+          <details>
+            <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink-600)" }}>Comptes de change (pont)</summary>
+            <div className="g2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+              <Field label="Compte de change (source)"><Autocomplete value={f.fromExchangeAccountId} options={acctOpts} onChange={(v) => set("fromExchangeAccountId", v)} /></Field>
+              <Field label="Compte de change (cible)"><Autocomplete value={f.toExchangeAccountId} options={acctOpts} onChange={(v) => set("toExchangeAccountId", v)} /></Field>
+            </div>
+          </details>
+
+          {f.fromCurrencyId && f.fromCurrencyId === f.toCurrencyId && <div className="note" style={{ color: "var(--danger-600, #b4232a)" }}>Les devises source et cible doivent être différentes.</div>}
+          {error && <div className="note" style={{ color: "var(--danger-600, #b4232a)" }}>{error}</div>}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy || !valid}>{busy ? "Enregistrement…" : "Comptabiliser l'échange"}</button></div>
+      </form>
+    </div>
+  );
+}
+
 /* ── Trésorerie ────────────────────────────────────────────────────────── */
 function Tresorerie({ accounts = [] }) {
   const rows = accounts.filter(isTreasuryAccount);
-  const total = rows.reduce((s, a) => s + balanceOf(a), 0);
+  const totalByCur = accBalByCur(rows);
   if (rows.length) {
     return (
       <>
         <PageHead eyebrow="Caisse & banques" title="Trésorerie" />
         <div className="g3" style={{ marginBottom: 18 }}>
-          <Mini label="Solde trésorerie" value={m(total)} valueClass={total >= 0 ? "pos" : "neg"} />
+          <Mini label="Solde trésorerie (par devise)" value={<ByCur list={totalByCur} />} />
           <Mini label="Comptes suivis" value={rows.length} />
           <Mini label="Source" value="Ledger" tone="info" />
         </div>
@@ -1015,8 +1370,8 @@ function Tresorerie({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes banque & caisse</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -1034,13 +1389,13 @@ function Tresorerie({ accounts = [] }) {
 /* ── Immobilisations ───────────────────────────────────────────────────── */
 function Immo({ accounts = [] }) {
   const rows = accounts.filter((a) => accountType(a) === "Asset" && isFixedAssetAccount(a) && !isTreasuryAccount(a));
-  const total = rows.reduce((s, a) => s + balanceOf(a), 0);
+  const totalByCur = accBalByCur(rows);
   if (rows.length) {
     return (
       <>
         <PageHead eyebrow="Registre & amortissements" title="Immobilisations" />
         <div className="g3" style={{ marginBottom: 18 }}>
-          <Mini label="Valeur nette comptable" value={m(total)} tone="info" />
+          <Mini label="Valeur nette comptable (par devise)" value={<ByCur list={totalByCur} />} tone="info" />
           <Mini label="Comptes immo." value={rows.length} />
           <Mini label="Source" value="Ledger" />
         </div>
@@ -1048,8 +1403,8 @@ function Immo({ accounts = [] }) {
           <div className="section-head"><h3 className="font-display">Soldes immobilisations</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -1071,6 +1426,11 @@ function Analytique() {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [showNew, setShowNew] = React.useState(false);
+  const [edit, setEdit] = React.useState(null);    // projet en cours d'édition
+  const [expense, setExpense] = React.useState(null); // projet pour lequel on saisit une dépense
+  const [accounts, setAccounts] = React.useState([]);   // sous-comptes (pour la dépense)
+  const [currencies, setCurrencies] = React.useState([]);
+  const [defCur, setDefCur] = React.useState("");
 
   const load = React.useCallback(async () => {
     try {
@@ -1086,6 +1446,23 @@ function Analytique() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  // Comptes + devises pour la saisie de dépense (best-effort, n'empêche pas l'écran).
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [acc, cur, set] = await Promise.allSettled([api.accounts(), api.currencies(), api.setting()]);
+        if (acc.status === "fulfilled") setAccounts(asArray(acc.value, "balances"));
+        const curList = cur.status === "fulfilled" ? (cur.value?.getAllCurrency || (Array.isArray(cur.value) ? cur.value : [])) : [];
+        setCurrencies(curList);
+        const sId = set.status === "fulfilled" ? set.value?.currencyId : null;
+        setDefCur(sId != null ? String(sId) : (curList[0] ? String(curList[0].currencyId ?? curList[0].id) : ""));
+      } catch { /* ignore : la saisie reste possible mais sans listes */ }
+    })();
+  }, []);
+
+  const expenseAccounts = accounts.filter((a) => accountType(a) === "Expense");
+  const treasuryAccounts = accounts.filter((a) => accountType(a) !== "Expense" && accountType(a) !== "Revenue");
+
   const newProject = () => setShowNew(true);
   const submitProject = async (form) => {
     const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
@@ -1097,6 +1474,51 @@ function Analytique() {
     } catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
+
+  // Modifier un projet (permission backend : update-transaction → 403 sinon).
+  const submitEdit = async (form) => {
+    setBusy(true); setError("");
+    try {
+      await api.updateProject(edit.id, {
+        name: form.name,
+        donor: form.donor || null,
+        budgetAmount: form.budget ? Number(String(form.budget).replace(/\s/g, "")) : null,
+      });
+      setEdit(null);
+      await load();
+    } catch (e) { setError(permError(e, "modifier le projet")); }
+    finally { setBusy(false); }
+  };
+
+  // Ajouter une dépense au projet SANS modifier le projet
+  // (permission backend : create-transaction ; écriture portant project_id).
+  const submitExpense = async (form) => {
+    const amount = Number(String(form.amount).replace(/\s/g, ""));
+    if (!amount || amount <= 0) { setError("Le montant doit être positif."); return; }
+    if (!form.expenseId || !form.creditId) { setError("Choisir le compte de charge et le compte de trésorerie."); return; }
+    if (!form.currencyId) { setError("La devise est obligatoire."); return; }
+    setBusy(true); setError("");
+    try {
+      await api.createLedgerEntry({
+        date: new Date(form.date).toISOString(),
+        particulars: form.particulars || `Dépense projet : ${expense.name}`,
+        currencyId: Number(form.currencyId),
+        sourceModule: "comptabilite",
+        lines: [
+          // La charge porte le project_id → remonte dans le rapport analytique.
+          { accountId: Number(form.expenseId), side: "DEBIT", amount, projectId: expense.id },
+          { accountId: Number(form.creditId), side: "CREDIT", amount },
+        ],
+      });
+      setExpense(null);
+      await load();
+    } catch (e) { setError(permError(e, "ajouter une dépense")); }
+    finally { setBusy(false); }
+  };
+
+  const curField = { key: "currencyId", label: "Devise", type: "select", required: true,
+    options: currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: c.code || c.name || c.symbol || String(c.currencyId ?? c.id) })), default: defCur };
+
   const projectModal = showNew && (
     <FormModal
       title="Nouveau projet"
@@ -1112,6 +1534,41 @@ function Analytique() {
       ]}
     />
   );
+  const editModal = edit && (
+    <FormModal
+      title="Modifier le projet"
+      subtitle="Nom, financeur et budget"
+      submitLabel="Enregistrer"
+      busy={busy}
+      onClose={() => setEdit(null)}
+      onSubmit={submitEdit}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
+        { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
+        { key: "budget", label: "Budget (optionnel)", type: "number", default: edit.budgetAmount != null ? String(edit.budgetAmount) : "" },
+      ]}
+    />
+  );
+  const expenseModal = expense && (
+    <FormModal
+      title={`Dépense — ${expense.name}`}
+      subtitle="Écriture imputée au projet (n'altère pas le projet)"
+      submitLabel="Enregistrer la dépense"
+      busy={busy}
+      onClose={() => setExpense(null)}
+      onSubmit={submitExpense}
+      fields={[
+        { key: "date", label: "Date", type: "date", default: new Date().toISOString().slice(0, 10), required: true },
+        { key: "particulars", label: "Libellé", default: "" },
+        { key: "amount", label: "Montant", type: "number", required: true },
+        curField,
+        { key: "expenseId", label: "Compte de charge (débit)", type: "select", required: true,
+          options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+        { key: "creditId", label: "Payé depuis (caisse/banque)", type: "select", required: true,
+          options: treasuryAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+      ]}
+    />
+  );
 
   // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
   if (projects && projects.length === 0) {
@@ -1121,6 +1578,8 @@ function Analytique() {
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
         <EmptyState title="Aucun projet analytique" detail="Les rapports financeurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
         {projectModal}
+        {editModal}
+        {expenseModal}
       </>
     );
   }
@@ -1141,6 +1600,10 @@ function Analytique() {
               <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
+                <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>
+              </div>
             </div>
           );
         })}
@@ -1160,6 +1623,8 @@ function Analytique() {
         <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport financeur en temps réel.</p>
       </div>
       {projectModal}
+      {editModal}
+      {expenseModal}
     </>
   );
 }
@@ -1209,7 +1674,7 @@ function Budget() {
             <div className="section-head"><h3 className="font-display">{b.name}</h3><span className="tiny">{b.fiscalYear || b.period || ""}</span></div>
             {lines.length === 0 && <p className="muted tiny">Aucune ligne budgétaire.</p>}
             {lines.map((l, i) => {
-              const allocated = Number(l.allocated ?? l.allocatedAmount ?? 0);
+              const allocated = Number(l.allocated ?? l.allocatedAmount ?? l.planned ?? l.plannedAmount ?? 0);
               const consumed = Number(l.consumed ?? l.consumedAmount ?? 0);
               const pct = allocated > 0 ? Math.min(100, Math.round((consumed / allocated) * 100)) : 0;
               const warn = pct >= 90;
@@ -1250,18 +1715,30 @@ function Capacite({ accounts = [] }) {
   }, []);
 
   const treasury = accounts.filter(isTreasuryAccount);
-  const cash = treasury.reduce((s, a) => s + balanceOf(a), 0);
-  const payables = accounts.filter(isPayableAccount).reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
-  const receivables = accounts.filter(isReceivableAccount).reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
-  // Reste à engager sur budgets = somme des (alloué − consommé) encore disponibles.
-  const remainingBudget = Object.values(statuses).reduce((s, st) => {
-    if (!st || !Array.isArray(st.lines)) return s;
-    return s + st.lines.reduce((acc, l) => acc + Math.max(0, Number(l.allocated || 0) - Number(l.consumed || 0)), 0);
-  }, 0);
-  const netNow = cash - payables;           // disponible immédiat
-  const netProjected = cash + receivables - payables; // après encaissement créances
+  const payablesAcc = accounts.filter(isPayableAccount);
+  const receivablesAcc = accounts.filter(isReceivableAccount);
 
-  if (!treasury.length && !payables && !receivables) {
+  // Capacité PAR DEVISE (SIFA) : on ne soustrait jamais des devises différentes.
+  // Pour chaque devise présente : trésorerie, dettes, créances, disponible immédiat/projeté.
+  const cap = new Map(); // currencyId -> { code, cash, payables, receivables }
+  const bump = (a, field, val) => {
+    const k = String(a.currencyId ?? "null");
+    const row = cap.get(k) || { currencyId: a.currencyId ?? null, currencyCode: a.currencyCode || CUR, cash: 0, payables: 0, receivables: 0 };
+    row[field] += val;
+    cap.set(k, row);
+  };
+  treasury.forEach((a) => bump(a, "cash", balanceOf(a)));
+  payablesAcc.forEach((a) => bump(a, "payables", Math.abs(Math.min(0, balanceOf(a)))));
+  receivablesAcc.forEach((a) => bump(a, "receivables", Math.max(0, balanceOf(a))));
+  const caps = [...cap.values()].map((c) => ({ ...c, netNow: c.cash - c.payables, netProjected: c.cash + c.receivables - c.payables }));
+
+  // Totaux par devise pour les KPI (format <ByCur>).
+  const cashByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.cash }));
+  const payByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.payables }));
+  const recByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.receivables }));
+  const nowByCur = caps.map((c) => ({ currencyId: c.currencyId, currencyCode: c.currencyCode, total: c.netNow }));
+
+  if (!treasury.length && !payablesAcc.length && !receivablesAcc.length) {
     return (
       <>
         <PageHead eyebrow="Disponibilité financière" title="Plan de trésorerie & capacité" />
@@ -1273,39 +1750,45 @@ function Capacite({ accounts = [] }) {
   return (
     <>
       <PageHead eyebrow="Disponibilité financière · depuis le grand livre" title="Plan de trésorerie & capacité" />
-      <div className="g4 kpis" style={{ marginBottom: 18 }}>
-        <Mini label="Trésorerie (banque + caisse)" value={m(cash)} valueClass={cash >= 0 ? "pos" : "neg"} />
-        <Mini label="Dettes fournisseurs" value={m(payables)} valueClass="neg" />
-        <Mini label="Créances à encaisser" value={m(receivables)} valueClass="pos" />
-        <Mini label={netNow >= 0 ? "Disponible immédiat" : "Découvert"} value={m(Math.abs(netNow))} tone={netNow >= 0 ? "info" : "warn"} />
+      <Note icon="lightbulb">Calculé <strong>par devise</strong> (principe SIFA) : aucune devise n'est convertie ni mélangée.</Note>
+      <div className="g4 kpis" style={{ margin: "14px 0 18px" }}>
+        <Mini label="Trésorerie (par devise)" value={<ByCur list={cashByCur} />} />
+        <Mini label="Dettes fournisseurs" value={<ByCur list={payByCur} />} valueClass="neg" />
+        <Mini label="Créances à encaisser" value={<ByCur list={recByCur} />} valueClass="pos" />
+        <Mini label="Disponible immédiat" value={<ByCur list={nowByCur} />} tone="info" />
       </div>
-      <div className="card pad" style={{ maxWidth: 680, marginBottom: 18 }}>
-        <h3 className="block-title font-display">Capacité financière</h3>
-        <div className="stmt num">
-          <div className="ln"><span className="muted">Trésorerie disponible</span><span className={cash >= 0 ? "pos" : "neg"}>{nf.format(cash)}</span></div>
-          <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(payables)}</span></div>
-          <div className="ln bold"><span>= Disponible immédiat</span><span className={netNow >= 0 ? "pos" : "neg"}>{nf.format(netNow)}</span></div>
-          <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(receivables)}</span></div>
-          <div className="ln total" style={{ background: netProjected >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
-            <span style={{ color: netProjected >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Disponible projeté</span>
-            <span className={netProjected >= 0 ? "pos" : "neg"}>{signed(netProjected)} {CUR}</span>
-          </div>
-        </div>
-      </div>
-      {budgets && budgets.length > 0 && (
-        <div className="card pad">
-          <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
-            <span className="muted">Budget encore disponible (toutes lignes)</span>
-            <span className={remainingBudget > netNow ? "neg" : "pos"}>{m(remainingBudget)}</span>
-          </div>
-          {remainingBudget > netNow && (
-            <div className="tiny" style={{ color: "var(--rose-600)", marginTop: 6 }}>
-              ⚠ Les engagements budgétaires restants ({m(remainingBudget)}) dépassent le disponible immédiat ({m(netNow)}).
+      <div className="g2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14, marginBottom: 18 }}>
+        {caps.map((c) => (
+          <div key={c.currencyId ?? "x"} className="card pad">
+            <h3 className="block-title font-display">Capacité — {c.currencyCode}</h3>
+            <div className="stmt num">
+              <div className="ln"><span className="muted">Trésorerie disponible</span><span className={c.cash >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.cash))} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">− Dettes fournisseurs</span><span className="neg">{nf.format(Math.round(c.payables))} {c.currencyCode}</span></div>
+              <div className="ln bold"><span>= Disponible immédiat</span><span className={c.netNow >= 0 ? "pos" : "neg"}>{nf.format(Math.round(c.netNow))} {c.currencyCode}</span></div>
+              <div className="ln"><span className="muted">+ Créances à encaisser</span><span className="pos">{nf.format(Math.round(c.receivables))} {c.currencyCode}</span></div>
+              <div className="ln total" style={{ background: c.netProjected >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}>
+                <span style={{ color: c.netProjected >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Disponible projeté</span>
+                <span className={c.netProjected >= 0 ? "pos" : "neg"}>{signed(c.netProjected)} {c.currencyCode}</span>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
+      {budgets && budgets.length > 0 && (() => {
+        const remaining = Object.values(statuses).reduce((s, st) => {
+          if (!st || !Array.isArray(st.lines)) return s;
+          return s + st.lines.reduce((acc, l) => acc + Math.max(0, Number(l.allocated || 0) - Number(l.consumed || 0)), 0);
+        }, 0);
+        return (
+          <div className="card pad">
+            <div className="section-head"><h3 className="font-display">Engagements budgétaires restants</h3><span className="tiny">Reste à engager (toutes lignes)</span></div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }} className="num">
+              <span className="muted">Budget encore disponible</span>
+              <span className="pos">{nf.format(Math.round(remaining))}</span>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
@@ -1340,9 +1823,20 @@ function Achats({ canMutate }) {
     finally { setBusy(false); }
   };
 
-  const totalAmount = info?._sum?.totalAmount ?? (rows || []).reduce((s, r) => s + Number(r.totalAmount || 0), 0);
-  const totalDue = info?._sum?.dueAmount ?? (rows || []).reduce((s, r) => s + Number(r.dueAmount || 0), 0);
-  const totalPaid = info?._sum?.paidAmount ?? (rows || []).reduce((s, r) => s + Number(r.paidAmount || 0), 0);
+  // Totaux par devise (SIFA) : chaque facture porte sa devise (currencyId/currencyCode).
+  const invByCur = (pick) => {
+    const map = new Map();
+    (rows || []).forEach((r) => {
+      const k = String(r.currencyId ?? "null");
+      const acc = map.get(k) || { currencyId: r.currencyId ?? null, currencyCode: r.currencyCode || null, total: 0 };
+      acc.total += Number(pick(r) || 0);
+      map.set(k, acc);
+    });
+    return [...map.values()];
+  };
+  const amountByCur = invByCur((r) => r.totalAmount);
+  const paidByCur = invByCur((r) => r.paidAmount ?? (Number(r.totalAmount || 0) - Number(r.dueAmount || 0)));
+  const dueByCur = invByCur((r) => r.dueAmount);
 
   return (
     <>
@@ -1350,23 +1844,24 @@ function Achats({ canMutate }) {
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="g4 kpis" style={{ marginBottom: 18 }}>
         <Mini label="Factures" value={(rows || []).length} />
-        <Mini label="Total facturé" value={m(totalAmount)} />
-        <Mini label="Payé" value={m(totalPaid)} valueClass="pos" />
-        <Mini label="Reste dû" value={m(totalDue)} valueClass={Number(totalDue) > 0 ? "neg" : "pos"} />
+        <Mini label="Total facturé (par devise)" value={<ByCur list={amountByCur} />} />
+        <Mini label="Payé (par devise)" value={<ByCur list={paidByCur} />} valueClass="pos" />
+        <Mini label="Reste dû (par devise)" value={<ByCur list={dueByCur} />} valueClass="neg" />
       </div>
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Liste des factures d'achat</h3><span className="tiny">{rows ? `${rows.length} facture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
-            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
+            <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th>Devise</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
             <tbody>
               {(rows || []).map((r) => (
                 <tr key={r.id}>
                   <td>{String(r.date || "").slice(0, 10)}</td>
                   <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
                   <td style={{ fontWeight: 500 }}>{r.supplierName || `Fournisseur #${r.supplierId}`}</td>
-                  <td className="r">{nf.format(Number(r.totalAmount || 0))}</td>
-                  <td className={`r ${Number(r.dueAmount) > 0 ? "neg" : "pos"}`}>{nf.format(Number(r.dueAmount || 0))}</td>
+                  <td><span className="chip">{r.currencyCode || "—"}</span></td>
+                  <td className="r">{mc(Number(r.totalAmount || 0), r)}</td>
+                  <td className={`r ${Number(r.dueAmount) > 0 ? "neg" : "pos"}`}>{mc(Number(r.dueAmount || 0), r)}</td>
                   <td className="r">
                     {canMutate
                       ? <button className="btn-sm grad-accent" disabled={busy} onClick={() => approve(r.id)}>Approuver</button>
@@ -1374,8 +1869,8 @@ function Achats({ canMutate }) {
                   </td>
                 </tr>
               ))}
-              {rows && rows.length === 0 && <tr><td colSpan={6} className="muted">Aucune facture d'achat. Connecté à <code>/purchase-invoice</code>.</td></tr>}
-              {rows === null && <tr><td colSpan={6} className="muted">Chargement…</td></tr>}
+              {rows && rows.length === 0 && <tr><td colSpan={7} className="muted">Aucune facture d'achat. Connecté à <code>/purchase-invoice</code>.</td></tr>}
+              {rows === null && <tr><td colSpan={7} className="muted">Chargement…</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1498,25 +1993,40 @@ function Stock() {
 }
 
 /* ── États financiers ──────────────────────────────────────────────────── */
-function Etats({ is, bs }) {
+function Etats({ is, bs, curFilter = "" }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
   // États réels depuis le grand livre moderne.
-  const [liveIs, setLiveIs] = React.useState(null);
-  const [liveBs, setLiveBs] = React.useState(null);
-  const [liveTb, setLiveTb] = React.useState(null);
+  const [rawIs, setRawIs] = React.useState(null);
+  const [rawBs, setRawBs] = React.useState(null);
+  const [rawTb, setRawTb] = React.useState(null);
   React.useEffect(() => {
-    api.ledgerIncomeStatement().then(setLiveIs).catch(() => setLiveIs(null));
-    api.ledgerBalanceSheet().then(setLiveBs).catch(() => setLiveBs(null));
-    api.ledgerTrialBalance().then(setLiveTb).catch(() => setLiveTb(null));
+    api.ledgerIncomeStatement().then(setRawIs).catch(() => setRawIs(null));
+    api.ledgerBalanceSheet().then(setRawBs).catch(() => setRawBs(null));
+    api.ledgerTrialBalance().then(setRawTb).catch(() => setRawTb(null));
   }, []);
+  // Filtre devise global (SIFA, sans conversion) : on restreint chaque liste du rapport
+  // — lignes ET totaux *ByCurrency — à la devise choisie. Les scalaires (totaux toutes
+  // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
+  const filterReport = React.useCallback((rep) => {
+    if (!rep || !curFilter) return rep;
+    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyId ?? "") === curFilter) : l);
+    const out = { ...rep };
+    Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
+    return out;
+  }, [curFilter]);
+  const liveIs = React.useMemo(() => filterReport(rawIs), [rawIs, filterReport]);
+  const liveBs = React.useMemo(() => filterReport(rawBs), [rawBs, filterReport]);
+  const liveTb = React.useMemo(() => filterReport(rawTb), [rawTb, filterReport]);
   const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
   const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
   const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);
 
-  const rev = hasLiveIs ? Number(liveIs.totalRevenue) : 0;
-  const exp = hasLiveIs ? Number(liveIs.totalExpenses) : 0;
-  const profit = hasLiveIs ? Number(liveIs.netIncome) : 0;
+  // En mono-devise les scalaires (toutes devises) ne s'appliquent plus : on somme les byCurrency filtrés.
+  const sumBy = (list) => (Array.isArray(list) ? list.reduce((s, c) => s + Number(c.total ?? c.amount ?? 0), 0) : 0);
+  const rev = hasLiveIs ? (curFilter ? sumBy(liveIs.revenueByCurrency) : Number(liveIs.totalRevenue)) : 0;
+  const exp = hasLiveIs ? (curFilter ? sumBy(liveIs.expensesByCurrency) : Number(liveIs.totalExpenses)) : 0;
+  const profit = hasLiveIs ? (curFilter ? rev - exp : Number(liveIs.netIncome)) : 0;
 
   // Export CSV de l'onglet courant (depuis le grand livre).
   const exportCurrent = () => {
@@ -1549,11 +2059,11 @@ function Etats({ is, bs }) {
         hasLiveIs ? <div className="card pad" style={{ maxWidth: 680 }}>
           <h3 className="block-title font-display">Compte de résultat</h3>
           <div className="stmt num">
-            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{nf.format(r.amount)}</span></div>)}
-            <div className="ln bold"><span>Total produits</span><span className="pos">{nf.format(rev)}</span></div>
-            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{nf.format(r.amount)}</span></div>)}
-            <div className="ln bold"><span>Total charges</span><span className="neg">{nf.format(exp)}</span></div>
-            <div className="ln total" style={{ background: profit >= 0 ? "var(--emerald-50)" : "var(--rose-50)" }}><span style={{ color: profit >= 0 ? "var(--emerald-800)" : "var(--rose-600)" }}>Résultat ({profit >= 0 ? "excédent" : "déficit"})</span><span className={profit >= 0 ? "pos" : "neg"}>{signed(profit)} {CUR}</span></div>
+            {liveIs.revenue.map((r) => <div className="ln" key={`r${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span className="pos">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total produits</span><span className="pos"><ByCur list={liveIs.revenueByCurrency} /></span></div>
+            {liveIs.expenses.map((r) => <div className="ln" key={`e${r.id}-${r.currencyId ?? "x"}`} style={{ marginTop: 0 }}><span className="muted">{r.subAccount || r.account}</span><span className="neg">{mc(r.amount, r)}</span></div>)}
+            <div className="ln bold"><span>Total charges</span><span className="neg"><ByCur list={liveIs.expensesByCurrency} /></span></div>
+            <div className="ln total" style={{ background: "var(--emerald-50)" }}><span style={{ color: "var(--emerald-800)" }}>Résultat (par devise)</span><span><ByCur list={netByCurrency(liveIs.revenueByCurrency, liveIs.expensesByCurrency)} /></span></div>
           </div>
         </div> : <EmptyState title="Compte de résultat vide" detail="Aucune ligne produit/charge réelle n'est disponible dans le grand livre." icon="barChart" />
       )}
@@ -1565,17 +2075,16 @@ function Etats({ is, bs }) {
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Actif</div>
               <div className="stmt num">
-                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>)}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span>{nf.format(liveBs.totalAssets)} {CUR}</span></div>
+                {liveBs.assets.map((r) => <div className="ln" key={`a${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Actif</span><span><ByCur list={liveBs.assetsByCurrency} /></span></div>
               </div>
             </div>
             <div>
               <div className="tiny" style={{ textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 4 }}>Passif + Capitaux propres</div>
               <div className="stmt num">
-                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}`}><span className="muted">{r.subAccount || r.account}</span><span>{nf.format(r.amount)}</span></div>),
-                  <div className="ln" key="netinc"><span className="muted">Résultat de l'exercice</span><span className={liveBs.netIncome >= 0 ? "pos" : "neg"}>{nf.format(liveBs.netIncome)}</span></div>]}
-                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span>{nf.format(liveBs.totalLiabilitiesAndEquity)} {CUR}</span></div>
+                {[...liveBs.liabilities.map((r) => <div className="ln" key={`l${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>),
+                  ...liveBs.equity.map((r) => <div className="ln" key={`eq${r.id}-${r.currencyId ?? "x"}`}><span className="muted">{r.subAccount || r.account}</span><span>{mc(r.amount, r)}</span></div>)]}
+                <div className="ln total" style={{ background: "var(--blue-50)" }}><span style={{ color: "var(--blue-800)" }}>Total Passif + CP</span><span><ByCur list={sumByCurrency(liveBs.liabilitiesByCurrency, liveBs.equityByCurrency)} /></span></div>
               </div>
             </div>
           </div>
@@ -1592,13 +2101,17 @@ function Etats({ is, bs }) {
           <div className="section-head"><h3 className="font-display">Balance générale</h3><button className="link" onClick={() => exportCsv("balance.csv", [["account", "Compte"], ["debit", "Solde débit"], ["credit", "Solde crédit"]], [...(liveTb.debits || []).map((r) => ({ account: r.subAccount || r.account, debit: r.balance, credit: "" })), ...(liveTb.credits || []).map((r) => ({ account: r.subAccount || r.account, debit: "", credit: Math.abs(r.balance) }))])}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Intitulé</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
+              <thead><tr><th>Compte</th><th>Intitulé</th><th>Devise</th><th className="r">Solde débit</th><th className="r">Solde crédit</th></tr></thead>
               <tbody>
                 {[...(liveTb.debits || []).map((r) => ({ ...r, debit: r.balance, credit: null })), ...(liveTb.credits || []).map((r) => ({ ...r, debit: null, credit: Math.abs(r.balance) }))].map((r) => (
-                  <tr key={r.id}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
+                  <tr key={`${r.id}-${r.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{r.id}</td><td style={{ fontVariantNumeric: "normal" }}>{r.subAccount || r.account}</td><td><span className="chip">{r.currencyCode || "—"}</span></td><td className="r">{r.debit ? nf.format(r.debit) : <span className="muted">—</span>}</td><td className="r">{r.credit ? nf.format(r.credit) : <span className="muted">—</span>}</td></tr>
                 ))}
               </tbody>
-              <tfoot><tr><td colSpan={2}>Totaux</td><td className="r">{nf.format(Number(liveTb.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(liveTb.totalCredit || 0)))}</td></tr></tfoot>
+              <tfoot>
+                {(liveTb.byCurrency || []).map((c) => (
+                  <tr key={`tot-${c.currencyId ?? "x"}`}><td colSpan={2}>Totaux</td><td><span className="chip">{c.currencyCode || "—"}</span></td><td className="r">{nf.format(Number(c.totalDebit || 0))}</td><td className="r">{nf.format(Math.abs(Number(c.totalCredit || 0)))}</td></tr>
+                ))}
+              </tfoot>
             </table>
           </div>
           <div style={{ marginTop: 12 }}><span className={`chip ${liveTb.match ? "emerald" : "amber"}`}><Icon name={liveTb.match ? "check" : "alertTriangle"} style={{ width: 11, height: 11 }} /> {liveTb.match ? "Balance équilibrée" : "Balance à vérifier"}</span></div>
@@ -1639,9 +2152,10 @@ function Etats({ is, bs }) {
 /* ── TVA ───────────────────────────────────────────────────────────────── */
 function Tva({ accounts = [], canMutate = true }) {
   const rows = accounts.filter(isTaxAccount);
-  const deductible = rows.reduce((s, a) => s + Math.max(0, balanceOf(a)), 0);
-  const collected = rows.reduce((s, a) => s + Math.abs(Math.min(0, balanceOf(a))), 0);
-  const net = collected - deductible;
+  // Par devise (SIFA) : déductible = soldes débiteurs, collectée = soldes créditeurs.
+  const deductibleByCur = accBalByCur(rows, (a) => Math.max(0, balanceOf(a)));
+  const collectedByCur = accBalByCur(rows, (a) => Math.abs(Math.min(0, balanceOf(a))));
+  const netByCur = netByCurrency(collectedByCur, deductibleByCur);
 
   // Taux de taxe paramétrables (réutilise l'API product-vat existante).
   const [rates, setRates] = React.useState(null);
@@ -1690,16 +2204,16 @@ function Tva({ accounts = [], canMutate = true }) {
         <PageHead eyebrow="Déclaration fiscale" title="TVA & taxes" />
         {ratesPanel}
         <div className="g3" style={{ marginBottom: 18 }}>
-          <Mini label="TVA collectée" value={m(collected)} valueClass="pos" />
-          <Mini label="TVA déductible" value={m(deductible)} valueClass="neg" />
-          <Mini label={net >= 0 ? "TVA à payer" : "Crédit TVA"} value={m(Math.abs(net))} tone={net >= 0 ? "warn" : "info"} />
+          <Mini label="TVA collectée (par devise)" value={<ByCur list={collectedByCur} />} valueClass="pos" />
+          <Mini label="TVA déductible (par devise)" value={<ByCur list={deductibleByCur} />} valueClass="neg" />
+          <Mini label="TVA nette (par devise)" value={<ByCur list={netByCur} />} tone="warn" />
         </div>
         <div className="card pad table-card">
           <div className="section-head"><h3 className="font-display">Soldes fiscaux</h3><span className="tiny">Depuis le ledger</span></div>
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
-              <thead><tr><th>Compte</th><th>Type</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={a.id}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{m(balanceOf(a))}</td></tr>)}</tbody>
+              <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
+              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
         </div>
@@ -1716,9 +2230,10 @@ function Tva({ accounts = [], canMutate = true }) {
 }
 
 /* ── Modal création (écriture / compte) ────────────────────────────────── */
-function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClose }) {
-  const [form, setForm] = React.useState(() => defaults(modal.kind, accounts, mainAccounts));
+function RecordModal({ modal, accounts, mainAccounts, currencies = [], defaultCurrencyId, busy, error, onSave, onClose }) {
+  const [form, setForm] = React.useState(() => defaults(modal.kind, accounts, mainAccounts, defaultCurrencyId));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const curCodeSel = curCode(currencies, form.currencyId) || CUR;
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
       <form className="modal-card" onSubmit={(e) => { e.preventDefault(); onSave(modal.kind, form); }}>
@@ -1730,7 +2245,12 @@ function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClo
               <FField label="Libellé" value={form.particulars} onChange={(v) => set("particulars", v)} required />
               <FSelect label="Débit" value={form.debitId} onChange={(v) => set("debitId", v)} rows={accounts} />
               <FSelect label="Crédit" value={form.creditId} onChange={(v) => set("creditId", v)} rows={accounts} />
-              <FField label={`Montant (${CUR})`} type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
+              <label className="field"><span>Devise *</span>
+                <Autocomplete value={form.currencyId} allowClear={false} placeholder="Choisir la devise…"
+                  options={(currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }))}
+                  onChange={(v) => set("currencyId", v)} />
+              </label>
+              <FField label={`Montant (${curCodeSel})`} type="number" value={form.amount} onChange={(v) => set("amount", v)} required />
               <FField label="Type / journal" value={form.type} onChange={(v) => set("type", v)} />
             </>
           )}
@@ -1742,7 +2262,7 @@ function RecordModal({ modal, accounts, mainAccounts, busy, error, onSave, onClo
           )}
         </div>
         {error && <div className="login-error">{error}</div>}
-        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "Enregistrement…" : "Enregistrer"}</button></div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy || (modal.kind === "transaction" && !form.currencyId)}>{busy ? "Enregistrement…" : "Enregistrer"}</button></div>
       </form>
     </div>
   );
@@ -1773,6 +2293,8 @@ function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy,
         <div className="form-grid">
           {fields.map((f) => f.type === "textarea"
             ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : f.type === "select"
+            ? <label className="field" key={f.key}><span>{f.label}</span><select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
             : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
         </div>
         <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : submitLabel}</button></div>
@@ -1780,9 +2302,9 @@ function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy,
     </div>
   );
 }
-function defaults(kind, accounts, mainAccounts) {
+function defaults(kind, accounts, mainAccounts, defaultCurrencyId) {
   if (kind === "account") return { name: "", accountId: mainAccounts[0]?.id || 1 };
-  return { date: new Date().toISOString().slice(0, 10), particulars: "", debitId: accounts[0]?.id || 1, creditId: accounts[1]?.id || accounts[0]?.id || 2, amount: 0, type: "transaction" };
+  return { date: new Date().toISOString().slice(0, 10), particulars: "", debitId: accounts[0]?.id || 1, creditId: accounts[1]?.id || accounts[0]?.id || 2, amount: 0, type: "transaction", currencyId: defaultCurrencyId != null ? String(defaultCurrencyId) : "" };
 }
 
 export default AppShell;
