@@ -124,6 +124,12 @@ const asArray = (value, key) => {
   return [];
 };
 const accountLabel = (a) => a.subAccount || a.name || a.account || "Compte";
+// Message clair quand le backend refuse l'action faute de permission (PermissionsGuard → 403).
+const permError = (e, action) => {
+  const msg = String(e?.message || e);
+  if (/\b403\b|Forbidden/i.test(msg)) return `Vous n'avez pas la permission de ${action}.`;
+  return msg;
+};
 const accountType = (a) => a.accountType || a.account?.type || a.type || "—";
 const accountText = (a) => `${accountLabel(a)} ${a.account || ""} ${accountType(a)}`.toLowerCase();
 const balanceOf = (a) => Number((a.balance ?? (Number(a.totalDebit || 0) - Number(a.totalCredit || 0))) || 0);
@@ -1420,6 +1426,11 @@ function Analytique() {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [showNew, setShowNew] = React.useState(false);
+  const [edit, setEdit] = React.useState(null);    // projet en cours d'édition
+  const [expense, setExpense] = React.useState(null); // projet pour lequel on saisit une dépense
+  const [accounts, setAccounts] = React.useState([]);   // sous-comptes (pour la dépense)
+  const [currencies, setCurrencies] = React.useState([]);
+  const [defCur, setDefCur] = React.useState("");
 
   const load = React.useCallback(async () => {
     try {
@@ -1435,6 +1446,23 @@ function Analytique() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  // Comptes + devises pour la saisie de dépense (best-effort, n'empêche pas l'écran).
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const [acc, cur, set] = await Promise.allSettled([api.accounts(), api.currencies(), api.setting()]);
+        if (acc.status === "fulfilled") setAccounts(asArray(acc.value, "balances"));
+        const curList = cur.status === "fulfilled" ? (cur.value?.getAllCurrency || (Array.isArray(cur.value) ? cur.value : [])) : [];
+        setCurrencies(curList);
+        const sId = set.status === "fulfilled" ? set.value?.currencyId : null;
+        setDefCur(sId != null ? String(sId) : (curList[0] ? String(curList[0].currencyId ?? curList[0].id) : ""));
+      } catch { /* ignore : la saisie reste possible mais sans listes */ }
+    })();
+  }, []);
+
+  const expenseAccounts = accounts.filter((a) => accountType(a) === "Expense");
+  const treasuryAccounts = accounts.filter((a) => accountType(a) !== "Expense" && accountType(a) !== "Revenue");
+
   const newProject = () => setShowNew(true);
   const submitProject = async (form) => {
     const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
@@ -1446,6 +1474,51 @@ function Analytique() {
     } catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
+
+  // Modifier un projet (permission backend : update-transaction → 403 sinon).
+  const submitEdit = async (form) => {
+    setBusy(true); setError("");
+    try {
+      await api.updateProject(edit.id, {
+        name: form.name,
+        donor: form.donor || null,
+        budgetAmount: form.budget ? Number(String(form.budget).replace(/\s/g, "")) : null,
+      });
+      setEdit(null);
+      await load();
+    } catch (e) { setError(permError(e, "modifier le projet")); }
+    finally { setBusy(false); }
+  };
+
+  // Ajouter une dépense au projet SANS modifier le projet
+  // (permission backend : create-transaction ; écriture portant project_id).
+  const submitExpense = async (form) => {
+    const amount = Number(String(form.amount).replace(/\s/g, ""));
+    if (!amount || amount <= 0) { setError("Le montant doit être positif."); return; }
+    if (!form.expenseId || !form.creditId) { setError("Choisir le compte de charge et le compte de trésorerie."); return; }
+    if (!form.currencyId) { setError("La devise est obligatoire."); return; }
+    setBusy(true); setError("");
+    try {
+      await api.createLedgerEntry({
+        date: new Date(form.date).toISOString(),
+        particulars: form.particulars || `Dépense projet : ${expense.name}`,
+        currencyId: Number(form.currencyId),
+        sourceModule: "comptabilite",
+        lines: [
+          // La charge porte le project_id → remonte dans le rapport analytique.
+          { accountId: Number(form.expenseId), side: "DEBIT", amount, projectId: expense.id },
+          { accountId: Number(form.creditId), side: "CREDIT", amount },
+        ],
+      });
+      setExpense(null);
+      await load();
+    } catch (e) { setError(permError(e, "ajouter une dépense")); }
+    finally { setBusy(false); }
+  };
+
+  const curField = { key: "currencyId", label: "Devise", type: "select", required: true,
+    options: currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: c.code || c.name || c.symbol || String(c.currencyId ?? c.id) })), default: defCur };
+
   const projectModal = showNew && (
     <FormModal
       title="Nouveau projet"
@@ -1461,6 +1534,41 @@ function Analytique() {
       ]}
     />
   );
+  const editModal = edit && (
+    <FormModal
+      title="Modifier le projet"
+      subtitle="Nom, financeur et budget"
+      submitLabel="Enregistrer"
+      busy={busy}
+      onClose={() => setEdit(null)}
+      onSubmit={submitEdit}
+      fields={[
+        { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
+        { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
+        { key: "budget", label: "Budget (optionnel)", type: "number", default: edit.budgetAmount != null ? String(edit.budgetAmount) : "" },
+      ]}
+    />
+  );
+  const expenseModal = expense && (
+    <FormModal
+      title={`Dépense — ${expense.name}`}
+      subtitle="Écriture imputée au projet (n'altère pas le projet)"
+      submitLabel="Enregistrer la dépense"
+      busy={busy}
+      onClose={() => setExpense(null)}
+      onSubmit={submitExpense}
+      fields={[
+        { key: "date", label: "Date", type: "date", default: new Date().toISOString().slice(0, 10), required: true },
+        { key: "particulars", label: "Libellé", default: "" },
+        { key: "amount", label: "Montant", type: "number", required: true },
+        curField,
+        { key: "expenseId", label: "Compte de charge (débit)", type: "select", required: true,
+          options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+        { key: "creditId", label: "Payé depuis (caisse/banque)", type: "select", required: true,
+          options: treasuryAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
+      ]}
+    />
+  );
 
   // Aucun projet réel (ou API indispo) : ne pas afficher de fausses consommations.
   if (projects && projects.length === 0) {
@@ -1470,6 +1578,8 @@ function Analytique() {
         {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}><b>API projets indisponible.</b> <span className="tiny">{error}</span></div>}
         <EmptyState title="Aucun projet analytique" detail="Les rapports financeurs s'afficheront après création de projets et écritures portant un project_id." action="Nouveau projet" onAction={newProject} icon="pieChart" />
         {projectModal}
+        {editModal}
+        {expenseModal}
       </>
     );
   }
@@ -1490,6 +1600,10 @@ function Analytique() {
               <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
+                <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>
+              </div>
             </div>
           );
         })}
@@ -1509,6 +1623,8 @@ function Analytique() {
         <p className="tiny" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}><Icon name="info" style={{ width: 13, height: 13 }} /> Chiffres calculés depuis le grand livre (écritures portant le project_id) → rapport financeur en temps réel.</p>
       </div>
       {projectModal}
+      {editModal}
+      {expenseModal}
     </>
   );
 }
@@ -2177,6 +2293,8 @@ function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy,
         <div className="form-grid">
           {fields.map((f) => f.type === "textarea"
             ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : f.type === "select"
+            ? <label className="field" key={f.key}><span>{f.label}</span><select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
             : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}
         </div>
         <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : submitLabel}</button></div>

@@ -71,7 +71,9 @@ export const api = {
   // ── Projets / Bailleurs (analytique) ─────────────────────────────────
   projects: () => jsonFetch("/projects"),
   createProject: (body) => jsonFetch("/projects", { method: "POST", body: JSON.stringify(body) }),
+  updateProject: (id, body) => jsonFetch(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   projectReport: (id) => jsonFetch(`/projects/${id}/report`),
+  createLedgerEntry: (body) => jsonFetch("/ledger", { method: "POST", body: JSON.stringify(body) }),
   reverseEntry: (id, reason) => jsonFetch(`/ledger/${id}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }),
 
   // ── Approbations (gate + workflow) ───────────────────────────────────
