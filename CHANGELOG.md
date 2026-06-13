@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **HR — page blanche `ReferenceError: statusChip is not defined` (SCRUM)** : le composant `ProjetsONG` utilisait `statusChip(...)` (colonnes Statut des tableaux Projets et Affectations) alors que ce helper n'est défini **localement** que dans `Employee360ProfileModal` et `SelfService` — il n'était pas dans le scope de `ProjetsONG` → crash au rendu. Le bug était **masqué tant que la table projets HR était vide** (`projects.map` ne s'exécutait pas) ; il s'est déclenché dès que les projets du registre partagé sont remontés dans HR (feature 3.60.0). Remplacé les deux appels par le pattern global déjà utilisé partout : `<span className={"chip " + chipForStatus(status)}>{statusLabel(status)}</span>` (helpers `chipForStatus`/`statusLabel` en scope module). [3.61.1]
+
 ### Changed
 - **Comptabilité/Analytique — rapport projet ventilé par devise (SIFA)** : `ProjectsService.ledgerReport` ne sommait plus correctement quand un projet mélangeait plusieurs devises (`totalExpenses` additionnait CDF+USD → faux). Désormais le grand livre est groupé par `(account_id, journal_entries.currency_id)` avec join `currency` ; sortie **`byCurrency[]`** = un bucket par devise `{ currencyId, currencyCode, expenses[], revenue[], totalExpenses, totalRevenue, net }`, **jamais d'addition inter-devises**. Les coûts de maintenance non comptabilisés (`maintenanceCostsMissingFromLedger`) sont aussi ventilés par devise et ajoutés dans leur bucket. La **consommation budget** (`consumptionPct`) est comparée uniquement dans la **devise du budget** (`project.currencyId`). Champs plats (`totalExpenses`/`revenue`/`net`/`currencyCode`) conservés pour compat = devise du budget (ou devise unique). Frontend : carte affiche « Dépensé <montant> <devise> » par devise ; tableau « Produits & charges » a une colonne **Devise** avec une ligne par (projet, devise). [3.61.0]
 
