@@ -1468,7 +1468,7 @@ function Analytique() {
     const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
     setBusy(true);
     try {
-      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount });
+      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount, currencyId: form.currencyId ? Number(form.currencyId) : undefined });
       setShowNew(false);
       await load();
     } catch (e) { setError(String(e.message || e)); }
@@ -1483,6 +1483,7 @@ function Analytique() {
         name: form.name,
         donor: form.donor || null,
         budgetAmount: form.budget ? Number(String(form.budget).replace(/\s/g, "")) : null,
+        currencyId: form.currencyId ? Number(form.currencyId) : undefined,
       });
       setEdit(null);
       await load();
@@ -1531,6 +1532,7 @@ function Analytique() {
         { key: "name", label: "Nom du projet", required: true },
         { key: "donor", label: "Financeur (optionnel)" },
         { key: "budget", label: "Budget (optionnel)", type: "number" },
+        { ...curField, label: "Devise du budget", required: false },
       ]}
     />
   );
@@ -1546,6 +1548,7 @@ function Analytique() {
         { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
         { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
         { key: "budget", label: "Budget (optionnel)", type: "number", default: edit.budgetAmount != null ? String(edit.budgetAmount) : "" },
+        { ...curField, label: "Devise du budget", required: false, default: edit.currencyId != null ? String(edit.currencyId) : defCur },
       ]}
     />
   );
@@ -1599,7 +1602,7 @@ function Analytique() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
               <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)} {curCode(currencies, p.currencyId) || CUR}</span><span>Budget {r && r.budget ? `${nf.format(r.budget)} ${curCode(currencies, p.currencyId) || CUR}` : "—"}</span></div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
                 <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>

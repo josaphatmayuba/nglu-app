@@ -21,5 +21,6 @@ export class UpdateProjectDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() startDate?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() endDate?: string;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) budgetAmount?: number;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() currencyId?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() status?: string;
 }

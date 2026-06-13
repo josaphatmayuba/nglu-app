@@ -225,6 +225,7 @@ export class ProjectsService {
         ...(input.startDate !== undefined ? { startDate: new Date(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: new Date(input.endDate) } : {}),
         ...(input.budgetAmount !== undefined ? { budgetAmount: String(input.budgetAmount) } : {}),
+        ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       })
       .where(and(eq(projects.id, id), eq(projects.organizationId, orgId)));
