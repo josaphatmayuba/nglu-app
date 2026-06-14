@@ -841,6 +841,13 @@
       "when": 1780444800000,
       "tag": "0143_merge_currency_duplicates",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "5",
+      "when": 1780448400000,
+      "tag": "0144_legacy_null_currency_usd",
+      "breakpoints": true
     }
   ]
 }

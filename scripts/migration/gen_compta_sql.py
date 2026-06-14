@@ -46,7 +46,8 @@ CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND statu
 
 
 def cur_sub(devise_id):
-    return {"1": CUR_CDF, "2": CUR_USD}.get(devise_id, "NULL")
+    # Legacy rule: if no devise was recorded on an imported amount, it is USD.
+    return {"1": CUR_CDF, "2": CUR_USD}.get(devise_id, CUR_USD)
 
 
 # account legacy -> account dev existant (par nature). None = a inserer en id auto.

@@ -313,7 +313,8 @@ def currency_expr(legacy_devise_id, salary=None):
         return "2"
     if salary is not None and float(salary) >= 1000:
         return "1"
-    return "NULL"
+    # Legacy rule: if no devise was recorded on an imported amount, it is USD.
+    return "2"
 
 
 def salary_start(u):
