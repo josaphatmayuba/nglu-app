@@ -174,10 +174,26 @@ def emit_transaction_types(sql):
 
 def emit_journal(sql):
     tx = [t for t in rows_as_dicts(sql, "transaction") if t.get("status") == "true"]
-    out(f"-- === journal_entries + journal_entry_lines ({len(tx)} transactions actives) ===")
+    # Dedup metier : deux ecritures legacy avec le meme (montant, devise, date)
+    # sont des doublons -> on n'en copie qu'une seule (la 1re rencontree).
+    seen = set()
+    deduped = []
+    skipped = 0
+    for t in tx:
+        key = (str(t["amount"]), str(t.get("device_id")), str(t["date"]))
+        if key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        deduped.append(t)
+    tx = deduped
+    out(f"-- === journal_entries + journal_entry_lines ({len(tx)} transactions actives, "
+        f"{skipped} doublon(s) montant+devise+date ignore(s)) ===")
     out("-- 1 tx = 1 entry + 2 lines (deja equilibree). account_id = NEW subAccount id (via map).")
     out("-- side en MAJUSCULES (convention code). Idempotent via idempotency_key.")
     out("-- Statements autonomes : la ligne retrouve son entry par idempotency_key (pas de @var).")
+    out("-- Dedup metier: 1 seule ecriture par (montant, devise, date) ; le NOT EXISTS de chaque entry")
+    out("-- protege aussi au rejeu contre une ecriture deja presente avec memes montant+devise+date.")
     for t in tx:
         cur = cur_sub(t.get("device_id"))
         amount = t["amount"]
@@ -188,11 +204,15 @@ def emit_journal(sql):
         debit_legacy = t["debit_id"]
         credit_legacy = t["credit_id"]
         related = t["id"]
-        # 1) l'entry (idempotent par idempotency_key)
+        # 1) l'entry : idempotent par idempotency_key ET dedup par (montant, devise, date).
+        #    Le 2e NOT EXISTS empeche d'ajouter un doublon meme si une autre entry
+        #    (autre idempotency_key) a deja les memes montant+devise+date.
         out(f"INSERT INTO journal_entries "
             f"(organization_id, date, particulars, source_module, related_id, status, currency_id, total_debit, total_credit, idempotency_key, created_at) "
             f"SELECT 1, {q(date)}, {q(particulars)}, 'legacy_migration', {q(related)}, 'posted', {cur}, {amount}, {amount}, {q(idem)}, NOW() "
-            f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE idempotency_key = {q(idem)});")
+            f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE idempotency_key = {q(idem)}) "
+            f"AND NOT EXISTS (SELECT 1 FROM journal_entries d WHERE d.date={q(date)} AND d.total_debit={amount} "
+            f"AND d.currency_id={cur});")
         bp()
         # 2) ligne DEBIT : retrouve l'entry par sa cle, idempotent par (entry_id, side)
         out(f"INSERT INTO journal_entry_lines (entry_id, organization_id, account_id, side, amount, created_at) "
