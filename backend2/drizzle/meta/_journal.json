@@ -869,6 +869,13 @@
       "when": 1780459200000,
       "tag": "0147_journal_entries_orphan_currency_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "5",
+      "when": 1780462800000,
+      "tag": "0148_journal_entries_nullcode_currency_usd",
+      "breakpoints": true
     }
   ]
 }
