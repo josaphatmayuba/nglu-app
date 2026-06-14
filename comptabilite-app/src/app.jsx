@@ -985,6 +985,7 @@ function GrandLivre({ curFilter, dateRange }) {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
+  const [visible, setVisible] = React.useState(20); // nb de lignes affichées (évite de rendre ~1000 lignes d'un coup → freeze UI)
   const ledgerParams = React.useMemo(() => ({
     startDate: dateRange?.from || undefined,
     endDate: dateRange?.to || undefined,
@@ -1013,7 +1014,16 @@ function GrandLivre({ curFilter, dateRange }) {
   const reverse = async ({ reason }) => {
     if (!reason || !reverseId) return;
     setBusy(true);
-    try { await api.reverseEntry(reverseId, reason); setReverseId(null); await load(); }
+    try {
+      const res = await api.reverseEntry(reverseId, reason);
+      // MAJ locale (pas de rechargement des ~1000 lignes → évite le freeze UI après submit) :
+      // l'écriture originale devient « contre-passée » (badge + bouton masqué). La ligne de
+      // contre-passation apparaîtra au prochain « Rafraîchir ».
+      const revId = res?.reversalEntryId ?? null;
+      setAllEntries((cur) => (cur || []).map((e) =>
+        e.id === reverseId ? { ...e, status: "reversed", reversedById: revId, reason } : e));
+      setReverseId(null);
+    }
     catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
@@ -1035,12 +1045,12 @@ function GrandLivre({ curFilter, dateRange }) {
       <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} écriture(s)` : "Chargement…"}</span></div>
+        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${Math.min(visible, entries.length)} / ${entries.length} écriture(s)` : "Chargement…"}</span></div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {(entries || []).map((e) => (
+              {(entries || []).slice(0, visible).map((e) => (
                 <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
                   <td>{(e.date || "").slice(0, 10)}</td>
                   <td className="muted">{e.reference || `#${e.id}`}</td>
@@ -1057,6 +1067,11 @@ function GrandLivre({ curFilter, dateRange }) {
             </tbody>
           </table>
         </div>
+        {entries && entries.length > visible && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" onClick={() => setVisible((v) => v + 20)}>Afficher plus ({entries.length - visible} restantes)</button>
+          </div>
+        )}
       </div>
       {reverseId != null && (
         <FormModal
