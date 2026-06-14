@@ -876,6 +876,13 @@
       "when": 1780462800000,
       "tag": "0148_journal_entries_nullcode_currency_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "5",
+      "when": 1780466400000,
+      "tag": "0149_expense_subaccounts_regroup",
+      "breakpoints": true
     }
   ]
 }
