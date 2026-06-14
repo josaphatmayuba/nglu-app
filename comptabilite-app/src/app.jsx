@@ -695,6 +695,8 @@ function Ecritures({ transactions, onNew, canMutate }) {
   const [q, setQ] = React.useState("");
   const [journal, setJournal] = React.useState("");
   const [statut, setStatut] = React.useState("");
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
   const rows = (transactions || []).map((t) => ({
     date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
     journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
@@ -709,10 +711,14 @@ function Ecritures({ transactions, onNew, canMutate }) {
   // Journaux réellement présents dans les données (pas une liste figée).
   const journaux = Array.from(new Set(rows.map((r) => r.journal).filter(Boolean))).sort();
   const needle = q.trim().toLowerCase();
+  const min = minMt === "" ? null : Number(minMt);
+  const max = maxMt === "" ? null : Number(maxMt);
   const list = rows.filter((r) =>
     (!needle || `${r.label ?? ""} ${r.reference ?? ""}`.toLowerCase().includes(needle)) &&
     (!journal || r.journal === journal) &&
-    (!statut || r.status === statut)
+    (!statut || r.status === statut) &&
+    (min == null || r.amount >= min) &&
+    (max == null || r.amount <= max)
   );
   return (
     <>
@@ -742,6 +748,8 @@ function Ecritures({ transactions, onNew, canMutate }) {
             <option value="Validée">Validée</option>
             <option value="Brouillon">Brouillon</option>
           </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 620 }}>
@@ -1013,6 +1021,8 @@ function GrandLivre({ curFilter, dateRange }) {
   const [q, setQ] = React.useState("");
   const [module, setModule] = React.useState("");
   const [statut, setStatut] = React.useState("");
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
   const ledgerParams = React.useMemo(() => ({
     startDate: dateRange?.from || undefined,
     endDate: dateRange?.to || undefined,
@@ -1042,13 +1052,18 @@ function GrandLivre({ curFilter, dateRange }) {
   const entries = React.useMemo(() => {
     if (allEntries === null) return null;
     const needle = q.trim().toLowerCase();
-    return allEntries.filter((e) =>
-      (!curFilter || String(e?.currencyCode ?? "") === curFilter) &&
+    const min = minMt === "" ? null : Number(minMt);
+    const max = maxMt === "" ? null : Number(maxMt);
+    return allEntries.filter((e) => {
+      const mt = Number(e.totalDebit ?? 0);
+      return (!curFilter || String(e?.currencyCode ?? "") === curFilter) &&
       (!needle || `${e.particulars ?? ""} ${e.reference ?? ""} #${e.id ?? ""}`.toLowerCase().includes(needle)) &&
       (!module || e.sourceModule === module) &&
-      (!statut || statusOf(e) === statut)
-    );
-  }, [allEntries, curFilter, q, module, statut]);
+      (!statut || statusOf(e) === statut) &&
+      (min == null || mt >= min) &&
+      (max == null || mt <= max);
+    });
+  }, [allEntries, curFilter, q, module, statut, minMt, maxMt]);
 
   const reverse = async ({ reason }) => {
     if (!reason || !reverseId) return;
@@ -1103,6 +1118,8 @@ function GrandLivre({ curFilter, dateRange }) {
             <option value="contre-passée">contre-passée</option>
             <option value="contre-passation">contre-passation</option>
           </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
