@@ -107,40 +107,58 @@ export class LedgerController {
     @CurrentRoleId() roleId: number,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
   ) {
-    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0, roleId);
+    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0, roleId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Soldes par sous-compte (grand livre moderne)" })
   @ApiOkResponse({ description: "Soldes" })
   @Permissions("readAll-transaction")
   @Get("balances")
-  balances(@CurrentOrg() orgId: number) {
-    return this.ledger.subAccountBalances(orgId);
+  balances(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.subAccountBalances(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Balance generale (trial balance) moderne" })
   @ApiOkResponse({ description: "Trial balance" })
   @Permissions("readAll-transaction")
   @Get("trial-balance")
-  trialBalance(@CurrentOrg() orgId: number) {
-    return this.ledger.trialBalance(orgId);
+  trialBalance(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.trialBalance(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Compte de resultat moderne (produits - charges)" })
   @ApiOkResponse({ description: "Income statement" })
   @Permissions("readAll-transaction")
   @Get("income-statement")
-  incomeStatement(@CurrentOrg() orgId: number) {
-    return this.ledger.incomeStatement(orgId);
+  incomeStatement(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.incomeStatement(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Bilan moderne (actif = passif + capitaux propres)" })
   @ApiOkResponse({ description: "Balance sheet" })
   @Permissions("readAll-transaction")
   @Get("balance-sheet")
-  balanceSheet(@CurrentOrg() orgId: number) {
-    return this.ledger.balanceSheet(orgId);
+  balanceSheet(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.balanceSheet(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Liste des modules exigeant une approbation avant comptabilisation" })
@@ -202,8 +220,10 @@ export class LedgerController {
     @Param("accountId", ParseIntPipe) accountId: number,
     @CurrentOrg() orgId: number,
     @CurrentRoleId() roleId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
   ) {
-    return this.ledger.ledgerForAccount(accountId, orgId, roleId);
+    return this.ledger.ledgerForAccount(accountId, orgId, roleId, { startDate, endDate });
   }
 
   // ─── Echange de devise (modele bancaire) ────────────────────────────────────

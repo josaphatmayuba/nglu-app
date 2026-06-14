@@ -219,6 +219,30 @@ function Toaster() {
 const txRev = (t) => /revenue|produit|vente|sales|don|subvention|loyer|rental|locatif/i.test(`${t.credit?.name || t.creditAccountName || ""}`);
 const txExp = (t) => /charge|expense|salaire|salary|achat|purchase|frais|cost|carburant|maintenance|fourniture/i.test(`${t.debit?.name || t.debitAccountName || ""}`);
 const monthKey = (d) => String(d || "").slice(0, 7);
+const DAY_MS = 86400000;
+const isoDate = (d) => d.toISOString().slice(0, 10);
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+function presetRange(preset) {
+  const today = startOfToday();
+  const end = isoDate(today);
+  if (preset === "all") return { from: "", to: "" };
+  if (preset === "today") return { from: end, to: end };
+  if (preset === "7d") return { from: isoDate(new Date(today.getTime() - 6 * DAY_MS)), to: end };
+  if (preset === "30d") return { from: isoDate(new Date(today.getTime() - 29 * DAY_MS)), to: end };
+  if (preset === "quarter") {
+    const q = Math.floor(today.getMonth() / 3) * 3;
+    return { from: isoDate(new Date(today.getFullYear(), q, 1)), to: end };
+  }
+  if (preset === "year") return { from: isoDate(new Date(today.getFullYear(), 0, 1)), to: end };
+  return { from: "", to: "" };
+}
+function defaultDateRange() {
+  return { preset: "custom", from: "2022-01-01", to: isoDate(startOfToday()) };
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -229,6 +253,24 @@ function useIsMobile() {
     return () => window.removeEventListener("resize", on);
   }, []);
   return m;
+}
+
+function DateRangeFilter({ value, onChange }) {
+  const current = value || defaultDateRange();
+  const presets = [["today", "Aujourd'hui"], ["7d", "7 j"], ["30d", "30 j"], ["quarter", "Trim."], ["year", "Annee"], ["all", "Tout"]];
+  const setPreset = (preset) => onChange({ preset, ...presetRange(preset) });
+  const setCustom = (patch) => onChange({ ...current, preset: "custom", ...patch });
+  return (
+    <div className="date-filter">
+      <div className="date-presets">
+        {presets.map(([id, label]) => (
+          <button key={id} type="button" className={`date-preset ${current.preset === id ? "active" : ""}`} onClick={() => setPreset(id)}>{label}</button>
+        ))}
+      </div>
+      <label><span>Du</span><input type="date" value={current.from || ""} onChange={(e) => setCustom({ from: e.target.value })} /></label>
+      <label><span>Au</span><input type="date" value={current.to || ""} onChange={(e) => setCustom({ to: e.target.value })} /></label>
+    </div>
+  );
 }
 
 /* ── Petits composants ─────────────────────────────────────────────────── */
@@ -288,17 +330,22 @@ function App() {
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
   const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyId (string)
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange());
   const isMobile = useIsMobile();
+  const dateParams = React.useMemo(() => ({
+    startDate: dateRange.from || undefined,
+    endDate: dateRange.to || undefined,
+  }), [dateRange.from, dateRange.to]);
 
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.ledgerEntries(),
-      api.ledgerBalances(),
+      api.ledgerEntries({ ...dateParams, limit: 1000 }),
+      api.ledgerBalances(dateParams),
       api.mainAccounts(),
-      api.ledgerTrialBalance(),
-      api.ledgerBalanceSheet(),
-      api.ledgerIncomeStatement(),
+      api.ledgerTrialBalance(dateParams),
+      api.ledgerBalanceSheet(dateParams),
+      api.ledgerIncomeStatement(dateParams),
       api.setting(),
       api.currencies(),
     ])
@@ -321,7 +368,7 @@ function App() {
         setApiStatus([entries, balances, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
       })
       .catch(() => setApiStatus("local"));
-  }, []);
+  }, [dateParams]);
   React.useEffect(() => load(), [load]);
   const me = getUser();
   const myInitials = initialsOf(me.name);
@@ -381,7 +428,7 @@ function App() {
     ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
-    grandlivre: <GrandLivre curFilter={curFilter} />,
+    grandlivre: <GrandLivre curFilter={curFilter} dateRange={dateRange} />,
     plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
     tiers: <Tiers accounts={fc.accounts} />,
     tresorerie: <Tresorerie accounts={fc.accounts} />,
@@ -392,7 +439,7 @@ function App() {
     capacite: <Capacite accounts={fc.accounts} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
-    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} curFilter={curFilter} />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} tb={fc.trialBalance} curFilter={curFilter} />,
     tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
@@ -426,7 +473,8 @@ function App() {
 
       <main className="main">
         <div className="content">
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
               <Icon name="landmark" style={{ width: 14, height: 14 }} /> Devise
               <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
@@ -932,21 +980,26 @@ function Approbations({ canMutate }) {
   );
 }
 
-function GrandLivre({ curFilter }) {
+function GrandLivre({ curFilter, dateRange }) {
   const [allEntries, setAllEntries] = React.useState(null); // null = chargement
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const ledgerParams = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    limit: 1000,
+  }), [dateRange?.from, dateRange?.to]);
 
   const load = React.useCallback(async () => {
     try {
       setError("");
-      const rows = await api.ledgerEntries();
+      const rows = await api.ledgerEntries(ledgerParams);
       setAllEntries(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setError(String(e.message || e));
       setAllEntries([]);
     }
-  }, []);
+  }, [ledgerParams]);
   React.useEffect(() => { load(); }, [load]);
 
   // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion).
@@ -2009,18 +2062,10 @@ function Stock() {
 }
 
 /* ── États financiers ──────────────────────────────────────────────────── */
-function Etats({ is, bs, curFilter = "" }) {
+function Etats({ is, bs, tb, curFilter = "" }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
   // États réels depuis le grand livre moderne.
-  const [rawIs, setRawIs] = React.useState(null);
-  const [rawBs, setRawBs] = React.useState(null);
-  const [rawTb, setRawTb] = React.useState(null);
-  React.useEffect(() => {
-    api.ledgerIncomeStatement().then(setRawIs).catch(() => setRawIs(null));
-    api.ledgerBalanceSheet().then(setRawBs).catch(() => setRawBs(null));
-    api.ledgerTrialBalance().then(setRawTb).catch(() => setRawTb(null));
-  }, []);
   // Filtre devise global (SIFA, sans conversion) : on restreint chaque liste du rapport
   // — lignes ET totaux *ByCurrency — à la devise choisie. Les scalaires (totaux toutes
   // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
@@ -2031,9 +2076,9 @@ function Etats({ is, bs, curFilter = "" }) {
     Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
     return out;
   }, [curFilter]);
-  const liveIs = React.useMemo(() => filterReport(rawIs), [rawIs, filterReport]);
-  const liveBs = React.useMemo(() => filterReport(rawBs), [rawBs, filterReport]);
-  const liveTb = React.useMemo(() => filterReport(rawTb), [rawTb, filterReport]);
+  const liveIs = React.useMemo(() => filterReport(is), [is, filterReport]);
+  const liveBs = React.useMemo(() => filterReport(bs), [bs, filterReport]);
+  const liveTb = React.useMemo(() => filterReport(tb), [tb, filterReport]);
   const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
   const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
   const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);

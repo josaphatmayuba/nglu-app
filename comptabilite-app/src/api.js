@@ -35,6 +35,15 @@ async function jsonFetch(path, init = {}, retried = false) {
   return text ? JSON.parse(text) : null;
 }
 
+function withQuery(path, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") qs.set(key, String(value));
+  });
+  const suffix = qs.toString();
+  return suffix ? `${path}${path.includes("?") ? "&" : "?"}${suffix}` : path;
+}
+
 export const api = {
   setting: () => jsonFetch("/setting"),
   currencies: () => jsonFetch("/currency?query=all"),
@@ -53,13 +62,13 @@ export const api = {
   deleteType: (type) => jsonFetch(`/ledger/type-rules/${encodeURIComponent(type)}/delete`, { method: "POST" }),
 
   // ── Grand livre moderne (partie double) ──────────────────────────────
-  ledgerEntries: () => jsonFetch("/ledger"),
+  ledgerEntries: (params) => jsonFetch(withQuery("/ledger", params)),
   ledgerEntry: (id) => jsonFetch(`/ledger/${id}`),
-  ledgerBalances: () => jsonFetch("/ledger/balances"),
+  ledgerBalances: (params) => jsonFetch(withQuery("/ledger/balances", params)),
   ledgerAccount: (accountId) => jsonFetch(`/ledger/account/${accountId}`),
-  ledgerTrialBalance: () => jsonFetch("/ledger/trial-balance"),
-  ledgerIncomeStatement: () => jsonFetch("/ledger/income-statement"),
-  ledgerBalanceSheet: () => jsonFetch("/ledger/balance-sheet"),
+  ledgerTrialBalance: (params) => jsonFetch(withQuery("/ledger/trial-balance", params)),
+  ledgerIncomeStatement: (params) => jsonFetch(withQuery("/ledger/income-statement", params)),
+  ledgerBalanceSheet: (params) => jsonFetch(withQuery("/ledger/balance-sheet", params)),
   ledgerPeriods: () => jsonFetch("/ledger/periods"),
 
   // ── Échange de devise (modèle bancaire : vrais montants + taux réel) ──

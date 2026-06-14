@@ -53,6 +53,11 @@ export interface PostEntryInput {
   lines: LedgerLineInput[];
 }
 
+export interface LedgerDateRange {
+  startDate?: string;
+  endDate?: string;
+}
+
 @Injectable()
 export class LedgerService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -60,6 +65,13 @@ export class LedgerService {
   /** Convertit en centimes entiers pour comparer sans erreur de flottant. */
   private cents(n: number): number {
     return Math.round(n * 100);
+  }
+
+  private dateRangeConditions(range?: LedgerDateRange) {
+    const conditions = [];
+    if (range?.startDate) conditions.push(sql`DATE(${journalEntries.date}) >= ${range.startDate}`);
+    if (range?.endDate) conditions.push(sql`DATE(${journalEntries.date}) <= ${range.endDate}`);
+    return conditions;
   }
 
   /**
@@ -335,16 +347,13 @@ export class LedgerService {
   }
 
   /** Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete). */
-  async findAll(orgId: number, limit = 50, offset = 0, roleId?: number) {
+  async findAll(orgId: number, limit = 50, offset = 0, roleId?: number, range?: LedgerDateRange) {
     const canViewReversed = await this.roleCanViewReversed(roleId);
-    const where = canViewReversed
-      ? eq(journalEntries.organizationId, orgId)
-      : and(
-          eq(journalEntries.organizationId, orgId),
-          // Masque l'originale contre-passee ET sa contre-passation.
-          sql`${journalEntries.status} <> 'reversed'`,
-          sql`${journalEntries.reversalOfId} is null`,
-        );
+    const conditions = [eq(journalEntries.organizationId, orgId), ...this.dateRangeConditions(range)];
+    if (!canViewReversed) {
+      // Masque l'originale contre-passee ET sa contre-passation.
+      conditions.push(sql`${journalEntries.status} <> 'reversed'`, sql`${journalEntries.reversalOfId} is null`);
+    }
     return this.db
       .select({
         id: journalEntries.id,
@@ -365,7 +374,7 @@ export class LedgerService {
       })
       .from(journalEntries)
       .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
-      .where(where)
+      .where(and(...conditions))
       .orderBy(desc(journalEntries.date), desc(journalEntries.id))
       .limit(limit)
       .offset(offset);
@@ -374,21 +383,18 @@ export class LedgerService {
   /**
    * Grand livre d'un compte : toutes ses lignes + solde courant (debit - credit cumule).
    */
-  async ledgerForAccount(accountId: number, orgId: number, roleId?: number) {
+  async ledgerForAccount(accountId: number, orgId: number, roleId?: number, range?: LedgerDateRange) {
     const canViewReversed = await this.roleCanViewReversed(roleId);
+    const conditions = [
+      eq(journalEntryLines.accountId, accountId),
+      eq(journalEntryLines.organizationId, orgId),
+      ...this.dateRangeConditions(range),
+    ];
+    if (!canViewReversed) {
+      conditions.push(sql`${journalEntries.status} <> 'reversed'`, sql`${journalEntries.reversalOfId} is null`);
+    }
     // Sans permission : on masque l'originale contre-passee ET sa contre-passation
     // ensemble — leur effet net etant nul, le solde courant reste juste.
-    const where = canViewReversed
-      ? and(
-          eq(journalEntryLines.accountId, accountId),
-          eq(journalEntryLines.organizationId, orgId),
-        )
-      : and(
-          eq(journalEntryLines.accountId, accountId),
-          eq(journalEntryLines.organizationId, orgId),
-          sql`${journalEntries.status} <> 'reversed'`,
-          sql`${journalEntries.reversalOfId} is null`,
-        );
     const rows = await this.db
       .select({
         entryId: journalEntryLines.entryId,
@@ -401,7 +407,7 @@ export class LedgerService {
       })
       .from(journalEntryLines)
       .innerJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
-      .where(where)
+      .where(and(...conditions))
       .orderBy(journalEntries.date, journalEntryLines.id);
 
     let balanceCents = 0;
@@ -418,7 +424,7 @@ export class LedgerService {
    * Equivalent moderne de accounts.subAccountBalances() (table plate) — sert de base
    * a la bascule des rapports (Phase 4). balance = somme(debit) - somme(credit).
    */
-  async subAccountBalances(orgId: number) {
+  async subAccountBalances(orgId: number, range?: LedgerDateRange) {
     // Une ligne par (sous-compte x devise) : aucune conversion, chaque devise
     // a son propre solde. La devise est portee par l'en-tete journal_entries.
     const rows = await this.db
@@ -433,17 +439,12 @@ export class LedgerService {
         totalDebit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
         totalCredit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
       })
-      .from(subAccounts)
+      .from(journalEntryLines)
+      .innerJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
+      .innerJoin(subAccounts, eq(subAccounts.id, journalEntryLines.accountId))
       .leftJoin(accounts, eq(accounts.id, subAccounts.accountId))
-      .leftJoin(
-        journalEntryLines,
-        and(
-          eq(journalEntryLines.accountId, subAccounts.id),
-          eq(journalEntryLines.organizationId, orgId),
-        ),
-      )
-      .leftJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
       .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
+      .where(and(eq(journalEntryLines.organizationId, orgId), ...this.dateRangeConditions(range)))
       .groupBy(subAccounts.id, journalEntries.currencyId)
       .orderBy(desc(subAccounts.id));
 
@@ -472,8 +473,8 @@ export class LedgerService {
    * Balance generale (trial balance) moderne : debits/credits par sous-compte
    * a partir du grand livre. match = true si total debit == total credit.
    */
-  async trialBalance(orgId: number) {
-    const items = await this.subAccountBalances(orgId);
+  async trialBalance(orgId: number, range?: LedgerDateRange) {
+    const items = await this.subAccountBalances(orgId, range);
     const debits = items.filter((i) => i.balance > 0);
     const credits = items.filter((i) => i.balance < 0);
     // Totaux par devise : on ne somme jamais deux devises ensemble (pas de conversion).
@@ -541,8 +542,8 @@ export class LedgerService {
    * Produits (Revenue, solde crediteur) - Charges (Expense, solde debiteur) = resultat net.
    * Convention balance = debit - credit : charges > 0, produits < 0 (on affiche en valeur positive).
    */
-  async incomeStatement(orgId: number) {
-    const items = await this.subAccountBalances(orgId);
+  async incomeStatement(orgId: number, range?: LedgerDateRange) {
+    const items = await this.subAccountBalances(orgId, range);
     const revenue = items
       .filter((i) => i.accountType === "Revenue" && i.balance !== 0)
       .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(-i.balance) }));
@@ -563,8 +564,8 @@ export class LedgerService {
    * Actif (solde debiteur) = Passif + Capitaux propres + resultat de l'exercice.
    * Le resultat net (produits - charges) est integre aux capitaux propres pour equilibrer.
    */
-  async balanceSheet(orgId: number) {
-    const items = await this.subAccountBalances(orgId);
+  async balanceSheet(orgId: number, range?: LedgerDateRange) {
+    const items = await this.subAccountBalances(orgId, range);
     const assets = items
       .filter((i) => i.accountType === "Asset" && i.balance !== 0)
       .map((i) => ({ id: i.id, account: i.account, subAccount: i.subAccount, ...this.currencyOf(i), amount: this.round2(i.balance) }));
@@ -582,7 +583,7 @@ export class LedgerService {
     const totalLiabilities = this.round2(liabilities.reduce((t, i) => t + i.amount, 0));
     const equityBase = this.round2(equity.reduce((t, i) => t + i.amount, 0));
     // Resultat de l'exercice (produits - charges), rattache aux capitaux propres.
-    const { netIncome } = await this.incomeStatement(orgId);
+    const { netIncome } = await this.incomeStatement(orgId, range);
     const totalEquity = this.round2(equityBase + netIncome);
     const totalLiabilitiesAndEquity = this.round2(totalLiabilities + totalEquity);
     return {

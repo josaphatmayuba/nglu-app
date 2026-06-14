@@ -201,6 +201,13 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
 .source-pill { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
 .source-pill.api { background: var(--emerald-100); color: var(--emerald-700); }
 .source-pill.local { background: var(--ink-100); color: var(--ink-500); }
+.date-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.date-presets { display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--ink-200); background: #fff; border-radius: 12px; }
+.date-preset { height: 28px; padding: 0 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-600); cursor: pointer; font-size: 12px; font-weight: 600; }
+.date-preset:hover { background: var(--ink-50); color: var(--ink-900); }
+.date-preset.active { color: #fff; background: linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%); }
+.date-filter label { display: flex; align-items: center; gap: 6px; color: var(--ink-500); font-size: 12px; }
+.date-filter input { height: 32px; border: 1px solid var(--ink-200); border-radius: 10px; background: #fff; color: var(--ink-700); padding: 0 9px; font-size: 12px; }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
 .login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -249,6 +256,8 @@ table.tbl tfoot td { padding: 11px 10px; border-top: 2px solid var(--ink-200); f
   .mob-topbar .brand-icon { width: 32px; height: 32px; }
   .mob-title { font-weight: 600; font-size: 16px; }
   .topbar { margin-bottom: 14px; }
+  .date-filter { width: 100%; }
+  .date-presets { max-width: 100%; overflow-x: auto; }
   .title { font-size: 20px; }
   .g2, .g3, .g4, .j-grid { grid-template-columns: 1fr; }
   .g4.kpis { grid-template-columns: 1fr 1fr; }
