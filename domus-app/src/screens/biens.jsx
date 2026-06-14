@@ -133,9 +133,19 @@ export function Biens({ go }) {
   );
   const payments = useMemo(() => paymentsRaw.slice(0, 6).map(normalizePayment), [paymentsRaw]);
 
+  // Une propriete active sans aucun lot doit quand meme apparaitre dans la grille
+  // (sinon le compteur affiche "1" mais la grille reste vide -> "Aucune propriete").
+  const cards = useMemo(() => {
+    const propertyIdsWithUnit = new Set(units.map((u) => Number(u.propertyId)));
+    const emptyProperties = properties
+      .filter((p) => !propertyIdsWithUnit.has(Number(p.id)))
+      .map(normalizeEmptyProperty);
+    return [...units, ...emptyProperties];
+  }, [units, properties]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return units.filter((property) => {
+    return cards.filter((property) => {
       if (type !== "Tous" && property.type !== type) return false;
       if (filters.city && !property.city.toLowerCase().includes(filters.city.toLowerCase())) return false;
       if (filters.minRent && property.rentValue < Number(filters.minRent)) return false;
@@ -147,7 +157,7 @@ export function Biens({ go }) {
         .toLowerCase()
         .includes(q);
     });
-  }, [filters, query, type, units]);
+  }, [filters, query, type, cards]);
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
@@ -203,7 +213,17 @@ export function Biens({ go }) {
     }
   }
 
+  // Carte propriete sans lot -> ouvrir l'ajout d'un lot pre-rempli ; sinon editer le lot.
+  function editCard(row) {
+    if (row?.isEmptyProperty) {
+      setUnitModal({ ...emptyUnit, propertyId: String(row.propertyId || "") });
+      return;
+    }
+    setUnitModal(unitToForm(row));
+  }
+
   async function removeUnit(row) {
+    if (row?.isEmptyProperty) return; // pas de lot a supprimer
     if (!window.confirm(`Supprimer ${row.name} ?`)) return;
     setBusy(true);
     setActionError("");
@@ -294,7 +314,7 @@ export function Biens({ go }) {
       ) : view === "list" ? (
         <PropertyTable
           rows={filtered}
-          onEdit={(row) => setUnitModal(unitToForm(row))}
+          onEdit={editCard}
           onDelete={removeUnit}
           go={go}
         />
@@ -307,7 +327,7 @@ export function Biens({ go }) {
               key={property.unitId}
               property={property}
               index={index}
-              onEdit={() => setUnitModal(unitToForm(property))}
+              onEdit={() => editCard(property)}
               onDelete={() => removeUnit(property)}
               go={go}
             />
@@ -386,7 +406,7 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
   return (
     <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`}>
       <div className="immo-property-media">
-        <span className={`immo-status-chip ${statusClass}`}>{property.status}</span>
+        <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? "Sans lot" : property.status}</span>
         <button className="immo-icon-button" title="Options" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></button>
         {menuOpen && (
           <div className="property-menu immo-property-context-menu">
@@ -923,6 +943,35 @@ function normalizeProperty(property) {
     code: property.code || `P-${property.id}`,
     city: property.city || "",
     address: [property.address, property.city].filter(Boolean).join(", "),
+  };
+}
+
+// Carte "propriete sans lot" : meme forme qu'un lot mais sans unitId, pour inviter a ajouter un lot.
+function normalizeEmptyProperty(property) {
+  const rawType = String(property.propertyType || "").toLowerCase();
+  return {
+    raw: property,
+    isEmptyProperty: true,
+    unitId: `prop-${property.id}`,
+    propertyId: property.id,
+    currencyId: property.currencyId,
+    code: property.code || `P-${property.id}`,
+    type: TYPE_MAP[rawType] || "Appartement",
+    status: "Libre",
+    rawStatus: "vacant",
+    paymentStatus: "ok",
+    name: property.name || `Propriete #${property.id}`,
+    address: property.address || "Adresse non renseignee",
+    city: property.city || "",
+    beds: 0,
+    baths: 0,
+    areaValue: 0,
+    area: "0.00m2",
+    tenant: "A assigner",
+    initials: "NA",
+    avatar: AVATARS[Number(property.id) % AVATARS.length],
+    rentValue: Number(property.defaultRent || 0),
+    rent: money(Number(property.defaultRent || 0), "$"),
   };
 }
 
