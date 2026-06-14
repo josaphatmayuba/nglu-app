@@ -848,6 +848,13 @@
       "when": 1780448400000,
       "tag": "0144_legacy_null_currency_usd",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "5",
+      "when": 1780452000000,
+      "tag": "0145_legacy_user_salary_histories",
+      "breakpoints": true
     }
   ]
 }
