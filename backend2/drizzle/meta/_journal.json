@@ -804,35 +804,42 @@
       "idx": 114,
       "version": "5",
       "when": 1780426800000,
-      "tag": "0134_legacy_compta",
+      "tag": "0134_view_reversed_entries_permission",
       "breakpoints": true
     },
     {
       "idx": 115,
       "version": "5",
       "when": 1780430400000,
-      "tag": "0135_legacy_immo",
+      "tag": "0135_legacy_compta",
       "breakpoints": true
     },
     {
       "idx": 116,
       "version": "5",
       "when": 1780434000000,
-      "tag": "0136_legacy_comm",
+      "tag": "0136_legacy_immo",
       "breakpoints": true
     },
     {
       "idx": 117,
       "version": "5",
       "when": 1780437600000,
-      "tag": "0137_legacy_users_devis",
+      "tag": "0137_legacy_comm",
       "breakpoints": true
     },
     {
       "idx": 118,
       "version": "5",
       "when": 1780441200000,
-      "tag": "0138_view_reversed_entries_permission",
+      "tag": "0138_legacy_users_devis",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "5",
+      "when": 1780444800000,
+      "tag": "0143_merge_currency_duplicates",
       "breakpoints": true
     }
   ]

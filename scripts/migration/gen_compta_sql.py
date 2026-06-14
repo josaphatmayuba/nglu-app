@@ -32,13 +32,17 @@ def out(line=""):
 
 
 def bp():
-    """Separateur de statement compatible Drizzle migrate() ET le repair (split sur ;)."""
+    """Separateur de statement pour le pipeline (Drizzle migrate + repair le retirent)."""
     out("--> statement-breakpoint")
 
 
 # Sous-requetes devise (currencyCode NULL en base -> on cible par NOM).
-CUR_CDF = "(SELECT id FROM currency WHERE currencyName LIKE 'FRANC%' ORDER BY id LIMIT 1)"
-CUR_USD = "(SELECT id FROM currency WHERE currencyName LIKE 'DOLLAR%' ORDER BY id LIMIT 1)"
+# Devise par currencyName EXACT + MIN(id) actif : aligne sur la migration 0143
+# (merge_currency_duplicates) qui regroupe par currencyName vers MIN(id) et DECONSEILLE
+# le symbole (mojibake -> '?'). CDF = 'FRANC CONGOLAIS', USD = 'DOLLAR'. PAS de LIKE
+# (eviterait de matcher 'FRANC' id 12). MIN(id) = l'id canonique apres fusion 0143.
+CUR_CDF = "(SELECT MIN(id) FROM currency WHERE currencyName = 'FRANC CONGOLAIS' AND status = 'true')"
+CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND status = 'true')"
 
 
 def cur_sub(devise_id):
@@ -75,10 +79,10 @@ def emit_header():
     out("-- ============================================================")
     out("-- Migration compta legacy -> ledger moderne (GENERE, NE PAS EDITER A LA MAIN)")
     out("-- Genere par scripts/migration/gen_compta_sql.py")
-    out("-- Cible : migration Drizzle (pipeline). Statements AUTONOMES separes par")
-    out("-- --> statement-breakpoint, sans variables de session (@var) : robuste car")
-    out("-- migrate() execute chaque statement independamment. Idempotent (NOT EXISTS).")
-    out("-- Devises : sous-requete sur currency (CDF/USD par NOM, currencyCode NULL en base).")
+    out("-- Devises : sous-requete sur currency par SYMBOLE (FC=CDF, $=USD), non ambigu.")
+    out("")
+    out("-- Statements autonomes (pas de @var), separes par --> statement-breakpoint,")
+    out("-- idempotents par cle naturelle. Applique au boot par le pipeline.")
     out("-- ============================================================")
     out("CREATE TABLE IF NOT EXISTS legacy_subaccount_map (legacy_id INT PRIMARY KEY, new_id BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
     bp()
@@ -170,10 +174,26 @@ def emit_transaction_types(sql):
 
 def emit_journal(sql):
     tx = [t for t in rows_as_dicts(sql, "transaction") if t.get("status") == "true"]
-    out(f"-- === journal_entries + journal_entry_lines ({len(tx)} transactions actives) ===")
+    # Dedup metier : deux ecritures legacy avec le meme (montant, devise, date)
+    # sont des doublons -> on n'en copie qu'une seule (la 1re rencontree).
+    seen = set()
+    deduped = []
+    skipped = 0
+    for t in tx:
+        key = (str(t["amount"]), str(t.get("device_id")), str(t["date"]))
+        if key in seen:
+            skipped += 1
+            continue
+        seen.add(key)
+        deduped.append(t)
+    tx = deduped
+    out(f"-- === journal_entries + journal_entry_lines ({len(tx)} transactions actives, "
+        f"{skipped} doublon(s) montant+devise+date ignore(s)) ===")
     out("-- 1 tx = 1 entry + 2 lines (deja equilibree). account_id = NEW subAccount id (via map).")
     out("-- side en MAJUSCULES (convention code). Idempotent via idempotency_key.")
     out("-- Statements autonomes : la ligne retrouve son entry par idempotency_key (pas de @var).")
+    out("-- Dedup metier: 1 seule ecriture par (montant, devise, date) ; le NOT EXISTS de chaque entry")
+    out("-- protege aussi au rejeu contre une ecriture deja presente avec memes montant+devise+date.")
     for t in tx:
         cur = cur_sub(t.get("device_id"))
         amount = t["amount"]
@@ -184,11 +204,15 @@ def emit_journal(sql):
         debit_legacy = t["debit_id"]
         credit_legacy = t["credit_id"]
         related = t["id"]
-        # 1) l'entry (idempotent par idempotency_key)
+        # 1) l'entry : idempotent par idempotency_key ET dedup par (montant, devise, date).
+        #    Le 2e NOT EXISTS empeche d'ajouter un doublon meme si une autre entry
+        #    (autre idempotency_key) a deja les memes montant+devise+date.
         out(f"INSERT INTO journal_entries "
             f"(organization_id, date, particulars, source_module, related_id, status, currency_id, total_debit, total_credit, idempotency_key, created_at) "
             f"SELECT 1, {q(date)}, {q(particulars)}, 'legacy_migration', {q(related)}, 'posted', {cur}, {amount}, {amount}, {q(idem)}, NOW() "
-            f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE idempotency_key = {q(idem)});")
+            f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE idempotency_key = {q(idem)}) "
+            f"AND NOT EXISTS (SELECT 1 FROM journal_entries d WHERE d.date={q(date)} AND d.total_debit={amount} "
+            f"AND d.currency_id={cur});")
         bp()
         # 2) ligne DEBIT : retrouve l'entry par sa cle, idempotent par (entry_id, side)
         out(f"INSERT INTO journal_entry_lines (entry_id, organization_id, account_id, side, amount, created_at) "

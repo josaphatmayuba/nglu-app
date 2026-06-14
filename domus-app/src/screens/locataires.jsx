@@ -192,16 +192,19 @@ export function Locataires() {
       .some((v) => String(v || "").toLowerCase().includes(q)));
   }, [view, query]);
 
+  // Dossiers d'onboarding encore "en ligne" (ni validés, ni expirés) : sert au KPI ET aux cartes,
+  // sinon le compteur affiche 4 alors qu'on ne voit que 3 dossiers en attente.
+  const pendingOnboarding = useMemo(() => onboarding.filter(isPendingOnboarding), [onboarding]);
+
   const filteredOnboarding = useMemo(() => {
     const q = normalize(query);
-    const pending = onboarding.filter(isPendingOnboarding);
-    if (!q) return pending;
-    return pending.filter((record) => {
+    if (!q) return pendingOnboarding;
+    return pendingOnboarding.filter((record) => {
       const d = parseOnboardingData(record);
       return [d.firstName, d.lastName, d.email, d.phone, record.phone, record.status]
         .some((v) => normalize(v).includes(q));
     });
-  }, [onboarding, query]);
+  }, [pendingOnboarding, query]);
 
   const activeCount = view.filter(isActive).length;
   const occupants = view.reduce((s, t) => s + Number(t.occupantNumber || 0), 0);
@@ -289,8 +292,8 @@ export function Locataires() {
       <MetricsGrid>
         <Metric tone="brand" icon={<Users size={20} />} label="Locataires" value={view.length} helper={`${activeCount} actif(s)`} />
         <Metric tone="green" icon={<Home size={20} />} label="Occupants au foyer" value={occupants} helper="personnes declarees" />
-        <Metric tone="amber" icon={<Clock size={20} />} label="Onboarding" value={onboarding.length}
-          valueColor={onboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
+        <Metric tone="amber" icon={<Clock size={20} />} label="Onboarding" value={pendingOnboarding.length}
+          valueColor={pendingOnboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
         <Metric tone="brand" icon={<Briefcase size={20} />} label="Salaries / fonction." value={salaried} helper="revenu stable declare" />
       </MetricsGrid>
 

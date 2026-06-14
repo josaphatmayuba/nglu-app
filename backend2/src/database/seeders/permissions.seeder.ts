@@ -84,7 +84,7 @@ const ENDPOINTS = [
 
 const PERMISSION_TYPES = ["create", "readAll", "readSingle", "update", "delete"];
 
-// Permissions ponctuelles hors schema {type}-{endpoint}. Voir migration 0138.
+// Permissions ponctuelles hors schema {type}-{endpoint}. Voir migration 0134.
 const EXTRA_PERMISSIONS = [{ name: "view-reversed-entries", type: "account" }];
 
 export async function seedPermissions() {

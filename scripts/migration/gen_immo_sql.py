@@ -37,8 +37,10 @@ def bp():
 
 
 # Devises par NOM (currencyCode NULL en base). USD = DOLLAR.
-CUR_USD = "(SELECT id FROM currency WHERE currencyName LIKE 'DOLLAR%' ORDER BY id LIMIT 1)"
-CUR_CDF = "(SELECT id FROM currency WHERE currencyName LIKE 'FRANC%' ORDER BY id LIMIT 1)"
+# Devise par currencyName EXACT + MIN(id) actif (aligne sur migration 0143). CDF =
+# 'FRANC CONGOLAIS', USD = 'DOLLAR'. Pas de symbole (mojibake) ni de LIKE (ambigu 'FRANC').
+CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND status = 'true')"
+CUR_CDF = "(SELECT MIN(id) FROM currency WHERE currencyName = 'FRANC CONGOLAIS' AND status = 'true')"
 
 # realestate_type -> property_type / unit_type Domus
 TYPE_MAP = {
