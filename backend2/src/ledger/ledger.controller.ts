@@ -109,8 +109,32 @@ export class LedgerController {
     @Query("offset") offset?: string,
     @Query("startDate") startDate?: string,
     @Query("endDate") endDate?: string,
+    @Query("q") q?: string,
+    @Query("currencyCode") currencyCode?: string,
+    @Query("sourceModule") sourceModule?: string,
+    @Query("status") status?: string,
+    @Query("minAmount") minAmount?: string,
+    @Query("maxAmount") maxAmount?: string,
+    @Query("paged") paged?: string,
   ) {
-    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0, roleId, { startDate, endDate });
+    const filter = {
+      startDate,
+      endDate,
+      q: q || undefined,
+      currencyCode: currencyCode || undefined,
+      sourceModule: sourceModule || undefined,
+      status: status || undefined,
+      minAmount: minAmount != null && minAmount !== "" ? Number(minAmount) : undefined,
+      maxAmount: maxAmount != null && maxAmount !== "" ? Number(maxAmount) : undefined,
+    };
+    return this.ledger.findAll(
+      orgId,
+      limit ? Number(limit) : 50,
+      offset ? Number(offset) : 0,
+      roleId,
+      filter,
+      paged === "1" || paged === "true",
+    );
   }
 
   @ApiOperation({ summary: "Soldes par sous-compte (grand livre moderne)" })

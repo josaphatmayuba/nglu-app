@@ -157,6 +157,25 @@ function exportCsv(filename, cols, rows) {
   URL.revokeObjectURL(url);
 }
 
+/* Pagination d'affichage : on ne rend que `step` lignes à la fois (évite de
+   rendre des centaines de lignes d'un coup → freeze UI). Même UX que le Grand livre.
+   `signature` = clé optionnelle : si elle change (filtres, données), on revient à `step`. */
+function usePaginated(list, step = 20, signature) {
+  const [visible, setVisible] = React.useState(step);
+  React.useEffect(() => { setVisible(step); }, [signature, step]);
+  const arr = Array.isArray(list) ? list : [];
+  return { shown: arr.slice(0, visible), total: arr.length, visible, more: () => setVisible((v) => v + step) };
+}
+/* Bouton « Afficher plus » réutilisable (rendu seulement s'il reste des lignes). */
+function ShowMore({ page, step = 20 }) {
+  if (!page || page.total <= page.visible) return null;
+  return (
+    <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+      <button className="btn btn-ghost" onClick={page.more}>Afficher plus ({page.total - page.visible} restantes)</button>
+    </div>
+  );
+}
+
 /* Autocomplete recherchable (remplace les <select> de listes de données).
    options = [{ value, label }]. onChange reçoit la valeur. */
 function Autocomplete({ value, onChange, options, placeholder = "—", allowClear = true, style }) {
@@ -426,7 +445,7 @@ function App() {
   const views = {
     dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
-    ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
+    ecritures: <Ecritures curFilter={curFilter} dateRange={dateRange} onNew={newEntry} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre curFilter={curFilter} dateRange={dateRange} />,
@@ -691,35 +710,64 @@ function Journaux({ transactions, onNew, canMutate }) {
 }
 
 /* ── Écritures ─────────────────────────────────────────────────────────── */
-function Ecritures({ transactions, onNew, canMutate }) {
+function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
   const [q, setQ] = React.useState("");
-  const [journal, setJournal] = React.useState("");
-  const [statut, setStatut] = React.useState("");
+  const [journal, setJournal] = React.useState(""); // = sourceModule côté serveur
+  const [statut, setStatut] = React.useState("");   // posted | pending
   const [minMt, setMinMt] = React.useState("");
   const [maxMt, setMaxMt] = React.useState("");
-  const rows = (transactions || []).map((t) => ({
+  const [raw, setRaw] = React.useState(null);  // écritures chargées (page cumulée)
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const PAGE = 20;
+
+  // Pagination + filtres CÔTÉ SERVEUR (mêmes query params que le Grand livre).
+  const params = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: journal || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, journal, statut, minMt, maxMt]);
+
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
+    try {
+      setError("");
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setRaw((cur) => reset || cur === null ? data : [...cur, ...data]);
+    } catch (e) {
+      setError(String(e.message || e));
+      if (reset) setRaw([]);
+    } finally { setLoading(false); }
+  }, [params]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
+  const loadMore = () => fetchPage(raw?.length || 0, false);
+
+  const rows = (raw || []).map((t) => ({
     date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
-    journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
+    journal: String(t.sourceModule || t.type || "OD").slice(0, 12),
     reference: t.reference || (t.id != null ? `#${t.id}` : ""),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
     currencyCode: t.currencyCode,
     currencyId: t.currencyId,
-    status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
+    status: /reversed/i.test(`${t.status ?? ""}`) ? "Contre-passée" : /pending|draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
   rows.forEach((r) => { r.montant = mc(r.amount, r); });
-  // Journaux réellement présents dans les données (pas une liste figée).
-  const journaux = Array.from(new Set(rows.map((r) => r.journal).filter(Boolean))).sort();
-  const needle = q.trim().toLowerCase();
-  const min = minMt === "" ? null : Number(minMt);
-  const max = maxMt === "" ? null : Number(maxMt);
-  const list = rows.filter((r) =>
-    (!needle || `${r.label ?? ""} ${r.reference ?? ""}`.toLowerCase().includes(needle)) &&
-    (!journal || r.journal === journal) &&
-    (!statut || r.status === statut) &&
-    (min == null || r.amount >= min) &&
-    (max == null || r.amount <= max)
-  );
+  // Modules réellement présents dans les pages chargées (pour le menu).
+  const journaux = Array.from(new Set((raw || []).map((t) => t.sourceModule).filter(Boolean))).sort();
+  const list = rows;
   return (
     <>
       <PageHead eyebrow="Saisie en partie double" title="Écritures" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
@@ -732,7 +780,8 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures <span className="tiny" style={{ fontWeight: 400 }}>{raw ? `(${list.length} / ${total})` : ""}</span></h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
         <div className="searchbar">
           <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name="search" />
@@ -745,8 +794,8 @@ function Ecritures({ transactions, onNew, canMutate }) {
           </select>
           <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
             <option value="">Tous statuts</option>
-            <option value="Validée">Validée</option>
-            <option value="Brouillon">Brouillon</option>
+            <option value="posted">Validée (posted)</option>
+            <option value="pending">Brouillon (pending)</option>
           </select>
           <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
           <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
@@ -756,12 +805,18 @@ function Ecritures({ transactions, onNew, canMutate }) {
             <thead><tr><th>Date</th><th>Journal</th><th>Libellé</th><th className="r">Montant</th><th className="r">Statut</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
+                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : r.status === "Contre-passée" ? "ink" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
-              {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
+              {raw === null && <tr><td colSpan={5} className="muted">Chargement…</td></tr>}
+              {raw && list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
+        {raw && list.length < total && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - list.length} restantes)`}</button>
+          </div>
+        )}
       </div>
     </>
   );
@@ -1017,53 +1072,57 @@ function GrandLivre({ curFilter, dateRange }) {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
-  const [visible, setVisible] = React.useState(20); // nb de lignes affichées (évite de rendre ~1000 lignes d'un coup → freeze UI)
+  const [total, setTotal] = React.useState(0); // nb total d'écritures (côté serveur) pour « Afficher plus »
+  const [loading, setLoading] = React.useState(false);
   const [q, setQ] = React.useState("");
   const [module, setModule] = React.useState("");
   const [statut, setStatut] = React.useState("");
   const [minMt, setMinMt] = React.useState("");
   const [maxMt, setMaxMt] = React.useState("");
-  const ledgerParams = React.useMemo(() => ({
+  const PAGE = 20;
+
+  // Pagination + filtres CÔTÉ SERVEUR (SQL) : on ne charge que PAGE lignes à la fois,
+  // filtrées sur tout le dataset (pas seulement la page affichée).
+  const params = React.useMemo(() => ({
     startDate: dateRange?.from || undefined,
     endDate: dateRange?.to || undefined,
-    limit: 1000,
-  }), [dateRange?.from, dateRange?.to]);
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: module || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, module, statut, minMt, maxMt]);
 
-  const load = React.useCallback(async () => {
+  // Récupère une page. reset=true remplace la liste (changement de filtre) ; sinon append.
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
     try {
       setError("");
-      const rows = await api.ledgerEntries(ledgerParams);
-      setAllEntries(Array.isArray(rows) ? rows : []);
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setAllEntries((cur) => reset || cur === null ? data : [...cur, ...data]);
     } catch (e) {
       setError(String(e.message || e));
-      setAllEntries([]);
-    }
-  }, [ledgerParams]);
-  React.useEffect(() => { load(); }, [load]);
+      if (reset) setAllEntries([]);
+    } finally { setLoading(false); }
+  }, [params]);
 
-  // Libellé de statut affiché/filtré (cohérent avec la colonne Statut).
-  const statusOf = (e) => e.reversalOfId ? "contre-passation" : e.reversedById ? "contre-passée" : String(e.status ?? "");
+  // Rechargement (page 0) à chaque changement de filtre, avec un léger debounce pour la recherche.
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
 
-  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion) + recherche/module/statut.
+  const load = React.useCallback(() => fetchPage(0, true), [fetchPage]);
+  const loadMore = () => fetchPage(allEntries?.length || 0, false);
+
+  const entries = allEntries; // déjà filtré/paginé côté serveur
   const modules = React.useMemo(
     () => Array.from(new Set((allEntries || []).map((e) => e.sourceModule).filter(Boolean))).sort(),
     [allEntries]
   );
-  const entries = React.useMemo(() => {
-    if (allEntries === null) return null;
-    const needle = q.trim().toLowerCase();
-    const min = minMt === "" ? null : Number(minMt);
-    const max = maxMt === "" ? null : Number(maxMt);
-    return allEntries.filter((e) => {
-      const mt = Number(e.totalDebit ?? 0);
-      return (!curFilter || String(e?.currencyCode ?? "") === curFilter) &&
-      (!needle || `${e.particulars ?? ""} ${e.reference ?? ""} #${e.id ?? ""}`.toLowerCase().includes(needle)) &&
-      (!module || e.sourceModule === module) &&
-      (!statut || statusOf(e) === statut) &&
-      (min == null || mt >= min) &&
-      (max == null || mt <= max);
-    });
-  }, [allEntries, curFilter, q, module, statut, minMt, maxMt]);
 
   const reverse = async ({ reason }) => {
     if (!reason || !reverseId) return;
@@ -1082,9 +1141,11 @@ function GrandLivre({ curFilter, dateRange }) {
     finally { setBusy(false); }
   };
 
+  const hasFilter = !!(q.trim() || curFilter || module || statut || minMt !== "" || maxMt !== "");
+
   // Pas encore d'écriture moderne (ou API indispo) : ne pas afficher de démo comptable.
-  // (On teste allEntries, pas entries : un filtre qui ne matche rien doit garder la barre de filtres.)
-  if (allEntries && allEntries.length === 0) {
+  // (Uniquement si AUCUN filtre actif : un filtre qui ne matche rien doit garder la barre de filtres.)
+  if (allEntries && allEntries.length === 0 && !hasFilter) {
     return (
       <>
         <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
@@ -1100,7 +1161,7 @@ function GrandLivre({ curFilter, dateRange }) {
       <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${Math.min(visible, entries.length)} / ${entries.length} écriture(s)` : "Chargement…"}</span></div>
+        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} / ${total} écriture(s)` : "Chargement…"}</span></div>
         <div className="searchbar">
           <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Icon name="search" />
@@ -1115,8 +1176,7 @@ function GrandLivre({ curFilter, dateRange }) {
             <option value="">Tous statuts</option>
             <option value="posted">posted</option>
             <option value="pending">pending</option>
-            <option value="contre-passée">contre-passée</option>
-            <option value="contre-passation">contre-passation</option>
+            <option value="reversed">reversed (contre-passée)</option>
           </select>
           <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
           <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
@@ -1125,7 +1185,7 @@ function GrandLivre({ curFilter, dateRange }) {
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {(entries || []).slice(0, visible).map((e) => (
+              {(entries || []).map((e) => (
                 <tr key={e.id} style={e.reversalOfId ? { opacity: 0.6 } : undefined}>
                   <td>{(e.date || "").slice(0, 10)}</td>
                   <td className="muted">{e.reference || `#${e.id}`}</td>
@@ -1143,9 +1203,9 @@ function GrandLivre({ curFilter, dateRange }) {
             </tbody>
           </table>
         </div>
-        {entries && entries.length > visible && (
+        {entries && entries.length < total && (
           <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
-            <button className="btn btn-ghost" onClick={() => setVisible((v) => v + 20)}>Afficher plus ({entries.length - visible} restantes)</button>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - entries.length} restantes)`}</button>
           </div>
         )}
       </div>
@@ -1171,6 +1231,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
   const liabCur = balanceSheet?.liabilitiesByCurrency || [];
   const revCur = incomeStatement?.revenueByCurrency || [];
   const expCur = incomeStatement?.expenseByCurrency || incomeStatement?.expensesByCurrency || [];
+  const page = usePaginated(accounts || [], 20, (accounts || []).length);
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
@@ -1185,7 +1246,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
           <table className="tbl num" style={{ minWidth: 560 }}>
             <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
             <tbody>
-              {(accounts || []).map((a) => (
+              {page.shown.map((a) => (
                 <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
               {(!accounts || accounts.length === 0) && <tr><td colSpan={5} className="muted">Aucun sous-compte réel disponible.</td></tr>}
@@ -1198,6 +1259,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
             </tfoot>
           </table>
         </div>
+        <ShowMore page={page} />
         <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} ligne(s) (sous-compte × devise) connectées à l'API.</p>
       </div>
     </>
@@ -1259,6 +1321,7 @@ function Tiers({ accounts = [] }) {
   const receivables = accounts.filter(isReceivableAccount);
   const payables = accounts.filter(isPayableAccount);
   const rows = [...receivables.map((a) => ({ ...a, family: "Créance" })), ...payables.map((a) => ({ ...a, family: "Dette" }))];
+  const page = usePaginated(rows, 20, rows.length);
   // Totaux par devise (SIFA) : créances = soldes débiteurs, dettes = soldes créditeurs.
   const receivableByCur = accBalByCur(receivables, (a) => Math.max(0, balanceOf(a)));
   const payableByCur = accBalByCur(payables, (a) => Math.abs(Math.min(0, balanceOf(a))));
@@ -1277,9 +1340,10 @@ function Tiers({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 620 }}>
               <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -1512,6 +1576,7 @@ function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, o
 function Tresorerie({ accounts = [] }) {
   const rows = accounts.filter(isTreasuryAccount);
   const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
   if (rows.length) {
     return (
       <>
@@ -1526,9 +1591,10 @@ function Tresorerie({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -1545,6 +1611,7 @@ function Tresorerie({ accounts = [] }) {
 function Immo({ accounts = [] }) {
   const rows = accounts.filter((a) => accountType(a) === "Asset" && isFixedAssetAccount(a) && !isTreasuryAccount(a));
   const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
   if (rows.length) {
     return (
       <>
@@ -1559,9 +1626,10 @@ function Immo({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -2008,6 +2076,7 @@ function Achats({ canMutate }) {
   const amountByCur = invByCur((r) => r.totalAmount);
   const paidByCur = invByCur((r) => r.paidAmount ?? (Number(r.totalAmount || 0) - Number(r.dueAmount || 0)));
   const dueByCur = invByCur((r) => r.dueAmount);
+  const page = usePaginated(rows || [], 20, (rows || []).length);
 
   return (
     <>
@@ -2025,7 +2094,7 @@ function Achats({ canMutate }) {
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th>Devise</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
             <tbody>
-              {(rows || []).map((r) => (
+              {page.shown.map((r) => (
                 <tr key={r.id}>
                   <td>{String(r.date || "").slice(0, 10)}</td>
                   <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
@@ -2045,6 +2114,7 @@ function Achats({ canMutate }) {
             </tbody>
           </table>
         </div>
+        <ShowMore page={page} />
         <p className="tiny muted" style={{ marginTop: 10 }}>Module gaté (sourceModule « purchase ») : l'approbation déclenche la comptabilisation de l'écriture différée via le workflow.</p>
       </div>
     </>
@@ -2315,6 +2385,7 @@ function Etats({ is, bs, tb, curFilter = "" }) {
 /* ── TVA ───────────────────────────────────────────────────────────────── */
 function Tva({ accounts = [], canMutate = true }) {
   const rows = accounts.filter(isTaxAccount);
+  const page = usePaginated(rows, 20, rows.length);
   // Par devise (SIFA) : déductible = soldes débiteurs, collectée = soldes créditeurs.
   const deductibleByCur = accBalByCur(rows, (a) => Math.max(0, balanceOf(a)));
   const collectedByCur = accBalByCur(rows, (a) => Math.abs(Math.min(0, balanceOf(a))));
@@ -2376,9 +2447,10 @@ function Tva({ accounts = [], canMutate = true }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );

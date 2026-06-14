@@ -58,6 +58,20 @@ export interface LedgerDateRange {
   endDate?: string;
 }
 
+export interface LedgerEntryFilter extends LedgerDateRange {
+  /** Recherche libellé OU référence (LIKE insensible à la casse). */
+  q?: string;
+  /** Code devise exact (ex. "USD"). */
+  currencyCode?: string;
+  /** Module source exact (ex. "purchase"). */
+  sourceModule?: string;
+  /** Statut applicatif : "posted" | "pending" | "reversed". */
+  status?: string;
+  /** Bornes sur le total (débit) de l'écriture. */
+  minAmount?: number;
+  maxAmount?: number;
+}
+
 @Injectable()
 export class LedgerService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -71,6 +85,24 @@ export class LedgerService {
     const conditions = [];
     if (range?.startDate) conditions.push(sql`DATE(${journalEntries.date}) >= ${range.startDate}`);
     if (range?.endDate) conditions.push(sql`DATE(${journalEntries.date}) <= ${range.endDate}`);
+    return conditions;
+  }
+
+  /** Total débit d'une écriture (même expression que la colonne `totalDebit`), pour filtrer par montant. */
+  private readonly entryTotalDebit = sql`coalesce((select sum(${journalEntryLines.amount}) from ${journalEntryLines} where ${journalEntryLines.entryId} = ${journalEntries.id} and ${journalEntryLines.side} = 'DEBIT'), 0)`;
+
+  /** Conditions de filtrage de la liste des écritures (recherche / devise / module / statut / montant). */
+  private entryFilterConditions(filter?: LedgerEntryFilter) {
+    const conditions = [];
+    if (filter?.q) {
+      const like = `%${filter.q}%`;
+      conditions.push(sql`(${journalEntries.particulars} like ${like} or ${journalEntries.reference} like ${like})`);
+    }
+    if (filter?.currencyCode) conditions.push(sql`${currencies.currencyCode} = ${filter.currencyCode}`);
+    if (filter?.sourceModule) conditions.push(eq(journalEntries.sourceModule, filter.sourceModule));
+    if (filter?.status) conditions.push(eq(journalEntries.status, filter.status));
+    if (filter?.minAmount != null) conditions.push(sql`${this.entryTotalDebit} >= ${filter.minAmount}`);
+    if (filter?.maxAmount != null) conditions.push(sql`${this.entryTotalDebit} <= ${filter.maxAmount}`);
     return conditions;
   }
 
@@ -346,15 +378,33 @@ export class LedgerService {
     return { entry, lines };
   }
 
-  /** Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete). */
-  async findAll(orgId: number, limit = 50, offset = 0, roleId?: number, range?: LedgerDateRange) {
+  /**
+   * Liste paginee des ecritures de l'organisation (avec le code devise de l'en-tete).
+   * Filtres optionnels (recherche / devise / module / statut / montant) appliques en SQL
+   * pour rester coherents avec la pagination (on filtre tout le dataset, pas juste la page).
+   * `paged=true` renvoie { data, total } (total = COUNT avec les memes conditions) pour le
+   * bouton « Afficher plus » ; sinon renvoie le tableau brut (retro-compatible).
+   */
+  async findAll(
+    orgId: number,
+    limit = 50,
+    offset = 0,
+    roleId?: number,
+    filter?: LedgerEntryFilter,
+    paged = false,
+  ) {
     const canViewReversed = await this.roleCanViewReversed(roleId);
-    const conditions = [eq(journalEntries.organizationId, orgId), ...this.dateRangeConditions(range)];
+    const conditions = [
+      eq(journalEntries.organizationId, orgId),
+      ...this.dateRangeConditions(filter),
+      ...this.entryFilterConditions(filter),
+    ];
     if (!canViewReversed) {
       // Masque l'originale contre-passee ET sa contre-passation.
       conditions.push(sql`${journalEntries.status} <> 'reversed'`, sql`${journalEntries.reversalOfId} is null`);
     }
-    return this.db
+    const where = and(...conditions);
+    const data = await this.db
       .select({
         id: journalEntries.id,
         date: journalEntries.date,
@@ -374,10 +424,19 @@ export class LedgerService {
       })
       .from(journalEntries)
       .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
-      .where(and(...conditions))
+      .where(where)
       .orderBy(desc(journalEntries.date), desc(journalEntries.id))
       .limit(limit)
       .offset(offset);
+
+    if (!paged) return data;
+
+    const [{ total }] = await this.db
+      .select({ total: sql<number>`count(*)` })
+      .from(journalEntries)
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
+      .where(where);
+    return { data, total: Number(total) };
   }
 
   /**
