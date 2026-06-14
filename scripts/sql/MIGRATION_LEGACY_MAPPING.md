@@ -3,6 +3,16 @@
 Source : `Téléchargements/db-backup-postgres (1) (3).sql` (pg_dump 16, UTF-8, format INSERT).
 Cible : `nglu_dev_mysql` (dev d'abord), schéma `backend2/src/database/schema.ts`.
 
+## ⚠️ STRATÉGIE DE DÉPLOIEMENT (décidé 13 juin 2026)
+- **DEV = migrations Drizzle (pipeline)** : les fichiers `backend2/drizzle/0xxx_legacy_*.sql`
+  (autonomes, idempotents, sans `SET @var`) sont appliqués AU BOOT par le pipeline, **POUR DEV
+  UNIQUEMENT**. C'est leur seul rôle.
+- **PROD = SCP direct, PAS le pipeline** : on poussera les données en prod **manuellement via
+  scp** (le SQL one-shot, ex. `scripts/sql/0150-0153_legacy_*.sql`), appliqué une fois à la main.
+  La prod ne passe donc PAS par les migrations Drizzle du pipeline pour ces données.
+- Conséquence : la numérotation/collision des migrations Drizzle (0134 vs view_reversed…)
+  n'est un enjeu que pour le boot DEV ; aucun impact prod.
+
 ## Règles transverses
 - `status=false` (ancien) → **NON migré** (ni ligne, ni écriture comptable associée).
 - Montants : ancien `double precision` → cible `decimal` (jamais de float pour l'argent).

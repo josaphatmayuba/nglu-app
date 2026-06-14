@@ -50,16 +50,50 @@ async function main() {
     await migrate(db, { migrationsFolder: "./drizzle" });
     console.log("✔ Migrations complete.");
   } catch (err: any) {
-    // Ignore "table already exists" errors - these can occur in certain edge cases
-    // and don't prevent the application from running
-    if (err.code === 'ER_TABLE_EXISTS_ERROR' || err.errno === 1050) {
-      console.log("✔ Migrations complete (some tables already exist).");
+    // Schéma déjà à jour mais suivi __drizzle_migrations désynchronisé (ex. deux
+    // migrations partageant le même préfixe 0015 → le suivi se fige à la première,
+    // Drizzle rejoue la seconde et bute sur des objets déjà créés). Drizzle
+    // enveloppe l'erreur MySQL dans DrizzleQueryError : le code/errno réel est
+    // dans err.cause. On tolère les erreurs « déjà existe / dupliqué » à tous les
+    // niveaux pour éviter le crash-loop du conteneur (dev ET prod).
+    if (isAlreadyAppliedError(err)) {
+      console.log("✔ Migrations complete (schema already up to date — duplicate-object errors ignored).");
     } else {
       throw err;
     }
   }
   await applyOperationalRepairs();
   await connection.end(); // pool.end() drains all connections
+}
+
+// Codes/errno MySQL signalant qu'un objet existe déjà ou est dupliqué : le
+// schéma est en avance sur le suivi des migrations, ce n'est pas une vraie panne.
+const ALREADY_APPLIED_CODES = new Set([
+  "ER_TABLE_EXISTS_ERROR", // 1050 CREATE TABLE
+  "ER_DUP_FIELDNAME", // 1060 ADD COLUMN déjà présent
+  "ER_DUP_KEYNAME", // 1061 index déjà présent
+  "ER_DUP_ENTRY", // 1062 clé unique dupliquée
+  "ER_FK_DUP_NAME", // 1826 contrainte FK déjà présente
+  "ER_CANT_CREATE_TABLE", // 1005 (souvent FK déjà existante)
+]);
+const ALREADY_APPLIED_ERRNOS = new Set([1050, 1060, 1061, 1062, 1826, 1005]);
+
+// Drizzle enveloppe l'erreur MySQL (DrizzleQueryError) : on déroule la chaîne
+// `cause` pour retrouver le code/errno réel à n'importe quelle profondeur.
+function isAlreadyAppliedError(err: unknown): boolean {
+  let current: any = err;
+  let depth = 0;
+  while (current && depth < 10) {
+    if (
+      (current.code && ALREADY_APPLIED_CODES.has(current.code)) ||
+      (current.errno && ALREADY_APPLIED_ERRNOS.has(Number(current.errno)))
+    ) {
+      return true;
+    }
+    current = current.cause;
+    depth += 1;
+  }
+  return false;
 }
 
 async function baselineExistingDatabase() {

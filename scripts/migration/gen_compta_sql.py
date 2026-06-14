@@ -32,16 +32,17 @@ def out(line=""):
 
 
 def bp():
-    """Separateur de statement compatible Drizzle migrate() ET le repair (split sur ;)."""
+    """Separateur de statement pour le pipeline (Drizzle migrate + repair le retirent)."""
     out("--> statement-breakpoint")
 
 
 # Sous-requetes devise (currencyCode NULL en base -> on cible par NOM).
-# CDF = franc congolais (symbole FC) ; USD = dollar (symbole $). On cible le SYMBOLE,
-# non ambigu : la table a aussi un 'FRANC' (id 12) -> un LIKE 'FRANC%' le matcherait par
-# erreur. currencyCode est NULL en base, d'ou le symbole comme cle.
-CUR_CDF = "(SELECT id FROM currency WHERE currencySymbol = 'FC' ORDER BY id LIMIT 1)"
-CUR_USD = "(SELECT id FROM currency WHERE currencySymbol = '$' ORDER BY id LIMIT 1)"
+# Devise par currencyName EXACT + MIN(id) actif : aligne sur la migration 0143
+# (merge_currency_duplicates) qui regroupe par currencyName vers MIN(id) et DECONSEILLE
+# le symbole (mojibake -> '?'). CDF = 'FRANC CONGOLAIS', USD = 'DOLLAR'. PAS de LIKE
+# (eviterait de matcher 'FRANC' id 12). MIN(id) = l'id canonique apres fusion 0143.
+CUR_CDF = "(SELECT MIN(id) FROM currency WHERE currencyName = 'FRANC CONGOLAIS' AND status = 'true')"
+CUR_USD = "(SELECT MIN(id) FROM currency WHERE currencyName = 'DOLLAR' AND status = 'true')"
 
 
 def cur_sub(devise_id):
@@ -78,10 +79,10 @@ def emit_header():
     out("-- ============================================================")
     out("-- Migration compta legacy -> ledger moderne (GENERE, NE PAS EDITER A LA MAIN)")
     out("-- Genere par scripts/migration/gen_compta_sql.py")
-    out("-- Cible : migration Drizzle (pipeline). Statements AUTONOMES separes par")
-    out("-- --> statement-breakpoint, sans variables de session (@var) : robuste car")
-    out("-- migrate() execute chaque statement independamment. Idempotent (NOT EXISTS).")
-    out("-- Devises : sous-requete sur currency (CDF/USD par NOM, currencyCode NULL en base).")
+    out("-- Devises : sous-requete sur currency par SYMBOLE (FC=CDF, $=USD), non ambigu.")
+    out("")
+    out("-- Statements autonomes (pas de @var), separes par --> statement-breakpoint,")
+    out("-- idempotents par cle naturelle. Applique au boot par le pipeline.")
     out("-- ============================================================")
     out("CREATE TABLE IF NOT EXISTS legacy_subaccount_map (legacy_id INT PRIMARY KEY, new_id BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
     bp()
