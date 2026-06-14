@@ -329,7 +329,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
-  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyId (string)
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyCode (ex. "USD")
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange());
   const isMobile = useIsMobile();
   const dateParams = React.useMemo(() => ({
@@ -397,9 +397,10 @@ function App() {
   const newEntry = () => setModal({ kind: "transaction" });
 
   // Filtre par devise (SIFA — on ne convertit jamais, on restreint l'affichage à une devise).
-  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyId.
+  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyCode.
+  // On filtre par CODE devise (vrai filtre robuste, insensible aux écarts d'id legacy/orphelins).
   const matchCur = React.useCallback(
-    (row) => !curFilter || String(row?.currencyId ?? "") === curFilter,
+    (row) => !curFilter || String(row?.currencyCode ?? "") === curFilter,
     [curFilter]
   );
   const fc = React.useMemo(() => {
@@ -481,7 +482,8 @@ function App() {
                 <option value="">Toutes les devises</option>
                 {(data.currencies || []).map((c) => {
                   const id = String(c.currencyId ?? c.id);
-                  return <option key={id} value={id}>{c.currencyCode || c.currencyName || cleanCurrencySymbol(c)}</option>;
+                  const code = c.currencyCode || c.currencyName || cleanCurrencySymbol(c);
+                  return <option key={id} value={code}>{code}</option>;
                 })}
               </select>
             </label>
@@ -690,9 +692,13 @@ function Journaux({ transactions, onNew, canMutate }) {
 
 /* ── Écritures ─────────────────────────────────────────────────────────── */
 function Ecritures({ transactions, onNew, canMutate }) {
+  const [q, setQ] = React.useState("");
+  const [journal, setJournal] = React.useState("");
+  const [statut, setStatut] = React.useState("");
   const rows = (transactions || []).map((t) => ({
     date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
     journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
+    reference: t.reference || (t.id != null ? `#${t.id}` : ""),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
     currencyCode: t.currencyCode,
@@ -700,7 +706,14 @@ function Ecritures({ transactions, onNew, canMutate }) {
     status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
   rows.forEach((r) => { r.montant = mc(r.amount, r); });
-  const list = rows;
+  // Journaux réellement présents dans les données (pas une liste figée).
+  const journaux = Array.from(new Set(rows.map((r) => r.journal).filter(Boolean))).sort();
+  const needle = q.trim().toLowerCase();
+  const list = rows.filter((r) =>
+    (!needle || `${r.label ?? ""} ${r.reference ?? ""}`.toLowerCase().includes(needle)) &&
+    (!journal || r.journal === journal) &&
+    (!statut || r.status === statut)
+  );
   return (
     <>
       <PageHead eyebrow="Saisie en partie double" title="Écritures" action="Nouvelle écriture" actionIcon="penLine" onAction={onNew} disabled={!canMutate} />
@@ -715,9 +728,20 @@ function Ecritures({ transactions, onNew, canMutate }) {
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
         <div className="searchbar">
-          <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
-          <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
-          <select className="select"><option>Tous statuts</option><option>Validée</option><option>Brouillon</option></select>
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={journal} onChange={(e) => setJournal(e.target.value)}>
+            <option value="">Tous journaux</option>
+            {journaux.map((j) => <option key={j} value={j}>{j}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="Validée">Validée</option>
+            <option value="Brouillon">Brouillon</option>
+          </select>
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 620 }}>
@@ -986,6 +1010,9 @@ function GrandLivre({ curFilter, dateRange }) {
   const [busy, setBusy] = React.useState(false);
   const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
   const [visible, setVisible] = React.useState(20); // nb de lignes affichées (évite de rendre ~1000 lignes d'un coup → freeze UI)
+  const [q, setQ] = React.useState("");
+  const [module, setModule] = React.useState("");
+  const [statut, setStatut] = React.useState("");
   const ledgerParams = React.useMemo(() => ({
     startDate: dateRange?.from || undefined,
     endDate: dateRange?.to || undefined,
@@ -1004,12 +1031,24 @@ function GrandLivre({ curFilter, dateRange }) {
   }, [ledgerParams]);
   React.useEffect(() => { load(); }, [load]);
 
-  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion).
+  // Libellé de statut affiché/filtré (cohérent avec la colonne Statut).
+  const statusOf = (e) => e.reversalOfId ? "contre-passation" : e.reversedById ? "contre-passée" : String(e.status ?? "");
+
+  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion) + recherche/module/statut.
+  const modules = React.useMemo(
+    () => Array.from(new Set((allEntries || []).map((e) => e.sourceModule).filter(Boolean))).sort(),
+    [allEntries]
+  );
   const entries = React.useMemo(() => {
     if (allEntries === null) return null;
-    if (!curFilter) return allEntries;
-    return allEntries.filter((e) => String(e?.currencyId ?? "") === curFilter);
-  }, [allEntries, curFilter]);
+    const needle = q.trim().toLowerCase();
+    return allEntries.filter((e) =>
+      (!curFilter || String(e?.currencyCode ?? "") === curFilter) &&
+      (!needle || `${e.particulars ?? ""} ${e.reference ?? ""} #${e.id ?? ""}`.toLowerCase().includes(needle)) &&
+      (!module || e.sourceModule === module) &&
+      (!statut || statusOf(e) === statut)
+    );
+  }, [allEntries, curFilter, q, module, statut]);
 
   const reverse = async ({ reason }) => {
     if (!reason || !reverseId) return;
@@ -1029,7 +1068,8 @@ function GrandLivre({ curFilter, dateRange }) {
   };
 
   // Pas encore d'écriture moderne (ou API indispo) : ne pas afficher de démo comptable.
-  if (entries && entries.length === 0) {
+  // (On teste allEntries, pas entries : un filtre qui ne matche rien doit garder la barre de filtres.)
+  if (allEntries && allEntries.length === 0) {
     return (
       <>
         <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
@@ -1046,6 +1086,24 @@ function GrandLivre({ curFilter, dateRange }) {
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
         <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${Math.min(visible, entries.length)} / ${entries.length} écriture(s)` : "Chargement…"}</span></div>
+        <div className="searchbar">
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={module} onChange={(e) => setModule(e.target.value)}>
+            <option value="">Tous modules</option>
+            {modules.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="posted">posted</option>
+            <option value="pending">pending</option>
+            <option value="contre-passée">contre-passée</option>
+            <option value="contre-passation">contre-passation</option>
+          </select>
+        </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
@@ -1064,6 +1122,7 @@ function GrandLivre({ curFilter, dateRange }) {
                 </tr>
               ))}
               {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
+              {entries && entries.length === 0 && <tr><td colSpan={9} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2097,7 +2156,7 @@ function Etats({ is, bs, tb, curFilter = "" }) {
   // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
   const filterReport = React.useCallback((rep) => {
     if (!rep || !curFilter) return rep;
-    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyId ?? "") === curFilter) : l);
+    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyCode ?? "") === curFilter) : l);
     const out = { ...rep };
     Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
     return out;
