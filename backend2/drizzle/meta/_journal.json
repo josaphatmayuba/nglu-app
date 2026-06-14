@@ -855,6 +855,13 @@
       "when": 1780452000000,
       "tag": "0145_legacy_user_salary_histories",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "5",
+      "when": 1780455600000,
+      "tag": "0146_journal_entries_null_currency_usd",
+      "breakpoints": true
     }
   ]
 }
