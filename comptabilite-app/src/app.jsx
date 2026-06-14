@@ -984,6 +984,7 @@ function GrandLivre({ curFilter, dateRange }) {
   const [allEntries, setAllEntries] = React.useState(null); // null = chargement
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
   const ledgerParams = React.useMemo(() => ({
     startDate: dateRange?.from || undefined,
     endDate: dateRange?.to || undefined,
@@ -1009,11 +1010,10 @@ function GrandLivre({ curFilter, dateRange }) {
     return allEntries.filter((e) => String(e?.currencyId ?? "") === curFilter);
   }, [allEntries, curFilter]);
 
-  const reverse = async (id) => {
-    const reason = window.prompt("Motif de la contre-passation ?");
-    if (!reason) return;
+  const reverse = async ({ reason }) => {
+    if (!reason || !reverseId) return;
     setBusy(true);
-    try { await api.reverseEntry(id, reason); await load(); }
+    try { await api.reverseEntry(reverseId, reason); setReverseId(null); await load(); }
     catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
@@ -1050,7 +1050,7 @@ function GrandLivre({ curFilter, dateRange }) {
                   <td className="r pos">{fmt(e.totalDebit)}</td>
                   <td className="r neg">{fmt(e.totalCredit)}</td>
                   <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
-                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => reverse(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
+                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => setReverseId(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
                 </tr>
               ))}
               {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
@@ -1058,6 +1058,17 @@ function GrandLivre({ curFilter, dateRange }) {
           </table>
         </div>
       </div>
+      {reverseId != null && (
+        <FormModal
+          title="Contre-passer l'écriture"
+          subtitle={`Pièce #${reverseId} · partie double`}
+          fields={[{ key: "reason", label: "Motif de la contre-passation", type: "textarea", required: true }]}
+          submitLabel="Contre-passer"
+          busy={busy}
+          onSubmit={reverse}
+          onClose={() => setReverseId(null)}
+        />
+      )}
     </>
   );
 }
