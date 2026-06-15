@@ -10,6 +10,7 @@ import { Liste } from "./screens/liste.jsx";
 import { Approbation } from "./screens/approbation.jsx";
 import { Nouveau } from "./screens/nouveau.jsx";
 import { Detail } from "./screens/detail.jsx";
+import { Parametres } from "./screens/parametres.jsx";
 
 const NAV = [
   {
@@ -25,9 +26,10 @@ const NAV = [
     ],
   },
   {
-    sec: "Lié à",
+    sec: "Configuration",
     items: [
-      { key: "ledger", label: "Ledger / Comptabilité", icon: Settings, external: "/comptabilite/" },
+      { key: "parametres", label: "Paramètres", icon: Settings },
+      { key: "ledger",     label: "Ledger / Comptabilité", icon: Settings, external: "/comptabilite/" },
     ],
   },
 ];
@@ -65,6 +67,7 @@ export default function App() {
       case "approbation": return <Approbation go={go} onToast={showToast} />;
       case "nouveau":     return <Nouveau go={go} onToast={showToast} />;
       case "detail":      return <Detail go={go} ticketId={detailId} onToast={showToast} />;
+      case "parametres":  return <Parametres />;
       default:            return <Dashboard go={go} />;
     }
   };

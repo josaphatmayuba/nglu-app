@@ -68,7 +68,11 @@ export function Approbation({ go, onToast }) {
                   </div>
                   <div className="approval-card-sub">
                     {t.submittedByName ? `Soumis par ${t.submittedByName} · ` : ""}{fmtDate(t.createdAt)}
-                    {t.currentStep != null && ` · Étape ${t.currentStep + 1}`}
+                    {t.currentStep != null && (() => {
+                      const steps = Array.isArray(t.workflow?.steps) ? t.workflow.steps : [];
+                      const stepLabel = steps[t.currentStep]?.label || steps[t.currentStep]?.role || null;
+                      return ` · Étape ${t.currentStep + 1}${steps.length ? `/${steps.length}` : ""}${stepLabel ? ` — ${stepLabel}` : ""}`;
+                    })()}
                   </div>
                 </div>
                 {t.amount && (

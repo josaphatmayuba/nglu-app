@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Send, CreditCard, ShoppingBag, CalendarDays, MoreHorizontal } from "lucide-react";
+import { useState, useRef } from "react";
+import { Send, CreditCard, ShoppingBag, CalendarDays, MoreHorizontal, Upload, X } from "lucide-react";
 import { useApi, CATEGORIES, useCurrency } from "../data.js";
 import { api } from "../api.js";
 
@@ -11,7 +11,9 @@ export function Nouveau({ go, onToast }) {
   const [amount, setAmount] = useState("");
   const [currencyCode, setCurrencyCode] = useState("CDF");
   const [description, setDescription] = useState("");
+  const [attachment, setAttachment] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const fileRef = useRef(null);
 
   const { data: workflows } = useApi(() => api.listWorkflows(), []);
   const { data: currencies } = useApi(() => api.currencies(), []);
@@ -110,10 +112,40 @@ export function Nouveau({ go, onToast }) {
           </div>
 
           {/* Description */}
-          <div className="form-field">
+          <div className="form-field" style={{ marginBottom: 14 }}>
             <label>Description</label>
             <textarea className="input" rows={4} placeholder="Détails de la demande, justification…"
               value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+
+          {/* Pièce jointe */}
+          <div className="form-field">
+            <label>Pièce jointe (optionnel)</label>
+            <input type="file" ref={fileRef} style={{ display: "none" }}
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+              onChange={(e) => setAttachment(e.target.files[0] || null)} />
+            {!attachment ? (
+              <div onClick={() => fileRef.current?.click()}
+                style={{ border: "2px dashed var(--border)", borderRadius: 10, padding: "20px 14px",
+                  textAlign: "center", cursor: "pointer", color: "var(--ink-500)", fontSize: 13, transition: ".15s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--iris-400)"; e.currentTarget.style.background = "var(--iris-50)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.background = ""; }}>
+                <Upload size={20} style={{ marginBottom: 6, color: "var(--ink-400)" }} />
+                <div>Glisser un fichier ou <span style={{ color: "var(--iris-600)", fontWeight: 600 }}>parcourir</span></div>
+                <div style={{ fontSize: 11, marginTop: 4, color: "var(--ink-400)" }}>PDF, image, Word, Excel</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                border: "1px solid var(--iris-100)", borderRadius: 8, background: "var(--iris-50)" }}>
+                <Upload size={15} style={{ color: "var(--iris-600)", flex: "none" }} />
+                <span style={{ flex: 1, fontSize: 13, color: "var(--iris-700)", fontWeight: 500,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachment.name}</span>
+                <button onClick={() => { setAttachment(null); if (fileRef.current) fileRef.current.value = ""; }}
+                  style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-400)", padding: 2 }}>
+                  <X size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </form>
 
