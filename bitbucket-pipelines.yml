@@ -161,10 +161,10 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-dev && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-dev/"
-                # Le bind-mount de la conf est un FICHIER : le scp recree l'inode cote hote (desync) et le
-                # conteneur garde l'ancien inode monte -> reload sans effet. On reecrit le CONTENU dans le
-                # fichier monte (inode preserve) via docker cp avant le reload.
-                - $SSH $SERVER "docker cp $PROD_APP/nginx/nginx.frontend.conf nglu_prod_frontend:/etc/nginx/conf.d/default.conf"
+                # Le bind-mount de la conf est un FICHIER : `docker cp` echoue (unlink du mount: device busy)
+                # et un scp cote hote recree l'inode (conteneur garde l'ancien). On reecrit donc le CONTENU
+                # DANS le fichier monte (inode preserve) en pipant l'hote vers `cat >` dans le conteneur.
+                - $SSH $SERVER "docker exec -i nglu_prod_frontend sh -c 'cat > /etc/nginx/conf.d/default.conf' < $PROD_APP/nginx/nginx.frontend.conf"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
@@ -316,9 +316,9 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
-                # Bind-mount fichier : le scp recree l'inode (desync). On reecrit le contenu dans le fichier
-                # monte (inode preserve) via docker cp avant le reload, sinon nginx sert l'ancienne conf.
-                - $SSH $SERVER "docker cp $APP/nginx/nginx.frontend.conf nglu_prod_frontend:/etc/nginx/conf.d/default.conf"
+                # Bind-mount fichier : `docker cp` echoue (unlink du mount: device busy). On reecrit le
+                # CONTENU dans le fichier monte (inode preserve) en pipant l'hote vers `cat >` du conteneur.
+                - $SSH $SERVER "docker exec -i nglu_prod_frontend sh -c 'cat > /etc/nginx/conf.d/default.conf' < $APP/nginx/nginx.frontend.conf"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
