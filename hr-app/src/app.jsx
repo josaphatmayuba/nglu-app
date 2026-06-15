@@ -2024,7 +2024,7 @@ function Conges({ data, staff, setModal }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, fontSize: 13 }}>{name} - <span className="muted" style={{ fontWeight: 400 }}>{c.type || "Conge"}</span></div>
                   <div className="tiny">{detail(c)} - {nf.format(Number(c.requestedDays || 0))} j{c.reason ? " - " + c.reason : ""}</div>
-                  <div className="tiny">Solde: {nf.format(Number(c.balanceBefore || 0))} -> {nf.format(Number(c.balanceAfter || 0))} j</div>
+                  <div className="tiny">Solde: {nf.format(Number(c.balanceBefore || 0))} {"→"} {nf.format(Number(c.balanceAfter || 0))} j</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                   <span className={"chip " + chipForStatus(c.status)}>{statusLabel(c.status)}</span>
