@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { DRIZZLE } from "../database/database.constants";
+import { LedgerService } from "../ledger/ledger.service";
 import { currencies, subAccounts, transactions } from "../database/schema";
 import type { Database } from "../database/types";
 import {
@@ -15,7 +16,10 @@ const creditAccount = alias(subAccounts, "creditAccount");
 
 @Injectable()
 export class TransactionsService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async create(input: CreateTransactionDto, orgId: number) {
     await this.ensureAccountsExist([input.debitId, input.creditId]);
@@ -35,7 +39,41 @@ export class TransactionsService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId), orgId);
+    const transactionId = Number(result.insertId);
+
+    // Dimension analytique : si un projet est fourni, on comptabilise AUSSI une
+    // ecriture equilibree au grand livre avec project_id sur les lignes, afin que la
+    // depense remonte dans le rapport Analytique projet (qui lit uniquement le ledger).
+    // Idempotent (manual_transaction:<id>) ; n'echoue pas la saisie si le ledger refuse.
+    if (input.projectId) {
+      await this.postToLedgerWithProject(transactionId, input, orgId).catch(() => undefined);
+    }
+
+    return this.findOne(transactionId, orgId);
+  }
+
+  /** Comptabilise une transaction manuelle au grand livre avec la dimension projet. */
+  private async postToLedgerWithProject(
+    transactionId: number,
+    input: CreateTransactionDto,
+    orgId: number,
+  ) {
+    await this.ledger.post(
+      {
+        date: new Date(input.date),
+        particulars: input.particulars,
+        sourceModule: "manual_transaction",
+        relatedId: String(transactionId),
+        currencyId: input.currencyId ?? undefined,
+        idempotencyKey: `manual_transaction:${transactionId}`,
+        skipApprovalGate: true,
+        lines: [
+          { accountId: input.debitId, side: "DEBIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
+          { accountId: input.creditId, side: "CREDIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
+        ],
+      },
+      orgId,
+    );
   }
 
   async findAll(query: TransactionQueryDto, orgId: number) {

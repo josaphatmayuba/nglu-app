@@ -5,6 +5,7 @@ import { deleteTransaction, loadAllTransaction } from "@/redux/rtk/features/tran
 import { loadAllAccount, loadIncomeStatement, loadTrailBalance, loadBalanceSheet } from "@/redux/rtk/features/account/accountSlice";
 import { loadAllTransactionType } from "@/redux/rtk/features/transactionType/transactionTypeSlice";
 import { loadAllCurrency } from "@/redux/rtk/features/eCommerce/currency/currencySlice";
+import { loadAllProjects } from "@/redux/rtk/features/project/projectSlice";
 import { Plus, Download, TrendingUp, TrendingDown, Scale, Receipt } from "lucide-react";
 
 import OverviewPanel        from "./panels/OverviewPanel";
@@ -101,6 +102,7 @@ export default function AccountingPage() {
   const balanceSheet    = useSelector((s) => s.accounts?.balanceSheet   ?? null);
   const transactionTypes = useSelector((s) => s.transactionTypes?.list  ?? []);
   const currencies      = useSelector((s) => s.currency?.list           ?? []);
+  const projects        = useSelector((s) => s.project?.list            ?? []);
   const { data: appSetting } = useSelector((s) => s.setting) || {};
 
   const currencySymbol = useMemo(
@@ -123,6 +125,7 @@ export default function AccountingPage() {
     dispatch(loadTrailBalance(reportParams));
     dispatch(loadAllTransactionType());
     dispatch(loadAllCurrency());
+    dispatch(loadAllProjects());
     dispatch(loadBalanceSheet(reportParams));
   }, [dispatch, transactionQuery, dateRange]);
 
@@ -265,6 +268,7 @@ export default function AccountingPage() {
         onClose={closeEntryModal}
         accounts={accounts}
         currencies={currencies}
+        projects={projects}
         defaultCurrencyId={appSetting?.currency?.id}
         record={editingTransaction}
         onSaved={reloadTransactions}

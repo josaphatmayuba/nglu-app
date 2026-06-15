@@ -15,6 +15,7 @@ export default function EcritureFormModal({
   onClose,
   accounts = [],
   currencies = [],
+  projects = [],
   defaultCurrencyId = null,
   record = null,
   onSaved,
@@ -29,6 +30,7 @@ export default function EcritureFormModal({
   const [note, setNote]   = useState("");
   const [currencyId, setCurrencyId] = useState("");
   const [payVia, setPayVia] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [lines, setLines] = useState([emptyLine(), emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
   const isEdit = Boolean(record?.id);
@@ -88,6 +90,7 @@ export default function EcritureFormModal({
     setNote("");
     setCurrencyId(defaultCurrencyId ? String(defaultCurrencyId) : "");
     setPayVia("");
+    setProjectId("");
     setLines([emptyLine(), emptyLine()]);
   };
 
@@ -107,6 +110,7 @@ export default function EcritureFormModal({
         : defaultCurrencyId ? String(defaultCurrencyId) : ""
     );
     setPayVia("");
+    setProjectId(record.projectId != null ? String(record.projectId) : "");
     setLines([
       { id: crypto.randomUUID(), account: String(record.debitId || record.debit?.id || ""), label: record.particulars || "", debit: amount, credit: "" },
       { id: crypto.randomUUID(), account: String(record.creditId || record.credit?.id || ""), label: record.particulars || "", debit: "", credit: amount },
@@ -127,6 +131,7 @@ export default function EcritureFormModal({
       creditId: Number(creditLine?.account) || selectedType?.creditAccountId || undefined,
       amount: totalDebit,
       currencyId: currencyId ? Number(currencyId) : undefined,
+      projectId: projectId ? Number(projectId) : undefined,
     };
     const response = isEdit
       ? await dispatch(updateTransaction({ id: record.id, values }))
@@ -192,8 +197,8 @@ export default function EcritureFormModal({
             </div>
           </div>
 
-          {/* Meta 2 — devise + payé via */}
-          <div className="px-6 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Meta 2 — devise + payé via + projet */}
+          <div className="px-6 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-ink-600 mb-1">Currency</label>
               <select
@@ -223,6 +228,22 @@ export default function EcritureFormModal({
                 <option value="">— cash/bank account —</option>
                 {treasuryAccounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-600 mb-1">
+                Project <span className="text-ink-400 font-normal">(analytics)</span>
+              </label>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                disabled={projects.length === 0}
+                className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white disabled:bg-ink-50"
+              >
+                <option value="">— no project —</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.code ? `${p.code} — ${p.name}` : p.name}</option>
                 ))}
               </select>
             </div>
