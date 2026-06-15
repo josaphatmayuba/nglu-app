@@ -42,6 +42,14 @@ export class TransactionsController {
     return this.transactionsService.create(body, orgId);
   }
 
+  @ApiOperation({ summary: "Rattrapage : reposte au grand livre les transactions actives non comptabilisees (idempotent)" })
+  @ApiOkResponse({ description: "Resume du backfill (total/posted/skipped/errors)" })
+  @Permissions("create-transaction")
+  @Post("backfill-ledger")
+  backfillLedger(@CurrentOrg() orgId: number) {
+    return this.transactionsService.backfillLedger(orgId);
+  }
+
   @ApiOperation({ summary: "List, search, or aggregate transactions" })
   @ApiOkResponse({ description: "Transaction result" })
   @Permissions("readAll-transaction")

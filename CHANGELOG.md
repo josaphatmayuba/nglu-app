@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Comptabilité — les saisies manuelles n'apparaissaient pas au grand livre (SCRUM)** : `TransactionsService.create` ne comptabilisait au grand livre (`/ledger`) **que si un projet était renseigné** ; or tous les écrans compta (Grand livre, Trésorerie, Tiers, Immobilisations, Analytique, Budget…) lisent **uniquement** le ledger. Résultat : une écriture saisie sans projet n'apparaissait nulle part. Désormais **toute** saisie manuelle est postée au grand livre en partie double (idempotent `manual_transaction:<id>`, `project_id` porté sur les lignes si fourni), et l'erreur ledger (période fermée, compte invalide) **remonte** au lieu d'être avalée silencieusement. Nouvel endpoint admin `POST /transaction/backfill-ledger` (idempotent) pour **rattraper** les écritures déjà saisies avant le fix. [3.74.1]
+
 ### Added
 - **Sélecteur de fournisseur central dans BâtiPro / Domus / FarmOS (SCRUM)** : les 3 apps consommatrices référencent désormais la fiche fournisseur centrale via un **`<select>`** (au lieu du texte libre), câblé sur `supplier_id`/`supplierId`. **BâtiPro** (modal Matériau) : `api.suppliers()` filtré `type=construction` → `supplier_id`. **Domus** (maintenance, nouveau coût) : `api.suppliers()` filtré `type=real_estate` → `supplierId` (composant `DomusPropertySelect`). **FarmOS** (modal aliment/médicament) : `api.listSuppliers()` filtré `type=farm` → `supplier_id` (+ `adaptMedicine` expose `supplierId` pour pré-sélection en édition). Chaque sélecteur ne liste que les fournisseurs **actifs**, distingue entreprise/personne, et **conserve le champ texte libre en repli** (fallback legacy, aucun champ détruit) ; choisir un fournisseur central renseigne aussi le nom texte pour l'affichage. Routes appelées sur la racine `/api/supplier` (hors préfixes `/batipro`,`/property-management`,`/farmos`) via l'override de base existant. Builds OK : batipro-app, domus-app, farmos-app. [3.74.0]
 

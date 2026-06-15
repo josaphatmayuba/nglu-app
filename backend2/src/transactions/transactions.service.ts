@@ -50,19 +50,68 @@ export class TransactionsService {
 
     const transactionId = Number(result.insertId);
 
-    // Dimension analytique : si un projet est fourni, on comptabilise AUSSI une
-    // ecriture equilibree au grand livre avec project_id sur les lignes, afin que la
-    // depense remonte dans le rapport Analytique projet (qui lit uniquement le ledger).
-    // Idempotent (manual_transaction:<id>) ; n'echoue pas la saisie si le ledger refuse.
-    if (input.projectId) {
-      await this.postToLedgerWithProject(transactionId, input, orgId).catch(() => undefined);
-    }
+    // Toute saisie manuelle est AUSSI comptabilisee au grand livre (partie double),
+    // sinon elle n'apparait dans aucun menu compta (Grand livre, Tresorerie, Tiers,
+    // Analytique...) qui lisent tous uniquement le ledger. Le project_id (optionnel)
+    // est porte sur les lignes pour le rapport Analytique projet. Idempotent
+    // (manual_transaction:<id>). L'erreur ledger (periode fermee, compte invalide)
+    // remonte volontairement : mieux vaut un echec clair qu'une ecriture fantome.
+    await this.postToLedger(transactionId, input, orgId);
 
     return this.findOne(transactionId, orgId);
   }
 
-  /** Comptabilise une transaction manuelle au grand livre avec la dimension projet. */
-  private async postToLedgerWithProject(
+  /**
+   * Rattrapage : rejoue au grand livre toutes les transactions actives de l'org qui
+   * n'y ont jamais ete postees (saisies avant le fix qui ne postait qu'avec projet).
+   * Idempotent grace a la cle manual_transaction:<id> ; relancer est sans danger.
+   */
+  async backfillLedger(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        debitId: transactions.debitId,
+        creditId: transactions.creditId,
+        particulars: transactions.particulars,
+        amount: transactions.amount,
+        currencyId: transactions.currencyId,
+      })
+      .from(transactions)
+      .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")));
+
+    let posted = 0;
+    let skipped = 0;
+    const errors: { id: number; message: string }[] = [];
+    for (const r of rows) {
+      try {
+        const res = await this.ledger.post(
+          {
+            date: new Date(r.date),
+            particulars: r.particulars,
+            sourceModule: "manual_transaction",
+            relatedId: String(r.id),
+            currencyId: r.currencyId ?? undefined,
+            idempotencyKey: `manual_transaction:${r.id}`,
+            skipApprovalGate: true,
+            lines: [
+              { accountId: r.debitId, side: "DEBIT", amount: r.amount, description: r.particulars },
+              { accountId: r.creditId, side: "CREDIT", amount: r.amount, description: r.particulars },
+            ],
+          },
+          orgId,
+        );
+        if ((res as any)?.idempotent) skipped++;
+        else posted++;
+      } catch (e) {
+        errors.push({ id: r.id, message: (e as Error).message });
+      }
+    }
+    return { total: rows.length, posted, skipped, errors };
+  }
+
+  /** Comptabilise une transaction manuelle au grand livre (dimension projet si fournie). */
+  private async postToLedger(
     transactionId: number,
     input: CreateTransactionDto,
     orgId: number,
