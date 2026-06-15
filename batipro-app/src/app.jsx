@@ -386,7 +386,7 @@ function Phase({ done, running, label, pct }) {
   return (
     <div className="phase">
       <Icon name={icon} className="ic" />
-      <span className="grow" style={{ color: done || running ? "inherit" : "var(--ink-500)", fontWeight: running ? 600 : 400, color }} />
+      <span className="grow" style={{ fontWeight: running ? 600 : 400, color }} />
       <span className="grow" style={{ fontWeight: running ? 600 : 400 }}>{label}</span>
       <span style={{ color: txtColor, fontWeight: 600 }}>{pct}</span>
     </div>

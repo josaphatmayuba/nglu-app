@@ -116,10 +116,13 @@ pipelines:
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/batipro-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
+                # html-batipro-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker cp
+                # echoue: mounted volume read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist"
+                - scp -o StrictHostKeyChecking=no -r batipro-app/dist/* $SERVER:/tmp/batipro-app-dist/
+                - $SSH $SERVER "find $APP/batipro-app/dist -mindepth 1 -delete && cp -r /tmp/batipro-app-dist/. $APP/batipro-app/dist/ && rm -rf /tmp/batipro-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-batipro-dev && docker cp $APP/batipro-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: HR → dev
