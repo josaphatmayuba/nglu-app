@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **tickets-app — nouvelle app Tickets internes** : PWA Vite+React servie sous `/tickets/`, calquée sur domus-app. Screens : Dashboard (KPIs), Mes tickets (liste + filtres date/statut/catégorie), À approuver (approve/reject avec commentaire), Nouveau ticket (catégorie/montant/devise/description), Détail+circuit (step tracker + timeline). API câblée sur `WorkflowController` existant (`/api/workflow`). Auth partagée via cookie refresh (SCRUM-119). PWA offline-capable. Pipeline Bitbucket (dev+prod), nginx `/tickets/`, docker-compose volume bind-mount dev. [SCRUM]
+
 ### Fixed
 - **CI frontend — build:dev jamais exécuté (high audit form-data)** : `npm audit --audit-level=high` faisait échouer la chaîne `npm install && npm audit ... && npm run build:dev` à cause d'une vulnérabilité high sur `form-data` (dépendance d'`axios`, CRLF injection GHSA-hmw2-7cc7-3qxx). `frontend/dist` n'était donc jamais généré et le `scp` du déploiement échouait. Ajout d'un override `"form-data": "^4.0.6"` dans `frontend/package.json` (fix non-breaking). [3.75.1]
 

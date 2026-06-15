@@ -21,6 +21,7 @@ definitions:
     node-hr: hr-app/node_modules
     node-comptabilite: comptabilite-app/node_modules
     node-migration: migration-app/node_modules
+    node-tickets: tickets-app/node_modules
     node-marketing: marketing-site/node_modules
 
 pipelines:
@@ -91,6 +92,19 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
                 # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
                 - $SSH $SERVER "find $APP/domus-app/dist -mindepth 1 -delete && cp -r /tmp/domus-app-dist/. $APP/domus-app/dist/ && rm -rf /tmp/domus-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Tickets → dev
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist $APP/tickets-app/dist"
+                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+                - $SSH $SERVER "find $APP/tickets-app/dist -mindepth 1 -delete && cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && rm -rf /tmp/tickets-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
@@ -267,6 +281,19 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
                 # PROD: html-domus-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
                 - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Tickets → prod
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
+                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-tickets-prod -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-prod/ && rm -rf /tmp/tickets-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
