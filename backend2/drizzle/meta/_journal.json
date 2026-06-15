@@ -911,6 +911,13 @@
       "when": 1780480800000,
       "tag": "0153_treasury_transaction_types_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "5",
+      "when": 1780484400000,
+      "tag": "0154_treasury_types_deposit_sense_fix",
+      "breakpoints": true
     }
   ]
 }

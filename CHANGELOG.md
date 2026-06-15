@@ -11,6 +11,9 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Comptabilité — sens dépôt/retrait WU corrigé (#40/#41) (SCRUM)** : suite de 0153, les types « dépôt »/« retrait » WU étaient inversés par rapport au sens comptable — un **dépôt** en banque doit **débiter la banque** (l'argent y entre), or #41 « dépôt » débitait les espèces et créditait la banque (= un retrait). Migration **`0154_treasury_types_deposit_sense_fix.sql`** : #41 dépôt → D=WU banque / C=WU espèces ; #40 retrait → D=WU espèces / C=WU banque. Aligné sur la nomenclature validée. Aucune écriture impactée (0 transaction). [3.68.2]
+
+### Fixed
 - **Comptabilité — assainissement des types de transaction de trésorerie (Caisse / WU & Cash Express) (SCRUM)** : les 12 types « trésorerie » étaient mal nommés (terminologie incohérente « We et cash » / « WU et Cash », fautes « especeexpress », « Sortis »), comportaient **2 doublons** et **3 sens débit/crédit inversés**. Diagnostic dev : **aucune écriture** n'utilise ces types (0 transaction) → correction sans risque sur l'historique ; les comptes pointés sont de vrais comptes Asset/Equity/Liability (plan comptable intact). Migration **`0153_treasury_transaction_types_fix.sql`** (idempotente) : **(1) corrige 3 sens** — #84 « sortie caisse→WU » débitait un compte de **capital (Equity)** au lieu de WU espèces (devient D=WU espèces / C=Caisse) ; #79 et #75 (emprunts) avaient Dette au débit au lieu du crédit (un emprunt augmente l'actif **et** la dette → D=trésorerie / C=Dette) ; **(2) désactive 3 doublons** (`is_active=0` : #80=#40 et contredit sa description, #83=inverse de #41, #78=#44) ; **(3) renomme** les 9 types conservés avec une terminologie claire et unique (« WU : dépôt espèces vers banque », « Transfert Caisse principale vers WU (espèces) », « Emprunt vers Caisse principale »…). Règle appliquée : Asset↑ au débit, Liability/Equity↑ au crédit. [3.68.1]
 
 ### Added
