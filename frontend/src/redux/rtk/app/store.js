@@ -60,6 +60,7 @@ import termsAndConditionSlice from "../features/termsAndCondition/termsAndCondit
 import transactionReducer from "../features/transaction/transactionSlice";
 import transactionTypeReducer from "../features/transactionType/transactionTypeSlice";
 import projectReducer from "../features/project/projectSlice";
+import quoteReducer from "../features/quote/quoteSlice";
 import uomSlice from "../features/uom/uomSlice";
 import userReducer from "../features/user/userSlice";
 import vatTaxSlice from "../features/vatTax/vatTaxSlice";
@@ -77,6 +78,7 @@ const store = configureStore({
     purchaseOrder: purchaseOrderSlice,
     customers: customerReducer,
     sales: saleReducer,
+    quotes: quoteReducer,
     saleReturn: SaleReturnListSlice,
     adjustInventory: adjustInventorySlice,
     users: userReducer,

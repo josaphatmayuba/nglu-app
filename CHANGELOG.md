@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **CRM — module Devis (SCRUM)** : nouvelle page « Devis » sous Ventes avancées, accessible via le menu latéral (`/admin/quote`, permissions `readAll-quote`/`create-quote`/`readSingle-quote`). Liste des devis avec recherche, formulaire de création (client, date, lignes produits, note) et page de détail réutilisant le composant d'impression existant `QuoteSlip`. Backend déjà existant (`/quote`, déjà whitelisté côté middleware) : aucune modification backend/middleware nécessaire. Nouveau slice Redux `quotes` (`loadAllQuote`, `loadSingleQuote`, `addQuote`, `deleteQuote`). [3.75.0]
+
 ### Changed
 - **SideNav CRM — RH et Comptabilité pointent vers les outils internes (SCRUM)** : dans la section « Gestion » de la barre latérale du CRM, **RH** ouvre désormais l'outil interne `/admin/hr` et **Comptabilité** l'outil interne `/admin/accounting` (NavLink interne au lieu d'un `window.location.href` vers les apps externes `/hr/` et `/comptabilite/`). **Immobilier** reste sur `/admin/property-management`. **FarmOS** et **BatiPro** restent des liens externes (pas d'équivalent interne au CRM). L'AppSwitcher n'est pas touché (ses tuiles continuent d'ouvrir directement les apps déployées). [3.74.3]
 

@@ -7,6 +7,9 @@ import SaleReport from "@/components/sale/SaleReport";
 import AddReturnSale from "@/components/sale/addReturnSale";
 import DetailSale from "@/components/sale/detailSale";
 import GetAllSale from "@/components/sale/getAllSale";
+import AddQuote from "@/components/quote/AddQuote";
+import DetailQuote from "@/components/quote/DetailQuote";
+import GetAllQuote from "@/components/quote/GetAllQuote";
 import ReportsHub from "@/components/reports/ReportsHub";
 // import InvoiceSetting from "@/components/settings/invoiceSetting";s
 import { Route, Routes } from "react-router-dom";
@@ -38,6 +41,31 @@ export default function SaleRoutes() {
         element={
           <PermissionChecker permission={"readSingle-saleInvoice"}>
             <DetailSale />
+          </PermissionChecker>
+        }
+      />
+      <Route
+        path="/quote"
+        exact
+        element={
+          <PermissionChecker permission={["readAll-quote", "create-quote"]}>
+            <GetAllQuote />
+          </PermissionChecker>
+        }
+      />
+      <Route
+        path="/quote/add"
+        element={
+          <PermissionChecker permission={"create-quote"}>
+            <AddQuote />
+          </PermissionChecker>
+        }
+      />
+      <Route
+        path="/quote/:id"
+        element={
+          <PermissionChecker permission={"readSingle-quote"}>
+            <DetailQuote />
           </PermissionChecker>
         }
       />
