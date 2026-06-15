@@ -1,7 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
-import { X, Plus, Trash2, AlertCircle, CheckCircle } from "lucide-react";
+import { X, Plus, Trash2, AlertCircle, CheckCircle, Paperclip, FileText } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { addTransaction, updateTransaction } from "@/redux/rtk/features/transaction/transactionSlice";
+import {
+  addTransaction,
+  updateTransaction,
+  listAttachments,
+  uploadAttachment,
+  deleteAttachment,
+} from "@/redux/rtk/features/transaction/transactionSlice";
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
@@ -33,6 +39,8 @@ export default function EcritureFormModal({
   const [projectId, setProjectId] = useState("");
   const [lines, setLines] = useState([emptyLine(), emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const isEdit = Boolean(record?.id);
 
   // Comptes de trésorerie disponibles pour "Payé via".
@@ -82,6 +90,39 @@ export default function EcritureFormModal({
       if (updated[idx]) updated[idx] = { ...updated[idx], account: String(accountId) };
       return updated;
     });
+  };
+
+  // Charge les justificatifs existants (mode edition uniquement).
+  useEffect(() => {
+    if (open && record?.id) {
+      dispatch(listAttachments(record.id)).then((res) => {
+        const data = res?.payload?.data;
+        setAttachments(Array.isArray(data) ? data : []);
+      });
+    } else {
+      setAttachments([]);
+    }
+  }, [open, record?.id, dispatch]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permet de re-selectionner le meme fichier
+    if (!file || !record?.id) return;
+    setUploading(true);
+    const res = await dispatch(uploadAttachment({ transactionId: record.id, file }));
+    setUploading(false);
+    if (res?.payload?.message === "success" || res?.payload?.data?.url) {
+      const list = await dispatch(listAttachments(record.id));
+      const data = list?.payload?.data;
+      setAttachments(Array.isArray(data) ? data : []);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId) => {
+    const res = await dispatch(deleteAttachment(attachmentId));
+    if (res?.payload?.message === "success" || res?.payload?.data) {
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    }
   };
 
   const reset = () => {
@@ -356,6 +397,43 @@ export default function EcritureFormModal({
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 Unbalanced: debit {FMT.format(totalDebit)} ≠ credit {FMT.format(totalCredit)} (diff. {FMT.format(Math.abs(totalDebit - totalCredit))})
               </div>
+            )}
+          </div>
+
+          {/* Justificatifs (recus/factures) */}
+          <div className="px-6 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-ink-600 uppercase">
+                <Paperclip className="w-3.5 h-3.5" /> Justificatifs
+              </label>
+              {isEdit && (
+                <label className={`flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 cursor-pointer transition ${uploading ? "bg-ink-100 text-ink-400" : "text-brand-600 hover:bg-brand-50"}`}>
+                  <Plus className="w-3.5 h-3.5" />
+                  {uploading ? "Envoi…" : "Ajouter un reçu"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={handleUpload} disabled={uploading} className="hidden" />
+                </label>
+              )}
+            </div>
+            {!isEdit ? (
+              <p className="text-xs text-ink-400 italic">Enregistrez d'abord l'écriture pour y joindre un reçu.</p>
+            ) : attachments.length === 0 ? (
+              <p className="text-xs text-ink-400 italic">Aucun justificatif. Joignez le reçu ou la facture (jpg, png, pdf — max 10 Mo).</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {attachments.map((a) => (
+                  <li key={a.id} className="flex items-center gap-2 text-xs border border-ink-100 rounded-lg px-3 py-2">
+                    <FileText className="w-4 h-4 text-ink-400 shrink-0" />
+                    <a href={a.url} target="_blank" rel="noreferrer" className="flex-1 truncate text-brand-600 hover:underline">
+                      {a.filename || a.url?.split("/").pop()}
+                    </a>
+                    <button type="button" onClick={() => handleDeleteAttachment(a.id)}
+                      className="p-1 rounded hover:bg-rose-50 text-ink-400 hover:text-rose-500 transition">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </form>

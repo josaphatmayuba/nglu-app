@@ -36,6 +36,47 @@ export const addTransaction = createAsyncThunk(
   }
 );
 
+// ── Justificatifs (recus/factures) ──
+export const listAttachments = createAsyncThunk(
+  "transaction/listAttachments",
+  async (transactionId) => {
+    try {
+      const { data } = await axios.get(`transaction/${transactionId}/attachments`);
+      return successHandler(data);
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  }
+);
+
+export const uploadAttachment = createAsyncThunk(
+  "transaction/uploadAttachment",
+  async ({ transactionId, file }) => {
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await axios.post(`transaction/${transactionId}/attachments`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return successHandler(data, "Justificatif ajoute");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  }
+);
+
+export const deleteAttachment = createAsyncThunk(
+  "transaction/deleteAttachment",
+  async (attachmentId) => {
+    try {
+      const { data } = await axios.delete(`transaction/attachments/${attachmentId}`);
+      return successHandler(data, "Justificatif supprime");
+    } catch (error) {
+      return errorHandler(error, true);
+    }
+  }
+);
+
 // TRANSACTION_DETAILS
 export const loadTransaction = createAsyncThunk(
   "transaction/DetailsStaff",

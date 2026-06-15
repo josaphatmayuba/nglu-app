@@ -735,6 +735,22 @@ export const transactions = mysqlTable("transaction", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Justificatifs (recus/factures scannes) lies a une ecriture de la table plate.
+// Plusieurs pieces par transaction. Soft-delete via status (true/false).
+export const transactionAttachments = mysqlTable("transaction_attachments", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }).notNull(),
+  url: varchar("url", { length: 255 }).notNull(),
+  filename: varchar("filename", { length: 255 }),
+  mimetype: varchar("mimetype", { length: 100 }),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  status: varchar("status", { length: 16 }).default("true").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+});
+
 export const realEstateProperties = mysqlTable("real_estate_properties", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

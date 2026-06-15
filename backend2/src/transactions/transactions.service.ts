@@ -1,10 +1,19 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { DRIZZLE } from "../database/database.constants";
 import { LedgerService } from "../ledger/ledger.service";
-import { currencies, subAccounts, transactions } from "../database/schema";
+import { currencies, subAccounts, transactionAttachments, transactions } from "../database/schema";
 import type { Database } from "../database/types";
+
+interface UploadedFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname?: string;
+  size?: number;
+}
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -314,5 +323,80 @@ export class TransactionsService {
     return this.csv(value)
       .map((item) => Number(item))
       .filter((item) => Number.isFinite(item));
+  }
+
+  // ─────────────── Justificatifs (recus/factures) ───────────────
+
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+
+  private validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
+    const s = buffer.subarray(0, 12);
+    switch (mimetype) {
+      case "image/jpeg": return s[0] === 0xff && s[1] === 0xd8 && s[2] === 0xff;
+      case "image/png":  return s.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      case "image/webp": return s.subarray(0, 4).toString("ascii") === "RIFF" && s.subarray(8, 12).toString("ascii") === "WEBP";
+      case "application/pdf": return s.subarray(0, 4).toString("ascii") === "%PDF";
+      default: return false;
+    }
+  }
+
+  private saveFile(file: UploadedFile): { name: string; path: string } {
+    if (!this.validateMagicBytes(file.buffer, file.mimetype)) {
+      throw new BadRequestException("Le contenu du fichier ne correspond pas au type declare (jpg/png/webp/pdf).");
+    }
+    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+    };
+    const ext = mimeToExt[file.mimetype] || "bin";
+    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    writeFileSync(join(this.uploadDir, name), file.buffer);
+    return { name, path: `/files/${name}` };
+  }
+
+  /** Attache un justificatif a une transaction (apres validation d'existence). */
+  async addAttachment(transactionId: number, file: UploadedFile, orgId: number, userId?: number) {
+    if (!file) throw new BadRequestException("Aucun fichier recu.");
+    await this.ensureTransactionExists(transactionId, orgId);
+    const { path } = this.saveFile(file);
+    const [result] = await this.db.insert(transactionAttachments).values({
+      organizationId: orgId,
+      transactionId,
+      url: path,
+      filename: file.originalname ?? null,
+      mimetype: file.mimetype,
+      sizeBytes: file.size ?? null,
+      createdBy: userId,
+    });
+    return { id: Number(result.insertId), url: path };
+  }
+
+  /** Liste les justificatifs actifs d'une transaction. */
+  async listAttachments(transactionId: number, orgId: number) {
+    return this.db
+      .select()
+      .from(transactionAttachments)
+      .where(
+        and(
+          eq(transactionAttachments.transactionId, transactionId),
+          eq(transactionAttachments.organizationId, orgId),
+          eq(transactionAttachments.status, "true"),
+        ),
+      )
+      .orderBy(desc(transactionAttachments.id));
+  }
+
+  /** Soft-delete d'un justificatif (status='false'). */
+  async removeAttachment(attachmentId: number, orgId: number) {
+    await this.db
+      .update(transactionAttachments)
+      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(transactionAttachments.id, attachmentId),
+          eq(transactionAttachments.organizationId, orgId),
+        ),
+      );
+    return { message: "Attachment deleted" };
   }
 }
