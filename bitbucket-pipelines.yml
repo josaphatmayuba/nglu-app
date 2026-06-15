@@ -152,21 +152,23 @@ pipelines:
           - step:
               name: Migration Cockpit → dev
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/migration-app/dist $PROD_APP/nginx"
+                # dist dev bind-monte via docker-compose.prod.yml (html-migration-dev) -> scp suffit.
                 - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
+                # La conf nginx ET le compose (nouveau volume html-migration-dev) sont montes/lus depuis
+                # l'hote : on met a jour les FICHIERS HOTE...
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-dev && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-dev/"
-                # Le bind-mount de la conf est un FICHIER : `docker cp` echoue (unlink du mount: device busy).
-                # On reecrit le CONTENU dans le fichier monte (inode preserve). La lecture du fichier ET le
-                # pipe doivent s'executer SUR LE SERVEUR (tout dans les guillemets SSH), sinon la redirection
-                # serait evaluee cote runner (ou le fichier n'existe pas).
-                - $SSH $SERVER "cat $PROD_APP/nginx/nginx.frontend.conf | docker exec -i nglu_prod_frontend sh -c 'cat > /etc/nginx/conf.d/default.conf'"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                # ...puis on RECREE le conteneur frontend (projet prod, qui sert dev+prod) pour qu'il
+                # re-binde la conf :ro a jour + le nouveau volume html-migration-dev. `docker cp`/`cat >`
+                # sont impossibles ici (mount read-only). Bref flicker de tous les sites front (~secondes).
+                - $SSH $SERVER "cd $PROD_APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
           - step:
               name: Marketing → dev
@@ -308,19 +310,22 @@ pipelines:
           - step:
               name: Migration Cockpit → prod
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/migration-app/dist $APP/nginx"
                 - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
+                # 1) Met a jour les FICHIERS HOTE : conf nginx (:ro) + compose (volume html-migration-dev).
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$APP/nginx/nginx.frontend.conf
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
+                # 2) RECREE le frontend pour qu'il re-binde la conf :ro a jour (la route /migration est
+                #    nouvelle ; docker cp/cat > sont impossibles sur un mount read-only). Bref flicker.
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend"
+                # 3) APRES le recreate, depose le dist prod dans le conteneur (html-migration-prod n'est pas
+                #    un volume : meme schema que comptabilite/domus prod, deja bakes/cp).
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
-                # Bind-mount fichier : `docker cp` echoue (unlink du mount: device busy). On reecrit le
-                # CONTENU dans le fichier monte (inode preserve). Lecture + pipe SUR LE SERVEUR (tout dans
-                # les guillemets SSH), sinon la redirection serait evaluee cote runner (fichier absent).
-                - $SSH $SERVER "cat $APP/nginx/nginx.frontend.conf | docker exec -i nglu_prod_frontend sh -c 'cat > /etc/nginx/conf.d/default.conf'"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
