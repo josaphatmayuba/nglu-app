@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **AppSwitcher — ajout de l'app « Migration » (SCRUM)** : l'app `migration-app` (servie sous `/migration/`) était développée mais absente du sélecteur d'applications. Ajoutée aux **Disponibles** (icône `DatabaseZap`, dégradé cyan→teal, lien externe). Aucune entrée existante retirée. [3.74.2]
+
 ### Fixed
 - **Comptabilité — les saisies manuelles n'apparaissaient pas au grand livre (SCRUM)** : `TransactionsService.create` ne comptabilisait au grand livre (`/ledger`) **que si un projet était renseigné** ; or tous les écrans compta (Grand livre, Trésorerie, Tiers, Immobilisations, Analytique, Budget…) lisent **uniquement** le ledger. Résultat : une écriture saisie sans projet n'apparaissait nulle part. Désormais **toute** saisie manuelle est postée au grand livre en partie double (idempotent `manual_transaction:<id>`, `project_id` porté sur les lignes si fourni), et l'erreur ledger (période fermée, compte invalide) **remonte** au lieu d'être avalée silencieusement. Nouvel endpoint admin `POST /transaction/backfill-ledger` (idempotent) pour **rattraper** les écritures déjà saisies avant le fix. [3.74.1]
 

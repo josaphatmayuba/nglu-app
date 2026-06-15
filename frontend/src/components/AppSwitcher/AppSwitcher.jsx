@@ -31,6 +31,7 @@ import {
   Layers,
   HardHat,
   KeyRound,
+  DatabaseZap,
 } from "lucide-react";
 
 const AVAILABLE_APPS = [
@@ -46,6 +47,7 @@ const AVAILABLE_APPS = [
   { key: "batipro", name: "BatiPro", path: "/batipro/", icon: HardHat, gradient: "from-blue-700 to-amber-500", external: true },
   { key: "domus", name: "Domus", path: "/domus/", icon: KeyRound, gradient: "from-indigo-500 to-violet-700", external: true },
   { key: "accounting", name: "Comptabilite", path: "/comptabilite/", icon: Wallet, gradient: "from-blue-600 to-sky-500", external: true },
+  { key: "migration", name: "Migration", path: "/migration/", icon: DatabaseZap, gradient: "from-cyan-600 to-teal-700", external: true },
   { key: "reports", name: "Rapports", path: "/admin/reports", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
   { key: "settings", name: "Paramètres", path: "/admin/app-settings", icon: Settings, gradient: "from-zinc-500 to-zinc-700" },
 ];
