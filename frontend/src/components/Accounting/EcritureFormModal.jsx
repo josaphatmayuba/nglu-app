@@ -6,7 +6,19 @@ import { addTransaction, updateTransaction } from "@/redux/rtk/features/transact
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 0 });
 const emptyLine = () => ({ id: crypto.randomUUID(), account: "", label: "", debit: "", credit: "" });
 
-export default function EcritureFormModal({ open, onClose, accounts = [], record = null, onSaved }) {
+// Comptes de trésorerie pour le sélecteur "Payé via" (caisse / banque / mobile money).
+const isTreasuryAccount = (name = "") =>
+  /caisse|cash|banque|bank|we\s*&?\s*cash|western|mobile|wallet/i.test(name);
+
+export default function EcritureFormModal({
+  open,
+  onClose,
+  accounts = [],
+  currencies = [],
+  defaultCurrencyId = null,
+  record = null,
+  onSaved,
+}) {
   const dispatch = useDispatch();
 
   // Real transaction types from DB
@@ -15,9 +27,17 @@ export default function EcritureFormModal({ open, onClose, accounts = [], record
   const [type, setType]   = useState("");
   const [date, setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [note, setNote]   = useState("");
+  const [currencyId, setCurrencyId] = useState("");
+  const [payVia, setPayVia] = useState("");
   const [lines, setLines] = useState([emptyLine(), emptyLine()]);
   const [submitting, setSubmitting] = useState(false);
   const isEdit = Boolean(record?.id);
+
+  // Comptes de trésorerie disponibles pour "Payé via".
+  const treasuryAccounts = useMemo(
+    () => accounts.filter((a) => isTreasuryAccount(a.name)),
+    [accounts]
+  );
 
   // When a transaction type is selected, auto-fill the debit/credit accounts from its definition
   const selectedType = useMemo(
@@ -49,10 +69,25 @@ export default function EcritureFormModal({ open, onClose, accounts = [], record
     }
   };
 
+  // Applique le compte de trésorerie choisi ("Payé via") sur la ligne de crédit.
+  const handlePayViaChange = (accountId) => {
+    setPayVia(accountId);
+    if (!accountId) return;
+    setLines((prev) => {
+      const updated = [...prev];
+      const creditIdx = updated.findIndex((l) => Number(l.credit) > 0);
+      const idx = creditIdx >= 0 ? creditIdx : 1;
+      if (updated[idx]) updated[idx] = { ...updated[idx], account: String(accountId) };
+      return updated;
+    });
+  };
+
   const reset = () => {
     setType("");
     setDate(new Date().toISOString().slice(0, 10));
     setNote("");
+    setCurrencyId(defaultCurrencyId ? String(defaultCurrencyId) : "");
+    setPayVia("");
     setLines([emptyLine(), emptyLine()]);
   };
 
@@ -66,6 +101,12 @@ export default function EcritureFormModal({ open, onClose, accounts = [], record
     setType(record.type || "");
     setDate(record.date ? new Date(record.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
     setNote(record.particulars || record.note || "");
+    setCurrencyId(
+      record.currencyId != null
+        ? String(record.currencyId)
+        : defaultCurrencyId ? String(defaultCurrencyId) : ""
+    );
+    setPayVia("");
     setLines([
       { id: crypto.randomUUID(), account: String(record.debitId || record.debit?.id || ""), label: record.particulars || "", debit: amount, credit: "" },
       { id: crypto.randomUUID(), account: String(record.creditId || record.credit?.id || ""), label: record.particulars || "", debit: "", credit: amount },
@@ -85,6 +126,7 @@ export default function EcritureFormModal({ open, onClose, accounts = [], record
       debitId:  Number(debitLine?.account)  || selectedType?.debitAccountId  || undefined,
       creditId: Number(creditLine?.account) || selectedType?.creditAccountId || undefined,
       amount: totalDebit,
+      currencyId: currencyId ? Number(currencyId) : undefined,
     };
     const response = isEdit
       ? await dispatch(updateTransaction({ id: record.id, values }))
@@ -147,6 +189,42 @@ export default function EcritureFormModal({ open, onClose, accounts = [], record
                 placeholder="Entry description"
                 className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400"
               />
+            </div>
+          </div>
+
+          {/* Meta 2 — devise + payé via */}
+          <div className="px-6 pb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-ink-600 mb-1">Currency</label>
+              <select
+                value={currencyId}
+                onChange={(e) => setCurrencyId(e.target.value)}
+                className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white"
+              >
+                <option value="">— select currency —</option>
+                {currencies.map((cur) => (
+                  <option key={cur.id} value={cur.id}>
+                    {(cur.currencyCode || cur.currencyName || cur.id)}
+                    {cur.currencySymbol ? ` (${cur.currencySymbol})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-600 mb-1">
+                Paid via <span className="text-ink-400 font-normal">(optional)</span>
+              </label>
+              <select
+                value={payVia}
+                onChange={(e) => handlePayViaChange(e.target.value)}
+                disabled={treasuryAccounts.length === 0}
+                className="w-full text-sm border border-ink-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-400 bg-white disabled:bg-ink-50"
+              >
+                <option value="">— cash/bank account —</option>
+                {treasuryAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 
