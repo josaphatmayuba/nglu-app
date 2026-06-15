@@ -167,7 +167,10 @@ pipelines:
                 # ...puis on RECREE le conteneur frontend (projet prod, qui sert dev+prod) pour qu'il
                 # re-binde la conf :ro a jour + le nouveau volume html-migration-dev. `docker cp`/`cat >`
                 # sont impossibles ici (mount read-only). Bref flicker de tous les sites front (~secondes).
-                - $SSH $SERVER "cd $PROD_APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend"
+                # NB: le conteneur frontend existant appartient au projet compose `nglu-app` (et non
+                # `nglu_prod` comme backend2/middleware) — heritage de l'incident du 2 juin. On recree
+                # avec SON projet reel, sinon conflit de nom (« container name already in use »).
+                - $SSH $SERVER "cd $PROD_APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
           - step:
@@ -322,7 +325,9 @@ pipelines:
                 - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
                 # 2) RECREE le frontend pour qu'il re-binde la conf :ro a jour (la route /migration est
                 #    nouvelle ; docker cp/cat > sont impossibles sur un mount read-only). Bref flicker.
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps frontend"
+                # Conteneur frontend = projet compose `nglu-app` (cf. step dev). On recree avec son projet
+                # reel + --force-recreate, sinon conflit de nom.
+                - $SSH $SERVER "cd $APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 # 3) APRES le recreate, depose le dist prod dans le conteneur (html-migration-prod n'est pas
                 #    un volume : meme schema que comptabilite/domus prod, deja bakes/cp).
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
