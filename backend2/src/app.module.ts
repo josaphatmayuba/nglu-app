@@ -23,6 +23,7 @@ import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { MessagesModule } from "./messages/messages.module";
+import { MigrationModule } from "./migration/migration.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
@@ -76,6 +77,7 @@ import { UsersModule } from "./users/users.module";
     MailAccountsModule,
     ManufacturersModule,
     MessagesModule,
+    MigrationModule,
     NotificationPreferencesModule,
     PaymentMethodsModule,
     PermissionsModule,
