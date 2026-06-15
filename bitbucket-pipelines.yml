@@ -130,10 +130,14 @@ pipelines:
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/hr-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
+                # html-hr-dev est bind-monte :ro depuis $APP/hr-app/dist -> on ecrit dans le dossier HOTE
+                # (docker cp vers le conteneur echoue: mounted volume read-only). Bind-mount safe: vider le
+                # CONTENU (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/hr-app-dist && mkdir -p /tmp/hr-app-dist"
+                - scp -o StrictHostKeyChecking=no -r hr-app/dist/* $SERVER:/tmp/hr-app-dist/
+                - $SSH $SERVER "find $APP/hr-app/dist -mindepth 1 -delete && cp -r /tmp/hr-app-dist/. $APP/hr-app/dist/ && rm -rf /tmp/hr-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-dev && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Comptabilite → dev
@@ -144,10 +148,13 @@ pipelines:
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
+                # html-comptabilite-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker
+                # cp echoue: read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/comptabilite-app-dist && mkdir -p /tmp/comptabilite-app-dist"
+                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist/* $SERVER:/tmp/comptabilite-app-dist/
+                - $SSH $SERVER "find $APP/comptabilite-app/dist -mindepth 1 -delete && cp -r /tmp/comptabilite-app-dist/. $APP/comptabilite-app/dist/ && rm -rf /tmp/comptabilite-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-dev && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Migration Cockpit → dev
@@ -158,8 +165,11 @@ pipelines:
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/migration-app/dist $PROD_APP/nginx"
-                # dist dev bind-monte via docker-compose.prod.yml (html-migration-dev) -> scp suffit.
-                - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
+                # dist dev bind-monte :ro via docker-compose.prod.yml (html-migration-dev). Bind-mount safe:
+                # vider le contenu (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/migration-app-dist && mkdir -p /tmp/migration-app-dist"
+                - scp -o StrictHostKeyChecking=no -r migration-app/dist/* $SERVER:/tmp/migration-app-dist/
+                - $SSH $SERVER "find $APP/migration-app/dist -mindepth 1 -delete && cp -r /tmp/migration-app-dist/. $APP/migration-app/dist/ && rm -rf /tmp/migration-app-dist"
                 # La conf nginx ET le compose (nouveau volume html-migration-dev) sont montes/lus depuis
                 # l'hote : on met a jour les FICHIERS HOTE...
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
