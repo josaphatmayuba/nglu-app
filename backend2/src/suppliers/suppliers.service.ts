@@ -20,6 +20,14 @@ export class SuppliersService {
       phone: input.phone,
       address: input.address ?? null,
       email: input.email ?? null,
+      partyType: input.partyType ?? "company",
+      supplierType: input.supplierType ?? "general",
+      contactPerson: input.contactPerson ?? null,
+      rccm: input.rccm ?? null,
+      nationalId: input.nationalId ?? null,
+      taxId: input.taxId ?? null,
+      paymentTerms: input.paymentTerms ?? null,
+      notes: input.notes ?? null,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -78,6 +86,14 @@ export class SuppliersService {
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
         ...(input.address !== undefined ? { address: input.address } : {}),
         ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.partyType !== undefined ? { partyType: input.partyType } : {}),
+        ...(input.supplierType !== undefined ? { supplierType: input.supplierType } : {}),
+        ...(input.contactPerson !== undefined ? { contactPerson: input.contactPerson } : {}),
+        ...(input.rccm !== undefined ? { rccm: input.rccm } : {}),
+        ...(input.nationalId !== undefined ? { nationalId: input.nationalId } : {}),
+        ...(input.taxId !== undefined ? { taxId: input.taxId } : {}),
+        ...(input.paymentTerms !== undefined ? { paymentTerms: input.paymentTerms } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(eq(suppliers.id, id));
@@ -119,7 +135,11 @@ export class SuppliersService {
   private async paginated(query: SupplierQueryDto) {
     const pagination = this.pagination(query);
     const statuses = this.csv(query.status || "true");
-    const where = statuses.length ? inArray(suppliers.status, statuses) : undefined;
+    const types = this.csv(query.type || "");
+    const where = and(
+      statuses.length ? inArray(suppliers.status, statuses) : undefined,
+      types.length ? inArray(suppliers.supplierType, types) : undefined,
+    );
     const rows = await this.supplierQuery()
       .where(where)
       .orderBy(desc(suppliers.id))
@@ -167,6 +187,14 @@ export class SuppliersService {
         phone: suppliers.phone,
         address: suppliers.address,
         email: suppliers.email,
+        partyType: suppliers.partyType,
+        supplierType: suppliers.supplierType,
+        contactPerson: suppliers.contactPerson,
+        rccm: suppliers.rccm,
+        nationalId: suppliers.nationalId,
+        taxId: suppliers.taxId,
+        paymentTerms: suppliers.paymentTerms,
+        notes: suppliers.notes,
         status: suppliers.status,
         createdAt: suppliers.createdAt,
         updatedAt: suppliers.updatedAt,

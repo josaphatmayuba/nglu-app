@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
 import { IsEmail, IsNotEmpty, IsOptional, IsString } from "class-validator";
 
 export class CreateSupplierDto {
@@ -21,29 +21,49 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsEmail()
   email?: string | null;
+
+  @ApiPropertyOptional({ example: "company", description: "company (entreprise) | individual (personne)" })
+  @IsOptional()
+  @IsString()
+  partyType?: string;
+
+  @ApiPropertyOptional({ example: "construction", description: "general | construction | real_estate | farm | factory" })
+  @IsOptional()
+  @IsString()
+  supplierType?: string;
+
+  @ApiPropertyOptional({ example: "Jean Mukendi" })
+  @IsOptional()
+  @IsString()
+  contactPerson?: string | null;
+
+  @ApiPropertyOptional({ example: "CD/KIN/RCCM/22-B-1234" })
+  @IsOptional()
+  @IsString()
+  rccm?: string | null;
+
+  @ApiPropertyOptional({ example: "01-G4567-N89012K" })
+  @IsOptional()
+  @IsString()
+  nationalId?: string | null;
+
+  @ApiPropertyOptional({ example: "A1234567B" })
+  @IsOptional()
+  @IsString()
+  taxId?: string | null;
+
+  @ApiPropertyOptional({ example: "30 jours" })
+  @IsOptional()
+  @IsString()
+  paymentTerms?: string | null;
+
+  @ApiPropertyOptional({ example: "Fournit le bois pour les chantiers." })
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
 }
 
-export class UpdateSupplierDto {
-  @ApiPropertyOptional({ example: "Acme Supplies" })
-  @IsOptional()
-  @IsString()
-  name?: string;
-
-  @ApiPropertyOptional({ example: "1234567890" })
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @ApiPropertyOptional({ example: "123 Supplier St" })
-  @IsOptional()
-  @IsString()
-  address?: string | null;
-
-  @ApiPropertyOptional({ example: "supplier@example.com" })
-  @IsOptional()
-  @IsEmail()
-  email?: string | null;
-}
+export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}
 
 export class UpdateSupplierStatusDto {
   @ApiProperty({ example: "false" })
@@ -66,6 +86,11 @@ export class SupplierQueryDto {
   @IsOptional()
   @IsString()
   status?: string;
+
+  @ApiPropertyOptional({ example: "construction", description: "Filtre par type de fournisseur (general, construction, real_estate, farm, factory)" })
+  @IsOptional()
+  @IsString()
+  type?: string;
 
   @ApiPropertyOptional({ example: "1" })
   @IsOptional()

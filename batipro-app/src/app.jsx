@@ -717,7 +717,7 @@ function payloadFor(kind, form) {
       due_date: form.dueDate || form.due || null, location: form.location || null, risk: form.risk || "Faible",
     };
   }
-  return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null };
+  return { name: form.name, unit: form.unit || "unite", stock: n(form.stock), min_stock: n(form.minStock ?? form.min), reserved: n(form.reserved), supplier: form.supplier || null, supplier_id: form.supplier_id ? Number(form.supplier_id) : null };
 }
 function RecordModal({ modal, busy, error, onClose, onSave }) {
   const { kind } = modal;
@@ -725,6 +725,14 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
     ? { name: "", status: "Planifie", risk: "Faible", progress: 0, budget: 0, spent: 0 }
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
+  const [suppliers, setSuppliers] = React.useState([]);
+  React.useEffect(() => {
+    if (kind !== "material") return;
+    api.suppliers().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
+      setSuppliers((arr || []).filter((s) => String(s.status) === "true"));
+    }).catch(() => setSuppliers([]));
+  }, [kind]);
   const canSave = Boolean(form.name);
   return (
     <div className="modal-scrim" role="dialog" aria-modal="true">
@@ -752,7 +760,17 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Stock" type="number" value={form.stock} onChange={(v) => set("stock", v)} />
               <Field label="Seuil minimum" type="number" value={form.minStock} onChange={(v) => set("minStock", v)} />
               <Field label="Réservé" type="number" value={form.reserved} onChange={(v) => set("reserved", v)} />
-              <Field label="Fournisseur" value={form.supplier || ""} onChange={(v) => set("supplier", v)} />
+              <label className="field">
+                <span>Fournisseur</span>
+                <select value={form.supplier_id || ""} onChange={(e) => {
+                  const id = e.target.value;
+                  const s = suppliers.find((x) => String(x.id) === id);
+                  setForm((c) => ({ ...c, supplier_id: id || null, supplier: s ? s.name : (id ? c.supplier : "") }));
+                }}>
+                  <option value="">— Choisir un fournisseur —</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.partyType === "individual" ? " (personne)" : ""}</option>)}
+                </select>
+              </label>
             </>
           )}
         </div>

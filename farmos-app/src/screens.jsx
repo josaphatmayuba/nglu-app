@@ -730,6 +730,14 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
   const [unit, setUnit] = React.useState(medicine?.unit || (effectiveKind === "feed" ? "kg" : "doses"));
   const [minQuantity, setMinQuantity] = React.useState(medicine?.min != null ? String(medicine.min) : "");
   const [supplier, setSupplier] = React.useState(medicine?.supplier || "");
+  const [supplierId, setSupplierId] = React.useState(medicine?.supplierId != null ? String(medicine.supplierId) : "");
+  const [suppliers, setSuppliers] = React.useState([]);
+  React.useEffect(() => {
+    api.listSuppliers().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
+      setSuppliers((arr || []).filter((s) => String(s.status) === "true"));
+    }).catch(() => setSuppliers([]));
+  }, []);
   const [expiryDate, setExpiryDate] = React.useState(medicine && medicine.expiry && medicine.expiry !== "—" ? medicine.expiry : "");
   const [notes, setNotes] = React.useState(medicine?.notes || "");
   const [species, setSpecies] = React.useState(medicine?.species?.length ? medicine.species : (defaultSpecies || []));
@@ -747,6 +755,7 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
       unit: unit || null,
       min_quantity: minQuantity ? Number(minQuantity) : null,
       supplier: supplier.trim() || null,
+      supplier_id: supplierId ? Number(supplierId) : null,
       expiry_date: expiryDate || null,
       notes: notes.trim() || null,
       species: species.length ? species : null,
@@ -808,6 +817,17 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
             </label>
           </div>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Fournisseur" : "Supplier"}
+            <select value={supplierId} onChange={(e) => {
+              const id = e.target.value;
+              setSupplierId(id);
+              const s = suppliers.find((x) => String(x.id) === id);
+              if (s) setSupplier(s.name);
+            }} className="input" style={{ width: "100%", marginTop: 4 }}>
+              <option value="">{lang === "fr" ? "— Aucun / saisir ci-dessous —" : "— None / type below —"}</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.partyType === "individual" ? (lang === "fr" ? " (personne)" : " (person)") : ""}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Fournisseur (texte libre)" : "Supplier (free text)"}
             <input value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
           </label>
           <div>

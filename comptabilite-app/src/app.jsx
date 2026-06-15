@@ -82,6 +82,7 @@ const NAV = [
   { id: "budget", label: "Budget", icon: "piggyBank" },
   { id: "capacite", label: "Plan de trésorerie", icon: "gauge" },
   { section: "Achats & stock" },
+  { id: "fournisseurs", label: "Fournisseurs", icon: "contact" },
   { id: "achats", label: "Factures fournisseurs", icon: "receipt" },
   { id: "stock", label: "Stock & entrepôts", icon: "warehouse" },
   { section: "États" },
@@ -459,6 +460,7 @@ function App() {
     analytique: <Analytique />,
     budget: <Budget />,
     capacite: <Capacite accounts={fc.accounts} />,
+    fournisseurs: <Fournisseurs canMutate={canMutate} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
     etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} tb={fc.trialBalance} curFilter={curFilter} />,
@@ -2147,6 +2149,182 @@ function Capacite({ accounts = [] }) {
         );
       })()}
     </>
+  );
+}
+
+/* ── Fournisseurs (référentiel central des tiers, partagé BâtiPro/Domus/FarmOS) ── */
+const PARTY_TYPES = [
+  { id: "company", label: "Entreprise" },
+  { id: "individual", label: "Personne" },
+];
+const SUPPLIER_TYPES = [
+  { id: "general", label: "Général" },
+  { id: "construction", label: "Construction (BâtiPro)" },
+  { id: "real_estate", label: "Immobilier (Domus)" },
+  { id: "farm", label: "Ferme (FarmOS)" },
+  { id: "factory", label: "Usine" },
+];
+const partyLabel = (v) => PARTY_TYPES.find((p) => p.id === v)?.label || "Entreprise";
+const supplierTypeLabel = (v) => SUPPLIER_TYPES.find((s) => s.id === v)?.label || "Général";
+
+function Fournisseurs({ canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [editing, setEditing] = React.useState(null); // objet fournisseur (ou {} pour nouveau)
+  const [search, setSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.suppliers();
+      const arr = Array.isArray(list) ? list : (list?.getAllSupplier || list?.data || []);
+      setRows(Array.isArray(arr) ? arr : []);
+    } catch (e) { setError(String(e.message || e)); setRows([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const toggleStatus = async (s) => {
+    const next = String(s.status) === "true" ? "false" : "true";
+    if (next === "false" && !window.confirm(`Désactiver le fournisseur « ${s.name} » ?`)) return;
+    try { await api.setSupplierStatus(s.id, next); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+  };
+
+  const filtered = (rows || []).filter((s) => {
+    if (typeFilter && s.supplierType !== typeFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return [s.name, s.phone, s.email, s.contactPerson, s.rccm, s.nationalId].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+  const active = (rows || []).filter((s) => String(s.status) === "true");
+  const companies = active.filter((s) => (s.partyType || "company") === "company").length;
+  const persons = active.length - companies;
+  const page = usePaginated(filtered, 20, filtered.length);
+
+  return (
+    <>
+      <PageHead eyebrow="Référentiel central · partagé entre apps" title="Fournisseurs"
+        action={canMutate ? "Nouveau fournisseur" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"}
+        onAction={canMutate ? () => setEditing({}) : load} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Fournisseurs actifs" value={active.length} />
+        <Mini label="Entreprises" value={companies} />
+        <Mini label="Personnes" value={persons} />
+        <Mini label="Total (avec inactifs)" value={(rows || []).length} />
+      </div>
+      <div className="card pad" style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="input" style={{ flex: 1, minWidth: 200 }} placeholder="Rechercher (nom, téléphone, contact, RCCM…)" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className="select" style={{ height: 36 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="">Tous les domaines</option>
+          {SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Liste des fournisseurs</h3><span className="tiny">{rows ? `${filtered.length} fournisseur(s)` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 820 }}>
+            <thead><tr><th>Nom</th><th>Type</th><th>Domaine</th><th>Contact</th><th>Téléphone</th><th>Pièces légales</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {page.shown.map((s) => {
+                const inactive = String(s.status) !== "true";
+                const isCompany = (s.partyType || "company") === "company";
+                return (
+                  <tr key={s.id} style={inactive ? { opacity: 0.5 } : undefined}>
+                    <td style={{ fontWeight: 500 }}>{s.name}{inactive && <span className="chip" style={{ marginLeft: 6 }}>inactif</span>}</td>
+                    <td><span className="chip">{isCompany ? "🏢 Entreprise" : "👤 Personne"}</span></td>
+                    <td className="muted">{supplierTypeLabel(s.supplierType)}</td>
+                    <td className="muted">{s.contactPerson || (isCompany ? "—" : s.name)}</td>
+                    <td className="muted">{s.phone || "—"}</td>
+                    <td className="tiny muted">{isCompany ? (s.rccm ? `RCCM ${s.rccm}` : "—") : (s.nationalId ? `ID ${s.nationalId}` : "—")}{s.taxId ? ` · NIF ${s.taxId}` : ""}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>
+                      {canMutate && <button className="btn-sm" onClick={() => setEditing(s)}>Modifier</button>}
+                      {canMutate && <button className="btn-sm" style={{ marginLeft: 6 }} onClick={() => toggleStatus(s)}>{inactive ? "Activer" : "Désactiver"}</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows && !filtered.length && <tr><td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>Aucun fournisseur.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <ShowMore page={page} />
+      </div>
+      {editing && <SupplierModal initial={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+    </>
+  );
+}
+
+function SupplierModal({ initial, onClose, onSaved }) {
+  const [f, setF] = React.useState({
+    name: initial.name || "", partyType: initial.partyType || "company", supplierType: initial.supplierType || "general",
+    phone: initial.phone || "", email: initial.email || "", address: initial.address || "",
+    contactPerson: initial.contactPerson || "", rccm: initial.rccm || "", nationalId: initial.nationalId || "",
+    taxId: initial.taxId || "", paymentTerms: initial.paymentTerms || "", notes: initial.notes || "",
+  });
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const isCompany = f.partyType === "company";
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!f.name.trim()) { setError("Le nom est requis."); return; }
+    if (!f.phone.trim()) { setError("Le téléphone est requis."); return; }
+    setBusy(true); setError("");
+    // n'envoie que les champs renseignés (les optionnels vides → non transmis)
+    const body = { name: f.name.trim(), partyType: f.partyType, supplierType: f.supplierType, phone: f.phone.trim() };
+    ["email", "address", "contactPerson", "rccm", "nationalId", "taxId", "paymentTerms", "notes"].forEach((k) => { if (f[k]?.trim()) body[k] = f[k].trim(); });
+    try {
+      if (initial.id) await api.updateSupplier(initial.id, body);
+      else await api.createSupplier(body);
+      await onSaved();
+    } catch (e2) { setError(String(e2.message || e2)); setBusy(false); }
+  };
+
+  const Field = ({ label, children }) => <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)" }}>{label}<div style={{ marginTop: 4 }}>{children}</div></label>;
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{initial.id ? "Modifier le fournisseur" : "Nouveau fournisseur"}</h2><p>Référentiel central · réutilisé par BâtiPro, Domus, FarmOS</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="modal-body" style={{ display: "grid", gap: 12 }}>
+          <Field label="Type de tiers">
+            <div className="segtabs">
+              {PARTY_TYPES.map((p) => <button key={p.id} type="button" className={`segtab ${f.partyType === p.id ? "active grad-accent" : ""}`} onClick={() => set("partyType", p.id)}>{p.id === "company" ? "🏢 " : "👤 "}{p.label}</button>)}
+            </div>
+          </Field>
+          <Field label={isCompany ? "Nom de l'entreprise" : "Nom complet"}>
+            <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={isCompany ? "Ex : SARL Kintambo Matériaux" : "Ex : Jean Mukendi"} autoFocus />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Domaine"><select className="select" value={f.supplierType} onChange={(e) => set("supplierType", e.target.value)}>{SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+            <Field label="Téléphone"><input className="input" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+243…" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="E-mail"><input className="input" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="contact@…" /></Field>
+            <Field label={isCompany ? "Personne de contact" : "Téléphone secondaire (optionnel)"}><input className="input" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder={isCompany ? "Nom du contact" : "—"} /></Field>
+          </div>
+          <Field label="Adresse"><input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="Quartier, commune, ville" /></Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {isCompany
+              ? <Field label="RCCM"><input className="input" value={f.rccm} onChange={(e) => set("rccm", e.target.value)} placeholder="CD/KIN/RCCM/…" /></Field>
+              : <Field label="ID national"><input className="input" value={f.nationalId} onChange={(e) => set("nationalId", e.target.value)} placeholder="N° pièce d'identité" /></Field>}
+            <Field label="NIF (n° impôt)"><input className="input" value={f.taxId} onChange={(e) => set("taxId", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Conditions de paiement"><input className="input" value={f.paymentTerms} onChange={(e) => set("paymentTerms", e.target.value)} placeholder="Ex : 30 jours, comptant" /></Field>
+            <Field label="Notes"><input className="input" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
   );
 }
 

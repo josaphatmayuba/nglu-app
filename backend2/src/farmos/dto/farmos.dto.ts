@@ -228,6 +228,12 @@ export class CreateMedicineDto {
   @IsString()
   supplier?: string | null;
 
+  @ApiPropertyOptional({ example: 12, description: "Lien vers le fournisseur central (compta)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  supplier_id?: number | null;
+
   @ApiPropertyOptional({ example: "2027-03-01" })
   @IsOptional()
   @IsDateString()
@@ -393,6 +399,7 @@ export class UpdateMedicineDto {
   @ApiPropertyOptional() @IsOptional() @IsString() unit?: string | null;
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() @Min(0) min_quantity?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsString() supplier?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() supplier_id?: number | null;
   @ApiPropertyOptional() @IsOptional() @IsDateString() expiry_date?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
   @ApiPropertyOptional({ type: [String] }) @IsOptional() @IsArray() @IsString({ each: true }) species?: string[] | null;

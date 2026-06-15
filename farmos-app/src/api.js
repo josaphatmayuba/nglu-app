@@ -244,6 +244,8 @@ async function jsonMutate(kind, path, init = {}) {
 export const api = {
   getAppSetting: () => globalJsonFetch("/setting"),
   listCurrencies: () => globalJsonFetch("/currency?query=all"),
+  // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
+  listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
@@ -459,6 +461,7 @@ export function adaptMedicine(row) {
     unit: row.unit,
     min,
     supplier: row.supplier,
+    supplierId: row.supplierId ?? row.supplier_id ?? null,
     expiry: exp ? String(exp).slice(0, 10) : "—",
     species: parseSpeciesList(row.species),
     lowStock: min != null && qty < min,

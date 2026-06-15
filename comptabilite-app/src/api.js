@@ -101,6 +101,12 @@ export const api = {
   budgets: () => jsonFetch("/budget"),
   budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),
 
+  // ── Fournisseurs (référentiel central des tiers — partagé entre apps) ─
+  suppliers: (params) => jsonFetch(withQuery("/supplier", { query: "all", ...(params || {}) })),
+  createSupplier: (body) => jsonFetch("/supplier", { method: "POST", body: JSON.stringify(body) }),
+  updateSupplier: (id, body) => jsonFetch(`/supplier/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  setSupplierStatus: (id, status) => jsonFetch(`/supplier/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
   // ── Achats / Factures fournisseurs (purchase-invoices) ───────────────
   purchaseInvoices: () => jsonFetch("/purchase-invoice"),
   purchaseInvoicesInfo: () => jsonFetch("/purchase-invoice?query=info"),

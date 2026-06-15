@@ -558,6 +558,7 @@ export class FarmosService {
       unit: input.unit ?? null,
       minQuantity: input.min_quantity != null ? String(input.min_quantity) : null,
       supplier: input.supplier ?? null,
+      supplierId: input.supplier_id ?? null,
       expiryDate: input.expiry_date ?? null,
       notes: input.notes ?? null,
       species: Array.isArray(input.species) && input.species.length ? input.species : null,
@@ -576,6 +577,7 @@ export class FarmosService {
     if (input.unit !== undefined) patch.unit = input.unit;
     if (input.min_quantity !== undefined) patch.minQuantity = input.min_quantity != null ? String(input.min_quantity) : null;
     if (input.supplier !== undefined) patch.supplier = input.supplier;
+    if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id;
     if (input.expiry_date !== undefined) patch.expiryDate = input.expiry_date;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (input.species !== undefined) patch.species = Array.isArray(input.species) && input.species.length ? input.species : null;
