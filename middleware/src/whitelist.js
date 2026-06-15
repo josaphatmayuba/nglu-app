@@ -116,6 +116,7 @@ module.exports = [
   { method: '*',    prefix: '/weight-unit',                   auth: true  },
   { method: '*',    prefix: '/dimension-unit',                auth: true  },
   { method: '*',    prefix: '/property-management',           auth: true  },
+  { method: '*',    prefix: '/journal-entreprise',             auth: true  },
   { method: '*',    prefix: '/farmos',                         auth: true  },
   { method: '*',    prefix: '/batipro',                       auth: true  },
   // Migration Cockpit — lecture seule (GET uniquement), JWT requis.

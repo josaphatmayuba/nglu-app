@@ -1,0 +1,37 @@
+{
+  "appId": "ca.ngolu.journal",
+  "appName": "Journal Entreprise",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "allowNavigation": [
+      "dev.ongdngolu.org",
+      "ongdngolu.org",
+      "*.ongdngolu.org"
+    ]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#0f172a",
+      "showSpinner": false,
+      "androidSplashResourceName": "splash",
+      "iosSplashResourceName": "Splash"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#0f172a",
+      "overlaysWebView": false
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true
+  },
+  "ios": {
+    "limitsNavigationsToAppBoundDomains": false,
+    "contentInset": "always"
+  }
+}

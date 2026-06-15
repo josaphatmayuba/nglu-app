@@ -932,6 +932,13 @@
       "when": 1780491600000,
       "tag": "0156_supplier_party_type",
       "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "5",
+      "when": 1780495200000,
+      "tag": "0157_journal_entreprise",
+      "breakpoints": true
     }
   ]
 }

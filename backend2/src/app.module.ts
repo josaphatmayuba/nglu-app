@@ -18,6 +18,7 @@ import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { FarmosModule } from "./farmos/farmos.module";
+import { JournalEntrepriseModule } from "./journal-entreprise/journal-entreprise.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
@@ -72,6 +73,7 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     EmailTemplatesModule,
     FarmosModule,
+    JournalEntrepriseModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
     MailAccountsModule,
