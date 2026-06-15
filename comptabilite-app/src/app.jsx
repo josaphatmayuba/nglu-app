@@ -64,6 +64,7 @@ function Icon({ name, className = "ic", style }) {
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "dashboard" },
   { section: "Saisie" },
+  { id: "saisie", label: "Saisie rapide", icon: "wallet" },
   { id: "approbations", label: "Approbations", icon: "bellRing" },
   { id: "journaux", label: "Journaux", icon: "bookText" },
   { id: "ecritures", label: "Écritures", icon: "penLine" },
@@ -446,6 +447,7 @@ function App() {
     dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
     ecritures: <Ecritures curFilter={curFilter} dateRange={dateRange} onNew={newEntry} canMutate={canMutate} />,
+    saisie: <SaisieRapide save={save} busy={busy} currencies={data.currencies} defaultCurrencyId={data.defaultCurrencyId} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
     grandlivre: <GrandLivre curFilter={curFilter} dateRange={dateRange} />,
@@ -821,6 +823,122 @@ function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
     </>
   );
 }
+/* ── Saisie rapide (cartes de types → montant + devise → enregistrer) ──────
+   Affiche chaque type de transaction actif en carte. Un clic ouvre un mini-modal
+   qui demande seulement le montant et la devise : le débit/crédit vient du type. */
+function SaisieRapide({ save, busy, currencies = [], defaultCurrencyId = null, canMutate }) {
+  const [types, setTypes] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [picked, setPicked] = React.useState(null); // type choisi (ouvre le mini-modal)
+
+  React.useEffect(() => {
+    api.transactionTypes()
+      .then((list) => setTypes((Array.isArray(list) ? list : []).filter((t) => t.isActive)))
+      .catch((e) => { setError(String(e.message || e)); setTypes([]); });
+  }, []);
+
+  return (
+    <>
+      <PageHead eyebrow="Saisie · le plus rapide" title="Saisie rapide"
+        action="Rafraîchir" actionIcon="download"
+        onAction={() => { setTypes(null); api.transactionTypes().then((l) => setTypes((Array.isArray(l) ? l : []).filter((t) => t.isActive))).catch(() => setTypes([])); }} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {!canMutate && <div className="card pad muted tiny" style={{ marginBottom: 12 }}>Lecture seule (données démo) — la saisie nécessite la connexion API.</div>}
+
+      {types === null
+        ? <div className="card pad muted">Chargement des types…</div>
+        : types.length === 0
+          ? <div className="card pad muted">Aucun type de transaction actif. Créez-en un dans « Types de transaction ».</div>
+          : (
+            <div className="qa-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {types.map((t) => (
+                <button key={t.id} type="button" className="card pad qa-card"
+                  disabled={!canMutate}
+                  onClick={() => setPicked(t)}
+                  style={{ textAlign: "left", cursor: canMutate ? "pointer" : "not-allowed", border: "1px solid var(--ink-100, #e7e5df)", display: "flex", flexDirection: "column", gap: 6, minHeight: 92 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="brand-icon grad-accent" style={{ width: 28, height: 28 }}><Icon name="wallet" /></span>
+                    <span style={{ fontWeight: 600, lineHeight: 1.2 }}>{t.name}</span>
+                  </span>
+                  <span className="tiny muted" style={{ lineHeight: 1.3 }}>
+                    {(t.debitAccount?.name || "—")} → {(t.creditAccount?.name || "—")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+      {picked && (
+        <QuickEntryModal
+          type={picked}
+          busy={busy}
+          currencies={currencies}
+          defaultCurrencyId={defaultCurrencyId}
+          onClose={() => setPicked(null)}
+          onSave={async (form) => {
+            await save("transaction", {
+              date: new Date().toISOString(),
+              debitId: picked.debitAccount?.id ?? picked.debitAccountId,
+              creditId: picked.creditAccount?.id ?? picked.creditAccountId,
+              particulars: form.particulars || picked.name,
+              amount: form.amount,
+              currencyId: form.currencyId,
+              type: picked.name,
+            });
+            setPicked(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* Mini-modal : montant + devise (+ note optionnelle) pour un type donné. */
+function QuickEntryModal({ type, busy, currencies = [], defaultCurrencyId, onClose, onSave }) {
+  const [amount, setAmount] = React.useState("");
+  const [currencyId, setCurrencyId] = React.useState(defaultCurrencyId ? String(defaultCurrencyId) : "");
+  const [particulars, setParticulars] = React.useState("");
+  const [err, setErr] = React.useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    const amt = Number(amount);
+    if (!(amt > 0)) { setErr("Montant invalide."); return; }
+    if (!currencyId) { setErr("La devise est obligatoire."); return; }
+    onSave({ amount: amt, currencyId: Number(currencyId), particulars: particulars.trim() });
+  };
+
+  const curCodeSel = curCode(currencies, currencyId) || CUR;
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{type.name}</h2><p>Débit {type.debitAccount?.name || "—"} · Crédit {type.creditAccount?.name || "—"}</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field"><span>Devise *</span>
+            <Autocomplete value={currencyId} allowClear={false} placeholder="Choisir la devise…"
+              options={(currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }))}
+              onChange={setCurrencyId} />
+          </label>
+          <label className="field"><span>{`Montant (${curCodeSel})`} *</span>
+            <input required type="number" min="0" step="any" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          </label>
+          <label className="field"><span>Note (optionnel)</span>
+            <input type="text" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder={type.name} />
+          </label>
+        </div>
+        {err && <div className="login-error">{err}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn btn-accent grad-accent" disabled={busy || !currencyId}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 /* ── Types de transaction ──────────────────────────────────────────────── */
 function Types({ canMutate, accounts = [] }) {
   const [types, setTypes] = React.useState(null);
