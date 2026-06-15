@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed
+- **SideNav CRM — RH et Comptabilité pointent vers les outils internes (SCRUM)** : dans la section « Gestion » de la barre latérale du CRM, **RH** ouvre désormais l'outil interne `/admin/hr` et **Comptabilité** l'outil interne `/admin/accounting` (NavLink interne au lieu d'un `window.location.href` vers les apps externes `/hr/` et `/comptabilite/`). **Immobilier** reste sur `/admin/property-management`. **FarmOS** et **BatiPro** restent des liens externes (pas d'équivalent interne au CRM). L'AppSwitcher n'est pas touché (ses tuiles continuent d'ouvrir directement les apps déployées). [3.74.3]
+
 ### Added
 - **AppSwitcher — ajout de l'app « Migration » (SCRUM)** : l'app `migration-app` (servie sous `/migration/`) était développée mais absente du sélecteur d'applications. Ajoutée aux **Disponibles** (icône `DatabaseZap`, dégradé cyan→teal, lien externe). Aucune entrée existante retirée. [3.74.2]
 
