@@ -904,6 +904,13 @@
       "when": 1780477200000,
       "tag": "0152_transaction_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "5",
+      "when": 1780480800000,
+      "tag": "0153_treasury_transaction_types_fix",
+      "breakpoints": true
     }
   ]
 }
