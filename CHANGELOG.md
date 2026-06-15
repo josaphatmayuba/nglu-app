@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **CI frontend — build:dev jamais exécuté (high audit form-data)** : `npm audit --audit-level=high` faisait échouer la chaîne `npm install && npm audit ... && npm run build:dev` à cause d'une vulnérabilité high sur `form-data` (dépendance d'`axios`, CRLF injection GHSA-hmw2-7cc7-3qxx). `frontend/dist` n'était donc jamais généré et le `scp` du déploiement échouait. Ajout d'un override `"form-data": "^4.0.6"` dans `frontend/package.json` (fix non-breaking). [3.75.1]
+
 ### Added
 - **CRM — module Devis (SCRUM)** : nouvelle page « Devis » sous Ventes avancées, accessible via le menu latéral (`/admin/quote`, permissions `readAll-quote`/`create-quote`/`readSingle-quote`). Liste des devis avec recherche, formulaire de création (client, date, lignes produits, note) et page de détail réutilisant le composant d'impression existant `QuoteSlip`. Backend déjà existant (`/quote`, déjà whitelisté côté middleware) : aucune modification backend/middleware nécessaire. Nouveau slice Redux `quotes` (`loadAllQuote`, `loadSingleQuote`, `addQuote`, `deleteQuote`). [3.75.0]
 
