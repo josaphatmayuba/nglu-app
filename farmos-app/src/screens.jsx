@@ -3708,10 +3708,231 @@ const AboutCard = ({ lang }) => {
 
 // ─── BÂTIMENTS ───────────────────────────────────────────────────────────
 const BLANK_BUILDING = { name: "", species: "", type: "", capacity: "", temperature: "", humidity: "", manager: "", hygiene_status: "" };
+
+// Type → couleur
+const BLDG_TYPE_META = {
+  barn:     { bg: "#EAF2EA", border: "#9CC09A", text: "#2A5A2A", icon: "barn" },
+  piggery:  { bg: "#FBF0F0", border: "#D49090", text: "#7A2A2A", icon: "pig" },
+  poultry:  { bg: "#FBF5E6", border: "#D4B870", text: "#7A5010", icon: "bird" },
+  rabbit:   { bg: "#FBF2EC", border: "#C8A880", text: "#7A4810", icon: "package" },
+  storage:  { bg: "#F5F3EE", border: "#C8C0B0", text: "#5A5040", icon: "package" },
+  clinic:   { bg: "#FCF0EE", border: "#D49880", text: "#7A3010", icon: "pulse" },
+};
+const bldgMeta = (type) => BLDG_TYPE_META[type] || BLDG_TYPE_META.storage;
+
+// Barre d'occupation
+const BldgOccBar = ({ rate, overCapacity, compact }) => {
+  const color = overCapacity ? "var(--oxblood-700)" : rate > 85 ? "var(--autorite-500)" : "var(--solidite-500)";
+  return (
+    <div style={{ height: compact ? 5 : 7, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${Math.min(100, rate ?? 0)}%`, background: color, transition: "width 0.3s" }}/>
+    </div>
+  );
+};
+
+// Plan SVG auto-layout (grille) depuis les vrais bâtiments
+const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
+  const COLS = 3;
+  const CELL_W = 220, CELL_H = 110, GAP = 18, PAD = 20;
+  const rows = Math.ceil(buildings.length / COLS);
+  const W = PAD * 2 + COLS * CELL_W + (COLS - 1) * GAP;
+  const H = PAD * 2 + rows * CELL_H + (rows - 1) * GAP + 28;
+
+  return (
+    <div style={{ background: "#F3F0E8", borderRadius: 12, border: "1px solid var(--border-1)", overflow: "hidden", position: "relative" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* Ground */}
+        <rect width={W} height={H} fill="#F3F0E8"/>
+        {/* Allée horizontale entre rangées */}
+        {Array.from({ length: rows - 1 }, (_, ri) => {
+          const y = PAD + (ri + 1) * CELL_H + ri * GAP - GAP / 2 - 7;
+          return <rect key={ri} x={0} y={y} width={W} height={14} fill="#E0DBCD" rx={2}/>;
+        })}
+        {/* Allée verticale entre colonnes */}
+        {Array.from({ length: COLS - 1 }, (_, ci) => {
+          const x = PAD + (ci + 1) * CELL_W + ci * GAP - GAP / 2 - 7;
+          return <rect key={ci} x={x} y={0} width={14} height={H} fill="#E0DBCD" rx={2}/>;
+        })}
+        {/* Compass */}
+        <g transform={`translate(${W - 26}, 22)`}>
+          <circle cx={0} cy={0} r={14} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
+          <text x={0} y={-5} textAnchor="middle" fontSize="7" fill="#3A3020" fontWeight="700" fontFamily="monospace">N</text>
+          <polygon points="0,-10 -3,2 3,2" fill="#3A3020"/>
+        </g>
+        {/* Buildings */}
+        {buildings.map((b, i) => {
+          const col = i % COLS;
+          const row = Math.floor(i / COLS);
+          const x = PAD + col * (CELL_W + GAP);
+          const y = PAD + row * (CELL_H + GAP);
+          const meta = bldgMeta(b.type);
+          const isSelected = selectedId === b.id;
+          const rate = b.occupancyRate ?? 0;
+          const overCap = b.overCapacity;
+          const barColor = overCap ? "#A82020" : rate > 85 ? "#B08020" : "#3A8040";
+          return (
+            <g key={b.id} style={{ cursor: "pointer" }} onClick={() => onSelect(b.id)}>
+              {/* Shadow */}
+              <rect x={x + 3} y={y + 3} width={CELL_W} height={CELL_H} rx={6} fill="rgba(0,0,0,0.07)"/>
+              {/* Body */}
+              <rect x={x} y={y} width={CELL_W} height={CELL_H} rx={6}
+                fill={isSelected ? "white" : meta.bg}
+                stroke={isSelected ? "var(--forest-700)" : meta.border}
+                strokeWidth={isSelected ? 2.5 : 1.5}/>
+              {/* Roof strip */}
+              <rect x={x} y={y} width={CELL_W} height={7} rx={6} fill={meta.border} opacity={0.5}/>
+              {/* Status dot */}
+              <circle cx={x + CELL_W - 12} cy={y + 13} r={5}
+                fill={overCap ? "#BE5234" : rate > 85 ? "#B08020" : "#3A8040"}
+                stroke="white" strokeWidth={1.5}/>
+              {/* Name */}
+              <text x={x + 10} y={y + 20} fontSize="9.5" fontWeight="800" fill={meta.border} fontFamily="monospace" letterSpacing="0.05em">
+                {b.type ? b.type.toUpperCase().slice(0, 8) : "BLDG"}
+              </text>
+              <text x={x + 10} y={y + 35} fontSize="10" fill="#3A3020" fontFamily="sans-serif" fontWeight="600">
+                {b.name.slice(0, 26)}
+              </text>
+              {/* Species */}
+              {b.species && (
+                <text x={x + 10} y={y + 49} fontSize="9" fill="#6A5A40" fontFamily="sans-serif">{b.species}</text>
+              )}
+              {/* Env info */}
+              {b.temperature != null && (
+                <text x={x + 10} y={y + 63} fontSize="9" fill="#7A7060" fontFamily="monospace">{b.temperature}°C {b.humidity != null ? `· ${b.humidity}%H` : ""}</text>
+              )}
+              {/* Occupancy bar */}
+              {b.capacity && (
+                <>
+                  <text x={x + 10} y={y + CELL_H - 22} fontSize="8.5" fill="#7A7060" fontFamily="monospace">
+                    {b.occupancy ?? 0} / {b.capacity} · {rate}%
+                  </text>
+                  <rect x={x + 10} y={y + CELL_H - 14} width={CELL_W - 20} height={6} rx={999} fill="rgba(0,0,0,0.09)"/>
+                  <rect x={x + 10} y={y + CELL_H - 14}
+                    width={Math.max(4, ((CELL_W - 20) * Math.min(100, rate)) / 100)} height={6} rx={999}
+                    fill={barColor}/>
+                </>
+              )}
+              {/* Manager */}
+              {b.manager && !b.capacity && (
+                <text x={x + 10} y={y + CELL_H - 12} fontSize="8.5" fill="#9A8A70" fontFamily="sans-serif">{b.manager}</text>
+              )}
+            </g>
+          );
+        })}
+        {/* Legend */}
+        <g transform={`translate(${PAD}, ${H - 18})`}>
+          {[
+            { color: "#3A8040", label: lang === "fr" ? "Normal" : "Normal" },
+            { color: "#B08020", label: lang === "fr" ? "> 85%" : "> 85%" },
+            { color: "#BE5234", label: lang === "fr" ? "Surcap." : "Over cap." },
+          ].map((l, i) => (
+            <g key={i} transform={`translate(${i * 90}, 0)`}>
+              <circle cx={5} cy={-3} r={4} fill={l.color}/>
+              <text x={13} y={0} fontSize="8.5" fill="#7A7060" fontFamily="sans-serif">{l.label}</text>
+            </g>
+          ))}
+        </g>
+      </svg>
+    </div>
+  );
+};
+
+// Panneau de détail d'un bâtiment sélectionné
+const BldgDetail = ({ building, lang, onEdit, onClose }) => {
+  if (!building) return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 240, color: "var(--fg-3)" }}>
+      <Icon name="building" size={28} color="var(--ink-300)"/>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-400)" }}>
+        {lang === "fr" ? "Sélectionnez un bâtiment" : "Select a building"}
+      </div>
+    </div>
+  );
+  const meta = bldgMeta(building.type);
+  const rate = building.occupancyRate ?? 0;
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14, overflow: "auto" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name={meta.icon} size={19} color={meta.text}/>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600, color: "var(--ink-950)" }}>{building.name}</div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>
+            {[building.type, building.species, building.manager].filter(Boolean).join(" · ") || "—"}
+          </div>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 7px", flexShrink: 0 }}>
+          <Icon name="x" size={13} color="var(--ink-600)"/>
+        </button>
+      </div>
+
+      {/* Occupation */}
+      {building.capacity && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--fg-2)" }}>
+            <span>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
+            <span className="mono" style={{ fontWeight: 700, color: building.overCapacity ? "var(--oxblood-700)" : "var(--ink-800)" }}>
+              {building.occupancy ?? 0} / {building.capacity} · {rate}%
+            </span>
+          </div>
+          <BldgOccBar rate={rate} overCapacity={building.overCapacity}/>
+          {building.overCapacity && (
+            <div style={{ marginTop: 6, fontSize: 11, color: "var(--oxblood-700)", fontWeight: 600 }}>
+              {lang === "fr" ? "⚠ Surcapacité détectée" : "⚠ Over capacity detected"}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KPIs env */}
+      {(building.temperature != null || building.humidity != null || building.hygieneStatus) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {building.temperature != null && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Temp." : "Temp."}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--ink-950)", marginTop: 2 }}>{building.temperature}°C</div>
+            </div>
+          )}
+          {building.humidity != null && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Humidité" : "Humidity"}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--ink-950)", marginTop: 2 }}>{building.humidity}%</div>
+            </div>
+          )}
+          {building.hygieneStatus && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Hygiène" : "Hygiene"}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-800)", marginTop: 4 }}>{building.hygieneStatus}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 7 }}>
+        <button className="btn btn-sm" style={{ flex: 1 }} onClick={onEdit}>
+          <Icon name="edit" size={12} color="var(--ink-700)"/>
+          {lang === "fr" ? "Modifier" : "Edit"}
+        </button>
+        <button className="btn btn-sm" style={{ flex: 1 }}>
+          <Icon name="layers" size={12} color="var(--ink-700)"/>
+          {lang === "fr" ? "Animaux" : "Animals"}
+        </button>
+        <button className="btn btn-sm btn-primary" style={{ flex: 1 }}>
+          <Icon name="pulse" size={12} color="#ECF1EC"/>
+          {lang === "fr" ? "Santé" : "Health"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [rows, setRows] = React.useState([]);
   const [editing, setEditing] = React.useState(null); // building | "new" | null
   const [reloadKey, setReloadKey] = React.useState(0);
+  const [viewMode, setViewMode] = React.useState("plan"); // "plan" | "cards"
+  const [selectedId, setSelectedId] = React.useState(null);
   const refresh = useDataRefresh(["buildings", "animals"]);
   React.useEffect(() => {
     let cancel = false;
@@ -3719,25 +3940,91 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
+  const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
-      <div>
-        <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
-        </h1>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+            {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* View toggle */}
+          <div style={{ display: "flex", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 8, padding: 3, gap: 2 }}>
+            {[
+              { id: "plan",  icon: "grid",   fr: "Plan",   en: "Map" },
+              { id: "cards", icon: "layers", fr: "Cartes", en: "Cards" },
+            ].map((v) => (
+              <button key={v.id} onClick={() => setViewMode(v.id)}
+                className={viewMode === v.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"}
+                style={{ gap: 5, padding: "5px 12px" }}>
+                <Icon name={v.icon} size={12} color={viewMode === v.id ? "#ECF1EC" : "var(--ink-700)"}/>
+                {lang === "fr" ? v.fr : v.en}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}>
+            <Icon name="plus" size={13} color="#FBF8F2"/>
+            {lang === "fr" ? "Nouveau bâtiment" : "New building"}
+          </button>
+        </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
-        <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}><Icon name="plus" size={13} color="#FBF8F2"/>{lang === "fr" ? "Nouveau bâtiment" : "New building"}</button>
-      </div>
+
+      {/* Species filter */}
+      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+
       {filtered.length === 0 ? (
         <EmptyState lang={lang} title={lang === "fr" ? "Aucun bâtiment" : "No building"} hint={lang === "fr" ? "Ajoute un bâtiment pour suivre capacité et occupation." : "Add a building to track capacity and occupancy."}/>
+      ) : viewMode === "plan" ? (
+        /* ── Vue Plan ── */
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, flex: 1, minHeight: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, overflow: "auto" }}>
+            <BuildingFloorPlan
+              buildings={filtered}
+              selectedId={selectedId}
+              onSelect={(id) => setSelectedId(id === selectedId ? null : id)}
+              lang={lang}
+            />
+            {/* Mini cards grid below the map */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+              {filtered.map((b) => {
+                const rate = b.occupancyRate ?? 0;
+                const meta = bldgMeta(b.type);
+                const isSelected = selectedId === b.id;
+                return (
+                  <button key={b.id}
+                    onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
+                    style={{ background: isSelected ? "var(--paper)" : meta.bg, border: `2px solid ${isSelected ? "var(--forest-700)" : meta.border}`, borderRadius: 9, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, boxShadow: isSelected ? "0 0 0 3px rgba(14,100,56,0.15)" : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Icon name={meta.icon} size={15} color={meta.text}/>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                      {b.overCapacity && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--oxblood-700)", background: "var(--oxblood-50)", borderRadius: 4, padding: "1px 5px" }}>!</span>}
+                    </div>
+                    {b.capacity && <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>}
+                    <div style={{ fontSize: 10, color: "var(--fg-3)" }}>{[b.type, b.species].filter(Boolean).join(" · ") || "—"}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Detail panel */}
+          <div style={{ overflow: "auto" }}>
+            <BldgDetail
+              building={selectedBuilding}
+              lang={lang}
+              onEdit={() => setEditing(selectedBuilding)}
+              onClose={() => setSelectedId(null)}
+            />
+          </div>
+        </div>
       ) : (
+        /* ── Vue Cartes ── */
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
           {filtered.map((b) => {
             const rate = b.occupancyRate;
-            const barColor = b.overCapacity ? "var(--oxblood-700)" : rate != null && rate > 85 ? "var(--autorite-500)" : "var(--solidite-500)";
             return (
               <div key={b.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }} onClick={() => setEditing(b)}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -3750,9 +4037,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     <span style={{ color: "var(--fg-2)" }}>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
                     <span className="mono">{b.occupancy}{b.capacity ? ` / ${b.capacity}` : ""}{rate != null ? ` · ${rate}%` : ""}</span>
                   </div>
-                  <div style={{ height: 6, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, rate ?? 0)}%`, background: barColor }}/>
-                  </div>
+                  <BldgOccBar rate={rate ?? 0} overCapacity={b.overCapacity}/>
                 </div>
                 <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--fg-2)" }}>
                   {b.temperature != null && <span>🌡 {b.temperature}°C</span>}

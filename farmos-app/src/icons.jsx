@@ -37,6 +37,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     egg:       <path d="M12 3c4 0 7 6 7 11a7 7 0 1 1-14 0c0-5 3-11 7-11z"/>,
     leaf:      <><path d="M5 21c5-2 11-8 14-16-8 1-16 6-16 14 0 1 1 2 2 2z"/><path d="M5 21 14 12"/></>,
     barn:      <><path d="M3 21V10l9-6 9 6v11"/><path d="M3 21h18M9 21v-6h6v6M9 11h6"/></>,
+    building:  <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M10 5V3M14 5V3M8 14h2M14 14h2M8 18h2M14 18h2"/></>,
     chart:     <><path d="M3 3v18h18"/><path d="m7 14 3-3 4 4 5-6"/></>,
     chartBar:  <><rect x="4" y="13" width="3" height="8"/><rect x="10" y="9" width="3" height="12"/><rect x="16" y="5" width="3" height="16"/><path d="M3 21h18"/></>,
     chartPie:  <><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 3a7 7 0 0 1 7 7"/></>,

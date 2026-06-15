@@ -4,6 +4,7 @@
 const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
   { id: "identification", icon: "scanLine", labelKey: "identification" },
+  { id: "buildings", icon: "building",  labelKey: "buildings" },
   { id: "animals",   icon: "layers",    labelKey: "animals" },
   { id: "health",    icon: "pulse",     labelKey: "health" },
   { id: "calendar",  icon: "calendar",  labelKey: "calendar" },
