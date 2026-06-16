@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **FarmOS /animaux crash** : `Cannot read properties of undefined (reading 'accentBg')` — `speciesById()` retournait `undefined` pour les espèces `bovin/porc/poule/caprin` (IDs inconnus du frontend). Fix double : (1) `animals.jsx` — fallback `|| {...}` sur tous les appels `speciesById` sans guard ; (2) seeder — normalise les IDs vers `cow/pig/chicken/goat` en DB + `fixSpeciesIds()` au boot pour les enregistrements existants. [SCRUM]
+
 ### Added
 - **Seeder FarmOS — nettoyage anciens bâtiments** : soft-delete automatique des bâtiments legacy (Zone A, Zone B, Kasangulu, Étable 1, Batiment 1, Batiment 2) au boot du seeder ; 6 bâtiments corrects restent seuls actifs (Zone Kiselele / Zone Kasangulu). [SCRUM]
 - **Seeder FarmOS — structure zones/bâtiments corrigée** : Zone Kiselele (Bâtiment Bovins + Bâtiment Porcs) et Zone Kasangulu (Bâtiment Caprins + Bâtiment Porcs + Poulailler 1 + Poulailler 2). Chaque animal placé dans son bâtiment correct. CSV `farmos_animals.csv` mis à jour en cohérence. [SCRUM]

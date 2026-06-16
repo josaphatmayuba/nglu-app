@@ -31,12 +31,12 @@ const ORG_ID = 1;
 
 // ── Bâtiments ──────────────────────────────────────────────────────────
 const BUILDINGS = [
-  { name: "Batiment Bovins Kiselele",   species: "bovin",  type: "enclos",     capacity: 30,   zone: "Zone Kiselele",  notes: "Bovins (vaches, veau) — Zone Kiselele" },
-  { name: "Batiment Porcs Kiselele",    species: "porc",   type: "porcherie",  capacity: 80,   zone: "Zone Kiselele",  notes: "Porcs adultes, jeunes et moyens — Zone Kiselele" },
-  { name: "Batiment Caprins Kasangulu", species: "caprin", type: "enclos",     capacity: 50,   zone: "Zone Kasangulu", notes: "Chevres — Zone Kasangulu" },
-  { name: "Batiment Porcs Kasangulu",   species: "porc",   type: "porcherie",  capacity: 80,   zone: "Zone Kasangulu", notes: "Porcs affectes par infection — Zone Kasangulu" },
-  { name: "Poulailler 1",               species: "poule",  type: "poulailler", capacity: 1700, zone: "Zone Kasangulu", notes: "Poulailler principal — Zone Kasangulu" },
-  { name: "Poulailler 2",               species: "poule",  type: "poulailler", capacity: 20,   zone: "Zone Kasangulu", notes: "Poulailler secondaire — Zone Kasangulu" },
+  { name: "Batiment Bovins Kiselele",   species: "cow",     type: "enclos",     capacity: 30,   zone: "Zone Kiselele",  notes: "Bovins (vaches, veau) — Zone Kiselele" },
+  { name: "Batiment Porcs Kiselele",    species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kiselele",  notes: "Porcs adultes, jeunes et moyens — Zone Kiselele" },
+  { name: "Batiment Caprins Kasangulu", species: "goat",    type: "enclos",     capacity: 50,   zone: "Zone Kasangulu", notes: "Chevres — Zone Kasangulu" },
+  { name: "Batiment Porcs Kasangulu",   species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kasangulu", notes: "Porcs affectes par infection — Zone Kasangulu" },
+  { name: "Poulailler 1",               species: "chicken", type: "poulailler", capacity: 1700, zone: "Zone Kasangulu", notes: "Poulailler principal — Zone Kasangulu" },
+  { name: "Poulailler 2",               species: "chicken", type: "poulailler", capacity: 20,   zone: "Zone Kasangulu", notes: "Poulailler secondaire — Zone Kasangulu" },
 ];
 
 // ── Inventaire animaux ─────────────────────────────────────────────────
@@ -44,29 +44,29 @@ const BUILDINGS = [
 // room  = zone géographique
 const ANIMALS = [
   // Zone Kiselele — Bovins
-  { species: "bovin",  type: "adulte",   sex: "male",   count: 4,    lot: "Cheptel Zone Kiselele", barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon, un veau",             externalId: "ZK-VACHE-MA" },
-  { species: "bovin",  type: "adulte",   sex: "female", count: 18,   lot: "Cheptel Zone Kiselele", barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-VACHE-FA" },
-  { species: "bovin",  type: "jeune",    sex: "male",   count: 1,    lot: "Cheptel Zone Kiselele", barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon, veau",                 externalId: "ZK-VACHE-JM" },
+  { species: "cow",     type: "adulte",   sex: "male",   count: 4,    lot: "Cheptel Zone Kiselele",  barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon, un veau",             externalId: "ZK-VACHE-MA" },
+  { species: "cow",     type: "adulte",   sex: "female", count: 18,   lot: "Cheptel Zone Kiselele",  barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-VACHE-FA" },
+  { species: "cow",     type: "jeune",    sex: "male",   count: 1,    lot: "Cheptel Zone Kiselele",  barn: "Batiment Bovins Kiselele",   room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon, veau",                 externalId: "ZK-VACHE-JM" },
   // Zone Kiselele — Porcs
-  { species: "porc",   type: "adulte",   sex: "male",   count: 1,    lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-MA" },
-  { species: "porc",   type: "adulte",   sex: "female", count: 13,   lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-FA" },
-  { species: "porc",   type: "jeune",    sex: "male",   count: 15,   lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-JM" },
-  { species: "porc",   type: "jeune",    sex: "female", count: 32,   lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-JF" },
-  { species: "porc",   type: "moyen",    sex: "male",   count: 11,   lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORCMOY-MA" },
-  { species: "porc",   type: "moyen",    sex: "female", count: 7,    lot: "Cheptel Zone Kiselele", barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORCMOY-FA" },
+  { species: "pig",     type: "adulte",   sex: "male",   count: 1,    lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-MA" },
+  { species: "pig",     type: "adulte",   sex: "female", count: 13,   lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-FA" },
+  { species: "pig",     type: "jeune",    sex: "male",   count: 15,   lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-JM" },
+  { species: "pig",     type: "jeune",    sex: "female", count: 32,   lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORC-JF" },
+  { species: "pig",     type: "moyen",    sex: "male",   count: 11,   lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORCMOY-MA" },
+  { species: "pig",     type: "moyen",    sex: "female", count: 7,    lot: "Cheptel Zone Kiselele",  barn: "Batiment Porcs Kiselele",    room: "Zone Kiselele",  status: "healthy", lastEvent: "Etat de sante bon",                       externalId: "ZK-PORCMOY-FA" },
   // Zone Kasangulu — Caprins
-  { species: "caprin", type: "total",    sex: null,     count: 45,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Caprins Kasangulu", room: "Zone Kasangulu", status: "sick",    lastEvent: "Etat de sante pas tres bon",              externalId: "ZKA-CHEVRE-TOTAL" },
+  { species: "goat",    type: "total",    sex: null,     count: 45,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Caprins Kasangulu", room: "Zone Kasangulu", status: "sick",    lastEvent: "Etat de sante pas tres bon",              externalId: "ZKA-CHEVRE-TOTAL" },
   // Zone Kasangulu — Porcs
-  { species: "porc",   type: "adulte",   sex: "male",   count: 1,    lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-MA" },
-  { species: "porc",   type: "adulte",   sex: "female", count: 10,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-FA" },
-  { species: "porc",   type: "jeune",    sex: "male",   count: 11,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-JM" },
-  { species: "porc",   type: "jeune",    sex: "female", count: 15,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-JF" },
-  { species: "porc",   type: "moyen",    sex: "male",   count: 22,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORCMOY-MA" },
-  { species: "porc",   type: "moyen",    sex: "female", count: 11,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORCMOY-FA" },
+  { species: "pig",     type: "adulte",   sex: "male",   count: 1,    lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-MA" },
+  { species: "pig",     type: "adulte",   sex: "female", count: 10,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-FA" },
+  { species: "pig",     type: "jeune",    sex: "male",   count: 11,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-JM" },
+  { species: "pig",     type: "jeune",    sex: "female", count: 15,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORC-JF" },
+  { species: "pig",     type: "moyen",    sex: "male",   count: 22,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORCMOY-MA" },
+  { species: "pig",     type: "moyen",    sex: "female", count: 11,   lot: "Cheptel Zone Kasangulu", barn: "Batiment Porcs Kasangulu",   room: "Zone Kasangulu", status: "sick",    lastEvent: "Porcs affectes par infection (plaies)",  externalId: "ZKA-PORCMOY-FA" },
   // Zone Kasangulu — Poulaillers
-  { species: "poule",  type: "pondeuse", sex: "female", count: 1700, lot: "Poulailler 1",           barn: "Poulailler 1",               room: "Zone Kasangulu", status: "healthy", lastEvent: "1700 poules pondeuses - Poulailler 1",    externalId: "ZKA-POULE-BAT1" },
-  { species: "poule",  type: "pondeuse", sex: "male",   count: 7,    lot: "Poulailler 2",           barn: "Poulailler 2",               room: "Zone Kasangulu", status: "healthy", lastEvent: "Poulailler 2: 7 males",                   externalId: "ZKA-POULE-BAT2-M" },
-  { species: "poule",  type: "pondeuse", sex: "female", count: 13,   lot: "Poulailler 2",           barn: "Poulailler 2",               room: "Zone Kasangulu", status: "healthy", lastEvent: "Poulailler 2: 13 femelles",               externalId: "ZKA-POULE-BAT2-F" },
+  { species: "chicken", type: "pondeuse", sex: "female", count: 1700, lot: "Poulailler 1",           barn: "Poulailler 1",               room: "Zone Kasangulu", status: "healthy", lastEvent: "1700 poules pondeuses - Poulailler 1",    externalId: "ZKA-POULE-BAT1" },
+  { species: "chicken", type: "pondeuse", sex: "male",   count: 7,    lot: "Poulailler 2",           barn: "Poulailler 2",               room: "Zone Kasangulu", status: "healthy", lastEvent: "Poulailler 2: 7 males",                   externalId: "ZKA-POULE-BAT2-M" },
+  { species: "chicken", type: "pondeuse", sex: "female", count: 13,   lot: "Poulailler 2",           barn: "Poulailler 2",               room: "Zone Kasangulu", status: "healthy", lastEvent: "Poulailler 2: 13 femelles",               externalId: "ZKA-POULE-BAT2-F" },
 ];
 
 // ── Production d'œufs ──────────────────────────────────────────────────
@@ -265,7 +265,17 @@ async function seedStaff() {
   console.log(`  [farmos-staff] ${created} compte(s) créé(s), ${STAFF.length - created} déjà présent(s).`);
 }
 
+async function fixSpeciesIds() {
+  const MAP: Record<string, string> = { bovin: "cow", porc: "pig", poule: "chicken", caprin: "goat" };
+  for (const [old, neo] of Object.entries(MAP)) {
+    await db.execute(sql`UPDATE farmos_animals SET species = ${neo} WHERE species = ${old} AND organization_id = ${ORG_ID}`);
+    await db.execute(sql`UPDATE farmos_buildings SET species = ${neo} WHERE species = ${old} AND organization_id = ${ORG_ID}`);
+  }
+  console.log(`  [farmos-species] IDs espèces normalisés (bovin→cow, porc→pig, poule→chicken, caprin→goat).`);
+}
+
 export async function seedFarmosElevage() {
+  await fixSpeciesIds();
   await cleanOldBuildings();
   await seedBuildings();
   await seedAnimals();
