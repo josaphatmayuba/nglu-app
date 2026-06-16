@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security
+- **3 vulnérabilités high corrigées (`nodemailer`, `ws`)** : `nodemailer <=8.0.8` (injection CRLF headers + TLS) et `ws 8.0.0-8.20.1` (DoS mémoire) mis à jour via `npm audit fix`. Les 19 vulnérabilités modérées restantes sont dans `jest` (devDependency uniquement, jamais en prod). [SCRUM]
+
 ### Fixed
 - **Versions `@nestjs/websockets` / `@nestjs/platform-socket.io` désalignées du reste de l'écosystème Nest** : déclarées en `^11.1.27` alors que `@nestjs/core` & co étaient en `^11.1.24` → `Cannot find module './ws-adapter'` au boot (mismatch d'API interne socket.io). Réalignées sur `^11.1.24` et `package-lock.json` régénéré (toutes les versions Nest cohérentes en 11.1.27 via le lock). [SCRUM]
 - **Pipeline backend (dev + prod) ne syncait pas `package.json`** — cause racine du crash-loop : le step déployait `dist` + `drizzle` mais jamais `package*.json`, donc le `--build` reconstruisait l'image (`COPY package*.json` + `npm ci`) avec un `package.json` serveur obsolète → toute nouvelle dépendance (`@nestjs/websockets`) manquait dans le conteneur → `MODULE_NOT_FOUND` → 504. Ajout du `scp backend2/package*.json` avant le rebuild, **sur dev ET prod** (protège le prochain merge develop→master). [SCRUM]
