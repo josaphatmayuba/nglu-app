@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestion de Projets · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        indigo:{50:'#eef2ff',100:'#e0e7ff',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca'},
+        violet:{50:'#f5f3ff',100:'#ede9fe',300:'#c4b5fd',400:'#a78bfa',500:'#8b5cf6',600:'#7c3aed',700:'#6d28d9'},
+        amber:{50:'#fffbeb',100:'#fef3c7',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309'},
+        emerald:{50:'#ecfdf5',100:'#d1fae5',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857'},
+        rose:{50:'#fff1f2',100:'#ffe4e6',400:'#fb7185',500:'#f43f5e',600:'#e11d48',700:'#be123c'},
+        sky:{50:'#f0f9ff',100:'#e0f2fe',400:'#38bdf8',500:'#0ea5e9',600:'#0284c7'},
+        cyan:{400:'#22d3ee',500:'#06b6d4'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e8ecf5;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-violet{background:linear-gradient(135deg,#7c3aed 0%,#6366f1 60%,#4f46e5 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#1e293b 0%,#0f172a 55%,#020617 100%);}
+    [data-lucide]{stroke-width:1.8;}
+    .view{display:none;}.view.active{display:flex;flex-direction:column;}
+    .navlink{cursor:pointer;transition:.15s;}
+    .nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}
+    .nav-active [data-lucide]{color:#c4b5fd!important;}
+    .chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
+
+    /* Frame */
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:820px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(15,23,42,.55),0 0 0 11px #0b1020,0 0 0 13px #1e293b;display:flex;flex-direction:column;background:#f7f8fa;}
+    body.mobile .desk-side{display:none;}
+    body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .pad{padding:14px!important;}
+    body.mobile .g4,body.mobile .g3,body.mobile .g2{grid-template-columns:1fr!important;}
+    body.mobile .hide-mob{display:none!important;}
+    body.mobile .mob-stack{flex-direction:column!important;}
+    body:not(.mobile) #stage{max-width:1340px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(15,23,42,.45);border:1px solid #e2e8f0;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:700px;}
+    body:not(.mobile) #scroll{flex:1;background:#f7f8fa;}
+    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+    .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+
+    /* Kanban */
+    .kanban-col{min-width:260px;max-width:280px;flex-shrink:0;}
+    .kanban-scroll{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;}
+    .kanban-scroll::-webkit-scrollbar{height:5px;}
+    .card-drag{cursor:grab;transition:.15s;}
+    .card-drag:hover{transform:translateY(-2px);box-shadow:0 8px 24px -8px rgba(99,102,241,.18);}
+
+    /* Gantt */
+    .gantt-bar{height:20px;border-radius:6px;position:relative;min-width:20px;}
+    .gantt-row:hover{background:#f1f5f9;}
+
+    /* Progress ring */
+    .ring-track{stroke:#e2e8f0;stroke-width:6;fill:none;}
+    .ring-fill{stroke-width:6;fill:none;stroke-linecap:round;transition:stroke-dashoffset .6s ease;}
+
+    /* Priority dot */
+    .prio-dot{width:8px;height:8px;border-radius:999px;flex-shrink:0;}
+
+    /* Avatar stack */
+    .av{width:26px;height:26px;border-radius:999px;border:2px solid #fff;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;margin-left:-8px;}
+    .av:first-child{margin-left:0;}
+
+    /* Modal */
+    .modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;}
+    .modal-bg.open{display:flex;}
+
+    /* Toast */
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#0f172a;color:#fff;padding:10px 20px;border-radius:12px;font-weight:600;font-size:13px;box-shadow:0 16px 40px -12px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.25s;z-index:300;}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    /* Timeline dot */
+    .tl-dot{width:10px;height:10px;border-radius:999px;flex-shrink:0;margin-top:4px;}
+
+    /* Tab active */
+    .tab-btn{cursor:pointer;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;color:#64748b;transition:.15s;}
+    .tab-btn.active{background:#fff;color:#4f46e5;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+    /* Stat card glow */
+    .stat-glow{box-shadow:0 0 0 1px rgba(99,102,241,.15),0 8px 24px -8px rgba(99,102,241,.12);}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== Barre de contrôle ===== -->
+<div class="max-w-[1340px] mx-auto px-6 pt-6 pb-3 flex items-center justify-between flex-wrap gap-3">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl grad-violet grid place-items-center text-white text-lg shadow-lg shadow-violet-500/30">🗂️</div>
+    <div>
+      <div class="font-display font-bold text-lg leading-tight">Gestion de Projets</div>
+      <div class="text-xs text-ink-500">Source autoritaire des projets SIFA — Kanban · Gantt · Équipes · Budgets</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 bg-white rounded-xl p-1 border border-ink-200 shadow-sm">
+    <button id="btnDesk" onclick="setMode('desk')" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 grad-violet text-white">
+      <i data-lucide="monitor" class="w-4 h-4"></i> Bureau
+    </button>
+    <button id="btnMob" onclick="setMode('mobile')" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600">
+      <i data-lucide="smartphone" class="w-4 h-4"></i> Mobile
+    </button>
+  </div>
+</div>
+
+<!-- ===== Stage ===== -->
+<div id="stage" class="px-6 pb-12">
+<div id="frame">
+
+  <!-- TOPBAR mobile -->
+  <div class="desk-side" id="topbar-mobile" style="display:none">
+    <div class="grad-violet px-4 pt-10 pb-3 flex items-center justify-between">
+      <div class="font-display font-bold text-white text-base">Projets</div>
+      <button onclick="showModal('modal-new-project')" class="w-8 h-8 bg-white/20 rounded-xl grid place-items-center">
+        <i data-lucide="plus" class="w-4 h-4 text-white"></i>
+      </button>
+    </div>
+  </div>
+
+  <div id="shell">
+    <!-- ===== SIDENAV ===== -->
+    <aside class="desk-side grad-dark w-56 flex-shrink-0 flex flex-col py-5 px-3 gap-1">
+      <div class="flex items-center gap-2 px-2 mb-4">
+        <div class="w-8 h-8 rounded-lg grad-violet grid place-items-center text-white text-sm shadow-md shadow-violet-700/40">🗂️</div>
+        <span class="font-display font-bold text-white text-sm tracking-wide">Projets</span>
+      </div>
+
+      <button class="navlink nav-active flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('dashboard')">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('kanban')">
+        <i data-lucide="kanban-square" class="w-4 h-4"></i> Kanban
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('gantt')">
+        <i data-lucide="gantt-chart" class="w-4 h-4"></i> Calendrier Gantt
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('tasks')">
+        <i data-lucide="check-square" class="w-4 h-4"></i> Mes tâches
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('team')">
+        <i data-lucide="users" class="w-4 h-4"></i> Équipe
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('budget')">
+        <i data-lucide="wallet" class="w-4 h-4"></i> Budget
+      </button>
+      <button class="navlink flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-ink-300" onclick="nav('docs')">
+        <i data-lucide="file-text" class="w-4 h-4"></i> Documents
+      </button>
+
+      <div class="mt-auto pt-4 border-t border-white/10 px-2">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-violet-500 grid place-items-center text-white text-xs font-bold">JM</div>
+          <div>
+            <div class="text-xs font-semibold text-white">Josaphat M.</div>
+            <div class="text-[10px] text-ink-400">Chef de projet</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== SCROLL AREA ===== -->
+    <div id="scroll">
+
+      <!-- ======== VUE: DASHBOARD ======== -->
+      <div id="v-dashboard" class="view active pad p-6">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-6 mob-stack gap-3">
+          <div>
+            <h1 class="font-display font-bold text-xl text-ink-900">Tableau de bord</h1>
+            <p class="text-sm text-ink-500 mt-0.5">Lundi 15 juin 2026 · 3 projets actifs</p>
+          </div>
+          <button onclick="showModal('modal-new-project')" class="grad-violet text-white text-sm font-semibold px-4 py-2 rounded-xl flex items-center gap-2 shadow-md shadow-violet-500/25 hover:opacity-90 transition">
+            <i data-lucide="plus" class="w-4 h-4"></i> Nouveau projet
+          </button>
+        </div>
+
+        <!-- KPI row -->
+        <div class="g4 mb-6">
+          <div class="bg-white rounded-2xl p-4 stat-glow">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-ink-500 uppercase tracking-wide">Projets actifs</span>
+              <div class="w-8 h-8 bg-violet-50 rounded-lg grid place-items-center"><i data-lucide="folder-open" class="w-4 h-4 text-violet-600"></i></div>
+            </div>
+            <div class="font-display font-bold text-2xl text-ink-900">3</div>
+            <div class="text-xs text-emerald-600 font-semibold mt-1">+1 ce mois</div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 stat-glow">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-ink-500 uppercase tracking-wide">Tâches ouvertes</span>
+              <div class="w-8 h-8 bg-sky-50 rounded-lg grid place-items-center"><i data-lucide="check-square" class="w-4 h-4 text-sky-600"></i></div>
+            </div>
+            <div class="font-display font-bold text-2xl text-ink-900">24</div>
+            <div class="text-xs text-ink-400 font-medium mt-1">8 en retard</div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 stat-glow">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-ink-500 uppercase tracking-wide">Membres actifs</span>
+              <div class="w-8 h-8 bg-emerald-50 rounded-lg grid place-items-center"><i data-lucide="users" class="w-4 h-4 text-emerald-600"></i></div>
+            </div>
+            <div class="font-display font-bold text-2xl text-ink-900">9</div>
+            <div class="text-xs text-ink-400 font-medium mt-1">3 équipes</div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 stat-glow">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold text-ink-500 uppercase tracking-wide">Budget consommé</span>
+              <div class="w-8 h-8 bg-amber-50 rounded-lg grid place-items-center"><i data-lucide="wallet" class="w-4 h-4 text-amber-600"></i></div>
+            </div>
+            <div class="font-display font-bold text-2xl text-ink-900">63%</div>
+            <div class="text-xs text-amber-600 font-semibold mt-1">$18 400 / $29 200</div>
+          </div>
+        </div>
+
+        <!-- Projets actifs -->
+        <div class="g3 mb-6">
+
+          <!-- Projet 1 -->
+          <div class="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-lg transition" onclick="nav('kanban')">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl" style="background:linear-gradient(135deg,#7c3aed,#4f46e5)"></div>
+                <div>
+                  <div class="font-semibold text-sm text-ink-900">Refonte ERP SIFA</div>
+                  <div class="text-xs text-ink-400">Dev · 6 membres</div>
+                </div>
+              </div>
+              <span class="chip bg-emerald-50 text-emerald-700">Actif</span>
+            </div>
+            <div class="flex items-center gap-3 mb-3">
+              <!-- ring -->
+              <svg width="48" height="48" viewBox="0 0 48 48">
+                <circle cx="24" cy="24" r="18" class="ring-track"/>
+                <circle cx="24" cy="24" r="18" class="ring-fill" stroke="#7c3aed"
+                  style="stroke-dasharray:113;stroke-dashoffset:42;transform:rotate(-90deg);transform-origin:center"/>
+              </svg>
+              <div>
+                <div class="font-display font-bold text-lg text-ink-900">63%</div>
+                <div class="text-xs text-ink-400">avancement</div>
+              </div>
+              <div class="ml-auto text-right">
+                <div class="text-xs font-semibold text-rose-600">J-12</div>
+                <div class="text-xs text-ink-400">deadline</div>
+              </div>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5 mb-3">
+              <div class="h-1.5 rounded-full" style="width:63%;background:linear-gradient(90deg,#7c3aed,#4f46e5)"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex">
+                <div class="av" style="background:#7c3aed">JM</div>
+                <div class="av" style="background:#0ea5e9">AB</div>
+                <div class="av" style="background:#10b981">PK</div>
+                <div class="av bg-ink-200 text-ink-600">+3</div>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-ink-400">
+                <span class="flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i>14/22</span>
+                <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>8</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Projet 2 -->
+          <div class="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-lg transition" onclick="nav('kanban')">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl" style="background:linear-gradient(135deg,#0ea5e9,#06b6d4)"></div>
+                <div>
+                  <div class="font-semibold text-sm text-ink-900">App Mobile FarmOS</div>
+                  <div class="text-xs text-ink-400">Flutter · 4 membres</div>
+                </div>
+              </div>
+              <span class="chip bg-amber-50 text-amber-700">En pause</span>
+            </div>
+            <div class="flex items-center gap-3 mb-3">
+              <svg width="48" height="48" viewBox="0 0 48 48">
+                <circle cx="24" cy="24" r="18" class="ring-track"/>
+                <circle cx="24" cy="24" r="18" class="ring-fill" stroke="#0ea5e9"
+                  style="stroke-dasharray:113;stroke-dashoffset:73;transform:rotate(-90deg);transform-origin:center"/>
+              </svg>
+              <div>
+                <div class="font-display font-bold text-lg text-ink-900">35%</div>
+                <div class="text-xs text-ink-400">avancement</div>
+              </div>
+              <div class="ml-auto text-right">
+                <div class="text-xs font-semibold text-ink-500">J-45</div>
+                <div class="text-xs text-ink-400">deadline</div>
+              </div>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5 mb-3">
+              <div class="h-1.5 rounded-full" style="width:35%;background:linear-gradient(90deg,#0ea5e9,#06b6d4)"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex">
+                <div class="av" style="background:#0ea5e9">SM</div>
+                <div class="av" style="background:#7c3aed">LB</div>
+                <div class="av bg-ink-200 text-ink-600">+2</div>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-ink-400">
+                <span class="flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i>7/20</span>
+                <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>3</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Projet 3 -->
+          <div class="bg-white rounded-2xl p-5 cursor-pointer hover:shadow-lg transition" onclick="nav('kanban')">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl" style="background:linear-gradient(135deg,#f59e0b,#ef4444)"></div>
+                <div>
+                  <div class="font-semibold text-sm text-ink-900">Audit Comptabilité</div>
+                  <div class="text-xs text-ink-400">Finance · 2 membres</div>
+                </div>
+              </div>
+              <span class="chip bg-rose-50 text-rose-700">Urgent</span>
+            </div>
+            <div class="flex items-center gap-3 mb-3">
+              <svg width="48" height="48" viewBox="0 0 48 48">
+                <circle cx="24" cy="24" r="18" class="ring-track"/>
+                <circle cx="24" cy="24" r="18" class="ring-fill" stroke="#f59e0b"
+                  style="stroke-dasharray:113;stroke-dashoffset:18;transform:rotate(-90deg);transform-origin:center"/>
+              </svg>
+              <div>
+                <div class="font-display font-bold text-lg text-ink-900">84%</div>
+                <div class="text-xs text-ink-400">avancement</div>
+              </div>
+              <div class="ml-auto text-right">
+                <div class="text-xs font-semibold text-rose-600">J-3</div>
+                <div class="text-xs text-ink-400">deadline</div>
+              </div>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5 mb-3">
+              <div class="h-1.5 rounded-full" style="width:84%;background:linear-gradient(90deg,#f59e0b,#ef4444)"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex">
+                <div class="av" style="background:#f59e0b">RN</div>
+                <div class="av" style="background:#ef4444">CM</div>
+              </div>
+              <div class="flex items-center gap-3 text-xs text-ink-400">
+                <span class="flex items-center gap-1"><i data-lucide="check-square" class="w-3 h-3"></i>21/25</span>
+                <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3 h-3"></i>12</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activité récente + Tâches urgentes -->
+        <div class="g2">
+          <!-- Activité -->
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-sm text-ink-800">Activité récente</h3>
+              <button class="text-xs text-violet-600 font-semibold">Tout voir</button>
+            </div>
+            <div class="flex flex-col gap-4">
+              <div class="flex gap-3">
+                <div class="tl-dot mt-1.5" style="background:#7c3aed"></div>
+                <div>
+                  <div class="text-xs font-semibold text-ink-800">Josaphat a clôturé la tâche <span class="text-violet-600">#T-087</span></div>
+                  <div class="text-xs text-ink-400 mt-0.5">Refonte ERP · il y a 14 min</div>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="tl-dot mt-1.5" style="background:#0ea5e9"></div>
+                <div>
+                  <div class="text-xs font-semibold text-ink-800">Amélie a commenté <span class="text-sky-600">#T-091</span></div>
+                  <div class="text-xs text-ink-400 mt-0.5">App Mobile · il y a 1 h</div>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="tl-dot mt-1.5" style="background:#10b981"></div>
+                <div>
+                  <div class="text-xs font-semibold text-ink-800">Rapport Q2 ajouté aux docs</div>
+                  <div class="text-xs text-ink-400 mt-0.5">Audit Compta · il y a 2 h</div>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="tl-dot mt-1.5" style="background:#f59e0b"></div>
+                <div>
+                  <div class="text-xs font-semibold text-ink-800">Nouveau membre ajouté : <span class="text-amber-600">Pierre K.</span></div>
+                  <div class="text-xs text-ink-400 mt-0.5">Refonte ERP · il y a 5 h</div>
+                </div>
+              </div>
+              <div class="flex gap-3">
+                <div class="tl-dot mt-1.5" style="background:#f43f5e"></div>
+                <div>
+                  <div class="text-xs font-semibold text-ink-800">Sprint 4 démarré</div>
+                  <div class="text-xs text-ink-400 mt-0.5">Refonte ERP · hier</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tâches urgentes -->
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-sm text-ink-800">Tâches urgentes</h3>
+              <button onclick="nav('tasks')" class="text-xs text-violet-600 font-semibold">Voir toutes</button>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="flex items-center gap-3 p-3 bg-rose-50 rounded-xl border border-rose-100">
+                <div class="prio-dot bg-rose-500"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold text-ink-800 truncate">Valider migration DB prod</div>
+                  <div class="text-xs text-ink-400">Refonte ERP · Josaphat</div>
+                </div>
+                <span class="chip bg-rose-100 text-rose-700">J-1</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                <div class="prio-dot bg-amber-500"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold text-ink-800 truncate">Rapport audit fiscal Q2</div>
+                  <div class="text-xs text-ink-400">Audit Compta · Roland N.</div>
+                </div>
+                <span class="chip bg-amber-100 text-amber-700">J-3</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 bg-ink-50 rounded-xl border border-ink-100">
+                <div class="prio-dot bg-violet-500"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold text-ink-800 truncate">Revue design UI mobile</div>
+                  <div class="text-xs text-ink-400">App Mobile · Amélie B.</div>
+                </div>
+                <span class="chip bg-ink-100 text-ink-600">J-5</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 bg-ink-50 rounded-xl border border-ink-100">
+                <div class="prio-dot bg-sky-500"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold text-ink-800 truncate">Tests endpoint ledger</div>
+                  <div class="text-xs text-ink-400">Refonte ERP · Pierre K.</div>
+                </div>
+                <span class="chip bg-ink-100 text-ink-600">J-7</span>
+              </div>
+              <div class="flex items-center gap-3 p-3 bg-ink-50 rounded-xl border border-ink-100">
+                <div class="prio-dot bg-emerald-500"></div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold text-ink-800 truncate">Intégration API Flutter</div>
+                  <div class="text-xs text-ink-400">App Mobile · Samuel M.</div>
+                </div>
+                <span class="chip bg-ink-100 text-ink-600">J-10</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /dashboard -->
+
+      <!-- ======== VUE: KANBAN ======== -->
+      <div id="v-kanban" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div class="flex items-center gap-3">
+            <button onclick="nav('dashboard')" class="w-8 h-8 bg-white rounded-lg border border-ink-200 grid place-items-center text-ink-500 hover:text-ink-800 transition">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <div>
+              <h1 class="font-display font-bold text-lg text-ink-900">Refonte ERP SIFA</h1>
+              <p class="text-xs text-ink-500">Sprint 4 · 22 tâches</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex">
+              <div class="av" style="background:#7c3aed">JM</div>
+              <div class="av" style="background:#0ea5e9">AB</div>
+              <div class="av" style="background:#10b981">PK</div>
+            </div>
+            <button onclick="showModal('modal-new-task')" class="grad-violet text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md shadow-violet-500/25">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tâche
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex items-center gap-1 bg-ink-100 rounded-xl p-1 w-fit mb-5">
+          <div class="tab-btn active" onclick="setTab(this,'kanban')">Kanban</div>
+          <div class="tab-btn" onclick="nav('gantt')">Gantt</div>
+          <div class="tab-btn" onclick="setTab(this,'list')">Liste</div>
+        </div>
+
+        <!-- Kanban columns -->
+        <div class="kanban-scroll flex" style="overflow-x:auto;padding-bottom:8px">
+
+          <!-- Backlog -->
+          <div class="kanban-col">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-ink-300"></div>
+              <span class="text-xs font-bold text-ink-600 uppercase tracking-wide">Backlog</span>
+              <span class="ml-auto chip bg-ink-100 text-ink-600">4</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm" onclick="showModal('modal-task-detail')">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-violet-50 text-violet-700">Backend</span>
+                  <div class="prio-dot bg-ink-300 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Configurer Drizzle multi-tenant</div>
+                <div class="text-xs text-ink-400 mb-3">Schéma partagé avec isolation par org_id</div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#10b981;width:22px;height:22px;font-size:10px">PK</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="paperclip" class="w-3 h-3"></i>2
+                    <i data-lucide="message-circle" class="w-3 h-3"></i>1
+                  </div>
+                </div>
+              </div>
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-sky-50 text-sky-700">Frontend</span>
+                  <div class="prio-dot bg-ink-300 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Dark mode dashboard</div>
+                <div class="text-xs text-ink-400 mb-3">Tokens CSS variables</div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#0ea5e9;width:22px;height:22px;font-size:10px">AB</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="message-circle" class="w-3 h-3"></i>0
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- À faire -->
+          <div class="kanban-col">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-violet-500"></div>
+              <span class="text-xs font-bold text-ink-600 uppercase tracking-wide">À faire</span>
+              <span class="ml-auto chip bg-violet-50 text-violet-700">5</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm" onclick="showModal('modal-task-detail')">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-rose-50 text-rose-700">Migration</span>
+                  <div class="prio-dot bg-rose-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Migration 0157 journal entreprise</div>
+                <div class="text-xs text-ink-400 mb-3">Appliquer sur dev + prod après QA</div>
+                <div class="w-full bg-ink-100 rounded-full h-1 mb-3">
+                  <div class="h-1 rounded-full bg-rose-400" style="width:0%"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="calendar" class="w-3 h-3"></i>16 juin
+                  </div>
+                </div>
+              </div>
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-emerald-50 text-emerald-700">QA</span>
+                  <div class="prio-dot bg-amber-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Tests endpoint /ledger/balances</div>
+                <div class="text-xs text-ink-400 mb-3">Scénarios budget + compta</div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#10b981;width:22px;height:22px;font-size:10px">PK</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="calendar" class="w-3 h-3"></i>18 juin
+                  </div>
+                </div>
+              </div>
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-sky-50 text-sky-700">UI</span>
+                  <div class="prio-dot bg-violet-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Composant filtre tableau dynamique</div>
+                <div class="text-xs text-ink-400 mb-3">Colonne, date, statut</div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#0ea5e9;width:22px;height:22px;font-size:10px">AB</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="message-circle" class="w-3 h-3"></i>3
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- En cours -->
+          <div class="kanban-col">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-sky-500"></div>
+              <span class="text-xs font-bold text-ink-600 uppercase tracking-wide">En cours</span>
+              <span class="ml-auto chip bg-sky-50 text-sky-700">5</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="card-drag bg-white rounded-2xl p-4 border border-violet-200 shadow-sm ring-1 ring-violet-200" onclick="showModal('modal-task-detail')">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-violet-50 text-violet-700">Backend</span>
+                  <div class="prio-dot bg-rose-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Module journal-entreprise NestJS</div>
+                <div class="text-xs text-ink-400 mb-3">CRUD + règles comptables dual-write</div>
+                <div class="w-full bg-ink-100 rounded-full h-1 mb-3">
+                  <div class="h-1 rounded-full bg-violet-500" style="width:70%"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <span class="font-semibold text-violet-600">70%</span>
+                    <i data-lucide="message-circle" class="w-3 h-3"></i>5
+                  </div>
+                </div>
+              </div>
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-amber-50 text-amber-700">Design</span>
+                  <div class="prio-dot bg-amber-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Mockup app gestion de projet</div>
+                <div class="text-xs text-ink-400 mb-3">Kanban + Gantt + équipe</div>
+                <div class="w-full bg-ink-100 rounded-full h-1 mb-3">
+                  <div class="h-1 rounded-full bg-amber-400" style="width:90%"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div>
+                  <span class="text-xs font-semibold text-amber-600">90%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Revue -->
+          <div class="kanban-col">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
+              <span class="text-xs font-bold text-ink-600 uppercase tracking-wide">Revue</span>
+              <span class="ml-auto chip bg-amber-50 text-amber-700">4</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-sky-50 text-sky-700">Frontend</span>
+                  <div class="prio-dot bg-amber-500 mt-1"></div>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2">Revue PR #142 — ledger UI</div>
+                <div class="text-xs text-ink-400 mb-3">Validation code + design</div>
+                <div class="flex items-center gap-1 mb-3">
+                  <span class="chip bg-emerald-50 text-emerald-700"><i data-lucide="check" class="w-3 h-3"></i>Tests OK</span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <div class="flex">
+                    <div class="av" style="background:#10b981;width:22px;height:22px;font-size:10px">PK</div>
+                    <div class="av" style="background:#0ea5e9;width:22px;height:22px;font-size:10px;margin-left:-6px">AB</div>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs text-ink-400">
+                    <i data-lucide="message-circle" class="w-3 h-3"></i>7
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminé -->
+          <div class="kanban-col">
+            <div class="flex items-center gap-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+              <span class="text-xs font-bold text-ink-600 uppercase tracking-wide">Terminé</span>
+              <span class="ml-auto chip bg-emerald-50 text-emerald-700">8</span>
+            </div>
+            <div class="flex flex-col gap-3">
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm opacity-75">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-emerald-50 text-emerald-700">Auth</span>
+                  <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 mt-0.5"></i>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2 line-through text-ink-400">JWT rotation refresh tokens</div>
+                <div class="text-xs text-ink-400">Migration 0070 · déployé</div>
+              </div>
+              <div class="card-drag bg-white rounded-2xl p-4 border border-ink-100 shadow-sm opacity-75">
+                <div class="flex items-start justify-between mb-2">
+                  <span class="chip bg-emerald-50 text-emerald-700">Compta</span>
+                  <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-500 mt-0.5"></i>
+                </div>
+                <div class="text-sm font-semibold text-ink-800 mb-2 line-through text-ink-400">Fix comptes Revenue/Expense typés Equity</div>
+                <div class="text-xs text-ink-400">Migration 0132</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /kanban -->
+
+      <!-- ======== VUE: GANTT ======== -->
+      <div id="v-gantt" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div class="flex items-center gap-3">
+            <button onclick="nav('kanban')" class="w-8 h-8 bg-white rounded-lg border border-ink-200 grid place-items-center text-ink-500">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <div>
+              <h1 class="font-display font-bold text-lg text-ink-900">Calendrier Gantt</h1>
+              <p class="text-xs text-ink-500">Juin 2026 · Sprint 4</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 bg-ink-100 rounded-xl p-1">
+            <div class="tab-btn active text-xs">Semaine</div>
+            <div class="tab-btn text-xs">Mois</div>
+            <div class="tab-btn text-xs">Trimestre</div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+          <!-- Header jours -->
+          <div class="flex border-b border-ink-100 bg-ink-50">
+            <div class="w-48 flex-shrink-0 px-4 py-2.5 text-xs font-bold text-ink-600 border-r border-ink-100">Tâche</div>
+            <div class="flex-1 grid hide-mob" style="grid-template-columns:repeat(14,1fr)">
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">15</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">16</div>
+              <div class="py-2.5 text-center text-xs text-violet-600 font-bold border-r border-ink-100 bg-violet-50">17</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">18</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">19</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">20</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">21</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">22</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">23</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">24</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">25</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">26</div>
+              <div class="py-2.5 text-center text-xs text-ink-400 border-r border-ink-100">27</div>
+              <div class="py-2.5 text-center text-xs text-ink-400">28</div>
+            </div>
+          </div>
+
+          <!-- Rows -->
+          <div id="gantt-body">
+            <!-- row -->
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Module journal-entreprise</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#7c3aed;width:18px;height:18px;font-size:9px">JM</div>
+                  <span class="chip bg-sky-50 text-sky-700">En cours</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:1/span 6;padding:0 2px">
+                  <div class="gantt-bar" style="background:linear-gradient(90deg,#7c3aed,#4f46e5)">
+                    <div class="absolute inset-0 flex items-center px-2"><span class="text-white text-[10px] font-bold">70%</span></div>
+                    <div style="position:absolute;left:0;top:0;bottom:0;width:70%;background:rgba(255,255,255,.25);border-radius:6px"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Migration 0157 journal</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#7c3aed;width:18px;height:18px;font-size:9px">JM</div>
+                  <span class="chip bg-violet-50 text-violet-700">À faire</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:2/span 2;padding:0 2px">
+                  <div class="gantt-bar" style="background:#c4b5fd"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Tests endpoint ledger</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#10b981;width:18px;height:18px;font-size:9px">PK</div>
+                  <span class="chip bg-violet-50 text-violet-700">À faire</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:3/span 4;padding:0 2px">
+                  <div class="gantt-bar" style="background:#34d399"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Revue PR #142</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#0ea5e9;width:18px;height:18px;font-size:9px">AB</div>
+                  <span class="chip bg-amber-50 text-amber-700">Revue</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:1/span 3;padding:0 2px">
+                  <div class="gantt-bar" style="background:#fbbf24"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Composant filtre tableau</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#0ea5e9;width:18px;height:18px;font-size:9px">AB</div>
+                  <span class="chip bg-violet-50 text-violet-700">À faire</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:4/span 5;padding:0 2px">
+                  <div class="gantt-bar" style="background:#38bdf8"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center border-b border-ink-50 hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Rapport audit fiscal Q2</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#f59e0b;width:18px;height:18px;font-size:9px">RN</div>
+                  <span class="chip bg-rose-50 text-rose-700">Urgent</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:1/span 3;padding:0 2px">
+                  <div class="gantt-bar" style="background:#f43f5e">
+                    <div class="absolute inset-0 flex items-center px-2"><span class="text-white text-[10px] font-bold">84%</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="gantt-row flex items-center hover:bg-ink-50 transition">
+              <div class="w-48 flex-shrink-0 px-4 py-3 border-r border-ink-100">
+                <div class="text-xs font-semibold text-ink-800 truncate">Design UI mobile FarmOS</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <div class="av" style="background:#0ea5e9;width:18px;height:18px;font-size:9px">SM</div>
+                  <span class="chip bg-ink-100 text-ink-600">Backlog</span>
+                </div>
+              </div>
+              <div class="flex-1 relative py-3 hide-mob" style="display:grid;grid-template-columns:repeat(14,1fr)">
+                <div style="grid-column:7/span 7;padding:0 2px">
+                  <div class="gantt-bar" style="background:#e0f2fe;border:1.5px dashed #38bdf8"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Légende -->
+        <div class="flex items-center gap-4 mt-4 flex-wrap">
+          <div class="flex items-center gap-1.5"><div class="w-4 h-2.5 rounded" style="background:linear-gradient(90deg,#7c3aed,#4f46e5)"></div><span class="text-xs text-ink-500">En cours</span></div>
+          <div class="flex items-center gap-1.5"><div class="w-4 h-2.5 rounded bg-violet-200"></div><span class="text-xs text-ink-500">À faire</span></div>
+          <div class="flex items-center gap-1.5"><div class="w-4 h-2.5 rounded bg-amber-400"></div><span class="text-xs text-ink-500">Revue</span></div>
+          <div class="flex items-center gap-1.5"><div class="w-4 h-2.5 rounded bg-rose-400"></div><span class="text-xs text-ink-500">Urgent</span></div>
+          <div class="flex items-center gap-1.5"><div class="w-4 h-2.5 rounded border-2 border-dashed border-sky-400 bg-sky-50"></div><span class="text-xs text-ink-500">Planifié</span></div>
+          <div class="ml-auto flex items-center gap-1.5 text-xs text-violet-600 font-semibold"><div class="w-0.5 h-4 bg-violet-600"></div>Aujourd'hui (17 juin)</div>
+        </div>
+      </div><!-- /gantt -->
+
+      <!-- ======== VUE: TASKS ======== -->
+      <div id="v-tasks" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div>
+            <h1 class="font-display font-bold text-lg text-ink-900">Mes tâches</h1>
+            <p class="text-xs text-ink-500">24 tâches · 8 en retard</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="text-xs bg-white border border-ink-200 px-3 py-2 rounded-xl flex items-center gap-1.5 text-ink-600 font-semibold">
+              <i data-lucide="filter" class="w-3.5 h-3.5"></i> Filtrer
+            </button>
+            <button onclick="showModal('modal-new-task')" class="grad-violet text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tâche
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+          <table class="w-full text-sm" style="min-width:600px">
+            <thead class="bg-ink-50 border-b border-ink-100">
+              <tr>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600">Tâche</th>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600 hide-mob">Projet</th>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600">Statut</th>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600 hide-mob">Priorité</th>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600">Échéance</th>
+                <th class="text-left px-4 py-3 text-xs font-bold text-ink-600 hide-mob">Assigné</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition" onclick="showModal('modal-task-detail')">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-800 text-xs">Valider migration DB prod</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-500">Refonte ERP</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-sky-50 text-sky-700">En cours</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-rose-500"></div><span class="text-xs text-ink-600">Critique</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs font-semibold text-rose-600">16 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div></td>
+              </tr>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-800 text-xs">Rapport audit fiscal Q2</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-500">Audit Compta</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-amber-50 text-amber-700">Revue</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-rose-500"></div><span class="text-xs text-ink-600">Critique</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs font-semibold text-rose-600">18 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#f59e0b;width:22px;height:22px;font-size:10px">RN</div></td>
+              </tr>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-800 text-xs">Module journal-entreprise NestJS</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-500">Refonte ERP</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-sky-50 text-sky-700">En cours</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-amber-500"></div><span class="text-xs text-ink-600">Haute</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs text-ink-600">20 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div></td>
+              </tr>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-800 text-xs">Tests endpoint /ledger/balances</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-500">Refonte ERP</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-violet-50 text-violet-700">À faire</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-amber-500"></div><span class="text-xs text-ink-600">Haute</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs text-ink-600">22 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#10b981;width:22px;height:22px;font-size:10px">PK</div></td>
+              </tr>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-800 text-xs">Revue UI mobile FarmOS</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-500">App Mobile</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-violet-50 text-violet-700">À faire</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-violet-500"></div><span class="text-xs text-ink-600">Normale</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs text-ink-600">25 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#0ea5e9;width:22px;height:22px;font-size:10px">AB</div></td>
+              </tr>
+              <tr class="border-b border-ink-50 hover:bg-ink-50 cursor-pointer transition">
+                <td class="px-4 py-3.5">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" class="rounded" />
+                    <span class="font-medium text-ink-500 text-xs line-through">JWT rotation refresh tokens</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3.5 hide-mob"><span class="text-xs text-ink-400">Refonte ERP</span></td>
+                <td class="px-4 py-3.5"><span class="chip bg-emerald-50 text-emerald-700">Terminé</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="flex items-center gap-1.5"><div class="prio-dot bg-ink-300"></div><span class="text-xs text-ink-400">—</span></div></td>
+                <td class="px-4 py-3.5"><span class="text-xs text-ink-400">10 juin</span></td>
+                <td class="px-4 py-3.5 hide-mob"><div class="av" style="background:#7c3aed;width:22px;height:22px;font-size:10px">JM</div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div><!-- /tasks -->
+
+      <!-- ======== VUE: TEAM ======== -->
+      <div id="v-team" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div>
+            <h1 class="font-display font-bold text-lg text-ink-900">Équipe</h1>
+            <p class="text-xs text-ink-500">9 membres · 3 équipes</p>
+          </div>
+          <button onclick="toast('Invitation envoyée !')" class="grad-violet text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5">
+            <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> Inviter
+          </button>
+        </div>
+
+        <div class="g3 mb-6">
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full grad-violet grid place-items-center text-white font-bold">JM</div>
+              <div>
+                <div class="font-semibold text-sm text-ink-800">Josaphat Mayuba</div>
+                <div class="text-xs text-ink-400">Chef de projet</div>
+              </div>
+              <span class="ml-auto chip bg-emerald-50 text-emerald-700">Actif</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-ink-500 mb-2">
+              <span>Tâches</span><span class="font-semibold text-ink-800">8 / 12</span>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full" style="width:67%;background:linear-gradient(90deg,#7c3aed,#4f46e5)"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-sky-500 grid place-items-center text-white font-bold">AB</div>
+              <div>
+                <div class="font-semibold text-sm text-ink-800">Amélie Bukasa</div>
+                <div class="text-xs text-ink-400">Lead Frontend</div>
+              </div>
+              <span class="ml-auto chip bg-emerald-50 text-emerald-700">Actif</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-ink-500 mb-2">
+              <span>Tâches</span><span class="font-semibold text-ink-800">5 / 8</span>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-sky-500" style="width:62%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-emerald-500 grid place-items-center text-white font-bold">PK</div>
+              <div>
+                <div class="font-semibold text-sm text-ink-800">Pierre Kasongo</div>
+                <div class="text-xs text-ink-400">Dev Backend</div>
+              </div>
+              <span class="ml-auto chip bg-emerald-50 text-emerald-700">Actif</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-ink-500 mb-2">
+              <span>Tâches</span><span class="font-semibold text-ink-800">3 / 6</span>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-emerald-500" style="width:50%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-amber-500 grid place-items-center text-white font-bold">RN</div>
+              <div>
+                <div class="font-semibold text-sm text-ink-800">Roland Nkulu</div>
+                <div class="text-xs text-ink-400">Finance</div>
+              </div>
+              <span class="ml-auto chip bg-amber-50 text-amber-700">En mission</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-ink-500 mb-2">
+              <span>Tâches</span><span class="font-semibold text-ink-800">4 / 5</span>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-amber-400" style="width:80%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="w-10 h-10 rounded-full bg-sky-400 grid place-items-center text-white font-bold">SM</div>
+              <div>
+                <div class="font-semibold text-sm text-ink-800">Samuel Mbuyi</div>
+                <div class="text-xs text-ink-400">Dev Flutter</div>
+              </div>
+              <span class="ml-auto chip bg-emerald-50 text-emerald-700">Actif</span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-ink-500 mb-2">
+              <span>Tâches</span><span class="font-semibold text-ink-800">2 / 7</span>
+            </div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-sky-400" style="width:29%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border-2 border-dashed border-ink-200 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-violet-300 transition" onclick="toast('Invitation envoyée !')">
+            <div class="w-10 h-10 rounded-full bg-ink-100 grid place-items-center">
+              <i data-lucide="user-plus" class="w-5 h-5 text-ink-400"></i>
+            </div>
+            <span class="text-xs text-ink-400 font-semibold">Ajouter un membre</span>
+          </div>
+        </div>
+      </div><!-- /team -->
+
+      <!-- ======== VUE: BUDGET ======== -->
+      <div id="v-budget" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div>
+            <h1 class="font-display font-bold text-lg text-ink-900">Budget</h1>
+            <p class="text-xs text-ink-500">Exercice 2026 · 3 projets</p>
+          </div>
+          <button onclick="toast('Export PDF généré')" class="bg-white border border-ink-200 text-ink-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter
+          </button>
+        </div>
+
+        <!-- Résumé -->
+        <div class="g3 mb-6">
+          <div class="bg-white rounded-2xl p-5 stat-glow">
+            <div class="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wide">Budget total</div>
+            <div class="font-display font-bold text-2xl text-ink-900">$29 200</div>
+            <div class="text-xs text-ink-400 mt-1">3 projets · exercice 2026</div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 stat-glow">
+            <div class="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wide">Consommé</div>
+            <div class="font-display font-bold text-2xl text-amber-600">$18 400</div>
+            <div class="w-full bg-ink-100 rounded-full h-1.5 mt-3">
+              <div class="h-1.5 rounded-full bg-amber-400" style="width:63%"></div>
+            </div>
+            <div class="text-xs text-ink-400 mt-1">63% du budget</div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 stat-glow">
+            <div class="text-xs font-semibold text-ink-500 mb-2 uppercase tracking-wide">Restant</div>
+            <div class="font-display font-bold text-2xl text-emerald-600">$10 800</div>
+            <div class="text-xs text-ink-400 mt-1">37% disponible</div>
+          </div>
+        </div>
+
+        <!-- Détail par projet -->
+        <div class="bg-white rounded-2xl overflow-hidden border border-ink-100 shadow-sm">
+          <div class="px-5 py-3.5 border-b border-ink-100 flex items-center justify-between">
+            <h3 class="font-semibold text-sm text-ink-800">Détail par projet</h3>
+          </div>
+          <div class="divide-y divide-ink-50">
+            <div class="px-5 py-4 flex items-center gap-4">
+              <div class="w-2.5 h-2.5 rounded-full" style="background:#7c3aed;flex-shrink:0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-sm font-semibold text-ink-800">Refonte ERP SIFA</span>
+                  <span class="text-xs font-bold text-ink-700">$9 200 / $14 000</span>
+                </div>
+                <div class="w-full bg-ink-100 rounded-full h-1.5">
+                  <div class="h-1.5 rounded-full" style="width:66%;background:linear-gradient(90deg,#7c3aed,#4f46e5)"></div>
+                </div>
+                <div class="flex items-center justify-between mt-1">
+                  <span class="text-xs text-ink-400">66% consommé</span>
+                  <span class="text-xs text-emerald-600 font-semibold">$4 800 restant</span>
+                </div>
+              </div>
+            </div>
+            <div class="px-5 py-4 flex items-center gap-4">
+              <div class="w-2.5 h-2.5 rounded-full bg-sky-500 flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-sm font-semibold text-ink-800">App Mobile FarmOS</span>
+                  <span class="text-xs font-bold text-ink-700">$4 800 / $10 200</span>
+                </div>
+                <div class="w-full bg-ink-100 rounded-full h-1.5">
+                  <div class="h-1.5 rounded-full bg-sky-500" style="width:47%"></div>
+                </div>
+                <div class="flex items-center justify-between mt-1">
+                  <span class="text-xs text-ink-400">47% consommé</span>
+                  <span class="text-xs text-emerald-600 font-semibold">$5 400 restant</span>
+                </div>
+              </div>
+            </div>
+            <div class="px-5 py-4 flex items-center gap-4">
+              <div class="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-sm font-semibold text-ink-800">Audit Comptabilité</span>
+                  <span class="text-xs font-bold text-rose-600">$4 400 / $5 000</span>
+                </div>
+                <div class="w-full bg-ink-100 rounded-full h-1.5">
+                  <div class="h-1.5 rounded-full bg-rose-400" style="width:88%"></div>
+                </div>
+                <div class="flex items-center justify-between mt-1">
+                  <span class="text-xs text-rose-600 font-semibold">88% consommé — alerte</span>
+                  <span class="text-xs text-ink-400">$600 restant</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /budget -->
+
+      <!-- ======== VUE: DOCS ======== -->
+      <div id="v-docs" class="view pad p-6">
+        <div class="flex items-center justify-between mb-5 mob-stack gap-3">
+          <div>
+            <h1 class="font-display font-bold text-lg text-ink-900">Documents</h1>
+            <p class="text-xs text-ink-500">12 fichiers · 3 projets</p>
+          </div>
+          <button onclick="toast('Fichier uploadé !')" class="grad-violet text-white text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i> Ajouter
+          </button>
+        </div>
+
+        <div class="g3">
+          <div class="bg-white rounded-2xl p-4 border border-ink-100 shadow-sm hover:shadow-md transition cursor-pointer" onclick="toast('Ouverture du document...')">
+            <div class="w-10 h-10 bg-rose-50 rounded-xl grid place-items-center mb-3">
+              <i data-lucide="file-text" class="w-5 h-5 text-rose-500"></i>
+            </div>
+            <div class="text-sm font-semibold text-ink-800 mb-1">Cahier des charges ERP</div>
+            <div class="text-xs text-ink-400 mb-3">PDF · 2.4 Mo · 12 juin 2026</div>
+            <div class="flex items-center gap-2">
+              <div class="av" style="background:#7c3aed;width:20px;height:20px;font-size:9px">JM</div>
+              <span class="text-xs text-ink-400">Josaphat M.</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 border border-ink-100 shadow-sm hover:shadow-md transition cursor-pointer" onclick="toast('Ouverture du document...')">
+            <div class="w-10 h-10 bg-emerald-50 rounded-xl grid place-items-center mb-3">
+              <i data-lucide="table-2" class="w-5 h-5 text-emerald-500"></i>
+            </div>
+            <div class="text-sm font-semibold text-ink-800 mb-1">Rapport audit Q2 2026</div>
+            <div class="text-xs text-ink-400 mb-3">XLSX · 890 Ko · 14 juin 2026</div>
+            <div class="flex items-center gap-2">
+              <div class="av" style="background:#f59e0b;width:20px;height:20px;font-size:9px">RN</div>
+              <span class="text-xs text-ink-400">Roland N.</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 border border-ink-100 shadow-sm hover:shadow-md transition cursor-pointer" onclick="toast('Ouverture du document...')">
+            <div class="w-10 h-10 bg-sky-50 rounded-xl grid place-items-center mb-3">
+              <i data-lucide="presentation" class="w-5 h-5 text-sky-500"></i>
+            </div>
+            <div class="text-sm font-semibold text-ink-800 mb-1">Présentation Sprint 4</div>
+            <div class="text-xs text-ink-400 mb-3">PPTX · 5.1 Mo · 15 juin 2026</div>
+            <div class="flex items-center gap-2">
+              <div class="av" style="background:#0ea5e9;width:20px;height:20px;font-size:9px">AB</div>
+              <span class="text-xs text-ink-400">Amélie B.</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 border border-ink-100 shadow-sm hover:shadow-md transition cursor-pointer">
+            <div class="w-10 h-10 bg-violet-50 rounded-xl grid place-items-center mb-3">
+              <i data-lucide="code-2" class="w-5 h-5 text-violet-500"></i>
+            </div>
+            <div class="text-sm font-semibold text-ink-800 mb-1">Architecture technique SIFA</div>
+            <div class="text-xs text-ink-400 mb-3">PDF · 1.2 Mo · 8 juin 2026</div>
+            <div class="flex items-center gap-2">
+              <div class="av" style="background:#7c3aed;width:20px;height:20px;font-size:9px">JM</div>
+              <span class="text-xs text-ink-400">Josaphat M.</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 border border-ink-100 shadow-sm hover:shadow-md transition cursor-pointer">
+            <div class="w-10 h-10 bg-amber-50 rounded-xl grid place-items-center mb-3">
+              <i data-lucide="image" class="w-5 h-5 text-amber-500"></i>
+            </div>
+            <div class="text-sm font-semibold text-ink-800 mb-1">Maquettes UI Mobile</div>
+            <div class="text-xs text-ink-400 mb-3">ZIP · 8.7 Mo · 10 juin 2026</div>
+            <div class="flex items-center gap-2">
+              <div class="av" style="background:#0ea5e9;width:20px;height:20px;font-size:9px">AB</div>
+              <span class="text-xs text-ink-400">Amélie B.</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-4 border-2 border-dashed border-ink-200 flex flex-col items-center justify-center gap-3 min-h-[120px] cursor-pointer hover:border-violet-300 transition" onclick="toast('Fichier uploadé !')">
+            <i data-lucide="upload-cloud" class="w-6 h-6 text-ink-300"></i>
+            <span class="text-xs text-ink-400 font-semibold">Glisser ou cliquer</span>
+          </div>
+        </div>
+      </div><!-- /docs -->
+
+    </div><!-- /scroll -->
+  </div><!-- /shell -->
+</div><!-- /frame -->
+</div><!-- /stage -->
+
+<!-- ===== MODAL: Nouvelle tâche ===== -->
+<div id="modal-new-task" class="modal-bg" onclick="if(event.target===this)closeModal('modal-new-task')">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <div class="grad-violet px-6 py-5 flex items-center justify-between">
+      <div class="font-display font-bold text-white">Nouvelle tâche</div>
+      <button onclick="closeModal('modal-new-task')" class="w-8 h-8 bg-white/20 rounded-xl grid place-items-center text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div class="p-6 flex flex-col gap-4">
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Titre *</label>
+        <input type="text" placeholder="Ex: Implémenter l'API projets" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-800 focus:outline-none focus:ring-2 focus:ring-violet-400">
+      </div>
+      <div class="g2">
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Statut</label>
+          <select class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            <option>À faire</option>
+            <option>En cours</option>
+            <option>Revue</option>
+            <option>Terminé</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Priorité</label>
+          <select class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            <option>Critique</option>
+            <option>Haute</option>
+            <option>Normale</option>
+            <option>Faible</option>
+          </select>
+        </div>
+      </div>
+      <div class="g2">
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Projet</label>
+          <select class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            <option>Refonte ERP SIFA</option>
+            <option>App Mobile FarmOS</option>
+            <option>Audit Comptabilité</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Assigné à</label>
+          <select class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+            <option>Josaphat M.</option>
+            <option>Amélie B.</option>
+            <option>Pierre K.</option>
+            <option>Roland N.</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Échéance</label>
+        <input type="date" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Description</label>
+        <textarea rows="3" placeholder="Décrivez la tâche..." class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"></textarea>
+      </div>
+      <button onclick="closeModal('modal-new-task');toast('Tâche créée ✓')" class="grad-violet text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition">
+        <i data-lucide="plus" class="w-4 h-4"></i> Créer la tâche
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Détail tâche ===== -->
+<div id="modal-task-detail" class="modal-bg" onclick="if(event.target===this)closeModal('modal-task-detail')">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+    <div class="grad-dark px-6 py-5 flex items-center justify-between">
+      <div>
+        <div class="chip bg-violet-500/30 text-violet-200 mb-2">Backend · En cours</div>
+        <div class="font-display font-bold text-white">Module journal-entreprise NestJS</div>
+      </div>
+      <button onclick="closeModal('modal-task-detail')" class="w-8 h-8 bg-white/10 rounded-xl grid place-items-center text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div class="p-6">
+      <div class="grid grid-cols-2 gap-4 mb-5">
+        <div class="bg-ink-50 rounded-xl p-3">
+          <div class="text-xs text-ink-400 mb-1">Priorité</div>
+          <div class="flex items-center gap-1.5"><div class="prio-dot bg-rose-500"></div><span class="text-xs font-semibold text-ink-800">Critique</span></div>
+        </div>
+        <div class="bg-ink-50 rounded-xl p-3">
+          <div class="text-xs text-ink-400 mb-1">Échéance</div>
+          <div class="text-xs font-semibold text-rose-600">20 juin 2026</div>
+        </div>
+        <div class="bg-ink-50 rounded-xl p-3">
+          <div class="text-xs text-ink-400 mb-1">Assigné à</div>
+          <div class="flex items-center gap-1.5">
+            <div class="av" style="background:#7c3aed;width:20px;height:20px;font-size:9px">JM</div>
+            <span class="text-xs font-semibold text-ink-800">Josaphat M.</span>
+          </div>
+        </div>
+        <div class="bg-ink-50 rounded-xl p-3">
+          <div class="text-xs text-ink-400 mb-1">Avancement</div>
+          <div class="flex items-center gap-2">
+            <div class="flex-1 bg-ink-200 rounded-full h-1.5">
+              <div class="h-1.5 rounded-full bg-violet-500" style="width:70%"></div>
+            </div>
+            <span class="text-xs font-bold text-violet-600">70%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-5">
+        <div class="text-xs font-semibold text-ink-600 mb-2">Description</div>
+        <p class="text-xs text-ink-600 leading-relaxed">CRUD complet + règles comptables dual-write. Inclure la validation Drizzle et les tests unitaires. Référencer le module ledger existant.</p>
+      </div>
+
+      <div class="mb-5">
+        <div class="text-xs font-semibold text-ink-600 mb-3">Sous-tâches</div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <input type="checkbox" checked class="rounded" />
+            <span class="text-xs text-ink-400 line-through">Créer l'entité JournalEntreprise</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" checked class="rounded" />
+            <span class="text-xs text-ink-400 line-through">Controller + Service CRUD</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" class="rounded" />
+            <span class="text-xs text-ink-800">Règles comptables dual-write</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" class="rounded" />
+            <span class="text-xs text-ink-800">Tests unitaires + e2e</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t border-ink-100 pt-4">
+        <div class="text-xs font-semibold text-ink-600 mb-3">Commentaires</div>
+        <div class="flex gap-2 mb-3">
+          <div class="av" style="background:#0ea5e9;width:28px;height:28px;font-size:11px;margin-left:0">AB</div>
+          <div class="bg-ink-50 rounded-xl px-3 py-2 flex-1">
+            <div class="text-xs font-semibold text-ink-800 mb-0.5">Amélie B. · il y a 2 h</div>
+            <div class="text-xs text-ink-600">Les règles dual-write doivent suivre le pattern du module ledger existant.</div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <div class="av" style="background:#7c3aed;width:28px;height:28px;font-size:11px;margin-left:0">JM</div>
+          <input type="text" placeholder="Ajouter un commentaire..." class="flex-1 border border-ink-200 rounded-xl px-3 py-2 text-xs text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-4">
+        <button onclick="closeModal('modal-task-detail');toast('Tâche mise à jour ✓')" class="flex-1 grad-violet text-white text-xs font-semibold py-2.5 rounded-xl">Sauvegarder</button>
+        <button onclick="closeModal('modal-task-detail')" class="px-4 bg-ink-100 text-ink-600 text-xs font-semibold py-2.5 rounded-xl">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: Nouveau projet ===== -->
+<div id="modal-new-project" class="modal-bg" onclick="if(event.target===this)closeModal('modal-new-project')">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <div class="grad-violet px-6 py-5 flex items-center justify-between">
+      <div class="font-display font-bold text-white">Nouveau projet</div>
+      <button onclick="closeModal('modal-new-project')" class="w-8 h-8 bg-white/20 rounded-xl grid place-items-center text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+    <div class="p-6 flex flex-col gap-4">
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Nom du projet *</label>
+        <input type="text" placeholder="Ex: Migration legacy ERP" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-800 focus:outline-none focus:ring-2 focus:ring-violet-400">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Description</label>
+        <textarea rows="2" placeholder="Objectif du projet..." class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"></textarea>
+      </div>
+      <div class="g2">
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Date début</label>
+          <input type="date" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Date fin</label>
+          <input type="date" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Budget ($)</label>
+        <input type="number" placeholder="0" class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-ink-600 mb-1.5 block">Système source (SIFA)</label>
+        <select class="w-full border border-ink-200 rounded-xl px-3 py-2.5 text-sm text-ink-700 focus:outline-none focus:ring-2 focus:ring-violet-400">
+          <option value="">Aucun (projet local)</option>
+          <option>CRM</option>
+          <option>FarmOS</option>
+          <option>BatiPro</option>
+          <option>Domus</option>
+          <option>RH</option>
+          <option>Comptabilité</option>
+        </select>
+      </div>
+      <button onclick="closeModal('modal-new-project');toast('Projet créé ✓')" class="grad-violet text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition">
+        <i data-lucide="folder-plus" class="w-4 h-4"></i> Créer le projet
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // Mode desktop/mobile
+  function setMode(m) {
+    document.body.classList.toggle('mobile', m === 'mobile');
+    document.getElementById('btnDesk').className = m === 'desk'
+      ? 'px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 grad-violet text-white'
+      : 'px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600';
+    document.getElementById('btnMob').className = m === 'mobile'
+      ? 'px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 grad-violet text-white'
+      : 'px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600';
+    document.getElementById('topbar-mobile').style.display = m === 'mobile' ? 'block' : 'none';
+    lucide.createIcons();
+  }
+
+  // Navigation
+  function nav(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('v-' + id).classList.add('active');
+    document.querySelectorAll('.navlink').forEach(n => {
+      n.classList.remove('nav-active');
+      if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + id + "'")) {
+        n.classList.add('nav-active');
+      }
+    });
+    lucide.createIcons();
+  }
+
+  // Tabs (dans kanban)
+  function setTab(el, id) {
+    el.closest('.flex').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    if (id === 'list') nav('tasks');
+    else if (id === 'kanban') nav('kanban');
+    else if (id === 'gantt') nav('gantt');
+  }
+
+  // Modals
+  function showModal(id) {
+    document.getElementById(id).classList.add('open');
+    lucide.createIcons();
+  }
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+  }
+
+  // Toast
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // Init
+  window.addEventListener('load', () => {
+    lucide.createIcons();
+  });
+</script>
+</body>
+</html>
