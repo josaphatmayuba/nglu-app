@@ -3837,8 +3837,197 @@ const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
   );
 };
 
+// ─── Plan intérieur générique (basé sur capacity et sections statiques) ──────
+const INTERIOR_BOX_FILL   = { ok: "#A8D8A0", sick: "#E08080", quarantine: "#F0C060", empty: "#E8E4DC" };
+const INTERIOR_BOX_STROKE = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
+
+const BldgInteriorPlan = ({ building, lang, onClose }) => {
+  const [tooltip, setTooltip] = React.useState(null);
+  if (!building) return null;
+
+  // Génère des sections fictives à partir de la capacité connue
+  const capacity = parseInt(building.capacity) || 20;
+  const occupancy = building.occupancy ?? Math.round(capacity * 0.8);
+  const sick = building.sick ?? 0;
+  const quarantine = building.quarantine ?? 0;
+  const empty = Math.max(0, capacity - occupancy);
+
+  // Répartition en sections (max 4)
+  const sectionCount = Math.min(4, Math.max(1, Math.ceil(capacity / 30)));
+  const sections = Array.from({ length: sectionCount }, (_, i) => {
+    const secCap = Math.ceil(capacity / sectionCount);
+    const secOcc = Math.min(secCap, Math.ceil(occupancy / sectionCount));
+    return { id: i, label: String.fromCharCode(65 + i), capacity: secCap, occupied: secOcc };
+  });
+
+  // Palette de statuts pour chaque box
+  const totalBoxes = capacity;
+  const statuses = [];
+  let s = sick, q = quarantine, e = empty;
+  for (let i = 0; i < totalBoxes; i++) {
+    if (s > 0) { statuses.push("sick"); s--; }
+    else if (q > 0) { statuses.push("quarantine"); q--; }
+    else if (e > 0) { statuses.push("empty"); e--; }
+    else statuses.push("ok");
+  }
+
+  const CANVAS_W = 600, CANVAS_H = 300;
+  const COLS = Math.ceil(Math.sqrt(capacity * 2));
+  const ROWS = Math.ceil(capacity / COLS);
+  const BOX_GAP = 3;
+  const AREA_PAD = 16;
+  const areaW = CANVAS_W - AREA_PAD * 2;
+  const areaH = CANVAS_H - AREA_PAD * 2 - 24; // 24 = aisle at bottom
+  const bw = Math.max(8, Math.floor((areaW - BOX_GAP * (COLS + 1)) / COLS));
+  const bh = Math.max(8, Math.floor((areaH - BOX_GAP * (ROWS + 1)) / ROWS));
+  const meta = bldgMeta(building.type);
+
+  const statusLabels = {
+    ok:         { fr: "Occupée", en: "Occupied" },
+    sick:       { fr: "Malade",  en: "Sick" },
+    quarantine: { fr: "Quarantaine", en: "Quarantine" },
+    empty:      { fr: "Vide",   en: "Empty" },
+  };
+  const counts = statuses.reduce((a, s) => { a[s] = (a[s] || 0) + 1; return a; }, {});
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
+      onClick={onClose}>
+      <div style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", maxWidth: 680, width: "96vw", maxHeight: "92vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border-1)" }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name={meta.icon} size={16} color={meta.text}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-950)" }}>{building.name}</div>
+            <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 1 }}>
+              {lang === "fr" ? "Plan intérieur · Visualisation des emplacements" : "Interior plan · Slot visualization"}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>
+            <Icon name="x" size={14} color="var(--ink-600)"/>
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 14, padding: "9px 18px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
+          {Object.entries(statusLabels).map(([k, v]) => counts[k] ? (
+            <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
+              <span style={{ width: 13, height: 13, borderRadius: 3, background: INTERIOR_BOX_FILL[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
+              {lang === "fr" ? v.fr : v.en}
+              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+            </div>
+          ) : null)}
+        </div>
+
+        {/* SVG */}
+        <div style={{ padding: "12px 14px", overflow: "auto" }}>
+          <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)" }}>
+            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 400 }}>
+              <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
+
+              {/* Section zones (coloured backgrounds) */}
+              {sections.map((sec, si) => {
+                const secCols = Math.ceil(COLS / sectionCount);
+                const sx = AREA_PAD + si * (secCols * (bw + BOX_GAP));
+                const sw = Math.min(secCols * (bw + BOX_GAP), areaW - (sx - AREA_PAD));
+                return (
+                  <g key={sec.id}>
+                    <rect x={sx} y={AREA_PAD} width={sw} height={areaH} rx={6}
+                      fill={meta.bg} stroke={meta.border} strokeWidth={1.2} opacity={0.5}/>
+                    <text x={sx + sw / 2} y={AREA_PAD + 13} textAnchor="middle"
+                      fontSize="9" fontWeight="700" fill={meta.text} fontFamily="sans-serif">
+                      {lang === "fr" ? `Section ${sec.label}` : `Section ${sec.label}`}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Boxes */}
+              {statuses.map((status, idx) => {
+                const col = idx % COLS;
+                const row = Math.floor(idx / COLS);
+                const bx = AREA_PAD + BOX_GAP + col * (bw + BOX_GAP);
+                const by = AREA_PAD + 16 + BOX_GAP + row * (bh + BOX_GAP);
+                const isHovered = tooltip && tooltip.idx === idx;
+                return (
+                  <g key={idx} style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setTooltip({ idx, status, bx, by })}
+                    onMouseLeave={() => setTooltip(null)}>
+                    <rect x={bx} y={by} width={bw} height={bh} rx={2}
+                      fill={INTERIOR_BOX_FILL[status]}
+                      stroke={isHovered ? "#1A1410" : INTERIOR_BOX_STROKE[status]}
+                      strokeWidth={isHovered ? 2 : 1}
+                      opacity={isHovered ? 1 : 0.9}/>
+                    {bw >= 14 && bh >= 11 && (
+                      <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
+                        fontSize="6.5" fill={status === "empty" ? "#A8A098" : "#2A1810"}
+                        fontFamily="monospace" fontWeight={status !== "ok" ? "700" : "400"}>
+                        {idx + 1}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Aisle at bottom */}
+              <rect x={AREA_PAD} y={CANVAS_H - AREA_PAD - 18} width={areaW} height={14}
+                fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
+              <text x={CANVAS_W / 2} y={CANVAS_H - AREA_PAD - 8} textAnchor="middle"
+                fontSize="7.5" fill="#8A8070" fontFamily="monospace" letterSpacing="1">
+                {lang === "fr" ? "COULOIR PRINCIPAL" : "MAIN AISLE"}
+              </text>
+
+              {/* Compass */}
+              <g transform={`translate(${CANVAS_W - 22}, 22)`}>
+                <circle cx={0} cy={0} r={14} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
+                <text x={0} y={-5} textAnchor="middle" fontSize="7" fill="#3A3020" fontWeight="700" fontFamily="monospace">N</text>
+                <polygon points="0,-10 -3,2 3,2" fill="#3A3020"/>
+              </g>
+
+              {/* Tooltip */}
+              {tooltip && (() => {
+                const tx = Math.min(tooltip.bx + bw + 4, CANVAS_W - 90);
+                const ty = Math.max(4, tooltip.by - 2);
+                const lbl = statusLabels[tooltip.status];
+                return (
+                  <g>
+                    <rect x={tx} y={ty} width={88} height={28} rx={5} fill="rgba(30,24,16,0.88)"/>
+                    <text x={tx + 44} y={ty + 11} textAnchor="middle" fontSize="7.5" fill="#ECE8E0" fontFamily="monospace">Box #{tooltip.idx + 1}</text>
+                    <text x={tx + 44} y={ty + 21} textAnchor="middle" fontSize="8" fill={INTERIOR_BOX_FILL[tooltip.status]} fontFamily="sans-serif" fontWeight="600">
+                      {lang === "fr" ? lbl.fr : lbl.en}
+                    </text>
+                  </g>
+                );
+              })()}
+            </svg>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", gap: 8, padding: "10px 18px", borderTop: "1px solid var(--border-1)" }}>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="layers" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Animaux par box" : "Animals per box"}
+          </button>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="pulse" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Capteurs" : "Sensors"}
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+            {lang === "fr" ? "Fermer" : "Close"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Panneau de détail d'un bâtiment sélectionné
-const BldgDetail = ({ building, lang, onEdit, onClose }) => {
+const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
   if (!building) return (
     <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 240, color: "var(--fg-3)" }}>
       <Icon name="building" size={28} color="var(--ink-300)"/>
@@ -3908,6 +4097,13 @@ const BldgDetail = ({ building, lang, onEdit, onClose }) => {
         </div>
       )}
 
+      {/* Interior plan button */}
+      <button className="btn btn-sm" onClick={() => onViewInterior && onViewInterior(building)}
+        style={{ background: "rgba(14,100,56,0.06)", border: "1.5px solid rgba(14,100,56,0.2)", color: "var(--forest-800)", fontWeight: 700, gap: 7, justifyContent: "center" }}>
+        <Icon name="grid" size={13} color="var(--forest-700)"/>
+        {lang === "fr" ? "Plan intérieur" : "Interior layout"}
+      </button>
+
       {/* Actions */}
       <div style={{ display: "flex", gap: 7 }}>
         <button className="btn btn-sm" style={{ flex: 1 }} onClick={onEdit}>
@@ -3933,6 +4129,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [viewMode, setViewMode] = React.useState("plan"); // "plan" | "cards"
   const [selectedId, setSelectedId] = React.useState(null);
+  const [interiorBuilding, setInteriorBuilding] = React.useState(null);
   const refresh = useDataRefresh(["buildings", "animals"]);
   React.useEffect(() => {
     let cancel = false;
@@ -4017,6 +4214,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               lang={lang}
               onEdit={() => setEditing(selectedBuilding)}
               onClose={() => setSelectedId(null)}
+              onViewInterior={setInteriorBuilding}
             />
           </div>
         </div>
@@ -4052,6 +4250,9 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       {editing && (
         <BuildingEditor lang={lang} building={editing === "new" ? null : editing}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
+      )}
+      {interiorBuilding && (
+        <BldgInteriorPlan building={interiorBuilding} lang={lang} onClose={() => setInteriorBuilding(null)}/>
       )}
     </div>
   );

@@ -225,6 +225,221 @@ const BUILDINGS_DATA = [
   },
 ];
 
+// ─── Interior floor plan SVG ─────────────────────────────────────────────────
+const BOX_STATUS_FILL = {
+  ok:          "#A8D8A0",
+  sick:        "#E08080",
+  quarantine:  "#F0C060",
+  empty:       "#E8E4DC",
+};
+const BOX_STATUS_STROKE = {
+  ok:          "#5A9A58",
+  sick:        "#B84040",
+  quarantine:  "#C89020",
+  empty:       "#B8B4A8",
+};
+
+const InteriorPlan = ({ building, lang, onClose }) => {
+  const [hoveredBox, setHoveredBox] = React.useState(null);
+  if (!building || !building.interior) return null;
+  const INT = building.interior;
+
+  const CANVAS_W = 620, CANVAS_H = 340;
+  const BOX_GAP = 3;
+
+  const allBoxes = (INT.areas || []).flatMap(area => {
+    const bw = Math.floor((area.w - BOX_GAP * (area.cols + 1)) / area.cols);
+    const bh = Math.floor((area.rows > 0 ? Math.min(28, (area.h - BOX_GAP * (area.rows + 1)) / area.rows) : 28));
+    return (area.boxes || []).map(box => {
+      const bx = area.x + BOX_GAP + box.col * (bw + BOX_GAP);
+      const by = area.y + BOX_GAP + box.row * (bh + BOX_GAP);
+      return { ...box, areaId: area.id, bx, by, bw, bh, alert: area.alert };
+    });
+  });
+
+  const statusCounts = allBoxes.reduce((acc, b) => { acc[b.status] = (acc[b.status] || 0) + 1; return acc; }, {});
+
+  const LABELS = {
+    ok: { fr: "Occupée", en: "Occupied" },
+    sick: { fr: "Malade", en: "Sick" },
+    quarantine: { fr: "Quarantaine", en: "Quarantine" },
+    empty: { fr: "Vide", en: "Empty" },
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
+      onClick={onClose}>
+      <div style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", maxWidth: 720, width: "96vw", maxHeight: "92vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Modal header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--border-1)" }}>
+          <Icon name="building" size={18} color="var(--forest-700)"/>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17, color: "var(--ink-950)" }}>
+              {lang === "fr" ? INT.fr : INT.en}
+            </div>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{building.code}</div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "5px 9px" }}>
+            <Icon name="x" size={14} color="var(--ink-600)"/>
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 14, padding: "10px 20px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
+          {Object.entries(LABELS).map(([k, v]) => (
+            <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
+              <span style={{ width: 14, height: 14, borderRadius: 3, background: BOX_STATUS_FILL[k], border: `1.5px solid ${BOX_STATUS_STROKE[k]}`, display: "inline-block" }}/>
+              {lang === "fr" ? v.fr : v.en}
+              {statusCounts[k] != null && (
+                <span className="mono" style={{ fontSize: 10, color: "var(--fg-3)" }}>({statusCounts[k]})</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* SVG plan */}
+        <div style={{ padding: "14px 16px", overflow: "auto" }}>
+          <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)", position: "relative" }}>
+            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 480 }}>
+              {/* Floor */}
+              <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
+
+              {/* Infrastructure (aisles, rooms) */}
+              {(INT.infra || []).map((inf, i) => (
+                <g key={i}>
+                  <rect x={inf.x} y={inf.y} width={inf.w} height={inf.h} rx={inf.isAisle ? 0 : 5}
+                    fill={inf.color} stroke={inf.stroke} strokeWidth={1}/>
+                  {inf.isAisle ? (
+                    <text x={inf.x + inf.w / 2} y={inf.y + inf.h / 2 + 4} textAnchor="middle"
+                      fontSize="8" fill="#8A8070" fontFamily="var(--font-mono)" letterSpacing="1">
+                      {lang === "fr" ? inf.fr.toUpperCase() : inf.en.toUpperCase()}
+                    </text>
+                  ) : (
+                    <>
+                      <text x={inf.x + inf.w / 2} y={inf.y + inf.h / 2 - 4} textAnchor="middle"
+                        fontSize="9" fill="#6A6060" fontFamily="sans-serif" fontWeight="600">
+                        {lang === "fr" ? inf.fr : inf.en}
+                      </text>
+                      {inf.icon && (
+                        <text x={inf.x + inf.w / 2} y={inf.y + inf.h / 2 + 14} textAnchor="middle" fontSize="14" fill="#8A8070">
+                          {inf.icon === "droplet" ? "💧" : inf.icon === "package" ? "📦" : "→"}
+                        </text>
+                      )}
+                    </>
+                  )}
+                </g>
+              ))}
+
+              {/* Areas */}
+              {(INT.areas || []).map(area => {
+                const bw = Math.floor((area.w - BOX_GAP * (area.cols + 1)) / area.cols);
+                const bh = Math.floor((area.rows > 0 ? Math.min(28, (area.h - BOX_GAP * (area.rows + 1)) / area.rows) : 28));
+                return (
+                  <g key={area.id}>
+                    {/* Area background */}
+                    <rect x={area.x} y={area.y} width={area.w} height={area.h} rx={6}
+                      fill={area.color} stroke={area.stroke} strokeWidth={area.alert ? 2 : 1.2}
+                      strokeDasharray={area.alert ? "5,3" : null}/>
+                    {/* Area label */}
+                    <text x={area.x + 6} y={area.y + 13} fontSize="8.5" fontWeight="700"
+                      fill={area.alert ? "#B84040" : "#4A4030"} fontFamily="sans-serif" letterSpacing="0.02em">
+                      {lang === "fr" ? area.fr : area.en}
+                    </text>
+                    {/* Boxes */}
+                    {(area.boxes || []).map(box => {
+                      const bx = area.x + BOX_GAP + box.col * (bw + BOX_GAP);
+                      const by = area.y + BOX_GAP + box.row * (bh + BOX_GAP) + 16;
+                      const isHovered = hoveredBox && hoveredBox.areaId === area.id && hoveredBox.id === box.id;
+                      return (
+                        <g key={box.id}
+                          style={{ cursor: "pointer" }}
+                          onMouseEnter={() => setHoveredBox({ ...box, areaId: area.id, bx, by, bw, bh })}
+                          onMouseLeave={() => setHoveredBox(null)}>
+                          <rect x={bx} y={by} width={bw} height={bh} rx={3}
+                            fill={BOX_STATUS_FILL[box.status]}
+                            stroke={isHovered ? "#1A1410" : BOX_STATUS_STROKE[box.status]}
+                            strokeWidth={isHovered ? 2 : 1}
+                            opacity={isHovered ? 1 : 0.88}/>
+                          {bw > 16 && bh > 12 && (
+                            <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
+                              fontSize="7" fill={box.status === "empty" ? "#A8A098" : "#2A1810"}
+                              fontFamily="var(--font-mono)" fontWeight={box.status !== "ok" ? "700" : "400"}>
+                              {box.id + 1}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                    {/* Aisle */}
+                    {area.aisle && (
+                      <>
+                        <rect x={area.aisle.x} y={area.aisle.y} width={area.aisle.w} height={area.aisle.h}
+                          fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
+                        <text x={area.aisle.x + area.aisle.w / 2} y={area.aisle.y + area.aisle.h / 2 + 4}
+                          textAnchor="middle" fontSize="7.5" fill="#8A8070"
+                          fontFamily="var(--font-mono)" letterSpacing="1">
+                          {lang === "fr" ? area.aisle.fr.toUpperCase() : area.aisle.en.toUpperCase()}
+                        </text>
+                      </>
+                    )}
+                    {/* Alert badge */}
+                    {area.alert && (
+                      <text x={area.x + area.w - 8} y={area.y + 14} textAnchor="middle" fontSize="10" fill="#B84040">⚠</text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Tooltip on hover */}
+              {hoveredBox && (() => {
+                const tx = Math.min(hoveredBox.bx + hoveredBox.bw + 4, CANVAS_W - 90);
+                const ty = Math.max(4, hoveredBox.by - 4);
+                const label = LABELS[hoveredBox.status];
+                return (
+                  <g>
+                    <rect x={tx} y={ty} width={88} height={28} rx={5} fill="rgba(30,24,16,0.88)"/>
+                    <text x={tx + 44} y={ty + 11} textAnchor="middle" fontSize="8" fill="#ECE8E0" fontFamily="var(--font-mono)">
+                      Box #{hoveredBox.id + 1}
+                    </text>
+                    <text x={tx + 44} y={ty + 21} textAnchor="middle" fontSize="8" fill={BOX_STATUS_FILL[hoveredBox.status]} fontFamily="sans-serif" fontWeight="600">
+                      {lang === "fr" ? label.fr : label.en}
+                    </text>
+                  </g>
+                );
+              })()}
+
+              {/* Compass */}
+              <g transform={`translate(${CANVAS_W - 22}, 22)`}>
+                <circle cx={0} cy={0} r={16} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
+                <text x={0} y={-6} textAnchor="middle" fontSize="8" fill="#3A3020" fontWeight="700" fontFamily="var(--font-mono)">N</text>
+                <line x1={0} y1={2} x2={0} y2={12} stroke="#B0A88C" strokeWidth={1}/>
+                <polygon points="0,-12 -3.5,2 3.5,2" fill="#3A3020"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div style={{ display: "flex", gap: 8, padding: "12px 20px", borderTop: "1px solid var(--border-1)" }}>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="layers" size={13} color="var(--ink-700)"/>
+            {lang === "fr" ? "Voir animaux par box" : "Animals per box"}
+          </button>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="pulse" size={13} color="var(--ink-700)"/>
+            {lang === "fr" ? "Capteurs environnement" : "Env. sensors"}
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+            {lang === "fr" ? "Fermer" : "Close"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BUILDING_TYPE_COLORS = {
   barn:     { bg: "var(--pertinence-100)", border: "var(--pertinence-300)", text: "var(--pertinence-900)", icon: "cow" },
   piggery:  { bg: "var(--oxblood-50)",    border: "var(--oxblood-200)",    text: "var(--oxblood-900)",    icon: "pig" },
@@ -467,7 +682,7 @@ const FloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
 };
 
 // ─── Detail panel ────────────────────────────────────────────────────────────
-const BuildingDetail = ({ building, lang, onClose }) => {
+const BuildingDetail = ({ building, lang, onClose, onViewInterior }) => {
   if (!building) return (
     <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, minHeight: 280, color: "var(--fg-3)" }}>
       <Icon name="building" size={32} color="var(--ink-300)"/>
@@ -580,6 +795,15 @@ const BuildingDetail = ({ building, lang, onClose }) => {
         </div>
       </div>
 
+      {/* Interior plan button */}
+      {building.interior && (
+        <button className="btn btn-sm" onClick={() => onViewInterior && onViewInterior(building)}
+          style={{ background: "var(--forest-50)", border: "1.5px solid var(--forest-200)", color: "var(--forest-800)", fontWeight: 700, gap: 7, justifyContent: "center" }}>
+          <Icon name="grid" size={14} color="var(--forest-700)"/>
+          {lang === "fr" ? "Voir le plan intérieur" : "View interior layout"}
+        </button>
+      )}
+
       {/* Actions */}
       <div style={{ display: "flex", gap: 8, paddingTop: 4 }}>
         <button className="btn btn-sm" style={{ flex: 1 }}>
@@ -604,6 +828,7 @@ const BuildingsScreen = ({ lang }) => {
   const [selectedId, setSelectedId] = React.useState(null);
   const [viewMode, setViewMode] = React.useState("plan"); // "plan" | "cards"
   const [filterStatus, setFilterStatus] = React.useState(null);
+  const [interiorBuilding, setInteriorBuilding] = React.useState(null);
 
   const selectedBuilding = BUILDINGS_DATA.find(b => b.id === selectedId) || null;
   const filtered = filterStatus ? BUILDINGS_DATA.filter(b => b.status === filterStatus) : BUILDINGS_DATA;
@@ -702,7 +927,7 @@ const BuildingsScreen = ({ lang }) => {
           </div>
           {/* Detail panel */}
           <div style={{ overflow: "auto" }}>
-            <BuildingDetail building={selectedBuilding} lang={lang} onClose={() => setSelectedId(null)}/>
+            <BuildingDetail building={selectedBuilding} lang={lang} onClose={() => setSelectedId(null)} onViewInterior={setInteriorBuilding}/>
           </div>
         </div>
       ) : (
@@ -711,6 +936,11 @@ const BuildingsScreen = ({ lang }) => {
             <BuildingMapCard key={b.id} building={b} selected={selectedId === b.id} onSelect={(id) => setSelectedId(id === selectedId ? null : id)} lang={lang}/>
           ))}
         </div>
+      )}
+
+      {/* Interior plan modal */}
+      {interiorBuilding && (
+        <InteriorPlan building={interiorBuilding} lang={lang} onClose={() => setInteriorBuilding(null)}/>
       )}
     </div>
   );
