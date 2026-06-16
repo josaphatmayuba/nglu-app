@@ -7,6 +7,7 @@ import {
   EVENT_TYPES, SOURCE_MODULES, EVENT_COLORS, EVENT_ICONS,
   IMP_COLORS, formatRelative, formatDate, impChipClass,
 } from "./shared.jsx";
+import { Discussion, DiscussionBadge } from "./discussion.jsx";
 
 export function Activite() {
   const [events, setEvents] = useState([]);
@@ -18,6 +19,8 @@ export function Activite() {
   const [editEvent, setEditEvent] = useState(null);
   const [detailEvent, setDetailEvent] = useState(null);
   const [error, setError] = useState(null);
+  const [discEvent, setDiscEvent] = useState(null);
+  const currentUserId = parseInt(localStorage.getItem("id") || "0", 10);
 
   const load = () => {
     setLoading(true);
@@ -115,6 +118,12 @@ export function Activite() {
                       {ev.description && <div className="journal-event-desc" style={{ WebkitLineClamp:2, display:"-webkit-box", WebkitBoxOrient:"vertical", overflow:"hidden" }}>{ev.description}</div>}
                     </div>
                     <div className="journal-event-actions" onClick={(e) => e.stopPropagation()}>
+                      <DiscussionBadge
+                        entityType="journal_event"
+                        entityId={ev.id}
+                        currentUserId={currentUserId}
+                        onClick={() => setDiscEvent(ev)}
+                      />
                       <button title={ev.isPinned ? "Desepingler" : "Epingler"} onClick={() => togglePin(ev)}>
                         {ev.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
                       </button>
@@ -137,6 +146,25 @@ export function Activite() {
       {showCreate && <EventModal onClose={() => { setShowCreate(false); load(); }} />}
       {editEvent && <EventModal event={editEvent} onClose={() => { setEditEvent(null); load(); }} />}
       {detailEvent && <EventDetail event={detailEvent} onClose={() => setDetailEvent(null)} onEdit={(ev) => { setDetailEvent(null); setEditEvent(ev); }} onPin={togglePin} onDelete={(ev) => { setDetailEvent(null); deleteEv(ev); }} />}
+
+      {/* Panneau Discussion */}
+      {discEvent && (
+        <div style={{
+          position:"fixed", inset:0, background:"rgba(15,23,42,.45)", zIndex:50,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16,
+        }} onClick={() => setDiscEvent(null)}>
+          <div style={{ width:"100%", maxWidth:520, height:"min(600px,90vh)" }}
+               onClick={(e) => e.stopPropagation()}>
+            <Discussion
+              entityType="journal_event"
+              entityId={discEvent.id}
+              entityTitle={discEvent.title}
+              currentUserId={currentUserId}
+              onClose={() => setDiscEvent(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

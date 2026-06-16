@@ -33,6 +33,7 @@ import {
   KeyRound,
   BookOpen,
   DatabaseZap,
+  Ticket,
 } from "lucide-react";
 
 const AVAILABLE_APPS = [
@@ -48,6 +49,8 @@ const AVAILABLE_APPS = [
   { key: "batipro", name: "BatiPro", path: "/batipro/", icon: HardHat, gradient: "from-blue-700 to-amber-500", external: true },
   { key: "domus", name: "Domus", path: "/domus/", icon: KeyRound, gradient: "from-indigo-500 to-violet-700", external: true },
   { key: "journal", name: "Journal", path: "/journal/", icon: BookOpen, gradient: "from-indigo-600 to-blue-700", external: true },
+  { key: "chat", name: "Chat", path: "/chat/", icon: MessageCircle, gradient: "from-violet-600 to-indigo-700", external: true },
+  { key: "tickets", name: "Tickets", path: "/tickets/", icon: Ticket, gradient: "from-rose-500 to-pink-700", external: true },
   { key: "accounting", name: "Comptabilite", path: "/comptabilite/", icon: Wallet, gradient: "from-blue-600 to-sky-500", external: true },
   { key: "migration", name: "Migration", path: "/migration/", icon: DatabaseZap, gradient: "from-cyan-600 to-teal-700", external: true },
   { key: "reports", name: "Rapports", path: "/admin/reports", icon: BarChart3, gradient: "from-blue-400 to-blue-600" },
@@ -63,7 +66,7 @@ const SOON_APPS = [
   { key: "documents", name: "Documents", icon: Folder, gradient: "from-yellow-400 to-yellow-600", badge: "SOON" },
   { key: "signature", name: "Signature", icon: PenTool, gradient: "from-fuchsia-400 to-fuchsia-600", badge: "SOON" },
   { key: "ai", name: "Assistant IA", icon: Sparkles, gradient: "from-slate-700 to-slate-900", badge: "NEW" },
-  { key: "discussion", name: "Discussion", icon: MessageCircle, gradient: "from-green-400 to-green-600", badge: "SOON" },
+  { key: "discussion", name: "Discussion", icon: MessageCircle, gradient: "from-green-400 to-green-600", badge: "BETA" },
   { key: "inventory", name: "Inventaire", icon: Boxes, gradient: "from-stone-500 to-stone-700", badge: "SOON" },
   { key: "planning", name: "Planning", icon: CalendarClock, gradient: "from-orange-500 to-red-500", badge: "SOON" },
   { key: "maintenance", name: "Maintenance", icon: Wrench, gradient: "from-zinc-500 to-zinc-700", badge: "SOON" },

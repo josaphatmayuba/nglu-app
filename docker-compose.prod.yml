@@ -137,6 +137,7 @@ services:
       - /opt/nglu-app-dev/journal-app/dist:/usr/share/nginx/html-journal-dev:ro
       - /opt/nglu-app-dev/migration-app/dist:/usr/share/nginx/html-migration-dev:ro
       - /opt/nglu-app-dev/tickets-app/dist:/usr/share/nginx/html-tickets-dev:ro
+      - /opt/nglu-app-dev/chat-app/dist:/usr/share/nginx/html-chat-dev:ro
     depends_on:
       - middleware
     networks:

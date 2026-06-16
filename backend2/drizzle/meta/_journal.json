@@ -939,6 +939,20 @@
       "when": 1780495200000,
       "tag": "0157_journal_entreprise",
       "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "5",
+      "when": 1750032000000,
+      "tag": "0158_journal_discussions",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "5",
+      "when": 1750118400000,
+      "tag": "0159_chat_channels",
+      "breakpoints": true
     }
   ]
 }
