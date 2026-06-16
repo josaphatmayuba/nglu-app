@@ -223,10 +223,10 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/chat-app/dist $PROD_APP/nginx && chmod 777 $APP/chat-app/dist"
+                - $SSH $SERVER "sudo mkdir -p $APP/chat-app/dist $PROD_APP/nginx && sudo chmod 777 $APP/chat-app/dist"
                 - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
-                - $SSH $SERVER "find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - $SSH $SERVER "sudo find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
