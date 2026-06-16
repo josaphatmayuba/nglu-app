@@ -14,6 +14,7 @@ This project follows:
 - **Backend2 dev redeploy (v3.79.6)** : synchronise `backend2/package.json` sur la version racine pour déclencher le pipeline backend dev et embarquer le module `journal-entreprise` (commit 089f6dcb, absent du conteneur `/api` déployé → 404 sur `/api/journal-entreprise/*`). [SCRUM]
 
 ### Fixed
+- **Build backend2 cassé : `DatabaseService` introuvable (v3.79.6)** : les services `journal-entreprise`, `discussion` et `chat` importaient `../database/database.service` (jamais commité au commit 089f6dcb) → `nest build` exit 1 → step backend du pipeline en échec → conteneur `/api` jamais redéployé → 404 sur `/api/journal-entreprise/*`. Réécriture des 3 services pour utiliser le client **Drizzle** (`db.execute(sql\`...\`)` via `@Inject(DRIZZLE)`) au lieu d'un pool mysql2 brut, conformément à la règle projet. Build + `tsc --noEmit` OK. [SCRUM]
 - **Pipeline Chat → dev (v3.79.2)** : le conteneur `nglu_prod_frontend` n'était pas recréé après l'ajout du bind-mount `html-chat-dev` → 403 Forbidden sur `/chat/` en dev. Le step pipeline sync maintenant la conf nginx + compose et recrée le frontend via `--force-recreate` (même pattern que Migration Cockpit). [SCRUM]
 
 ### Added
