@@ -24,6 +24,7 @@ definitions:
     node-migration: migration-app/node_modules
     node-tickets: tickets-app/node_modules
     node-marketing: marketing-site/node_modules
+    node-chat: chat-app/node_modules
 
 pipelines:
   branches:
@@ -215,6 +216,21 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
           - step:
+              name: Chat → dev
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/chat-app/dist"
+                # Bind-mount safe: vider le contenu (inode preserve) puis copier
+                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
+                - $SSH $SERVER "find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
               name: Marketing → dev
               caches: [node-marketing]
               condition: { changesets: { includePaths: ["marketing-site/**"] } }
@@ -398,6 +414,22 @@ pipelines:
                 # 3) APRES le recreate, depose le dist prod dans le conteneur (html-migration-prod n'est pas
                 #    un volume : meme schema que comptabilite/domus prod, deja bakes/cp).
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Chat → prod
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/chat-app/dist $APP/nginx"
+                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
+                - $SSH $SERVER "mkdir -p $APP/chat-app/dist && find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                # html-chat-prod n'est pas un volume bind-monte : docker cp dans le conteneur
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-chat-prod && docker cp $APP/chat-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-chat-prod/"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
