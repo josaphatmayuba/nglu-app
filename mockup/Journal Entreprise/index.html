@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Journal d'Entreprise · Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans:['Inter','sans-serif'], display:['Space Grotesk','sans-serif'] },
+      colors: {
+        ink:{50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617'},
+        iris:{50:'#eef2ff',100:'#e0e7ff',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca'},
+        amber:{50:'#fffbeb',100:'#fef3c7',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309'},
+      },
+    } } };
+  </script>
+  <style>
+    html,body{font-family:'Inter',sans-serif;background:#e8ecf5;color:#0f172a;}
+    .font-display{font-family:'Space Grotesk',sans-serif;}
+    ::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+    .grad-iris{background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 60%,#4f46e5 100%);}
+    .grad-dark{background:radial-gradient(120% 120% at 0% 0%,#1e293b 0%,#0f172a 55%,#020617 100%);}
+    .text-grad{background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;background-clip:text;color:transparent;}
+    .card{background:#fff;border:1px solid #e8ecf4;border-radius:18px;}
+    .chip{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;}
+    [data-lucide]{stroke-width:2;}
+    .view{display:none;}.view.active{display:block;}
+    .navlink{cursor:pointer;}.nav-active{background:rgba(255,255,255,.10)!important;color:#fff!important;}.nav-active [data-lucide]{color:#a5b4fc!important;}
+
+    /* ===== Frame & responsive toggle (pattern Domus) ===== */
+    #frame{transition:all .35s cubic-bezier(.4,0,.2,1);}
+    .mob-only{display:none;}
+    body.mobile #stage{padding:28px 0;display:flex;justify-content:center;}
+    body.mobile #frame{width:390px;height:800px;border-radius:44px;overflow:hidden;box-shadow:0 40px 80px -24px rgba(15,23,42,.55),0 0 0 11px #0b1020,0 0 0 13px #1e293b;display:flex;flex-direction:column;background:#f6f8fc;}
+    body.mobile .desk-side{display:none;}
+    body.mobile .mob-only{display:flex;}
+    body.mobile #scroll{flex:1;overflow-y:auto;}body.mobile #scroll::-webkit-scrollbar{display:none;}
+    body.mobile .browser-chrome{display:none;}
+    body.mobile .pad{padding:16px!important;}
+    body.mobile .g2,body.mobile .g3,body.mobile .g4{grid-template-columns:1fr!important;}
+    body.mobile .desk-only{display:none!important;}
+    body:not(.mobile) #stage{max-width:1320px;margin:0 auto;padding:0 24px 48px;}
+    body:not(.mobile) #frame{border-radius:18px;overflow:hidden;box-shadow:0 40px 80px -28px rgba(15,23,42,.45);border:1px solid #e2e8f0;background:#fff;}
+    body:not(.mobile) #shell{display:flex;min-height:680px;}body:not(.mobile) #scroll{flex:1;background:#f6f8fc;}
+    .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+    .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+    .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+
+    /* timeline */
+    .tl-line::before{content:"";position:absolute;left:19px;top:42px;bottom:-6px;width:2px;background:#e2e8f0;}
+    .fade{animation:fade .3s ease;}@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+    /* mobile bottom nav */
+    .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:600;color:#94a3b8;padding:8px 0;cursor:pointer;}
+    .mob-tab.on{color:#4f46e5;}
+    .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:#0f172a;color:#fff;padding:11px 22px;border-radius:12px;font-weight:600;font-size:14px;box-shadow:0 16px 40px -12px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.25s;z-index:120;}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    .modal-layer{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:100;overflow:auto;}
+    .modal-layer.open{display:flex;}
+  </style>
+</head>
+<body class="min-h-screen">
+
+<!-- ===== Barre de contrôle mockup ===== -->
+<div class="max-w-[1320px] mx-auto px-6 pt-6 pb-3 flex items-center justify-between flex-wrap gap-3">
+  <div class="flex items-center gap-3">
+    <div class="w-10 h-10 rounded-xl grad-iris grid place-items-center text-white text-lg shadow-lg shadow-iris-500/30">📓</div>
+    <div>
+      <div class="font-display font-bold text-lg leading-tight">Journal d'Entreprise</div>
+      <div class="text-xs text-ink-500">Outil secrétariat · tout l'historique de l'entreprise</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-2 bg-white rounded-xl p-1 border border-ink-200 shadow-sm">
+    <button id="btnDesk" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-iris-600 text-white"><i data-lucide="monitor" class="w-4 h-4"></i> Bureau</button>
+    <button id="btnMob" class="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600"><i data-lucide="smartphone" class="w-4 h-4"></i> Mobile</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="frame">
+    <div id="shell">
+
+      <!-- ================= SIDEBAR (desktop) ================= -->
+      <aside class="desk-side w-64 grad-dark text-ink-300 flex flex-col p-4 shrink-0">
+        <div class="flex items-center gap-2.5 px-2 py-2 mb-3">
+          <div class="w-9 h-9 rounded-lg grad-iris grid place-items-center text-white">📓</div>
+          <div class="font-display font-bold text-white">Journal Pro</div>
+        </div>
+        <nav id="deskNav" class="flex-1 space-y-0.5 text-sm overflow-auto pr-1">
+          <div class="text-[10px] uppercase tracking-wider text-ink-500 px-3 mt-2 mb-1">Principal</div>
+          <a data-page="stats" class="navlink nav-active flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="layout-dashboard" class="w-4 h-4"></i> Tableau de bord</a>
+          <a data-page="journal" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="list" class="w-4 h-4"></i> Journal d'activité</a>
+          <a data-page="calendrier" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="calendar" class="w-4 h-4"></i> Calendrier</a>
+          <a data-page="taches" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="check-square" class="w-4 h-4"></i> Tâches & rappels <span id="taskBadge" class="ml-auto bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-full">3</span></a>
+          <a data-page="epingles" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="pin" class="w-4 h-4"></i> Épinglés</a>
+
+          <div class="text-[10px] uppercase tracking-wider text-ink-500 px-3 mt-4 mb-1">Sources</div>
+          <a data-src="compta" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Comptabilité</a>
+          <a data-src="domus" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-violet-400"></span> Domus (loyers)</a>
+          <a data-src="batipro" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-amber-400"></span> BâtiPro (travaux)</a>
+          <a data-src="hr" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-sky-400"></span> Ressources Humaines</a>
+          <a data-src="farmos" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-lime-400"></span> FarmOS</a>
+          <a data-src="usine" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><span class="w-2 h-2 rounded-full bg-rose-400"></span> Usine / Production</a>
+
+          <div class="text-[10px] uppercase tracking-wider text-ink-500 px-3 mt-4 mb-1">Outils</div>
+          <a data-page="export" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="download" class="w-4 h-4"></i> Exporter</a>
+          <a data-page="audit" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="shield-check" class="w-4 h-4"></i> Audit / Traçabilité</a>
+          <a data-page="params" class="navlink flex items-center gap-3 px-3 py-2.5 rounded-lg"><i data-lucide="settings" class="w-4 h-4"></i> Paramètres</a>
+        </nav>
+        <div class="flex items-center gap-2.5 px-2 py-2 mt-2 border-t border-white/10 pt-3">
+          <div class="w-8 h-8 rounded-full grad-iris grid place-items-center text-white text-xs font-bold">SK</div>
+          <div class="text-xs"><div class="text-white font-semibold">Sandrine K.</div><div class="text-ink-500">Secrétaire</div></div>
+        </div>
+      </aside>
+
+      <!-- ================= ZONE DE CONTENU ================= -->
+      <div id="scroll" class="flex-1 flex flex-col" style="min-width:0">
+
+        <!-- En-tête mobile -->
+        <header class="mob-only items-center justify-between px-4 py-3 bg-white border-b border-ink-200 sticky top-0 z-30">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg grad-iris grid place-items-center text-white text-sm">📓</div>
+            <span class="font-display font-bold">Journal</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="mBell" class="w-9 h-9 rounded-full bg-ink-100 grid place-items-center relative"><i data-lucide="bell" class="w-4 h-4 text-ink-600"></i><span class="absolute top-2 right-2 w-2 h-2 bg-amber-500 rounded-full"></span></button>
+            <div class="w-8 h-8 rounded-full grad-iris grid place-items-center text-white text-xs font-bold">SK</div>
+          </div>
+        </header>
+
+        <!-- Topbar desktop -->
+        <div class="desk-only items-center gap-3 px-6 py-3.5 bg-white/80 backdrop-blur border-b border-ink-200 sticky top-0 z-30 flex">
+          <div class="flex-1 max-w-lg flex items-center gap-2 bg-ink-100 rounded-xl px-3 py-2">
+            <i data-lucide="search" class="w-4 h-4 text-ink-400"></i>
+            <input id="searchD" class="flex-1 bg-transparent outline-none text-sm" placeholder="Rechercher un événement, personne, montant, bien…">
+          </div>
+          <button id="bellD" class="w-10 h-10 rounded-xl bg-ink-100 grid place-items-center relative"><i data-lucide="bell" class="w-4 h-4 text-ink-600"></i><span class="absolute top-2.5 right-2.5 w-2 h-2 bg-amber-500 rounded-full"></span></button>
+          <button id="newD" class="grad-iris text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg shadow-iris-500/30"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel événement</button>
+        </div>
+
+        <!-- Contenu rendu -->
+        <main id="content" class="flex-1 pad p-6"></main>
+
+        <!-- Bottom nav mobile -->
+        <nav class="mob-only border-t border-ink-200 bg-white">
+          <div class="mob-tab on" data-page="stats"><i data-lucide="layout-dashboard" class="w-5 h-5"></i>Accueil</div>
+          <div class="mob-tab" data-page="calendrier"><i data-lucide="calendar" class="w-5 h-5"></i>Agenda</div>
+          <div class="mob-tab" data-mnew><div class="w-11 h-11 -mt-5 rounded-full grad-iris grid place-items-center text-white shadow-lg shadow-iris-500/40"><i data-lucide="plus" class="w-5 h-5"></i></div></div>
+          <div class="mob-tab" data-page="taches"><i data-lucide="check-square" class="w-5 h-5"></i>Tâches</div>
+          <div class="mob-tab" data-page="journal"><i data-lucide="list" class="w-5 h-5"></i>Journal</div>
+        </nav>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL Créer / Éditer ================= -->
+<div class="modal-layer" id="ov">
+  <div class="card w-full max-w-xl fade">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-ink-200">
+      <h2 id="modalTitle" class="font-display font-bold text-lg">📝 Nouvel événement</h2>
+      <button data-close class="w-9 h-9 rounded-lg hover:bg-ink-100 grid place-items-center"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-4 max-h-[70vh] overflow-auto">
+      <div>
+        <label class="text-xs font-semibold text-ink-500 block mb-2">Type d'événement</label>
+        <div id="typePick" class="grid grid-cols-4 gap-2">
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Note" data-emoji="📝"><div class="text-lg">📝</div>Note</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Appel" data-emoji="📞"><div class="text-lg">📞</div>Appel</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Réunion" data-emoji="🤝"><div class="text-lg">🤝</div>Réunion</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Courrier" data-emoji="📧"><div class="text-lg">📧</div>Courrier</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Incident" data-emoji="⚠️"><div class="text-lg">⚠️</div>Incident</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Livraison" data-emoji="🚚"><div class="text-lg">🚚</div>Livraison</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Décision" data-emoji="💼"><div class="text-lg">💼</div>Décision</div>
+          <div class="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs" data-type="Visite" data-emoji="👤"><div class="text-lg">👤</div>Visite</div>
+        </div>
+      </div>
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Titre</label><input id="f-title" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500" placeholder="Ex : Réunion fournisseur ciment"></div>
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Description</label><textarea id="f-desc" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500 min-h-[80px]" placeholder="Décrivez ce qui s'est passé…"></textarea></div>
+      <div class="grid grid-cols-2 gap-3 g2">
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Module concerné</label>
+          <select id="f-module" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500">
+            <option value="event">Général / Direction</option><option value="compta">Comptabilité</option><option value="domus">Domus</option><option value="batipro">BâtiPro</option><option value="hr">Ressources Humaines</option><option value="farmos">FarmOS</option><option value="usine">Usine / Production</option>
+          </select></div>
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Date & heure</label><input type="datetime-local" id="f-date" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 g2">
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Personnes (mentions)</label><input id="f-people" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500" placeholder="@Patron, @Comptable…"></div>
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Montant (optionnel)</label><input id="f-amount" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500" placeholder="450 USD / 1 200 000 FC"></div>
+      </div>
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Importance</label>
+        <div id="impPick" class="flex gap-2">
+          <div class="imp flex-1 text-center py-2 rounded-xl border cursor-pointer text-xs" data-imp="low">🟢 Basse</div>
+          <div class="imp flex-1 text-center py-2 rounded-xl border cursor-pointer text-xs" data-imp="med">🟡 Moyenne</div>
+          <div class="imp flex-1 text-center py-2 rounded-xl border cursor-pointer text-xs" data-imp="high">🔴 Haute</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3 g2">
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">📎 Pièce jointe</label><input type="file" id="f-att" class="w-full text-xs"></div>
+        <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">🔔 Rappel (tâche)</label><input type="date" id="f-remind" class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-iris-500"></div>
+      </div>
+      <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" id="f-pin"> 📌 Épingler cet événement</label>
+    </div>
+    <div class="flex justify-end gap-2 px-5 py-4 border-t border-ink-200">
+      <button data-close class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-ink-100 text-ink-700">Annuler</button>
+      <button id="saveEv" class="px-4 py-2.5 rounded-xl text-sm font-semibold grad-iris text-white shadow-lg shadow-iris-500/30">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= MODAL détail ================= -->
+<div class="modal-layer" id="ovDetail">
+  <div class="card w-full max-w-md fade">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-ink-200">
+      <h2 id="dt-title" class="font-display font-bold text-lg">Détail</h2>
+      <button data-closed class="w-9 h-9 rounded-lg hover:bg-ink-100 grid place-items-center"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="p-5 space-y-3 text-sm" id="dt-body"></div>
+    <div class="flex justify-end gap-2 px-5 py-4 border-t border-ink-200"><button data-closed class="px-4 py-2.5 rounded-xl text-sm font-semibold bg-ink-100 text-ink-700">Fermer</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Enregistré ✓</div>
+
+<script>
+/* ============ DONNÉES ============ */
+const MODS={
+  event:{name:"Événement",hex:"#6366f1",tw:"bg-iris-500",emoji:"📝",dot:"bg-iris-400"},
+  compta:{name:"Comptabilité",hex:"#10b981",tw:"bg-emerald-500",emoji:"💰",dot:"bg-emerald-400"},
+  domus:{name:"Domus",hex:"#8b5cf6",tw:"bg-violet-500",emoji:"🏠",dot:"bg-violet-400"},
+  batipro:{name:"BâtiPro",hex:"#f59e0b",tw:"bg-amber-500",emoji:"🏗️",dot:"bg-amber-400"},
+  hr:{name:"RH",hex:"#0ea5e9",tw:"bg-sky-500",emoji:"👥",dot:"bg-sky-400"},
+  farmos:{name:"FarmOS",hex:"#84cc16",tw:"bg-lime-500",emoji:"🌾",dot:"bg-lime-400"},
+  usine:{name:"Usine",hex:"#f43f5e",tw:"bg-rose-500",emoji:"🏭",dot:"bg-rose-400"},
+};
+let UID=100;
+let events=[
+  {id:1,mod:"event",emoji:"📝",title:"Réunion direction — décision achat camion",desc:"Validation achat camion benne pour chantier Matete. Budget : 18 000 USD. Devis avant 20/06.",auto:false,pinned:true,by:"Sandrine",date:"2026-06-15T14:30",people:"@Patron @Comptable",att:"PV_reunion.pdf",amount:"",imp:"high",tags:"Direction · Achats"},
+  {id:2,mod:"compta",emoji:"💰",title:"Encaissement facture #FAC-2026-0142",desc:"Paiement reçu du client SARL Kintambo via Western Union.",auto:true,pinned:false,by:"Système",date:"2026-06-15T13:05",amount:"+ 3 200 000 FC",imp:"med",tags:"Écriture #EC-8841"},
+  {id:3,mod:"domus",emoji:"🏠",title:"Loyer payé — Appart B4, Résidence Gombe",desc:"Locataire M. Ilunga — loyer de juin réglé (mobile money).",auto:true,pinned:false,by:"Système",date:"2026-06-15T11:40",amount:"+ 450 USD",imp:"low",tags:"Bail #BL-217"},
+  {id:4,mod:"batipro",emoji:"🏗️",title:"Avancement chantier Matete — fondations",desc:"Progression : fondations 80%. Livraison de 120 sacs de ciment réceptionnée.",auto:true,pinned:false,by:"Système",date:"2026-06-15T10:15",amount:"",imp:"med",tags:"Projet #PRJ-09",att:"photo_chantier.jpg"},
+  {id:5,mod:"hr",emoji:"👥",title:"Demande de congé — Joseph Mbiya",desc:"5 jours du 22 au 26 juin. En attente d'approbation du supérieur.",auto:true,pinned:false,by:"Système",date:"2026-06-15T09:20",amount:"",imp:"med",tags:"Service Logistique"},
+  {id:6,mod:"event",emoji:"📞",title:"Appel fournisseur — retard livraison",desc:"Fournisseur carrelage : 1 semaine de retard. Prévenir le chef de chantier.",auto:false,pinned:false,by:"Sandrine",date:"2026-06-15T08:45",amount:"",imp:"med",tags:"Approvisionnement"},
+  {id:7,mod:"usine",emoji:"🏭",title:"Production journalière — Usine",desc:"Sortie de production : 1 200 unités. Aucun incident.",auto:true,pinned:false,by:"Système",date:"2026-06-14T18:00",amount:"",imp:"low",tags:"1 200 u."},
+  {id:8,mod:"farmos",emoji:"🌾",title:"Vente récolte — maïs (lot L-12)",desc:"Vente de 2 tonnes de maïs au marché de Kinshasa.",auto:true,pinned:false,by:"Système",date:"2026-06-14T15:30",amount:"+ 1 800 000 FC",imp:"low",tags:"Lot L-12"},
+  {id:9,mod:"compta",emoji:"💰",title:"Paiement salaire — équipe chantier",desc:"Virement des salaires de la quinzaine pour 6 ouvriers.",auto:true,pinned:false,by:"Système",date:"2026-06-12T16:00",amount:"- 2 400 000 FC",imp:"med",tags:"Paie #PAY-44"},
+  {id:10,mod:"domus",emoji:"🏠",title:"Nouveau bail signé — Local commercial Limete",desc:"Bail 24 mois signé avec Ets Mukendi. Caution encaissée.",auto:true,pinned:true,by:"Système",date:"2026-06-09T11:00",amount:"+ 1 200 USD",imp:"high",tags:"Bail #BL-231"},
+];
+let tasks=[
+  {id:1,txt:"Relancer le fournisseur de carrelage",when:"En retard — hier",overdue:true,done:false},
+  {id:2,txt:"Demander 3 devis camion benne",when:"Échéance 20/06",overdue:false,done:false},
+  {id:3,txt:"Renouveler assurance véhicules",when:"Échéance 30/06",overdue:false,done:false},
+  {id:4,txt:"Envoyer reçu loyer B4",when:"Fait aujourd'hui",overdue:false,done:true},
+];
+let audit=[
+  {who:"Sandrine",act:"a créé",what:"Réunion direction — décision achat camion",at:"15/06 14:30"},
+  {who:"Système",act:"a importé",what:"Encaissement facture #FAC-2026-0142",at:"15/06 13:05"},
+  {who:"Sandrine",act:"a épinglé",what:"Nouveau bail — Local Limete",at:"15/06 09:50"},
+  {who:"Patrick",act:"a modifié",what:"Appel fournisseur — retard livraison",at:"15/06 09:10"},
+];
+let state={page:"stats",filterMod:"all",period:"all",view:"fil",search:"",editId:null,dateFrom:"",dateTo:""};
+let cur={type:"Note",emoji:"📝",imp:"low"};
+
+/* ============ HELPERS ============ */
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
+const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+const initials=n=>n.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+const fmtDay=iso=>new Date(iso).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+const fmtTime=iso=>new Date(iso).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+const dayKey=iso=>iso.slice(0,10);
+function icons(){if(window.lucide)lucide.createIcons();}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1800);}
+function filtered(){
+  let l=[...events];
+  if(state.filterMod!=="all")l=l.filter(e=>e.mod===state.filterMod);
+  if(state.search){const q=state.search.toLowerCase();l=l.filter(e=>(e.title+e.desc+(e.people||"")+(e.amount||"")+(e.tags||"")+e.by).toLowerCase().includes(q));}
+  if(state.period==="today")l=l.filter(e=>dayKey(e.date)==="2026-06-15");
+  if(state.period==="week")l=l.filter(e=>e.date>="2026-06-09");
+  if(state.dateFrom)l=l.filter(e=>dayKey(e.date)>=state.dateFrom);
+  if(state.dateTo)l=l.filter(e=>dayKey(e.date)<=state.dateTo);
+  return l.sort((a,b)=>b.date.localeCompare(a.date));
+}
+
+/* ============ COMPOSANTS ============ */
+function kpiCard(lab,val,sub,cls){return `<div class="card p-4"><div class="text-xs text-ink-500">${lab}</div><div class="font-display text-2xl font-bold mt-1">${val}</div><div class="text-xs mt-1 ${cls||'text-ink-400'}">${sub||''}</div></div>`;}
+function evCard(e){const m=MODS[e.mod];const neg=e.amount&&e.amount.trim().startsWith('-');
+  return `<div class="relative flex gap-3 pb-4 tl-line fade" data-id="${e.id}">
+    <div class="w-10 h-10 rounded-xl ${m.tw} grid place-items-center text-white text-base shrink-0 z-10">${e.emoji}</div>
+    <div class="card flex-1 p-3.5 min-w-0 ${e.pinned?'border-l-4 border-l-amber-400':''}">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-semibold text-sm">${esc(e.title)}</span>
+        <span class="chip ${e.auto?'bg-sky-100 text-sky-700':'bg-iris-100 text-iris-700'}">${e.auto?'Auto · '+m.name:'Manuel'}</span>
+        ${e.pinned?'<i data-lucide="pin" class="w-3.5 h-3.5 text-amber-500"></i>':''}
+        <span class="ml-auto text-xs text-ink-400 whitespace-nowrap">${fmtTime(e.date)}</span>
+      </div>
+      <div class="text-sm text-ink-500 mt-1">${esc(e.desc)}</div>
+      <div class="flex items-center gap-3 mt-2.5 text-xs text-ink-400 flex-wrap">
+        ${e.amount?`<span class="font-bold ${neg?'text-rose-600':'text-emerald-600'}">${esc(e.amount)}</span>`:''}
+        <span class="flex items-center gap-1.5"><span class="w-5 h-5 rounded-full bg-ink-100 grid place-items-center text-[9px] font-bold text-ink-600">${initials(e.by)}</span>${e.auto?'Système':e.by}</span>
+        ${e.people?`<span>👤 ${esc(e.people)}</span>`:''}
+        ${e.tags?`<span>🏷️ ${esc(e.tags)}</span>`:''}
+        ${e.att?`<span class="chip bg-ink-100 text-ink-600">📎 ${esc(e.att)}</span>`:''}
+        <span class="ml-auto flex gap-1">
+          <button data-act="view" class="w-7 h-7 rounded-lg hover:bg-ink-100 grid place-items-center"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>
+          <button data-act="pin" class="w-7 h-7 rounded-lg hover:bg-ink-100 grid place-items-center"><i data-lucide="pin" class="w-3.5 h-3.5"></i></button>
+          ${!e.auto?'<button data-act="edit" class="w-7 h-7 rounded-lg hover:bg-ink-100 grid place-items-center"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button data-act="del" class="w-7 h-7 rounded-lg hover:bg-rose-100 grid place-items-center text-rose-500"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>':''}
+        </span>
+      </div>
+    </div></div>`;
+}
+function tlHtml(list){let h='',d="";list.forEach(e=>{const k=dayKey(e.date);if(k!==d){h+=`<div class="flex items-center gap-2 text-xs font-semibold text-ink-400 my-3"><i data-lucide="calendar" class="w-3.5 h-3.5"></i> ${cap(fmtDay(e.date))}<div class="flex-1 h-px bg-ink-200"></div></div>`;d=k;}h+=evCard(e);});return `<div>${h}</div>`;}
+function calHtml(list){
+  const by={};list.forEach(e=>{const dd=+dayKey(e.date).slice(8);(by[dd]=by[dd]||[]).push(e);});
+  let h='<div class="card p-4"><div class="font-display font-bold mb-3">📅 Juin 2026</div><div class="grid grid-cols-7 gap-1.5">';
+  ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"].forEach(d=>h+=`<div class="text-[10px] text-ink-400 text-center uppercase">${d}</div>`);
+  for(let i=1;i<=30;i++){const evs=by[i]||[];h+=`<div class="rounded-lg border ${i===15?'border-iris-500':'border-ink-200'} p-1.5 min-h-[88px] text-[11px]"><div class="font-bold ${i===15?'text-iris-600':'text-ink-400'} mb-1">${i}</div>${evs.slice(0,3).map(e=>`<div class="${MODS[e.mod].tw} text-white rounded px-1 py-0.5 mb-1 truncate cursor-pointer" data-id="${e.id}" title="${esc(e.title)}">${e.emoji} ${esc(e.title)}</div>`).join("")}${evs.length>3?`<div class="text-ink-400">+${evs.length-3}</div>`:''}</div>`;}
+  return h+'</div></div>';
+}
+function tblHtml(list){
+  let h=`<div class="card overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm" style="min-width:720px"><thead><tr class="text-left text-xs uppercase text-ink-400 border-b border-ink-200">
+    <th class="px-4 py-3">Date</th><th class="px-4 py-3">Module</th><th class="px-4 py-3">Événement</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Montant</th><th class="px-4 py-3">Par</th><th></th></tr></thead><tbody>`;
+  list.forEach(e=>{const m=MODS[e.mod];const neg=e.amount&&e.amount.trim().startsWith('-');
+    h+=`<tr class="border-b border-ink-100 hover:bg-ink-50 cursor-pointer" data-id="${e.id}">
+      <td class="px-4 py-3 whitespace-nowrap">${new Date(e.date).toLocaleDateString("fr-FR")} ${fmtTime(e.date)}</td>
+      <td class="px-4 py-3"><span class="chip ${m.tw} text-white">${m.emoji} ${m.name}</span></td>
+      <td class="px-4 py-3">${e.pinned?'📌 ':''}${esc(e.title)}</td>
+      <td class="px-4 py-3">${e.auto?'Auto':'Manuel'}</td>
+      <td class="px-4 py-3 font-semibold ${neg?'text-rose-600':'text-emerald-600'}">${esc(e.amount||'—')}</td>
+      <td class="px-4 py-3">${esc(e.by)}</td>
+      <td class="px-4 py-3"><button data-act="view" class="text-iris-600 font-semibold">Voir</button></td></tr>`;});
+  return h+'</tbody></table></div></div>';
+}
+function tasksHtml(){return tasks.map(t=>`<div class="flex gap-3 items-start py-2.5 border-b border-ink-100 last:border-0" data-tid="${t.id}">
+  <div class="cb w-5 h-5 rounded-md border-2 ${t.done?'bg-emerald-500 border-emerald-500':'border-ink-300'} shrink-0 mt-0.5 grid place-items-center text-white text-[11px] cursor-pointer">${t.done?'✓':''}</div>
+  <div class="text-sm"><div class="${t.done?'line-through text-ink-400':''}">${esc(t.txt)}</div><div class="text-[11px] ${t.done?'text-emerald-600':(t.overdue?'text-rose-600':'text-amber-600')} mt-0.5">${t.done?'✅ '+t.when:(t.overdue?'⚠️ ':'')+t.when}</div></div></div>`).join("");}
+function statsBars(){const c={};Object.keys(MODS).forEach(k=>c[k]=events.filter(e=>e.mod===k).length);const max=Math.max(1,...Object.values(c));
+  return Object.entries(MODS).filter(([k])=>c[k]>0).map(([k,m])=>`<div class="flex justify-between text-sm mt-3 mb-1"><span>${m.emoji} ${m.name}</span><span class="font-semibold">${c[k]}</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full rounded-full ${m.tw}" style="width:${Math.round(c[k]/max*100)}%"></div></div>`).join("");}
+
+/* ============ PAGES ============ */
+function render(){setActiveNav();renderPage(state.page);icons();}
+function renderPage(p){
+  const C=$("#content");
+  if(p==="journal"){C.innerHTML=journalPage();bindJournal();return;}
+  if(p==="calendrier"){state.view="cal";C.innerHTML=journalPage();bindJournal();return;}
+  if(p==="taches"){C.innerHTML=`<div class="flex items-end justify-between mb-4 flex-wrap gap-2"><div><h1 class="font-display text-2xl font-bold">✅ Tâches & rappels</h1><p class="text-sm text-ink-500">Relances, échéances et rappels créés depuis les événements.</p></div><button id="addTask" class="grad-iris text-white px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4"></i>Nouvelle tâche</button></div><div class="card p-4 max-w-2xl">${tasksHtml()}</div>`;bindTasks();$("#addTask").onclick=()=>{const t=prompt("Intitulé de la tâche :");if(t){tasks.unshift({id:++UID,txt:t,when:"À planifier",overdue:false,done:false});updateBadges();renderPage("taches");icons();toast("Tâche ajoutée ✓");}};return;}
+  if(p==="epingles"){const l=events.filter(e=>e.pinned).sort((a,b)=>b.date.localeCompare(a.date));C.innerHTML=`<h1 class="font-display text-2xl font-bold mb-1">📌 Épinglés</h1><p class="text-sm text-ink-500 mb-4">${l.length} événement(s) à suivre.</p><div class="max-w-3xl">${l.length?tlHtml(l):'<div class="card p-12 text-center text-ink-400">Aucun événement épinglé.</div>'}</div>`;bindJournal();return;}
+  if(p==="stats"){const auto=events.filter(e=>e.auto).length,man=events.length-auto;
+    const kT=events.filter(e=>dayKey(e.date)==="2026-06-15").length,pin=events.filter(e=>e.pinned).length,od=tasks.filter(t=>t.overdue&&!t.done).length;
+    C.innerHTML=`<h1 class="font-display text-2xl font-bold mb-1">📊 Tableau de bord</h1><p class="text-sm text-ink-500 mb-4">Vue d'ensemble de l'activité du journal.</p>
+    <div class="grid grid-cols-4 g4 mb-4">${kpiCard("📋 Aujourd'hui",kT,"▲ 12% vs hier","text-emerald-600")}${kpiCard("💰 Mouvements",events.filter(e=>e.amount).length,"flux financiers")}${kpiCard("⏰ Rappels",tasks.filter(t=>!t.done).length,od+" en retard",od?'text-rose-600':'')}${kpiCard("📌 Épinglés",pin,"à suivre")}</div>
+    <div class="grid grid-cols-4 g4 mb-4">${kpiCard("Total événements",events.length,"")}${kpiCard("Automatiques",auto,"flux modules")}${kpiCard("Saisies manuelles",man,"")}${kpiCard("Tâches ouvertes",tasks.filter(t=>!t.done).length,"")}</div>
+    <div class="grid grid-cols-2 g2"><div class="card p-4"><div class="font-display font-bold mb-1">Répartition par module</div>${statsBars()}</div>
+    <div class="card p-4"><div class="font-display font-bold mb-1">Auto vs Manuel</div><div class="flex justify-between text-sm mt-3 mb-1"><span>🤖 Automatique</span><span class="font-semibold">${auto}</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-sky-500" style="width:${auto/events.length*100}%"></div></div><div class="flex justify-between text-sm mt-3 mb-1"><span>📝 Manuel</span><span class="font-semibold">${man}</span></div><div class="h-2 rounded-full bg-ink-100 overflow-hidden"><div class="h-full bg-iris-500" style="width:${man/events.length*100}%"></div></div></div></div>`;return;}
+  if(p==="export"){C.innerHTML=`<h1 class="font-display text-2xl font-bold mb-1">📤 Exporter le journal</h1><p class="text-sm text-ink-500 mb-4">Générer un rapport sur une période et un périmètre.</p>
+    <div class="card p-5 max-w-lg space-y-4">
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Période</label><select class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm"><option>Aujourd'hui</option><option>Cette semaine</option><option>Ce mois</option><option>Personnalisée…</option></select></div>
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Modules</label><select class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm"><option>Tous les modules</option><option>Comptabilité</option><option>Domus</option><option>BâtiPro</option><option>RH</option></select></div>
+      <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Format</label><div class="flex gap-2"><div class="flex-1 text-center py-2.5 rounded-xl grad-iris text-white text-sm font-semibold cursor-pointer">📄 PDF</div><div class="flex-1 text-center py-2.5 rounded-xl border border-ink-200 text-sm cursor-pointer">📊 Excel</div><div class="flex-1 text-center py-2.5 rounded-xl border border-ink-200 text-sm cursor-pointer">📋 CSV</div></div></div>
+      <button id="doExport" class="grad-iris text-white w-full py-2.5 rounded-xl text-sm font-semibold">Générer le rapport</button></div>`;$("#doExport").onclick=()=>toast("Rapport généré ✓ (démo)");return;}
+  if(p==="audit"){C.innerHTML=`<h1 class="font-display text-2xl font-bold mb-1">🔍 Audit / Traçabilité</h1><p class="text-sm text-ink-500 mb-4">Journal des actions des utilisateurs.</p>
+    <div class="card overflow-hidden"><table class="w-full text-sm"><thead><tr class="text-left text-xs uppercase text-ink-400 border-b border-ink-200"><th class="px-4 py-3">Utilisateur</th><th class="px-4 py-3">Action</th><th class="px-4 py-3">Élément</th><th class="px-4 py-3">Date</th></tr></thead><tbody>${audit.map(a=>`<tr class="border-b border-ink-100"><td class="px-4 py-3"><span class="w-6 h-6 rounded-full bg-ink-100 inline-grid place-items-center text-[10px] font-bold mr-1.5">${initials(a.who)}</span>${a.who}</td><td class="px-4 py-3">${a.act}</td><td class="px-4 py-3">${esc(a.what)}</td><td class="px-4 py-3">${a.at}</td></tr>`).join("")}</tbody></table></div>`;return;}
+  if(p==="params"){C.innerHTML=`<h1 class="font-display text-2xl font-bold mb-1">⚙️ Paramètres</h1><p class="text-sm text-ink-500 mb-4">Configuration du journal.</p>
+    <div class="card p-5 max-w-lg space-y-4"><div><label class="text-xs font-semibold text-ink-500 block mb-2">Modules synchronisés automatiquement</label>${Object.entries(MODS).filter(([k])=>k!=='event').map(([k,m])=>`<label class="flex items-center gap-2 py-1.5 text-sm cursor-pointer"><input type="checkbox" checked> ${m.emoji} ${m.name}</label>`).join("")}</div>
+    <div><label class="text-xs font-semibold text-ink-500 block mb-1.5">Devise par défaut</label><select class="w-full bg-ink-50 border border-ink-200 rounded-xl px-3 py-2.5 text-sm"><option>FC (Franc congolais)</option><option>USD</option></select></div>
+    <div class="bg-iris-50 border-l-4 border-iris-500 rounded-lg p-3 text-xs text-ink-600">Les utilisateurs et permissions sont gérés dans l'administration centrale NgoluApp.</div></div>`;return;}
+}
+function journalPage(){
+  const list=filtered();
+  const view=document.body.classList.contains("mobile")?"fil":state.view;
+  let main;
+  if(!list.length)main=`<div class="card p-12 text-center text-ink-400">Aucun événement ne correspond aux filtres.<br><br><button id="resetF" class="grad-iris text-white px-4 py-2.5 rounded-xl text-sm font-semibold">Réinitialiser</button></div>`;
+  else if(view==="fil")main=tlHtml(list);
+  else if(view==="cal")main=calHtml(list);
+  else main=tblHtml(list);
+  return `
+  <div class="flex items-end justify-between gap-3 mb-4 flex-wrap">
+    <div><h1 class="font-display text-2xl font-bold">Journal d'activité</h1><p class="text-sm text-ink-500">Saisies manuelles + flux automatiques de tous les modules.</p></div>
+    <div class="flex bg-white border border-ink-200 rounded-xl p-1 desk-only" id="viewSeg">
+      ${["fil","cal","tbl"].map(v=>`<button data-view="${v}" class="px-3 py-1.5 rounded-lg text-sm font-semibold ${state.view===v?'grad-iris text-white':'text-ink-500'}">${v==='fil'?'Fil':v==='cal'?'Calendrier':'Tableau'}</button>`).join("")}
+    </div>
+  </div>
+  <div class="flex gap-2 flex-wrap items-center mb-4" id="filterChips">
+    <span class="chip cursor-pointer ${state.filterMod==='all'?'grad-iris text-white':'bg-white border border-ink-200 text-ink-500'}" data-mod="all" style="padding:6px 12px">Tout</span>
+    ${Object.entries(MODS).map(([k,m])=>`<span class="chip cursor-pointer ${state.filterMod===k?'grad-iris text-white':'bg-white border border-ink-200 text-ink-500'}" data-mod="${k}" style="padding:6px 12px"><span class="w-2 h-2 rounded-full ${m.dot}"></span> ${m.name}</span>`).join("")}
+    <div class="flex items-center gap-2 ml-auto flex-wrap">
+      <div class="flex items-center gap-1.5 bg-white border border-ink-200 rounded-xl px-2.5 py-1.5">
+        <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-ink-400"></i>
+        <input type="date" id="dateFrom" value="${state.dateFrom}" class="bg-transparent outline-none text-xs text-ink-600 w-[120px]" title="Du">
+        <span class="text-ink-300 text-xs">→</span>
+        <input type="date" id="dateTo" value="${state.dateTo}" class="bg-transparent outline-none text-xs text-ink-600 w-[120px]" title="Au">
+        ${(state.dateFrom||state.dateTo)?'<button id="clearDates" class="text-ink-400 hover:text-rose-500" title="Effacer"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>':''}
+      </div>
+      <div class="flex bg-white border border-ink-200 rounded-xl p-1" id="periodSeg">
+        ${[["today","Aujourd'hui"],["week","Semaine"],["all","Tout"]].map(([v,l])=>`<button data-period="${v}" class="px-3 py-1.5 rounded-lg text-xs font-semibold ${state.period===v&&!state.dateFrom&&!state.dateTo?'grad-iris text-white':'text-ink-500'}">${l}</button>`).join("")}
+      </div>
+    </div>
+  </div>
+  <div class="grid g3" style="grid-template-columns:minmax(0,1fr) 300px;align-items:start">
+    <div id="mainCol">${main}</div>
+    <div class="desk-only space-y-4">
+      <div class="card p-4"><div class="font-display font-bold mb-1 flex items-center gap-2"><i data-lucide="check-square" class="w-4 h-4 text-iris-500"></i>Tâches & rappels</div>${tasksHtml()}</div>
+      <div class="card p-4"><div class="font-display font-bold mb-2 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4 text-iris-500"></i>Traçabilité</div><div class="bg-iris-50 border-l-4 border-iris-500 rounded-lg p-3 text-xs text-ink-600">Chaque saisie enregistre l'auteur, la date et les modifications. Les événements automatiques sont « Système » et non modifiables.</div></div>
+    </div>
+  </div>`;
+}
+
+/* ============ BINDINGS ============ */
+function bindJournal(){
+  const r=$("#resetF");if(r)r.onclick=()=>{state.filterMod="all";state.period="all";state.search="";state.dateFrom="";state.dateTo="";const s=$("#searchD");if(s)s.value="";render();};
+  $$("#filterChips [data-mod]").forEach(c=>c.onclick=()=>{state.filterMod=c.dataset.mod;render();});
+  const ps=$("#periodSeg");if(ps)$$("#periodSeg button").forEach(b=>b.onclick=()=>{state.period=b.dataset.period;state.dateFrom="";state.dateTo="";render();});
+  const df=$("#dateFrom");if(df)df.onchange=()=>{state.dateFrom=df.value;state.period="all";render();};
+  const dt=$("#dateTo");if(dt)dt.onchange=()=>{state.dateTo=dt.value;state.period="all";render();};
+  const cd=$("#clearDates");if(cd)cd.onclick=()=>{state.dateFrom="";state.dateTo="";render();};
+  const vs=$("#viewSeg");if(vs)$$("#viewSeg button").forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render();});
+  $$("[data-id] [data-act], .cal-line, [data-id][title]").forEach(()=>{});
+  $$("#mainCol [data-act]").forEach(btn=>btn.onclick=ev=>{ev.stopPropagation();const row=btn.closest("[data-id]");const id=+row.dataset.id;doAct(btn.dataset.act,id);});
+  $$("#mainCol tr[data-id]").forEach(r2=>r2.onclick=()=>openDetail(+r2.dataset.id));
+  $$("#mainCol .truncate[data-id]").forEach(c=>c.onclick=()=>openDetail(+c.dataset.id));
+  bindTasks();
+}
+function doAct(act,id){
+  if(act==="view")openDetail(id);
+  else if(act==="pin"){const e=events.find(x=>x.id===id);e.pinned=!e.pinned;toast(e.pinned?"Épinglé 📌":"Désépinglé");render();}
+  else if(act==="edit")openModal(id);
+  else if(act==="del"){if(confirm("Supprimer cet événement ?")){events=events.filter(x=>x.id!==id);toast("Supprimé 🗑️");render();}}
+}
+function bindTasks(){$$("[data-tid] .cb").forEach(cb=>cb.onclick=()=>{const t=tasks.find(x=>x.id===+cb.closest("[data-tid]").dataset.tid);t.done=!t.done;if(t.done){t.overdue=false;t.when="Fait aujourd'hui";}updateBadges();if(state.page==="taches")renderPage("taches"),icons();else render();});}
+
+/* ============ DÉTAIL ============ */
+function openDetail(id){const e=events.find(x=>x.id===id);const m=MODS[e.mod];const neg=e.amount&&e.amount.trim().startsWith('-');
+  $("#dt-title").innerHTML=`${e.emoji} ${esc(e.title)}`;
+  $("#dt-body").innerHTML=`<div class="flex gap-2 flex-wrap"><span class="chip ${m.tw} text-white">${m.name}</span><span class="chip ${e.auto?'bg-sky-100 text-sky-700':'bg-iris-100 text-iris-700'}">${e.auto?'Automatique':'Manuel'}</span>${e.pinned?'<span class="chip bg-amber-100 text-amber-700">📌 Épinglé</span>':''}</div>
+    <div><div class="text-xs font-semibold text-ink-500 mb-1">Description</div>${esc(e.desc)}</div>
+    <div class="grid grid-cols-2 gap-3"><div><div class="text-xs font-semibold text-ink-500 mb-1">Date</div>${cap(fmtDay(e.date))} à ${fmtTime(e.date)}</div><div><div class="text-xs font-semibold text-ink-500 mb-1">Saisi par</div>${esc(e.by)}</div></div>
+    ${e.amount?`<div><div class="text-xs font-semibold text-ink-500 mb-1">Montant</div><span class="font-bold ${neg?'text-rose-600':'text-emerald-600'}">${esc(e.amount)}</span></div>`:''}
+    ${e.people?`<div><div class="text-xs font-semibold text-ink-500 mb-1">Personnes</div>${esc(e.people)}</div>`:''}
+    ${e.tags?`<div><div class="text-xs font-semibold text-ink-500 mb-1">Référence</div>${esc(e.tags)}</div>`:''}
+    ${e.att?`<div><div class="text-xs font-semibold text-ink-500 mb-1">Pièce jointe</div><span class="chip bg-ink-100 text-ink-600">📎 ${esc(e.att)}</span></div>`:''}`;
+  $("#ovDetail").classList.add("open");icons();
+}
+
+/* ============ MODAL CRÉER/ÉDITER ============ */
+function setImp(v){$$("#impPick .imp").forEach(c=>c.classList.toggle("on",c.dataset.imp===v));$$("#impPick .imp").forEach(c=>{c.className="imp flex-1 text-center py-2 rounded-xl border cursor-pointer text-xs"+(c.dataset.imp===v?" border-iris-500 bg-iris-50 font-semibold":" border-ink-200");});cur.imp=v;}
+function setType(t){$$("#typePick .tp").forEach(x=>{x.className="tp text-center py-2.5 rounded-xl border cursor-pointer text-xs"+(x.dataset.type===t?" border-iris-500 bg-iris-50":" border-ink-200");});}
+function openModal(id){
+  state.editId=id||null;
+  $("#modalTitle").textContent=id?"✏️ Modifier l'événement":"📝 Nouvel événement";
+  if(id){const e=events.find(x=>x.id===id);$("#f-title").value=e.title;$("#f-desc").value=e.desc;$("#f-module").value=e.mod;$("#f-date").value=e.date;$("#f-people").value=e.people||"";$("#f-amount").value=e.amount||"";$("#f-pin").checked=e.pinned;cur.emoji=e.emoji;cur.type=e.tags||"Note";setImp(e.imp);setType(cur.type);}
+  else{["f-title","f-desc","f-people","f-amount","f-remind"].forEach(i=>$("#"+i).value="");$("#f-module").value="event";$("#f-date").value="2026-06-15T15:00";$("#f-pin").checked=false;cur={type:"Note",emoji:"📝",imp:"low"};setType("Note");setImp("low");}
+  $("#ov").classList.add("open");icons();
+}
+function saveEvent(){
+  const title=$("#f-title").value.trim();if(!title){toast("⚠️ Le titre est requis");$("#f-title").focus();return;}
+  const data={mod:$("#f-module").value,emoji:cur.emoji,title,desc:$("#f-desc").value.trim()||"(sans description)",auto:false,pinned:$("#f-pin").checked,by:"Sandrine",date:$("#f-date").value||"2026-06-15T15:00",people:$("#f-people").value.trim(),amount:$("#f-amount").value.trim(),imp:cur.imp,tags:cur.type};
+  const att=$("#f-att").files[0];if(att)data.att=att.name;
+  if(state.editId){Object.assign(events.find(e=>e.id===state.editId),data);audit.unshift({who:"Sandrine",act:"a modifié",what:title,at:"15/06 15:00"});toast("Modifié ✓");}
+  else{data.id=++UID;events.unshift(data);audit.unshift({who:"Sandrine",act:"a créé",what:title,at:"15/06 15:00"});toast("Événement enregistré ✓");}
+  const rem=$("#f-remind").value;if(rem)tasks.unshift({id:++UID,txt:"Rappel : "+title,when:"Échéance "+rem.split("-").reverse().join("/"),overdue:false,done:false});
+  $("#ov").classList.remove("open");updateBadges();render();
+}
+
+/* ============ NAV ============ */
+function setActiveNav(){$$("#deskNav a").forEach(a=>a.classList.remove("nav-active"));const s=document.querySelector(`#deskNav [data-page="${state.page}"]`);if(s)s.classList.add("nav-active");$$(".mob-tab[data-page]").forEach(t=>t.classList.toggle("on",t.dataset.page===state.page));}
+function updateBadges(){const n=tasks.filter(t=>!t.done).length;$("#taskBadge").textContent=n;$("#taskBadge").style.display=n?"":"none";}
+
+/* ============ EVENTS GLOBAUX ============ */
+$$("#deskNav a[data-page]").forEach(a=>a.onclick=()=>{state.page=a.dataset.page;if(a.dataset.page==="journal")state.view="fil";render();});
+$$("#deskNav a[data-src]").forEach(a=>a.onclick=()=>{state.page="journal";state.view="fil";state.filterMod=a.dataset.src;render();toast("Filtré : "+MODS[a.dataset.src].name);});
+$$(".mob-tab[data-page]").forEach(t=>t.onclick=()=>{state.page=t.dataset.page;if(t.dataset.page==="journal")state.view="fil";render();});
+$("[data-mnew]").onclick=()=>openModal();
+$("#searchD").oninput=e=>{state.search=e.target.value;if(state.page!=="journal")state.page="journal";render();$("#searchD").focus();};
+$("#newD").onclick=()=>openModal();
+$("#saveEv").onclick=saveEvent;
+$$("[data-close]").forEach(b=>b.onclick=()=>$("#ov").classList.remove("open"));
+$$("[data-closed]").forEach(b=>b.onclick=()=>$("#ovDetail").classList.remove("open"));
+$("#ov").onclick=e=>{if(e.target.id==="ov")$("#ov").classList.remove("open");};
+$("#ovDetail").onclick=e=>{if(e.target.id==="ovDetail")$("#ovDetail").classList.remove("open");};
+$$("#typePick .tp").forEach(t=>t.onclick=()=>{setType(t.dataset.type);cur.type=t.dataset.type;cur.emoji=t.dataset.emoji;});
+$$("#impPick .imp").forEach(c=>c.onclick=()=>setImp(c.dataset.imp));
+$("#bellD").onclick=()=>toast("3 notifications");
+$("#mBell").onclick=()=>toast("3 notifications");
+document.onkeydown=e=>{if(e.key==="Escape"){$("#ov").classList.remove("open");$("#ovDetail").classList.remove("open");}};
+
+/* ============ TOGGLE BUREAU / MOBILE ============ */
+$("#btnDesk").onclick=()=>{document.body.classList.remove("mobile");$("#btnDesk").className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-iris-600 text-white";$("#btnMob").className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600";render();};
+$("#btnMob").onclick=()=>{document.body.classList.add("mobile");$("#btnMob").className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 bg-iris-600 text-white";$("#btnDesk").className="px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 text-ink-600";render();};
+
+/* ============ INIT ============ */
+updateBadges();render();icons();
+</script>
+</body>
+</html>
