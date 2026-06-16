@@ -11,7 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Security
-- **3 vulnérabilités high corrigées (`nodemailer`, `ws`)** : `nodemailer <=8.0.8` (injection CRLF headers + TLS) et `ws 8.0.0-8.20.1` (DoS mémoire) mis à jour via `npm audit fix`. Les 19 vulnérabilités modérées restantes sont dans `jest` (devDependency uniquement, jamais en prod). [SCRUM]
+- **Toutes les vulnérabilités npm corrigées (0 restantes)** : 3 high (`nodemailer` CRLF/TLS, `ws` DoS mémoire) corrigées via `npm audit fix` ; 19 modérées (`js-yaml <=4.1.1`) corrigées via override `js-yaml@^4.2.0` dans `package.json` (force toutes les dépendances transitives). [SCRUM]
 
 ### Fixed
 - **Versions `@nestjs/websockets` / `@nestjs/platform-socket.io` désalignées du reste de l'écosystème Nest** : déclarées en `^11.1.27` alors que `@nestjs/core` & co étaient en `^11.1.24` → `Cannot find module './ws-adapter'` au boot (mismatch d'API interne socket.io). Réalignées sur `^11.1.24` et `package-lock.json` régénéré (toutes les versions Nest cohérentes en 11.1.27 via le lock). [SCRUM]
