@@ -1,6 +1,6 @@
 {
   "name": "nglu-backend2",
-  "version": "3.79.7",
+  "version": "3.79.8",
   "private": true,
   "overrides": {
     "qs": "^6.15.2",

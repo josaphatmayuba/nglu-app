@@ -41,6 +41,10 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
@@ -257,6 +261,10 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/

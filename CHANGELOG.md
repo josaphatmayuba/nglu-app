@@ -11,8 +11,13 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
-- **Chat dev — backend en crash-loop (504 au login FarmOS)** : le déploiement dev n'avait pas installé `@nestjs/websockets` / `@nestjs/platform-socket.io` (pourtant présents dans `backend2/package.json`) → `MODULE_NOT_FOUND` sur `discussion.gateway.js` → Nest jamais up → `504 Gateway Timeout`. Rebuild image backend via pipeline (npm install) pour embarquer les deps. [SCRUM]
+- **Pipeline backend (dev + prod) ne syncait pas `package.json`** — cause racine du crash-loop : le step déployait `dist` + `drizzle` mais jamais `package*.json`, donc le `--build` reconstruisait l'image (`COPY package*.json` + `npm ci`) avec un `package.json` serveur obsolète → toute nouvelle dépendance (`@nestjs/websockets`) manquait dans le conteneur → `MODULE_NOT_FOUND` → 504. Ajout du `scp backend2/package*.json` avant le rebuild, **sur dev ET prod** (protège le prochain merge develop→master). [SCRUM]
+- **Backend résilient à l'absence de `@nestjs/websockets`** : les gateways WebSocket (`discussion`, `chat`) sont désormais chargés de façon paresseuse et optionnelle dans leur module. Si la dépendance manque, le backend démarre quand même (chat via API REST, sans temps réel) au lieu de crasher entièrement. Filet de sécurité pour ne jamais reproduire un crash-loop en prod. [SCRUM]
+- **Chat dev — backend en crash-loop (504 au login FarmOS)** : `MODULE_NOT_FOUND` sur `discussion.gateway.js` (deps websockets absentes du conteneur) → Nest jamais up → `504 Gateway Timeout`. Corrigé par les deux points ci-dessus. [SCRUM]
 - **Migration `0159_chat_channels` — `ER_PARSE_ERROR`** : `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` n'est pas supporté par MySQL → colonnes `channel_id` / `discussion_type` jamais créées sur `journal_discussions`. Réécrit en pattern idempotent `PREPARE`/`IF` (vérification `information_schema`), rejoué par les réparations opérationnelles au boot. [SCRUM]
+
+### Added
+- **Seeder élevage FarmOS (`farmos-elevage.seeder`)** : importe les données réelles d'audit terrain dans les tables/modules **existants** — cheptel (`farmos_animals`), production d'œufs (`farmos_production_logs`), consignes de plan santé (événements `note` du Journal Entreprise, `journal_events`), et personnel d'élevage (comptes CRM dépt FarmOS, emails générés au standard `prenom.nom@ongdngolu.org`). Idempotent, branché dans `seed-demo` (boot dev). [SCRUM]
 
 ### Changed
 - **Backend2 dev redeploy (v3.79.6)** : synchronise `backend2/package.json` sur la version racine pour déclencher le pipeline backend dev et embarquer le module `journal-entreprise` (commit 089f6dcb, absent du conteneur `/api` déployé → 404 sur `/api/journal-entreprise/*`). [SCRUM]
