@@ -11,7 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
-- **Seeder FarmOS bâtiments** : ajout de Zone A (Kiselele), Zone B (Kasangulu), Bâtiment 1 et Bâtiment 2 (poulaillers) dans `farmos_buildings`. [SCRUM]
+- **Seeder FarmOS — structure zones/bâtiments corrigée** : Zone Kiselele (Bâtiment Bovins + Bâtiment Porcs) et Zone Kasangulu (Bâtiment Caprins + Bâtiment Porcs + Poulailler 1 + Poulailler 2). Chaque animal placé dans son bâtiment correct. CSV `farmos_animals.csv` mis à jour en cohérence. [SCRUM]
 
 ### Security
 - **Toutes les vulnérabilités npm corrigées (0 restantes)** : 3 high (`nodemailer` CRLF/TLS, `ws` DoS mémoire) corrigées via `npm audit fix` ; 19 modérées (`js-yaml <=4.1.1`) corrigées via override `js-yaml@^4.2.0` dans `package.json` (force toutes les dépendances transitives). [SCRUM]
