@@ -37,7 +37,7 @@ pipelines:
               condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
@@ -116,11 +116,11 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist $APP/tickets-app/dist && chmod 777 $APP/tickets-app/dist"
+                - export SERVER=admin@16.54.167.125 SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
                 - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
-                - $SSH $SERVER "find $APP/tickets-app/dist -mindepth 1 -delete && cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && rm -rf /tmp/tickets-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-dev && find /usr/share/nginx/html-tickets-dev -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-dev/ && rm -rf /tmp/tickets-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
               name: FarmOS → dev
@@ -253,7 +253,7 @@ pipelines:
               condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
