@@ -27,9 +27,25 @@ CREATE TABLE IF NOT EXISTS `chat_channel_members` (
   KEY `idx_member_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 --> statement-breakpoint
-ALTER TABLE `journal_discussions`
-  ADD COLUMN IF NOT EXISTS `channel_id` int DEFAULT NULL COMMENT 'null = discussion contextuelle, set = channel permanent',
-  ADD COLUMN IF NOT EXISTS `discussion_type` varchar(30) NOT NULL DEFAULT 'entity' COMMENT 'entity | channel | direct';
+SET @col_exists := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'journal_discussions' AND COLUMN_NAME = 'channel_id');
+--> statement-breakpoint
+SET @ddl := IF(@col_exists = 0, 'ALTER TABLE `journal_discussions` ADD COLUMN `channel_id` int DEFAULT NULL', 'SELECT 1');
+--> statement-breakpoint
+PREPARE stmt FROM @ddl;
+--> statement-breakpoint
+EXECUTE stmt;
+--> statement-breakpoint
+DEALLOCATE PREPARE stmt;
+--> statement-breakpoint
+SET @col2_exists := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'journal_discussions' AND COLUMN_NAME = 'discussion_type');
+--> statement-breakpoint
+SET @ddl2 := IF(@col2_exists = 0, 'ALTER TABLE `journal_discussions` ADD COLUMN `discussion_type` varchar(30) NOT NULL DEFAULT ''entity''', 'SELECT 1');
+--> statement-breakpoint
+PREPARE stmt2 FROM @ddl2;
+--> statement-breakpoint
+EXECUTE stmt2;
+--> statement-breakpoint
+DEALLOCATE PREPARE stmt2;
 --> statement-breakpoint
 INSERT IGNORE INTO `chat_channels` (`slug`, `name`, `description`, `icon`, `color`, `is_default`, `created_by`) VALUES
   ('general', 'Général', 'Canal de discussion générale', 'MessageCircle', '#6366f1', 1, 1),

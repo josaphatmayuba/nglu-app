@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Chat dev — backend en crash-loop (504 au login FarmOS)** : le déploiement dev n'avait pas installé `@nestjs/websockets` / `@nestjs/platform-socket.io` (pourtant présents dans `backend2/package.json`) → `MODULE_NOT_FOUND` sur `discussion.gateway.js` → Nest jamais up → `504 Gateway Timeout`. Rebuild image backend via pipeline (npm install) pour embarquer les deps. [SCRUM]
+- **Migration `0159_chat_channels` — `ER_PARSE_ERROR`** : `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` n'est pas supporté par MySQL → colonnes `channel_id` / `discussion_type` jamais créées sur `journal_discussions`. Réécrit en pattern idempotent `PREPARE`/`IF` (vérification `information_schema`), rejoué par les réparations opérationnelles au boot. [SCRUM]
+
 ### Changed
 - **Backend2 dev redeploy (v3.79.6)** : synchronise `backend2/package.json` sur la version racine pour déclencher le pipeline backend dev et embarquer le module `journal-entreprise` (commit 089f6dcb, absent du conteneur `/api` déployé → 404 sur `/api/journal-entreprise/*`). [SCRUM]
 
