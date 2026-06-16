@@ -1,12 +1,14 @@
 """Generateur SQL immobilier : legacy PostgreSQL -> Domus (real_estate_*) nglu-app.
 
 Decalage de modele : legacy realestate -> contract -> rent_payment (sans unite).
-Cible : property -> unit -> lease -> rent_payment. On cree 1 unite "Principal" par bien.
+Cible : property -> unit -> lease -> rent_payment.
 
-Decisions (13/06/2026) :
-  - realestate : migrer LES 19 (status legacy = "pas loue", PAS supprime). On corrige la
-    donnee au modele Domus : property.status='available', unit.status='vacant' par defaut ;
-    si un bail actif occupe le bien -> 'occupied'/'occupied'.
+Decisions (13/06/2026, regroupement residences le 15/06/2026) :
+  - realestate : les 19 lignes legacy = 19 appartements/biens repartis sur 7 residences
+    reelles (voir RESIDENCES). Chaque residence -> 1 real_estate_properties ; chaque
+    legacy_id -> 1 real_estate_units (nom = "AP <apartment_number>"). property.status=
+    'occupied' si au moins 1 unite occupee par un bail actif, sinon 'available'.
+    unit.status='vacant' par defaut, 'occupied' si bail actif sur ce legacy_id.
   - contract : migrer les 6 actifs (status=true). Tous expires (end_date < today) -> 'expired'.
   - rent_payment : seulement ceux des 6 baux actifs (122). status legacy -> statut paiement.
   - customer : les 19 (tous actifs) -> customer + tenant_details. Champs texte non-numeriques
@@ -90,42 +92,115 @@ def emit_header():
     bp()
 
 
+# Regroupement des 19 lignes legacy "realestate" en residences reelles (decide avec
+# l'utilisateur le 15/06/2026). Chaque residence = 1 real_estate_properties, chaque
+# legacy_id d'origine devient une real_estate_units (nom = appartement d'origine).
+RESIDENCES = [
+    {
+        "code": "RES-BETITO",
+        "name": "Residence Betito",
+        "address": "17 Av. Betito",
+        "municipality": "Bandalungwa",
+        "property_type": "building",
+        "members": [2, 10, 11, 12, 13, 14, 18],
+    },
+    {
+        "code": "RES-BABOMA",
+        "name": "Residence Baboma",
+        "address": "30 D Quartier Baboma",
+        "municipality": "Matete",
+        "property_type": "building",
+        "members": [5, 8, 9, 15, 19, 20],
+    },
+    {
+        "code": "RES-BATEKE",
+        "name": "Residence Bateke",
+        "address": "18 A Quartier Bateke 2",
+        "municipality": "Matete",
+        "property_type": "building",
+        "members": [3, 7],
+    },
+    {
+        "code": "RES-KINKOLE",
+        "name": "Residence Kinkole",
+        "address": "13 Avenue Muenga, Quartier Kinkole",
+        "municipality": "N'Sele",
+        "property_type": "house",
+        "members": [17],
+    },
+    {
+        "code": "RES-GOMBE",
+        "name": "Residence Gombe",
+        "address": "7 Ave Le Marinel",
+        "municipality": "Gombe",
+        "property_type": "house",
+        "members": [16],
+    },
+    {
+        "code": "RES-KINKOLE2",
+        "name": "Residence Kinkole 2",
+        "address": "5 Avenue Muenga",
+        "municipality": "N'Sele",
+        "property_type": "building",
+        "members": [6],
+    },
+    {
+        "code": "RES-MAYENGE",
+        "name": "Residence Mahenge",
+        "address": "17 Rue de Mahenge",
+        "municipality": "Kinshasa",
+        "property_type": "building",
+        "members": [4],
+        # Vendue (15/06/2026) -> plus dans le portefeuille locatif actif.
+        "sold": True,
+    },
+]
+
+
 def emit_properties(sql):
-    prop = rows_as_dicts(sql, "realestate")
+    prop_by_id = {int(p["id"]): p for p in rows_as_dicts(sql, "realestate")}
     # biens occupes par un bail actif -> status occupied
     contracts = [c for c in rows_as_dicts(sql, "contract") if c.get("status") == "true"]
-    occupied = {c["realestate_id"] for c in contracts}
-    out(f"-- === real_estate_properties ({len(prop)} biens, status legacy=non loue -> available) ===")
-    for p in prop:
-        lid = p["id"]
-        ptype, _ = TYPE_MAP.get(p.get("realestate_type_id"), ("building", "apartment"))
-        is_occ = lid in occupied
-        status = "occupied" if is_occ else "available"
-        name = trunc(p.get("address") or f"Bien {lid}", 255)
-        market = num(p.get("purchase_price"))
-        code = f"LEG-{lid}"  # cle naturelle unique pour le recablage
-        # 1) le bien (idempotent par code)
+    occupied = {int(c["realestate_id"]) for c in contracts}
+    rent_by_realestate = {int(c["realestate_id"]): num(c.get("rent_amount")) for c in contracts}
+    out(f"-- === real_estate_properties ({len(RESIDENCES)} residences, {sum(len(r['members']) for r in RESIDENCES)} unites legacy) ===")
+    for res in RESIDENCES:
+        members = res["members"]
+        any_occ = any(lid in occupied for lid in members)
+        status = "occupied" if any_occ else "available"
+        city = "Kinshasa"
+        addr = res["address"] + (f", {res['municipality']}" if res["municipality"] else "")
+        market = sum(int(num(prop_by_id[lid].get("purchase_price"))) for lid in members)
+        code = res["code"]
+        is_active = 0 if res.get("sold") else 1
+        # 1) la residence (idempotent par code)
         out(f"INSERT INTO real_estate_properties (organization_id, name, code, property_type, status, address, city, country, market_value, currency_id, is_active, created_at) "
-            f"SELECT 1, {q(name)}, {q(code)}, {q(ptype)}, {q(status)}, {q(trunc(p.get('address'),255))}, {q(trunc(p.get('city'),255))}, {q(trunc(p.get('country') or 'RDC',255))}, {market}, {CUR_USD}, 1, NOW() "
+            f"SELECT 1, {q(res['name'])}, {q(code)}, {q(res['property_type'])}, {q(status)}, {q(addr)}, {q(city)}, 'République démocratique du Congo', {market}, {CUR_USD}, {is_active}, NOW() "
             f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM real_estate_properties WHERE code={q(code)});")
         bp()
-        # 2) map legacy_id -> id du bien (retrouve par code)
-        out(f"INSERT INTO legacy_property_map (legacy_id, new_id) "
-            f"SELECT {lid}, id FROM real_estate_properties WHERE code={q(code)} ORDER BY id LIMIT 1 "
-            f"ON DUPLICATE KEY UPDATE new_id=VALUES(new_id);")
-        bp()
-        # 3) 1 unite "Principal" par bien (idempotent via legacy_unit_map)
-        ustatus = "occupied" if is_occ else "vacant"
-        _, utype = TYPE_MAP.get(p.get("realestate_type_id"), ("building", "apartment"))
-        out(f"INSERT INTO real_estate_units (organization_id, property_id, name, unit_type, status, monthly_rent, currency_id, is_active, created_at) "
-            f"SELECT 1, (SELECT new_id FROM legacy_property_map WHERE legacy_id={lid}), 'Principal', {q(utype)}, {q(ustatus)}, 0, {CUR_USD}, 1, NOW() "
-            f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM legacy_unit_map WHERE legacy_property_id={lid});")
-        bp()
-        # 4) map property_id -> unit_id
-        out(f"INSERT INTO legacy_unit_map (legacy_property_id, new_unit_id) "
-            f"SELECT {lid}, id FROM real_estate_units WHERE property_id=(SELECT new_id FROM legacy_property_map WHERE legacy_id={lid}) ORDER BY id LIMIT 1 "
-            f"ON DUPLICATE KEY UPDATE new_unit_id=VALUES(new_unit_id);")
-        bp()
+        for lid in members:
+            # 2) map legacy_id -> id de la residence (retrouve par code)
+            out(f"INSERT INTO legacy_property_map (legacy_id, new_id) "
+                f"SELECT {lid}, id FROM real_estate_properties WHERE code={q(code)} ORDER BY id LIMIT 1 "
+                f"ON DUPLICATE KEY UPDATE new_id=VALUES(new_id);")
+            bp()
+            # 3) 1 unite par legacy_id (idempotent via legacy_unit_map)
+            p = prop_by_id[lid]
+            is_occ = lid in occupied
+            ustatus = "occupied" if is_occ else "vacant"
+            _, utype = TYPE_MAP.get(p.get("realestate_type_id"), ("building", "apartment"))
+            apnum = num(p.get("apartment_number"), "0")
+            uname = f"AP {apnum}" if apnum != "0" else f"Unite {lid}"
+            rent = rent_by_realestate.get(lid, "0")
+            out(f"INSERT INTO real_estate_units (organization_id, property_id, name, unit_type, status, monthly_rent, currency_id, is_active, created_at) "
+                f"SELECT 1, (SELECT new_id FROM legacy_property_map WHERE legacy_id={lid}), {q(uname)}, {q(utype)}, {q(ustatus)}, {rent}, {CUR_USD}, {is_active}, NOW() "
+                f"FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM legacy_unit_map WHERE legacy_property_id={lid});")
+            bp()
+            # 4) map legacy_id -> unit_id
+            out(f"INSERT INTO legacy_unit_map (legacy_property_id, new_unit_id) "
+                f"SELECT {lid}, id FROM real_estate_units WHERE property_id=(SELECT new_id FROM legacy_property_map WHERE legacy_id={lid}) AND name={q(uname)} ORDER BY id LIMIT 1 "
+                f"ON DUPLICATE KEY UPDATE new_unit_id=VALUES(new_unit_id);")
+            bp()
     out()
 
 

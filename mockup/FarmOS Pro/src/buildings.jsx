@@ -1,6 +1,25 @@
 /* eslint-disable */
 // FarmOS Pro — Bâtiments : visualisation de l'organisation spatiale de la ferme.
 
+// ─── Helpers intérieur ───────────────────────────────────────────────────────
+// Génère un tableau de boxes pour un couloir donné
+const makeBoxes = (rowCount, colCount, statusDist) => {
+  // statusDist = { ok, sick, quarantine, empty }  (nombres)
+  const total = rowCount * colCount;
+  const boxes = [];
+  let sick = statusDist.sick || 0;
+  let quarantine = statusDist.quarantine || 0;
+  let empty = statusDist.empty || 0;
+  for (let i = 0; i < total; i++) {
+    let s = "ok";
+    if (sick > 0) { s = "sick"; sick--; }
+    else if (quarantine > 0) { s = "quarantine"; quarantine--; }
+    else if (empty > 0) { s = "empty"; empty--; }
+    boxes.push({ id: i, row: Math.floor(i / colCount), col: i % colCount, status: s });
+  }
+  return boxes;
+};
+
 // ─── Données de bâtiments (mockup statique) ─────────────────────────────────
 const BUILDINGS_DATA = [
   {
@@ -9,7 +28,7 @@ const BUILDINGS_DATA = [
     type: "barn",
     species: "cow",
     capacity: 280, occupied: 247, sick: 6, quarantine: 2,
-    status: "ok", // ok | warning | critical
+    status: "ok",
     x: 80, y: 60, w: 260, h: 120,
     sections: [
       { id: "B01-L1", fr: "Loge L1 (vaches en lactation)", en: "Stall L1 (lactating)", capacity: 120, occupied: 118, icon: "droplet" },
@@ -17,6 +36,50 @@ const BUILDINGS_DATA = [
       { id: "B01-M", fr: "Maternité", en: "Maternity", capacity: 40, occupied: 32, icon: "baby" },
       { id: "B01-Q", fr: "Quarantaine", en: "Quarantine", capacity: 40, occupied: 25, icon: "shield", alert: true },
     ],
+    interior: {
+      fr: "Plan intérieur — Étable", en: "Interior plan — Barn",
+      orientation: "landscape",
+      areas: [
+        {
+          id: "A-L1", fr: "Loge L1 · Lactation", en: "Stall L1 · Lactating",
+          color: "#E8F5E8", stroke: "#7CB87A",
+          x: 20, y: 30, w: 340, h: 110,
+          rows: 3, cols: 8,
+          boxes: makeBoxes(3, 8, { sick: 4, quarantine: 0, empty: 2 }),
+          aisle: { x: 20, y: 145, w: 340, h: 18, fr: "Couloir L1", en: "Aisle L1" },
+        },
+        {
+          id: "A-L2", fr: "Loge L2 · Taries", en: "Stall L2 · Dry cows",
+          color: "#EEF3FB", stroke: "#8AACD4",
+          x: 20, y: 175, w: 220, h: 90,
+          rows: 2, cols: 8,
+          boxes: makeBoxes(2, 8, { sick: 0, quarantine: 0, empty: 8 }),
+          aisle: null,
+        },
+        {
+          id: "A-M", fr: "Maternité", en: "Maternity",
+          color: "#FFF5FA", stroke: "#D4A0C0",
+          x: 250, y: 175, w: 110, h: 90,
+          rows: 2, cols: 4,
+          boxes: makeBoxes(2, 4, { sick: 2, quarantine: 0, empty: 6 }),
+          aisle: null,
+        },
+        {
+          id: "A-Q", fr: "Quarantaine", en: "Quarantine",
+          color: "rgba(190,82,52,0.06)", stroke: "#D49878",
+          x: 370, y: 30, w: 110, h: 235,
+          rows: 5, cols: 2,
+          boxes: makeBoxes(5, 2, { sick: 0, quarantine: 2, empty: 3 }),
+          aisle: null,
+          alert: true,
+        },
+      ],
+      infra: [
+        { fr: "Salle de traite",  en: "Milking parlour", x: 495, y: 30,  w: 100, h: 80,  color: "#F0EDE4", stroke: "#B0A878", icon: "droplet" },
+        { fr: "Couloir principal", en: "Main aisle",     x: 20,  y: 270, w: 575, h: 22,  color: "#E8E4D8", stroke: "#C0B898", isAisle: true },
+        { fr: "Stockage aliments", en: "Feed storage",   x: 495, y: 120, w: 100, h: 130, color: "#F5F0E4", stroke: "#C0B090", icon: "package" },
+      ],
+    },
     kpis: [
       { fr: "Lait / jour", en: "Milk / day", value: "5 412", unit: "L" },
       { fr: "T° moy.", en: "Avg. temp.", value: "38.6", unit: "°C" },
@@ -46,6 +109,42 @@ const BUILDINGS_DATA = [
       { severity: "critical", fr: "PRRS détecté Salle B", en: "PRRS detected Room B" },
       { severity: "warning", fr: "Mortalité +0.4 % cette sem.", en: "Mortality +0.4% this week" },
     ],
+    interior: {
+      fr: "Plan intérieur — Porcherie", en: "Interior plan — Pig unit",
+      orientation: "landscape",
+      areas: [
+        {
+          id: "P-A", fr: "Salle A · Sevrage", en: "Room A · Weaning",
+          color: "#FDF0F0", stroke: "#D49090",
+          x: 20, y: 20, w: 175, h: 110,
+          rows: 5, cols: 6,
+          boxes: makeBoxes(5, 6, { sick: 2, quarantine: 0, empty: 1 }),
+          aisle: { x: 20, y: 135, w: 175, h: 16, fr: "Couloir A", en: "Aisle A" },
+        },
+        {
+          id: "P-B", fr: "Salle B · Croissance", en: "Room B · Growth",
+          color: "rgba(190,82,52,0.07)", stroke: "#C07060",
+          x: 205, y: 20, w: 175, h: 110,
+          rows: 4, cols: 8,
+          boxes: makeBoxes(4, 8, { sick: 12, quarantine: 5, empty: 0 }),
+          aisle: { x: 205, y: 135, w: 175, h: 16, fr: "Couloir B ⚠ PRRS", en: "Aisle B ⚠ PRRS" },
+          alert: true,
+        },
+        {
+          id: "P-C", fr: "Salle C · Finition", en: "Room C · Finishing",
+          color: "#FBF5E8", stroke: "#C8A868",
+          x: 390, y: 20, w: 205, h: 110,
+          rows: 4, cols: 10,
+          boxes: makeBoxes(4, 10, { sick: 4, quarantine: 0, empty: 30 }),
+          aisle: { x: 390, y: 135, w: 205, h: 16, fr: "Couloir C", en: "Aisle C" },
+        },
+      ],
+      infra: [
+        { fr: "Couloir principal", en: "Main aisle", x: 20, y: 155, w: 575, h: 22, color: "#E8E4D8", stroke: "#C0B898", isAisle: true },
+        { fr: "Quai chargement",  en: "Loading dock", x: 495, y: 20, w: 100, h: 80, color: "#EEF3FB", stroke: "#90A8C8", icon: "arrowRight" },
+        { fr: "Stockage lisier",  en: "Slurry store", x: 495, y: 110, w: 100, h: 45, color: "#F0EDE4", stroke: "#B8B090", icon: "droplet" },
+      ],
+    },
   },
   {
     id: "B03", code: "B03",
