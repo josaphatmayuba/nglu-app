@@ -94,6 +94,23 @@ const STAFF = [
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
+const LEGACY_BUILDING_NAMES = ["Zone A", "Zone B", "Kasangulu", "Etable 1", "Étable 1", "Batiment 1", "Batiment 2"];
+
+async function cleanOldBuildings() {
+  let removed = 0;
+  for (const name of LEGACY_BUILDING_NAMES) {
+    const [row] = await db
+      .select({ id: farmosBuildings.id })
+      .from(farmosBuildings)
+      .where(and(eq(farmosBuildings.organizationId, ORG_ID), eq(farmosBuildings.name, name)))
+      .limit(1);
+    if (!row) continue;
+    await db.execute(sql`UPDATE farmos_buildings SET is_active = 0 WHERE id = ${row.id}`);
+    removed++;
+  }
+  if (removed) console.log(`  [farmos-buildings] ${removed} ancien(s) bâtiment(s) désactivé(s).`);
+}
+
 async function seedBuildings() {
   let created = 0;
   for (const b of BUILDINGS) {
@@ -249,6 +266,7 @@ async function seedStaff() {
 }
 
 export async function seedFarmosElevage() {
+  await cleanOldBuildings();
   await seedBuildings();
   await seedAnimals();
   await seedProduction();

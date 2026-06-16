@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **Seeder FarmOS — nettoyage anciens bâtiments** : soft-delete automatique des bâtiments legacy (Zone A, Zone B, Kasangulu, Étable 1, Batiment 1, Batiment 2) au boot du seeder ; 6 bâtiments corrects restent seuls actifs (Zone Kiselele / Zone Kasangulu). [SCRUM]
 - **Seeder FarmOS — structure zones/bâtiments corrigée** : Zone Kiselele (Bâtiment Bovins + Bâtiment Porcs) et Zone Kasangulu (Bâtiment Caprins + Bâtiment Porcs + Poulailler 1 + Poulailler 2). Chaque animal placé dans son bâtiment correct. CSV `farmos_animals.csv` mis à jour en cohérence. [SCRUM]
 
 ### Security
