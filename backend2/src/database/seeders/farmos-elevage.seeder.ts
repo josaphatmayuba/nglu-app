@@ -16,12 +16,21 @@ import {
   departments,
   designations,
   farmosAnimals,
+  farmosBuildings,
   farmosProductionLogs,
   roles,
   users,
 } from "../schema";
 
 const ORG_ID = 1;
+
+// ── Bâtiments ──────────────────────────────────────────────────────────
+const BUILDINGS = [
+  { name: "Zone A", species: "bovin,porc", type: "enclos", capacity: 100, notes: "Localisation Kiselele" },
+  { name: "Zone B", species: "caprin,porc", type: "enclos", capacity: 100, notes: "Localisation Kasangulu" },
+  { name: "Batiment 1", species: "poule", type: "poulailler", capacity: 1700, notes: "Poulailler principal" },
+  { name: "Batiment 2", species: "poule", type: "poulailler", capacity: 20, notes: "Poulailler secondaire" },
+];
 
 // ── Inventaire animaux (external_id = clé d'idempotence) ───────────────
 const ANIMALS = [
@@ -71,6 +80,28 @@ const STAFF = [
 
 const slugify = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+async function seedBuildings() {
+  let created = 0;
+  for (const b of BUILDINGS) {
+    const [exists] = await db
+      .select({ id: farmosBuildings.id })
+      .from(farmosBuildings)
+      .where(and(eq(farmosBuildings.organizationId, ORG_ID), eq(farmosBuildings.name, b.name)))
+      .limit(1);
+    if (exists) continue;
+    await db.insert(farmosBuildings).values({
+      organizationId: ORG_ID,
+      name: b.name,
+      species: b.species,
+      type: b.type,
+      capacity: b.capacity,
+      notes: b.notes,
+    } as any);
+    created++;
+  }
+  console.log(`  [farmos-buildings] ${created} créé(s), ${BUILDINGS.length - created} déjà présent(s).`);
+}
 
 async function seedAnimals() {
   let created = 0;
@@ -208,6 +239,7 @@ async function seedStaff() {
 }
 
 export async function seedFarmosElevage() {
+  await seedBuildings();
   await seedAnimals();
   await seedProduction();
   await seedHealthGuidelines();
