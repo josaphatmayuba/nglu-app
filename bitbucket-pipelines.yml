@@ -117,7 +117,7 @@ pipelines:
                 - apk add --no-cache openssh-client
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist $APP/tickets-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist $APP/tickets-app/dist && chmod 777 $APP/tickets-app/dist"
                 - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
                 - $SSH $SERVER "find $APP/tickets-app/dist -mindepth 1 -delete && cp -r /tmp/tickets-app-dist/. $APP/tickets-app/dist/ && rm -rf /tmp/tickets-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
