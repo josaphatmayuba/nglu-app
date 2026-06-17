@@ -11,6 +11,9 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Pipeline Domus prod** : ajout `mkdir -p /usr/share/nginx/html-domus-prod` dans le pipeline avant le `find -delete` (le dossier n'existait pas dans le conteneur → erreur `No such file or directory`). Ajout d'un `RUN mkdir -p` dans `frontend/Dockerfile.prod` pour les futurs rebuilds d'image. [3.82.8]
+
+### Fixed
 - **Pipeline — pdf-service deploy** : le `git pull` serveur échouait silencieusement (ref lock `refs/remotes/origin/master`) → dossier `pdf-service/` absent → build Docker en erreur. Remplacement par `scp` direct depuis le pipeline (dev + prod), identique au pattern backend2. [3.82.7]
 
 ## [3.82.6]

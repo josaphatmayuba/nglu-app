@@ -318,7 +318,7 @@ pipelines:
                 - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist"
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
                 # PROD: html-domus-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-domus-prod && find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
