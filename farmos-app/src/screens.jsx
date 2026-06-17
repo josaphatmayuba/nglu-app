@@ -3741,7 +3741,7 @@ const LAND_FEATURE_META = {
 };
 const landMeta = (t) => LAND_FEATURE_META[t] || LAND_FEATURE_META.field;
 
-const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onPersist, lang }) => {
+const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onPersist, display = "occupation", lang }) => {
   const mapRef = React.useRef(null);
   const dragRef = React.useRef(null); // { kind, id, offX, offY, el }
   // Positions locales (live pendant le drag) : id → {x,y} en %
@@ -3835,7 +3835,7 @@ const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onP
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
             </div>
             {b.species && <div style={{ fontSize: 10, color: "var(--fg-3)", marginBottom: 4 }}>{b.species}</div>}
-            {b.capacity != null && <>
+            {display === "occupation" && b.capacity != null && <>
               <div className="mono" style={{ fontSize: 10, color: "var(--fg-2)", marginBottom: 3 }}>{b.occupancy} / {b.capacity} · {rate}%</div>
               <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>
             </>}
@@ -4252,6 +4252,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [features, setFeatures] = React.useState([]);
   const [planEdit, setPlanEdit] = React.useState(false);
   const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
+  const [planDisplay, setPlanDisplay] = React.useState("occupation"); // "occupation" | "simple"
   const refresh = useDataRefresh(["buildings", "animals", "land-features"]);
   React.useEffect(() => {
     let cancel = false;
@@ -4410,6 +4411,32 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         /* ── Vue Plan ── */
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, flex: 1, minHeight: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, overflow: "auto" }}>
+            {/* En-tête façon maquette : Ferme — Plan du terrain */}
+            {(() => {
+              const farm = farmId ? farms.find((f) => f.id === farmId) : null;
+              const st = farmId ? farmStats(farmId) : { buildings: filtered.length, animals: filtered.reduce((s, b) => s + (b.occupancy ?? 0), 0) };
+              return (
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-900)" }}>
+                      {farm ? `${farm.name} — ` : ""}{lang === "fr" ? "Plan du terrain" : "Land plan"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }} className="mono">
+                      {[farm?.hectares ? `${farm.hectares} ha` : null, `${st.buildings} ${lang === "fr" ? "bâtiments" : "buildings"}`, `${st.animals} ${lang === "fr" ? "animaux" : "animals"}`].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  {/* Toggle affichage : occupation / simple */}
+                  <div style={{ display: "flex", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 8, padding: 3, gap: 2 }}>
+                    {[{ id: "occupation", fr: "Occupation", en: "Occupancy" }, { id: "simple", fr: "Simple", en: "Simple" }].map((d) => (
+                      <button key={d.id} onClick={() => setPlanDisplay(d.id)}
+                        className={planDisplay === d.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} style={{ padding: "4px 11px" }}>
+                        {lang === "fr" ? d.fr : d.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {/* Barre plan : zone + mode édition */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <select value={planZoneId ?? ""} onChange={(e) => { setPlanZoneId(e.target.value ? Number(e.target.value) : null); setSelectedId(null); }}
@@ -4441,8 +4468,26 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               onSelect={(id) => setSelectedId(id === selectedId ? null : id)}
               editMode={planEdit}
               onPersist={persistPlan}
+              display={planDisplay}
               lang={lang}
             />
+            {/* Légende par catégorie (espèce / type de bâtiment) */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {(() => {
+                const cats = new Map();
+                filtered.forEach((b) => {
+                  const sp = b.species ? speciesById(b.species) : null;
+                  const label = sp ? (lang === "fr" ? sp.fr : sp.en) : (b.buildingKind ? { habitation: lang === "fr" ? "Habitation" : "Housing", stock: "Stock", sante: lang === "fr" ? "Santé" : "Health" }[b.buildingKind] || b.buildingKind : (lang === "fr" ? "Autre" : "Other"));
+                  const color = sp ? sp.accent : "var(--fg-3)";
+                  if (!cats.has(label)) cats.set(label, color);
+                });
+                return [...cats.entries()].map(([label, color]) => (
+                  <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-2)", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 20, padding: "3px 11px" }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: color }}/>{label}
+                  </span>
+                ));
+              })()}
+            </div>
             {/* Mini cards grid below the map */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
               {filtered.map((b) => {
