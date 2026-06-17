@@ -104,7 +104,10 @@ if (Test-Path $localArchive) {
 }
 Push-Location $backendDir
 try {
-  tar -czf $localArchive dist drizzle package.json package-lock.json
+  # _dev_seed = données de seed DEV uniquement (jamais utilisées en prod) et son
+  # dossier est parfois en lecture seule (dr-xr-xr-x) → casse l'extraction tar
+  # côté serveur. On l'exclut de l'archive prod.
+  tar -czf $localArchive --exclude="drizzle/_dev_seed" dist drizzle package.json package-lock.json
 }
 finally {
   Pop-Location
