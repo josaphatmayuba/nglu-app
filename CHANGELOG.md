@@ -11,6 +11,15 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **FarmOS Santé — crash filtre « Tout »** : `deleteAnimal` soft-delete l'animal sans désactiver ses traitements ; en mode « Tout » ces traitements remontaient avec `species=null` (animal absent de `listAnimals` filtré `is_active=1`) → `speciesById(null).accentBg` → `TypeError accentBg`. Fix : cascade soft-delete des `farmos_treatments` dans `deleteAnimal` + `listTreatments` JOIN `farmos_animals` (sans filtre `is_active`) pour exposer espèce/nom même sur orphelins legacy. [3.82.10]
+
+### Fixed
+- **Pipeline prod (farmos/journal/tickets)** : ajout `mkdir -p` avant `find -delete` pour html-farmos-prod, html-journal-prod, html-tickets-prod — même fix que domus (3.82.8) ; dossiers absents du conteneur si image non rebuildée. Dockerfile.prod : placeholders `RUN mkdir -p` pour journal+tickets. [3.82.9]
+
+### Fixed
+- **Pipeline Domus prod** : ajout `mkdir -p /usr/share/nginx/html-domus-prod` dans le pipeline avant le `find -delete` (le dossier n'existait pas dans le conteneur → erreur `No such file or directory`). Ajout d'un `RUN mkdir -p` dans `frontend/Dockerfile.prod` pour les futurs rebuilds d'image. [3.82.8]
+
+### Fixed
 - **Pipeline — pdf-service deploy** : le `git pull` serveur échouait silencieusement (ref lock `refs/remotes/origin/master`) → dossier `pdf-service/` absent → build Docker en erreur. Remplacement par `scp` direct depuis le pipeline (dev + prod), identique au pattern backend2. [3.82.7]
 
 ## [3.82.6]

@@ -318,7 +318,7 @@ pipelines:
                 - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist"
                 - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
                 # PROD: html-domus-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-domus-prod && find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
@@ -331,7 +331,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "rm -rf /tmp/journal-app-dist && mkdir -p /tmp/journal-app-dist"
                 - scp -o StrictHostKeyChecking=no -r journal-app/dist/* $SERVER:/tmp/journal-app-dist/
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-journal-prod -mindepth 1 -delete' && docker cp /tmp/journal-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-journal-prod/ && rm -rf /tmp/journal-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-journal-prod && find /usr/share/nginx/html-journal-prod -mindepth 1 -delete' && docker cp /tmp/journal-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-journal-prod/ && rm -rf /tmp/journal-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
@@ -344,7 +344,7 @@ pipelines:
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
                 - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-tickets-prod -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-prod/ && rm -rf /tmp/tickets-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-prod && find /usr/share/nginx/html-tickets-prod -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-prod/ && rm -rf /tmp/tickets-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
@@ -358,7 +358,7 @@ pipelines:
                 - $SSH $SERVER "rm -rf /tmp/farmos-app-dist && mkdir -p /tmp/farmos-app-dist"
                 - scp -o StrictHostKeyChecking=no -r farmos-app/dist/* $SERVER:/tmp/farmos-app-dist/
                 # PROD: html-farmos-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-farmos-prod -mindepth 1 -delete' && docker cp /tmp/farmos-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-farmos-prod/ && rm -rf /tmp/farmos-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-farmos-prod && find /usr/share/nginx/html-farmos-prod -mindepth 1 -delete' && docker cp /tmp/farmos-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-farmos-prod/ && rm -rf /tmp/farmos-app-dist"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:

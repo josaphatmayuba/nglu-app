@@ -525,6 +525,12 @@ export class FarmosService {
     const current = await this.getAnimal(id, orgId);
     this.assertAnimalWritable(current);
     await this.db.update(farmosAnimals).set({ isActive: 0 }).where(eq(farmosAnimals.id, id));
+    // Cascade soft-delete : les traitements de l'animal supprime ne doivent plus
+    // apparaitre (sinon ils remontent en mode "Tout" sans animal de reference).
+    await this.db
+      .update(farmosTreatments)
+      .set({ isActive: 0 })
+      .where(and(eq(farmosTreatments.animalId, id), eq(farmosTreatments.organizationId, orgId)));
     await this.publishFarmosUpdate("deleteAnimal", ["animals"], "deleted", id, orgId);
     return { message: "Animal supprimé." };
   }
@@ -615,11 +621,28 @@ export class FarmosService {
   // ─── Treatments ──────────────────────────────────────────────────────────
 
   async listTreatments(orgId: number) {
-    return this.db
-      .select()
+    // LEFT JOIN sur l'animal (sans filtre isActive) pour conserver l'espece et
+    // le nom meme quand l'animal lie a ete soft-delete (vendu/mort) : sinon le
+    // frontend recoit species=null et plante en mode "Tout".
+    const rows = await this.db
+      .select({
+        treatment: farmosTreatments,
+        animalSpecies: farmosAnimals.species,
+        animalName: farmosAnimals.name,
+        animalExternalId: farmosAnimals.externalId,
+        animalStatus: farmosAnimals.status,
+      })
       .from(farmosTreatments)
+      .leftJoin(farmosAnimals, eq(farmosTreatments.animalId, farmosAnimals.id))
       .where(and(eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1)))
       .orderBy(desc(farmosTreatments.id));
+    return rows.map((r) => ({
+      ...r.treatment,
+      animalSpecies: r.animalSpecies ?? null,
+      animalName: r.animalName ?? null,
+      animalExternalId: r.animalExternalId ?? null,
+      animalStatus: r.animalStatus ?? null,
+    }));
   }
 
   async getTreatment(id: number, orgId: number) {
