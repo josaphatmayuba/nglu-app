@@ -317,6 +317,11 @@ export const api = {
   deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
+  // Fermes
+  listFarms: () => jsonFetch("/farms"),
+  createFarm: (body) => jsonFetch("/farms", { method: "POST", body: JSON.stringify(body) }),
+  updateFarm: (id, body) => jsonFetch(`/farms/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteFarm: (id) => jsonFetch(`/farms/${id}`, { method: "DELETE" }),
   // Zones
   listZones: () => jsonFetch("/zones"),
   createZone: (body) => jsonFetch("/zones", { method: "POST", body: JSON.stringify(body) }),

@@ -4242,6 +4242,8 @@ const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
 const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [rows, setRows] = React.useState([]);
   const [zones, setZones] = React.useState([]);
+  const [farms, setFarms] = React.useState([]);
+  const [farmId, setFarmId] = React.useState(null); // null = toutes les fermes
   const [editing, setEditing] = React.useState(null); // building | "new" | null
   const [reloadKey, setReloadKey] = React.useState(0);
   const [viewMode, setViewMode] = React.useState("zones"); // "zones" | "plan" | "cards"
@@ -4257,7 +4259,8 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       api.listBuildings().catch(() => []),
       api.listZones().catch(() => []),
       api.listLandFeatures().catch(() => []),
-    ]).then(([b, z, f]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); } });
+      api.listFarms().catch(() => []),
+    ]).then(([b, z, f, fm]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   // Persistance d'un déplacement sur le plan (bâtiment ou élément de terrain)
@@ -4283,8 +4286,18 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     if (selectedId === id) setSelectedId(null);
     api.deleteLandFeature(id).catch(() => {});
   }, [selectedId]);
-  const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
+  // Zones de la ferme sélectionnée (null = toutes)
+  const farmZoneIds = farmId ? new Set(zones.filter((z) => z.farmId === farmId).map((z) => z.id)) : null;
+  const filtered = rows.filter((b) =>
+    (!speciesFilter || b.species === speciesFilter) &&
+    (!farmZoneIds || (b.zoneId && farmZoneIds.has(b.zoneId))));
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
+  // Compteurs par ferme (bâtiments + occupation animaux)
+  const farmStats = (fmId) => {
+    const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
+    const bs = rows.filter((b) => b.zoneId && zids.has(b.zoneId));
+    return { buildings: bs.length, animals: bs.reduce((s, b) => s + (b.occupancy ?? 0), 0) };
+  };
   // Grouper par zone pour la vue zones
   const noZone = filtered.filter((b) => !b.zoneId);
   const byZone = zones.map((z) => ({ zone: z, buildings: filtered.filter((b) => b.zoneId === z.id) })).filter((g) => g.buildings.length > 0);
@@ -4321,6 +4334,32 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </button>
         </div>
       </div>
+
+      {/* Sélecteur de ferme (Mes fermes) */}
+      {farms.length > 0 && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {[{ id: null, name: lang === "fr" ? "Toutes les fermes" : "All farms", all: true }, ...farms].map((f) => {
+            const active = farmId === (f.all ? null : f.id);
+            const st = f.all ? null : farmStats(f.id);
+            const badge = { active: { fr: "Principale", bg: "var(--forest-50)", fg: "var(--forest-700)" }, ok: { fr: "OK", bg: "var(--autorite-50)", fg: "var(--autorite-700)" }, maintenance: { fr: "Suivi", bg: "var(--oxblood-50)", fg: "var(--oxblood-700)" } }[f.status] || null;
+            return (
+              <button key={f.id ?? "all"} onClick={() => { setFarmId(f.all ? null : f.id); setSelectedId(null); }}
+                className="card" style={{ textAlign: "left", padding: f.all ? "10px 14px" : "12px 14px", minWidth: f.all ? 0 : 180, cursor: "pointer", border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-2)", background: active ? "var(--forest-50)" : "var(--paper)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{f.name}</span>
+                  {badge && <span style={{ fontSize: 9, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 4, padding: "1px 6px" }}>{badge.fr}</span>}
+                </div>
+                {!f.all && (
+                  <div style={{ fontSize: 10, color: "var(--fg-3)", marginTop: 4 }}>
+                    {[f.location, f.hectares ? `${f.hectares} ha` : null].filter(Boolean).join(" · ")}
+                    {st && <span style={{ marginLeft: 6, color: "var(--fg-2)" }} className="mono">{st.buildings} {lang === "fr" ? "bât." : "bld."} · {st.animals} {lang === "fr" ? "anim." : "ani."}</span>}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Species filter */}
       <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
@@ -4376,7 +4415,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               <select value={planZoneId ?? ""} onChange={(e) => { setPlanZoneId(e.target.value ? Number(e.target.value) : null); setSelectedId(null); }}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-2)", background: "var(--paper)", fontSize: 13 }}>
                 <option value="">{lang === "fr" ? "Sans zone" : "No zone"}</option>
-                {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+                {zones.filter((z) => !farmZoneIds || farmZoneIds.has(z.id)).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
               </select>
               <button className={planEdit ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} onClick={() => setPlanEdit((v) => !v)} style={{ gap: 5 }}>
                 <Icon name={planEdit ? "check" : "edit"} size={12} color={planEdit ? "#ECF1EC" : "var(--ink-700)"}/>
