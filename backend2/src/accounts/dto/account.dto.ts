@@ -72,4 +72,14 @@ export class AccountQueryDto {
   @IsOptional()
   @IsString()
   limit?: string;
+
+  @ApiPropertyOptional({ example: "2026-01-01", description: "Borne basse (incluse) sur la date des ecritures" })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ example: "2026-12-31", description: "Borne haute (incluse) sur la date des ecritures" })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }

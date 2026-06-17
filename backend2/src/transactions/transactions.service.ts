@@ -1,9 +1,19 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { and, count, desc, eq, gte, inArray, like, lte, or, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 import { DRIZZLE } from "../database/database.constants";
-import { currencies, subAccounts, transactions } from "../database/schema";
+import { LedgerService } from "../ledger/ledger.service";
+import { currencies, subAccounts, transactionAttachments, transactions } from "../database/schema";
 import type { Database } from "../database/types";
+
+interface UploadedFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname?: string;
+  size?: number;
+}
 import {
   CreateTransactionDto,
   TransactionQueryDto,
@@ -15,7 +25,10 @@ const creditAccount = alias(subAccounts, "creditAccount");
 
 @Injectable()
 export class TransactionsService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly ledger: LedgerService,
+  ) {}
 
   async create(input: CreateTransactionDto, orgId: number) {
     await this.ensureAccountsExist([input.debitId, input.creditId]);
@@ -27,6 +40,7 @@ export class TransactionsService {
       creditId: input.creditId,
       particulars: input.particulars,
       amount: input.amount,
+      currencyId: input.currencyId ?? null,
       type: input.type ?? "transaction",
       relatedId: input.relatedId ?? "0",
       status: input.status ?? "true",
@@ -34,7 +48,90 @@ export class TransactionsService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId), orgId);
+    const transactionId = Number(result.insertId);
+
+    // Toute saisie manuelle est AUSSI comptabilisee au grand livre (partie double),
+    // sinon elle n'apparait dans aucun menu compta (Grand livre, Tresorerie, Tiers,
+    // Analytique...) qui lisent tous uniquement le ledger. Le project_id (optionnel)
+    // est porte sur les lignes pour le rapport Analytique projet. Idempotent
+    // (manual_transaction:<id>). L'erreur ledger (periode fermee, compte invalide)
+    // remonte volontairement : mieux vaut un echec clair qu'une ecriture fantome.
+    await this.postToLedger(transactionId, input, orgId);
+
+    return this.findOne(transactionId, orgId);
+  }
+
+  /**
+   * Rattrapage : rejoue au grand livre toutes les transactions actives de l'org qui
+   * n'y ont jamais ete postees (saisies avant le fix qui ne postait qu'avec projet).
+   * Idempotent grace a la cle manual_transaction:<id> ; relancer est sans danger.
+   */
+  async backfillLedger(orgId: number) {
+    const rows = await this.db
+      .select({
+        id: transactions.id,
+        date: transactions.date,
+        debitId: transactions.debitId,
+        creditId: transactions.creditId,
+        particulars: transactions.particulars,
+        amount: transactions.amount,
+        currencyId: transactions.currencyId,
+      })
+      .from(transactions)
+      .where(and(eq(transactions.organizationId, orgId), eq(transactions.status, "true")));
+
+    let posted = 0;
+    let skipped = 0;
+    const errors: { id: number; message: string }[] = [];
+    for (const r of rows) {
+      try {
+        const res = await this.ledger.post(
+          {
+            date: new Date(r.date),
+            particulars: r.particulars,
+            sourceModule: "manual_transaction",
+            relatedId: String(r.id),
+            currencyId: r.currencyId ?? undefined,
+            idempotencyKey: `manual_transaction:${r.id}`,
+            skipApprovalGate: true,
+            lines: [
+              { accountId: r.debitId, side: "DEBIT", amount: r.amount, description: r.particulars },
+              { accountId: r.creditId, side: "CREDIT", amount: r.amount, description: r.particulars },
+            ],
+          },
+          orgId,
+        );
+        if ((res as any)?.idempotent) skipped++;
+        else posted++;
+      } catch (e) {
+        errors.push({ id: r.id, message: (e as Error).message });
+      }
+    }
+    return { total: rows.length, posted, skipped, errors };
+  }
+
+  /** Comptabilise une transaction manuelle au grand livre (dimension projet si fournie). */
+  private async postToLedger(
+    transactionId: number,
+    input: CreateTransactionDto,
+    orgId: number,
+  ) {
+    await this.ledger.post(
+      {
+        date: new Date(input.date),
+        particulars: input.particulars,
+        sourceModule: "manual_transaction",
+        relatedId: String(transactionId),
+        currencyId: input.currencyId ?? undefined,
+        idempotencyKey: `manual_transaction:${transactionId}`,
+        skipApprovalGate: true,
+        lines: [
+          { accountId: input.debitId, side: "DEBIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
+          { accountId: input.creditId, side: "CREDIT", amount: input.amount, projectId: input.projectId ?? undefined, description: input.particulars },
+        ],
+      },
+      orgId,
+    );
   }
 
   async findAll(query: TransactionQueryDto, orgId: number) {
@@ -95,6 +192,7 @@ export class TransactionsService {
         ...(input.creditId !== undefined ? { creditId: input.creditId } : {}),
         ...(input.particulars !== undefined ? { particulars: input.particulars } : {}),
         ...(input.amount !== undefined ? { amount: input.amount } : {}),
+        ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
         ...(input.relatedId !== undefined ? { relatedId: input.relatedId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
@@ -274,5 +372,80 @@ export class TransactionsService {
     return this.csv(value)
       .map((item) => Number(item))
       .filter((item) => Number.isFinite(item));
+  }
+
+  // ─────────────── Justificatifs (recus/factures) ───────────────
+
+  private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+
+  private validateMagicBytes(buffer: Buffer, mimetype: string): boolean {
+    const s = buffer.subarray(0, 12);
+    switch (mimetype) {
+      case "image/jpeg": return s[0] === 0xff && s[1] === 0xd8 && s[2] === 0xff;
+      case "image/png":  return s.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+      case "image/webp": return s.subarray(0, 4).toString("ascii") === "RIFF" && s.subarray(8, 12).toString("ascii") === "WEBP";
+      case "application/pdf": return s.subarray(0, 4).toString("ascii") === "%PDF";
+      default: return false;
+    }
+  }
+
+  private saveFile(file: UploadedFile): { name: string; path: string } {
+    if (!this.validateMagicBytes(file.buffer, file.mimetype)) {
+      throw new BadRequestException("Le contenu du fichier ne correspond pas au type declare (jpg/png/webp/pdf).");
+    }
+    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
+    const mimeToExt: Record<string, string> = {
+      "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+    };
+    const ext = mimeToExt[file.mimetype] || "bin";
+    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
+    writeFileSync(join(this.uploadDir, name), file.buffer);
+    return { name, path: `/files/${name}` };
+  }
+
+  /** Attache un justificatif a une transaction (apres validation d'existence). */
+  async addAttachment(transactionId: number, file: UploadedFile, orgId: number, userId?: number) {
+    if (!file) throw new BadRequestException("Aucun fichier recu.");
+    await this.ensureTransactionExists(transactionId, orgId);
+    const { path } = this.saveFile(file);
+    const [result] = await this.db.insert(transactionAttachments).values({
+      organizationId: orgId,
+      transactionId,
+      url: path,
+      filename: file.originalname ?? null,
+      mimetype: file.mimetype,
+      sizeBytes: file.size ?? null,
+      createdBy: userId,
+    });
+    return { id: Number(result.insertId), url: path };
+  }
+
+  /** Liste les justificatifs actifs d'une transaction. */
+  async listAttachments(transactionId: number, orgId: number) {
+    return this.db
+      .select()
+      .from(transactionAttachments)
+      .where(
+        and(
+          eq(transactionAttachments.transactionId, transactionId),
+          eq(transactionAttachments.organizationId, orgId),
+          eq(transactionAttachments.status, "true"),
+        ),
+      )
+      .orderBy(desc(transactionAttachments.id));
+  }
+
+  /** Soft-delete d'un justificatif (status='false'). */
+  async removeAttachment(attachmentId: number, orgId: number) {
+    await this.db
+      .update(transactionAttachments)
+      .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(
+        and(
+          eq(transactionAttachments.id, attachmentId),
+          eq(transactionAttachments.organizationId, orgId),
+        ),
+      );
+    return { message: "Attachment deleted" };
   }
 }

@@ -34,6 +34,7 @@ import {
   hrPerformanceReviews,
   hrProjectAssignments,
   hrProjects,
+  projects,
   hrRecruitmentOffers,
   hrSocialDeclarations,
   hrTrainingSessions,
@@ -830,8 +831,53 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listProjects(q: Record<string, string>) {
+  async listProjects(q: Record<string, string>) {
+    // Reflete le registre partage `projects` (projets compta/maintenance/app projet)
+    // dans hr_projects pour que HR voie tout. Best-effort : un drift de schema ne
+    // doit pas casser la liste.
+    try {
+      await this.ensureHrProjectsFromRegistry(Number(q["organizationId"]) || 1);
+    } catch (err) {
+      this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
+    }
     return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject");
+  }
+
+  /**
+   * Cree/maj le reflet HR des projets du registre partage `projects`.
+   * Idempotent par (organization_id, source_system='projects', external_ref=projects.id).
+   * Les champs RH (hrBudget, managerId, affectations) ne sont jamais ecrases : seuls
+   * nom / code / donor / devise / dates sont propages depuis le registre.
+   */
+  private async ensureHrProjectsFromRegistry(orgId: number) {
+    await this.db.execute(sql`
+      insert into ${hrProjects} (
+        organization_id, code, name, donor, currencyId,
+        startDate, endDate, source_system, external_ref, status, created_at, updated_at
+      )
+      select
+        p.organization_id, p.code, p.name, p.donor, p.currency_id,
+        p.start_date, p.end_date, 'projects', cast(p.id as char), 'active', now(), now()
+      from ${projects} p
+      where p.organization_id = ${orgId}
+        and p.is_active = 1
+        and not exists (
+          select 1 from ${hrProjects} h
+          where h.organization_id = p.organization_id
+            and h.source_system = 'projects'
+            and h.external_ref = cast(p.id as char) collate utf8mb4_0900_ai_ci
+        )
+    `);
+    await this.db.execute(sql`
+      update ${hrProjects} h
+      join ${projects} p
+        on p.organization_id = h.organization_id
+       and cast(p.id as char) collate utf8mb4_0900_ai_ci = h.external_ref
+      set h.name = p.name, h.code = p.code, h.donor = p.donor, h.updated_at = now()
+      where h.organization_id = ${orgId}
+        and h.source_system = 'projects'
+        and p.is_active = 1
+    `);
   }
 
   findProject(id: number) {
@@ -898,6 +944,12 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     const monthFilter = q["month"] || "";
     const startFilter = q["startDate"] || "";
     const endFilter = q["endDate"] || "";
+
+    try {
+      await this.ensureHrProjectsFromRegistry(Number(q["organizationId"]) || 1);
+    } catch (err) {
+      this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
+    }
 
     const [projectRows, assignmentRows, timesheetRows, staffRows, salaryRows, departmentRows] = await Promise.all([
       this.db.select().from(hrProjects).where(ne(hrProjects.status, "false")).orderBy(desc(hrProjects.id)),

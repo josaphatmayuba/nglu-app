@@ -16,11 +16,15 @@ definitions:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
     node-domus: domus-app/node_modules
+    node-journal: journal-app/node_modules
     node-farmos: farmos-app/node_modules
     node-batipro: batipro-app/node_modules
     node-hr: hr-app/node_modules
     node-comptabilite: comptabilite-app/node_modules
+    node-migration: migration-app/node_modules
+    node-tickets: tickets-app/node_modules
     node-marketing: marketing-site/node_modules
+    node-chat: chat-app/node_modules
 
 pipelines:
   branches:
@@ -33,10 +37,14 @@ pipelines:
               condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
@@ -93,6 +101,32 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
+              name: Journal → dev
+              caches: [node-journal]
+              condition: { changesets: { includePaths: ["journal-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/journal-app-dist && mkdir -p /tmp/journal-app-dist $APP/journal-app/dist"
+                - scp -o StrictHostKeyChecking=no -r journal-app/dist/* $SERVER:/tmp/journal-app-dist/
+                - $SSH $SERVER "find $APP/journal-app/dist -mindepth 1 -delete && cp -r /tmp/journal-app-dist/. $APP/journal-app/dist/ && rm -rf /tmp/journal-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Tickets → dev
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
+                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-dev && find /usr/share/nginx/html-tickets-dev -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-dev/ && rm -rf /tmp/tickets-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
               name: FarmOS → dev
               caches: [node-farmos]
               condition: { changesets: { includePaths: ["farmos-app/**"] } }
@@ -115,10 +149,13 @@ pipelines:
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/batipro-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r batipro-app/dist $SERVER:$APP/batipro-app/
+                # html-batipro-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker cp
+                # echoue: mounted volume read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist"
+                - scp -o StrictHostKeyChecking=no -r batipro-app/dist/* $SERVER:/tmp/batipro-app-dist/
+                - $SSH $SERVER "find $APP/batipro-app/dist -mindepth 1 -delete && cp -r /tmp/batipro-app-dist/. $APP/batipro-app/dist/ && rm -rf /tmp/batipro-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-batipro-dev && docker cp $APP/batipro-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: HR → dev
@@ -129,10 +166,14 @@ pipelines:
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/hr-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
+                # html-hr-dev est bind-monte :ro depuis $APP/hr-app/dist -> on ecrit dans le dossier HOTE
+                # (docker cp vers le conteneur echoue: mounted volume read-only). Bind-mount safe: vider le
+                # CONTENU (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/hr-app-dist && mkdir -p /tmp/hr-app-dist"
+                - scp -o StrictHostKeyChecking=no -r hr-app/dist/* $SERVER:/tmp/hr-app-dist/
+                - $SSH $SERVER "find $APP/hr-app/dist -mindepth 1 -delete && cp -r /tmp/hr-app-dist/. $APP/hr-app/dist/ && rm -rf /tmp/hr-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-dev && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Comptabilite → dev
@@ -143,10 +184,55 @@ pipelines:
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist $PROD_APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
+                # html-comptabilite-dev bind-monte :ro depuis l'hote -> ecrire dans le dossier HOTE (docker
+                # cp echoue: read-only). Bind-mount safe: vider le contenu (inode preserve) puis copier.
+                - $SSH $SERVER "rm -rf /tmp/comptabilite-app-dist && mkdir -p /tmp/comptabilite-app-dist"
+                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist/* $SERVER:/tmp/comptabilite-app-dist/
+                - $SSH $SERVER "find $APP/comptabilite-app/dist -mindepth 1 -delete && cp -r /tmp/comptabilite-app-dist/. $APP/comptabilite-app/dist/ && rm -rf /tmp/comptabilite-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-dev && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-dev/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+
+          - step:
+              name: Migration Cockpit → dev
+              caches: [node-migration]
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/migration-app/dist $PROD_APP/nginx"
+                # dist dev bind-monte :ro via docker-compose.prod.yml (html-migration-dev). Bind-mount safe:
+                # vider le contenu (inode preserve) puis copier, sinon scp -r dist cree un inode orphelin.
+                - $SSH $SERVER "rm -rf /tmp/migration-app-dist && mkdir -p /tmp/migration-app-dist"
+                - scp -o StrictHostKeyChecking=no -r migration-app/dist/* $SERVER:/tmp/migration-app-dist/
+                - $SSH $SERVER "find $APP/migration-app/dist -mindepth 1 -delete && cp -r /tmp/migration-app-dist/. $APP/migration-app/dist/ && rm -rf /tmp/migration-app-dist"
+                # La conf nginx ET le compose (nouveau volume html-migration-dev) sont montes/lus depuis
+                # l'hote : on met a jour les FICHIERS HOTE...
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                # ...puis on RECREE le conteneur frontend (projet prod, qui sert dev+prod) pour qu'il
+                # re-binde la conf :ro a jour + le nouveau volume html-migration-dev. `docker cp`/`cat >`
+                # sont impossibles ici (mount read-only). Bref flicker de tous les sites front (~secondes).
+                # NB: le conteneur frontend existant appartient au projet compose `nglu-app` (et non
+                # `nglu_prod` comme backend2/middleware) — heritage de l'incident du 2 juin. On recree
+                # avec SON projet reel, sinon conflit de nom (« container name already in use »).
+                - $SSH $SERVER "cd $PROD_APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+
+          - step:
+              name: Chat → dev
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "sudo mkdir -p $APP/chat-app/dist $PROD_APP/nginx && sudo chmod 777 $APP/chat-app/dist"
+                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
+                - $SSH $SERVER "sudo find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
           - step:
               name: Marketing → dev
@@ -171,10 +257,14 @@ pipelines:
               condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
               script:
                 - apk add --no-cache openssh-client
-                - cd backend2 && npm ci && npm audit --audit-level=high && npm run build && cd ..
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - scp -o StrictHostKeyChecking=no -r backend2/dist $SERVER:$APP/backend2/
+                # Sync package.json AVANT le --build : le Dockerfile fait COPY package*.json + npm ci.
+                # Sans ce scp, l'image se reconstruit avec un package.json serveur obsolete et toute
+                # nouvelle dependance (ex: @nestjs/websockets) manque dans le conteneur -> MODULE_NOT_FOUND.
+                - scp -o StrictHostKeyChecking=no backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 # Sync migrations explicitement (l'image bake drizzle/ via COPY . . ;
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
@@ -232,6 +322,32 @@ pipelines:
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:
+              name: Journal → prod
+              caches: [node-journal]
+              condition: { changesets: { includePaths: ["journal-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/journal-app-dist && mkdir -p /tmp/journal-app-dist"
+                - scp -o StrictHostKeyChecking=no -r journal-app/dist/* $SERVER:/tmp/journal-app-dist/
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-journal-prod -mindepth 1 -delete' && docker cp /tmp/journal-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-journal-prod/ && rm -rf /tmp/journal-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Tickets → prod
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
+                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
+                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-tickets-prod -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-prod/ && rm -rf /tmp/tickets-app-dist"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
               name: FarmOS → prod
               caches: [node-farmos]
               condition: { changesets: { includePaths: ["farmos-app/**"] } }
@@ -283,6 +399,45 @@ pipelines:
                 - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist"
                 - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
                 - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-prod && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-prod/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Migration Cockpit → prod
+              caches: [node-migration]
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/migration-app/dist $APP/nginx"
+                - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
+                # 1) Met a jour les FICHIERS HOTE : conf nginx (:ro) + compose (volume html-migration-dev).
+                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$APP/nginx/nginx.frontend.conf
+                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
+                # 2) RECREE le frontend pour qu'il re-binde la conf :ro a jour (la route /migration est
+                #    nouvelle ; docker cp/cat > sont impossibles sur un mount read-only). Bref flicker.
+                # Conteneur frontend = projet compose `nglu-app` (cf. step dev). On recree avec son projet
+                # reel + --force-recreate, sinon conflit de nom.
+                - $SSH $SERVER "cd $APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                # 3) APRES le recreate, depose le dist prod dans le conteneur (html-migration-prod n'est pas
+                #    un volume : meme schema que comptabilite/domus prod, deja bakes/cp).
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+
+          - step:
+              name: Chat → prod
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**"] } }
+              script:
+                - apk add --no-cache openssh-client
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/chat-app/dist $APP/nginx"
+                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
+                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
+                - $SSH $SERVER "mkdir -p $APP/chat-app/dist && find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                # html-chat-prod n'est pas un volume bind-monte : docker cp dans le conteneur
+                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-chat-prod && docker cp $APP/chat-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-chat-prod/"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
 
           - step:

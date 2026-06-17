@@ -1,0 +1,5 @@
+zone,type,label,pos_x,pos_y,width,height
+Zone Kiselele,water,Point d'eau,78,70,16,16
+Zone Kiselele,field,Champ,6,64,30,26
+Zone Kasangulu,water,Point d'eau,78,70,16,16
+Zone Kasangulu,field,Champ maïs,70,38,26,24

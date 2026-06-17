@@ -318,7 +318,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "RH",
-          action: () => { window.location.href = "/hr/"; },
+          to: "/admin/hr",
           icon: BriefcaseBusiness,
           permit: {
             permissions: ["create-user", "readAll-user"],
@@ -345,7 +345,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
         },
         {
           label: "Comptabilite",
-          action: () => { window.location.href = "/comptabilite/"; },
+          to: "/admin/accounting",
           icon: WalletCards,
           permit: {
             permissions: ["create-account", "readAll-account"],
@@ -395,6 +395,7 @@ const SideNav = ({ collapsed, setCollapsed }) => {
       label: "Ventes avancées",
       items: [
         { label: "Nouvelle vente", to: "/admin/sale/add", icon: Receipt, permit: { permissions: ["create-saleInvoice"], operator: "or" } },
+        { label: "Devis", to: "/admin/quote", icon: FileDoneOutlined, permit: { permissions: ["readAll-quote", "create-quote"], operator: "or" } },
         { label: "Retours ventes", to: "/admin/sale-return-list", icon: RotateCcw, permit: { permissions: ["create-returnSaleInvoice", "readAll-returnSaleInvoice"], operator: "or" } },
         { label: "Fournisseurs", to: "/admin/supplier", icon: Users, permit: { permissions: ["readAll-supplier", "create-supplier"], operator: "or" } },
         { label: "Retours achats", to: "/admin/purchase-return-list", icon: RotateCcw, permit: { permissions: ["create-returnPurchaseInvoice", "readAll-returnPurchaseInvoice"], operator: "or" } },

@@ -1743,6 +1743,7 @@ export class PropertyManagementService {
       amount: String(input.amount),
       currencyId: input.currencyId ?? null,
       vendorName: input.vendorName ?? null,
+      supplierId: input.supplierId ?? null,
       paymentMethod: input.paymentMethod ?? "cash",
       paymentDate: input.paymentDate ?? null,
       notes: input.notes ?? null,

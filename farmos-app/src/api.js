@@ -16,6 +16,11 @@ const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
 const inFlightReads = new Map();
 let requestQueue = Promise.resolve();
 
+const buildQuery = (params) => {
+  const q = Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  return q ? `?${q}` : "";
+};
+
 function authHeaders() {
   const token = getToken(); // SCRUM-119 — token en mémoire
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -244,6 +249,8 @@ async function jsonMutate(kind, path, init = {}) {
 export const api = {
   getAppSetting: () => globalJsonFetch("/setting"),
   listCurrencies: () => globalJsonFetch("/currency?query=all"),
+  // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
+  listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),
@@ -310,11 +317,26 @@ export const api = {
   deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
+  // Fermes
+  listFarms: () => jsonFetch("/farms"),
+  createFarm: (body) => jsonFetch("/farms", { method: "POST", body: JSON.stringify(body) }),
+  updateFarm: (id, body) => jsonFetch(`/farms/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteFarm: (id) => jsonFetch(`/farms/${id}`, { method: "DELETE" }),
+  // Zones
+  listZones: () => jsonFetch("/zones"),
+  createZone: (body) => jsonFetch("/zones", { method: "POST", body: JSON.stringify(body) }),
+  updateZone: (id, body) => jsonFetch(`/zones/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteZone: (id) => jsonFetch(`/zones/${id}`, { method: "DELETE" }),
   // Bâtiments
-  listBuildings: (species) => jsonFetch(`/buildings${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
   updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),
+  // Éléments de terrain (décor du plan)
+  listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),
+  createLandFeature: (body) => jsonFetch("/land-features", { method: "POST", body: JSON.stringify(body) }),
+  updateLandFeature: (id, body) => jsonFetch(`/land-features/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteLandFeature: (id) => jsonFetch(`/land-features/${id}`, { method: "DELETE" }),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
   deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),
@@ -459,6 +481,7 @@ export function adaptMedicine(row) {
     unit: row.unit,
     min,
     supplier: row.supplier,
+    supplierId: row.supplierId ?? row.supplier_id ?? null,
     expiry: exp ? String(exp).slice(0, 10) : "—",
     species: parseSpeciesList(row.species),
     lowStock: min != null && qty < min,

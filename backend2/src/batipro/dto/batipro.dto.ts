@@ -42,6 +42,7 @@ export class CreateBatiproMaterialDto {
   @IsOptional() @IsNumber() @Min(0) min_stock?: number;
   @IsOptional() @IsNumber() @Min(0) reserved?: number;
   @IsOptional() @IsString() supplier?: string;
+  @IsOptional() @IsNumber() supplier_id?: number;
 }
 
 export class UpdateBatiproMaterialDto extends CreateBatiproMaterialDto {

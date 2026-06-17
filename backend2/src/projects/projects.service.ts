@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
   accounts,
+  currencies,
   journalEntries,
   journalEntryLines,
   projects,
@@ -110,13 +111,20 @@ export class ProjectsService {
     `);
   }
 
+  /**
+   * Couts de maintenance saisis mais PAS encore comptabilises, ventiles PAR DEVISE
+   * (principe SIFA : jamais de somme inter-devises).
+   */
   private async maintenanceCostsMissingFromLedger(projectId: number, orgId: number) {
-    const [row] = await this.db
+    const rows = await this.db
       .select({
+        currencyId: realEstateMaintenanceCosts.currencyId,
+        currencyCode: currencies.currencyCode,
         amount: sql<string>`coalesce(sum(${realEstateMaintenanceCosts.amount}), 0)`,
         count: sql<string>`count(*)`,
       })
       .from(realEstateMaintenanceCosts)
+      .leftJoin(currencies, eq(currencies.id, realEstateMaintenanceCosts.currencyId))
       .where(
         and(
           eq(realEstateMaintenanceCosts.organizationId, orgId),
@@ -131,12 +139,17 @@ export class ProjectsService {
               and e.status = 'posted'
           )`,
         ),
-      );
+      )
+      .groupBy(realEstateMaintenanceCosts.currencyId);
 
-    return {
-      amount: this.round2(Number(row?.amount ?? 0)),
-      count: Number(row?.count ?? 0),
-    };
+    return rows
+      .map((r) => ({
+        currencyId: r.currencyId ?? null,
+        currencyCode: r.currencyCode ?? null,
+        amount: this.round2(Number(r.amount ?? 0)),
+        count: Number(r.count ?? 0),
+      }))
+      .filter((r) => r.amount !== 0);
   }
 
   async findOne(id: number, orgId: number) {
@@ -225,6 +238,7 @@ export class ProjectsService {
         ...(input.startDate !== undefined ? { startDate: new Date(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: new Date(input.endDate) } : {}),
         ...(input.budgetAmount !== undefined ? { budgetAmount: String(input.budgetAmount) } : {}),
+        ...(input.currencyId !== undefined ? { currencyId: input.currencyId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       })
       .where(and(eq(projects.id, id), eq(projects.organizationId, orgId)));
@@ -243,7 +257,8 @@ export class ProjectsService {
 
   /**
    * Rapport analytique d'un projet : produits / charges du grand livre ventiles
-   * par sous-compte, filtres sur journal_entry_lines.project_id. Sert de base au rapport bailleur.
+   * par sous-compte ET PAR DEVISE (principe SIFA : jamais de somme inter-devises),
+   * filtres sur journal_entry_lines.project_id. Sert de base au rapport bailleur.
    */
   async ledgerReport(projectId: number, orgId: number) {
     try {
@@ -254,11 +269,15 @@ export class ProjectsService {
       );
     }
     const project = await this.findOne(projectId, orgId);
+    // La devise est portee par l'ecriture (journal_entries.currency_id) : on groupe
+    // par (compte, devise) et on join `currency` pour le code affiche.
     const rows = await this.db
       .select({
         subAccount: subAccounts.name,
         account: accounts.name,
         accountType: accounts.type,
+        currencyId: journalEntries.currencyId,
+        currencyCode: currencies.currencyCode,
         totalDebit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'DEBIT' then ${journalEntryLines.amount} else 0 end), 0)`,
         totalCredit: sql<string>`coalesce(sum(case when ${journalEntryLines.side} = 'CREDIT' then ${journalEntryLines.amount} else 0 end), 0)`,
       })
@@ -266,55 +285,102 @@ export class ProjectsService {
       .innerJoin(journalEntries, eq(journalEntries.id, journalEntryLines.entryId))
       .leftJoin(subAccounts, eq(subAccounts.id, journalEntryLines.accountId))
       .leftJoin(accounts, eq(accounts.id, subAccounts.accountId))
+      .leftJoin(currencies, eq(currencies.id, journalEntries.currencyId))
       .where(
         and(
           eq(journalEntryLines.organizationId, orgId),
           eq(journalEntryLines.projectId, projectId),
         ),
       )
-      .groupBy(journalEntryLines.accountId);
+      .groupBy(journalEntryLines.accountId, journalEntries.currencyId);
 
-    const expenses: any[] = [];
-    const revenue: any[] = [];
+    // Un bucket par devise : { currencyId, currencyCode, expenses[], revenue[], totals }.
+    const buckets = new Map<string, any>();
+    const bucketFor = (currencyId: number | null, currencyCode: string | null) => {
+      const key = String(currencyId ?? "null");
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          currencyId: currencyId ?? null,
+          currencyCode: currencyCode ?? null,
+          expenses: [] as any[],
+          revenue: [] as any[],
+          totalExpenses: 0,
+          totalRevenue: 0,
+        });
+      }
+      return buckets.get(key);
+    };
+
     for (const r of rows) {
       const debit = this.round2(Number(r.totalDebit));
       const credit = this.round2(Number(r.totalCredit));
+      const b = bucketFor(r.currencyId ?? null, r.currencyCode ?? null);
       if (r.accountType === "Expense") {
         const amount = this.round2(debit - credit);
-        if (amount !== 0) expenses.push({ subAccount: r.subAccount, account: r.account, amount });
+        if (amount !== 0) b.expenses.push({ subAccount: r.subAccount, account: r.account, amount, currencyId: b.currencyId, currencyCode: b.currencyCode });
       } else if (r.accountType === "Revenue") {
         const amount = this.round2(credit - debit);
-        if (amount !== 0) revenue.push({ subAccount: r.subAccount, account: r.account, amount });
+        if (amount !== 0) b.revenue.push({ subAccount: r.subAccount, account: r.account, amount, currencyId: b.currencyId, currencyCode: b.currencyCode });
       }
     }
-    const unpostedMaintenance = await this.maintenanceCostsMissingFromLedger(projectId, orgId);
-    if (unpostedMaintenance.amount !== 0) {
-      expenses.push({
+
+    // Couts de maintenance saisis mais non comptabilises : ajoutes dans LEUR devise.
+    const unpostedByCurrency = await this.maintenanceCostsMissingFromLedger(projectId, orgId);
+    for (const m of unpostedByCurrency) {
+      const b = bucketFor(m.currencyId, m.currencyCode);
+      b.expenses.push({
         subAccount: "Maintenance",
         account: "Couts maintenance saisis",
-        amount: unpostedMaintenance.amount,
+        amount: m.amount,
+        currencyId: m.currencyId,
+        currencyCode: m.currencyCode,
         source: "maintenance_costs",
-        count: unpostedMaintenance.count,
+        count: m.count,
       });
     }
-    const totalExpenses = this.round2(expenses.reduce((t, i) => t + i.amount, 0));
-    const totalRevenue = this.round2(revenue.reduce((t, i) => t + i.amount, 0));
+
+    // Totaux PAR DEVISE (jamais d'addition inter-devises).
+    const byCurrency = Array.from(buckets.values())
+      .map((b) => {
+        b.totalExpenses = this.round2(b.expenses.reduce((t: number, i: any) => t + i.amount, 0));
+        b.totalRevenue = this.round2(b.revenue.reduce((t: number, i: any) => t + i.amount, 0));
+        b.net = this.round2(b.totalRevenue - b.totalExpenses);
+        return b;
+      })
+      .filter((b) => b.expenses.length || b.revenue.length);
+
     const budget = project.budgetAmount != null ? Number(project.budgetAmount) : null;
+    const budgetCurrencyId = project.currencyId ?? null;
+
+    // Consommation budget : comparee UNIQUEMENT dans la devise du budget (SIFA).
+    const budgetBucket = byCurrency.find((b) => b.currencyId === budgetCurrencyId)
+      || (byCurrency.length === 1 ? byCurrency[0] : null);
+    const budgetExpenses = budgetBucket ? budgetBucket.totalExpenses : 0;
     const consumptionPct =
-      budget && budget > 0 ? Math.round((totalExpenses / budget) * 1000) / 10 : null;
+      budget && budget > 0 ? Math.round((budgetExpenses / budget) * 1000) / 10 : null;
+
+    // Compat ascendante : champs plats = devise du budget (ou unique devise presente).
+    const flat = budgetBucket || { expenses: [], revenue: [], totalExpenses: 0, totalRevenue: 0, net: 0, currencyId: budgetCurrencyId, currencyCode: null };
+
     return {
-      project: { id: project.id, name: project.name, donor: project.donor, budget },
-      revenue,
-      expenses,
-      totalRevenue,
-      totalExpenses,
-      net: this.round2(totalRevenue - totalExpenses),
-      maintenanceCosts: {
-        unpostedExpense: unpostedMaintenance.amount,
-        unpostedCount: unpostedMaintenance.count,
-      },
+      project: { id: project.id, name: project.name, donor: project.donor, budget, budgetCurrencyId },
+      // SIFA : ventilation par devise (source de verite pour l'affichage).
+      byCurrency,
+      maintenanceUnpostedByCurrency: unpostedByCurrency,
       budget,
+      budgetCurrencyId,
       consumptionPct,
+      // Champs plats conserves pour compat (devise du budget / devise unique).
+      revenue: flat.revenue,
+      expenses: flat.expenses,
+      totalRevenue: flat.totalRevenue,
+      totalExpenses: flat.totalExpenses,
+      net: flat.net,
+      currencyCode: flat.currencyCode,
+      maintenanceCosts: {
+        unpostedExpense: unpostedByCurrency.reduce((t, m) => (m.currencyId === flat.currencyId ? t + m.amount : t), 0),
+        unpostedCount: unpostedByCurrency.reduce((t, m) => (m.currencyId === flat.currencyId ? t + m.count : t), 0),
+      },
     };
   }
 }

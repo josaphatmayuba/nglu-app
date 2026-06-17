@@ -1,6 +1,8 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -8,8 +10,11 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -35,6 +40,14 @@ export class TransactionsController {
   @Post()
   create(@Body() body: CreateTransactionDto, @CurrentOrg() orgId: number) {
     return this.transactionsService.create(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Rattrapage : reposte au grand livre les transactions actives non comptabilisees (idempotent)" })
+  @ApiOkResponse({ description: "Resume du backfill (total/posted/skipped/errors)" })
+  @Permissions("create-transaction")
+  @Post("backfill-ledger")
+  backfillLedger(@CurrentOrg() orgId: number) {
+    return this.transactionsService.backfillLedger(orgId);
   }
 
   @ApiOperation({ summary: "List, search, or aggregate transactions" })
@@ -67,5 +80,38 @@ export class TransactionsController {
   @Patch(":id")
   updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTransactionStatusDto, @CurrentOrg() orgId: number) {
     return this.transactionsService.updateStatus(id, body.status, orgId);
+  }
+
+  // ─────────────── Justificatifs (recus/factures) ───────────────
+
+  @ApiOperation({ summary: "Liste les justificatifs d'une transaction" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("readSingle-transaction", "readAll-transaction")
+  @Get(":id/attachments")
+  listAttachments(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.transactionsService.listAttachments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Attache un justificatif (recu/facture) a une transaction" })
+  @ApiParam({ name: "id", example: 1, type: Number })
+  @Permissions("update-transaction")
+  @Post(":id/attachments")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const ok = ["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(file.mimetype);
+      cb(ok ? null : new BadRequestException("Type non autorise (jpg/png/webp/pdf)."), ok);
+    },
+  }))
+  addAttachment(@Param("id", ParseIntPipe) id: number, @UploadedFile() file: any, @CurrentOrg() orgId: number) {
+    return this.transactionsService.addAttachment(id, file, orgId);
+  }
+
+  @ApiOperation({ summary: "Supprime (soft) un justificatif" })
+  @ApiParam({ name: "attachmentId", example: 1, type: Number })
+  @Permissions("update-transaction")
+  @Delete("attachments/:attachmentId")
+  removeAttachment(@Param("attachmentId", ParseIntPipe) attachmentId: number, @CurrentOrg() orgId: number) {
+    return this.transactionsService.removeAttachment(attachmentId, orgId);
   }
 }

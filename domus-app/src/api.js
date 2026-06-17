@@ -142,6 +142,8 @@ export const api = {
   createMaintenance: (b) => post("/maintenance", b),
   updateMaintenance: (id, b) => put(`/maintenance/${id}`, b),
   deleteMaintenance: (id) => del(`/maintenance/${id}`),
+  // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /property-management)
+  suppliers: () => jsonFetch("/supplier?query=all&type=real_estate", { method: "GET", base: API_ROOT }),
   maintenanceCosts: (id) => get(`/maintenance/${id}/costs`),
   addMaintenanceCost: (id, b) => post(`/maintenance/${id}/costs`, b),
   deleteMaintenanceCost: (id) => del(`/maintenance/costs/${id}`),

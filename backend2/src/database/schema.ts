@@ -692,6 +692,14 @@ export const suppliers = mysqlTable("supplier", {
   phone: varchar("phone", { length: 255 }).notNull(),
   address: varchar("address", { length: 255 }),
   email: varchar("email", { length: 255 }),
+  partyType: varchar("party_type", { length: 20 }).default("company").notNull(),
+  supplierType: varchar("supplier_type", { length: 50 }).default("general").notNull(),
+  contactPerson: varchar("contact_person", { length: 255 }),
+  rccm: varchar("rccm", { length: 100 }),
+  nationalId: varchar("national_id", { length: 100 }),
+  taxId: varchar("tax_id", { length: 100 }),
+  paymentTerms: varchar("payment_terms", { length: 100 }),
+  notes: text("notes"),
   status: varchar("status", { length: 255 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
@@ -733,6 +741,22 @@ export const transactions = mysqlTable("transaction", {
   status: varchar("status", { length: 255 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
+});
+
+// Justificatifs (recus/factures scannes) lies a une ecriture de la table plate.
+// Plusieurs pieces par transaction. Soft-delete via status (true/false).
+export const transactionAttachments = mysqlTable("transaction_attachments", {
+  id: bigint("id", { mode: "number", unsigned: true }).autoincrement().primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  transactionId: bigint("transaction_id", { mode: "number" }).notNull(),
+  url: varchar("url", { length: 255 }).notNull(),
+  filename: varchar("filename", { length: 255 }),
+  mimetype: varchar("mimetype", { length: 100 }),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  status: varchar("status", { length: 16 }).default("true").notNull(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export const realEstateProperties = mysqlTable("real_estate_properties", {
@@ -879,6 +903,8 @@ export const realEstateMaintenanceCosts = mysqlTable("real_estate_maintenance_co
   amount: decimal("amount", { precision: 15, scale: 2 }).default("0").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
   vendorName: varchar("vendor_name", { length: 255 }),
+  // Lien vers le referentiel central fournisseurs (compta). vendorName reste en fallback texte legacy.
+  supplierId: bigint("supplier_id", { mode: "number" }),
   paymentMethod: varchar("payment_method", { length: 50 }).default("cash").notNull(),
   paymentDate: date("payment_date", { mode: "string" }),
   notes: text("notes"),
@@ -1145,6 +1171,10 @@ export const hrProjects = mysqlTable("hr_projects", {
   endDate: date("endDate", { mode: "string" }),
   hrBudget: double("hrBudget").default(0).notNull(),
   currencyId: bigint("currencyId", { mode: "number" }),
+  // Reflet du registre partage `projects` (principe SIFA). source_system='projects'
+  // + external_ref = projects.id quand le projet vient de la compta/app projet.
+  sourceSystem: varchar("source_system", { length: 40 }).default("hr").notNull(),
+  externalRef: varchar("external_ref", { length: 120 }),
   status: varchar("status", { length: 30 }).default("active").notNull(),
   notes: text("notes"),
   createdAt: timestamp("created_at"),
@@ -2000,6 +2030,8 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   lot: varchar("lot", { length: 100 }),
   barn: varchar("barn", { length: 100 }),
   room: varchar("room", { length: 100 }),
+  buildingId: bigint("building_id", { mode: "number" }),
+  zoneId: bigint("zone_id", { mode: "number" }),
   type: varchar("type", { length: 50 }),
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
   withdrawalUntil: date("withdrawal_until", { mode: "string" }),
@@ -2022,6 +2054,8 @@ export const farmosMedicines = mysqlTable("farmos_medicines", {
   unit: varchar("unit", { length: 30 }),
   minQuantity: decimal("min_quantity", { precision: 12, scale: 2 }),
   supplier: varchar("supplier", { length: 255 }),
+  // Lien vers le referentiel central fournisseurs (compta). supplier reste en fallback texte legacy.
+  supplierId: bigint("supplier_id", { mode: "number" }),
   expiryDate: date("expiry_date", { mode: "string" }),
   notes: text("notes"),
   species: json("species").$type<string[] | null>(),
@@ -2075,6 +2109,8 @@ export const batiproMaterials = mysqlTable("batipro_materials", {
   minStock: decimal("min_stock", { precision: 14, scale: 2 }).default("0").notNull(),
   reserved: decimal("reserved", { precision: 14, scale: 2 }).default("0").notNull(),
   supplier: varchar("supplier", { length: 255 }),
+  // Lien vers le referentiel central fournisseurs (compta). Le champ texte ci-dessus reste en fallback legacy.
+  supplierId: bigint("supplier_id", { mode: "number" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -2357,18 +2393,62 @@ export const farmosDocuments = mysqlTable("farmos_documents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const farmosBuildings = mysqlTable("farmos_buildings", {
+export const farmosFarms = mysqlTable("farmos_farms", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
+  location: varchar("location", { length: 255 }),
+  hectares: decimal("hectares", { precision: 8, scale: 2 }),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosZones = mysqlTable("farmos_zones", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  farmId: bigint("farm_id", { mode: "number" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosBuildings = mysqlTable("farmos_buildings", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  zoneId: bigint("zone_id", { mode: "number" }),
+  name: varchar("name", { length: 255 }).notNull(),
   species: varchar("species", { length: 50 }),
   type: varchar("type", { length: 50 }),
+  buildingKind: varchar("building_kind", { length: 50 }),
   capacity: int("capacity"),
+  posX: decimal("pos_x", { precision: 6, scale: 2 }),
+  posY: decimal("pos_y", { precision: 6, scale: 2 }),
   temperature: decimal("temperature", { precision: 5, scale: 2 }),
   humidity: decimal("humidity", { precision: 5, scale: 2 }),
   manager: varchar("manager", { length: 255 }),
   hygieneStatus: varchar("hygiene_status", { length: 30 }),
   notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosLandFeatures = mysqlTable("farmos_land_features", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  zoneId: bigint("zone_id", { mode: "number" }),
+  type: varchar("type", { length: 30 }).notNull(),
+  label: varchar("label", { length: 255 }),
+  posX: decimal("pos_x", { precision: 6, scale: 2 }).default("0").notNull(),
+  posY: decimal("pos_y", { precision: 6, scale: 2 }).default("0").notNull(),
+  width: decimal("width", { precision: 6, scale: 2 }),
+  height: decimal("height", { precision: 6, scale: 2 }),
+  meta: json("meta"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

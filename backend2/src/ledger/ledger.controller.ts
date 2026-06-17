@@ -10,6 +10,7 @@ import {
 } from "@nestjs/common";
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentRoleId } from "../auth/decorators/current-role-id.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -103,42 +104,85 @@ export class LedgerController {
   @Get()
   findAll(
     @CurrentOrg() orgId: number,
+    @CurrentRoleId() roleId: number,
     @Query("limit") limit?: string,
     @Query("offset") offset?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("q") q?: string,
+    @Query("currencyCode") currencyCode?: string,
+    @Query("sourceModule") sourceModule?: string,
+    @Query("status") status?: string,
+    @Query("minAmount") minAmount?: string,
+    @Query("maxAmount") maxAmount?: string,
+    @Query("paged") paged?: string,
   ) {
-    return this.ledger.findAll(orgId, limit ? Number(limit) : 50, offset ? Number(offset) : 0);
+    const filter = {
+      startDate,
+      endDate,
+      q: q || undefined,
+      currencyCode: currencyCode || undefined,
+      sourceModule: sourceModule || undefined,
+      status: status || undefined,
+      minAmount: minAmount != null && minAmount !== "" ? Number(minAmount) : undefined,
+      maxAmount: maxAmount != null && maxAmount !== "" ? Number(maxAmount) : undefined,
+    };
+    return this.ledger.findAll(
+      orgId,
+      limit ? Number(limit) : 50,
+      offset ? Number(offset) : 0,
+      roleId,
+      filter,
+      paged === "1" || paged === "true",
+    );
   }
 
   @ApiOperation({ summary: "Soldes par sous-compte (grand livre moderne)" })
   @ApiOkResponse({ description: "Soldes" })
   @Permissions("readAll-transaction")
   @Get("balances")
-  balances(@CurrentOrg() orgId: number) {
-    return this.ledger.subAccountBalances(orgId);
+  balances(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.subAccountBalances(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Balance generale (trial balance) moderne" })
   @ApiOkResponse({ description: "Trial balance" })
   @Permissions("readAll-transaction")
   @Get("trial-balance")
-  trialBalance(@CurrentOrg() orgId: number) {
-    return this.ledger.trialBalance(orgId);
+  trialBalance(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.trialBalance(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Compte de resultat moderne (produits - charges)" })
   @ApiOkResponse({ description: "Income statement" })
   @Permissions("readAll-transaction")
   @Get("income-statement")
-  incomeStatement(@CurrentOrg() orgId: number) {
-    return this.ledger.incomeStatement(orgId);
+  incomeStatement(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.incomeStatement(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Bilan moderne (actif = passif + capitaux propres)" })
   @ApiOkResponse({ description: "Balance sheet" })
   @Permissions("readAll-transaction")
   @Get("balance-sheet")
-  balanceSheet(@CurrentOrg() orgId: number) {
-    return this.ledger.balanceSheet(orgId);
+  balanceSheet(
+    @CurrentOrg() orgId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    return this.ledger.balanceSheet(orgId, { startDate, endDate });
   }
 
   @ApiOperation({ summary: "Liste des modules exigeant une approbation avant comptabilisation" })
@@ -199,8 +243,11 @@ export class LedgerController {
   ledgerForAccount(
     @Param("accountId", ParseIntPipe) accountId: number,
     @CurrentOrg() orgId: number,
+    @CurrentRoleId() roleId: number,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
   ) {
-    return this.ledger.ledgerForAccount(accountId, orgId);
+    return this.ledger.ledgerForAccount(accountId, orgId, roleId, { startDate, endDate });
   }
 
   // ─── Echange de devise (modele bancaire) ────────────────────────────────────
@@ -258,8 +305,8 @@ export class LedgerController {
   @ApiParam({ name: "id", type: Number })
   @Permissions("read-transaction")
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
-    return this.ledger.findOne(id, orgId);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number, @CurrentRoleId() roleId: number) {
+    return this.ledger.findOne(id, orgId, roleId);
   }
 
   @ApiOperation({ summary: "Contre-passe une ecriture (extourne)" })

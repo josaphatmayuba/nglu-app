@@ -538,11 +538,61 @@ export class FarmosController {
     return this.farmos.deleteDocument(id, orgId);
   }
 
+  // ─── Fermes ───────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("farms")
+  listFarms(@CurrentOrg() orgId: number) {
+    return this.farmos.listFarms(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("farms")
+  createFarm(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createFarm(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("farms/:id")
+  updateFarm(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateFarm(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("farms/:id")
+  deleteFarm(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteFarm(id, orgId);
+  }
+
+  // ─── Zones ────────────────────────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("zones")
+  listZones(@CurrentOrg() orgId: number) {
+    return this.farmos.listZones(orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("zones")
+  createZone(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createZone(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("zones/:id")
+  updateZone(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateZone(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("zones/:id")
+  deleteZone(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteZone(id, orgId);
+  }
+
   // ─── Bâtiments ────────────────────────────────────────────────────────────
   @Permissions("readAll-farmos")
   @Get("buildings")
-  listBuildings(@CurrentOrg() orgId: number, @Query("species") species?: string) {
-    return this.farmos.listBuildings(orgId, species || null);
+  listBuildings(@CurrentOrg() orgId: number, @Query("species") species?: string, @Query("zone_id") zoneId?: string) {
+    return this.farmos.listBuildings(orgId, species || null, zoneId ? Number(zoneId) : null);
   }
 
   @Permissions("create-farmos")
@@ -561,6 +611,31 @@ export class FarmosController {
   @Delete("buildings/:id")
   deleteBuilding(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteBuilding(id, orgId);
+  }
+
+  // ─── Éléments de terrain (décor du plan) ──────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("land-features")
+  listLandFeatures(@CurrentOrg() orgId: number, @Query("zone_id") zoneId?: string) {
+    return this.farmos.listLandFeatures(orgId, zoneId ? Number(zoneId) : null);
+  }
+
+  @Permissions("create-farmos")
+  @Post("land-features")
+  createLandFeature(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createLandFeature(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("land-features/:id")
+  updateLandFeature(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateLandFeature(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("land-features/:id")
+  deleteLandFeature(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteLandFeature(id, orgId);
   }
 
   // ─── Rapports PDF (#3) ────────────────────────────────────────────────────

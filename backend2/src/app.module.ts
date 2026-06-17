@@ -18,11 +18,15 @@ import { HealthModule } from "./health/health.module";
 import { HrModule } from "./hr/hr.module";
 import { EmailTemplatesModule } from "./email-templates/email-templates.module";
 import { FarmosModule } from "./farmos/farmos.module";
+import { JournalEntrepriseModule } from "./journal-entreprise/journal-entreprise.module";
+import { DiscussionModule } from "./discussion/discussion.module";
+import { ChatModule } from "./chat/chat.module";
 import { InvoiceTemplatesModule } from "./invoice-templates/invoice-templates.module";
 import { LegacyModulesModule } from "./legacy-modules/legacy-modules.module";
 import { MailAccountsModule } from "./mail-accounts/mail-accounts.module";
 import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { MessagesModule } from "./messages/messages.module";
+import { MigrationModule } from "./migration/migration.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
@@ -71,11 +75,15 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     EmailTemplatesModule,
     FarmosModule,
+    JournalEntrepriseModule,
+    DiscussionModule,
+    ChatModule,
     InvoiceTemplatesModule,
     LegacyModulesModule,
     MailAccountsModule,
     ManufacturersModule,
     MessagesModule,
+    MigrationModule,
     NotificationPreferencesModule,
     PaymentMethodsModule,
     PermissionsModule,

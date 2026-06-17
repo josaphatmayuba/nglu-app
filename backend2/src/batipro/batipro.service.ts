@@ -200,6 +200,7 @@ export class BatiproService {
       minStock: String(input.min_stock ?? 0),
       reserved: String(input.reserved ?? 0),
       supplier: input.supplier ?? null,
+      supplierId: input.supplier_id ?? null,
     }).$returningId();
     const id = Number(result.id);
     await this.publish("createMaterial", ["materials"], "created", id, orgId);
@@ -215,6 +216,7 @@ export class BatiproService {
     if (input.min_stock !== undefined) patch.minStock = String(input.min_stock);
     if (input.reserved !== undefined) patch.reserved = String(input.reserved);
     if (input.supplier !== undefined) patch.supplier = input.supplier || null;
+    if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id || null;
     if (Object.keys(patch).length) await this.db.update(batiproMaterials).set(patch).where(eq(batiproMaterials.id, id));
     await this.publish("updateMaterial", ["materials"], "updated", id, orgId);
     return this.getMaterial(id, orgId);

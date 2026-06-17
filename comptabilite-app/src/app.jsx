@@ -64,6 +64,7 @@ function Icon({ name, className = "ic", style }) {
 const NAV = [
   { id: "dashboard", label: "Tableau de bord", icon: "dashboard" },
   { section: "Saisie" },
+  { id: "saisie", label: "Saisie rapide", icon: "wallet" },
   { id: "approbations", label: "Approbations", icon: "bellRing" },
   { id: "journaux", label: "Journaux", icon: "bookText" },
   { id: "ecritures", label: "Écritures", icon: "penLine" },
@@ -81,6 +82,7 @@ const NAV = [
   { id: "budget", label: "Budget", icon: "piggyBank" },
   { id: "capacite", label: "Plan de trésorerie", icon: "gauge" },
   { section: "Achats & stock" },
+  { id: "fournisseurs", label: "Fournisseurs", icon: "contact" },
   { id: "achats", label: "Factures fournisseurs", icon: "receipt" },
   { id: "stock", label: "Stock & entrepôts", icon: "warehouse" },
   { section: "États" },
@@ -157,6 +159,25 @@ function exportCsv(filename, cols, rows) {
   URL.revokeObjectURL(url);
 }
 
+/* Pagination d'affichage : on ne rend que `step` lignes à la fois (évite de
+   rendre des centaines de lignes d'un coup → freeze UI). Même UX que le Grand livre.
+   `signature` = clé optionnelle : si elle change (filtres, données), on revient à `step`. */
+function usePaginated(list, step = 20, signature) {
+  const [visible, setVisible] = React.useState(step);
+  React.useEffect(() => { setVisible(step); }, [signature, step]);
+  const arr = Array.isArray(list) ? list : [];
+  return { shown: arr.slice(0, visible), total: arr.length, visible, more: () => setVisible((v) => v + step) };
+}
+/* Bouton « Afficher plus » réutilisable (rendu seulement s'il reste des lignes). */
+function ShowMore({ page, step = 20 }) {
+  if (!page || page.total <= page.visible) return null;
+  return (
+    <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+      <button className="btn btn-ghost" onClick={page.more}>Afficher plus ({page.total - page.visible} restantes)</button>
+    </div>
+  );
+}
+
 /* Autocomplete recherchable (remplace les <select> de listes de données).
    options = [{ value, label }]. onChange reçoit la valeur. */
 function Autocomplete({ value, onChange, options, placeholder = "—", allowClear = true, style }) {
@@ -219,6 +240,30 @@ function Toaster() {
 const txRev = (t) => /revenue|produit|vente|sales|don|subvention|loyer|rental|locatif/i.test(`${t.credit?.name || t.creditAccountName || ""}`);
 const txExp = (t) => /charge|expense|salaire|salary|achat|purchase|frais|cost|carburant|maintenance|fourniture/i.test(`${t.debit?.name || t.debitAccountName || ""}`);
 const monthKey = (d) => String(d || "").slice(0, 7);
+const DAY_MS = 86400000;
+const isoDate = (d) => d.toISOString().slice(0, 10);
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+function presetRange(preset) {
+  const today = startOfToday();
+  const end = isoDate(today);
+  if (preset === "all") return { from: "", to: "" };
+  if (preset === "today") return { from: end, to: end };
+  if (preset === "7d") return { from: isoDate(new Date(today.getTime() - 6 * DAY_MS)), to: end };
+  if (preset === "30d") return { from: isoDate(new Date(today.getTime() - 29 * DAY_MS)), to: end };
+  if (preset === "quarter") {
+    const q = Math.floor(today.getMonth() / 3) * 3;
+    return { from: isoDate(new Date(today.getFullYear(), q, 1)), to: end };
+  }
+  if (preset === "year") return { from: isoDate(new Date(today.getFullYear(), 0, 1)), to: end };
+  return { from: "", to: "" };
+}
+function defaultDateRange() {
+  return { preset: "custom", from: "2022-01-01", to: isoDate(startOfToday()) };
+}
 
 function useIsMobile() {
   const get = () => (typeof window !== "undefined" ? window.innerWidth <= 960 : false);
@@ -229,6 +274,24 @@ function useIsMobile() {
     return () => window.removeEventListener("resize", on);
   }, []);
   return m;
+}
+
+function DateRangeFilter({ value, onChange }) {
+  const current = value || defaultDateRange();
+  const presets = [["today", "Aujourd'hui"], ["7d", "7 j"], ["30d", "30 j"], ["quarter", "Trim."], ["year", "Annee"], ["all", "Tout"]];
+  const setPreset = (preset) => onChange({ preset, ...presetRange(preset) });
+  const setCustom = (patch) => onChange({ ...current, preset: "custom", ...patch });
+  return (
+    <div className="date-filter">
+      <div className="date-presets">
+        {presets.map(([id, label]) => (
+          <button key={id} type="button" className={`date-preset ${current.preset === id ? "active" : ""}`} onClick={() => setPreset(id)}>{label}</button>
+        ))}
+      </div>
+      <label><span>Du</span><input type="date" value={current.from || ""} onChange={(e) => setCustom({ from: e.target.value })} /></label>
+      <label><span>Au</span><input type="date" value={current.to || ""} onChange={(e) => setCustom({ to: e.target.value })} /></label>
+    </div>
+  );
 }
 
 /* ── Petits composants ─────────────────────────────────────────────────── */
@@ -287,18 +350,23 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [moreOpen, setMoreOpen] = React.useState(false);
-  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyId (string)
+  const [curFilter, setCurFilter] = React.useState(""); // "" = toutes les devises ; sinon currencyCode (ex. "USD")
+  const [dateRange, setDateRange] = React.useState(() => defaultDateRange());
   const isMobile = useIsMobile();
+  const dateParams = React.useMemo(() => ({
+    startDate: dateRange.from || undefined,
+    endDate: dateRange.to || undefined,
+  }), [dateRange.from, dateRange.to]);
 
   const [, forceCur] = React.useState(0);
   const load = React.useCallback(() => {
     Promise.allSettled([
-      api.ledgerEntries(),
-      api.ledgerBalances(),
+      api.ledgerEntries({ ...dateParams, limit: 1000 }),
+      api.ledgerBalances(dateParams),
       api.mainAccounts(),
-      api.ledgerTrialBalance(),
-      api.ledgerBalanceSheet(),
-      api.ledgerIncomeStatement(),
+      api.ledgerTrialBalance(dateParams),
+      api.ledgerBalanceSheet(dateParams),
+      api.ledgerIncomeStatement(dateParams),
       api.setting(),
       api.currencies(),
     ])
@@ -321,7 +389,7 @@ function App() {
         setApiStatus([entries, balances, tb].some((r) => r.status === "fulfilled" && r.value) ? "api" : "local");
       })
       .catch(() => setApiStatus("local"));
-  }, []);
+  }, [dateParams]);
   React.useEffect(() => load(), [load]);
   const me = getUser();
   const myInitials = initialsOf(me.name);
@@ -350,9 +418,10 @@ function App() {
   const newEntry = () => setModal({ kind: "transaction" });
 
   // Filtre par devise (SIFA — on ne convertit jamais, on restreint l'affichage à une devise).
-  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyId.
+  // Prédicat commun : transactions, comptes et listes *ByCurrency portent tous currencyCode.
+  // On filtre par CODE devise (vrai filtre robuste, insensible aux écarts d'id legacy/orphelins).
   const matchCur = React.useCallback(
-    (row) => !curFilter || String(row?.currencyId ?? "") === curFilter,
+    (row) => !curFilter || String(row?.currencyCode ?? "") === curFilter,
     [curFilter]
   );
   const fc = React.useMemo(() => {
@@ -378,10 +447,11 @@ function App() {
   const views = {
     dashboard: <Dashboard is={fc.incomeStatement} transactions={fc.transactions} go={go} onNew={newEntry} canMutate={canMutate} />,
     journaux: <Journaux transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
-    ecritures: <Ecritures transactions={fc.transactions} onNew={newEntry} canMutate={canMutate} />,
+    ecritures: <Ecritures curFilter={curFilter} dateRange={dateRange} onNew={newEntry} canMutate={canMutate} />,
+    saisie: <SaisieRapide save={save} busy={busy} currencies={data.currencies} defaultCurrencyId={data.defaultCurrencyId} canMutate={canMutate} />,
     types: <Types canMutate={canMutate} accounts={data.accounts} />,
     approbations: <Approbations canMutate={canMutate} />,
-    grandlivre: <GrandLivre curFilter={curFilter} />,
+    grandlivre: <GrandLivre curFilter={curFilter} dateRange={dateRange} />,
     plan: <Plan accounts={fc.accounts} trialBalance={fc.trialBalance} incomeStatement={fc.incomeStatement} balanceSheet={fc.balanceSheet} canMutate={canMutate} onNew={() => setModal({ kind: "account" })} />,
     tiers: <Tiers accounts={fc.accounts} />,
     tresorerie: <Tresorerie accounts={fc.accounts} />,
@@ -390,9 +460,10 @@ function App() {
     analytique: <Analytique />,
     budget: <Budget />,
     capacite: <Capacite accounts={fc.accounts} />,
+    fournisseurs: <Fournisseurs canMutate={canMutate} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,
-    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} curFilter={curFilter} />,
+    etats: <Etats is={fc.incomeStatement} bs={fc.balanceSheet} tb={fc.trialBalance} curFilter={curFilter} />,
     tva: <Tva accounts={fc.accounts} canMutate={canMutate} />,
     parametres: <Parametres />,
   };
@@ -426,14 +497,16 @@ function App() {
 
       <main className="main">
         <div className="content">
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
             <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--ink-500)" }}>
               <Icon name="landmark" style={{ width: 14, height: 14 }} /> Devise
               <select className="select" style={{ height: 30 }} value={curFilter} onChange={(e) => setCurFilter(e.target.value)}>
                 <option value="">Toutes les devises</option>
                 {(data.currencies || []).map((c) => {
                   const id = String(c.currencyId ?? c.id);
-                  return <option key={id} value={id}>{c.currencyCode || c.currencyName || cleanCurrencySymbol(c)}</option>;
+                  const code = c.currencyCode || c.currencyName || cleanCurrencySymbol(c);
+                  return <option key={id} value={code}>{code}</option>;
                 })}
               </select>
             </label>
@@ -641,17 +714,63 @@ function Journaux({ transactions, onNew, canMutate }) {
 }
 
 /* ── Écritures ─────────────────────────────────────────────────────────── */
-function Ecritures({ transactions, onNew, canMutate }) {
-  const rows = (transactions || []).map((t) => ({
+function Ecritures({ curFilter, dateRange, onNew, canMutate }) {
+  const [q, setQ] = React.useState("");
+  const [journal, setJournal] = React.useState(""); // = sourceModule côté serveur
+  const [statut, setStatut] = React.useState("");   // posted | pending
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
+  const [raw, setRaw] = React.useState(null);  // écritures chargées (page cumulée)
+  const [total, setTotal] = React.useState(0);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const PAGE = 20;
+
+  // Pagination + filtres CÔTÉ SERVEUR (mêmes query params que le Grand livre).
+  const params = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: journal || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, journal, statut, minMt, maxMt]);
+
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
+    try {
+      setError("");
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setRaw((cur) => reset || cur === null ? data : [...cur, ...data]);
+    } catch (e) {
+      setError(String(e.message || e));
+      if (reset) setRaw([]);
+    } finally { setLoading(false); }
+  }, [params]);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
+  const loadMore = () => fetchPage(raw?.length || 0, false);
+
+  const rows = (raw || []).map((t) => ({
     date: String(t.date || "").slice(0, 10).split("-").reverse().join("/"),
-    journal: String(t.type || t.sourceModule || "OD").slice(0, 12),
+    journal: String(t.sourceModule || t.type || "OD").slice(0, 12),
+    reference: t.reference || (t.id != null ? `#${t.id}` : ""),
     label: t.particulars,
     amount: Number(t.totalDebit ?? t.amount ?? 0),
     currencyCode: t.currencyCode,
     currencyId: t.currencyId,
-    status: /draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
+    status: /reversed/i.test(`${t.status ?? ""}`) ? "Contre-passée" : /pending|draft|brouillon|false/i.test(`${t.status ?? ""}`) ? "Brouillon" : "Validée",
   }));
   rows.forEach((r) => { r.montant = mc(r.amount, r); });
+  // Modules réellement présents dans les pages chargées (pour le menu).
+  const journaux = Array.from(new Set((raw || []).map((t) => t.sourceModule).filter(Boolean))).sort();
   const list = rows;
   return (
     <>
@@ -665,27 +784,163 @@ function Ecritures({ transactions, onNew, canMutate }) {
         </div>
       </div>
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Liste des écritures</h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        <div className="section-head"><h3 className="font-display">Liste des écritures <span className="tiny" style={{ fontWeight: 400 }}>{raw ? `(${list.length} / ${total})` : ""}</span></h3><button className="link" onClick={() => exportCsv("ecritures.csv", [["date", "Date"], ["journal", "Journal"], ["label", "Libellé"], ["montant", "Montant"], ["status", "Statut"]], list)}><Icon name="download" style={{ width: 13, height: 13 }} /> Exporter</button></div>
+        {error && <div className="tiny" style={{ color: "var(--rose-600)", marginBottom: 8 }}>{error}</div>}
         <div className="searchbar">
-          <div className="search-input"><Icon name="search" /> Rechercher un libellé, une pièce…</div>
-          <select className="select"><option>Tous journaux</option><option>Caisse (CA)</option><option>Banque (BQ)</option><option>Ventes (VE)</option><option>Achats (AC)</option></select>
-          <select className="select"><option>Tous statuts</option><option>Validée</option><option>Brouillon</option></select>
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={journal} onChange={(e) => setJournal(e.target.value)}>
+            <option value="">Tous journaux</option>
+            {journaux.map((j) => <option key={j} value={j}>{j}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="posted">Validée (posted)</option>
+            <option value="pending">Brouillon (pending)</option>
+          </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
         </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 620 }}>
             <thead><tr><th>Date</th><th>Journal</th><th>Libellé</th><th className="r">Montant</th><th className="r">Statut</th></tr></thead>
             <tbody>
               {list.map((r, i) => (
-                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : "emerald"}`}>{r.status}</span></td></tr>
+                <tr key={i}><td>{r.date}</td><td><span className="chip ink">{r.journal}</span></td><td style={{ fontVariantNumeric: "normal" }}>{r.label}</td><td className="r">{mc(r.amount, r)}</td><td className="r"><span className={`chip ${r.status === "Brouillon" ? "amber" : r.status === "Contre-passée" ? "ink" : "emerald"}`}>{r.status}</span></td></tr>
               ))}
-              {list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture réelle.</td></tr>}
+              {raw === null && <tr><td colSpan={5} className="muted">Chargement…</td></tr>}
+              {raw && list.length === 0 && <tr><td colSpan={5} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
+        {raw && list.length < total && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - list.length} restantes)`}</button>
+          </div>
+        )}
       </div>
     </>
   );
 }
+/* ── Saisie rapide (cartes de types → montant + devise → enregistrer) ──────
+   Affiche chaque type de transaction actif en carte. Un clic ouvre un mini-modal
+   qui demande seulement le montant et la devise : le débit/crédit vient du type. */
+function SaisieRapide({ save, busy, currencies = [], defaultCurrencyId = null, canMutate }) {
+  const [types, setTypes] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [picked, setPicked] = React.useState(null); // type choisi (ouvre le mini-modal)
+
+  React.useEffect(() => {
+    api.transactionTypes()
+      .then((list) => setTypes((Array.isArray(list) ? list : []).filter((t) => t.isActive)))
+      .catch((e) => { setError(String(e.message || e)); setTypes([]); });
+  }, []);
+
+  return (
+    <>
+      <PageHead eyebrow="Saisie · le plus rapide" title="Saisie rapide"
+        action="Rafraîchir" actionIcon="download"
+        onAction={() => { setTypes(null); api.transactionTypes().then((l) => setTypes((Array.isArray(l) ? l : []).filter((t) => t.isActive))).catch(() => setTypes([])); }} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      {!canMutate && <div className="card pad muted tiny" style={{ marginBottom: 12 }}>Lecture seule (données démo) — la saisie nécessite la connexion API.</div>}
+
+      {types === null
+        ? <div className="card pad muted">Chargement des types…</div>
+        : types.length === 0
+          ? <div className="card pad muted">Aucun type de transaction actif. Créez-en un dans « Types de transaction ».</div>
+          : (
+            <div className="qa-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+              {types.map((t) => (
+                <button key={t.id} type="button" className="card pad qa-card"
+                  disabled={!canMutate}
+                  onClick={() => setPicked(t)}
+                  style={{ textAlign: "left", cursor: canMutate ? "pointer" : "not-allowed", border: "1px solid var(--ink-100, #e7e5df)", display: "flex", flexDirection: "column", gap: 6, minHeight: 92 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="brand-icon grad-accent" style={{ width: 28, height: 28 }}><Icon name="wallet" /></span>
+                    <span style={{ fontWeight: 600, lineHeight: 1.2 }}>{t.name}</span>
+                  </span>
+                  <span className="tiny muted" style={{ lineHeight: 1.3 }}>
+                    {(t.debitAccount?.name || "—")} → {(t.creditAccount?.name || "—")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+      {picked && (
+        <QuickEntryModal
+          type={picked}
+          busy={busy}
+          currencies={currencies}
+          defaultCurrencyId={defaultCurrencyId}
+          onClose={() => setPicked(null)}
+          onSave={async (form) => {
+            await save("transaction", {
+              date: new Date().toISOString(),
+              debitId: picked.debitAccount?.id ?? picked.debitAccountId,
+              creditId: picked.creditAccount?.id ?? picked.creditAccountId,
+              particulars: form.particulars || picked.name,
+              amount: form.amount,
+              currencyId: form.currencyId,
+              type: picked.name,
+            });
+            setPicked(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* Mini-modal : montant + devise (+ note optionnelle) pour un type donné. */
+function QuickEntryModal({ type, busy, currencies = [], defaultCurrencyId, onClose, onSave }) {
+  const [amount, setAmount] = React.useState("");
+  const [currencyId, setCurrencyId] = React.useState(defaultCurrencyId ? String(defaultCurrencyId) : "");
+  const [particulars, setParticulars] = React.useState("");
+  const [err, setErr] = React.useState("");
+
+  const submit = (e) => {
+    e.preventDefault();
+    const amt = Number(amount);
+    if (!(amt > 0)) { setErr("Montant invalide."); return; }
+    if (!currencyId) { setErr("La devise est obligatoire."); return; }
+    onSave({ amount: amt, currencyId: Number(currencyId), particulars: particulars.trim() });
+  };
+
+  const curCodeSel = curCode(currencies, currencyId) || CUR;
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{type.name}</h2><p>Débit {type.debitAccount?.name || "—"} · Crédit {type.creditAccount?.name || "—"}</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="form-grid">
+          <label className="field"><span>Devise *</span>
+            <Autocomplete value={currencyId} allowClear={false} placeholder="Choisir la devise…"
+              options={(currencies || []).map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyName || c.currencyCode }))}
+              onChange={setCurrencyId} />
+          </label>
+          <label className="field"><span>{`Montant (${curCodeSel})`} *</span>
+            <input required type="number" min="0" step="any" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+          </label>
+          <label className="field"><span>Note (optionnel)</span>
+            <input type="text" value={particulars} onChange={(e) => setParticulars(e.target.value)} placeholder={type.name} />
+          </label>
+        </div>
+        {err && <div className="login-error">{err}</div>}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button>
+          <button type="submit" className="btn btn-accent grad-accent" disabled={busy || !currencyId}>{busy ? "Enregistrement…" : "Enregistrer"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 /* ── Types de transaction ──────────────────────────────────────────────── */
 function Types({ canMutate, accounts = [] }) {
   const [types, setTypes] = React.useState(null);
@@ -932,41 +1187,85 @@ function Approbations({ canMutate }) {
   );
 }
 
-function GrandLivre({ curFilter }) {
+function GrandLivre({ curFilter, dateRange }) {
   const [allEntries, setAllEntries] = React.useState(null); // null = chargement
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [reverseId, setReverseId] = React.useState(null); // id de l'écriture à contre-passer (ouvre le modal)
+  const [total, setTotal] = React.useState(0); // nb total d'écritures (côté serveur) pour « Afficher plus »
+  const [loading, setLoading] = React.useState(false);
+  const [q, setQ] = React.useState("");
+  const [module, setModule] = React.useState("");
+  const [statut, setStatut] = React.useState("");
+  const [minMt, setMinMt] = React.useState("");
+  const [maxMt, setMaxMt] = React.useState("");
+  const PAGE = 20;
 
-  const load = React.useCallback(async () => {
+  // Pagination + filtres CÔTÉ SERVEUR (SQL) : on ne charge que PAGE lignes à la fois,
+  // filtrées sur tout le dataset (pas seulement la page affichée).
+  const params = React.useMemo(() => ({
+    startDate: dateRange?.from || undefined,
+    endDate: dateRange?.to || undefined,
+    q: q.trim() || undefined,
+    currencyCode: curFilter || undefined,
+    sourceModule: module || undefined,
+    status: statut || undefined,
+    minAmount: minMt === "" ? undefined : Number(minMt),
+    maxAmount: maxMt === "" ? undefined : Number(maxMt),
+  }), [dateRange?.from, dateRange?.to, q, curFilter, module, statut, minMt, maxMt]);
+
+  // Récupère une page. reset=true remplace la liste (changement de filtre) ; sinon append.
+  const fetchPage = React.useCallback(async (offset, reset) => {
+    setLoading(true);
     try {
       setError("");
-      const rows = await api.ledgerEntries();
-      setAllEntries(Array.isArray(rows) ? rows : []);
+      const res = await api.ledgerEntries({ ...params, limit: PAGE, offset, paged: 1 });
+      const data = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setTotal(Number(res?.total ?? data.length));
+      setAllEntries((cur) => reset || cur === null ? data : [...cur, ...data]);
     } catch (e) {
       setError(String(e.message || e));
-      setAllEntries([]);
-    }
-  }, []);
-  React.useEffect(() => { load(); }, [load]);
+      if (reset) setAllEntries([]);
+    } finally { setLoading(false); }
+  }, [params]);
 
-  // Filtre devise global (SIFA — on restreint l'affichage, pas de conversion).
-  const entries = React.useMemo(() => {
-    if (allEntries === null) return null;
-    if (!curFilter) return allEntries;
-    return allEntries.filter((e) => String(e?.currencyId ?? "") === curFilter);
-  }, [allEntries, curFilter]);
+  // Rechargement (page 0) à chaque changement de filtre, avec un léger debounce pour la recherche.
+  React.useEffect(() => {
+    const t = setTimeout(() => fetchPage(0, true), 250);
+    return () => clearTimeout(t);
+  }, [fetchPage]);
 
-  const reverse = async (id) => {
-    const reason = window.prompt("Motif de la contre-passation ?");
-    if (!reason) return;
+  const load = React.useCallback(() => fetchPage(0, true), [fetchPage]);
+  const loadMore = () => fetchPage(allEntries?.length || 0, false);
+
+  const entries = allEntries; // déjà filtré/paginé côté serveur
+  const modules = React.useMemo(
+    () => Array.from(new Set((allEntries || []).map((e) => e.sourceModule).filter(Boolean))).sort(),
+    [allEntries]
+  );
+
+  const reverse = async ({ reason }) => {
+    if (!reason || !reverseId) return;
     setBusy(true);
-    try { await api.reverseEntry(id, reason); await load(); }
+    try {
+      const res = await api.reverseEntry(reverseId, reason);
+      // MAJ locale (pas de rechargement des ~1000 lignes → évite le freeze UI après submit) :
+      // l'écriture originale devient « contre-passée » (badge + bouton masqué). La ligne de
+      // contre-passation apparaîtra au prochain « Rafraîchir ».
+      const revId = res?.reversalEntryId ?? null;
+      setAllEntries((cur) => (cur || []).map((e) =>
+        e.id === reverseId ? { ...e, status: "reversed", reversedById: revId, reason } : e));
+      setReverseId(null);
+    }
     catch (e) { setError(String(e.message || e)); }
     finally { setBusy(false); }
   };
 
+  const hasFilter = !!(q.trim() || curFilter || module || statut || minMt !== "" || maxMt !== "");
+
   // Pas encore d'écriture moderne (ou API indispo) : ne pas afficher de démo comptable.
-  if (entries && entries.length === 0) {
+  // (Uniquement si AUCUN filtre actif : un filtre qui ne matche rien doit garder la barre de filtres.)
+  if (allEntries && allEntries.length === 0 && !hasFilter) {
     return (
       <>
         <PageHead eyebrow="Détail par compte" title="Grand livre" ghost />
@@ -982,7 +1281,26 @@ function GrandLivre({ curFilter }) {
       <PageHead eyebrow="Partie double · écritures réelles" title="Grand livre" action="Rafraîchir" actionIcon="download" onAction={load} ghost />
       {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
       <div className="card pad table-card">
-        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} écriture(s)` : "Chargement…"}</span></div>
+        <div className="section-head"><h3 className="font-display">Journal des écritures</h3><span className="tiny">{entries ? `${entries.length} / ${total} écriture(s)` : "Chargement…"}</span></div>
+        <div className="searchbar">
+          <label className="search-input" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Icon name="search" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un libellé, une pièce…"
+              style={{ border: "none", outline: "none", background: "transparent", flex: 1, font: "inherit", color: "inherit" }} />
+          </label>
+          <select className="select" value={module} onChange={(e) => setModule(e.target.value)}>
+            <option value="">Tous modules</option>
+            {modules.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select className="select" value={statut} onChange={(e) => setStatut(e.target.value)}>
+            <option value="">Tous statuts</option>
+            <option value="posted">posted</option>
+            <option value="pending">pending</option>
+            <option value="reversed">reversed (contre-passée)</option>
+          </select>
+          <input className="select" type="number" inputMode="decimal" value={minMt} onChange={(e) => setMinMt(e.target.value)} placeholder="Montant min" style={{ width: 120 }} />
+          <input className="select" type="number" inputMode="decimal" value={maxMt} onChange={(e) => setMaxMt(e.target.value)} placeholder="Montant max" style={{ width: 120 }} />
+        </div>
         <div className="tbl-scroll">
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th>Module</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th>Statut</th><th></th></tr></thead>
@@ -997,14 +1315,31 @@ function GrandLivre({ curFilter }) {
                   <td className="r pos">{fmt(e.totalDebit)}</td>
                   <td className="r neg">{fmt(e.totalCredit)}</td>
                   <td>{e.reversalOfId ? <span className="chip">contre-passation</span> : e.reversedById ? <span className="chip">contre-passée</span> : <span className="chip pos">{e.status}</span>}</td>
-                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => reverse(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
+                  <td className="r">{!e.reversalOfId && !e.reversedById && <button className="navlink" disabled={busy} onClick={() => setReverseId(e.id)} title="Contre-passer"><Icon name="gitCompare" /></button>}</td>
                 </tr>
               ))}
               {entries === null && <tr><td colSpan={9} className="muted">Chargement…</td></tr>}
+              {entries && entries.length === 0 && <tr><td colSpan={9} className="muted">Aucune écriture ne correspond aux filtres.</td></tr>}
             </tbody>
           </table>
         </div>
+        {entries && entries.length < total && (
+          <div className="section-head" style={{ justifyContent: "center", marginTop: 8 }}>
+            <button className="btn btn-ghost" disabled={loading} onClick={loadMore}>{loading ? "Chargement…" : `Afficher plus (${total - entries.length} restantes)`}</button>
+          </div>
+        )}
       </div>
+      {reverseId != null && (
+        <FormModal
+          title="Contre-passer l'écriture"
+          subtitle={`Pièce #${reverseId} · partie double`}
+          fields={[{ key: "reason", label: "Motif de la contre-passation", type: "textarea", required: true }]}
+          submitLabel="Contre-passer"
+          busy={busy}
+          onSubmit={reverse}
+          onClose={() => setReverseId(null)}
+        />
+      )}
     </>
   );
 }
@@ -1016,6 +1351,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
   const liabCur = balanceSheet?.liabilitiesByCurrency || [];
   const revCur = incomeStatement?.revenueByCurrency || [];
   const expCur = incomeStatement?.expenseByCurrency || incomeStatement?.expensesByCurrency || [];
+  const page = usePaginated(accounts || [], 20, (accounts || []).length);
   return (
     <>
       <PageHead eyebrow="SYSCOHADA · OHADA" title="Plan comptable" action="Nouveau compte" onAction={onNew} disabled={!canMutate} />
@@ -1030,7 +1366,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
           <table className="tbl num" style={{ minWidth: 560 }}>
             <thead><tr><th>Compte</th><th>Intitulé</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
             <tbody>
-              {(accounts || []).map((a) => (
+              {page.shown.map((a) => (
                 <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{a.code || a.id}</td><td style={{ fontVariantNumeric: "normal" }}>{accountLabel(a)}</td><td><span className="chip ink">{accountType(a)}</span></td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${Number(a.balance || 0) >= 0 ? "pos" : "neg"}`}>{mc(Number(a.balance || 0), a)}</td></tr>
               ))}
               {(!accounts || accounts.length === 0) && <tr><td colSpan={5} className="muted">Aucun sous-compte réel disponible.</td></tr>}
@@ -1043,6 +1379,7 @@ function Plan({ accounts, trialBalance, incomeStatement, balanceSheet, canMutate
             </tfoot>
           </table>
         </div>
+        <ShowMore page={page} />
         <p className="tiny" style={{ marginTop: 10 }}>{accounts?.length || 0} ligne(s) (sous-compte × devise) connectées à l'API.</p>
       </div>
     </>
@@ -1104,6 +1441,7 @@ function Tiers({ accounts = [] }) {
   const receivables = accounts.filter(isReceivableAccount);
   const payables = accounts.filter(isPayableAccount);
   const rows = [...receivables.map((a) => ({ ...a, family: "Créance" })), ...payables.map((a) => ({ ...a, family: "Dette" }))];
+  const page = usePaginated(rows, 20, rows.length);
   // Totaux par devise (SIFA) : créances = soldes débiteurs, dettes = soldes créditeurs.
   const receivableByCur = accBalByCur(receivables, (a) => Math.max(0, balanceOf(a)));
   const payableByCur = accBalByCur(payables, (a) => Math.abs(Math.min(0, balanceOf(a))));
@@ -1122,9 +1460,10 @@ function Tiers({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 620 }}>
               <thead><tr><th>Compte</th><th>Famille</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.family}-${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td><span className="chip ink">{a.family}</span></td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -1357,6 +1696,7 @@ function ExchangeModal({ accounts, currencies, exchanges, busy, error, onSave, o
 function Tresorerie({ accounts = [] }) {
   const rows = accounts.filter(isTreasuryAccount);
   const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
   if (rows.length) {
     return (
       <>
@@ -1371,9 +1711,10 @@ function Tresorerie({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Débit</th><th className="r">Crédit</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className="r pos">{nf.format(Number(a.totalDebit || 0))}</td><td className="r neg">{nf.format(Number(a.totalCredit || 0))}</td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -1390,6 +1731,7 @@ function Tresorerie({ accounts = [] }) {
 function Immo({ accounts = [] }) {
   const rows = accounts.filter((a) => accountType(a) === "Asset" && isFixedAssetAccount(a) && !isTreasuryAccount(a));
   const totalByCur = accBalByCur(rows);
+  const page = usePaginated(rows, 20, rows.length);
   if (rows.length) {
     return (
       <>
@@ -1404,9 +1746,10 @@ function Immo({ accounts = [] }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -1468,7 +1811,7 @@ function Analytique() {
     const budgetAmount = form.budget ? Number(String(form.budget).replace(/\s/g, "")) : undefined;
     setBusy(true);
     try {
-      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount });
+      await api.createProject({ name: form.name, donor: form.donor || undefined, budgetAmount, currencyId: form.currencyId ? Number(form.currencyId) : undefined });
       setShowNew(false);
       await load();
     } catch (e) { setError(String(e.message || e)); }
@@ -1483,6 +1826,7 @@ function Analytique() {
         name: form.name,
         donor: form.donor || null,
         budgetAmount: form.budget ? Number(String(form.budget).replace(/\s/g, "")) : null,
+        currencyId: form.currencyId ? Number(form.currencyId) : undefined,
       });
       setEdit(null);
       await load();
@@ -1516,8 +1860,7 @@ function Analytique() {
     finally { setBusy(false); }
   };
 
-  const curField = { key: "currencyId", label: "Devise", type: "select", required: true,
-    options: currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: c.code || c.name || c.symbol || String(c.currencyId ?? c.id) })), default: defCur };
+  const curOptions = currencies.map((c) => ({ value: String(c.currencyId ?? c.id), label: cleanCurrencySymbol(c) || c.currencyCode || c.currencyName || String(c.currencyId ?? c.id) }));
 
   const projectModal = showNew && (
     <FormModal
@@ -1530,7 +1873,8 @@ function Analytique() {
       fields={[
         { key: "name", label: "Nom du projet", required: true },
         { key: "donor", label: "Financeur (optionnel)" },
-        { key: "budget", label: "Budget (optionnel)", type: "number" },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curOptions: curOptions, curDefault: defCur },
       ]}
     />
   );
@@ -1545,7 +1889,9 @@ function Analytique() {
       fields={[
         { key: "name", label: "Nom du projet", required: true, default: edit.name || "" },
         { key: "donor", label: "Financeur (optionnel)", default: edit.donor || "" },
-        { key: "budget", label: "Budget (optionnel)", type: "number", default: edit.budgetAmount != null ? String(edit.budgetAmount) : "" },
+        { key: "budget", label: "Budget (optionnel)", type: "money", placeholder: "ex. 480 000 000",
+          default: edit.budgetAmount != null ? String(edit.budgetAmount) : "",
+          curKey: "currencyId", curOptions: curOptions, curDefault: edit.currencyId != null ? String(edit.currencyId) : defCur },
       ]}
     />
   );
@@ -1560,8 +1906,8 @@ function Analytique() {
       fields={[
         { key: "date", label: "Date", type: "date", default: new Date().toISOString().slice(0, 10), required: true },
         { key: "particulars", label: "Libellé", default: "" },
-        { key: "amount", label: "Montant", type: "number", required: true },
-        curField,
+        { key: "amount", label: "Montant", type: "money", required: true, placeholder: "ex. 480 000 000",
+          curKey: "currencyId", curRequired: true, curOptions: curOptions, default: "", curDefault: defCur },
         { key: "expenseId", label: "Compte de charge (débit)", type: "select", required: true,
           options: expenseAccounts.map((a) => ({ value: String(a.id), label: accountLabel(a) })) },
         { key: "creditId", label: "Payé depuis (caisse/banque)", type: "select", required: true,
@@ -1599,7 +1945,15 @@ function Analytique() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}><span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>{r && r.consumptionPct != null && <span className={`chip ${warn ? "" : "emerald"}`} style={warn ? { background: "var(--rose-50)", color: "var(--rose-600)" } : undefined}>{pct} %</span>}</div>
               <div className="tiny" style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>Financeur : {p.donor || "—"}</div>
               {r && r.budget ? <div className="bar"><span style={{ width: `${Math.min(100, pct)}%`, background: warn ? "var(--rose-500)" : undefined }} /></div> : null}
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }} className="tiny num"><span>Dépensé {nf.format(r ? r.totalExpenses : 0)}</span><span>Budget {r && r.budget ? nf.format(r.budget) : "—"}</span></div>
+              {/* SIFA : depense ventilee par devise (jamais d'addition inter-devises). */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 8, gap: 8 }} className="tiny num">
+                <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {(r && r.byCurrency && r.byCurrency.length)
+                    ? r.byCurrency.filter((b) => b.totalExpenses).map((b) => <span key={b.currencyId ?? "x"}>Dépensé {nf.format(b.totalExpenses)} {b.currencyCode || curCode(currencies, b.currencyId) || CUR}</span>)
+                    : <span>Dépensé 0 {curCode(currencies, p.currencyId) || CUR}</span>}
+                </span>
+                <span>Budget {r && r.budget ? `${nf.format(r.budget)} ${curCode(currencies, p.currencyId) || CUR}` : "—"}</span>
+              </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <button type="button" className="btn btn-ghost tiny" style={{ flex: 1 }} onClick={() => setEdit(p)}>Modifier</button>
                 <button type="button" className="btn btn-accent grad-accent tiny" style={{ flex: 1 }} onClick={() => setExpense(p)}>+ Dépense</button>
@@ -1611,12 +1965,17 @@ function Analytique() {
       <div className="card pad table-card tbl-scroll">
         <h3 className="block-title font-display">Produits & charges par projet</h3>
         <table className="tbl num" style={{ minWidth: 560 }}>
-          <thead><tr><th>Projet (financeur)</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
+          <thead><tr><th>Projet (financeur)</th><th className="r">Devise</th><th className="r">Produits</th><th className="r">Charges</th><th className="r">Solde</th></tr></thead>
           <tbody>
-            {(projects || []).map((p) => {
+            {/* SIFA : une ligne par (projet, devise) — aucun melange inter-devises. */}
+            {(projects || []).flatMap((p) => {
               const r = reports[p.id];
-              const prod = r ? r.totalRevenue : 0, charge = r ? r.totalExpenses : 0, solde = r ? r.net : 0;
-              return <tr key={p.id}><td style={{ fontWeight: 500 }}>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+              const cur = (r && r.byCurrency && r.byCurrency.length) ? r.byCurrency : [{ currencyId: p.currencyId, currencyCode: curCode(currencies, p.currencyId), totalRevenue: 0, totalExpenses: 0, net: 0 }];
+              return cur.map((b, i) => {
+                const prod = b.totalRevenue || 0, charge = b.totalExpenses || 0, solde = b.net || 0;
+                const code = b.currencyCode || curCode(currencies, b.currencyId) || CUR;
+                return <tr key={`${p.id}-${b.currencyId ?? i}`}><td style={{ fontWeight: 500 }}>{i === 0 ? <>{p.name}{p.donor ? <span className="muted"> · {p.donor}</span> : null}</> : ""}</td><td className="r"><span className="chip">{code}</span></td><td className="r pos">{prod ? nf.format(prod) : <span className="muted">—</span>}</td><td className="r neg">{nf.format(charge)}</td><td className="r" style={{ fontWeight: 600, color: solde < 0 ? "var(--rose-600)" : undefined }}>{signed(solde)}</td></tr>;
+              });
             })}
           </tbody>
         </table>
@@ -1793,6 +2152,182 @@ function Capacite({ accounts = [] }) {
   );
 }
 
+/* ── Fournisseurs (référentiel central des tiers, partagé BâtiPro/Domus/FarmOS) ── */
+const PARTY_TYPES = [
+  { id: "company", label: "Entreprise" },
+  { id: "individual", label: "Personne" },
+];
+const SUPPLIER_TYPES = [
+  { id: "general", label: "Général" },
+  { id: "construction", label: "Construction (BâtiPro)" },
+  { id: "real_estate", label: "Immobilier (Domus)" },
+  { id: "farm", label: "Ferme (FarmOS)" },
+  { id: "factory", label: "Usine" },
+];
+const partyLabel = (v) => PARTY_TYPES.find((p) => p.id === v)?.label || "Entreprise";
+const supplierTypeLabel = (v) => SUPPLIER_TYPES.find((s) => s.id === v)?.label || "Général";
+
+function Fournisseurs({ canMutate }) {
+  const [rows, setRows] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [editing, setEditing] = React.useState(null); // objet fournisseur (ou {} pour nouveau)
+  const [search, setSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try {
+      setError("");
+      const list = await api.suppliers();
+      const arr = Array.isArray(list) ? list : (list?.getAllSupplier || list?.data || []);
+      setRows(Array.isArray(arr) ? arr : []);
+    } catch (e) { setError(String(e.message || e)); setRows([]); }
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const toggleStatus = async (s) => {
+    const next = String(s.status) === "true" ? "false" : "true";
+    if (next === "false" && !window.confirm(`Désactiver le fournisseur « ${s.name} » ?`)) return;
+    try { await api.setSupplierStatus(s.id, next); await load(); }
+    catch (e) { setError(String(e.message || e)); }
+  };
+
+  const filtered = (rows || []).filter((s) => {
+    if (typeFilter && s.supplierType !== typeFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return [s.name, s.phone, s.email, s.contactPerson, s.rccm, s.nationalId].some((v) => String(v || "").toLowerCase().includes(q));
+  });
+  const active = (rows || []).filter((s) => String(s.status) === "true");
+  const companies = active.filter((s) => (s.partyType || "company") === "company").length;
+  const persons = active.length - companies;
+  const page = usePaginated(filtered, 20, filtered.length);
+
+  return (
+    <>
+      <PageHead eyebrow="Référentiel central · partagé entre apps" title="Fournisseurs"
+        action={canMutate ? "Nouveau fournisseur" : "Rafraîchir"} actionIcon={canMutate ? "plus" : "download"}
+        onAction={canMutate ? () => setEditing({}) : load} />
+      {error && <div className="card pad" style={{ marginBottom: 12, color: "var(--rose-600)" }}>{error}</div>}
+      <div className="g4 kpis" style={{ marginBottom: 18 }}>
+        <Mini label="Fournisseurs actifs" value={active.length} />
+        <Mini label="Entreprises" value={companies} />
+        <Mini label="Personnes" value={persons} />
+        <Mini label="Total (avec inactifs)" value={(rows || []).length} />
+      </div>
+      <div className="card pad" style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <input className="input" style={{ flex: 1, minWidth: 200 }} placeholder="Rechercher (nom, téléphone, contact, RCCM…)" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select className="select" style={{ height: 36 }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <option value="">Tous les domaines</option>
+          {SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </div>
+      <div className="card pad table-card">
+        <div className="section-head"><h3 className="font-display">Liste des fournisseurs</h3><span className="tiny">{rows ? `${filtered.length} fournisseur(s)` : "Chargement…"}</span></div>
+        <div className="tbl-scroll">
+          <table className="tbl" style={{ minWidth: 820 }}>
+            <thead><tr><th>Nom</th><th>Type</th><th>Domaine</th><th>Contact</th><th>Téléphone</th><th>Pièces légales</th><th className="r">Action</th></tr></thead>
+            <tbody>
+              {page.shown.map((s) => {
+                const inactive = String(s.status) !== "true";
+                const isCompany = (s.partyType || "company") === "company";
+                return (
+                  <tr key={s.id} style={inactive ? { opacity: 0.5 } : undefined}>
+                    <td style={{ fontWeight: 500 }}>{s.name}{inactive && <span className="chip" style={{ marginLeft: 6 }}>inactif</span>}</td>
+                    <td><span className="chip">{isCompany ? "🏢 Entreprise" : "👤 Personne"}</span></td>
+                    <td className="muted">{supplierTypeLabel(s.supplierType)}</td>
+                    <td className="muted">{s.contactPerson || (isCompany ? "—" : s.name)}</td>
+                    <td className="muted">{s.phone || "—"}</td>
+                    <td className="tiny muted">{isCompany ? (s.rccm ? `RCCM ${s.rccm}` : "—") : (s.nationalId ? `ID ${s.nationalId}` : "—")}{s.taxId ? ` · NIF ${s.taxId}` : ""}</td>
+                    <td className="r" style={{ whiteSpace: "nowrap" }}>
+                      {canMutate && <button className="btn-sm" onClick={() => setEditing(s)}>Modifier</button>}
+                      {canMutate && <button className="btn-sm" style={{ marginLeft: 6 }} onClick={() => toggleStatus(s)}>{inactive ? "Activer" : "Désactiver"}</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows && !filtered.length && <tr><td colSpan={7} className="muted" style={{ textAlign: "center", padding: 24 }}>Aucun fournisseur.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <ShowMore page={page} />
+      </div>
+      {editing && <SupplierModal initial={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+    </>
+  );
+}
+
+function SupplierModal({ initial, onClose, onSaved }) {
+  const [f, setF] = React.useState({
+    name: initial.name || "", partyType: initial.partyType || "company", supplierType: initial.supplierType || "general",
+    phone: initial.phone || "", email: initial.email || "", address: initial.address || "",
+    contactPerson: initial.contactPerson || "", rccm: initial.rccm || "", nationalId: initial.nationalId || "",
+    taxId: initial.taxId || "", paymentTerms: initial.paymentTerms || "", notes: initial.notes || "",
+  });
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const isCompany = f.partyType === "company";
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!f.name.trim()) { setError("Le nom est requis."); return; }
+    if (!f.phone.trim()) { setError("Le téléphone est requis."); return; }
+    setBusy(true); setError("");
+    // n'envoie que les champs renseignés (les optionnels vides → non transmis)
+    const body = { name: f.name.trim(), partyType: f.partyType, supplierType: f.supplierType, phone: f.phone.trim() };
+    ["email", "address", "contactPerson", "rccm", "nationalId", "taxId", "paymentTerms", "notes"].forEach((k) => { if (f[k]?.trim()) body[k] = f[k].trim(); });
+    try {
+      if (initial.id) await api.updateSupplier(initial.id, body);
+      else await api.createSupplier(body);
+      await onSaved();
+    } catch (e2) { setError(String(e2.message || e2)); setBusy(false); }
+  };
+
+  const Field = ({ label, children }) => <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)" }}>{label}<div style={{ marginTop: 4 }}>{children}</div></label>;
+
+  return (
+    <div className="modal-scrim" role="dialog" aria-modal="true">
+      <form className="modal-card" style={{ maxWidth: 640 }} onSubmit={submit}>
+        <div className="modal-head">
+          <div><h2 className="font-display">{initial.id ? "Modifier le fournisseur" : "Nouveau fournisseur"}</h2><p>Référentiel central · réutilisé par BâtiPro, Domus, FarmOS</p></div>
+          <button type="button" className="icon-btn" onClick={onClose}><Icon name="x" /></button>
+        </div>
+        <div className="modal-body" style={{ display: "grid", gap: 12 }}>
+          <Field label="Type de tiers">
+            <div className="segtabs">
+              {PARTY_TYPES.map((p) => <button key={p.id} type="button" className={`segtab ${f.partyType === p.id ? "active grad-accent" : ""}`} onClick={() => set("partyType", p.id)}>{p.id === "company" ? "🏢 " : "👤 "}{p.label}</button>)}
+            </div>
+          </Field>
+          <Field label={isCompany ? "Nom de l'entreprise" : "Nom complet"}>
+            <input className="input" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={isCompany ? "Ex : SARL Kintambo Matériaux" : "Ex : Jean Mukendi"} autoFocus />
+          </Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Domaine"><select className="select" value={f.supplierType} onChange={(e) => set("supplierType", e.target.value)}>{SUPPLIER_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field>
+            <Field label="Téléphone"><input className="input" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+243…" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="E-mail"><input className="input" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="contact@…" /></Field>
+            <Field label={isCompany ? "Personne de contact" : "Téléphone secondaire (optionnel)"}><input className="input" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} placeholder={isCompany ? "Nom du contact" : "—"} /></Field>
+          </div>
+          <Field label="Adresse"><input className="input" value={f.address} onChange={(e) => set("address", e.target.value)} placeholder="Quartier, commune, ville" /></Field>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {isCompany
+              ? <Field label="RCCM"><input className="input" value={f.rccm} onChange={(e) => set("rccm", e.target.value)} placeholder="CD/KIN/RCCM/…" /></Field>
+              : <Field label="ID national"><input className="input" value={f.nationalId} onChange={(e) => set("nationalId", e.target.value)} placeholder="N° pièce d'identité" /></Field>}
+            <Field label="NIF (n° impôt)"><input className="input" value={f.taxId} onChange={(e) => set("taxId", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Conditions de paiement"><input className="input" value={f.paymentTerms} onChange={(e) => set("paymentTerms", e.target.value)} placeholder="Ex : 30 jours, comptant" /></Field>
+            <Field label="Notes"><input className="input" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optionnel" /></Field>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+        </div>
+        <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={onClose}>Annuler</button><button className="btn btn-accent grad-accent" disabled={busy}>{busy ? "…" : "Enregistrer"}</button></div>
+      </form>
+    </div>
+  );
+}
+
 /* ── Achats / Factures fournisseurs ────────────────────────────────────── */
 function Achats({ canMutate }) {
   const [rows, setRows] = React.useState(null);
@@ -1837,6 +2372,7 @@ function Achats({ canMutate }) {
   const amountByCur = invByCur((r) => r.totalAmount);
   const paidByCur = invByCur((r) => r.paidAmount ?? (Number(r.totalAmount || 0) - Number(r.dueAmount || 0)));
   const dueByCur = invByCur((r) => r.dueAmount);
+  const page = usePaginated(rows || [], 20, (rows || []).length);
 
   return (
     <>
@@ -1854,7 +2390,7 @@ function Achats({ canMutate }) {
           <table className="tbl num" style={{ minWidth: 720 }}>
             <thead><tr><th>Date</th><th>Pièce</th><th>Fournisseur</th><th>Devise</th><th className="r">Total</th><th className="r">Reste dû</th><th className="r">Action</th></tr></thead>
             <tbody>
-              {(rows || []).map((r) => (
+              {page.shown.map((r) => (
                 <tr key={r.id}>
                   <td>{String(r.date || "").slice(0, 10)}</td>
                   <td className="muted">{r.invoiceMemoNo || `#${r.id}`}</td>
@@ -1874,6 +2410,7 @@ function Achats({ canMutate }) {
             </tbody>
           </table>
         </div>
+        <ShowMore page={page} />
         <p className="tiny muted" style={{ marginTop: 10 }}>Module gaté (sourceModule « purchase ») : l'approbation déclenche la comptabilisation de l'écriture différée via le workflow.</p>
       </div>
     </>
@@ -1993,31 +2530,23 @@ function Stock() {
 }
 
 /* ── États financiers ──────────────────────────────────────────────────── */
-function Etats({ is, bs, curFilter = "" }) {
+function Etats({ is, bs, tb, curFilter = "" }) {
   const [tab, setTab] = React.useState("resultat");
   const tabs = [["resultat", "Compte de résultat"], ["bilan", "Bilan"], ["balance", "Balance"], ["flux", "Flux de trésorerie"]];
   // États réels depuis le grand livre moderne.
-  const [rawIs, setRawIs] = React.useState(null);
-  const [rawBs, setRawBs] = React.useState(null);
-  const [rawTb, setRawTb] = React.useState(null);
-  React.useEffect(() => {
-    api.ledgerIncomeStatement().then(setRawIs).catch(() => setRawIs(null));
-    api.ledgerBalanceSheet().then(setRawBs).catch(() => setRawBs(null));
-    api.ledgerTrialBalance().then(setRawTb).catch(() => setRawTb(null));
-  }, []);
   // Filtre devise global (SIFA, sans conversion) : on restreint chaque liste du rapport
   // — lignes ET totaux *ByCurrency — à la devise choisie. Les scalaires (totaux toutes
   // devises confondues) ne sont plus fiables en mono-devise → recalculés depuis les byCurrency.
   const filterReport = React.useCallback((rep) => {
     if (!rep || !curFilter) return rep;
-    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyId ?? "") === curFilter) : l);
+    const keep = (l) => (Array.isArray(l) ? l.filter((row) => String(row?.currencyCode ?? "") === curFilter) : l);
     const out = { ...rep };
     Object.keys(out).forEach((k) => { if (Array.isArray(out[k])) out[k] = keep(out[k]); });
     return out;
   }, [curFilter]);
-  const liveIs = React.useMemo(() => filterReport(rawIs), [rawIs, filterReport]);
-  const liveBs = React.useMemo(() => filterReport(rawBs), [rawBs, filterReport]);
-  const liveTb = React.useMemo(() => filterReport(rawTb), [rawTb, filterReport]);
+  const liveIs = React.useMemo(() => filterReport(is), [is, filterReport]);
+  const liveBs = React.useMemo(() => filterReport(bs), [bs, filterReport]);
+  const liveTb = React.useMemo(() => filterReport(tb), [tb, filterReport]);
   const hasLiveIs = liveIs && (liveIs.revenue?.length || liveIs.expenses?.length);
   const hasLiveBs = liveBs && (liveBs.assets?.length || liveBs.liabilities?.length || liveBs.equity?.length);
   const hasLiveTb = liveTb && ((liveTb.debits?.length || 0) + (liveTb.credits?.length || 0) > 0);
@@ -2152,6 +2681,7 @@ function Etats({ is, bs, curFilter = "" }) {
 /* ── TVA ───────────────────────────────────────────────────────────────── */
 function Tva({ accounts = [], canMutate = true }) {
   const rows = accounts.filter(isTaxAccount);
+  const page = usePaginated(rows, 20, rows.length);
   // Par devise (SIFA) : déductible = soldes débiteurs, collectée = soldes créditeurs.
   const deductibleByCur = accBalByCur(rows, (a) => Math.max(0, balanceOf(a)));
   const collectedByCur = accBalByCur(rows, (a) => Math.abs(Math.min(0, balanceOf(a))));
@@ -2213,9 +2743,10 @@ function Tva({ accounts = [], canMutate = true }) {
           <div className="tbl-scroll">
             <table className="tbl num" style={{ minWidth: 560 }}>
               <thead><tr><th>Compte</th><th>Type</th><th>Devise</th><th className="r">Solde</th></tr></thead>
-              <tbody>{rows.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
+              <tbody>{page.shown.map((a) => <tr key={`${a.id}-${a.currencyId ?? "x"}`}><td style={{ fontWeight: 500 }}>{accountLabel(a)}</td><td>{accountType(a)}</td><td><span className="chip">{a.currencyCode || "—"}</span></td><td className={`r ${balanceOf(a) >= 0 ? "pos" : "neg"}`}>{mc(balanceOf(a), a)}</td></tr>)}</tbody>
             </table>
           </div>
+          <ShowMore page={page} />
         </div>
       </>
     );
@@ -2279,7 +2810,14 @@ function FSelect({ label, value, onChange, rows }) {
 
 /* Modal générique (remplace window.prompt) : titre + champs configurables. */
 function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy, onSubmit, onClose }) {
-  const [form, setForm] = React.useState(() => Object.fromEntries(fields.map((f) => [f.key, f.default ?? ""])));
+  const [form, setForm] = React.useState(() => {
+    const init = {};
+    for (const f of fields) {
+      init[f.key] = f.default ?? "";
+      if (f.type === "money" && f.curKey) init[f.curKey] = f.curDefault ?? "";
+    }
+    return init;
+  });
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const submit = (e) => {
     e.preventDefault();
@@ -2293,6 +2831,8 @@ function FormModal({ title, subtitle, fields, submitLabel = "Enregistrer", busy,
         <div className="form-grid">
           {fields.map((f) => f.type === "textarea"
             ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><textarea rows={3} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /></label>
+            : f.type === "money"
+            ? <label className="field" key={f.key} style={{ gridColumn: "1 / -1" }}><span>{f.label}</span><div className="money-row"><input type="number" placeholder={f.placeholder} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required} /><select value={form[f.curKey]} onChange={(e) => set(f.curKey, e.target.value)} required={f.curRequired}>{(f.curOptions || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div></label>
             : f.type === "select"
             ? <label className="field" key={f.key}><span>{f.label}</span><select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required={f.required}><option value="">—</option>{(f.options || []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>
             : <FField key={f.key} label={f.label} type={f.type || "text"} value={form[f.key]} onChange={(v) => set(f.key, v)} required={f.required} />)}

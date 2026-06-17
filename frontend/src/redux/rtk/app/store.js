@@ -59,6 +59,8 @@ import supplierPaymentReducer from "../features/supplierPayment/supplierPaymentS
 import termsAndConditionSlice from "../features/termsAndCondition/termsAndConditionSlice";
 import transactionReducer from "../features/transaction/transactionSlice";
 import transactionTypeReducer from "../features/transactionType/transactionTypeSlice";
+import projectReducer from "../features/project/projectSlice";
+import quoteReducer from "../features/quote/quoteSlice";
 import uomSlice from "../features/uom/uomSlice";
 import userReducer from "../features/user/userSlice";
 import vatTaxSlice from "../features/vatTax/vatTaxSlice";
@@ -76,6 +78,7 @@ const store = configureStore({
     purchaseOrder: purchaseOrderSlice,
     customers: customerReducer,
     sales: saleReducer,
+    quotes: quoteReducer,
     saleReturn: SaleReturnListSlice,
     adjustInventory: adjustInventorySlice,
     users: userReducer,
@@ -84,6 +87,7 @@ const store = configureStore({
     dashboard: dashboardReducer,
     transactions: transactionReducer,
     transactionTypes: transactionTypeReducer,
+    project: projectReducer,
     propertyManagement: propertyManagementSlice,
     productCategories: productCategoryReducer,
     productSubCategories: productSubCategoryReducer,

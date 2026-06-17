@@ -73,6 +73,7 @@ function App() {
   const routeMeta = {
     dashboard:  { title: t(lang, "dashboard"),  subtitle: lang === "fr" ? "Aperçu global de la ferme" : "Farm-wide overview", breadcrumb: lang === "fr" ? "FERME BELLEVUE · TABLEAU DE BORD" : "BELLEVUE FARM · DASHBOARD" },
     identification: { title: lang === "fr" ? "Identification" : "Identification", subtitle: lang === "fr" ? "Scanner sur le terrain" : "Field scanner", breadcrumb: lang === "fr" ? "FERME · IDENTIFICATION" : "FARM · IDENTIFICATION" },
+    buildings:  { title: t(lang, "buildings"),  subtitle: lang === "fr" ? "Plan & organisation spatiale" : "Layout & spatial organization", breadcrumb: lang === "fr" ? "FERME · BÂTIMENTS" : "FARM · BUILDINGS" },
     animals:    { title: t(lang, "animals"),    subtitle: lang === "fr" ? "Cheptel & fiches" : "Herd & records",              breadcrumb: lang === "fr" ? "FERME · ANIMAUX" : "FARM · ANIMALS" },
     health:     { title: t(lang, "health"),     subtitle: lang === "fr" ? "Traitements & vétérinaire" : "Treatments & vet",   breadcrumb: lang === "fr" ? "FERME · SANTÉ" : "FARM · HEALTH" },
     calendar:   { title: t(lang, "calendar"),   subtitle: lang === "fr" ? "Vaccination & rappels" : "Vaccines & reminders",   breadcrumb: lang === "fr" ? "FERME · CALENDRIER" : "FARM · CALENDAR" },
@@ -93,6 +94,7 @@ function App() {
     switch (route) {
       case "dashboard":  return <Dashboard {...props}/>;
       case "identification": return <Identification {...props}/>;
+      case "buildings":  return <BuildingsScreen lang={lang}/>;
       case "animals":    return <Animals {...props}/>;
       case "health":     return <HealthScreen {...props}/>;
       case "calendar":   return <CalendarScreen {...props}/>;
@@ -380,6 +382,7 @@ const FarmTweaks = ({ tweaks, setTweak }) => (
         {[
           { id: "dashboard", fr: "Tableau de bord", en: "Dashboard" },
           { id: "identification", fr: "Identification", en: "Identification" },
+          { id: "buildings", fr: "Bâtiments", en: "Buildings" },
           { id: "animals", fr: "Animaux", en: "Animals" },
           { id: "health", fr: "Santé", en: "Health" },
           { id: "calendar", fr: "Calendrier", en: "Calendar" },

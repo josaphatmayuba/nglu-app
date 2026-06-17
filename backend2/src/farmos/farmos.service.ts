@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -558,6 +558,7 @@ export class FarmosService {
       unit: input.unit ?? null,
       minQuantity: input.min_quantity != null ? String(input.min_quantity) : null,
       supplier: input.supplier ?? null,
+      supplierId: input.supplier_id ?? null,
       expiryDate: input.expiry_date ?? null,
       notes: input.notes ?? null,
       species: Array.isArray(input.species) && input.species.length ? input.species : null,
@@ -576,6 +577,7 @@ export class FarmosService {
     if (input.unit !== undefined) patch.unit = input.unit;
     if (input.min_quantity !== undefined) patch.minQuantity = input.min_quantity != null ? String(input.min_quantity) : null;
     if (input.supplier !== undefined) patch.supplier = input.supplier;
+    if (input.supplier_id !== undefined) patch.supplierId = input.supplier_id;
     if (input.expiry_date !== undefined) patch.expiryDate = input.expiry_date;
     if (input.notes !== undefined) patch.notes = input.notes;
     if (input.species !== undefined) patch.species = Array.isArray(input.species) && input.species.length ? input.species : null;
@@ -1712,17 +1714,103 @@ export class FarmosService {
     return { message: "Document supprimé." };
   }
 
+  // ─── Zones FarmOS ─────────────────────────────────────────────────────────
+  async listFarms(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosFarms)
+      .where(and(eq(farmosFarms.organizationId, orgId), eq(farmosFarms.isActive, 1)))
+      .orderBy(farmosFarms.name);
+  }
+
+  async createFarm(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosFarms).values({
+      organizationId: orgId,
+      name: input.name,
+      location: input.location ?? null,
+      hectares: input.hectares != null ? String(input.hectares) : null,
+      status: input.status ?? "active",
+      description: input.description ?? null,
+    } as any).$returningId();
+    return { id: res.id };
+  }
+
+  async updateFarm(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosFarms.id }).from(farmosFarms)
+      .where(and(eq(farmosFarms.id, id), eq(farmosFarms.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Farm not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.location !== undefined) patch.location = input.location;
+    if (input.hectares !== undefined) patch.hectares = input.hectares != null ? String(input.hectares) : null;
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.description !== undefined) patch.description = input.description;
+    if (Object.keys(patch).length) await this.db.update(farmosFarms).set(patch).where(eq(farmosFarms.id, id));
+    return { id };
+  }
+
+  async deleteFarm(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosFarms.id }).from(farmosFarms)
+      .where(and(eq(farmosFarms.id, id), eq(farmosFarms.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Farm not found.");
+    await this.db.update(farmosFarms).set({ isActive: 0 } as any).where(eq(farmosFarms.id, id));
+    return { ok: true };
+  }
+
+  async listZones(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosZones)
+      .where(and(eq(farmosZones.organizationId, orgId), eq(farmosZones.isActive, 1)))
+      .orderBy(farmosZones.name);
+  }
+
+  async createZone(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosZones).values({
+      organizationId: orgId,
+      farmId: input.farm_id ?? input.farmId ?? null,
+      name: input.name,
+      description: input.description ?? null,
+    } as any).$returningId();
+    return { id: res.id };
+  }
+
+  async updateZone(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosZones.id }).from(farmosZones)
+      .where(and(eq(farmosZones.id, id), eq(farmosZones.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Zone not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.farm_id !== undefined || input.farmId !== undefined) patch.farmId = input.farm_id ?? input.farmId ?? null;
+    if (Object.keys(patch).length) await this.db.update(farmosZones).set(patch).where(eq(farmosZones.id, id));
+    return { id };
+  }
+
+  async deleteZone(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosZones.id }).from(farmosZones)
+      .where(and(eq(farmosZones.id, id), eq(farmosZones.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Zone not found.");
+    await this.db.update(farmosZones).set({ isActive: 0 } as any).where(eq(farmosZones.id, id));
+    return { ok: true };
+  }
+
   // ─── Bâtiments FarmOS — occupation calculée depuis animals.barn (par nom) ─────
-  async listBuildings(orgId: number, species?: string | null) {
+  async listBuildings(orgId: number, species?: string | null, zoneId?: number | null) {
     const conds = [eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)];
     if (species) conds.push(eq(farmosBuildings.species, species));
-    const [buildings, animals] = await Promise.all([
+    if (zoneId) conds.push(eq(farmosBuildings.zoneId, zoneId));
+    const [buildings, animals, zones] = await Promise.all([
       this.db.select().from(farmosBuildings).where(and(...conds)).orderBy(farmosBuildings.name),
       this.db
         .select({ barn: farmosAnimals.barn, count: farmosAnimals.count })
         .from(farmosAnimals)
         .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+      this.db.select().from(farmosZones).where(and(eq(farmosZones.organizationId, orgId), eq(farmosZones.isActive, 1))),
     ]);
+    const zoneById = new Map(zones.map((z) => [z.id, z]));
     // Occupation = somme des count (ou 1 par tête) des animaux dont barn == nom du bâtiment.
     const occByName = new Map<string, number>();
     for (const a of animals) {
@@ -1733,8 +1821,10 @@ export class FarmosService {
     return buildings.map((b) => {
       const occupancy = occByName.get(b.name) ?? 0;
       const cap = b.capacity ?? null;
+      const zone = b.zoneId ? zoneById.get(b.zoneId) ?? null : null;
       return {
         ...b,
+        zone: zone ? { id: zone.id, name: zone.name } : null,
         occupancy,
         occupancyRate: cap && cap > 0 ? Math.round((occupancy / cap) * 100) : null,
         overCapacity: cap != null && cap > 0 && occupancy > cap,
@@ -1756,6 +1846,7 @@ export class FarmosService {
     if (!input.name) throw new BadRequestException("name requis.");
     const [res] = await this.db.insert(farmosBuildings).values({
       organizationId: orgId,
+      zoneId: input.zone_id ?? null,
       name: input.name,
       species: input.species ?? null,
       type: input.type ?? null,
@@ -1773,6 +1864,7 @@ export class FarmosService {
   async updateBuilding(id: number, input: any, orgId: number) {
     await this.getBuilding(id, orgId);
     const patch: Record<string, unknown> = {};
+    if (input.zone_id !== undefined) patch.zoneId = input.zone_id;
     if (input.name !== undefined) patch.name = input.name;
     if (input.species !== undefined) patch.species = input.species;
     if (input.type !== undefined) patch.type = input.type;
@@ -1782,6 +1874,8 @@ export class FarmosService {
     if (input.manager !== undefined) patch.manager = input.manager;
     if (input.hygiene_status !== undefined) patch.hygieneStatus = input.hygiene_status;
     if (input.notes !== undefined) patch.notes = input.notes;
+    if (input.pos_x !== undefined) patch.posX = input.pos_x != null ? String(input.pos_x) : null;
+    if (input.pos_y !== undefined) patch.posY = input.pos_y != null ? String(input.pos_y) : null;
     if (Object.keys(patch).length === 0) return this.getBuilding(id, orgId);
     await this.db.update(farmosBuildings).set(patch).where(eq(farmosBuildings.id, id));
     await this.publishFarmosUpdate("updateBuilding", ["buildings"], "updated", id, orgId);
@@ -1793,6 +1887,57 @@ export class FarmosService {
     await this.db.update(farmosBuildings).set({ isActive: 0 }).where(eq(farmosBuildings.id, id));
     await this.publishFarmosUpdate("deleteBuilding", ["buildings"], "deleted", id, orgId);
     return { message: "Bâtiment supprimé." };
+  }
+
+  // ─── Éléments de terrain (décor du plan : champ, eau, route…) ───────────────
+  async listLandFeatures(orgId: number, zoneId?: number | null) {
+    const conds = [eq(farmosLandFeatures.organizationId, orgId), eq(farmosLandFeatures.isActive, 1)];
+    if (zoneId) conds.push(eq(farmosLandFeatures.zoneId, zoneId));
+    return this.db.select().from(farmosLandFeatures).where(and(...conds)).orderBy(farmosLandFeatures.id);
+  }
+
+  async createLandFeature(input: any, orgId: number) {
+    if (!input.type) throw new BadRequestException("type requis.");
+    const [res] = await this.db.insert(farmosLandFeatures).values({
+      organizationId: orgId,
+      zoneId: input.zone_id ?? null,
+      type: input.type,
+      label: input.label ?? null,
+      posX: input.pos_x != null ? String(input.pos_x) : "0",
+      posY: input.pos_y != null ? String(input.pos_y) : "0",
+      width: input.width != null ? String(input.width) : null,
+      height: input.height != null ? String(input.height) : null,
+      meta: input.meta ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createLandFeature", ["land-features"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async updateLandFeature(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosLandFeatures.id }).from(farmosLandFeatures)
+      .where(and(eq(farmosLandFeatures.id, id), eq(farmosLandFeatures.organizationId, orgId), eq(farmosLandFeatures.isActive, 1))).limit(1);
+    if (!row) throw new NotFoundException("Land feature not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.zone_id !== undefined) patch.zoneId = input.zone_id;
+    if (input.type !== undefined) patch.type = input.type;
+    if (input.label !== undefined) patch.label = input.label;
+    if (input.pos_x !== undefined) patch.posX = String(input.pos_x);
+    if (input.pos_y !== undefined) patch.posY = String(input.pos_y);
+    if (input.width !== undefined) patch.width = input.width != null ? String(input.width) : null;
+    if (input.height !== undefined) patch.height = input.height != null ? String(input.height) : null;
+    if (input.meta !== undefined) patch.meta = input.meta;
+    if (Object.keys(patch).length) await this.db.update(farmosLandFeatures).set(patch).where(eq(farmosLandFeatures.id, id));
+    await this.publishFarmosUpdate("updateLandFeature", ["land-features"], "updated", id, orgId);
+    return { id };
+  }
+
+  async deleteLandFeature(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosLandFeatures.id }).from(farmosLandFeatures)
+      .where(and(eq(farmosLandFeatures.id, id), eq(farmosLandFeatures.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Land feature not found.");
+    await this.db.update(farmosLandFeatures).set({ isActive: 0 } as any).where(eq(farmosLandFeatures.id, id));
+    await this.publishFarmosUpdate("deleteLandFeature", ["land-features"], "deleted", id, orgId);
+    return { message: "Élément supprimé." };
   }
 
   // ─── Rapports PDF — délégués au microservice pdf-service (voir pdf-client) ───

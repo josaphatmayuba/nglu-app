@@ -66,6 +66,7 @@ const emptyCost = {
   description: "",
   amount: "",
   currencyId: "",
+  supplierId: "",
   vendorName: "",
   paymentMethod: "cash",
   paymentDate: "",
@@ -132,7 +133,17 @@ export function Maintenance() {
   const unitsApi = useApi(() => api.units(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
+  const suppliersApi = useApi(() => api.suppliers(), []);
   useRealtimeReload(maintenanceApi.reload, ["maintenance"]);
+
+  // Fournisseurs actifs du référentiel central (options [id, libellé] pour le select)
+  const supplierOptions = useMemo(() => {
+    const raw = suppliersApi.data;
+    const arr = Array.isArray(raw) ? raw : (raw?.getAllSupplier || raw?.data || []);
+    return (arr || [])
+      .filter((s) => String(s.status) === "true")
+      .map((s) => [String(s.id), `${s.name}${s.partyType === "individual" ? " (personne)" : ""}`]);
+  }, [suppliersApi.data]);
 
   const loading = maintenanceApi.loading || propertiesApi.loading || unitsApi.loading;
   const error = maintenanceApi.error || propertiesApi.error || unitsApi.error;
@@ -276,6 +287,7 @@ export function Maintenance() {
         description: form.description?.trim(),
         amount: toMoney(form.amount),
         currencyId: toId(form.currencyId) ?? toId(ticket.currencyId) ?? toId(currency.defaultCurrencyId),
+        supplierId: toId(form.supplierId) ?? undefined,
         vendorName: form.vendorName?.trim() || undefined,
         paymentMethod: form.paymentMethod || "cash",
         paymentDate: form.paymentDate || undefined,
@@ -699,7 +711,11 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
             <div className="domus-property-form-grid">
               <DomusPropertySelect label="Type" value={form.type} onChange={(type) => set({ type })} options={[["service", "Service"], ["labour", "Main d'oeuvre"]]} />
               <DomusPropertySelect label="Paiement" value={form.paymentMethod} onChange={(paymentMethod) => set({ paymentMethod })} options={[["cash", "Cash"], ["bank", "Banque"], ["mobile_money", "Mobile money"], ["cheque", "Cheque"]]} />
-              <DomusPropertyField label="Fournisseur" value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
+              <DomusPropertySelect label="Fournisseur" value={form.supplierId} onChange={(supplierId) => {
+                const opt = supplierOptions.find(([id]) => id === supplierId);
+                set({ supplierId, vendorName: opt ? opt[1].replace(" (personne)", "") : form.vendorName });
+              }} options={[["", "— Aucun / saisir ci-dessous —"], ...supplierOptions]} />
+              <DomusPropertyField label="Fournisseur (texte libre)" value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
               <DomusPropertyField label="Date paiement" type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
               <MoneyField label="Montant" value={form.amount} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(amount) => set({ amount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
             </div>

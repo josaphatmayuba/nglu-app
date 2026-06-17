@@ -882,6 +882,11 @@ export class CreateMaintenanceCostDto {
   vendorName?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  supplierId?: number;
+
+  @IsOptional()
   @IsIn(["cash", "bank", "mobile_money", "cheque"])
   paymentMethod?: "cash" | "bank" | "mobile_money" | "cheque";
 

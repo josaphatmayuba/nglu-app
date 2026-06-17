@@ -730,6 +730,14 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
   const [unit, setUnit] = React.useState(medicine?.unit || (effectiveKind === "feed" ? "kg" : "doses"));
   const [minQuantity, setMinQuantity] = React.useState(medicine?.min != null ? String(medicine.min) : "");
   const [supplier, setSupplier] = React.useState(medicine?.supplier || "");
+  const [supplierId, setSupplierId] = React.useState(medicine?.supplierId != null ? String(medicine.supplierId) : "");
+  const [suppliers, setSuppliers] = React.useState([]);
+  React.useEffect(() => {
+    api.listSuppliers().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
+      setSuppliers((arr || []).filter((s) => String(s.status) === "true"));
+    }).catch(() => setSuppliers([]));
+  }, []);
   const [expiryDate, setExpiryDate] = React.useState(medicine && medicine.expiry && medicine.expiry !== "—" ? medicine.expiry : "");
   const [notes, setNotes] = React.useState(medicine?.notes || "");
   const [species, setSpecies] = React.useState(medicine?.species?.length ? medicine.species : (defaultSpecies || []));
@@ -747,6 +755,7 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
       unit: unit || null,
       min_quantity: minQuantity ? Number(minQuantity) : null,
       supplier: supplier.trim() || null,
+      supplier_id: supplierId ? Number(supplierId) : null,
       expiry_date: expiryDate || null,
       notes: notes.trim() || null,
       species: species.length ? species : null,
@@ -808,6 +817,17 @@ function MedicineFormModal({ lang, kind, defaultSpecies, medicine, onClose, onSa
             </label>
           </div>
           <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Fournisseur" : "Supplier"}
+            <select value={supplierId} onChange={(e) => {
+              const id = e.target.value;
+              setSupplierId(id);
+              const s = suppliers.find((x) => String(x.id) === id);
+              if (s) setSupplier(s.name);
+            }} className="input" style={{ width: "100%", marginTop: 4 }}>
+              <option value="">{lang === "fr" ? "— Aucun / saisir ci-dessous —" : "— None / type below —"}</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}{s.partyType === "individual" ? (lang === "fr" ? " (personne)" : " (person)") : ""}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: 12, color: "var(--fg-2)" }}>{lang === "fr" ? "Fournisseur (texte libre)" : "Supplier (free text)"}
             <input value={supplier} onChange={(e) => setSupplier(e.target.value)} className="input" style={{ width: "100%", marginTop: 4 }}/>
           </label>
           <div>
@@ -3688,36 +3708,824 @@ const AboutCard = ({ lang }) => {
 
 // ─── BÂTIMENTS ───────────────────────────────────────────────────────────
 const BLANK_BUILDING = { name: "", species: "", type: "", capacity: "", temperature: "", humidity: "", manager: "", hygiene_status: "" };
+
+// Type → couleur
+const BLDG_TYPE_META = {
+  barn:     { bg: "#EAF2EA", border: "#9CC09A", text: "#2A5A2A", icon: "barn" },
+  piggery:  { bg: "#FBF0F0", border: "#D49090", text: "#7A2A2A", icon: "pig" },
+  poultry:  { bg: "#FBF5E6", border: "#D4B870", text: "#7A5010", icon: "bird" },
+  rabbit:   { bg: "#FBF2EC", border: "#C8A880", text: "#7A4810", icon: "package" },
+  storage:  { bg: "#F5F3EE", border: "#C8C0B0", text: "#5A5040", icon: "package" },
+  clinic:   { bg: "#FCF0EE", border: "#D49880", text: "#7A3010", icon: "pulse" },
+};
+const bldgMeta = (type) => BLDG_TYPE_META[type] || BLDG_TYPE_META.storage;
+
+// Barre d'occupation
+const BldgOccBar = ({ rate, overCapacity, compact }) => {
+  const color = overCapacity ? "var(--oxblood-700)" : rate > 85 ? "var(--autorite-500)" : "var(--solidite-500)";
+  return (
+    <div style={{ height: compact ? 5 : 7, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${Math.min(100, rate ?? 0)}%`, background: color, transition: "width 0.3s" }}/>
+    </div>
+  );
+};
+
+// ─── Plan du terrain déplaçable (positions DB pos_x/pos_y, par zone) ─────────
+// Décor (champ/eau/route) = farmos_land_features. Mode édition = drag souris/tactile,
+// persistance via api.updateBuilding / api.updateLandFeature (pourcentage 0–100).
+const LAND_FEATURE_META = {
+  field:   { label: "Champ",   emoji: "🌾", w: 26, h: 22, style: { background: "repeating-linear-gradient(90deg, rgba(101,143,53,.35) 0 10px, rgba(255,255,255,.22) 10px 17px), #9fcb68", border: "2px solid rgba(76,105,44,.45)", color: "#31501c", borderRadius: 14 } },
+  pasture: { label: "Pâturage", emoji: "🌱", w: 28, h: 22, style: { background: "#bfe3a0", border: "2px solid rgba(76,105,44,.4)", color: "#2c4a1c", borderRadius: 18 } },
+  water:   { label: "Point d'eau", emoji: "💧", w: 16, h: 16, style: { background: "linear-gradient(135deg, #80cdf0, #3f9bc7)", border: "3px solid rgba(255,255,255,0.55)", color: "white", borderRadius: "55% 45% 50% 40%", display: "grid", placeItems: "center", fontWeight: 900 } },
+  road:    { label: "Route",   emoji: "", w: 40, h: 5, style: { background: "rgba(121,93,47,.3)", border: "2px dashed rgba(84,61,30,.4)", borderRadius: 999 } },
+};
+const landMeta = (t) => LAND_FEATURE_META[t] || LAND_FEATURE_META.field;
+
+const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onPersist, display = "occupation", lang }) => {
+  const mapRef = React.useRef(null);
+  const dragRef = React.useRef(null); // { kind, id, offX, offY, el }
+  // Positions locales (live pendant le drag) : id → {x,y} en %
+  const [pos, setPos] = React.useState({});
+
+  // Auto-grille pour les bâtiments sans position (pos_x null)
+  const placed = React.useMemo(() => {
+    let auto = 0;
+    return buildings.map((b) => {
+      const hasPos = b.posX != null && b.posY != null;
+      if (hasPos) return { ...b, _x: Number(b.posX), _y: Number(b.posY) };
+      const col = auto % 4, row = Math.floor(auto / 4); auto++;
+      return { ...b, _x: 6 + col * 23, _y: 8 + row * 26 };
+    });
+  }, [buildings]);
+
+  const liveXY = (kind, item, fx, fy) => {
+    const p = pos[`${kind}:${item.id}`];
+    return p || { x: fx, y: fy };
+  };
+
+  const onDown = (e, kind, item) => {
+    onSelect(item.id);
+    if (!editMode) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    const r = e.currentTarget.getBoundingClientRect();
+    dragRef.current = { kind, id: item.id, offX: pt.clientX - r.left, offY: pt.clientY - r.top };
+  };
+  const onMove = (e) => {
+    const d = dragRef.current; if (!d || !editMode) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    const m = mapRef.current.getBoundingClientRect();
+    let x = ((pt.clientX - m.left - d.offX) / m.width) * 100;
+    let y = ((pt.clientY - m.top - d.offY) / m.height) * 100;
+    x = Math.max(0, Math.min(x, 96)); y = Math.max(0, Math.min(y, 94));
+    setPos((s) => ({ ...s, [`${d.kind}:${d.id}`]: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } }));
+  };
+  const onUp = () => {
+    const d = dragRef.current; if (!d) return;
+    dragRef.current = null;
+    const p = pos[`${d.kind}:${d.id}`];
+    if (p) onPersist(d.kind, d.id, p.x, p.y);
+  };
+  React.useEffect(() => {
+    if (!editMode) return;
+    window.addEventListener("mousemove", onMove); window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("mouseup", onUp); window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("mouseup", onUp); window.removeEventListener("touchend", onUp);
+    };
+  }); // deps volontairement larges : pos/editMode capturés à chaque rendu
+
+  return (
+    <div ref={mapRef}
+      style={{ position: "relative", height: 640, minHeight: 640, flexShrink: 0, borderRadius: 16, overflow: "hidden", border: "2px solid #cbdcc5", touchAction: "none",
+        background: "linear-gradient(135deg, #cbe8b8, #e4f0c8 45%, #c7df9f)",
+        backgroundImage: editMode ? "linear-gradient(rgba(55,80,55,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(55,80,55,.07) 1px, transparent 1px)" : undefined,
+        backgroundSize: editMode ? "40px 40px" : undefined }}>
+      {/* Décor : land features */}
+      {features.map((f) => {
+        const m = landMeta(f.type);
+        const { x, y } = liveXY("feature", f, Number(f.posX), Number(f.posY));
+        const w = f.width != null ? Number(f.width) : m.w, h = f.height != null ? Number(f.height) : m.h;
+        return (
+          <div key={`f${f.id}`} onMouseDown={(e) => onDown(e, "feature", f)} onTouchStart={(e) => onDown(e, "feature", f)}
+            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`,
+              cursor: editMode ? "grab" : "default", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 800, padding: 8, userSelect: "none", ...m.style,
+              outline: selectedId === f.id && editMode ? "2px solid #2f7d32" : "none", outlineOffset: 2 }}>
+            {m.emoji} {f.label || m.label}
+          </div>
+        );
+      })}
+      {/* Bâtiments */}
+      {placed.map((b) => {
+        const meta = bldgMeta(b.type);
+        const { x, y } = liveXY("building", b, b._x, b._y);
+        const isSel = selectedId === b.id;
+        const rate = b.occupancyRate ?? 0;
+        return (
+          <div key={b.id} onMouseDown={(e) => onDown(e, "building", b)} onTouchStart={(e) => onDown(e, "building", b)}
+            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: 172, borderRadius: 14, padding: 13,
+              background: isSel ? "#fff" : meta.bg, border: `2px solid ${isSel ? "var(--forest-700)" : meta.border}`,
+              boxShadow: isSel ? "0 0 0 3px rgba(14,100,56,.18)" : "0 6px 14px rgba(44,65,36,.18)",
+              cursor: editMode ? "grab" : "pointer", userSelect: "none", touchAction: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+              <Icon name={meta.icon} size={13} color={meta.text}/>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+            </div>
+            {b.species && <div style={{ fontSize: 10, color: "var(--fg-3)", marginBottom: 4 }}>{b.species}</div>}
+            {display === "occupation" && b.capacity != null && <>
+              <div className="mono" style={{ fontSize: 10, color: "var(--fg-2)", marginBottom: 3 }}>{b.occupancy} / {b.capacity} · {rate}%</div>
+              <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>
+            </>}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// Plan SVG auto-layout (grille) depuis les vrais bâtiments
+const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
+  const COLS = 3;
+  const CELL_W = 220, CELL_H = 110, GAP = 18, PAD = 20;
+  const rows = Math.ceil(buildings.length / COLS);
+  const W = PAD * 2 + COLS * CELL_W + (COLS - 1) * GAP;
+  const H = PAD * 2 + rows * CELL_H + (rows - 1) * GAP + 28;
+
+  return (
+    <div style={{ background: "#F3F0E8", borderRadius: 12, border: "1px solid var(--border-1)", overflow: "hidden", position: "relative" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {/* Ground */}
+        <rect width={W} height={H} fill="#F3F0E8"/>
+        {/* Allée horizontale entre rangées */}
+        {Array.from({ length: rows - 1 }, (_, ri) => {
+          const y = PAD + (ri + 1) * CELL_H + ri * GAP - GAP / 2 - 7;
+          return <rect key={ri} x={0} y={y} width={W} height={14} fill="#E0DBCD" rx={2}/>;
+        })}
+        {/* Allée verticale entre colonnes */}
+        {Array.from({ length: COLS - 1 }, (_, ci) => {
+          const x = PAD + (ci + 1) * CELL_W + ci * GAP - GAP / 2 - 7;
+          return <rect key={ci} x={x} y={0} width={14} height={H} fill="#E0DBCD" rx={2}/>;
+        })}
+        {/* Compass */}
+        <g transform={`translate(${W - 26}, 22)`}>
+          <circle cx={0} cy={0} r={14} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
+          <text x={0} y={-5} textAnchor="middle" fontSize="7" fill="#3A3020" fontWeight="700" fontFamily="monospace">N</text>
+          <polygon points="0,-10 -3,2 3,2" fill="#3A3020"/>
+        </g>
+        {/* Buildings */}
+        {buildings.map((b, i) => {
+          const col = i % COLS;
+          const row = Math.floor(i / COLS);
+          const x = PAD + col * (CELL_W + GAP);
+          const y = PAD + row * (CELL_H + GAP);
+          const meta = bldgMeta(b.type);
+          const isSelected = selectedId === b.id;
+          const rate = b.occupancyRate ?? 0;
+          const overCap = b.overCapacity;
+          const barColor = overCap ? "#A82020" : rate > 85 ? "#B08020" : "#3A8040";
+          return (
+            <g key={b.id} style={{ cursor: "pointer" }} onClick={() => onSelect(b.id)}>
+              {/* Shadow */}
+              <rect x={x + 3} y={y + 3} width={CELL_W} height={CELL_H} rx={6} fill="rgba(0,0,0,0.07)"/>
+              {/* Body */}
+              <rect x={x} y={y} width={CELL_W} height={CELL_H} rx={6}
+                fill={isSelected ? "white" : meta.bg}
+                stroke={isSelected ? "var(--forest-700)" : meta.border}
+                strokeWidth={isSelected ? 2.5 : 1.5}/>
+              {/* Roof strip */}
+              <rect x={x} y={y} width={CELL_W} height={7} rx={6} fill={meta.border} opacity={0.5}/>
+              {/* Status dot */}
+              <circle cx={x + CELL_W - 12} cy={y + 13} r={5}
+                fill={overCap ? "#BE5234" : rate > 85 ? "#B08020" : "#3A8040"}
+                stroke="white" strokeWidth={1.5}/>
+              {/* Name */}
+              <text x={x + 10} y={y + 20} fontSize="9.5" fontWeight="800" fill={meta.border} fontFamily="monospace" letterSpacing="0.05em">
+                {b.type ? b.type.toUpperCase().slice(0, 8) : "BLDG"}
+              </text>
+              <text x={x + 10} y={y + 35} fontSize="10" fill="#3A3020" fontFamily="sans-serif" fontWeight="600">
+                {b.name.slice(0, 26)}
+              </text>
+              {/* Species */}
+              {b.species && (
+                <text x={x + 10} y={y + 49} fontSize="9" fill="#6A5A40" fontFamily="sans-serif">{b.species}</text>
+              )}
+              {/* Env info */}
+              {b.temperature != null && (
+                <text x={x + 10} y={y + 63} fontSize="9" fill="#7A7060" fontFamily="monospace">{b.temperature}°C {b.humidity != null ? `· ${b.humidity}%H` : ""}</text>
+              )}
+              {/* Occupancy bar */}
+              {b.capacity && (
+                <>
+                  <text x={x + 10} y={y + CELL_H - 22} fontSize="8.5" fill="#7A7060" fontFamily="monospace">
+                    {b.occupancy ?? 0} / {b.capacity} · {rate}%
+                  </text>
+                  <rect x={x + 10} y={y + CELL_H - 14} width={CELL_W - 20} height={6} rx={999} fill="rgba(0,0,0,0.09)"/>
+                  <rect x={x + 10} y={y + CELL_H - 14}
+                    width={Math.max(4, ((CELL_W - 20) * Math.min(100, rate)) / 100)} height={6} rx={999}
+                    fill={barColor}/>
+                </>
+              )}
+              {/* Manager */}
+              {b.manager && !b.capacity && (
+                <text x={x + 10} y={y + CELL_H - 12} fontSize="8.5" fill="#9A8A70" fontFamily="sans-serif">{b.manager}</text>
+              )}
+            </g>
+          );
+        })}
+        {/* Legend */}
+        <g transform={`translate(${PAD}, ${H - 18})`}>
+          {[
+            { color: "#3A8040", label: lang === "fr" ? "Normal" : "Normal" },
+            { color: "#B08020", label: lang === "fr" ? "> 85%" : "> 85%" },
+            { color: "#BE5234", label: lang === "fr" ? "Surcap." : "Over cap." },
+          ].map((l, i) => (
+            <g key={i} transform={`translate(${i * 90}, 0)`}>
+              <circle cx={5} cy={-3} r={4} fill={l.color}/>
+              <text x={13} y={0} fontSize="8.5" fill="#7A7060" fontFamily="sans-serif">{l.label}</text>
+            </g>
+          ))}
+        </g>
+      </svg>
+    </div>
+  );
+};
+
+// ─── Plan intérieur générique (basé sur capacity et sections statiques) ──────
+const INTERIOR_BOX_FILL   = { ok: "#A8D8A0", sick: "#E08080", quarantine: "#F0C060", empty: "#E8E4DC" };
+const INTERIOR_BOX_STROKE = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
+
+const BldgInteriorPlan = ({ building, lang, onClose }) => {
+  const [tooltip, setTooltip] = React.useState(null);
+  if (!building) return null;
+
+  // Génère des sections fictives à partir de la capacité connue
+  const capacity = parseInt(building.capacity) || 20;
+  const occupancy = building.occupancy ?? Math.round(capacity * 0.8);
+  const sick = building.sick ?? 0;
+  const quarantine = building.quarantine ?? 0;
+  const empty = Math.max(0, capacity - occupancy);
+
+  // Répartition en sections (max 4)
+  const sectionCount = Math.min(4, Math.max(1, Math.ceil(capacity / 30)));
+  const sections = Array.from({ length: sectionCount }, (_, i) => {
+    const secCap = Math.ceil(capacity / sectionCount);
+    const secOcc = Math.min(secCap, Math.ceil(occupancy / sectionCount));
+    return { id: i, label: String.fromCharCode(65 + i), capacity: secCap, occupied: secOcc };
+  });
+
+  // Palette de statuts pour chaque box
+  const totalBoxes = capacity;
+  const statuses = [];
+  let s = sick, q = quarantine, e = empty;
+  for (let i = 0; i < totalBoxes; i++) {
+    if (s > 0) { statuses.push("sick"); s--; }
+    else if (q > 0) { statuses.push("quarantine"); q--; }
+    else if (e > 0) { statuses.push("empty"); e--; }
+    else statuses.push("ok");
+  }
+
+  const CANVAS_W = 600, CANVAS_H = 300;
+  const COLS = Math.ceil(Math.sqrt(capacity * 2));
+  const ROWS = Math.ceil(capacity / COLS);
+  const BOX_GAP = 3;
+  const AREA_PAD = 16;
+  const areaW = CANVAS_W - AREA_PAD * 2;
+  const areaH = CANVAS_H - AREA_PAD * 2 - 24; // 24 = aisle at bottom
+  const bw = Math.max(8, Math.floor((areaW - BOX_GAP * (COLS + 1)) / COLS));
+  const bh = Math.max(8, Math.floor((areaH - BOX_GAP * (ROWS + 1)) / ROWS));
+  const meta = bldgMeta(building.type);
+
+  const statusLabels = {
+    ok:         { fr: "Occupée", en: "Occupied" },
+    sick:       { fr: "Malade",  en: "Sick" },
+    quarantine: { fr: "Quarantaine", en: "Quarantine" },
+    empty:      { fr: "Vide",   en: "Empty" },
+  };
+  const counts = statuses.reduce((a, s) => { a[s] = (a[s] || 0) + 1; return a; }, {});
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
+      onClick={onClose}>
+      <div style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", maxWidth: 680, width: "96vw", maxHeight: "92vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderBottom: "1px solid var(--border-1)" }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name={meta.icon} size={16} color={meta.text}/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-950)" }}>{building.name}</div>
+            <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 1 }}>
+              {lang === "fr" ? "Plan intérieur · Visualisation des emplacements" : "Interior plan · Slot visualization"}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>
+            <Icon name="x" size={14} color="var(--ink-600)"/>
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 14, padding: "9px 18px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
+          {Object.entries(statusLabels).map(([k, v]) => counts[k] ? (
+            <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
+              <span style={{ width: 13, height: 13, borderRadius: 3, background: INTERIOR_BOX_FILL[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
+              {lang === "fr" ? v.fr : v.en}
+              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+            </div>
+          ) : null)}
+        </div>
+
+        {/* SVG */}
+        <div style={{ padding: "12px 14px", overflow: "auto" }}>
+          <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)" }}>
+            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 400 }}>
+              <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
+
+              {/* Section zones (coloured backgrounds) */}
+              {sections.map((sec, si) => {
+                const secCols = Math.ceil(COLS / sectionCount);
+                const sx = AREA_PAD + si * (secCols * (bw + BOX_GAP));
+                const sw = Math.min(secCols * (bw + BOX_GAP), areaW - (sx - AREA_PAD));
+                return (
+                  <g key={sec.id}>
+                    <rect x={sx} y={AREA_PAD} width={sw} height={areaH} rx={6}
+                      fill={meta.bg} stroke={meta.border} strokeWidth={1.2} opacity={0.5}/>
+                    <text x={sx + sw / 2} y={AREA_PAD + 13} textAnchor="middle"
+                      fontSize="9" fontWeight="700" fill={meta.text} fontFamily="sans-serif">
+                      {lang === "fr" ? `Section ${sec.label}` : `Section ${sec.label}`}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Boxes */}
+              {statuses.map((status, idx) => {
+                const col = idx % COLS;
+                const row = Math.floor(idx / COLS);
+                const bx = AREA_PAD + BOX_GAP + col * (bw + BOX_GAP);
+                const by = AREA_PAD + 16 + BOX_GAP + row * (bh + BOX_GAP);
+                const isHovered = tooltip && tooltip.idx === idx;
+                return (
+                  <g key={idx} style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setTooltip({ idx, status, bx, by })}
+                    onMouseLeave={() => setTooltip(null)}>
+                    <rect x={bx} y={by} width={bw} height={bh} rx={2}
+                      fill={INTERIOR_BOX_FILL[status]}
+                      stroke={isHovered ? "#1A1410" : INTERIOR_BOX_STROKE[status]}
+                      strokeWidth={isHovered ? 2 : 1}
+                      opacity={isHovered ? 1 : 0.9}/>
+                    {bw >= 14 && bh >= 11 && (
+                      <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
+                        fontSize="6.5" fill={status === "empty" ? "#A8A098" : "#2A1810"}
+                        fontFamily="monospace" fontWeight={status !== "ok" ? "700" : "400"}>
+                        {idx + 1}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Aisle at bottom */}
+              <rect x={AREA_PAD} y={CANVAS_H - AREA_PAD - 18} width={areaW} height={14}
+                fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
+              <text x={CANVAS_W / 2} y={CANVAS_H - AREA_PAD - 8} textAnchor="middle"
+                fontSize="7.5" fill="#8A8070" fontFamily="monospace" letterSpacing="1">
+                {lang === "fr" ? "COULOIR PRINCIPAL" : "MAIN AISLE"}
+              </text>
+
+              {/* Compass */}
+              <g transform={`translate(${CANVAS_W - 22}, 22)`}>
+                <circle cx={0} cy={0} r={14} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
+                <text x={0} y={-5} textAnchor="middle" fontSize="7" fill="#3A3020" fontWeight="700" fontFamily="monospace">N</text>
+                <polygon points="0,-10 -3,2 3,2" fill="#3A3020"/>
+              </g>
+
+              {/* Tooltip */}
+              {tooltip && (() => {
+                const tx = Math.min(tooltip.bx + bw + 4, CANVAS_W - 90);
+                const ty = Math.max(4, tooltip.by - 2);
+                const lbl = statusLabels[tooltip.status];
+                return (
+                  <g>
+                    <rect x={tx} y={ty} width={88} height={28} rx={5} fill="rgba(30,24,16,0.88)"/>
+                    <text x={tx + 44} y={ty + 11} textAnchor="middle" fontSize="7.5" fill="#ECE8E0" fontFamily="monospace">Box #{tooltip.idx + 1}</text>
+                    <text x={tx + 44} y={ty + 21} textAnchor="middle" fontSize="8" fill={INTERIOR_BOX_FILL[tooltip.status]} fontFamily="sans-serif" fontWeight="600">
+                      {lang === "fr" ? lbl.fr : lbl.en}
+                    </text>
+                  </g>
+                );
+              })()}
+            </svg>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", gap: 8, padding: "10px 18px", borderTop: "1px solid var(--border-1)" }}>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="layers" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Animaux par box" : "Animals per box"}
+          </button>
+          <button className="btn btn-sm" style={{ flex: 1 }}>
+            <Icon name="pulse" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Capteurs" : "Sensors"}
+          </button>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+            {lang === "fr" ? "Fermer" : "Close"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Panneau de détail d'un bâtiment sélectionné
+const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
+  if (!building) return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 240, color: "var(--fg-3)" }}>
+      <Icon name="building" size={28} color="var(--ink-300)"/>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-400)" }}>
+        {lang === "fr" ? "Sélectionnez un bâtiment" : "Select a building"}
+      </div>
+    </div>
+  );
+  const meta = bldgMeta(building.type);
+  const rate = building.occupancyRate ?? 0;
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14, overflow: "auto" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: 9, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name={meta.icon} size={19} color={meta.text}/>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600, color: "var(--ink-950)" }}>{building.name}</div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>
+            {[building.type, building.species, building.manager].filter(Boolean).join(" · ") || "—"}
+          </div>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 7px", flexShrink: 0 }}>
+          <Icon name="x" size={13} color="var(--ink-600)"/>
+        </button>
+      </div>
+
+      {/* Occupation */}
+      {building.capacity && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--fg-2)" }}>
+            <span>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
+            <span className="mono" style={{ fontWeight: 700, color: building.overCapacity ? "var(--oxblood-700)" : "var(--ink-800)" }}>
+              {building.occupancy ?? 0} / {building.capacity} · {rate}%
+            </span>
+          </div>
+          <BldgOccBar rate={rate} overCapacity={building.overCapacity}/>
+          {building.overCapacity && (
+            <div style={{ marginTop: 6, fontSize: 11, color: "var(--oxblood-700)", fontWeight: 600 }}>
+              {lang === "fr" ? "⚠ Surcapacité détectée" : "⚠ Over capacity detected"}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KPIs env */}
+      {(building.temperature != null || building.humidity != null || building.hygieneStatus) && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+          {building.temperature != null && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Temp." : "Temp."}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--ink-950)", marginTop: 2 }}>{building.temperature}°C</div>
+            </div>
+          )}
+          {building.humidity != null && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Humidité" : "Humidity"}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, color: "var(--ink-950)", marginTop: 2 }}>{building.humidity}%</div>
+            </div>
+          )}
+          {building.hygieneStatus && (
+            <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+              <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Hygiène" : "Hygiene"}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-800)", marginTop: 4 }}>{building.hygieneStatus}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Interior plan button */}
+      <button className="btn btn-sm" onClick={() => onViewInterior && onViewInterior(building)}
+        style={{ background: "rgba(14,100,56,0.06)", border: "1.5px solid rgba(14,100,56,0.2)", color: "var(--forest-800)", fontWeight: 700, gap: 7, justifyContent: "center" }}>
+        <Icon name="grid" size={13} color="var(--forest-700)"/>
+        {lang === "fr" ? "Plan intérieur" : "Interior layout"}
+      </button>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 7 }}>
+        <button className="btn btn-sm" style={{ flex: 1 }} onClick={onEdit}>
+          <Icon name="edit" size={12} color="var(--ink-700)"/>
+          {lang === "fr" ? "Modifier" : "Edit"}
+        </button>
+        <button className="btn btn-sm" style={{ flex: 1 }}>
+          <Icon name="layers" size={12} color="var(--ink-700)"/>
+          {lang === "fr" ? "Animaux" : "Animals"}
+        </button>
+        <button className="btn btn-sm btn-primary" style={{ flex: 1 }}>
+          <Icon name="pulse" size={12} color="#ECF1EC"/>
+          {lang === "fr" ? "Santé" : "Health"}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [rows, setRows] = React.useState([]);
+  const [zones, setZones] = React.useState([]);
+  const [farms, setFarms] = React.useState([]);
+  const [farmId, setFarmId] = React.useState(null); // null = toutes les fermes
   const [editing, setEditing] = React.useState(null); // building | "new" | null
   const [reloadKey, setReloadKey] = React.useState(0);
-  const refresh = useDataRefresh(["buildings", "animals"]);
+  const [viewMode, setViewMode] = React.useState("zones"); // "zones" | "plan" | "cards"
+  const [selectedId, setSelectedId] = React.useState(null);
+  const [interiorBuilding, setInteriorBuilding] = React.useState(null);
+  const [features, setFeatures] = React.useState([]);
+  const [planEdit, setPlanEdit] = React.useState(false);
+  const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
+  const [planDisplay, setPlanDisplay] = React.useState("occupation"); // "occupation" | "simple"
+  const refresh = useDataRefresh(["buildings", "animals", "land-features"]);
   React.useEffect(() => {
     let cancel = false;
-    api.listBuildings().then((b) => { if (!cancel) setRows(Array.isArray(b) ? b : []); }).catch((e) => console.warn("listBuildings:", e.message));
+    Promise.all([
+      api.listBuildings().catch(() => []),
+      api.listZones().catch(() => []),
+      api.listLandFeatures().catch(() => []),
+      api.listFarms().catch(() => []),
+    ]).then(([b, z, f, fm]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
-  const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
+  // Persistance d'un déplacement sur le plan (bâtiment ou élément de terrain)
+  const persistPlan = React.useCallback((kind, id, x, y) => {
+    if (kind === "building") {
+      setRows((rs) => rs.map((b) => (b.id === id ? { ...b, posX: x, posY: y } : b)));
+      api.updateBuilding(id, { pos_x: x, pos_y: y }).catch(() => {});
+    } else {
+      setFeatures((fs) => fs.map((f) => (f.id === id ? { ...f, posX: x, posY: y } : f)));
+      api.updateLandFeature(id, { pos_x: x, pos_y: y }).catch(() => {});
+    }
+  }, []);
+  // Ajouter un élément de décor au plan (zone courante), centré
+  const addFeature = React.useCallback((type) => {
+    const labels = { field: "Champ", water: "Point d'eau", road: "Route", pasture: "Pâturage" };
+    const body = { zone_id: planZoneId, type, label: labels[type] || type, pos_x: 40, pos_y: 40 };
+    api.createLandFeature(body).then((r) => {
+      setFeatures((fs) => [...fs, { id: r.id, zoneId: planZoneId, type, label: body.label, posX: 40, posY: 40, width: null, height: null }]);
+    }).catch(() => {});
+  }, [planZoneId]);
+  const removeFeature = React.useCallback((id) => {
+    setFeatures((fs) => fs.filter((f) => f.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    api.deleteLandFeature(id).catch(() => {});
+  }, [selectedId]);
+  // Zones de la ferme sélectionnée (null = toutes)
+  const farmZoneIds = farmId ? new Set(zones.filter((z) => z.farmId === farmId).map((z) => z.id)) : null;
+  const filtered = rows.filter((b) =>
+    (!speciesFilter || b.species === speciesFilter) &&
+    (!farmZoneIds || (b.zoneId && farmZoneIds.has(b.zoneId))));
+  const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
+  // Compteurs par ferme (bâtiments + occupation animaux)
+  const farmStats = (fmId) => {
+    const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
+    const bs = rows.filter((b) => b.zoneId && zids.has(b.zoneId));
+    return { buildings: bs.length, animals: bs.reduce((s, b) => s + (b.occupancy ?? 0), 0) };
+  };
+  // Grouper par zone pour la vue zones
+  const noZone = filtered.filter((b) => !b.zoneId);
+  const byZone = zones.map((z) => ({ zone: z, buildings: filtered.filter((b) => b.zoneId === z.id) })).filter((g) => g.buildings.length > 0);
+  if (noZone.length) byZone.push({ zone: null, buildings: noZone });
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
-      <div>
-        <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
-        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
-        </h1>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Bâtiments · Buildings" : "Buildings · Bâtiments"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+            {lang === "fr" ? <>Bâtiments & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupation</span></> : <>Buildings & <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>occupancy</span></>}
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* View toggle */}
+          <div style={{ display: "flex", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 8, padding: 3, gap: 2 }}>
+            {[
+              { id: "zones", icon: "layers", fr: "Zones",  en: "Zones" },
+              { id: "plan",  icon: "grid",   fr: "Plan",   en: "Map" },
+              { id: "cards", icon: "barn",   fr: "Cartes", en: "Cards" },
+            ].map((v) => (
+              <button key={v.id} onClick={() => setViewMode(v.id)}
+                className={viewMode === v.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"}
+                style={{ gap: 5, padding: "5px 12px" }}>
+                <Icon name={v.icon} size={12} color={viewMode === v.id ? "#ECF1EC" : "var(--ink-700)"}/>
+                {lang === "fr" ? v.fr : v.en}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}>
+            <Icon name="plus" size={13} color="#FBF8F2"/>
+            {lang === "fr" ? "Nouveau bâtiment" : "New building"}
+          </button>
+        </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
-        <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}><Icon name="plus" size={13} color="#FBF8F2"/>{lang === "fr" ? "Nouveau bâtiment" : "New building"}</button>
-      </div>
+
+      {/* Sélecteur de ferme (Mes fermes) — scroll horizontal sur mobile */}
+      {farms.length > 0 && (
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+          {[{ id: null, name: lang === "fr" ? "Toutes les fermes" : "All farms", all: true }, ...farms].map((f) => {
+            const active = farmId === (f.all ? null : f.id);
+            const st = f.all ? null : farmStats(f.id);
+            const badge = { active: { fr: "Principale", bg: "var(--forest-50)", fg: "var(--forest-700)" }, ok: { fr: "OK", bg: "var(--autorite-50)", fg: "var(--autorite-700)" }, maintenance: { fr: "Suivi", bg: "var(--oxblood-50)", fg: "var(--oxblood-700)" } }[f.status] || null;
+            return (
+              <button key={f.id ?? "all"} onClick={() => { setFarmId(f.all ? null : f.id); setSelectedId(null); }}
+                className="card" style={{ textAlign: "left", padding: f.all ? "10px 14px" : "12px 14px", minWidth: f.all ? 0 : 180, flexShrink: 0, cursor: "pointer", border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-2)", background: active ? "var(--forest-50)" : "var(--paper)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{f.name}</span>
+                  {badge && <span style={{ fontSize: 9, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 4, padding: "1px 6px" }}>{badge.fr}</span>}
+                </div>
+                {!f.all && (
+                  <div style={{ fontSize: 10, color: "var(--fg-3)", marginTop: 4 }}>
+                    {[f.location, f.hectares ? `${f.hectares} ha` : null].filter(Boolean).join(" · ")}
+                    {st && <span style={{ marginLeft: 6, color: "var(--fg-2)" }} className="mono">{st.buildings} {lang === "fr" ? "bât." : "bld."} · {st.animals} {lang === "fr" ? "anim." : "ani."}</span>}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Species filter */}
+      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} compact/>
+
       {filtered.length === 0 ? (
         <EmptyState lang={lang} title={lang === "fr" ? "Aucun bâtiment" : "No building"} hint={lang === "fr" ? "Ajoute un bâtiment pour suivre capacité et occupation." : "Add a building to track capacity and occupancy."}/>
+      ) : viewMode === "zones" ? (
+        /* ── Vue Zones ── */
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {byZone.map(({ zone, buildings: zb }) => (
+            <div key={zone?.id ?? "no-zone"}>
+              {/* En-tête de zone */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <Icon name="layers" size={14} color="var(--forest-700)"/>
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--ink-900)" }}>
+                  {zone ? zone.name : (lang === "fr" ? "Sans zone" : "No zone")}
+                </span>
+                {zone?.description && <span style={{ fontSize: 11, color: "var(--fg-3)" }}>— {zone.description}</span>}
+                <span style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{zb.length} {lang === "fr" ? "bâtiment(s)" : "building(s)"}</span>
+              </div>
+              {/* Bâtiments de cette zone */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                {zb.map((b) => {
+                  const rate = b.occupancyRate ?? 0;
+                  const meta = bldgMeta(b.type);
+                  const sp = speciesById(b.species);
+                  return (
+                    <div key={b.id} className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", border: `1px solid ${meta.border}` }}
+                      onClick={() => setEditing(b)}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {sp && <div style={{ width: 28, height: 28, borderRadius: 7, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <AnimalGlyph kind={sp.glyph} size={15} color="currentColor"/>
+                        </div>}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                        {b.overCapacity && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--oxblood-700)", background: "var(--oxblood-50)", borderRadius: 4, padding: "1px 5px" }}>!</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--fg-3)" }}>{[b.type, b.species ? (lang === "fr" ? (speciesById(b.species)?.fr ?? b.species) : (speciesById(b.species)?.en ?? b.species)) : null].filter(Boolean).join(" · ") || "—"}</div>
+                      {b.capacity != null && <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>}
+                      <div style={{ fontSize: 11, color: "var(--fg-2)" }} className="mono">{b.occupancy}{b.capacity ? ` / ${b.capacity}` : ""}  {rate != null && b.capacity ? `· ${rate}%` : ""}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : viewMode === "plan" ? (
+        /* ── Vue Plan ── */
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, flex: 1, minHeight: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, overflow: "auto" }}>
+            {/* En-tête façon maquette : Ferme — Plan du terrain */}
+            {(() => {
+              const farm = farmId ? farms.find((f) => f.id === farmId) : null;
+              const st = farmId ? farmStats(farmId) : { buildings: filtered.length, animals: filtered.reduce((s, b) => s + (b.occupancy ?? 0), 0) };
+              return (
+                <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-900)" }}>
+                      {farm ? `${farm.name} — ` : ""}{lang === "fr" ? "Plan du terrain" : "Land plan"}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }} className="mono">
+                      {[farm?.hectares ? `${farm.hectares} ha` : null, `${st.buildings} ${lang === "fr" ? "bâtiments" : "buildings"}`, `${st.animals} ${lang === "fr" ? "animaux" : "animals"}`].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  {/* Toggle affichage : occupation / simple */}
+                  <div style={{ display: "flex", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 8, padding: 3, gap: 2 }}>
+                    {[{ id: "occupation", fr: "Occupation", en: "Occupancy" }, { id: "simple", fr: "Simple", en: "Simple" }].map((d) => (
+                      <button key={d.id} onClick={() => setPlanDisplay(d.id)}
+                        className={planDisplay === d.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} style={{ padding: "4px 11px" }}>
+                        {lang === "fr" ? d.fr : d.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Barre plan : zone + mode édition */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <select value={planZoneId ?? ""} onChange={(e) => { setPlanZoneId(e.target.value ? Number(e.target.value) : null); setSelectedId(null); }}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-2)", background: "var(--paper)", fontSize: 13 }}>
+                <option value="">{lang === "fr" ? "Sans zone" : "No zone"}</option>
+                {zones.filter((z) => !farmZoneIds || farmZoneIds.has(z.id)).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select>
+              <button className={planEdit ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} onClick={() => setPlanEdit((v) => !v)} style={{ gap: 5 }}>
+                <Icon name={planEdit ? "check" : "edit"} size={12} color={planEdit ? "#ECF1EC" : "var(--ink-700)"}/>
+                {planEdit ? (lang === "fr" ? "Terminer" : "Done") : (lang === "fr" ? "Éditer le plan" : "Edit plan")}
+              </button>
+              {planEdit && <>
+                <span style={{ width: 1, height: 18, background: "var(--border-2)" }}/>
+                <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Ajouter :" : "Add:"}</span>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("field")}>🌾 {lang === "fr" ? "Champ" : "Field"}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("water")}>💧 {lang === "fr" ? "Eau" : "Water"}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("road")}>🛤 {lang === "fr" ? "Route" : "Road"}</button>
+                {features.some((f) => f.id === selectedId) && (
+                  <button className="btn btn-sm btn-ghost" style={{ color: "var(--oxblood-700)" }} onClick={() => removeFeature(selectedId)}>
+                    <Icon name="trash" size={12} color="var(--oxblood-700)"/> {lang === "fr" ? "Supprimer" : "Delete"}
+                  </button>
+                )}
+              </>}
+            </div>
+            <FarmLandPlan
+              buildings={filtered.filter((b) => (planZoneId ? b.zoneId === planZoneId : !b.zoneId))}
+              features={features.filter((f) => (planZoneId ? f.zoneId === planZoneId : !f.zoneId))}
+              selectedId={selectedId}
+              onSelect={(id) => setSelectedId(id === selectedId ? null : id)}
+              editMode={planEdit}
+              onPersist={persistPlan}
+              display={planDisplay}
+              lang={lang}
+            />
+            {/* Légende par catégorie (espèce / type de bâtiment) */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              {(() => {
+                const cats = new Map();
+                filtered.forEach((b) => {
+                  const sp = b.species ? speciesById(b.species) : null;
+                  const label = sp ? (lang === "fr" ? sp.fr : sp.en) : (b.buildingKind ? { habitation: lang === "fr" ? "Habitation" : "Housing", stock: "Stock", sante: lang === "fr" ? "Santé" : "Health" }[b.buildingKind] || b.buildingKind : (lang === "fr" ? "Autre" : "Other"));
+                  const color = sp ? sp.accent : "var(--fg-3)";
+                  if (!cats.has(label)) cats.set(label, color);
+                });
+                return [...cats.entries()].map(([label, color]) => (
+                  <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-2)", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 20, padding: "3px 11px" }}>
+                    <span style={{ width: 9, height: 9, borderRadius: "50%", background: color }}/>{label}
+                  </span>
+                ));
+              })()}
+            </div>
+            {/* Mini cards grid below the map */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+              {filtered.map((b) => {
+                const rate = b.occupancyRate ?? 0;
+                const meta = bldgMeta(b.type);
+                const isSelected = selectedId === b.id;
+                return (
+                  <button key={b.id}
+                    onClick={() => setSelectedId(b.id === selectedId ? null : b.id)}
+                    style={{ background: isSelected ? "var(--paper)" : meta.bg, border: `2px solid ${isSelected ? "var(--forest-700)" : meta.border}`, borderRadius: 9, padding: "12px 14px", textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", gap: 8, boxShadow: isSelected ? "0 0 0 3px rgba(14,100,56,0.15)" : "none" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Icon name={meta.icon} size={15} color={meta.text}/>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                      {b.overCapacity && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--oxblood-700)", background: "var(--oxblood-50)", borderRadius: 4, padding: "1px 5px" }}>!</span>}
+                    </div>
+                    {b.capacity && <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>}
+                    <div style={{ fontSize: 10, color: "var(--fg-3)" }}>{[b.type, b.species].filter(Boolean).join(" · ") || "—"}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Detail panel */}
+          <div style={{ overflow: "auto" }}>
+            <BldgDetail
+              building={selectedBuilding}
+              lang={lang}
+              onEdit={() => setEditing(selectedBuilding)}
+              onClose={() => setSelectedId(null)}
+              onViewInterior={setInteriorBuilding}
+            />
+          </div>
+        </div>
       ) : (
+        /* ── Vue Cartes ── */
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
           {filtered.map((b) => {
             const rate = b.occupancyRate;
-            const barColor = b.overCapacity ? "var(--oxblood-700)" : rate != null && rate > 85 ? "var(--autorite-500)" : "var(--solidite-500)";
             return (
               <div key={b.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }} onClick={() => setEditing(b)}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -3730,9 +4538,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     <span style={{ color: "var(--fg-2)" }}>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
                     <span className="mono">{b.occupancy}{b.capacity ? ` / ${b.capacity}` : ""}{rate != null ? ` · ${rate}%` : ""}</span>
                   </div>
-                  <div style={{ height: 6, background: "var(--ink-100)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${Math.min(100, rate ?? 0)}%`, background: barColor }}/>
-                  </div>
+                  <BldgOccBar rate={rate ?? 0} overCapacity={b.overCapacity}/>
                 </div>
                 <div style={{ display: "flex", gap: 12, fontSize: 11, color: "var(--fg-2)" }}>
                   {b.temperature != null && <span>🌡 {b.temperature}°C</span>}
@@ -3748,6 +4554,9 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         <BuildingEditor lang={lang} building={editing === "new" ? null : editing}
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
       )}
+      {interiorBuilding && (
+        <BldgInteriorPlan building={interiorBuilding} lang={lang} onClose={() => setInteriorBuilding(null)}/>
+      )}
     </div>
   );
 };
@@ -3761,10 +4570,12 @@ const BuildingEditorField = ({ label, children }) => (
 
 const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
   const [form, setForm] = React.useState(() => building
-    ? { name: building.name || "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
-    : { ...BLANK_BUILDING });
+    ? { name: building.name || "", zone_id: building.zoneId ? String(building.zoneId) : "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
+    : { name: "", zone_id: "", species: "", type: "", capacity: "", temperature: "", humidity: "", manager: "", hygiene_status: "" });
+  const [zones, setZones] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  React.useEffect(() => { api.listZones().then((z) => setZones(Array.isArray(z) ? z : [])).catch(() => {}); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const num = (v) => (v === "" || v == null ? null : Number(v));
   const inputStyle = { padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1)", background: "var(--paper)", fontSize: 13, width: "100%" };
@@ -3772,7 +4583,7 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
     if (!form.name.trim()) { setErr(lang === "fr" ? "Nom requis." : "Name required."); return; }
     setBusy(true); setErr(null);
     try {
-      const payload = { name: form.name.trim(), species: form.species || null, type: form.type || null, capacity: num(form.capacity), temperature: num(form.temperature), humidity: num(form.humidity), manager: form.manager || null, hygiene_status: form.hygiene_status || null };
+      const payload = { name: form.name.trim(), zone_id: form.zone_id ? Number(form.zone_id) : null, species: form.species || null, type: form.type || null, capacity: num(form.capacity), temperature: num(form.temperature), humidity: num(form.humidity), manager: form.manager || null, hygiene_status: form.hygiene_status || null };
       if (building?.id) await api.updateBuilding(building.id, payload);
       else await api.createBuilding(payload);
       onSaved();
@@ -3787,6 +4598,12 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
           <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
         </div>
         <BuildingEditorField label={lang === "fr" ? "Nom" : "Name"}><input value={form.name} onChange={set("name")} style={inputStyle}/></BuildingEditorField>
+        <BuildingEditorField label={lang === "fr" ? "Zone (lieu)" : "Zone (location)"}>
+          <select value={form.zone_id} onChange={set("zone_id")} style={inputStyle}>
+            <option value="">{lang === "fr" ? "— Sans zone —" : "— No zone —"}</option>
+            {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+        </BuildingEditorField>
         <div style={{ display: "flex", gap: 8 }}>
           <BuildingEditorField label={lang === "fr" ? "Espèce" : "Species"}>
             <select value={form.species} onChange={set("species")} style={inputStyle}>

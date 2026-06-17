@@ -12,6 +12,7 @@ const I18N = {
     // Nav
     dashboard: "Tableau de bord",
     identification: "Identification",
+    buildings: "Bâtiments",
     animals: "Animaux",
     health: "Santé & traitements",
     calendar: "Calendrier vaccinal",
@@ -87,6 +88,7 @@ const I18N = {
     tagline: "Smart livestock",
     dashboard: "Dashboard",
     identification: "Identification",
+    buildings: "Buildings",
     animals: "Animals",
     health: "Health & treatments",
     calendar: "Vaccination calendar",

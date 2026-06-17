@@ -206,7 +206,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {animals.map((a) => {
-          const sp = speciesById(a.species);
+          const sp = speciesById(a.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
           const sel = selectedId === a.id;
           const locked = isSaleLockedAnimal(a);
           const statusColor = animalStatusColor(a.status);
@@ -269,7 +269,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
         <span style={{ textAlign: "right" }}>{lang === "fr" ? "Prod." : "Prod."}</span>
       </div>
       {animals.map((a) => {
-        const sp = speciesById(a.species);
+        const sp = speciesById(a.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
         const sel = selectedId === a.id;
         const locked = isSaleLockedAnimal(a);
         const statusColor = animalStatusColor(a.status);
@@ -320,7 +320,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 
 // ─── Animal detail drawer (species-adaptive) ─────────────────────────────
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
-  const sp = speciesById(animal.species);
+  const sp = speciesById(animal.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", frSing: animal.species, enSing: animal.species, fields: [] };
   const groups = groupFields(sp.fields);
   const readOnly = isSaleLockedAnimal(animal);
   const [tab, setTab] = React.useState("details");
