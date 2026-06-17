@@ -6,14 +6,14 @@ COPY frontend/dist/ /usr/share/nginx/html
 COPY marketing-site/dist/ /usr/share/nginx/html-marketing-prod
 # Production FarmOS SPA at /farmos/ — baked into the image.
 COPY farmos-app/dist/ /usr/share/nginx/html-farmos-prod
-# Production BatiPro / HR / Comptabilite SPAs.
+# Production product SPAs.
+COPY domus-app/dist/ /usr/share/nginx/html-domus-prod
+COPY journal-app/dist/ /usr/share/nginx/html-journal-prod
+COPY tickets-app/dist/ /usr/share/nginx/html-tickets-prod
 COPY batipro-app/dist/ /usr/share/nginx/html-batipro-prod
 COPY hr-app/dist/ /usr/share/nginx/html-hr-prod
 COPY comptabilite-app/dist/ /usr/share/nginx/html-comptabilite-prod
-# Placeholders for SPAs deployed via docker cp (no dist at image build time).
-RUN mkdir -p /usr/share/nginx/html-domus-prod \
-             /usr/share/nginx/html-journal-prod \
-             /usr/share/nginx/html-tickets-prod
+COPY migration-app/dist/ /usr/share/nginx/html-migration-prod
 # Chat SPA at /chat/
 COPY chat-app/dist/ /usr/share/nginx/html-chat-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)

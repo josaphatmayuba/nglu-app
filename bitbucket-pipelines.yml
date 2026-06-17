@@ -295,162 +295,112 @@ pipelines:
           - step:
               name: Frontend → prod
               caches: [node-frontend]
-              condition: { changesets: { includePaths: ["frontend/**"] } }
-              # Prod = dist bind-montee servie par nginx : on NE rebuild PAS l'image (cf. incident prod), simple reload.
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm audit --audit-level=high && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/frontend-dist && mkdir -p /tmp/frontend-dist $APP/frontend/dist"
-                - scp -o StrictHostKeyChecking=no -r frontend/dist/* $SERVER:/tmp/frontend-dist/
-                # Bind-mount safe: on vide le CONTENU du dist monté (inode préservé) puis on copie le nouveau contenu — éviter scp -r dist (inode orphelin → ancien build servi).
-                - $SSH $SERVER "find $APP/frontend/dist -mindepth 1 -delete && cp -r /tmp/frontend-dist/. $APP/frontend/dist/ && rm -rf /tmp/frontend-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
           - step:
               name: Domus → prod
               caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**"] } }
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/domus-app-dist && mkdir -p /tmp/domus-app-dist"
-                - scp -o StrictHostKeyChecking=no -r domus-app/dist/* $SERVER:/tmp/domus-app-dist/
-                # PROD: html-domus-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-domus-prod && find /usr/share/nginx/html-domus-prod -mindepth 1 -delete' && docker cp /tmp/domus-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-domus-prod/ && rm -rf /tmp/domus-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
 
           - step:
               name: Journal → prod
               caches: [node-journal]
-              condition: { changesets: { includePaths: ["journal-app/**"] } }
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/journal-app-dist && mkdir -p /tmp/journal-app-dist"
-                - scp -o StrictHostKeyChecking=no -r journal-app/dist/* $SERVER:/tmp/journal-app-dist/
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-journal-prod && find /usr/share/nginx/html-journal-prod -mindepth 1 -delete' && docker cp /tmp/journal-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-journal-prod/ && rm -rf /tmp/journal-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
 
           - step:
               name: Tickets → prod
               caches: [node-tickets]
-              condition: { changesets: { includePaths: ["tickets-app/**"] } }
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/tickets-app-dist && mkdir -p /tmp/tickets-app-dist"
-                - scp -o StrictHostKeyChecking=no -r tickets-app/dist/* $SERVER:/tmp/tickets-app-dist/
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-tickets-prod && find /usr/share/nginx/html-tickets-prod -mindepth 1 -delete' && docker cp /tmp/tickets-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-tickets-prod/ && rm -rf /tmp/tickets-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
 
           - step:
               name: FarmOS → prod
               caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**"] } }
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/farmos-app-dist && mkdir -p /tmp/farmos-app-dist"
-                - scp -o StrictHostKeyChecking=no -r farmos-app/dist/* $SERVER:/tmp/farmos-app-dist/
-                # PROD: html-farmos-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'mkdir -p /usr/share/nginx/html-farmos-prod && find /usr/share/nginx/html-farmos-prod -mindepth 1 -delete' && docker cp /tmp/farmos-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-farmos-prod/ && rm -rf /tmp/farmos-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
 
           - step:
               name: BatiPro → prod
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "rm -rf /tmp/batipro-app-dist && mkdir -p /tmp/batipro-app-dist"
-                - scp -o StrictHostKeyChecking=no -r batipro-app/dist/* $SERVER:/tmp/batipro-app-dist/
-                # PROD: html-batipro-prod est INTERNE au conteneur (pas bind-monté) → docker cp obligatoire ; écrire sur l'hôte ne sert RIEN. Cf hr/comptabilite.
-                - $SSH $SERVER "docker exec nglu_prod_frontend sh -c 'find /usr/share/nginx/html-batipro-prod -mindepth 1 -delete 2>/dev/null; mkdir -p /usr/share/nginx/html-batipro-prod' && docker cp /tmp/batipro-app-dist/. nglu_prod_frontend:/usr/share/nginx/html-batipro-prod/ && rm -rf /tmp/batipro-app-dist"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
 
           - step:
               name: HR → prod
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/hr-app/dist"
-                - scp -o StrictHostKeyChecking=no -r hr-app/dist $SERVER:$APP/hr-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-hr-prod && docker cp $APP/hr-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-hr-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
 
           - step:
               name: Comptabilite → prod
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/comptabilite-app/dist"
-                - scp -o StrictHostKeyChecking=no -r comptabilite-app/dist $SERVER:$APP/comptabilite-app/
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-comptabilite-prod && docker cp $APP/comptabilite-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-comptabilite-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
 
           - step:
               name: Migration Cockpit → prod
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/migration-app/dist $APP/nginx"
-                - scp -o StrictHostKeyChecking=no -r migration-app/dist $SERVER:$APP/migration-app/
-                # 1) Met a jour les FICHIERS HOTE : conf nginx (:ro) + compose (volume html-migration-dev).
-                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$APP/nginx/nginx.frontend.conf
-                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-                # 2) RECREE le frontend pour qu'il re-binde la conf :ro a jour (la route /migration est
-                #    nouvelle ; docker cp/cat > sont impossibles sur un mount read-only). Bref flicker.
-                # Conteneur frontend = projet compose `nglu-app` (cf. step dev). On recree avec son projet
-                # reel + --force-recreate, sinon conflit de nom.
-                - $SSH $SERVER "cd $APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
-                # 3) APRES le recreate, depose le dist prod dans le conteneur (html-migration-prod n'est pas
-                #    un volume : meme schema que comptabilite/domus prod, deja bakes/cp).
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-migration-prod && docker cp $APP/migration-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-migration-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
 
           - step:
               name: Chat → prod
               caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**"] } }
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/chat-app/dist $APP/nginx"
-                - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
-                - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
-                - $SSH $SERVER "mkdir -p $APP/chat-app/dist && find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
-                # html-chat-prod n'est pas un volume bind-monte : docker cp dans le conteneur
-                - $SSH $SERVER "docker exec nglu_prod_frontend mkdir -p /usr/share/nginx/html-chat-prod && docker cp $APP/chat-app/dist/. nglu_prod_frontend:/usr/share/nginx/html-chat-prod/"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t && docker exec nglu_prod_frontend nginx -s reload"
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
 
           - step:
               name: Marketing → prod
               caches: [node-marketing]
-              condition: { changesets: { includePaths: ["marketing-site/**"] } }
+              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/marketing-site/dist"
-                - scp -o StrictHostKeyChecking=no -r marketing-site/dist $SERVER:$APP/marketing-site/
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
 
   # ═══════════ Override manuel : tout redeployer (Bitbucket → Run pipeline → custom) ═══════════
   custom:
@@ -496,8 +446,19 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - for a in domus-app farmos-app batipro-app hr-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - for a in domus-app farmos-app journal-app tickets-app batipro-app hr-app migration-app; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
+                - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
