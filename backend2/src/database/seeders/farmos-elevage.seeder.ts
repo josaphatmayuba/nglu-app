@@ -22,6 +22,7 @@ import {
   designations,
   farmosAnimals,
   farmosBuildings,
+  farmosFarms,
   farmosLandFeatures,
   farmosProductionLogs,
   farmosZones,
@@ -31,10 +32,19 @@ import {
 
 const ORG_ID = 1;
 
+// ── Fermes (exploitations) ─────────────────────────────────────────────
+// Niveau au-dessus des zones. Valeurs issues de l'audit terrain (maquette).
+const FARMS = [
+  { name: "Ferme Kasangulu",   location: "Kongo Central", hectares: 12, status: "active",      description: "Elevage porcs, vaches, chevres, habitation et champ mais." },
+  { name: "Ferme Mont-Ngafula", location: "Kinshasa",     hectares: 7,  status: "ok",          description: "Stockage, habitation, cultures maraicheres et petit elevage." },
+  { name: "Ferme Ngolu Nord",  location: "Zone agricole", hectares: 17, status: "maintenance", description: "Grande zone de culture, etables et batiments en maintenance." },
+];
+
 // ── Zones géographiques ────────────────────────────────────────────────
+// farm = nom de la ferme (doit correspondre à FARMS[].name)
 const ZONES = [
-  { name: "Zone Kiselele",  description: "Site principal — bovins et porcs" },
-  { name: "Zone Kasangulu", description: "Site secondaire — caprins, porcs malades, poulaillers" },
+  { name: "Zone Kiselele",  farm: "Ferme Kasangulu", description: "Site principal — bovins et porcs" },
+  { name: "Zone Kasangulu", farm: "Ferme Kasangulu", description: "Site secondaire — caprins, porcs malades, poulaillers" },
 ];
 
 // ── Bâtiments ──────────────────────────────────────────────────────────
@@ -230,19 +240,50 @@ async function cleanOldBuildings() {
   if (removed) console.log(`  [farmos-buildings] ${removed} ancien(s) bâtiment(s) désactivé(s).`);
 }
 
-async function seedZones(): Promise<Map<string, number>> {
+async function seedFarms(): Promise<Map<string, number>> {
+  const farmMap = new Map<string, number>();
+  for (const f of FARMS) {
+    const [exists] = await db
+      .select({ id: farmosFarms.id })
+      .from(farmosFarms)
+      .where(and(eq(farmosFarms.organizationId, ORG_ID), eq(farmosFarms.name, f.name)))
+      .limit(1);
+    if (exists) {
+      farmMap.set(f.name, exists.id);
+    } else {
+      const [r] = await db.insert(farmosFarms).values({
+        organizationId: ORG_ID,
+        name: f.name,
+        location: f.location,
+        hectares: String(f.hectares),
+        status: f.status,
+        description: f.description,
+      } as any).$returningId();
+      farmMap.set(f.name, Number(r.id));
+    }
+  }
+  console.log(`  [farmos-farms] ${FARMS.length} ferme(s) prête(s).`);
+  return farmMap;
+}
+
+async function seedZones(farmMap: Map<string, number>): Promise<Map<string, number>> {
   const zoneMap = new Map<string, number>();
   for (const z of ZONES) {
+    const farmId = farmMap.get(z.farm) ?? null;
     const [exists] = await db
-      .select({ id: farmosZones.id })
+      .select({ id: farmosZones.id, farmId: farmosZones.farmId })
       .from(farmosZones)
       .where(and(eq(farmosZones.organizationId, ORG_ID), eq(farmosZones.name, z.name)))
       .limit(1);
     if (exists) {
       zoneMap.set(z.name, exists.id);
+      if (!exists.farmId && farmId) {
+        await db.execute(sql`UPDATE farmos_zones SET farm_id = ${farmId} WHERE id = ${exists.id}`);
+      }
     } else {
       const [r] = await db.insert(farmosZones).values({
         organizationId: ORG_ID,
+        farmId,
         name: z.name,
         description: z.description,
       } as any).$returningId();
@@ -494,7 +535,8 @@ async function fixSpeciesIds() {
 export async function seedFarmosElevage() {
   await fixSpeciesIds();
   await cleanOldBuildings();
-  const zoneMap = await seedZones();
+  const farmMap = await seedFarms();
+  const zoneMap = await seedZones(farmMap);
   await seedBuildings(zoneMap);
   await seedLandFeatures(zoneMap);
   await seedAnimals();

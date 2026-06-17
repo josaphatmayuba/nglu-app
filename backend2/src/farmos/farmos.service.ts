@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -1715,6 +1715,49 @@ export class FarmosService {
   }
 
   // ─── Zones FarmOS ─────────────────────────────────────────────────────────
+  async listFarms(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosFarms)
+      .where(and(eq(farmosFarms.organizationId, orgId), eq(farmosFarms.isActive, 1)))
+      .orderBy(farmosFarms.name);
+  }
+
+  async createFarm(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosFarms).values({
+      organizationId: orgId,
+      name: input.name,
+      location: input.location ?? null,
+      hectares: input.hectares != null ? String(input.hectares) : null,
+      status: input.status ?? "active",
+      description: input.description ?? null,
+    } as any).$returningId();
+    return { id: res.id };
+  }
+
+  async updateFarm(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosFarms.id }).from(farmosFarms)
+      .where(and(eq(farmosFarms.id, id), eq(farmosFarms.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Farm not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.location !== undefined) patch.location = input.location;
+    if (input.hectares !== undefined) patch.hectares = input.hectares != null ? String(input.hectares) : null;
+    if (input.status !== undefined) patch.status = input.status;
+    if (input.description !== undefined) patch.description = input.description;
+    if (Object.keys(patch).length) await this.db.update(farmosFarms).set(patch).where(eq(farmosFarms.id, id));
+    return { id };
+  }
+
+  async deleteFarm(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosFarms.id }).from(farmosFarms)
+      .where(and(eq(farmosFarms.id, id), eq(farmosFarms.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Farm not found.");
+    await this.db.update(farmosFarms).set({ isActive: 0 } as any).where(eq(farmosFarms.id, id));
+    return { ok: true };
+  }
+
   async listZones(orgId: number) {
     return this.db
       .select()
@@ -1727,6 +1770,7 @@ export class FarmosService {
     if (!input.name) throw new BadRequestException("name requis.");
     const [res] = await this.db.insert(farmosZones).values({
       organizationId: orgId,
+      farmId: input.farm_id ?? input.farmId ?? null,
       name: input.name,
       description: input.description ?? null,
     } as any).$returningId();
@@ -1740,6 +1784,7 @@ export class FarmosService {
     const patch: Record<string, unknown> = {};
     if (input.name !== undefined) patch.name = input.name;
     if (input.description !== undefined) patch.description = input.description;
+    if (input.farm_id !== undefined || input.farmId !== undefined) patch.farmId = input.farm_id ?? input.farmId ?? null;
     if (Object.keys(patch).length) await this.db.update(farmosZones).set(patch).where(eq(farmosZones.id, id));
     return { id };
   }

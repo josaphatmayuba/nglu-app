@@ -2393,9 +2393,23 @@ export const farmosDocuments = mysqlTable("farmos_documents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const farmosFarms = mysqlTable("farmos_farms", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  location: varchar("location", { length: 255 }),
+  hectares: decimal("hectares", { precision: 8, scale: 2 }),
+  status: varchar("status", { length: 30 }).default("active").notNull(),
+  description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosZones = mysqlTable("farmos_zones", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  farmId: bigint("farm_id", { mode: "number" }),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   isActive: tinyint("is_active").default(1).notNull(),
@@ -2410,6 +2424,7 @@ export const farmosBuildings = mysqlTable("farmos_buildings", {
   name: varchar("name", { length: 255 }).notNull(),
   species: varchar("species", { length: 50 }),
   type: varchar("type", { length: 50 }),
+  buildingKind: varchar("building_kind", { length: 50 }),
   capacity: int("capacity"),
   posX: decimal("pos_x", { precision: 6, scale: 2 }),
   posY: decimal("pos_y", { precision: 6, scale: 2 }),
