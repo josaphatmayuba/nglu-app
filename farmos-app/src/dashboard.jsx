@@ -293,7 +293,7 @@ function computeFarmScore(live, speciesFilter, dateRange) {
   const expenses = (live.expenses || []).filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const rev = sales.reduce((s, x) => s + Number(x.totalAmount ?? x.total_amount ?? 0), 0);
   const exp = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
-  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 80;
+  const finance = rev > 0 ? Math.max(0, Math.min(100, Math.round(((rev - exp) / rev) * 100))) : 0;
   return { sante, prod, finance };
 }
 
