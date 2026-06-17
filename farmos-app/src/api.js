@@ -16,6 +16,11 @@ const BASE = (NATIVE ? API_HOST : "") + "/api/farmos";
 const inFlightReads = new Map();
 let requestQueue = Promise.resolve();
 
+const buildQuery = (params) => {
+  const q = Object.entries(params).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+  return q ? `?${q}` : "";
+};
+
 function authHeaders() {
   const token = getToken(); // SCRUM-119 — token en mémoire
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -312,8 +317,13 @@ export const api = {
   deleteWeighing: (id) => mutate({ kind: "deleteWeighing", method: "DELETE", path: `/weighings/${id}` }),
   getFinanceSummary: () => jsonFetch("/finance-summary"),
   getProfitability: () => jsonFetch("/profitability"),
+  // Zones
+  listZones: () => jsonFetch("/zones"),
+  createZone: (body) => jsonFetch("/zones", { method: "POST", body: JSON.stringify(body) }),
+  updateZone: (id, body) => jsonFetch(`/zones/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteZone: (id) => jsonFetch(`/zones/${id}`, { method: "DELETE" }),
   // Bâtiments
-  listBuildings: (species) => jsonFetch(`/buildings${species ? `?species=${encodeURIComponent(species)}` : ""}`),
+  listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
   updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),

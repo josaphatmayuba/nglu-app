@@ -953,6 +953,13 @@
       "when": 1780502400000,
       "tag": "0159_chat_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "5",
+      "when": 1780506000000,
+      "tag": "0160_farmos_zones",
+      "breakpoints": true
     }
   ]
 }

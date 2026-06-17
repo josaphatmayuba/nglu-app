@@ -23,11 +23,18 @@ import {
   farmosAnimals,
   farmosBuildings,
   farmosProductionLogs,
+  farmosZones,
   roles,
   users,
 } from "../schema";
 
 const ORG_ID = 1;
+
+// ── Zones géographiques ────────────────────────────────────────────────
+const ZONES = [
+  { name: "Zone Kiselele",  description: "Site principal — bovins et porcs" },
+  { name: "Zone Kasangulu", description: "Site secondaire — caprins, porcs malades, poulaillers" },
+];
 
 // ── Bâtiments ──────────────────────────────────────────────────────────
 const BUILDINGS = [
@@ -111,17 +118,48 @@ async function cleanOldBuildings() {
   if (removed) console.log(`  [farmos-buildings] ${removed} ancien(s) bâtiment(s) désactivé(s).`);
 }
 
-async function seedBuildings() {
-  let created = 0;
-  for (const b of BUILDINGS) {
+async function seedZones(): Promise<Map<string, number>> {
+  const zoneMap = new Map<string, number>();
+  for (const z of ZONES) {
     const [exists] = await db
-      .select({ id: farmosBuildings.id })
+      .select({ id: farmosZones.id })
+      .from(farmosZones)
+      .where(and(eq(farmosZones.organizationId, ORG_ID), eq(farmosZones.name, z.name)))
+      .limit(1);
+    if (exists) {
+      zoneMap.set(z.name, exists.id);
+    } else {
+      const [r] = await db.insert(farmosZones).values({
+        organizationId: ORG_ID,
+        name: z.name,
+        description: z.description,
+      } as any).$returningId();
+      zoneMap.set(z.name, Number(r.id));
+    }
+  }
+  console.log(`  [farmos-zones] ${ZONES.length} zone(s) prête(s).`);
+  return zoneMap;
+}
+
+async function seedBuildings(zoneMap: Map<string, number>) {
+  let created = 0, updated = 0;
+  for (const b of BUILDINGS) {
+    const zoneId = zoneMap.get(b.zone) ?? null;
+    const [exists] = await db
+      .select({ id: farmosBuildings.id, zoneId: farmosBuildings.zoneId })
       .from(farmosBuildings)
       .where(and(eq(farmosBuildings.organizationId, ORG_ID), eq(farmosBuildings.name, b.name)))
       .limit(1);
-    if (exists) continue;
+    if (exists) {
+      if (!exists.zoneId && zoneId) {
+        await db.execute(sql`UPDATE farmos_buildings SET zone_id = ${zoneId} WHERE id = ${exists.id}`);
+        updated++;
+      }
+      continue;
+    }
     await db.insert(farmosBuildings).values({
       organizationId: ORG_ID,
+      zoneId,
       name: b.name,
       species: b.species,
       type: b.type,
@@ -130,18 +168,34 @@ async function seedBuildings() {
     } as any);
     created++;
   }
-  console.log(`  [farmos-buildings] ${created} créé(s), ${BUILDINGS.length - created} déjà présent(s).`);
+  console.log(`  [farmos-buildings] ${created} créé(s), ${updated} zone_id mis à jour.`);
 }
 
 async function seedAnimals() {
-  let created = 0;
+  // Charger la map bâtiment→{id, zone_id} pour lier building_id et zone_id
+  const bldgRows = await db
+    .select({ id: farmosBuildings.id, name: farmosBuildings.name, zoneId: farmosBuildings.zoneId })
+    .from(farmosBuildings)
+    .where(eq(farmosBuildings.organizationId, ORG_ID));
+  const bldgMap = new Map(bldgRows.map((r) => [r.name, r]));
+
+  let created = 0, updated = 0;
   for (const a of ANIMALS) {
+    const bldg = bldgMap.get(a.barn);
+    const buildingId = bldg?.id ?? null;
+    const zoneId = bldg?.zoneId ?? null;
     const [exists] = await db
-      .select({ id: farmosAnimals.id })
+      .select({ id: farmosAnimals.id, buildingId: farmosAnimals.buildingId })
       .from(farmosAnimals)
       .where(and(eq(farmosAnimals.organizationId, ORG_ID), eq(farmosAnimals.externalId, a.externalId)))
       .limit(1);
-    if (exists) continue;
+    if (exists) {
+      if (!exists.buildingId && buildingId) {
+        await db.execute(sql`UPDATE farmos_animals SET building_id = ${buildingId}, zone_id = ${zoneId} WHERE id = ${exists.id}`);
+        updated++;
+      }
+      continue;
+    }
     await db.insert(farmosAnimals).values({
       organizationId: ORG_ID,
       externalId: a.externalId,
@@ -152,13 +206,15 @@ async function seedAnimals() {
       lot: a.lot,
       barn: a.barn,
       room: a.room,
+      buildingId,
+      zoneId,
       status: a.status,
       lastEvent: a.lastEvent,
       weightUnit: "kg",
     } as any);
     created++;
   }
-  console.log(`  [farmos-animals] ${created} créé(s), ${ANIMALS.length - created} déjà présent(s).`);
+  console.log(`  [farmos-animals] ${created} créé(s), ${updated} building_id/zone_id mis à jour.`);
 }
 
 async function seedProduction() {
@@ -277,7 +333,8 @@ async function fixSpeciesIds() {
 export async function seedFarmosElevage() {
   await fixSpeciesIds();
   await cleanOldBuildings();
-  await seedBuildings();
+  const zoneMap = await seedZones();
+  await seedBuildings(zoneMap);
   await seedAnimals();
   await seedProduction();
   await seedHealthGuidelines();

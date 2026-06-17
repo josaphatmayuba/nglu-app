@@ -2030,6 +2030,8 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   lot: varchar("lot", { length: 100 }),
   barn: varchar("barn", { length: 100 }),
   room: varchar("room", { length: 100 }),
+  buildingId: bigint("building_id", { mode: "number" }),
+  zoneId: bigint("zone_id", { mode: "number" }),
   type: varchar("type", { length: 50 }),
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
   withdrawalUntil: date("withdrawal_until", { mode: "string" }),
@@ -2391,9 +2393,20 @@ export const farmosDocuments = mysqlTable("farmos_documents", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const farmosZones = mysqlTable("farmos_zones", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosBuildings = mysqlTable("farmos_buildings", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  zoneId: bigint("zone_id", { mode: "number" }),
   name: varchar("name", { length: 255 }).notNull(),
   species: varchar("species", { length: 50 }),
   type: varchar("type", { length: 50 }),

@@ -4125,19 +4125,27 @@ const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
 
 const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [rows, setRows] = React.useState([]);
+  const [zones, setZones] = React.useState([]);
   const [editing, setEditing] = React.useState(null); // building | "new" | null
   const [reloadKey, setReloadKey] = React.useState(0);
-  const [viewMode, setViewMode] = React.useState("plan"); // "plan" | "cards"
+  const [viewMode, setViewMode] = React.useState("zones"); // "zones" | "plan" | "cards"
   const [selectedId, setSelectedId] = React.useState(null);
   const [interiorBuilding, setInteriorBuilding] = React.useState(null);
   const refresh = useDataRefresh(["buildings", "animals"]);
   React.useEffect(() => {
     let cancel = false;
-    api.listBuildings().then((b) => { if (!cancel) setRows(Array.isArray(b) ? b : []); }).catch((e) => console.warn("listBuildings:", e.message));
+    Promise.all([
+      api.listBuildings().catch(() => []),
+      api.listZones().catch(() => []),
+    ]).then(([b, z]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
+  // Grouper par zone pour la vue zones
+  const noZone = filtered.filter((b) => !b.zoneId);
+  const byZone = zones.map((z) => ({ zone: z, buildings: filtered.filter((b) => b.zoneId === z.id) })).filter((g) => g.buildings.length > 0);
+  if (noZone.length) byZone.push({ zone: null, buildings: noZone });
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       {/* Header */}
@@ -4152,8 +4160,9 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           {/* View toggle */}
           <div style={{ display: "flex", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 8, padding: 3, gap: 2 }}>
             {[
+              { id: "zones", icon: "layers", fr: "Zones",  en: "Zones" },
               { id: "plan",  icon: "grid",   fr: "Plan",   en: "Map" },
-              { id: "cards", icon: "layers", fr: "Cartes", en: "Cards" },
+              { id: "cards", icon: "barn",   fr: "Cartes", en: "Cards" },
             ].map((v) => (
               <button key={v.id} onClick={() => setViewMode(v.id)}
                 className={viewMode === v.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"}
@@ -4175,6 +4184,46 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
 
       {filtered.length === 0 ? (
         <EmptyState lang={lang} title={lang === "fr" ? "Aucun bâtiment" : "No building"} hint={lang === "fr" ? "Ajoute un bâtiment pour suivre capacité et occupation." : "Add a building to track capacity and occupancy."}/>
+      ) : viewMode === "zones" ? (
+        /* ── Vue Zones ── */
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {byZone.map(({ zone, buildings: zb }) => (
+            <div key={zone?.id ?? "no-zone"}>
+              {/* En-tête de zone */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                <Icon name="layers" size={14} color="var(--forest-700)"/>
+                <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--ink-900)" }}>
+                  {zone ? zone.name : (lang === "fr" ? "Sans zone" : "No zone")}
+                </span>
+                {zone?.description && <span style={{ fontSize: 11, color: "var(--fg-3)" }}>— {zone.description}</span>}
+                <span style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{zb.length} {lang === "fr" ? "bâtiment(s)" : "building(s)"}</span>
+              </div>
+              {/* Bâtiments de cette zone */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                {zb.map((b) => {
+                  const rate = b.occupancyRate ?? 0;
+                  const meta = bldgMeta(b.type);
+                  const sp = speciesById(b.species);
+                  return (
+                    <div key={b.id} className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", border: `1px solid ${meta.border}` }}
+                      onClick={() => setEditing(b)}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {sp && <div style={{ width: 28, height: 28, borderRadius: 7, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <AnimalGlyph kind={sp.glyph} size={15} color="currentColor"/>
+                        </div>}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+                        {b.overCapacity && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--oxblood-700)", background: "var(--oxblood-50)", borderRadius: 4, padding: "1px 5px" }}>!</span>}
+                      </div>
+                      <div style={{ fontSize: 10, color: "var(--fg-3)" }}>{[b.type, b.species ? (lang === "fr" ? (speciesById(b.species)?.fr ?? b.species) : (speciesById(b.species)?.en ?? b.species)) : null].filter(Boolean).join(" · ") || "—"}</div>
+                      {b.capacity != null && <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>}
+                      <div style={{ fontSize: 11, color: "var(--fg-2)" }} className="mono">{b.occupancy}{b.capacity ? ` / ${b.capacity}` : ""}  {rate != null && b.capacity ? `· ${rate}%` : ""}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : viewMode === "plan" ? (
         /* ── Vue Plan ── */
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, flex: 1, minHeight: 0 }}>
@@ -4267,10 +4316,12 @@ const BuildingEditorField = ({ label, children }) => (
 
 const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
   const [form, setForm] = React.useState(() => building
-    ? { name: building.name || "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
-    : { ...BLANK_BUILDING });
+    ? { name: building.name || "", zone_id: building.zoneId ? String(building.zoneId) : "", species: building.species || "", type: building.type || "", capacity: building.capacity ?? "", temperature: building.temperature ?? "", humidity: building.humidity ?? "", manager: building.manager || "", hygiene_status: building.hygieneStatus || "" }
+    : { name: "", zone_id: "", species: "", type: "", capacity: "", temperature: "", humidity: "", manager: "", hygiene_status: "" });
+  const [zones, setZones] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
+  React.useEffect(() => { api.listZones().then((z) => setZones(Array.isArray(z) ? z : [])).catch(() => {}); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const num = (v) => (v === "" || v == null ? null : Number(v));
   const inputStyle = { padding: "7px 9px", borderRadius: 6, border: "1px solid var(--border-1)", background: "var(--paper)", fontSize: 13, width: "100%" };
@@ -4278,7 +4329,7 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
     if (!form.name.trim()) { setErr(lang === "fr" ? "Nom requis." : "Name required."); return; }
     setBusy(true); setErr(null);
     try {
-      const payload = { name: form.name.trim(), species: form.species || null, type: form.type || null, capacity: num(form.capacity), temperature: num(form.temperature), humidity: num(form.humidity), manager: form.manager || null, hygiene_status: form.hygiene_status || null };
+      const payload = { name: form.name.trim(), zone_id: form.zone_id ? Number(form.zone_id) : null, species: form.species || null, type: form.type || null, capacity: num(form.capacity), temperature: num(form.temperature), humidity: num(form.humidity), manager: form.manager || null, hygiene_status: form.hygiene_status || null };
       if (building?.id) await api.updateBuilding(building.id, payload);
       else await api.createBuilding(payload);
       onSaved();
@@ -4293,6 +4344,12 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
           <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
         </div>
         <BuildingEditorField label={lang === "fr" ? "Nom" : "Name"}><input value={form.name} onChange={set("name")} style={inputStyle}/></BuildingEditorField>
+        <BuildingEditorField label={lang === "fr" ? "Zone (lieu)" : "Zone (location)"}>
+          <select value={form.zone_id} onChange={set("zone_id")} style={inputStyle}>
+            <option value="">{lang === "fr" ? "— Sans zone —" : "— No zone —"}</option>
+            {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+        </BuildingEditorField>
         <div style={{ display: "flex", gap: 8 }}>
           <BuildingEditorField label={lang === "fr" ? "Espèce" : "Species"}>
             <select value={form.species} onChange={set("species")} style={inputStyle}>

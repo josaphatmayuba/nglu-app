@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **FarmOS — structure Zones/Bâtiments** : table `farmos_zones` (migration 0160) + colonne `zone_id` sur `farmos_buildings` et `building_id`/`zone_id` sur `farmos_animals`. Backend : CRUD `/zones`, `listBuildings` retourne la zone liée. Seeder : `seedZones()` crée Zone Kiselele / Zone Kasangulu et lie chaque bâtiment + animal. UI : vue "Zones" par défaut (bâtiments groupés par zone), sélecteur de zone dans l'éditeur de bâtiment. [SCRUM]
+
 ### Fixed
 - **FarmOS /animaux crash** : `Cannot read properties of undefined (reading 'accentBg')` — `speciesById()` retournait `undefined` pour les espèces `bovin/porc/poule/caprin` (IDs inconnus du frontend). Fix double : (1) `animals.jsx` — fallback `|| {...}` sur tous les appels `speciesById` sans guard ; (2) seeder — normalise les IDs vers `cow/pig/chicken/goat` en DB + `fixSpeciesIds()` au boot pour les enregistrements existants. [SCRUM]
 

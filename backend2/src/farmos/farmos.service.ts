@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -1714,17 +1714,58 @@ export class FarmosService {
     return { message: "Document supprimé." };
   }
 
+  // ─── Zones FarmOS ─────────────────────────────────────────────────────────
+  async listZones(orgId: number) {
+    return this.db
+      .select()
+      .from(farmosZones)
+      .where(and(eq(farmosZones.organizationId, orgId), eq(farmosZones.isActive, 1)))
+      .orderBy(farmosZones.name);
+  }
+
+  async createZone(input: any, orgId: number) {
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosZones).values({
+      organizationId: orgId,
+      name: input.name,
+      description: input.description ?? null,
+    } as any).$returningId();
+    return { id: res.id };
+  }
+
+  async updateZone(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosZones.id }).from(farmosZones)
+      .where(and(eq(farmosZones.id, id), eq(farmosZones.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Zone not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.description !== undefined) patch.description = input.description;
+    if (Object.keys(patch).length) await this.db.update(farmosZones).set(patch).where(eq(farmosZones.id, id));
+    return { id };
+  }
+
+  async deleteZone(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosZones.id }).from(farmosZones)
+      .where(and(eq(farmosZones.id, id), eq(farmosZones.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Zone not found.");
+    await this.db.update(farmosZones).set({ isActive: 0 } as any).where(eq(farmosZones.id, id));
+    return { ok: true };
+  }
+
   // ─── Bâtiments FarmOS — occupation calculée depuis animals.barn (par nom) ─────
-  async listBuildings(orgId: number, species?: string | null) {
+  async listBuildings(orgId: number, species?: string | null, zoneId?: number | null) {
     const conds = [eq(farmosBuildings.organizationId, orgId), eq(farmosBuildings.isActive, 1)];
     if (species) conds.push(eq(farmosBuildings.species, species));
-    const [buildings, animals] = await Promise.all([
+    if (zoneId) conds.push(eq(farmosBuildings.zoneId, zoneId));
+    const [buildings, animals, zones] = await Promise.all([
       this.db.select().from(farmosBuildings).where(and(...conds)).orderBy(farmosBuildings.name),
       this.db
         .select({ barn: farmosAnimals.barn, count: farmosAnimals.count })
         .from(farmosAnimals)
         .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+      this.db.select().from(farmosZones).where(and(eq(farmosZones.organizationId, orgId), eq(farmosZones.isActive, 1))),
     ]);
+    const zoneById = new Map(zones.map((z) => [z.id, z]));
     // Occupation = somme des count (ou 1 par tête) des animaux dont barn == nom du bâtiment.
     const occByName = new Map<string, number>();
     for (const a of animals) {
@@ -1735,8 +1776,10 @@ export class FarmosService {
     return buildings.map((b) => {
       const occupancy = occByName.get(b.name) ?? 0;
       const cap = b.capacity ?? null;
+      const zone = b.zoneId ? zoneById.get(b.zoneId) ?? null : null;
       return {
         ...b,
+        zone: zone ? { id: zone.id, name: zone.name } : null,
         occupancy,
         occupancyRate: cap && cap > 0 ? Math.round((occupancy / cap) * 100) : null,
         overCapacity: cap != null && cap > 0 && occupancy > cap,
@@ -1758,6 +1801,7 @@ export class FarmosService {
     if (!input.name) throw new BadRequestException("name requis.");
     const [res] = await this.db.insert(farmosBuildings).values({
       organizationId: orgId,
+      zoneId: input.zone_id ?? null,
       name: input.name,
       species: input.species ?? null,
       type: input.type ?? null,
@@ -1775,6 +1819,7 @@ export class FarmosService {
   async updateBuilding(id: number, input: any, orgId: number) {
     await this.getBuilding(id, orgId);
     const patch: Record<string, unknown> = {};
+    if (input.zone_id !== undefined) patch.zoneId = input.zone_id;
     if (input.name !== undefined) patch.name = input.name;
     if (input.species !== undefined) patch.species = input.species;
     if (input.type !== undefined) patch.type = input.type;
