@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.12)
+- FarmOS POS : section "Productions disponibles" avec bouton Vendre direct pour les œufs (et lait) dès qu'un stock est disponible — plus de chasse dans la recherche ; message EmptyState corrigé pour orienter vers Production
+
+### Added (3.82.11)
+- FarmOS vente d'œufs : migration 0167 (`building_id` sur `farmos_production_logs`), endpoint `GET /farmos/egg-stock` (stock = produit - vendu), section "Gestion des œufs" dans ProductionScreen avec formulaire récolte (poulailler, cassés) + formulaire vente (stock check, devise, acheteur, total auto)
+
 ### Fixed
 - **Pipeline prod statique** : les apps servies par `nglu_prod_frontend` utilisent maintenant un déploiement prod commun avec lock `/tmp/nglu-prod-deploy.lock`, remplacement du `dist` hôte, rebuild de l'image frontend, smoke test et rollback image (`nglu_prod-frontend:previous`) en cas d'échec. Le premier déploiement d'une app crée aussi les dossiers `dist` manquants avant le build Docker. [3.82.11]
 

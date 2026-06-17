@@ -1245,10 +1245,20 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("7d"));
   const refresh = useDataRefresh(["animals", "productionLogs", "sales", "expenses", "treatments"]);
+
+  // ── Egg section state ──
+  const [eggStock, setEggStock] = React.useState({ produced: 0, sold: 0, available: 0 });
+  const [buildings, setBuildings] = React.useState([]);
+  const currencyMeta = useCurrencyCatalog();
+  const [eggHarvestForm, setEggHarvestForm] = React.useState({ open: false, date: new Date().toISOString().slice(0, 10), building_id: "", quantity: "", broken: "", notes: "" });
+  const [eggSaleForm, setEggSaleForm] = React.useState({ open: false, date: new Date().toISOString().slice(0, 10), quantity: "", unit: "oeufs", unit_price: "", buyer: "", currency_id: "", notes: "" });
+  const [eggSubmitting, setEggSubmitting] = React.useState(false);
+  const [eggError, setEggError] = React.useState("");
+
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listProductionLogs(), api.getDashboardSnapshot()])
-      .then(([rows, snapshot]) => {
+    Promise.all([api.listProductionLogs(), api.getDashboardSnapshot(), api.getEggStock(), api.listBuildings("chicken")])
+      .then(([rows, snapshot, stock, bldgs]) => {
         if (cancel) return;
         setLogs(Array.isArray(rows) ? rows : []);
         setLive({
@@ -1257,6 +1267,8 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
           sales: Array.isArray(snapshot?.sales) ? snapshot.sales : [],
           expenses: Array.isArray(snapshot?.expenses) ? snapshot.expenses : [],
         });
+        if (stock && typeof stock.available === "number") setEggStock(stock);
+        setBuildings(Array.isArray(bldgs) ? bldgs : []);
       })
       .catch(() => {});
     return () => { cancel = true; };
@@ -1419,9 +1431,229 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
           })}
         </div>
       )}
+
+      {/* ── SECTION ŒUFS ─────────────────────────────────────────── */}
+      {(!speciesFilter || speciesFilter === "chicken") && (
+        <EggSection
+          lang={lang}
+          eggStock={eggStock}
+          buildings={buildings}
+          currencyMeta={currencyMeta}
+          harvestForm={eggHarvestForm}
+          setHarvestForm={setEggHarvestForm}
+          saleForm={eggSaleForm}
+          setSaleForm={setEggSaleForm}
+          submitting={eggSubmitting}
+          setSubmitting={setEggSubmitting}
+          error={eggError}
+          setError={setEggError}
+          onRefresh={() => setReloadKey((k) => k + 1)}
+        />
+      )}
     </div>
   );
 };
+
+// ─── EGG SECTION ─────────────────────────────────────────────────────────
+function EggSection({ lang, eggStock, buildings, currencyMeta, harvestForm, setHarvestForm, saleForm, setSaleForm, submitting, setSubmitting, error, setError, onRefresh }) {
+  const fmt = (n) => Number(n).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA");
+  const moneySymbol = currencyMeta.fallbackSymbol || "CDF";
+
+  async function submitHarvest(e) {
+    e.preventDefault();
+    setError("");
+    const qty = Number(harvestForm.quantity);
+    if (!qty || qty <= 0) { setError(lang === "fr" ? "Quantité requise." : "Quantity required."); return; }
+    setSubmitting(true);
+    try {
+      const quality = {};
+      if (harvestForm.broken) quality.broken = Number(harvestForm.broken);
+      await api.createProductionLog({
+        species: "chicken",
+        product_type: "eggs",
+        log_date: harvestForm.date,
+        quantity: qty,
+        unit: "oeufs",
+        building_id: harvestForm.building_id ? Number(harvestForm.building_id) : null,
+        quality: Object.keys(quality).length ? quality : null,
+        notes: harvestForm.notes || null,
+      });
+      setHarvestForm((f) => ({ ...f, open: false, quantity: "", broken: "", notes: "" }));
+      onRefresh();
+    } catch (err) {
+      setError(err.message || "Erreur");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitSale(e) {
+    e.preventDefault();
+    setError("");
+    const qty = Number(saleForm.quantity);
+    const unitPrice = saleForm.unit_price ? Number(saleForm.unit_price) : null;
+    const total = unitPrice != null ? qty * unitPrice : 0;
+    if (!qty || qty <= 0) { setError(lang === "fr" ? "Quantité requise." : "Quantity required."); return; }
+    if (qty > eggStock.available) {
+      setError(lang === "fr" ? `Stock insuffisant. Disponible: ${fmt(eggStock.available)} œufs.` : `Insufficient stock. Available: ${fmt(eggStock.available)} eggs.`);
+      return;
+    }
+    if (!total) { setError(lang === "fr" ? "Montant total requis." : "Total amount required."); return; }
+    setSubmitting(true);
+    try {
+      await api.createSale({
+        species: "chicken",
+        product_type: "eggs",
+        sale_source: "production",
+        quantity: qty,
+        unit: saleForm.unit || "oeufs",
+        unit_price: unitPrice,
+        total_amount: total,
+        currency_id: saleForm.currency_id ? Number(saleForm.currency_id) : (currencyMeta.defaultCurrencyId || null),
+        buyer: saleForm.buyer || null,
+        sale_date: saleForm.date,
+        notes: saleForm.notes || null,
+      });
+      setSaleForm((f) => ({ ...f, open: false, quantity: "", unit_price: "", buyer: "", notes: "" }));
+      onRefresh();
+    } catch (err) {
+      setError(err.message || "Erreur");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const stockColor = eggStock.available > 0 ? "var(--solidite-700)" : "var(--fg-3)";
+
+  return (
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 0, padding: 0, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>
+          {lang === "fr" ? "🥚 Gestion des œufs" : "🥚 Egg management"}
+        </h3>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
+            onClick={() => { setError(""); setHarvestForm((f) => ({ ...f, open: !f.open })); setSaleForm((f) => ({ ...f, open: false })); }}>
+            {lang === "fr" ? "+ Récolte" : "+ Harvest"}
+          </button>
+          <button className="btn" style={{ fontSize: 12, padding: "4px 12px" }}
+            onClick={() => { setError(""); setSaleForm((f) => ({ ...f, open: !f.open })); setHarvestForm((f) => ({ ...f, open: false })); }}>
+            {lang === "fr" ? "Vendre" : "Sell"}
+          </button>
+        </div>
+      </div>
+
+      {/* KPIs stock */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1, background: "var(--border-1)" }}>
+        {[
+          { label: lang === "fr" ? "Produits" : "Collected", value: fmt(Math.round(eggStock.produced)), color: "var(--ink-700)" },
+          { label: lang === "fr" ? "Vendus" : "Sold", value: fmt(Math.round(eggStock.sold)), color: "var(--clay-700)" },
+          { label: lang === "fr" ? "Disponibles" : "Available", value: fmt(Math.round(eggStock.available)), color: stockColor },
+        ].map(({ label, value, color }) => (
+          <div key={label} style={{ background: "var(--bg-page)", padding: "12px 16px", textAlign: "center" }}>
+            <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>{label}</div>
+            <div className="tnum" style={{ fontSize: 24, fontWeight: 700, color }}>{value}</div>
+            <div className="mono" style={{ fontSize: 10, color: "var(--fg-3)" }}>{lang === "fr" ? "œufs" : "eggs"}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Formulaire Récolte */}
+      {harvestForm.open && (
+        <form onSubmit={submitHarvest} style={{ padding: "16px 18px", borderTop: "1px solid var(--border-1)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="overline" style={{ fontSize: 11 }}>{lang === "fr" ? "Enregistrer une récolte" : "Record harvest"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label className="label">{lang === "fr" ? "Date" : "Date"}</label>
+              <input type="date" className="input" value={harvestForm.date} onChange={(e) => setHarvestForm((f) => ({ ...f, date: e.target.value }))} required/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Poulailler" : "Henhouse"}</label>
+              <select className="input" value={harvestForm.building_id} onChange={(e) => setHarvestForm((f) => ({ ...f, building_id: e.target.value }))}>
+                <option value="">{lang === "fr" ? "Tous / non précisé" : "All / unspecified"}</option>
+                {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Quantité récoltée" : "Quantity collected"}</label>
+              <input type="number" className="input" min="1" placeholder="ex: 850" value={harvestForm.quantity}
+                onChange={(e) => setHarvestForm((f) => ({ ...f, quantity: e.target.value }))} required/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Œufs cassés" : "Broken eggs"}</label>
+              <input type="number" className="input" min="0" placeholder="0" value={harvestForm.broken}
+                onChange={(e) => setHarvestForm((f) => ({ ...f, broken: e.target.value }))}/>
+            </div>
+          </div>
+          <div>
+            <label className="label">{lang === "fr" ? "Notes" : "Notes"}</label>
+            <input type="text" className="input" value={harvestForm.notes} onChange={(e) => setHarvestForm((f) => ({ ...f, notes: e.target.value }))}/>
+          </div>
+          {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setHarvestForm((f) => ({ ...f, open: false }))}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+            <button type="submit" className="btn" disabled={submitting}>{submitting ? "…" : (lang === "fr" ? "Enregistrer" : "Save")}</button>
+          </div>
+        </form>
+      )}
+
+      {/* Formulaire Vente */}
+      {saleForm.open && (
+        <form onSubmit={submitSale} style={{ padding: "16px 18px", borderTop: "1px solid var(--border-1)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="overline" style={{ fontSize: 11 }}>{lang === "fr" ? "Enregistrer une vente d'œufs" : "Record egg sale"}</div>
+          {eggStock.available <= 0 && (
+            <div style={{ background: "var(--rust-50)", border: "1px solid var(--rust-200)", borderRadius: 6, padding: "8px 12px", fontSize: 12, color: "var(--rust-700)" }}>
+              {lang === "fr" ? "Aucun stock disponible. Enregistrez d'abord une récolte." : "No stock available. Record a harvest first."}
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label className="label">{lang === "fr" ? "Date" : "Date"}</label>
+              <input type="date" className="input" value={saleForm.date} onChange={(e) => setSaleForm((f) => ({ ...f, date: e.target.value }))} required/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Acheteur" : "Buyer"}</label>
+              <input type="text" className="input" placeholder={lang === "fr" ? "Nom / marché" : "Name / market"} value={saleForm.buyer}
+                onChange={(e) => setSaleForm((f) => ({ ...f, buyer: e.target.value }))}/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? `Quantité (dispo: ${fmt(Math.round(eggStock.available))})` : `Quantity (avail: ${fmt(Math.round(eggStock.available))})`}</label>
+              <input type="number" className="input" min="1" max={eggStock.available} placeholder="ex: 300" value={saleForm.quantity}
+                onChange={(e) => setSaleForm((f) => ({ ...f, quantity: e.target.value }))} required/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? `Prix unitaire (${moneySymbol})` : `Unit price (${moneySymbol})`}</label>
+              <input type="number" className="input" min="0" step="any" placeholder="ex: 150" value={saleForm.unit_price}
+                onChange={(e) => setSaleForm((f) => ({ ...f, unit_price: e.target.value }))} required/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Devise" : "Currency"}</label>
+              <CurrencySelect lang={lang} value={saleForm.currency_id} onChange={(v) => setSaleForm((f) => ({ ...f, currency_id: v }))} currencies={currencyMeta.currencies}/>
+            </div>
+            <div>
+              <label className="label">{lang === "fr" ? "Total estimé" : "Estimated total"}</label>
+              <div className="input" style={{ background: "var(--bg-sunken)", color: "var(--fg-3)", userSelect: "none" }}>
+                {saleForm.quantity && saleForm.unit_price
+                  ? `${(Number(saleForm.quantity) * Number(saleForm.unit_price)).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} ${moneySymbol}`
+                  : "—"}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="label">{lang === "fr" ? "Notes" : "Notes"}</label>
+            <input type="text" className="input" value={saleForm.notes} onChange={(e) => setSaleForm((f) => ({ ...f, notes: e.target.value }))}/>
+          </div>
+          {error && <div style={{ color: "var(--rust-700)", fontSize: 12 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button type="button" className="btn btn-secondary" onClick={() => setSaleForm((f) => ({ ...f, open: false }))}>{lang === "fr" ? "Annuler" : "Cancel"}</button>
+            <button type="submit" className="btn" disabled={submitting || eggStock.available <= 0}>{submitting ? "…" : (lang === "fr" ? "Vendre" : "Sell")}</button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
 
 // ─── ALERTS ──────────────────────────────────────────────────────────────
 function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
@@ -2176,13 +2408,50 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
           </div>
         )}
 
+        {/* Accès rapide productions : œufs et autres si dispo */}
+        {(() => {
+          const prodItems = allItems.filter((it) => it.source !== "animal");
+          if (!prodItems.length) return null;
+          return (
+            <div>
+              <div className="overline" style={{ fontSize: 11, marginBottom: 8 }}>{lang === "fr" ? "Productions disponibles" : "Available production"}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+                {prodItems.map((item) => {
+                  const sp = speciesById(item.species);
+                  const sym = item.unitPrice && currencyMeta.currencies?.length
+                    ? formatMoney(item.unitPrice, item.currencyId || currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)
+                    : null;
+                  return (
+                    <button key={item.id} type="button" onClick={() => { selectItem(item); openSale(item); }}
+                      style={{ border: "2px solid var(--autorite-200)", background: "var(--autorite-50)", borderRadius: 10, padding: "12px 14px", display: "flex", gap: 12, alignItems: "center", textAlign: "left", cursor: "pointer", width: "100%" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: sp?.accentBg || "var(--autorite-100)", color: sp?.accent || "var(--autorite-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22 }}>
+                        {item.productType === "eggs" ? "🥚" : <Icon name="droplet" size={20} color="currentColor"/>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-950)" }}>{saleProductLabel(item.productType, lang)}</div>
+                        <div style={{ fontSize: 12, color: "var(--autorite-700)", fontWeight: 600 }}>
+                          {Number(item.available).toLocaleString(lang === "fr" ? "fr-CA" : "en-CA")} {item.unit}
+                          {sym ? ` · ${sym}/${item.unit}` : ""}
+                        </div>
+                      </div>
+                      <div style={{ background: "var(--autorite-600)", color: "#fff", borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                        {lang === "fr" ? "Vendre" : "Sell"}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Resultats" : "Results"}</h3>
           <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{availableRowsAll.length}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 8 }}>
           {availableRowsAll.length === 0 ? (
-            <EmptyState icon="cart" title={lang === "fr" ? "Aucun produit a vendre" : "No product to sell"} hint={lang === "fr" ? "La preparation des produits se fait dans Parametres > Gestion de vente." : "Product preparation is managed in Settings > Sales management."}/>
+            <EmptyState icon="cart" title={lang === "fr" ? "Aucun produit a vendre" : "No product to sell"} hint={lang === "fr" ? "Enregistrez une recolte dans Production, ou marquez des animaux a vendre dans Parametres." : "Record a harvest in Production, or mark animals for sale in Settings."}/>
           ) : (
             suggestions.map(renderSuggestion)
           )}
@@ -3314,7 +3583,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
             <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{availableRowsAll.length}</span>
           </div>
           {availableRowsAll.length === 0 ? (
-            <EmptyState icon="cart" title={lang === "fr" ? "Rien a vendre" : "Nothing to sell"} hint={lang === "fr" ? "Marque un animal a vendre ou ajoute de la production." : "Mark an animal for sale or add production."}/>
+            <EmptyState icon="cart" title={lang === "fr" ? "Rien a vendre" : "Nothing to sell"} hint={lang === "fr" ? "Marque un animal a vendre, ou enregistre une recolte dans l'onglet Production (oeufs, lait...)." : "Mark an animal for sale, or record a harvest in the Production tab (eggs, milk...)."}/>
           ) : visibleAvailableRows.map(renderManagedItem)}
           {availableRowsAll.length > visibleAvailableRows.length && (
             <button className="btn" onClick={() => setAvailableLimit((n) => n + 24)}>

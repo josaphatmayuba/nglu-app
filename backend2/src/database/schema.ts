@@ -2470,6 +2470,7 @@ export const farmosProductionLogs = mysqlTable("farmos_production_logs", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   animalId: bigint("animal_id", { mode: "number" }),
+  buildingId: bigint("building_id", { mode: "number" }),
   species: varchar("species", { length: 50 }).notNull(),
   productType: varchar("product_type", { length: 20 }).notNull(),
   logDate: date("log_date", { mode: "string" }).notNull(),

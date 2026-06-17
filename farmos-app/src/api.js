@@ -278,6 +278,7 @@ export const api = {
   createReproductionEvent: (body) => mutate({ kind: "createReproductionEvent", method: "POST", path: "/reproduction-events", body,
                        optimistic: { table: "reproductionEvents", row: { id: tempId("r"), ...body, _pending: true } } }),
   listProductionLogs: cachedList("productionLogs", "/production-logs"),
+  getEggStock: () => jsonFetch("/egg-stock"),
   listVaccinations: cachedList("vaccinations", "/vaccinations"),
   listAiInsights: cachedList("aiInsights", "/ai-insights"),
   listFeedForecasts: cachedList("feedForecasts", "/feed-forecasts"),

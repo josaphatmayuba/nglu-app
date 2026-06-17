@@ -618,6 +618,7 @@ export class UpdateSemenStrawDto {
 // ─── Production logs ─────────────────────────────────────────────────────
 export class CreateProductionLogDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional({ description: "Bâtiment (poulailler) source de la récolte." }) @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
   @ApiProperty({ enum: FARMOS_SPECIES }) @IsString() @IsIn(FARMOS_SPECIES as unknown as string[]) species: string;
   @ApiProperty({ example: "milk" }) @IsString() product_type: string;
   @ApiProperty() @IsDateString() log_date: string;

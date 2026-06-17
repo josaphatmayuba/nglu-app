@@ -1374,6 +1374,24 @@ export class FarmosService {
       .orderBy(desc(farmosProductionLogs.logDate));
   }
 
+  async getEggStock(orgId: number) {
+    const [logs, sales] = await Promise.all([
+      this.db.select({ quantity: farmosProductionLogs.quantity, unit: farmosProductionLogs.unit, buildingId: farmosProductionLogs.buildingId, logDate: farmosProductionLogs.logDate })
+        .from(farmosProductionLogs)
+        .where(and(eq(farmosProductionLogs.organizationId, orgId), eq(farmosProductionLogs.isActive, 1), eq(farmosProductionLogs.productType, "eggs"))),
+      this.db.select({ quantity: farmosSales.quantity })
+        .from(farmosSales)
+        .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1), eq(farmosSales.productType, "eggs"), isNull(farmosSales.animalId))),
+    ]);
+    const produced = logs.reduce((s, r) => s + Number(r.quantity || 0), 0);
+    const sold = sales.reduce((s, r) => s + Number(r.quantity || 0), 0);
+    const byBuilding: Record<number, number> = {};
+    for (const r of logs) {
+      if (r.buildingId) byBuilding[r.buildingId] = (byBuilding[r.buildingId] || 0) + Number(r.quantity || 0);
+    }
+    return { produced, sold, available: Math.max(0, produced - sold), byBuilding };
+  }
+
   async createProductionLog(input: CreateProductionLogDto, orgId: number) {
     if (input.animal_id != null) {
       await this.assertAnimalWritableById(Number(input.animal_id), orgId);
@@ -1381,6 +1399,7 @@ export class FarmosService {
     const [res] = await this.db.insert(farmosProductionLogs).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
+      buildingId: input.building_id ?? null,
       species: input.species,
       productType: input.product_type,
       logDate: input.log_date,

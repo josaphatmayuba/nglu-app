@@ -353,6 +353,13 @@ export class FarmosController {
 
   // ─── Sales & expenses ────────────────────────────────────────────────────
 
+  @ApiOperation({ summary: "Stock œufs disponible (produit - vendu)." })
+  @Permissions("readAll-farmos")
+  @Get("egg-stock")
+  getEggStock(@CurrentOrg() orgId: number) {
+    return this.farmos.getEggStock(orgId);
+  }
+
   @ApiOperation({ summary: "List FarmOS sales for the organisation." })
   @Permissions("readAll-farmos")
   @Get("sales")
