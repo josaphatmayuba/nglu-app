@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Pipeline — pdf-service deploy** : le `git pull` serveur échouait silencieusement (ref lock `refs/remotes/origin/master`) → dossier `pdf-service/` absent → build Docker en erreur. Remplacement par `scp` direct depuis le pipeline (dev + prod), identique au pattern backend2. [3.82.7]
+
+## [3.82.6]
+
 ### Added
 - **FarmOS — Plan du terrain par ferme (maquette)** : la vue Plan affiche un en-tête « Ferme X — Plan du terrain » (hectares · bâtiments · animaux), un toggle d'affichage **Occupation / Simple** (barres X/capacité visibles ou masquées) et une **légende par catégorie** (couleur par espèce / type de bâtiment) sous le plan, comme la maquette. Le plan reste alimenté par les vrais bâtiments de la ferme sélectionnée (pas de bâtiments fictifs). [SCRUM]
 - **FarmOS — Sélecteur de bâtiment dans la fiche animal** : le champ Bâtiment de la modale d'édition propose maintenant les vrais bâtiments (API `/buildings`) via un datalist, avec la zone en libellé — saisie libre toujours possible. [SCRUM]
