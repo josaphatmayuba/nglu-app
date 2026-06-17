@@ -513,9 +513,11 @@ export function adaptTreatment(row, animalById, diseaseById) {
   return {
     id: `T-${row.id}`,
     _pk: row.id,
-    species: a?.species || null,
-    animalStatus: a?.status || null,
-    animal: a?.name || a?.externalId || a?.external_id || "—",
+    // L'espece/le nom viennent du JOIN backend (animal_*) pour rester corrects
+    // meme si l'animal a ete soft-delete ; fallback sur l'animal local en cache.
+    species: row.animalSpecies ?? a?.species ?? null,
+    animalStatus: row.animalStatus ?? a?.status ?? null,
+    animal: row.animalName || row.animalExternalId || a?.name || a?.externalId || a?.external_id || "—",
     med: row.medicineName || row.medicine_name || "—",
     reason: d ? (d.nameFr || d.name_fr) : "—",
     dosage: row.dosage,
