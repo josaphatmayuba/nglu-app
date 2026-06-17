@@ -588,6 +588,31 @@ export class FarmosController {
     return this.farmos.deleteBuilding(id, orgId);
   }
 
+  // ─── Éléments de terrain (décor du plan) ──────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("land-features")
+  listLandFeatures(@CurrentOrg() orgId: number, @Query("zone_id") zoneId?: string) {
+    return this.farmos.listLandFeatures(orgId, zoneId ? Number(zoneId) : null);
+  }
+
+  @Permissions("create-farmos")
+  @Post("land-features")
+  createLandFeature(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createLandFeature(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("land-features/:id")
+  updateLandFeature(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateLandFeature(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("land-features/:id")
+  deleteLandFeature(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteLandFeature(id, orgId);
+  }
+
   // ─── Rapports PDF (#3) ────────────────────────────────────────────────────
   @Permissions("readAll-farmos")
   @Get("vet-exams/:id/pdf")

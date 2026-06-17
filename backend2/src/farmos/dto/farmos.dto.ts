@@ -308,6 +308,9 @@ export class UpsertFarmosBuildingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() manager?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() hygiene_status?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() zone_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() pos_x?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() pos_y?: number | null;
 }
 
 export class CreateFarmosDocumentDto {

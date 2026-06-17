@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Added
+- **FarmOS — Plan du terrain déplaçable** : positionnement libre des bâtiments sur le plan (par zone). Colonnes `pos_x`/`pos_y` sur `farmos_buildings` (migration 0161) + nouvelle table `farmos_land_features` pour le décor (champ, point d'eau, route…) (migration 0162). Backend : `updateBuilding` accepte `pos_x`/`pos_y`, CRUD `/land-features`. Front : composant `FarmLandPlan` (drag souris + tactile, mode édition, sélecteur de zone) ; les positions sont persistées en DB via l'API (pourcentage 0–100), fallback grille auto pour les bâtiments non placés. Seeder : positions par défaut des 6 bâtiments + décor par défaut (point d'eau, champ) par zone (idempotent). UI : en mode édition, boutons "Ajouter champ/eau/route" et suppression de l'élément sélectionné (soft-delete). [SCRUM]
 - **FarmOS — structure Zones/Bâtiments** : table `farmos_zones` (migration 0160) + colonne `zone_id` sur `farmos_buildings` et `building_id`/`zone_id` sur `farmos_animals`. Backend : CRUD `/zones`, `listBuildings` retourne la zone liée. Seeder : `seedZones()` crée Zone Kiselele / Zone Kasangulu et lie chaque bâtiment + animal. UI : vue "Zones" par défaut (bâtiments groupés par zone), sélecteur de zone dans l'éditeur de bâtiment. [SCRUM]
 
 ### Fixed

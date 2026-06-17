@@ -327,6 +327,11 @@ export const api = {
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
   updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),
+  // Éléments de terrain (décor du plan)
+  listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),
+  createLandFeature: (body) => jsonFetch("/land-features", { method: "POST", body: JSON.stringify(body) }),
+  updateLandFeature: (id, body) => jsonFetch(`/land-features/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteLandFeature: (id) => jsonFetch(`/land-features/${id}`, { method: "DELETE" }),
   createProductionLog: (body) => mutate({ kind: "createProductionLog", method: "POST", path: "/production-logs", body }),
   deleteAnimal:  (id) => mutate({ kind: "deleteAnimal",  method: "DELETE", path: `/animals/${id}` }),
   deleteMedicine: (id) => mutate({ kind: "deleteMedicine", method: "DELETE", path: `/medicines/${id}` }),

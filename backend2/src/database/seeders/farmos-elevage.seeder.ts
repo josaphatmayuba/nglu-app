@@ -22,6 +22,7 @@ import {
   designations,
   farmosAnimals,
   farmosBuildings,
+  farmosLandFeatures,
   farmosProductionLogs,
   farmosZones,
   roles,
@@ -38,12 +39,21 @@ const ZONES = [
 
 // ── Bâtiments ──────────────────────────────────────────────────────────
 const BUILDINGS = [
-  { name: "Batiment Bovins Kiselele",   species: "cow",     type: "enclos",     capacity: 30,   zone: "Zone Kiselele",  notes: "Bovins (vaches, veau) — Zone Kiselele" },
-  { name: "Batiment Porcs Kiselele",    species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kiselele",  notes: "Porcs adultes, jeunes et moyens — Zone Kiselele" },
-  { name: "Batiment Caprins Kasangulu", species: "goat",    type: "enclos",     capacity: 50,   zone: "Zone Kasangulu", notes: "Chevres — Zone Kasangulu" },
-  { name: "Batiment Porcs Kasangulu",   species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kasangulu", notes: "Porcs affectes par infection — Zone Kasangulu" },
-  { name: "Poulailler 1",               species: "chicken", type: "poulailler", capacity: 1700, zone: "Zone Kasangulu", notes: "Poulailler principal — Zone Kasangulu" },
-  { name: "Poulailler 2",               species: "chicken", type: "poulailler", capacity: 20,   zone: "Zone Kasangulu", notes: "Poulailler secondaire — Zone Kasangulu" },
+  { name: "Batiment Bovins Kiselele",   species: "cow",     type: "enclos",     capacity: 30,   zone: "Zone Kiselele",  notes: "Bovins (vaches, veau) — Zone Kiselele",          posX: 8,  posY: 12 },
+  { name: "Batiment Porcs Kiselele",    species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kiselele",  notes: "Porcs adultes, jeunes et moyens — Zone Kiselele", posX: 55, posY: 12 },
+  { name: "Batiment Caprins Kasangulu", species: "goat",    type: "enclos",     capacity: 50,   zone: "Zone Kasangulu", notes: "Chevres — Zone Kasangulu",                        posX: 8,  posY: 12 },
+  { name: "Batiment Porcs Kasangulu",   species: "pig",     type: "porcherie",  capacity: 80,   zone: "Zone Kasangulu", notes: "Porcs affectes par infection — Zone Kasangulu",   posX: 55, posY: 12 },
+  { name: "Poulailler 1",               species: "chicken", type: "poulailler", capacity: 1700, zone: "Zone Kasangulu", notes: "Poulailler principal — Zone Kasangulu",            posX: 8,  posY: 55 },
+  { name: "Poulailler 2",               species: "chicken", type: "poulailler", capacity: 20,   zone: "Zone Kasangulu", notes: "Poulailler secondaire — Zone Kasangulu",          posX: 40, posY: 55 },
+];
+
+// ── Décor du terrain (par zone) ────────────────────────────────────────
+// pos/width/height en % du terrain. Idempotent par (zone, type, label).
+const LAND_FEATURES = [
+  { zone: "Zone Kiselele",  type: "water", label: "Point d'eau", posX: 78, posY: 70, width: 16, height: 16 },
+  { zone: "Zone Kiselele",  type: "field", label: "Champ",       posX: 6,  posY: 64, width: 30, height: 26 },
+  { zone: "Zone Kasangulu", type: "water", label: "Point d'eau", posX: 78, posY: 70, width: 16, height: 16 },
+  { zone: "Zone Kasangulu", type: "field", label: "Champ maïs",  posX: 70, posY: 38, width: 26, height: 24 },
 ];
 
 // ── Inventaire animaux ─────────────────────────────────────────────────
@@ -155,6 +165,8 @@ async function seedBuildings(zoneMap: Map<string, number>) {
         await db.execute(sql`UPDATE farmos_buildings SET zone_id = ${zoneId} WHERE id = ${exists.id}`);
         updated++;
       }
+      // Backfill position par défaut si pas encore placé manuellement
+      await db.execute(sql`UPDATE farmos_buildings SET pos_x = ${b.posX}, pos_y = ${b.posY} WHERE id = ${exists.id} AND pos_x IS NULL`);
       continue;
     }
     await db.insert(farmosBuildings).values({
@@ -165,10 +177,37 @@ async function seedBuildings(zoneMap: Map<string, number>) {
       type: b.type,
       capacity: b.capacity,
       notes: b.notes,
+      posX: String(b.posX),
+      posY: String(b.posY),
     } as any);
     created++;
   }
   console.log(`  [farmos-buildings] ${created} créé(s), ${updated} zone_id mis à jour.`);
+}
+
+async function seedLandFeatures(zoneMap: Map<string, number>) {
+  let created = 0;
+  for (const f of LAND_FEATURES) {
+    const zoneId = zoneMap.get(f.zone) ?? null;
+    const [exists] = await db
+      .select({ id: farmosLandFeatures.id })
+      .from(farmosLandFeatures)
+      .where(and(eq(farmosLandFeatures.organizationId, ORG_ID), eq(farmosLandFeatures.type, f.type), eq(farmosLandFeatures.label, f.label)))
+      .limit(1);
+    if (exists) continue;
+    await db.insert(farmosLandFeatures).values({
+      organizationId: ORG_ID,
+      zoneId,
+      type: f.type,
+      label: f.label,
+      posX: String(f.posX),
+      posY: String(f.posY),
+      width: String(f.width),
+      height: String(f.height),
+    } as any);
+    created++;
+  }
+  console.log(`  [farmos-land-features] ${created} élément(s) de terrain créé(s).`);
 }
 
 async function seedAnimals() {
@@ -335,6 +374,7 @@ export async function seedFarmosElevage() {
   await cleanOldBuildings();
   const zoneMap = await seedZones();
   await seedBuildings(zoneMap);
+  await seedLandFeatures(zoneMap);
   await seedAnimals();
   await seedProduction();
   await seedHealthGuidelines();

@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -1829,6 +1829,8 @@ export class FarmosService {
     if (input.manager !== undefined) patch.manager = input.manager;
     if (input.hygiene_status !== undefined) patch.hygieneStatus = input.hygiene_status;
     if (input.notes !== undefined) patch.notes = input.notes;
+    if (input.pos_x !== undefined) patch.posX = input.pos_x != null ? String(input.pos_x) : null;
+    if (input.pos_y !== undefined) patch.posY = input.pos_y != null ? String(input.pos_y) : null;
     if (Object.keys(patch).length === 0) return this.getBuilding(id, orgId);
     await this.db.update(farmosBuildings).set(patch).where(eq(farmosBuildings.id, id));
     await this.publishFarmosUpdate("updateBuilding", ["buildings"], "updated", id, orgId);
@@ -1840,6 +1842,57 @@ export class FarmosService {
     await this.db.update(farmosBuildings).set({ isActive: 0 }).where(eq(farmosBuildings.id, id));
     await this.publishFarmosUpdate("deleteBuilding", ["buildings"], "deleted", id, orgId);
     return { message: "Bâtiment supprimé." };
+  }
+
+  // ─── Éléments de terrain (décor du plan : champ, eau, route…) ───────────────
+  async listLandFeatures(orgId: number, zoneId?: number | null) {
+    const conds = [eq(farmosLandFeatures.organizationId, orgId), eq(farmosLandFeatures.isActive, 1)];
+    if (zoneId) conds.push(eq(farmosLandFeatures.zoneId, zoneId));
+    return this.db.select().from(farmosLandFeatures).where(and(...conds)).orderBy(farmosLandFeatures.id);
+  }
+
+  async createLandFeature(input: any, orgId: number) {
+    if (!input.type) throw new BadRequestException("type requis.");
+    const [res] = await this.db.insert(farmosLandFeatures).values({
+      organizationId: orgId,
+      zoneId: input.zone_id ?? null,
+      type: input.type,
+      label: input.label ?? null,
+      posX: input.pos_x != null ? String(input.pos_x) : "0",
+      posY: input.pos_y != null ? String(input.pos_y) : "0",
+      width: input.width != null ? String(input.width) : null,
+      height: input.height != null ? String(input.height) : null,
+      meta: input.meta ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createLandFeature", ["land-features"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async updateLandFeature(id: number, input: any, orgId: number) {
+    const [row] = await this.db.select({ id: farmosLandFeatures.id }).from(farmosLandFeatures)
+      .where(and(eq(farmosLandFeatures.id, id), eq(farmosLandFeatures.organizationId, orgId), eq(farmosLandFeatures.isActive, 1))).limit(1);
+    if (!row) throw new NotFoundException("Land feature not found.");
+    const patch: Record<string, unknown> = {};
+    if (input.zone_id !== undefined) patch.zoneId = input.zone_id;
+    if (input.type !== undefined) patch.type = input.type;
+    if (input.label !== undefined) patch.label = input.label;
+    if (input.pos_x !== undefined) patch.posX = String(input.pos_x);
+    if (input.pos_y !== undefined) patch.posY = String(input.pos_y);
+    if (input.width !== undefined) patch.width = input.width != null ? String(input.width) : null;
+    if (input.height !== undefined) patch.height = input.height != null ? String(input.height) : null;
+    if (input.meta !== undefined) patch.meta = input.meta;
+    if (Object.keys(patch).length) await this.db.update(farmosLandFeatures).set(patch).where(eq(farmosLandFeatures.id, id));
+    await this.publishFarmosUpdate("updateLandFeature", ["land-features"], "updated", id, orgId);
+    return { id };
+  }
+
+  async deleteLandFeature(id: number, orgId: number) {
+    const [row] = await this.db.select({ id: farmosLandFeatures.id }).from(farmosLandFeatures)
+      .where(and(eq(farmosLandFeatures.id, id), eq(farmosLandFeatures.organizationId, orgId))).limit(1);
+    if (!row) throw new NotFoundException("Land feature not found.");
+    await this.db.update(farmosLandFeatures).set({ isActive: 0 } as any).where(eq(farmosLandFeatures.id, id));
+    await this.publishFarmosUpdate("deleteLandFeature", ["land-features"], "deleted", id, orgId);
+    return { message: "Élément supprimé." };
   }
 
   // ─── Rapports PDF — délégués au microservice pdf-service (voir pdf-client) ───

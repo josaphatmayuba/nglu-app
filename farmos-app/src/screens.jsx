@@ -3730,6 +3730,122 @@ const BldgOccBar = ({ rate, overCapacity, compact }) => {
   );
 };
 
+// ─── Plan du terrain déplaçable (positions DB pos_x/pos_y, par zone) ─────────
+// Décor (champ/eau/route) = farmos_land_features. Mode édition = drag souris/tactile,
+// persistance via api.updateBuilding / api.updateLandFeature (pourcentage 0–100).
+const LAND_FEATURE_META = {
+  field:   { label: "Champ",   emoji: "🌾", w: 26, h: 22, style: { background: "repeating-linear-gradient(90deg, rgba(101,143,53,.35) 0 10px, rgba(255,255,255,.22) 10px 17px), #9fcb68", border: "2px solid rgba(76,105,44,.45)", color: "#31501c", borderRadius: 14 } },
+  pasture: { label: "Pâturage", emoji: "🌱", w: 28, h: 22, style: { background: "#bfe3a0", border: "2px solid rgba(76,105,44,.4)", color: "#2c4a1c", borderRadius: 18 } },
+  water:   { label: "Point d'eau", emoji: "💧", w: 16, h: 16, style: { background: "linear-gradient(135deg, #80cdf0, #3f9bc7)", border: "3px solid rgba(255,255,255,0.55)", color: "white", borderRadius: "55% 45% 50% 40%", display: "grid", placeItems: "center", fontWeight: 900 } },
+  road:    { label: "Route",   emoji: "", w: 40, h: 5, style: { background: "rgba(121,93,47,.3)", border: "2px dashed rgba(84,61,30,.4)", borderRadius: 999 } },
+};
+const landMeta = (t) => LAND_FEATURE_META[t] || LAND_FEATURE_META.field;
+
+const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onPersist, lang }) => {
+  const mapRef = React.useRef(null);
+  const dragRef = React.useRef(null); // { kind, id, offX, offY, el }
+  // Positions locales (live pendant le drag) : id → {x,y} en %
+  const [pos, setPos] = React.useState({});
+
+  // Auto-grille pour les bâtiments sans position (pos_x null)
+  const placed = React.useMemo(() => {
+    let auto = 0;
+    return buildings.map((b) => {
+      const hasPos = b.posX != null && b.posY != null;
+      if (hasPos) return { ...b, _x: Number(b.posX), _y: Number(b.posY) };
+      const col = auto % 4, row = Math.floor(auto / 4); auto++;
+      return { ...b, _x: 6 + col * 23, _y: 8 + row * 26 };
+    });
+  }, [buildings]);
+
+  const liveXY = (kind, item, fx, fy) => {
+    const p = pos[`${kind}:${item.id}`];
+    return p || { x: fx, y: fy };
+  };
+
+  const onDown = (e, kind, item) => {
+    onSelect(item.id);
+    if (!editMode) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    const r = e.currentTarget.getBoundingClientRect();
+    dragRef.current = { kind, id: item.id, offX: pt.clientX - r.left, offY: pt.clientY - r.top };
+  };
+  const onMove = (e) => {
+    const d = dragRef.current; if (!d || !editMode) return;
+    e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    const m = mapRef.current.getBoundingClientRect();
+    let x = ((pt.clientX - m.left - d.offX) / m.width) * 100;
+    let y = ((pt.clientY - m.top - d.offY) / m.height) * 100;
+    x = Math.max(0, Math.min(x, 96)); y = Math.max(0, Math.min(y, 94));
+    setPos((s) => ({ ...s, [`${d.kind}:${d.id}`]: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 } }));
+  };
+  const onUp = () => {
+    const d = dragRef.current; if (!d) return;
+    dragRef.current = null;
+    const p = pos[`${d.kind}:${d.id}`];
+    if (p) onPersist(d.kind, d.id, p.x, p.y);
+  };
+  React.useEffect(() => {
+    if (!editMode) return;
+    window.addEventListener("mousemove", onMove); window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("mouseup", onUp); window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("mouseup", onUp); window.removeEventListener("touchend", onUp);
+    };
+  }); // deps volontairement larges : pos/editMode capturés à chaque rendu
+
+  return (
+    <div ref={mapRef}
+      style={{ position: "relative", height: 580, borderRadius: 16, overflow: "hidden", border: "2px solid #cbdcc5", touchAction: "none",
+        background: "linear-gradient(135deg, #cbe8b8, #e4f0c8 45%, #c7df9f)",
+        backgroundImage: editMode ? "linear-gradient(rgba(55,80,55,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(55,80,55,.07) 1px, transparent 1px)" : undefined,
+        backgroundSize: editMode ? "40px 40px" : undefined }}>
+      {/* Décor : land features */}
+      {features.map((f) => {
+        const m = landMeta(f.type);
+        const { x, y } = liveXY("feature", f, Number(f.posX), Number(f.posY));
+        const w = f.width != null ? Number(f.width) : m.w, h = f.height != null ? Number(f.height) : m.h;
+        return (
+          <div key={`f${f.id}`} onMouseDown={(e) => onDown(e, "feature", f)} onTouchStart={(e) => onDown(e, "feature", f)}
+            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`,
+              cursor: editMode ? "grab" : "default", display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 800, padding: 8, userSelect: "none", ...m.style,
+              outline: selectedId === f.id && editMode ? "2px solid #2f7d32" : "none", outlineOffset: 2 }}>
+            {m.emoji} {f.label || m.label}
+          </div>
+        );
+      })}
+      {/* Bâtiments */}
+      {placed.map((b) => {
+        const meta = bldgMeta(b.type);
+        const { x, y } = liveXY("building", b, b._x, b._y);
+        const isSel = selectedId === b.id;
+        const rate = b.occupancyRate ?? 0;
+        return (
+          <div key={b.id} onMouseDown={(e) => onDown(e, "building", b)} onTouchStart={(e) => onDown(e, "building", b)}
+            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: 150, borderRadius: 14, padding: 11,
+              background: isSel ? "#fff" : meta.bg, border: `2px solid ${isSel ? "var(--forest-700)" : meta.border}`,
+              boxShadow: isSel ? "0 0 0 3px rgba(14,100,56,.18)" : "0 6px 14px rgba(44,65,36,.18)",
+              cursor: editMode ? "grab" : "pointer", userSelect: "none", touchAction: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+              <Icon name={meta.icon} size={13} color={meta.text}/>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+            </div>
+            {b.species && <div style={{ fontSize: 10, color: "var(--fg-3)", marginBottom: 4 }}>{b.species}</div>}
+            {b.capacity != null && <>
+              <div className="mono" style={{ fontSize: 10, color: "var(--fg-2)", marginBottom: 3 }}>{b.occupancy} / {b.capacity} · {rate}%</div>
+              <BldgOccBar rate={rate} overCapacity={b.overCapacity} compact/>
+            </>}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // Plan SVG auto-layout (grille) depuis les vrais bâtiments
 const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
   const COLS = 3;
@@ -4131,15 +4247,42 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [viewMode, setViewMode] = React.useState("zones"); // "zones" | "plan" | "cards"
   const [selectedId, setSelectedId] = React.useState(null);
   const [interiorBuilding, setInteriorBuilding] = React.useState(null);
-  const refresh = useDataRefresh(["buildings", "animals"]);
+  const [features, setFeatures] = React.useState([]);
+  const [planEdit, setPlanEdit] = React.useState(false);
+  const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
+  const refresh = useDataRefresh(["buildings", "animals", "land-features"]);
   React.useEffect(() => {
     let cancel = false;
     Promise.all([
       api.listBuildings().catch(() => []),
       api.listZones().catch(() => []),
-    ]).then(([b, z]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); } });
+      api.listLandFeatures().catch(() => []),
+    ]).then(([b, z, f]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
+  // Persistance d'un déplacement sur le plan (bâtiment ou élément de terrain)
+  const persistPlan = React.useCallback((kind, id, x, y) => {
+    if (kind === "building") {
+      setRows((rs) => rs.map((b) => (b.id === id ? { ...b, posX: x, posY: y } : b)));
+      api.updateBuilding(id, { pos_x: x, pos_y: y }).catch(() => {});
+    } else {
+      setFeatures((fs) => fs.map((f) => (f.id === id ? { ...f, posX: x, posY: y } : f)));
+      api.updateLandFeature(id, { pos_x: x, pos_y: y }).catch(() => {});
+    }
+  }, []);
+  // Ajouter un élément de décor au plan (zone courante), centré
+  const addFeature = React.useCallback((type) => {
+    const labels = { field: "Champ", water: "Point d'eau", road: "Route", pasture: "Pâturage" };
+    const body = { zone_id: planZoneId, type, label: labels[type] || type, pos_x: 40, pos_y: 40 };
+    api.createLandFeature(body).then((r) => {
+      setFeatures((fs) => [...fs, { id: r.id, zoneId: planZoneId, type, label: body.label, posX: 40, posY: 40, width: null, height: null }]);
+    }).catch(() => {});
+  }, [planZoneId]);
+  const removeFeature = React.useCallback((id) => {
+    setFeatures((fs) => fs.filter((f) => f.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    api.deleteLandFeature(id).catch(() => {});
+  }, [selectedId]);
   const filtered = rows.filter((b) => !speciesFilter || b.species === speciesFilter);
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
   // Grouper par zone pour la vue zones
@@ -4228,10 +4371,37 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         /* ── Vue Plan ── */
         <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 16, flex: 1, minHeight: 0 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, overflow: "auto" }}>
-            <BuildingFloorPlan
-              buildings={filtered}
+            {/* Barre plan : zone + mode édition */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <select value={planZoneId ?? ""} onChange={(e) => { setPlanZoneId(e.target.value ? Number(e.target.value) : null); setSelectedId(null); }}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-2)", background: "var(--paper)", fontSize: 13 }}>
+                <option value="">{lang === "fr" ? "Sans zone" : "No zone"}</option>
+                {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+              </select>
+              <button className={planEdit ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} onClick={() => setPlanEdit((v) => !v)} style={{ gap: 5 }}>
+                <Icon name={planEdit ? "check" : "edit"} size={12} color={planEdit ? "#ECF1EC" : "var(--ink-700)"}/>
+                {planEdit ? (lang === "fr" ? "Terminer" : "Done") : (lang === "fr" ? "Éditer le plan" : "Edit plan")}
+              </button>
+              {planEdit && <>
+                <span style={{ width: 1, height: 18, background: "var(--border-2)" }}/>
+                <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Ajouter :" : "Add:"}</span>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("field")}>🌾 {lang === "fr" ? "Champ" : "Field"}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("water")}>💧 {lang === "fr" ? "Eau" : "Water"}</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => addFeature("road")}>🛤 {lang === "fr" ? "Route" : "Road"}</button>
+                {features.some((f) => f.id === selectedId) && (
+                  <button className="btn btn-sm btn-ghost" style={{ color: "var(--oxblood-700)" }} onClick={() => removeFeature(selectedId)}>
+                    <Icon name="trash" size={12} color="var(--oxblood-700)"/> {lang === "fr" ? "Supprimer" : "Delete"}
+                  </button>
+                )}
+              </>}
+            </div>
+            <FarmLandPlan
+              buildings={filtered.filter((b) => (planZoneId ? b.zoneId === planZoneId : !b.zoneId))}
+              features={features.filter((f) => (planZoneId ? f.zoneId === planZoneId : !f.zoneId))}
               selectedId={selectedId}
               onSelect={(id) => setSelectedId(id === selectedId ? null : id)}
+              editMode={planEdit}
+              onPersist={persistPlan}
               lang={lang}
             />
             {/* Mini cards grid below the map */}
