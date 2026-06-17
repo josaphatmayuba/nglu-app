@@ -852,7 +852,9 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Bâtiment" : "Barn"}</span>
-          <input className="input" value={form.barn} onChange={(e) => set("barn", e.target.value)}/>
+          <input className="input" value={form.barn} onChange={(e) => set("barn", e.target.value)} list="all-barns"
+            placeholder={lang === "fr" ? "Choisir un bâtiment…" : "Pick a building…"}/>
+          <AllBarnsDataList/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4, gridColumn: "1 / -1" }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Statut" : "Status"}</span>
@@ -899,6 +901,25 @@ const AllLotsDataList = () => {
   return (
     <datalist id="all-lots">
       {lots.map((l) => <option key={l} value={l}/>)}
+    </datalist>
+  );
+};
+
+const AllBarnsDataList = () => {
+  const [barns, setBarns] = React.useState([]);
+  React.useEffect(() => {
+    api.listBuildings().then((rows) => {
+      const seen = new Map();
+      (rows || []).forEach((b) => {
+        const name = (b.name || "").trim();
+        if (name && !seen.has(name)) seen.set(name, b.zone?.name || "");
+      });
+      setBarns(Array.from(seen.entries()).sort((a, b) => a[0].localeCompare(b[0])));
+    }).catch(() => {});
+  }, []);
+  return (
+    <datalist id="all-barns">
+      {barns.map(([name, zone]) => <option key={name} value={name} label={zone || undefined}/>)}
     </datalist>
   );
 };
