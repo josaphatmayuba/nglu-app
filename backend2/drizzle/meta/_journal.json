@@ -995,6 +995,13 @@
       "when": 1780524000000,
       "tag": "0165_farmos_species_canonical",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "5",
+      "when": 1780527600000,
+      "tag": "0166_farmos_animals_inventory_prod",
+      "breakpoints": true
     }
   ]
 }
