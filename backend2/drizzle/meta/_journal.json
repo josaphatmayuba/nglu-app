@@ -988,6 +988,13 @@
       "when": 1780520400000,
       "tag": "0164_repair_farm_zone_cols",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "5",
+      "when": 1780524000000,
+      "tag": "0165_farmos_species_canonical",
+      "breakpoints": true
     }
   ]
 }

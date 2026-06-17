@@ -200,7 +200,7 @@ const ANIMALS = [
 
 // ── Production d'œufs ──────────────────────────────────────────────────
 const PRODUCTION = [
-  { species: "poule", productType: "eggs", logDate: "2026-06-13", period: "week", quantity: "140", unit: "plateaux", notes: "Production semaine du 7 au 13 juin 2026 — Poulailler 1, Zone Kasangulu" },
+  { species: "chicken", productType: "eggs", logDate: "2026-06-13", period: "week", quantity: "140", unit: "plateaux", notes: "Production semaine du 7 au 13 juin 2026 — Poulailler 1, Zone Kasangulu" },
 ];
 
 // ── Plan santé / consignes (Journal Entreprise) ────────────────────────
