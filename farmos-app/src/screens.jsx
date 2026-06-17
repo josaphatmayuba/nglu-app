@@ -4335,16 +4335,16 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </div>
       </div>
 
-      {/* Sélecteur de ferme (Mes fermes) */}
+      {/* Sélecteur de ferme (Mes fermes) — scroll horizontal sur mobile */}
       {farms.length > 0 && (
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
           {[{ id: null, name: lang === "fr" ? "Toutes les fermes" : "All farms", all: true }, ...farms].map((f) => {
             const active = farmId === (f.all ? null : f.id);
             const st = f.all ? null : farmStats(f.id);
             const badge = { active: { fr: "Principale", bg: "var(--forest-50)", fg: "var(--forest-700)" }, ok: { fr: "OK", bg: "var(--autorite-50)", fg: "var(--autorite-700)" }, maintenance: { fr: "Suivi", bg: "var(--oxblood-50)", fg: "var(--oxblood-700)" } }[f.status] || null;
             return (
               <button key={f.id ?? "all"} onClick={() => { setFarmId(f.all ? null : f.id); setSelectedId(null); }}
-                className="card" style={{ textAlign: "left", padding: f.all ? "10px 14px" : "12px 14px", minWidth: f.all ? 0 : 180, cursor: "pointer", border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-2)", background: active ? "var(--forest-50)" : "var(--paper)" }}>
+                className="card" style={{ textAlign: "left", padding: f.all ? "10px 14px" : "12px 14px", minWidth: f.all ? 0 : 180, flexShrink: 0, cursor: "pointer", border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-2)", background: active ? "var(--forest-50)" : "var(--paper)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{f.name}</span>
                   {badge && <span style={{ fontSize: 9, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 4, padding: "1px 6px" }}>{badge.fr}</span>}
