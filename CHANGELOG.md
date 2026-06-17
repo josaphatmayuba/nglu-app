@@ -12,6 +12,7 @@ This project follows:
 
 ### Added
 - **FarmOS — Plan du terrain par ferme (maquette)** : la vue Plan affiche un en-tête « Ferme X — Plan du terrain » (hectares · bâtiments · animaux), un toggle d'affichage **Occupation / Simple** (barres X/capacité visibles ou masquées) et une **légende par catégorie** (couleur par espèce / type de bâtiment) sous le plan, comme la maquette. Le plan reste alimenté par les vrais bâtiments de la ferme sélectionnée (pas de bâtiments fictifs). [SCRUM]
+- **FarmOS — Sélecteur de bâtiment dans la fiche animal** : le champ Bâtiment de la modale d'édition propose maintenant les vrais bâtiments (API `/buildings`) via un datalist, avec la zone en libellé — saisie libre toujours possible. [SCRUM]
 
 ### Fixed
 - **FarmOS — drift colonnes zones/bâtiments** : les `ALTER ADD COLUMN` des migrations 0160/0161/0163 (`farmos_buildings.zone_id`/`building_kind`/`pos_x`/`pos_y`, `farmos_zones.farm_id`, `farmos_animals.building_id`/`zone_id`) étaient marqués appliqués mais jamais exécutés en dev (`ADD COLUMN IF NOT EXISTS` non fiable selon version MySQL) → bâtiments non rattachés aux zones/fermes, écran « Aucun bâtiment » et compteurs « 0 bât. ». Migration de réparation `0164_repair_farm_zone_cols.sql` idempotente (pattern SET/IF/PREPARE via information_schema). Au boot suivant, le seeder relie zone_id/farm_id sur l'existant. [SCRUM]

@@ -57,7 +57,7 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "cd $APP && (git pull origin develop || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r pdf-service $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
@@ -277,7 +277,7 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
+                - scp -o StrictHostKeyChecking=no -r pdf-service $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
