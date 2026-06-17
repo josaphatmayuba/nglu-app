@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **FarmOS — drift colonnes zones/bâtiments** : les `ALTER ADD COLUMN` des migrations 0160/0161/0163 (`farmos_buildings.zone_id`/`building_kind`/`pos_x`/`pos_y`, `farmos_zones.farm_id`, `farmos_animals.building_id`/`zone_id`) étaient marqués appliqués mais jamais exécutés en dev (`ADD COLUMN IF NOT EXISTS` non fiable selon version MySQL) → bâtiments non rattachés aux zones/fermes, écran « Aucun bâtiment » et compteurs « 0 bât. ». Migration de réparation `0164_repair_farm_zone_cols.sql` idempotente (pattern SET/IF/PREPARE via information_schema). Au boot suivant, le seeder relie zone_id/farm_id sur l'existant. [SCRUM]
+
 ### Added
 - **FarmOS — Niveau Ferme (Phase 3 : mobile)** : l'app mobile FarmOS est la même PWA React empaquetée via Capacitor (`webDir: dist`), donc la barre « Mes fermes » y est nativement présente — pas de code Flutter séparé. Ajustement responsive : la barre fermes passe en scroll horizontal tactile sur petit écran (au lieu d'un wrap qui cassait la grille). [SCRUM]
 - **FarmOS — Niveau Ferme (Phase 2 : UI web)** : barre « Mes fermes » dans l'écran Bâtiments — cartes cliquables (nom, localisation, hectares, badge statut Principale/OK/Suivi, compteurs bâtiments + animaux). Sélectionner une ferme filtre les zones → bâtiments → plan ; le sélecteur de zone du plan respecte la ferme choisie. API front : `listFarms/createFarm/updateFarm/deleteFarm`. [SCRUM]
