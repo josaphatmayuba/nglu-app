@@ -10,8 +10,10 @@ COPY farmos-app/dist/ /usr/share/nginx/html-farmos-prod
 COPY batipro-app/dist/ /usr/share/nginx/html-batipro-prod
 COPY hr-app/dist/ /usr/share/nginx/html-hr-prod
 COPY comptabilite-app/dist/ /usr/share/nginx/html-comptabilite-prod
-# Domus SPA at /domus/ — baked as empty placeholder; pipeline overwrites via docker cp.
-RUN mkdir -p /usr/share/nginx/html-domus-prod
+# Placeholders for SPAs deployed via docker cp (no dist at image build time).
+RUN mkdir -p /usr/share/nginx/html-domus-prod \
+             /usr/share/nginx/html-journal-prod \
+             /usr/share/nginx/html-tickets-prod
 # Chat SPA at /chat/
 COPY chat-app/dist/ /usr/share/nginx/html-chat-prod
 # nginx.conf is mounted from the host at runtime (see docker-compose.prod.yml)

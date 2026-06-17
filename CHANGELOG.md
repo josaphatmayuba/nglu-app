@@ -11,6 +11,9 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Pipeline prod (farmos/journal/tickets)** : ajout `mkdir -p` avant `find -delete` pour html-farmos-prod, html-journal-prod, html-tickets-prod — même fix que domus (3.82.8) ; dossiers absents du conteneur si image non rebuildée. Dockerfile.prod : placeholders `RUN mkdir -p` pour journal+tickets. [3.82.9]
+
+### Fixed
 - **Pipeline Domus prod** : ajout `mkdir -p /usr/share/nginx/html-domus-prod` dans le pipeline avant le `find -delete` (le dossier n'existait pas dans le conteneur → erreur `No such file or directory`). Ajout d'un `RUN mkdir -p` dans `frontend/Dockerfile.prod` pour les futurs rebuilds d'image. [3.82.8]
 
 ### Fixed
