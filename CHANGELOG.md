@@ -11,6 +11,9 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Pipeline prod statique** : les apps servies par `nglu_prod_frontend` utilisent maintenant un déploiement prod commun avec lock `/tmp/nglu-prod-deploy.lock`, remplacement du `dist` hôte, rebuild de l'image frontend, smoke test et rollback image (`nglu_prod-frontend:previous`) en cas d'échec. Le premier déploiement d'une app crée aussi les dossiers `dist` manquants avant le build Docker. [3.82.11]
+
+### Fixed
 - **FarmOS Santé — crash filtre « Tout »** : `deleteAnimal` soft-delete l'animal sans désactiver ses traitements ; en mode « Tout » ces traitements remontaient avec `species=null` (animal absent de `listAnimals` filtré `is_active=1`) → `speciesById(null).accentBg` → `TypeError accentBg`. Fix : cascade soft-delete des `farmos_treatments` dans `deleteAnimal` + `listTreatments` JOIN `farmos_animals` (sans filtre `is_active`) pour exposer espèce/nom même sur orphelins legacy. [3.82.10]
 
 ### Fixed

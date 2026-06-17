@@ -17,11 +17,13 @@ Production deploys are more guarded than dev deploys:
 - Packages:
   - `frontend/dist`
   - `marketing-site/dist`
+  - production frontend support files (`docker-compose.prod.yml`, `frontend/Dockerfile.prod`, `nginx/nginx.frontend.conf`)
 - Uploads the bundle to Lightsail.
 - Acquires a server-side lock at `/tmp/nglu-prod-deploy.lock`.
 - Replaces only the contents of:
   - `/opt/nglu-app/frontend/dist`
   - `/opt/nglu-app/marketing-site/dist`
+- Ensures first-deploy `dist` directories exist for the other static apps before rebuilding the frontend image.
 - Keeps mounted `dist` directories in place.
 - Optionally pulls `master` on the server.
 - Optionally recreates the frontend container.
