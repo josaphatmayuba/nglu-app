@@ -3799,7 +3799,7 @@ const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onP
 
   return (
     <div ref={mapRef}
-      style={{ position: "relative", height: 580, borderRadius: 16, overflow: "hidden", border: "2px solid #cbdcc5", touchAction: "none",
+      style={{ position: "relative", height: 640, minHeight: 640, flexShrink: 0, borderRadius: 16, overflow: "hidden", border: "2px solid #cbdcc5", touchAction: "none",
         background: "linear-gradient(135deg, #cbe8b8, #e4f0c8 45%, #c7df9f)",
         backgroundImage: editMode ? "linear-gradient(rgba(55,80,55,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(55,80,55,.07) 1px, transparent 1px)" : undefined,
         backgroundSize: editMode ? "40px 40px" : undefined }}>
@@ -3826,7 +3826,7 @@ const FarmLandPlan = ({ buildings, features, selectedId, onSelect, editMode, onP
         const rate = b.occupancyRate ?? 0;
         return (
           <div key={b.id} onMouseDown={(e) => onDown(e, "building", b)} onTouchStart={(e) => onDown(e, "building", b)}
-            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: 150, borderRadius: 14, padding: 11,
+            style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: 172, borderRadius: 14, padding: 13,
               background: isSel ? "#fff" : meta.bg, border: `2px solid ${isSel ? "var(--forest-700)" : meta.border}`,
               boxShadow: isSel ? "0 0 0 3px rgba(14,100,56,.18)" : "0 6px 14px rgba(44,65,36,.18)",
               cursor: editMode ? "grab" : "pointer", userSelect: "none", touchAction: "none" }}>
