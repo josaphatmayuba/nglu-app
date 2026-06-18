@@ -4455,59 +4455,121 @@ const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
 const INTERIOR_BOX_FILL   = { ok: "#A8D8A0", sick: "#E08080", quarantine: "#F0C060", empty: "#E8E4DC" };
 const INTERIOR_BOX_STROKE = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
 
-const BldgInteriorPlan = ({ building, lang, onClose }) => {
-  const [tooltip, setTooltip] = React.useState(null);
+// Plan intérieur RÉEL : box = entités farmos_boxes rattachées au bâtiment.
+// Box libre : on assigne N animaux (de n'importe quel lot, ou sans lot) à un box,
+// avec capacité max par box (blocage + possibilité de forcer). Cliquer un box ouvre
+// le panneau d'affectation ; bouton "Générer les box" si le bâtiment n'en a aucun.
+const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const [boxes, setBoxes] = React.useState(null); // null = chargement
+  const [selBoxId, setSelBoxId] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [hoverIdx, setHoverIdx] = React.useState(null);
+
+  const reload = React.useCallback(() => {
+    if (!building) return;
+    setBoxes(null);
+    api.listBoxes(building.id).then((b) => setBoxes(Array.isArray(b) ? b : [])).catch(() => setBoxes([]));
+  }, [building]);
+  React.useEffect(() => { reload(); }, [reload]);
+
   if (!building) return null;
-
-  // Génère des sections fictives à partir de la capacité connue
-  const capacity = parseInt(building.capacity) || 20;
-  const occupancy = building.occupancy ?? Math.round(capacity * 0.8);
-  const sick = building.sick ?? 0;
-  const quarantine = building.quarantine ?? 0;
-  const empty = Math.max(0, capacity - occupancy);
-
-  // Répartition en sections (max 4)
-  const sectionCount = Math.min(4, Math.max(1, Math.ceil(capacity / 30)));
-  const sections = Array.from({ length: sectionCount }, (_, i) => {
-    const secCap = Math.ceil(capacity / sectionCount);
-    const secOcc = Math.min(secCap, Math.ceil(occupancy / sectionCount));
-    return { id: i, label: String.fromCharCode(65 + i), capacity: secCap, occupied: secOcc };
-  });
-
-  // Palette de statuts pour chaque box
-  const totalBoxes = capacity;
-  const statuses = [];
-  let s = sick, q = quarantine, e = empty;
-  for (let i = 0; i < totalBoxes; i++) {
-    if (s > 0) { statuses.push("sick"); s--; }
-    else if (q > 0) { statuses.push("quarantine"); q--; }
-    else if (e > 0) { statuses.push("empty"); e--; }
-    else statuses.push("ok");
-  }
-
-  const CANVAS_W = 600, CANVAS_H = 300;
-  const COLS = Math.ceil(Math.sqrt(capacity * 2));
-  const ROWS = Math.ceil(capacity / COLS);
-  const BOX_GAP = 3;
-  const AREA_PAD = 16;
-  const areaW = CANVAS_W - AREA_PAD * 2;
-  const areaH = CANVAS_H - AREA_PAD * 2 - 24; // 24 = aisle at bottom
-  const bw = Math.max(8, Math.floor((areaW - BOX_GAP * (COLS + 1)) / COLS));
-  const bh = Math.max(8, Math.floor((areaH - BOX_GAP * (ROWS + 1)) / ROWS));
   const meta = bldgMeta(building.type);
 
-  const statusLabels = {
-    ok:         { fr: "Occupée", en: "Occupied" },
-    sick:       { fr: "Malade",  en: "Sick" },
-    quarantine: { fr: "Quarantaine", en: "Quarantine" },
-    empty:      { fr: "Vide",   en: "Empty" },
+  // Animaux de ce bâtiment (par building_id, fallback barn == nom) — base de l'affectation.
+  const bldgAnimals = animals.filter((a) =>
+    (a.buildingId != null && a.buildingId === building.id) ||
+    (a.buildingId == null && a.barn && a.barn === building.name));
+  const animalsByBox = new Map();
+  for (const a of bldgAnimals) {
+    if (a.boxId == null) continue;
+    if (!animalsByBox.has(a.boxId)) animalsByBox.set(a.boxId, []);
+    animalsByBox.get(a.boxId).push(a);
+  }
+  const headsIn = (boxId) => (animalsByBox.get(boxId) || []).reduce((s, a) => s + (Number(a.count) || 1), 0);
+  const boxStatus = (box) => {
+    const list = animalsByBox.get(box.id) || [];
+    if (list.length === 0) return "empty";
+    if (list.some((a) => a.status === "sick")) return "sick";
+    if (list.some((a) => a.status === "quarantine")) return "quarantine";
+    return "ok";
   };
-  const counts = statuses.reduce((a, s) => { a[s] = (a[s] || 0) + 1; return a; }, {});
+
+  const loading = boxes === null;
+  const hasBoxes = !loading && boxes.length > 0;
+  const selBox = hasBoxes ? boxes.find((b) => b.id === selBoxId) || null : null;
+
+  // Génération en masse
+  const onGenerate = async () => {
+    const def = building.capacity || 20;
+    const nStr = window.prompt(L("Combien de box créer ?", "How many boxes?"), String(def));
+    if (!nStr) return;
+    const count = parseInt(nStr, 10);
+    if (!Number.isFinite(count) || count < 1) return;
+    const capStr = window.prompt(L("Capacité par box (têtes) ? Laisser vide = sans limite.", "Capacity per box (heads)? Empty = unlimited."), "");
+    const capacity = capStr && capStr.trim() ? parseInt(capStr, 10) : null;
+    setBusy(true);
+    try {
+      await api.generateBoxes({ building_id: building.id, count, capacity });
+      reload();
+    } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  // Affectation d'animaux au box sélectionné (avec gestion BOX_FULL → confirmer Forcer)
+  const assign = async (animalIds, force = false) => {
+    if (!selBox || animalIds.length === 0) return;
+    setBusy(true);
+    try {
+      await api.assignAnimalsToBox({ box_id: selBox.id, animal_ids: animalIds, force });
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
+      reload();
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (msg.includes("BOX_FULL")) {
+        if (window.confirm(L("Box plein : la capacité sera dépassée. Forcer quand même ?", "Box full: capacity will be exceeded. Force anyway?"))) {
+          setBusy(false);
+          return assign(animalIds, true);
+        }
+      } else window.alert(msg);
+    }
+    setBusy(false);
+  };
+  const unassign = async (animalId) => {
+    setBusy(true);
+    try {
+      await api.assignAnimalsToBox({ box_id: null, animal_ids: [animalId] });
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "assignBox", tables: ["animals"] } }));
+      reload();
+    } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  // Animaux du bâtiment non encore placés dans CE box (candidats à l'ajout)
+  const candidates = bldgAnimals.filter((a) => a.boxId !== (selBox ? selBox.id : -1));
+  const lotsAvailable = [...new Set(candidates.map((a) => a.lot).filter(Boolean))];
+
+  // Layout SVG (grille auto sur le nombre de box réels)
+  const CANVAS_W = 600, CANVAS_H = 300;
+  const n = hasBoxes ? boxes.length : 0;
+  const COLS = Math.max(1, Math.ceil(Math.sqrt(n * 2)));
+  const ROWS = Math.max(1, Math.ceil(n / COLS));
+  const BOX_GAP = 3, AREA_PAD = 16;
+  const areaW = CANVAS_W - AREA_PAD * 2;
+  const areaH = CANVAS_H - AREA_PAD * 2 - 24;
+  const bw = Math.max(8, Math.floor((areaW - BOX_GAP * (COLS + 1)) / COLS));
+  const bh = Math.max(8, Math.floor((areaH - BOX_GAP * (ROWS + 1)) / ROWS));
+
+  const statusLabels = {
+    ok: L("Occupée", "Occupied"), sick: L("Malade", "Sick"),
+    quarantine: L("Quarantaine", "Quarantine"), empty: L("Vide", "Empty"),
+  };
+  const counts = hasBoxes ? boxes.reduce((a, b) => { const s = boxStatus(b); a[s] = (a[s] || 0) + 1; return a; }, {}) : {};
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
       onClick={onClose}>
-      <div style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", maxWidth: 680, width: "96vw", maxHeight: "92vh", overflow: "auto", display: "flex", flexDirection: "column" }}
+      <div style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", maxWidth: 720, width: "96vw", maxHeight: "92vh", overflow: "auto", display: "flex", flexDirection: "column" }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -4518,121 +4580,151 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, color: "var(--ink-950)" }}>{building.name}</div>
             <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 1 }}>
-              {lang === "fr" ? "Plan intérieur · Visualisation des emplacements" : "Interior plan · Slot visualization"}
+              {L("Plan intérieur · Affectation des box", "Interior plan · Box assignment")}
             </div>
           </div>
+          {hasBoxes && <button className="btn btn-sm" disabled={busy} onClick={onGenerate} style={{ marginRight: 6 }}>
+            <Icon name="plus" size={12} color="var(--ink-700)"/>{L("Box", "Box")}
+          </button>}
           <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 8px" }}>
             <Icon name="x" size={14} color="var(--ink-600)"/>
           </button>
         </div>
 
-        {/* Legend */}
-        <div style={{ display: "flex", gap: 14, padding: "9px 18px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
-          {Object.entries(statusLabels).map(([k, v]) => counts[k] ? (
-            <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
-              <span style={{ width: 13, height: 13, borderRadius: 3, background: INTERIOR_BOX_FILL[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
-              {lang === "fr" ? v.fr : v.en}
-              <span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+        {loading && <div style={{ padding: 32, textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>{L("Chargement…", "Loading…")}</div>}
+
+        {!loading && !hasBoxes && (
+          <div style={{ padding: "36px 24px", textAlign: "center" }}>
+            <div style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 4, fontWeight: 600 }}>{L("Aucun box configuré", "No box configured")}</div>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 16 }}>
+              {L("Génère les box de ce bâtiment pour y placer des animaux.", "Generate this building's boxes to place animals in them.")}
             </div>
-          ) : null)}
-        </div>
-
-        {/* SVG */}
-        <div style={{ padding: "12px 14px", overflow: "auto" }}>
-          <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)" }}>
-            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 400 }}>
-              <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
-
-              {/* Section zones (coloured backgrounds) */}
-              {sections.map((sec, si) => {
-                const secCols = Math.ceil(COLS / sectionCount);
-                const sx = AREA_PAD + si * (secCols * (bw + BOX_GAP));
-                const sw = Math.min(secCols * (bw + BOX_GAP), areaW - (sx - AREA_PAD));
-                return (
-                  <g key={sec.id}>
-                    <rect x={sx} y={AREA_PAD} width={sw} height={areaH} rx={6}
-                      fill={meta.bg} stroke={meta.border} strokeWidth={1.2} opacity={0.5}/>
-                    <text x={sx + sw / 2} y={AREA_PAD + 13} textAnchor="middle"
-                      fontSize="9" fontWeight="700" fill={meta.text} fontFamily="sans-serif">
-                      {lang === "fr" ? `Section ${sec.label}` : `Section ${sec.label}`}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Boxes */}
-              {statuses.map((status, idx) => {
-                const col = idx % COLS;
-                const row = Math.floor(idx / COLS);
-                const bx = AREA_PAD + BOX_GAP + col * (bw + BOX_GAP);
-                const by = AREA_PAD + 16 + BOX_GAP + row * (bh + BOX_GAP);
-                const isHovered = tooltip && tooltip.idx === idx;
-                return (
-                  <g key={idx} style={{ cursor: "pointer" }}
-                    onMouseEnter={() => setTooltip({ idx, status, bx, by })}
-                    onMouseLeave={() => setTooltip(null)}>
-                    <rect x={bx} y={by} width={bw} height={bh} rx={2}
-                      fill={INTERIOR_BOX_FILL[status]}
-                      stroke={isHovered ? "#1A1410" : INTERIOR_BOX_STROKE[status]}
-                      strokeWidth={isHovered ? 2 : 1}
-                      opacity={isHovered ? 1 : 0.9}/>
-                    {bw >= 14 && bh >= 11 && (
-                      <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
-                        fontSize="6.5" fill={status === "empty" ? "#A8A098" : "#2A1810"}
-                        fontFamily="monospace" fontWeight={status !== "ok" ? "700" : "400"}>
-                        {idx + 1}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-
-              {/* Aisle at bottom */}
-              <rect x={AREA_PAD} y={CANVAS_H - AREA_PAD - 18} width={areaW} height={14}
-                fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
-              <text x={CANVAS_W / 2} y={CANVAS_H - AREA_PAD - 8} textAnchor="middle"
-                fontSize="7.5" fill="#8A8070" fontFamily="monospace" letterSpacing="1">
-                {lang === "fr" ? "COULOIR PRINCIPAL" : "MAIN AISLE"}
-              </text>
-
-              {/* Compass */}
-              <g transform={`translate(${CANVAS_W - 22}, 22)`}>
-                <circle cx={0} cy={0} r={14} fill="white" stroke="#D0CCBE" strokeWidth={1}/>
-                <text x={0} y={-5} textAnchor="middle" fontSize="7" fill="#3A3020" fontWeight="700" fontFamily="monospace">N</text>
-                <polygon points="0,-10 -3,2 3,2" fill="#3A3020"/>
-              </g>
-
-              {/* Tooltip */}
-              {tooltip && (() => {
-                const tx = Math.min(tooltip.bx + bw + 4, CANVAS_W - 90);
-                const ty = Math.max(4, tooltip.by - 2);
-                const lbl = statusLabels[tooltip.status];
-                return (
-                  <g>
-                    <rect x={tx} y={ty} width={88} height={28} rx={5} fill="rgba(30,24,16,0.88)"/>
-                    <text x={tx + 44} y={ty + 11} textAnchor="middle" fontSize="7.5" fill="#ECE8E0" fontFamily="monospace">Box #{tooltip.idx + 1}</text>
-                    <text x={tx + 44} y={ty + 21} textAnchor="middle" fontSize="8" fill={INTERIOR_BOX_FILL[tooltip.status]} fontFamily="sans-serif" fontWeight="600">
-                      {lang === "fr" ? lbl.fr : lbl.en}
-                    </text>
-                  </g>
-                );
-              })()}
-            </svg>
+            <button className="btn" disabled={busy} onClick={onGenerate}>
+              <Icon name="plus" size={13} color="#fff"/>{L("Générer les box", "Generate boxes")}
+            </button>
           </div>
-        </div>
+        )}
+
+        {hasBoxes && <>
+          {/* Legend */}
+          <div style={{ display: "flex", gap: 14, padding: "9px 18px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
+            {Object.entries(statusLabels).map(([k, lbl]) => counts[k] ? (
+              <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
+                <span style={{ width: 13, height: 13, borderRadius: 3, background: INTERIOR_BOX_FILL[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
+                {lbl}<span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+              </div>
+            ) : null)}
+          </div>
+
+          {/* SVG plan */}
+          <div style={{ padding: "12px 14px", overflow: "auto" }}>
+            <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)" }}>
+              <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 400 }}>
+                <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
+                {boxes.map((box, idx) => {
+                  const col = idx % COLS, row = Math.floor(idx / COLS);
+                  const bx = AREA_PAD + BOX_GAP + col * (bw + BOX_GAP);
+                  const by = AREA_PAD + BOX_GAP + row * (bh + BOX_GAP);
+                  const status = boxStatus(box);
+                  const isSel = box.id === selBoxId;
+                  const isHover = hoverIdx === idx;
+                  const over = box.capacity != null && headsIn(box.id) > box.capacity;
+                  return (
+                    <g key={box.id} style={{ cursor: "pointer" }}
+                      onMouseEnter={() => setHoverIdx(idx)} onMouseLeave={() => setHoverIdx(null)}
+                      onClick={() => setSelBoxId(box.id)}>
+                      <rect x={bx} y={by} width={bw} height={bh} rx={2}
+                        fill={INTERIOR_BOX_FILL[status]}
+                        stroke={isSel ? "#1A1410" : (over ? "#B84040" : INTERIOR_BOX_STROKE[status])}
+                        strokeWidth={isSel ? 2.4 : (isHover ? 2 : (over ? 1.6 : 1))}
+                        opacity={isHover || isSel ? 1 : 0.92}/>
+                      {bw >= 14 && bh >= 11 && (
+                        <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
+                          fontSize="6.5" fill={status === "empty" ? "#A8A098" : "#2A1810"}
+                          fontFamily="monospace" fontWeight={status !== "ok" ? "700" : "400"}>{box.name}</text>
+                      )}
+                    </g>
+                  );
+                })}
+                <rect x={AREA_PAD} y={CANVAS_H - AREA_PAD - 18} width={areaW} height={14}
+                  fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
+                <text x={CANVAS_W / 2} y={CANVAS_H - AREA_PAD - 8} textAnchor="middle"
+                  fontSize="7.5" fill="#8A8070" fontFamily="monospace" letterSpacing="1">
+                  {L("COULOIR PRINCIPAL", "MAIN AISLE")}
+                </text>
+              </svg>
+            </div>
+          </div>
+
+          {/* Panneau d'affectation du box sélectionné */}
+          <div style={{ padding: "4px 18px 14px" }}>
+            {!selBox && <div style={{ fontSize: 12, color: "var(--fg-3)", textAlign: "center", padding: "8px 0" }}>
+              {L("Clique un box pour voir et affecter ses animaux.", "Click a box to view and assign its animals.")}
+            </div>}
+            {selBox && (() => {
+              const inBox = animalsByBox.get(selBox.id) || [];
+              const heads = headsIn(selBox.id);
+              const capTxt = selBox.capacity != null ? `${heads}/${selBox.capacity}` : `${heads}`;
+              const full = selBox.capacity != null && heads >= selBox.capacity;
+              return (
+                <div style={{ border: "1px solid var(--border-1)", borderRadius: 10, padding: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink-950)" }}>Box {selBox.name}</div>
+                    <span className="mono" style={{ fontSize: 11, color: full ? "#B84040" : "var(--fg-2)" }}>
+                      {capTxt} {L("têtes", "heads")}{full ? ` · ${L("plein", "full")}` : ""}
+                    </span>
+                  </div>
+
+                  {/* Animaux présents */}
+                  {inBox.length === 0
+                    ? <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 10 }}>{L("Box vide.", "Empty box.")}</div>
+                    : <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
+                        {inBox.map((a) => (
+                          <div key={a._pk} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                            <span style={{ flex: 1 }}>{a.name || a.id}{a.lot ? ` · ${L("lot", "lot")} ${a.lot}` : ""}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+                            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => unassign(a._pk)}>{L("Retirer", "Remove")}</button>
+                          </div>
+                        ))}
+                      </div>}
+
+                  {/* Ajout : par lot entier ou animal individuel (box libre) */}
+                  {candidates.length === 0
+                    ? <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Aucun autre animal du bâtiment à placer.", "No other building animal to place.")}</div>
+                    : <>
+                        {lotsAvailable.length > 0 && (
+                          <div style={{ marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>{L("Placer tout un lot :", "Place a whole lot:")}</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                              {lotsAvailable.map((lot) => (
+                                <button key={lot} className="btn btn-sm" disabled={busy}
+                                  onClick={() => assign(candidates.filter((a) => a.lot === lot).map((a) => a._pk))}>
+                                  {L("Lot", "Lot")} {lot}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>{L("Ajouter un animal :", "Add an animal:")}</div>
+                        <select className="input" disabled={busy} defaultValue=""
+                          onChange={(e) => { if (e.target.value) { assign([Number(e.target.value)]); e.target.value = ""; } }}>
+                          <option value="">{L("— choisir —", "— choose —")}</option>
+                          {candidates.map((a) => (
+                            <option key={a._pk} value={a._pk}>
+                              {(a.name || a.id)}{a.lot ? ` (lot ${a.lot})` : ""}{a.count > 1 ? ` ×${a.count}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </>}
+                </div>
+              );
+            })()}
+          </div>
+        </>}
 
         {/* Footer */}
         <div style={{ display: "flex", gap: 8, padding: "10px 18px", borderTop: "1px solid var(--border-1)" }}>
-          <button className="btn btn-sm" style={{ flex: 1 }}>
-            <Icon name="layers" size={12} color="var(--ink-700)"/>
-            {lang === "fr" ? "Animaux par box" : "Animals per box"}
-          </button>
-          <button className="btn btn-sm" style={{ flex: 1 }}>
-            <Icon name="pulse" size={12} color="var(--ink-700)"/>
-            {lang === "fr" ? "Capteurs" : "Sensors"}
-          </button>
           <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
-            {lang === "fr" ? "Fermer" : "Close"}
+            {L("Fermer", "Close")}
           </button>
         </div>
       </div>
@@ -5354,7 +5446,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
       )}
       {interiorBuilding && (
-        <BldgInteriorPlan building={interiorBuilding} lang={lang} onClose={() => setInteriorBuilding(null)}/>
+        <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} onClose={() => setInteriorBuilding(null)}/>
       )}
     </div>
   );

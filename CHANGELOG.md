@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.90.0)
+- FarmOS — **Box (loges/emplacements) comme vraies entités**. Migration **0168** : table `farmos_boxes` (rattachée à un bâtiment, `name`/`section`/`capacity`) + colonne `box_id` sur `farmos_animals`. **Box libre** : on place N animaux de n'importe quel lot (ou sans lot) dans un même box via `box_id`, sans contrainte de lot. **Capacité max par box** appliquée à l'affectation : blocage `BOX_FULL` si dépassement, **possibilité de forcer** (surpeuplement temporaire). Endpoints `/farmos/boxes` (CRUD + soft delete), `/farmos/boxes/generate` (génère N box d'un coup, capacité par défaut) et `/farmos/boxes/assign` (affecte/désaffecte des animaux). UI : le plan intérieur du bâtiment devient **réel** (box colorés selon les animaux réellement présents) ; clic sur un box → panneau d'affectation (ajout individuel, **« placer tout un lot »** en 1 clic, retrait), bouton **« Générer les box »** si le bâtiment n'en a aucun.
+
 ### Added (3.89.0)
 - Prévisionnel de trésorerie — **cône d'incertitude** : la projection affiche désormais une **bande min/max** qui s'élargit avec l'horizon (±3 %/mois d'éloignement, plafonné à ±40 %) au lieu d'un trait sec — plus l'échéance est lointaine, plus la fourchette est large (`netLow`/`netHigh` par mois, zone ombrée sur la courbe SVG).
 - Prévisionnel de trésorerie — **références externes (couche 2, saisie manuelle)**. Migration **0170** : table `forecast_external_refs` (prix marché/région, taux de référence, flux récurrents ; champ `source` = manual/api/ia pour la cascade future). Producteur `ExternalRefProducer` : les références actives de type `cashflow_inflow`/`cashflow_outflow` génèrent des flux mensuels estimés par devise, avec **badge de provenance** (`réf. interne` / `réf. API` / `estimé IA`) affiché dans le détail. Visible en mode Réaliste/Optimiste.

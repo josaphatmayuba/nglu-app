@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -1929,6 +1929,174 @@ export class FarmosService {
     await this.db.update(farmosBuildings).set({ isActive: 0 }).where(eq(farmosBuildings.id, id));
     await this.publishFarmosUpdate("deleteBuilding", ["buildings"], "deleted", id, orgId);
     return { message: "Bâtiment supprimé." };
+  }
+
+  // ─── Box (loges/emplacements) ───────────────────────────────────────────────
+  // Box = vraie entité rattachée à un bâtiment, avec capacité max. Box libre :
+  // N animaux de n'importe quel lot (ou sans lot) via animal.box_id, sans contrainte.
+  async listBoxes(orgId: number, buildingId?: number | null) {
+    const conds = [eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)];
+    if (buildingId) conds.push(eq(farmosBoxes.buildingId, buildingId));
+    const [boxes, animals] = await Promise.all([
+      this.db.select().from(farmosBoxes).where(and(...conds)).orderBy(farmosBoxes.name),
+      this.db
+        .select({ boxId: farmosAnimals.boxId, count: farmosAnimals.count, status: farmosAnimals.status })
+        .from(farmosAnimals)
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+    ]);
+    // Occupation par box = somme des count (ou 1/tête) des animaux pointant sur box_id.
+    const occByBox = new Map<number, number>();
+    const sickByBox = new Map<number, number>();
+    for (const a of animals) {
+      if (!a.boxId) continue;
+      const n = Number(a.count ?? 0) || 1;
+      occByBox.set(a.boxId, (occByBox.get(a.boxId) ?? 0) + n);
+      if (a.status === "sick" || a.status === "quarantine") {
+        sickByBox.set(a.boxId, (sickByBox.get(a.boxId) ?? 0) + n);
+      }
+    }
+    return boxes.map((b) => {
+      const occupancy = occByBox.get(b.id) ?? 0;
+      const cap = b.capacity ?? null;
+      return {
+        ...b,
+        occupancy,
+        sick: sickByBox.get(b.id) ?? 0,
+        occupancyRate: cap && cap > 0 ? Math.round((occupancy / cap) * 100) : null,
+        overCapacity: cap != null && cap > 0 && occupancy > cap,
+      };
+    });
+  }
+
+  async getBox(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosBoxes)
+      .where(and(eq(farmosBoxes.id, id), eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Box not found.");
+    return row;
+  }
+
+  async createBox(input: any, orgId: number) {
+    if (!input.building_id) throw new BadRequestException("building_id requis.");
+    if (!input.name) throw new BadRequestException("name requis.");
+    const [res] = await this.db.insert(farmosBoxes).values({
+      organizationId: orgId,
+      buildingId: input.building_id,
+      name: String(input.name),
+      section: input.section ?? null,
+      capacity: input.capacity ?? null,
+      notes: input.notes ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createBox", ["boxes"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  // Génère N box d'un coup pour un bâtiment (ex: 70 box, capacité 4) — saisie indolore.
+  async generateBoxes(input: any, orgId: number) {
+    const buildingId = input.building_id;
+    if (!buildingId) throw new BadRequestException("building_id requis.");
+    const building = await this.getBuilding(buildingId, orgId);
+    const countRaw = Number(input.count ?? building.capacity ?? 0);
+    const count = Math.max(1, Math.min(500, Math.floor(countRaw)));
+    const capacity = input.capacity != null ? Number(input.capacity) : null;
+    const prefix = input.prefix != null ? String(input.prefix) : "";
+    const start = Number(input.start ?? 1) || 1;
+    const values = Array.from({ length: count }, (_, i) => ({
+      organizationId: orgId,
+      buildingId,
+      name: `${prefix}${start + i}`,
+      section: input.section ?? null,
+      capacity,
+      notes: null,
+    }));
+    await this.db.insert(farmosBoxes).values(values);
+    await this.publishFarmosUpdate("generateBoxes", ["boxes"], "created", buildingId, orgId);
+    return { created: count };
+  }
+
+  async updateBox(id: number, input: any, orgId: number) {
+    await this.getBox(id, orgId);
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = String(input.name);
+    if (input.section !== undefined) patch.section = input.section;
+    if (input.capacity !== undefined) patch.capacity = input.capacity;
+    if (input.notes !== undefined) patch.notes = input.notes;
+    if (Object.keys(patch).length === 0) return this.getBox(id, orgId);
+    await this.db.update(farmosBoxes).set(patch).where(eq(farmosBoxes.id, id));
+    await this.publishFarmosUpdate("updateBox", ["boxes"], "updated", id, orgId);
+    return this.getBox(id, orgId);
+  }
+
+  async deleteBox(id: number, orgId: number) {
+    await this.getBox(id, orgId);
+    // Soft delete : on désassigne les animaux du box pour ne pas laisser de FK orpheline.
+    await this.db.update(farmosAnimals).set({ boxId: null }).where(eq(farmosAnimals.boxId, id));
+    await this.db.update(farmosBoxes).set({ isActive: 0 }).where(eq(farmosBoxes.id, id));
+    await this.publishFarmosUpdate("deleteBox", ["boxes", "animals"], "deleted", id, orgId);
+    return { message: "Box supprimé." };
+  }
+
+  // Capacité dispo d'un box, en excluant éventuellement des animaux déjà comptés (réassignation).
+  private async boxFreeSpace(box: { id: number; capacity: number | null }, orgId: number, excludeAnimalIds: number[] = []) {
+    if (box.capacity == null) return { capacity: null as number | null, occupancy: 0, free: Infinity };
+    const rows = await this.db
+      .select({ id: farmosAnimals.id, count: farmosAnimals.count })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.boxId, box.id), eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+    const exclude = new Set(excludeAnimalIds);
+    let occupancy = 0;
+    for (const r of rows) {
+      if (exclude.has(r.id)) continue;
+      occupancy += Number(r.count ?? 0) || 1;
+    }
+    return { capacity: box.capacity, occupancy, free: box.capacity - occupancy };
+  }
+
+  // Assigne un ou plusieurs animaux à un box. Bloque si dépassement de capacité,
+  // sauf force=true. Désassigne si box_id null. "Box libre" : aucune contrainte de lot.
+  async assignAnimalsToBox(input: any, orgId: number) {
+    const animalIds: number[] = Array.isArray(input.animal_ids)
+      ? input.animal_ids.map(Number).filter((n: number) => Number.isFinite(n))
+      : [];
+    if (animalIds.length === 0) throw new BadRequestException("animal_ids requis.");
+    const targetBoxId = input.box_id != null ? Number(input.box_id) : null;
+    const force = input.force === true || input.force === "true";
+
+    if (targetBoxId == null) {
+      await this.db.update(farmosAnimals)
+        .set({ boxId: null })
+        .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+      await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", 0, orgId);
+      return { assigned: animalIds.length, boxId: null };
+    }
+
+    const box = await this.getBox(targetBoxId, orgId);
+    // Têtes à placer (somme des count des animaux ciblés), en excluant ceux déjà dans ce box.
+    const animals = await this.db
+      .select({ id: farmosAnimals.id, count: farmosAnimals.count, boxId: farmosAnimals.boxId })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1),
+        sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+    const alreadyHere = animals.filter((a) => a.boxId === targetBoxId).map((a) => a.id);
+    const incoming = animals.filter((a) => a.boxId !== targetBoxId)
+      .reduce((s, a) => s + (Number(a.count ?? 0) || 1), 0);
+    const { capacity, occupancy, free } = await this.boxFreeSpace(box, orgId, alreadyHere);
+
+    if (capacity != null && incoming > free && !force) {
+      throw new BadRequestException({
+        code: "BOX_FULL",
+        message: `Box plein : ${occupancy}/${capacity} occupé, ${free} place(s) libre(s), ${incoming} à ajouter.`,
+        capacity, occupancy, free, incoming,
+      });
+    }
+
+    await this.db.update(farmosAnimals)
+      .set({ boxId: targetBoxId })
+      .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
+    await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", targetBoxId, orgId);
+    return { assigned: animalIds.length, boxId: targetBoxId, forced: force && capacity != null && incoming > free };
   }
 
   // ─── Éléments de terrain (décor du plan : champ, eau, route…) ───────────────

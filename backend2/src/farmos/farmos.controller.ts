@@ -620,6 +620,43 @@ export class FarmosController {
     return this.farmos.deleteBuilding(id, orgId);
   }
 
+  // ─── Box (loges/emplacements) ─────────────────────────────────────────────
+  @Permissions("readAll-farmos")
+  @Get("boxes")
+  listBoxes(@CurrentOrg() orgId: number, @Query("building_id") buildingId?: string) {
+    return this.farmos.listBoxes(orgId, buildingId ? Number(buildingId) : null);
+  }
+
+  @Permissions("create-farmos")
+  @Post("boxes")
+  createBox(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.createBox(body, orgId);
+  }
+
+  @Permissions("create-farmos")
+  @Post("boxes/generate")
+  generateBoxes(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.generateBoxes(body, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Put("boxes/:id")
+  updateBox(@Param("id", ParseIntPipe) id: number, @Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.updateBox(id, body, orgId);
+  }
+
+  @Permissions("delete-farmos")
+  @Delete("boxes/:id")
+  deleteBox(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteBox(id, orgId);
+  }
+
+  @Permissions("update-farmos")
+  @Post("boxes/assign")
+  assignAnimalsToBox(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.assignAnimalsToBox(body, orgId);
+  }
+
   // ─── Éléments de terrain (décor du plan) ──────────────────────────────────
   @Permissions("readAll-farmos")
   @Get("land-features")

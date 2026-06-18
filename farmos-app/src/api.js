@@ -333,6 +333,13 @@ export const api = {
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),
   updateBuilding: (id, body) => jsonFetch(`/buildings/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBuilding: (id) => jsonFetch(`/buildings/${id}`, { method: "DELETE" }),
+  // Box (loges/emplacements) — box libre : N animaux de n'importe quel lot via box_id
+  listBoxes: (buildingId) => jsonFetch(`/boxes${buildQuery({ building_id: buildingId })}`),
+  createBox: (body) => jsonFetch("/boxes", { method: "POST", body: JSON.stringify(body) }),
+  generateBoxes: (body) => jsonFetch("/boxes/generate", { method: "POST", body: JSON.stringify(body) }),
+  updateBox: (id, body) => jsonFetch(`/boxes/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteBox: (id) => jsonFetch(`/boxes/${id}`, { method: "DELETE" }),
+  assignAnimalsToBox: (body) => jsonFetch("/boxes/assign", { method: "POST", body: JSON.stringify(body) }),
   // Éléments de terrain (décor du plan)
   listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),
   createLandFeature: (body) => jsonFetch("/land-features", { method: "POST", body: JSON.stringify(body) }),
@@ -552,6 +559,8 @@ export function adaptAnimal(row) {
     count: row.count != null ? Number(row.count) : null,
     lot: row.lot,
     barn: row.barn,
+    buildingId: row.buildingId ?? row.building_id ?? null,
+    boxId: row.boxId ?? row.box_id ?? null,
     status: row.status || "healthy",
     motherId: row.motherId ?? row.mother_id ?? null,
     fatherId: row.fatherId ?? row.father_id ?? null,
