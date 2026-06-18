@@ -173,22 +173,62 @@ if ! docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FI
 fi
 
 check_url() {
-  curl -fsSIL "$1" >/dev/null 2>&1
+  curl -fsSIL --connect-timeout 5 --max-time 10 "$1" >/dev/null 2>&1
+}
+
+smoke_once() {
+  route_url="$BASE_URL$SMOKE_ROUTE"
+  check_url "$BASE_URL/" \
+    && check_url "$BASE_URL/crm" \
+    && check_url "$BASE_URL/admin/auth/login" \
+    && check_url "$route_url" \
+    && docker exec nglu_prod_frontend nginx -t >/dev/null 2>&1
+}
+
+diagnose_smoke() {
+  route_url="$BASE_URL$SMOKE_ROUTE"
+  failed=0
+
+  for check in \
+    "marketing root|$BASE_URL/" \
+    "crm entry|$BASE_URL/crm" \
+    "crm login|$BASE_URL/admin/auth/login" \
+    "app route|$route_url"; do
+    label="${check%%|*}"
+    url="${check#*|}"
+    if check_url "$url"; then
+      echo "[remote] smoke ok: $label ($url)"
+    else
+      echo "[remote] smoke fail: $label ($url)" >&2
+      failed=1
+    fi
+  done
+
+  nginx_test_log="$(mktemp)"
+  if docker exec nglu_prod_frontend nginx -t >"$nginx_test_log" 2>&1; then
+    echo "[remote] smoke ok: nginx config"
+  else
+    echo "[remote] smoke fail: nginx config" >&2
+    sed 's/^/[remote] nginx-test: /' "$nginx_test_log" >&2
+    failed=1
+  fi
+  rm -f "$nginx_test_log"
+
+  return "$failed"
 }
 
 check_web() {
-  route_url="$BASE_URL$SMOKE_ROUTE"
+  # Static app deploys run in parallel with backend deploys. Keep this smoke
+  # limited to frontend/nginx checks so an API restart cannot rollback a valid
+  # static app image.
   for _ in $(seq 1 20); do
-    if check_url "$BASE_URL/" \
-      && check_url "$BASE_URL/crm" \
-      && check_url "$BASE_URL/admin/auth/login" \
-      && curl -fsS "$BASE_URL/api/health" 2>/dev/null | grep -q '"status":"ok"' \
-      && check_url "$route_url" \
-      && docker exec nglu_prod_frontend nginx -t >/dev/null 2>&1; then
+    if smoke_once; then
       return 0
     fi
     sleep 3
   done
+
+  diagnose_smoke || true
   return 1
 }
 
