@@ -10,6 +10,14 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.98.0)
+- FarmOS — **page Rapports réorganisée** : les rapports « générés en direct » (Rentabilité, Effectif par bâtiment, Structure du cheptel ♂/♀, Ratio reproducteur M:F) ne sont plus des bannières pleine largeur mais des **cartes** dans une grille homogène (section « Générés en direct · données réelles »), au-dessus de la bibliothèque d'archives. [SCRUM]
+
+### Added (3.98.0)
+- FarmOS — **nouveau rapport de prévision** (carte « Prévision (6 mois) ») : imprime la **trésorerie projetée** (flux net cumulé par devise) et le **cheptel projeté** (effectif actuel → effectif prévu avec fourchette, naissances/mortalités/sorties cumulées) en réutilisant le moteur forecast backend (`/forecast/cash-flow` + `/forecast/livestock`, scope farmos, scénario réaliste). [SCRUM]
+- FarmOS — **nouveau rapport de mortalité** (carte « Mortalité (animaux décédés) ») : liste chaque décès enregistré (date, espèce, nombre, cause présumée/confirmée, lieu, perte estimée, symptômes/notes) via `GET /farmos/mortality-events`, avec totaux par cause/espèce. [SCRUM]
+- FarmOS — **explication en langage naturel** ajoutée au bas de chaque rapport imprimé (effectif, structure ♂/♀, ratio reproducteur, prévision, mortalité) : un encart « Ce que disent ces données » qui résume en clair les chiffres réels et ce qu'ils signifient pour l'éleveur. [SCRUM]
+
 ### Added (3.97.0)
 - FarmOS — **projection du cheptel dans le Prévisionnel** (combien d'animaux après tel temps + impact financier). Nouveau service backend `ForecastLivestockService` + endpoint `GET /forecast/livestock?horizon=`. Part de l'**effectif réel courant** (somme des têtes des animaux actifs non sortis) et applique mois par mois les leviers, dont les **taux sont calculés sur l'historique FarmOS réel** (6 mois) : naissances = N1 certain (gestations en cours, `farmos_reproduction_events`), mortalité = N2 estimé (taux mensuel historique × cheptel), ventes/abattage/sorties = N2 tendance (têtes sorties/mois). Sortie = **courbe des têtes par mois avec cône d'incertitude** (3%/mois, plafond 40%) + **impact financier** : têtes vendues projetées × prix moyen historique par devise → recette d'élevage prévisionnelle (jamais de conversion entre devises). `tsc --noEmit` backend OK. Route déjà couverte par la whitelist `/forecast`. UI à brancher. [SCRUM]
 

@@ -2812,6 +2812,12 @@ const printHeadcountReport = (buildings, animals, lang) => {
   }).join("");
   const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Total", "Total")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}<th class="num">${L("Prêts", "Ready")}</th><th class="num">${L("Retard", "Overdue")}</th><th class="num">${L("Poids moy.", "Avg kg")}</th>`;
   const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${grandTotal}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${grand[c]}</td>`).join("")}<td class="num">${grandReady}</td><td class="num">${grandOverdue}</td><td class="num"></td></tr>`;
+  const catLbl = (c) => esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en);
+  const topCat = CATEGORY_ORDER.slice().sort((a, b) => grand[b] - grand[a])[0];
+  const nlText = L(
+    `En clair : la ferme compte aujourd'hui <b>${grandTotal}</b> animaux vivants répartis sur <b>${(buildings || []).length}</b> bâtiment(s). La catégorie la plus nombreuse est <b>${catLbl(topCat)}</b> (${grand[topCat] || 0} têtes). ${grandReady > 0 ? `<b>${grandReady}</b> animal(aux) à l'engraissement ont atteint le poids d'abattage (prêts à vendre)` : "Aucun animal n'est encore prêt pour l'abattage"}${grandOverdue > 0 ? `, dont <b>${grandOverdue}</b> en retard (déjà au-delà du poids cible : à vendre en priorité pour éviter de gaspiller de l'aliment)` : ""}. Chaque ligne du tableau correspond à un bâtiment ; les colonnes détaillent combien d'adultes, cochettes, animaux à l'engraissement et jeunes s'y trouvent.`,
+    `In plain words: the farm currently holds <b>${grandTotal}</b> live animals across <b>${(buildings || []).length}</b> building(s). The largest category is <b>${catLbl(topCat)}</b> (${grand[topCat] || 0} head). ${grandReady > 0 ? `<b>${grandReady}</b> fattening animal(s) have reached slaughter weight (ready to sell)` : "No animal is ready for slaughter yet"}${grandOverdue > 0 ? `, of which <b>${grandOverdue}</b> are overdue (past target weight: sell first to avoid wasting feed)` : ""}. Each table row is a building; the columns break down how many adults, gilts, fattening and young animals it holds.`
+  );
   const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport d'effectif global", "Global headcount report")}</title>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
@@ -2820,11 +2826,14 @@ const printHeadcountReport = (buildings, animals, lang) => {
   th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; } th { background: #f2f2f2; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.tot td { font-weight: 700; background: #eef5ef; }
+  .nl { border: 1px solid #d7e3da; background: #f3f8f4; border-radius: 6px; padding: 11px 13px; margin-top: 14px; font-size: 12px; color: #243; line-height: 1.55; }
+  .nl h2 { font-size: 12px; margin: 0 0 4px; color: #15603a; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Rapport d'effectif global", "Global headcount report")}</h1>
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
+  <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${nlText}</div>
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
 </body></html>`;
   const w = window.open("", "_blank");
@@ -2865,12 +2874,18 @@ const printSexStructureReport = (buildings, animals, lang) => {
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.tot td { font-weight: 700; background: #eef5ef; }
   .lgd { color: #666; font-size: 11px; margin-top: 10px; }
+  .nl { border: 1px solid #d7e3da; background: #f3f8f4; border-radius: 6px; padding: 11px 13px; margin-top: 14px; font-size: 12px; color: #243; line-height: 1.55; }
+  .nl h2 { font-size: 12px; margin: 0 0 4px; color: #15603a; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Structure du cheptel — répartition mâles / femelles", "Herd structure — male / female breakdown")}</h1>
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="lgd">${L("M = mâles · F = femelles · ? = sexe non renseigné. La colonne Total = M + F (+ sexe non renseigné).", "M = males · F = females · ? = sex not set. The Total column = M + F (+ sex not set).")}</div>
+  <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${L(
+    `En clair : sur l'ensemble de la ferme on dénombre <b>${gM}</b> mâles et <b>${gF}</b> femelles${gU ? ` (et ${gU} animal(aux) au sexe non renseigné)` : ""}. ${gF > gM ? "Les femelles dominent, ce qui est sain pour la reproduction (les femelles produisent la descendance, le lait, les œufs)." : gM > gF ? "Les mâles sont plus nombreux que les femelles : un surplus de mâles non reproducteurs coûte de l'aliment sans rapporter — pensez à les orienter vers l'engraissement / la vente." : "Mâles et femelles sont à l'équilibre."}${gU ? ` Renseigner le sexe des <b>${gU}</b> animal(aux) manquant(s) fiabilisera ce suivi.` : ""} Le tableau montre, bâtiment par bâtiment et catégorie par catégorie, combien de mâles et de femelles sont présents.`,
+    `In plain words: across the whole farm there are <b>${gM}</b> males and <b>${gF}</b> females${gU ? ` (plus ${gU} animal(s) with no sex recorded)` : ""}. ${gF > gM ? "Females dominate, which is healthy for breeding (females produce offspring, milk, eggs)." : gM > gF ? "Males outnumber females: a surplus of non-breeding males eats feed without return — consider moving them to fattening / sale." : "Males and females are balanced."}${gU ? ` Recording the sex of the <b>${gU}</b> missing animal(s) will make this tracking more reliable.` : ""} The table shows, building by building and category by category, how many males and females are present.`
+  )}</div>
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
 </body></html>`;
   const w = window.open("", "_blank");
@@ -2926,11 +2941,17 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   .note { border: 1px solid #ddd; background: #fafaf8; border-radius: 6px; padding: 10px 12px; margin-top: 12px; font-size: 11px; color: #333; line-height: 1.5; }
   .note h2 { font-size: 12px; margin: 0 0 4px; }
   .note ul { margin: 4px 0 0; padding-left: 18px; } .note li { margin: 2px 0; }
+  .nl { border: 1px solid #d7e3da; background: #f3f8f4; border-radius: 6px; padding: 11px 13px; margin-top: 14px; font-size: 12px; color: #243; line-height: 1.55; }
+  .nl h2 { font-size: 12px; margin: 0 0 4px; color: #15603a; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Ratio reproducteur — mâles / femelles", "Breeding ratio — males / females")}</h1>
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
+  <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${L(
+    `En clair : la ferme compte au total <b>${gM}</b> mâles pour <b>${gF}</b> femelles, soit un ratio global de <b>${ratio(gM, gF)}</b>${gF > 0 ? ` (environ ${(gF / Math.max(gM, 1)).toFixed(0)} femelle(s) par mâle)` : ""}. ${gM === 0 ? "Sans mâle reproducteur, aucune saillie naturelle n'est possible : il faut introduire au moins un mâle ou recourir à l'insémination." : (gF / gM) > 30 ? "Il y a relativement peu de mâles pour beaucoup de femelles : surveillez que toutes les femelles soient bien fécondées." : (gF / gM) < 5 && gM > 1 ? "Il y a beaucoup de mâles par rapport aux femelles : un mâle peut couvrir plusieurs femelles, le surplus de mâles peut être engraissé pour la vente." : "L'équilibre mâles / femelles est globalement cohérent pour la reproduction."} La colonne <b>Interprétation</b> précise, bâtiment par bâtiment, si ce ratio est bon (vert), s'il manque des mâles (rouge) ou s'il y en a trop (orange).`,
+    `In plain words: the farm has a total of <b>${gM}</b> males for <b>${gF}</b> females, i.e. an overall ratio of <b>${ratio(gM, gF)}</b>${gF > 0 ? ` (about ${(gF / Math.max(gM, 1)).toFixed(0)} female(s) per male)` : ""}. ${gM === 0 ? "With no breeding male, no natural mating is possible: add at least one male or use insemination." : (gF / gM) > 30 ? "There are relatively few males for many females: make sure all females actually get bred." : (gF / gM) < 5 && gM > 1 ? "There are many males relative to females: one male can serve several females, so the surplus males can be fattened for sale." : "The male / female balance is broadly sound for breeding."} The <b>Interpretation</b> column says, building by building, whether this ratio is good (green), short of males (red) or has too many (orange).`
+  )}</div>
   <div class="note">
     <h2>${L("Comment lire le ratio M:F et l'interprétation", "How to read the M:F ratio and interpretation")}</h2>
     ${L(
@@ -2950,12 +2971,180 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   w.document.write(html); w.document.close();
 };
 
+// Imprime un rapport de PRÉVISION (forecast) : projette trésorerie, cheptel et
+// production sur un horizon donné en réutilisant le moteur forecast backend2
+// (scope "farmos"), puis ajoute une explication en langage naturel.
+const printForecastReport = async (lang, horizon = 6) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
+  const horizonLabel = horizon >= 12 ? L(`${horizon / 12} an(s)`, `${horizon / 12} year(s)`) : L(`${horizon} mois`, `${horizon} months`);
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
+  w.document.write(`<!DOCTYPE html><html lang="${lang}"><body style="font-family:Arial,sans-serif;color:#666;margin:40px">${L("Génération de la prévision…", "Generating forecast…")}</body></html>`);
+  w.document.close();
+  const [cash, herd] = await Promise.all([
+    api.forecastCashFlow({ horizon, mode: "realiste", scope: "farmos" }).catch(() => null),
+    api.forecastLivestock({ horizon }).catch(() => null),
+  ]);
+
+  // Trésorerie : cumul net final par devise
+  const cashRows = [];
+  let netLine = L("Données de trésorerie insuffisantes.", "Not enough cash-flow data.");
+  if (cash && Array.isArray(cash.months) && cash.months.length) {
+    const byCur = new Map();
+    for (const mo of cash.months) {
+      for (const c of (mo.currencies || [])) {
+        const code = c.currencyCode || c.currencySymbol || "?";
+        byCur.set(code, (byCur.get(code) || 0) + Number(c.net || 0));
+      }
+    }
+    const parts = [];
+    for (const [code, net] of byCur.entries()) {
+      cashRows.push(`<tr><td>${esc(code)}</td><td class="num">${nf.format(Math.round(net))}</td></tr>`);
+      parts.push(`<b>${nf.format(Math.round(net))} ${esc(code)}</b>`);
+    }
+    if (parts.length) netLine = L(`Sur ${horizonLabel}, le flux net cumulé projeté est de ${parts.join(", ")} (entrées de ventes moins dépenses prévues).`, `Over ${horizonLabel}, the projected cumulative net flow is ${parts.join(", ")} (sales inflows minus expected expenses).`);
+  }
+  const cashTable = cashRows.length
+    ? `<table><thead><tr><th>${L("Devise", "Currency")}</th><th class="num">${L("Flux net cumulé prévu", "Projected cumulative net flow")}</th></tr></thead><tbody>${cashRows.join("")}</tbody></table>`
+    : `<p class="empty">${L("Pas encore assez d'historique de ventes/dépenses pour projeter la trésorerie.", "Not enough sales/expense history yet to project cash flow.")}</p>`;
+
+  // Cheptel : effectif actuel → effectif projeté (+ fourchette)
+  let herdTable = `<p class="empty">${L("Pas encore assez d'historique pour projeter le cheptel.", "Not enough history yet to project livestock.")}</p>`;
+  let herdLine = "";
+  if (herd && Array.isArray(herd.points) && herd.points.length) {
+    const end = herd.points[herd.points.length - 1];
+    const current = Number(herd.current || 0);
+    const proj = Number(end.head || 0);
+    const low = Number(end.headLow || proj), high = Number(end.headHigh || proj);
+    const delta = proj - current;
+    const totals = herd.points.reduce((a, p) => ({ births: a.births + Number(p.births || 0), deaths: a.deaths + Number(p.deaths || 0), exits: a.exits + Number(p.exits || 0) }), { births: 0, deaths: 0, exits: 0 });
+    herdTable = `<table><thead><tr><th>${L("Indicateur", "Indicator")}</th><th class="num">${L("Valeur", "Value")}</th></tr></thead><tbody>`
+      + `<tr><td>${L("Effectif actuel", "Current headcount")}</td><td class="num">${nf.format(current)}</td></tr>`
+      + `<tr class="tot"><td>${L("Effectif prévu dans", "Headcount projected in")} ${horizonLabel}</td><td class="num">${nf.format(Math.round(proj))} <span style="color:#888">(${nf.format(Math.round(low))}–${nf.format(Math.round(high))})</span></td></tr>`
+      + `<tr><td>${L("Naissances cumulées prévues", "Projected cumulative births")}</td><td class="num">+${nf.format(Math.round(totals.births))}</td></tr>`
+      + `<tr><td>${L("Mortalités cumulées prévues", "Projected cumulative deaths")}</td><td class="num">−${nf.format(Math.round(totals.deaths))}</td></tr>`
+      + `<tr><td>${L("Sorties cumulées prévues (ventes/abattage)", "Projected cumulative exits (sales/slaughter)")}</td><td class="num">−${nf.format(Math.round(totals.exits))}</td></tr>`
+      + `</tbody></table>`;
+    herdLine = L(
+      `Le cheptel passerait de <b>${nf.format(current)}</b> à environ <b>${nf.format(Math.round(proj))}</b> têtes (${delta >= 0 ? "+" : ""}${nf.format(Math.round(delta))}), avec une fourchette plausible de ${nf.format(Math.round(low))} à ${nf.format(Math.round(high))}. Cette projection tient compte des naissances attendues (+${nf.format(Math.round(totals.births))}), des mortalités (−${nf.format(Math.round(totals.deaths))}) et des sorties prévues (−${nf.format(Math.round(totals.exits))}).`,
+      `The herd would move from <b>${nf.format(current)}</b> to about <b>${nf.format(Math.round(proj))}</b> head (${delta >= 0 ? "+" : ""}${nf.format(Math.round(delta))}), within a plausible range of ${nf.format(Math.round(low))} to ${nf.format(Math.round(high))}. This projection factors in expected births (+${nf.format(Math.round(totals.births))}), deaths (−${nf.format(Math.round(totals.deaths))}) and planned exits (−${nf.format(Math.round(totals.exits))}).`
+    );
+  }
+
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport de prévision", "Forecast report")}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 20px 0 6px; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 4px; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; } th { background: #f2f2f2; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.tot td { font-weight: 700; background: #eef5ef; }
+  .empty { color: #888; font-size: 12px; }
+  .nl { border: 1px solid #d7e3da; background: #f3f8f4; border-radius: 6px; padding: 11px 13px; margin-top: 18px; font-size: 12px; color: #243; line-height: 1.55; }
+  .nl h2 { font-size: 12px; margin: 0 0 4px; color: #15603a; }
+  .disc { color: #888; font-size: 10.5px; margin-top: 10px; line-height: 1.5; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${L("Rapport de prévision", "Forecast report")}</h1>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${L("horizon", "horizon")} ${horizonLabel} · ${L("scénario réaliste", "realistic scenario")}</div>
+  <h2>${L("Trésorerie projetée", "Projected cash flow")}</h2>
+  ${cashTable}
+  <h2>${L("Cheptel projeté", "Projected livestock")}</h2>
+  ${herdTable}
+  <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>
+    ${netLine}${herdLine ? " " + herdLine : ""}
+    <div class="disc">${L("Une prévision n'est pas une certitude : elle prolonge les tendances passées de la ferme. Plus l'horizon est lointain, plus la fourchette s'élargit. Mettez à jour vos saisies (ventes, naissances, mortalités) pour fiabiliser ces projections.", "A forecast is not a certainty: it extends the farm's past trends. The further the horizon, the wider the range. Keep your entries up to date (sales, births, deaths) to make these projections more reliable.")}</div>
+  </div>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  w.document.open(); w.document.write(html); w.document.close();
+};
+
+// Imprime un rapport de MORTALITÉ : liste chaque événement de décès (date, espèce,
+// nombre, cause présumée / confirmée, lieu, perte estimée, symptômes, notes), avec
+// totaux par cause / espèce et une explication en langage naturel.
+const printMortalityReport = (events, lang) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
+  const list = Array.isArray(events) ? events.slice().sort((a, b) => String(b.eventDate ?? "").localeCompare(String(a.eventDate ?? ""))) : [];
+  const spLabel = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.fr : s.en) : (id || "—"); };
+  let totalDeaths = 0, totalLoss = 0, confirmedCount = 0;
+  const byCause = {}, bySpecies = {};
+  const rows = list.map((e) => {
+    const n = Number(e.count ?? 1);
+    totalDeaths += n;
+    totalLoss += Number(e.estimatedLoss ?? 0);
+    const confirmed = e.confirmedCause && String(e.confirmedCause).trim();
+    if (confirmed) confirmedCount += n;
+    const cause = (e.cause && String(e.cause).trim()) || L("Non renseignée", "Not recorded");
+    byCause[cause] = (byCause[cause] || 0) + n;
+    bySpecies[e.species || "?"] = (bySpecies[e.species || "?"] || 0) + n;
+    const place = [e.barn, e.lot].filter(Boolean).map(esc).join(" · ") || "—";
+    const extras = [
+      e.preDeathSymptoms ? `${L("Symptômes", "Symptoms")}: ${esc(e.preDeathSymptoms)}` : "",
+      Number(e.vetConsulted) ? L("Vétérinaire consulté", "Vet consulted") : "",
+      Number(e.necropsyDone) ? L("Nécropsie réalisée", "Necropsy done") : (Number(e.necropsyRequested) ? L("Nécropsie demandée", "Necropsy requested") : ""),
+    ].filter(Boolean).join(" · ");
+    const notes = [esc(e.notes || ""), extras].filter(Boolean).join(extras && e.notes ? " — " : "");
+    return `<tr>`
+      + `<td>${esc(e.eventDate || "—")}</td>`
+      + `<td>${esc(spLabel(e.species))}</td>`
+      + `<td class="num">${n}</td>`
+      + `<td>${esc(cause)}</td>`
+      + `<td>${confirmed ? `<b>${esc(e.confirmedCause)}</b>` : `<span style="color:#999">${L("présumée", "presumed")}</span>`}</td>`
+      + `<td>${place}</td>`
+      + `<td class="num">${e.estimatedLoss != null && e.estimatedLoss !== "" ? nf.format(Number(e.estimatedLoss)) : ""}</td>`
+      + `<td style="max-width:280px">${notes || "—"}</td>`
+      + `</tr>`;
+  }).join("");
+  const head = `<th>${L("Date", "Date")}</th><th>${L("Espèce", "Species")}</th><th class="num">${L("Nb", "Qty")}</th>`
+    + `<th>${L("Cause", "Cause")}</th><th>${L("Confirmée ?", "Confirmed?")}</th><th>${L("Lieu", "Location")}</th>`
+    + `<th class="num">${L("Perte est.", "Est. loss")}</th><th>${L("Notes / symptômes", "Notes / symptoms")}</th>`;
+  const foot = `<tr class="tot"><td colspan="2">${L("TOTAL", "TOTAL")}</td><td class="num">${totalDeaths}</td><td colspan="3"></td><td class="num">${totalLoss ? nf.format(Math.round(totalLoss)) : ""}</td><td></td></tr>`;
+  const topCause = Object.entries(byCause).sort((a, b) => b[1] - a[1])[0];
+  const topSpecies = Object.entries(bySpecies).sort((a, b) => b[1] - a[1])[0];
+  const confirmedPct = totalDeaths > 0 ? Math.round((confirmedCount / totalDeaths) * 100) : 0;
+  const nlText = list.length === 0
+    ? L("Aucun décès n'a été enregistré. Continuez à saisir les mortalités au fur et à mesure : c'est ce qui permet de détecter tôt une maladie ou un problème d'élevage.", "No deaths have been recorded. Keep logging mortalities as they happen: this is what lets you spot a disease or husbandry problem early.")
+    : L(
+      `En clair : <b>${totalDeaths}</b> animal(aux) sont décédés sur <b>${list.length}</b> événement(s) enregistré(s)${totalLoss ? `, pour une perte estimée d'environ <b>${nf.format(Math.round(totalLoss))}</b>` : ""}. La cause la plus fréquente est <b>${esc(topCause[0])}</b> (${topCause[1]} décès) et l'espèce la plus touchée est <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} décès). Seulement <b>${confirmedPct}%</b> des décès ont une cause confirmée (examen / nécropsie) : les autres reposent sur une cause présumée par l'éleveur. Confirmer la cause (faire examiner les carcasses) aide à savoir s'il s'agit d'une maladie contagieuse à enrayer. Chaque ligne décrit un décès : quand, quelle espèce, combien d'animaux, la cause, le lieu et les observations.`,
+      `In plain words: <b>${totalDeaths}</b> animal(s) died across <b>${list.length}</b> recorded event(s)${totalLoss ? `, for an estimated loss of about <b>${nf.format(Math.round(totalLoss))}</b>` : ""}. The most frequent cause is <b>${esc(topCause[0])}</b> (${topCause[1]} deaths) and the most affected species is <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} deaths). Only <b>${confirmedPct}%</b> of deaths have a confirmed cause (exam / necropsy): the rest rely on a cause presumed by the farmer. Confirming the cause (having carcasses examined) helps tell whether it is a contagious disease to contain. Each row describes one death event: when, which species, how many animals, the cause, the location and the observations.`
+    );
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport de mortalité", "Mortality report")}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; vertical-align: top; } th { background: #f2f2f2; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.tot td { font-weight: 700; background: #fbecec; }
+  .nl { border: 1px solid #e3d7d7; background: #fdf4f4; border-radius: 6px; padding: 11px 13px; margin-top: 14px; font-size: 12px; color: #432; line-height: 1.55; }
+  .nl h2 { font-size: 12px; margin: 0 0 4px; color: #9a3030; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${L("Rapport de mortalité — animaux décédés", "Mortality report — deceased animals")}</h1>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${list.length} ${L("événement(s)", "event(s)")} · ${totalDeaths} ${L("décès", "deaths")}</div>
+  ${list.length ? `<table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>` : `<p style="color:#888;font-size:12px">${L("Aucun décès enregistré.", "No deaths recorded.")}</p>`}
+  <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${nlText}</div>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
+  w.document.write(html); w.document.close();
+};
+
 const ReportsScreen = ({ lang }) => {
-  const [hcData, setHcData] = React.useState({ buildings: [], animals: [], loading: true });
+  const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], loading: true });
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => [])])
-      .then(([b, a]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], loading: false }); });
+    Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => [])])
+      .then(([b, a, m]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], mortality: Array.isArray(m) ? m : [], loading: false }); });
     return () => { cancel = true; };
   }, []);
   const reports = [
@@ -2968,6 +3157,16 @@ const ReportsScreen = ({ lang }) => {
     { fr: "Inventaire médicaments", en: "Medicine inventory", icon: "pill", color: "var(--health-500)", date: "20 mai 2026", size: "11 p." },
     { fr: "Traçabilité MAPAQ", en: "MAPAQ traceability", icon: "shield", color: "var(--ink-700)", date: "Trimestriel", size: "—" },
   ];
+  // Rapports générés en direct : lisent les données réelles et finissent par une
+  // explication en langage naturel à l'impression. cta "pdf" = bouton PDF, sinon Imprimer.
+  const liveReports = [
+    { fr: "Rentabilité", en: "Profitability", descFr: "Revenus, dépenses, profit + ventes/dépenses récentes", descEn: "Revenue, expenses, profit + recent sales/expenses", icon: "coins", color: "var(--money-500)", cta: "pdf", action: () => api.downloadFinancePdf().catch((e) => console.warn(e.message)) },
+    { fr: "Effectif par bâtiment", en: "Headcount by building", descFr: "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment", descEn: "Total and categories per building", icon: "layers", color: "var(--forest-700)", needsData: true, action: () => printHeadcountReport(hcData.buildings, hcData.animals, lang) },
+    { fr: "Structure du cheptel ♂/♀", en: "Herd structure ♂/♀", descFr: "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀", descEn: "Males / females per category and building, + ♂:♀ ratio", icon: "fingerprint", color: "var(--pertinence-500)", needsData: true, action: () => printSexStructureReport(hcData.buildings, hcData.animals, lang) },
+    { fr: "Ratio reproducteur M:F", en: "Breeding ratio M:F", descFr: "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture", descEn: "Males / females and M:F ratio per building, with reading guide", icon: "activity", color: "var(--oxblood-500)", needsData: true, action: () => printBreedingRatioReport(hcData.buildings, hcData.animals, lang) },
+    { fr: "Prévision (6 mois)", en: "Forecast (6 months)", descFr: "Trésorerie et cheptel projetés sur 6 mois, avec fourchette et explication", descEn: "Cash flow and livestock projected over 6 months, with range and explanation", icon: "pulse", color: "var(--pertinence-500)", action: () => printForecastReport(lang, 6) },
+    { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(hcData.mortality, lang) },
+  ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
@@ -2976,58 +3175,26 @@ const ReportsScreen = ({ lang }) => {
           {lang === "fr" ? <>Rapports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>bibliothèque</span></> : <>Reports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>library</span></>}
         </h1>
       </div>
-      {/* Rapports générés en direct (#3) */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--money-500) 12%, transparent)", color: "var(--money-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="coins" size={18} color="currentColor"/>
+      {/* Rapports générés en direct — chacun lit les données réelles et se
+          termine, à l'impression, par une explication en langage naturel. */}
+      <div>
+        <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>{lang === "fr" ? "Générés en direct · données réelles" : "Live generated · real data"}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {liveReports.map((r, i) => (
+            <div key={i} className="card" style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: `color-mix(in oklch, ${r.color} 12%, transparent)`, color: r.color, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                <Icon name={r.icon} size={18} color="currentColor"/>
+              </div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink-950)", fontWeight: 500, lineHeight: 1.25 }}>{lang === "fr" ? r.fr : r.en}</div>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 6, flex: 1 }}>{lang === "fr" ? r.descFr : r.descEn}</div>
+              <button className="btn btn-primary btn-sm" disabled={r.needsData && hcData.loading} style={{ marginTop: 12, justifyContent: "center" }} onClick={r.action}>
+                <Icon name={r.cta === "pdf" ? "download" : "report"} size={12} color="#FBF8F2"/>{r.cta === "pdf" ? "PDF" : (lang === "fr" ? "Imprimer" : "Print")}
+              </button>
+            </div>
+          ))}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Rentabilité (généré en direct)" : "Profitability (live generated)"}</div>
-          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Revenus, dépenses, profit + ventes/dépenses récentes" : "Revenue, expenses, profit + recent sales/expenses"}</div>
-        </div>
-        <button className="btn btn-primary btn-sm" onClick={() => api.downloadFinancePdf().catch((e) => console.warn(e.message))}>
-          <Icon name="download" size={12} color="#FBF8F2"/>PDF
-        </button>
       </div>
-      {/* Rapport d'effectif global (généré en direct, impression navigateur) */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--forest-700) 12%, transparent)", color: "var(--forest-700)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="layers" size={18} color="currentColor"/>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Effectif par bâtiment (généré en direct)" : "Headcount by building (live generated)"}</div>
-          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment" : "Total and categories per building"}</div>
-        </div>
-        <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printHeadcountReport(hcData.buildings, hcData.animals, lang)}>
-          <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
-        </button>
-      </div>
-      {/* Structure du cheptel ♂/♀ (généré en direct, impression navigateur) */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--pertinence-500) 12%, transparent)", color: "var(--pertinence-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="fingerprint" size={18} color="currentColor"/>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Structure du cheptel ♂/♀ (généré en direct)" : "Herd structure ♂/♀ (live generated)"}</div>
-          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀" : "Males / females per category and building, + ♂:♀ ratio"}</div>
-        </div>
-        <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printSexStructureReport(hcData.buildings, hcData.animals, lang)}>
-          <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
-        </button>
-      </div>
-      {/* Ratio reproducteur M:F (généré en direct, impression navigateur) */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--oxblood-500) 12%, transparent)", color: "var(--oxblood-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <Icon name="activity" size={18} color="currentColor"/>
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Ratio reproducteur M:F (généré en direct)" : "Breeding ratio M:F (live generated)"}</div>
-          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture" : "Males / females and M:F ratio per building, with reading guide"}</div>
-        </div>
-        <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printBreedingRatioReport(hcData.buildings, hcData.animals, lang)}>
-          <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
-        </button>
-      </div>
+      <div className="overline" style={{ marginTop: 4, color: "var(--fg-3)" }}>{lang === "fr" ? "Bibliothèque · archives" : "Library · archives"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         {reports.map((r, i) => (
           <div key={i} className="card" style={{ cursor: "pointer" }}>
