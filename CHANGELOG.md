@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.92.1)
+- FarmOS mortalité Zone B — migration **0172** (réparation) : supprime les **événements de mortalité en doublon** créés en dev avant correction (un jeu intermédiaire count chèvre = 3 + porcs en double), ne garde que la version finale (count 2/1/6). N'agit que sur `farmos_mortality_events` Zone B au 2026-06-13. Migration **0171** rendue idempotente côté événements (garde anti-doublon `NOT EXISTS` sur espèce/date/lot/count) et apostrophes retirées des commentaires SQL (piège de parse au boot). `external_id` conservés en `ZB-PORCELET-MORT-*` / `ZB-CHEVREAU-MORT-*` (pas de renommage = aucun autre animal touché).
+
 ### Added (3.92.0)
 - FarmOS — **Mortalité Zone B (diarrhée, 13 juin 2026)**. Migration **0171** : crée **9 animaux** décédés en Zone B (Ferme Kasangulu) — 2 porcelets femelles + 1 porcelet mâle (nés 2 juin, `Batiment Porcs Kasangulu`) et 6 chevreaux (`Batiment Caprins Kasangulu`), tous `status='deceased'` (sortis du cheptel vivant, traçables `is_active=1`, `external_id` `ZB-PORCELET-MORT-*` / `ZB-CHEVREAU-MORT-*`). Crée aussi **3 événements** `farmos_mortality_events` agrégés (count 2/1/6, cause « Diarrhee (presumee, non confirmee) », pertes estimées 60/30/240 = 330 $). Source : `farmos_mortality_events.csv`. Idempotente (`external_id` unique + `ON DUPLICATE KEY` + flag `data_migration_flags`).
 

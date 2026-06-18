@@ -1,6 +1,6 @@
 -- FarmOS: 6 animaux Zone B decedes (diarrhee, 13 juin 2026) + 3 evenements de mortalite.
 -- Source: migration-data/cleaned_csv/farmos_mortality_events.csv (3 lignes agregees, count 2/1/6 = 9 tetes).
--- Reproduit le comportement de FarmosService.createMortalityEvent: l'animal passe status='deceased'.
+-- Reproduit le comportement de FarmosService.createMortalityEvent: animal passe en statut deceased.
 -- Idempotent: external_id unique + ON DUPLICATE KEY + flag data_migration_flags (rejeu au boot >=0070).
 
 CREATE TABLE IF NOT EXISTS `data_migration_flags` (
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `data_migration_flags` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 --> statement-breakpoint
 
--- 6 animaux crees directement en status='deceased' (sortis du cheptel vivant), is_active=1 = traçables.
+-- 9 animaux crees directement en statut deceased (sortis du cheptel vivant), is_active=1 = tracables.
 INSERT INTO `farmos_animals` (
   `organization_id`, `external_id`, `name`, `species`, `race`, `sex`, `date_of_birth`,
   `weight`, `weight_unit`, `count`, `lot`, `barn`, `room`, `building_id`, `zone_id`,
@@ -91,6 +91,13 @@ FROM (
 ) AS src
 WHERE NOT EXISTS (
   SELECT 1 FROM `data_migration_flags` WHERE `migration_key` = '0171_farmos_mortality_zb_deaths'
+)
+-- Garde anti-doublon: pas de cle unique sur farmos_mortality_events, on evite de reinserer
+-- un evenement deja present (meme espece + date + lot) si la migration est rejouee avant le flag.
+AND NOT EXISTS (
+  SELECT 1 FROM `farmos_mortality_events` e
+  WHERE e.`organization_id` = 1 AND e.`event_date` = src.`event_date`
+    AND e.`species` = src.`species` AND e.`lot` = src.`lot` AND e.`count` = src.`count`
 );
 --> statement-breakpoint
 

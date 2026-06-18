@@ -1037,6 +1037,13 @@
                         "when":  1780545600000,
                         "tag":  "0171_farmos_mortality_zb_deaths",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  148,
+                        "version":  "5",
+                        "when":  1780549200000,
+                        "tag":  "0172_farmos_mortality_zb_repair",
+                        "breakpoints":  true
                     }
                 ]
 }
