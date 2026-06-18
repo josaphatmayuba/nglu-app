@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.22)
+- FarmOS **prêt à abattre / vente** : détection par animal selon l'âge OU le poids (seuils par espèce, `SLAUGHTER_THRESHOLDS`). 3 états : en croissance / prêt / en retard (coût net). Sur la carte Engraissement du modal : « ✓ N prêt(s) à abattre » et « ⚠ M en retard ». Évite de garder des animaux qui mangent sans rendement.
+- FarmOS **poids** : carte KPI « Poids moyen » dans le modal (si des poids sont saisis), + colonnes Prêts/Retard/Poids moyen dans les rapports imprimables (par bâtiment et global) + section « Abattage / vente » dans le rapport bâtiment.
+
 ### Added (3.82.21)
 - FarmOS modal Visualiser : la répartition « Par catégorie » passe en **cartes détaillées** (valeur + % du total + pastille de couleur par catégorie), une seule représentation (pas de doublon avec les puces).
 - FarmOS **rapports imprimables** (impression navigateur, sans backend) : bouton « Rapport » dans le modal (effectif d'un bâtiment : synthèse, catégories, lots) + carte « Effectif par bâtiment (généré en direct) » dans l'écran Rapports (tableau global tous bâtiments × catégories avec total).

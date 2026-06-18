@@ -10,7 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
-import { animalQty, isAdultAnimal, categoryBreakdownByGroup, CATEGORY_LABELS } from "./animal-category";
+import { animalQty, isAdultAnimal, categoryBreakdownByGroup, CATEGORY_LABELS, slaughterStats } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -2771,17 +2771,19 @@ const printHeadcountReport = (buildings, animals, lang) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
   const grand = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
-  let grandTotal = 0;
+  let grandTotal = 0, grandReady = 0, grandOverdue = 0;
   const rows = (buildings || []).map((b) => {
     const bAnimals = (animals || []).filter((a) => a.barn === b.name);
     const cats = categoryBreakdownByGroup(bAnimals);
+    const sl = slaughterStats(bAnimals, { onlyFattening: true });
+    const aw = slaughterStats(bAnimals).avgWeight;
     const total = bAnimals.reduce((s, a) => s + animalQty(a), 0);
     CATEGORY_ORDER.forEach((c) => { grand[c] += cats[c]; });
-    grandTotal += total;
-    return `<tr><td>${esc(b.name)}</td><td class="num">${total}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${cats[c] || 0}</td>`).join("")}</tr>`;
+    grandTotal += total; grandReady += sl.pret; grandOverdue += sl.retard;
+    return `<tr><td>${esc(b.name)}</td><td class="num">${total}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${cats[c] || 0}</td>`).join("")}<td class="num">${sl.pret || ""}</td><td class="num">${sl.retard || ""}</td><td class="num">${aw != null ? aw.toFixed(1) : ""}</td></tr>`;
   }).join("");
-  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Total", "Total")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}`;
-  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${grandTotal}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${grand[c]}</td>`).join("")}</tr>`;
+  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Total", "Total")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}<th class="num">${L("Prêts", "Ready")}</th><th class="num">${L("Retard", "Overdue")}</th><th class="num">${L("Poids moy.", "Avg kg")}</th>`;
+  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${grandTotal}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${grand[c]}</td>`).join("")}<td class="num">${grandReady}</td><td class="num">${grandOverdue}</td><td class="num"></td></tr>`;
   const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport d'effectif global", "Global headcount report")}</title>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
@@ -4474,7 +4476,7 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 // représenter plusieurs têtes), aligné sur le calcul d'occupation backend (somme des count).
 // Catégorisation (adulte / cochette / engraissement / jeune) partagée via animal-category.js.
 const bldgAnimalStats = (building, animals) => {
-  if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {} };
+  if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {}, slaughter: { pret: 0, retard: 0, enCroissance: 0, avgWeight: null }, avgWeight: null };
   const bldgAnimals = animals.filter((a) => a.barn === building.name);
   const lotGroups = new Map(); // nom -> [animaux]
   let female = 0, male = 0, total = 0, sick = 0, femaleAdult = 0, maleAdult = 0;
@@ -4490,13 +4492,16 @@ const bldgAnimalStats = (building, animals) => {
   // Catégories (avec ratio reproducteur) calculées par groupe : le bâtiment entier,
   // puis chaque lot indépendamment (le ratio mâle/femelle s'applique au sein du groupe).
   const categories = categoryBreakdownByGroup(bldgAnimals);
+  // Abattage : sur les animaux destinés à l'engraissement ; poids moyen sur tout le bâtiment.
+  const slaughter = slaughterStats(bldgAnimals, { onlyFattening: true });
+  const avgWeight = slaughterStats(bldgAnimals).avgWeight;
   const lots = [...lotGroups.entries()].map(([name, rows]) => {
     const count = rows.reduce((s, a) => s + animalQty(a), 0);
     const f = rows.filter((a) => a.sex === "F").reduce((s, a) => s + animalQty(a), 0);
     const m = rows.filter((a) => a.sex === "M").reduce((s, a) => s + animalQty(a), 0);
     return { name, count, female: f, male: m, categories: categoryBreakdownByGroup(rows) };
   }).sort((x, y) => y.count - x.count);
-  return { female, male, total, sick, femaleAdult, maleAdult, categories, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
+  return { female, male, total, sick, femaleAdult, maleAdult, categories, slaughter, avgWeight, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
 };
 
 // Génère et imprime un rapport d'effectif d'un bâtiment (impression navigateur, sans backend).
@@ -4535,7 +4540,13 @@ const printBuildingReport = (building, stats, lang) => {
     <div class="kpi"><div class="lbl">${L("Femelles", "Females")}</div><div class="val">${stats.female}</div><div class="lbl">${L("dont", "incl.")} ${stats.femaleAdult} ${L("adultes", "adults")}</div></div>
     <div class="kpi"><div class="lbl">${L("Mâles", "Males")}</div><div class="val">${stats.male}</div><div class="lbl">${L("dont", "incl.")} ${stats.maleAdult} ${L("adultes", "adults")}</div></div>
     <div class="kpi"><div class="lbl">${L("Malades", "Sick")}</div><div class="val">${stats.sick}</div></div>
+    ${stats.avgWeight != null ? `<div class="kpi"><div class="lbl">${L("Poids moyen", "Avg weight")}</div><div class="val">${stats.avgWeight.toFixed(1)} kg</div></div>` : ""}
   </div>
+  ${(stats.slaughter.pret > 0 || stats.slaughter.retard > 0) ? `<h2>${L("Abattage / vente", "Slaughter / sale")}</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">${L("Prêts à abattre", "Ready")}</div><div class="val">${stats.slaughter.pret}</div></div>
+    <div class="kpi"><div class="lbl">${L("En retard (coût net)", "Overdue")}</div><div class="val">${stats.slaughter.retard}</div></div>
+  </div>` : ""}
   <h2>${L("Par catégorie", "By category")}</h2>
   <table><thead><tr><th>${L("Catégorie", "Category")}</th><th class="num">${L("Têtes", "Head")}</th><th class="num">%</th></tr></thead><tbody>${catRows}</tbody></table>
   ${stats.lots.length ? `<h2>${L("Lots", "Batches")}</h2>
@@ -4618,6 +4629,7 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
           <Kpi label={lang === "fr" ? "Femelles" : "Females"} value={stats.female.toLocaleString("fr-CA")} color="var(--pertinence-700)" sub={adultSub(stats.femaleAdult, stats.female)}/>
           <Kpi label={lang === "fr" ? "Mâles" : "Males"} value={stats.male.toLocaleString("fr-CA")} color="var(--forest-700)" sub={adultSub(stats.maleAdult, stats.male)}/>
           <Kpi label={lang === "fr" ? "Malades" : "Sick"} value={stats.sick.toLocaleString("fr-CA")} color={stats.sick > 0 ? "var(--oxblood-700)" : "var(--ink-950)"}/>
+          {stats.avgWeight != null && <Kpi label={lang === "fr" ? "Poids moyen" : "Avg weight"} value={`${stats.avgWeight.toFixed(1)} kg`}/>}
         </div>
 
         {/* Répartition par catégorie — cartes détaillées (valeur + % + pastille couleur) */}
@@ -4639,6 +4651,21 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
                       <span style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: col }}>{val.toLocaleString("fr-CA")}</span>
                       <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{pct}%</span>
                     </div>
+                    {/* Prêts à abattre / en retard (uniquement sur la carte Engraissement) */}
+                    {c === "engraissement" && (stats.slaughter.pret > 0 || stats.slaughter.retard > 0) && (
+                      <div style={{ marginTop: 5, display: "flex", flexDirection: "column", gap: 2 }}>
+                        {stats.slaughter.pret > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--forest-700)" }}>
+                            ✓ {stats.slaughter.pret} {lang === "fr" ? "prêt(s) à abattre" : "ready"}
+                          </span>
+                        )}
+                        {stats.slaughter.retard > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--oxblood-700)" }}>
+                            ⚠ {stats.slaughter.retard} {lang === "fr" ? "en retard (coût net)" : "overdue"}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}

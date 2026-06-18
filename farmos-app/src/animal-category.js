@@ -29,6 +29,20 @@ const GILT_SPECIES = new Set(["pig"]);
 // Mots-clés du champ type signalant une destination abattage/engraissement (prioritaire).
 const FATTEN_TYPE_KW = ["engraissement", "abattage", "embouche", "boucherie"];
 
+// Seuils d'abattage par espèce : prêt = âge OU poids atteint ; en retard = au-delà du
+// seuil "late" (l'animal mange sans rendement → coût net). Le poids ne s'applique que
+// s'il est saisi. Valeurs standard d'élevage (porc charcutier ~100 kg/5,5 mois, etc.).
+export const SLAUGHTER_THRESHOLDS = {
+  pig:     { readyDays: 165, lateDays: 240, readyKg: 100, lateKg: 130 },
+  cow:     { readyDays: 540, lateDays: 900, readyKg: 450, lateKg: 600 },
+  goat:    { readyDays: 150, lateDays: 300, readyKg: 35,  lateKg: 50 },
+  sheep:   { readyDays: 150, lateDays: 300, readyKg: 40,  lateKg: 55 },
+  chicken: { readyDays: 42,  lateDays: 70,  readyKg: 2,   lateKg: 3 },
+  duck:    { readyDays: 49,  lateDays: 80,  readyKg: 3,   lateKg: 4 },
+  turkey:  { readyDays: 100, lateDays: 160, readyKg: 7,   lateKg: 12 },
+  rabbit:  { readyDays: 70,  lateDays: 110, readyKg: 2.3, lateKg: 3 },
+};
+
 // Quantité représentée par une ligne (1 ligne peut valoir plusieurs têtes via `count`).
 // Aligné sur le calcul d'occupation backend (somme des count, défaut 1).
 export const animalQty = (a) => (Number(a?.count ?? 0) > 0 ? Number(a.count) : 1);
@@ -51,6 +65,47 @@ const ageDays = (a) => {
 export const isAdultAnimal = (a) => {
   const d = ageDays(a);
   return d != null && d >= (ADULT_AGE_DAYS[a.species] ?? 365);
+};
+
+const animalKg = (a) => {
+  const w = Number(a?.weight);
+  return Number.isFinite(w) && w > 0 ? w : null;
+};
+
+// État d'abattage d'un animal : "en_croissance" | "pret" | "retard" | null (inconnu).
+// Prêt = âge OU poids atteint ; en retard = au-delà du seuil "late". Le poids prime
+// quand il est saisi (plus précis que l'âge pour la rentabilité).
+export const slaughterReadiness = (a) => {
+  const th = SLAUGHTER_THRESHOLDS[a?.species];
+  if (!th) return null;
+  const d = ageDays(a);
+  const kg = animalKg(a);
+  if (d == null && kg == null) return null;
+  const late = (kg != null && kg >= th.lateKg) || (d != null && d >= th.lateDays);
+  if (late) return "retard";
+  const ready = (kg != null && kg >= th.readyKg) || (d != null && d >= th.readyDays);
+  return ready ? "pret" : "en_croissance";
+};
+
+export const SLAUGHTER_LABELS = {
+  pret:   { fr: "Prêts à abattre",  en: "Ready to slaughter" },
+  retard: { fr: "En retard (coût net)", en: "Overdue (net cost)" },
+  en_croissance: { fr: "En croissance", en: "Growing" },
+};
+
+// Agrège l'état d'abattage + le poids moyen d'un groupe d'animaux (têtes pondérées
+// par count). onlyFattening = ne compter que les animaux destinés à l'engraissement.
+export const slaughterStats = (animals, { onlyFattening = false } = {}) => {
+  let pret = 0, retard = 0, enCroissance = 0, weightSum = 0, weightHeads = 0;
+  (animals || []).forEach((a) => {
+    if (onlyFattening && animalCategory(a) !== "engraissement") return;
+    const n = animalQty(a);
+    const st = slaughterReadiness(a);
+    if (st === "pret") pret += n; else if (st === "retard") retard += n; else if (st === "en_croissance") enCroissance += n;
+    const kg = animalKg(a);
+    if (kg != null) { weightSum += kg * n; weightHeads += n; }
+  });
+  return { pret, retard, enCroissance, avgWeight: weightHeads > 0 ? weightSum / weightHeads : null, weightHeads };
 };
 
 // Catégorie d'un animal isolé (sans contexte de groupe). Un mâle adulte non marqué
