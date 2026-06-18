@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.95.2)
+- FarmOS — **Plan intérieur des box modernisé**. Le mini-plan SVG (peu lisible, box minuscules) est remplacé par une **grille de cartes de box** (nom + pastille d'état + têtes `9/10` + jauge de remplissage, fonds doux par état). Le clic sur un box ouvre le détail **en remplacement de la grille** avec un **bouton retour `‹`** (manquant auparavant) pour revenir à la vue d'ensemble et rouvrir un autre box — corrige « plus moyen de revoir les box quand on clique ». Tactile/mobile (cartes ≥92px, grille scrollable). Icône `chevron-left` ajoutée au jeu d'icônes FarmOS. Logique d'affectation (assign/unassign/générer/capacité) inchangée. [SCRUM]
+
 ### Fixed (3.95.1)
 - FarmOS — fiche animal: après fermeture du panneau de détail (bouton X), recliquer sur un animal ne le rouvrait plus. Le bouton X passait le layout en « full » de façon permanente; le clic sur une ligne remet désormais le layout en « split » et réaffiche le panneau. [SCRUM]
 

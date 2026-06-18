@@ -4454,6 +4454,8 @@ const BuildingFloorPlan = ({ buildings, selectedId, onSelect, lang }) => {
 // ─── Plan intérieur générique (basé sur capacity et sections statiques) ──────
 const INTERIOR_BOX_FILL   = { ok: "#A8D8A0", sick: "#E08080", quarantine: "#F0C060", empty: "#E8E4DC" };
 const INTERIOR_BOX_STROKE = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
+// Fonds doux pour les cartes de box (plan moderne)
+const INTERIOR_CARD_BG    = { ok: "#E7F1E6", sick: "#FBE9E7", quarantine: "#FBF1DC", empty: "#F6F3EC" };
 
 // Plan intérieur RÉEL : box = entités farmos_boxes rattachées au bâtiment.
 // Box libre : on assigne N animaux (de n'importe quel lot, ou sans lot) à un box,
@@ -4464,7 +4466,6 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const [boxes, setBoxes] = React.useState(null); // null = chargement
   const [selBoxId, setSelBoxId] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
-  const [hoverIdx, setHoverIdx] = React.useState(null);
   const [genOpen, setGenOpen] = React.useState(false); // modal "Générer les box"
 
   const reload = React.useCallback(() => {
@@ -4550,17 +4551,6 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const candidates = bldgAnimals.filter((a) => a.boxId !== (selBox ? selBox.id : -1));
   const lotsAvailable = [...new Set(candidates.map((a) => a.lot).filter(Boolean))];
 
-  // Layout SVG (grille auto sur le nombre de box réels)
-  const CANVAS_W = 600, CANVAS_H = 300;
-  const n = hasBoxes ? boxes.length : 0;
-  const COLS = Math.max(1, Math.ceil(Math.sqrt(n * 2)));
-  const ROWS = Math.max(1, Math.ceil(n / COLS));
-  const BOX_GAP = 3, AREA_PAD = 16;
-  const areaW = CANVAS_W - AREA_PAD * 2;
-  const areaH = CANVAS_H - AREA_PAD * 2 - 24;
-  const bw = Math.max(8, Math.floor((areaW - BOX_GAP * (COLS + 1)) / COLS));
-  const bh = Math.max(8, Math.floor((areaH - BOX_GAP * (ROWS + 1)) / ROWS));
-
   const statusLabels = {
     ok: L("Occupée", "Occupied"), sick: L("Malade", "Sick"),
     quarantine: L("Quarantaine", "Quarantine"), empty: L("Vide", "Empty"),
@@ -4606,64 +4596,61 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
           </div>
         )}
 
-        {hasBoxes && <>
+        {hasBoxes && !selBox && <>
           {/* Legend */}
-          <div style={{ display: "flex", gap: 14, padding: "9px 18px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 18, padding: "11px 20px", borderBottom: "1px solid var(--border-1)", flexWrap: "wrap" }}>
             {Object.entries(statusLabels).map(([k, lbl]) => counts[k] ? (
-              <div key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ink-700)", fontWeight: 600 }}>
-                <span style={{ width: 13, height: 13, borderRadius: 3, background: INTERIOR_BOX_FILL[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
-                {lbl}<span style={{ fontSize: 10, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
+              <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--ink-700)", fontWeight: 600 }}>
+                <span style={{ width: 13, height: 13, borderRadius: 4, background: INTERIOR_CARD_BG[k], border: `1.5px solid ${INTERIOR_BOX_STROKE[k]}`, display: "inline-block" }}/>
+                {lbl}<span style={{ fontSize: 10.5, color: "var(--fg-3)", fontFamily: "monospace" }}>({counts[k]})</span>
               </div>
             ) : null)}
           </div>
 
-          {/* SVG plan */}
-          <div style={{ padding: "12px 14px", overflow: "auto" }}>
-            <div style={{ background: "#F6F3EC", borderRadius: 10, border: "1px solid var(--border-1)" }}>
-              <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} style={{ width: "100%", height: "auto", display: "block", minWidth: 400 }}>
-                <rect width={CANVAS_W} height={CANVAS_H} fill="#F6F3EC"/>
-                {boxes.map((box, idx) => {
-                  const col = idx % COLS, row = Math.floor(idx / COLS);
-                  const bx = AREA_PAD + BOX_GAP + col * (bw + BOX_GAP);
-                  const by = AREA_PAD + BOX_GAP + row * (bh + BOX_GAP);
-                  const status = boxStatus(box);
-                  const isSel = box.id === selBoxId;
-                  const isHover = hoverIdx === idx;
-                  const over = box.capacity != null && headsIn(box.id) > box.capacity;
-                  return (
-                    <g key={box.id} style={{ cursor: "pointer" }}
-                      onMouseEnter={() => setHoverIdx(idx)} onMouseLeave={() => setHoverIdx(null)}
-                      onClick={() => setSelBoxId(box.id)}>
-                      <rect x={bx} y={by} width={bw} height={bh} rx={2}
-                        fill={INTERIOR_BOX_FILL[status]}
-                        stroke={isSel ? "#1A1410" : (over ? "#B84040" : INTERIOR_BOX_STROKE[status])}
-                        strokeWidth={isSel ? 2.4 : (isHover ? 2 : (over ? 1.6 : 1))}
-                        opacity={isHover || isSel ? 1 : 0.92}/>
-                      {bw >= 14 && bh >= 11 && (
-                        <text x={bx + bw / 2} y={by + bh / 2 + 3.5} textAnchor="middle"
-                          fontSize="6.5" fill={status === "empty" ? "#A8A098" : "#2A1810"}
-                          fontFamily="monospace" fontWeight={status !== "ok" ? "700" : "400"}>{box.name}</text>
-                      )}
-                    </g>
-                  );
-                })}
-                <rect x={AREA_PAD} y={CANVAS_H - AREA_PAD - 18} width={areaW} height={14}
-                  fill="#E8E4D8" stroke="#C0B898" strokeWidth={0.8}/>
-                <text x={CANVAS_W / 2} y={CANVAS_H - AREA_PAD - 8} textAnchor="middle"
-                  fontSize="7.5" fill="#8A8070" fontFamily="monospace" letterSpacing="1">
-                  {L("COULOIR PRINCIPAL", "MAIN AISLE")}
-                </text>
-              </svg>
+          {/* Grille de cartes box (tactile, lisible) */}
+          <div style={{ padding: "16px 20px", overflowY: "auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 10 }}>
+              {boxes.map((box) => {
+                const status = boxStatus(box);
+                const heads = headsIn(box.id);
+                const cap = box.capacity != null ? box.capacity : null;
+                const over = cap != null && heads > cap;
+                const full = cap != null && heads >= cap;
+                const pct = cap != null ? Math.min(100, Math.round((heads / cap) * 100)) : (heads > 0 ? 100 : 0);
+                const barColor = over ? "#B84040" : (full ? "#C89020" : "#5A9A58");
+                const isEmpty = status === "empty";
+                return (
+                  <button key={box.id} type="button" onClick={() => setSelBoxId(box.id)}
+                    style={{
+                      textAlign: "left", cursor: "pointer", borderRadius: 12, padding: "10px 11px",
+                      minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between",
+                      background: isEmpty ? "var(--surface-1, #F6F3EC)" : INTERIOR_CARD_BG[status],
+                      border: `1.5px ${isEmpty ? "dashed" : "solid"} ${over ? "#B84040" : INTERIOR_BOX_STROKE[status]}`,
+                      transition: "transform .12s, box-shadow .12s", font: "inherit",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,.08)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 700, fontSize: 14, color: isEmpty ? "var(--fg-2)" : "var(--ink-950)" }}>
+                      {!isEmpty && <span style={{ width: 8, height: 8, borderRadius: "50%", background: INTERIOR_BOX_STROKE[status], flexShrink: 0 }}/>}
+                      Box {box.name}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, fontFamily: "monospace", color: over ? "#B84040" : "var(--fg-2)" }}>
+                      {cap != null ? `${heads}/${cap}` : `${heads}`}{!isEmpty ? ` ${L("têtes", "heads")}` : ""}{over ? ` ${L("dépassé", "over")}` : (full && !isEmpty ? ` ${L("plein", "full")}` : "")}
+                    </div>
+                    <div style={{ height: 5, borderRadius: 3, background: "var(--border-1)", overflow: "hidden", marginTop: 4 }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: 3 }}/>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
+        </>}
 
-          {/* Panneau d'affectation du box sélectionné */}
-          <div style={{ padding: "4px 18px 14px" }}>
-            {!selBox && <div style={{ fontSize: 12.5, color: "var(--fg-3)", textAlign: "center", padding: "14px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              <Icon name="grid" size={20} color="var(--border-2)"/>
-              {L("Clique un box du plan pour voir et affecter ses animaux.", "Click a box on the plan to view and assign its animals.")}
-            </div>}
-            {selBox && (() => {
+        {/* Panneau d'affectation du box sélectionné (remplace la grille, avec retour) */}
+        {hasBoxes && selBox && (
+          <div style={{ padding: "16px 20px" }}>
+            {(() => {
               const inBox = animalsByBox.get(selBox.id) || [];
               const heads = headsIn(selBox.id);
               const cap = selBox.capacity != null ? selBox.capacity : null;
@@ -4674,11 +4661,15 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
               const stColor = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
               return (
                 <div style={{ border: "1px solid var(--border-1)", borderRadius: 12, overflow: "hidden", background: "var(--paper)" }}>
-                  {/* En-tête sticky du box : nom + remplissage */}
-                  <div style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--paper)", padding: "11px 13px 9px", borderBottom: "1px solid var(--border-1)" }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 7 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink-950)" }}>Box {selBox.name}</div>
-                      <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
+                  {/* En-tête sticky du box : retour + nom + remplissage */}
+                  <div style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--surface-1, #F6F3EC)", padding: "11px 13px 9px", borderBottom: "1px solid var(--border-1)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: cap != null ? 7 : 0 }}>
+                      <button type="button" title={L("Retour aux box", "Back to boxes")} onClick={() => setSelBoxId(null)}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-2)", background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                        <Icon name="chevron-left" size={16} color="var(--ink-700)"/>
+                      </button>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "var(--ink-950)" }}>Box {selBox.name}</div>
+                      <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
                         {cap != null ? `${heads}/${cap}` : heads} {L("têtes", "heads")}{over ? ` · ${L("dépassé", "over")}` : (full ? ` · ${L("plein", "full")}` : "")}
                       </span>
                     </div>
@@ -4742,7 +4733,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
               );
             })()}
           </div>
-        </>}
+        )}
 
         {/* Footer */}
         <div style={{ display: "flex", gap: 8, padding: "10px 18px", borderTop: "1px solid var(--border-1)" }}>

@@ -7,6 +7,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     // UI
     search:    <><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></>,
     plus:      <path d="M12 3v18M3 12h18"/>,
+    "chevron-left": <path d="m15 18-6-6 6-6"/>,
     minus:     <path d="M3 12h18"/>,
     check:     <path d="M20 7 9 18l-5-5"/>,
     x:         <path d="M18 6 6 18M6 6l12 12"/>,
