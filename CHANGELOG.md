@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.14)
+- FarmOS bâtiments : clic sur un bâtiment (vues Zones et Cartes) ouvre un modal « Visualiser » en lecture seule (occupation + taux, places disponibles, total animaux, mâles/femelles, malades, température/humidité/hygiène, plan intérieur) avec boutons Fermer et Modifier → l'édition n'est plus déclenchée directement au clic. Helper `bldgAnimalStats` factorisé.
+
 ### Fixed (3.82.13)
 - **Backend dev + prod en crash-loop** : un BOM UTF-8 (`﻿`) en tête de `backend2/drizzle/meta/_journal.json` (réécriture OneDrive/éditeur Windows) cassait `JSON.parse` dans `migrate.ts` au boot → migration échoue → `process.exit(1)` → conteneur boucle, `/api` down. Fix : suppression du BOM (fichier UTF-8 sans BOM, 144 entrées intactes). Le `COPY drizzle/` du Dockerfile bakait le BOM dans l'image, d'où l'impact dev ET prod.
 

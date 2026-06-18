@@ -4412,6 +4412,112 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 };
 
 // Panneau de détail d'un bâtiment sélectionné
+// Stats animaux d'un bâtiment (par nom de barn) : sexe, total, malades
+const bldgAnimalStats = (building, animals) => {
+  if (!building) return { female: 0, male: 0, total: 0, sick: 0 };
+  const bldgAnimals = animals.filter((a) => a.barn === building.name);
+  return {
+    female: bldgAnimals.filter((a) => a.sex === "F").length,
+    male: bldgAnimals.filter((a) => a.sex === "M").length,
+    total: bldgAnimals.length,
+    sick: bldgAnimals.filter((a) => a.status && a.status !== "healthy").length,
+  };
+};
+
+// Modal "Visualiser le bâtiment" : KPIs en lecture seule + bouton Modifier
+const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior }) => {
+  if (!building) return null;
+  const meta = bldgMeta(building.type);
+  const rate = building.occupancyRate ?? 0;
+  const cap = building.capacity;
+  const occ = building.occupancy ?? 0;
+  const available = cap != null ? Math.max(0, cap - occ) : null;
+  const sp = building.species ? speciesById(building.species) : null;
+  const Kpi = ({ label, value, color }) => (
+    <div className="card" style={{ padding: "10px 12px", background: "var(--bg-sunken)" }}>
+      <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: color || "var(--ink-950)", marginTop: 2 }}>{value}</div>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,16,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 16, padding: 20 }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 10, background: meta.border, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name={meta.icon} size={21} color={meta.text}/>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="overline" style={{ marginBottom: 2 }}>{lang === "fr" ? "Bâtiment" : "Building"}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 19, fontWeight: 600, color: "var(--ink-950)" }}>{building.name}</div>
+            <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>
+              {[building.type, sp ? (lang === "fr" ? sp.fr : sp.en) : building.species, building.manager].filter(Boolean).join(" · ") || "—"}
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ padding: "4px 7px", flexShrink: 0 }}>
+            <Icon name="x" size={14} color="var(--ink-600)"/>
+          </button>
+        </div>
+
+        {/* Occupation */}
+        {cap != null && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--fg-2)" }}>
+              <span>{lang === "fr" ? "Occupation" : "Occupancy"}</span>
+              <span className="mono" style={{ fontWeight: 700, color: building.overCapacity ? "var(--oxblood-700)" : "var(--ink-800)" }}>{occ} / {cap} · {rate}%</span>
+            </div>
+            <BldgOccBar rate={rate} overCapacity={building.overCapacity}/>
+            {building.overCapacity && (
+              <div style={{ marginTop: 6, fontSize: 11, color: "var(--oxblood-700)", fontWeight: 600 }}>{lang === "fr" ? "⚠ Surcapacité détectée" : "⚠ Over capacity detected"}</div>
+            )}
+          </div>
+        )}
+
+        {/* KPIs effectif */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+          <Kpi label={lang === "fr" ? "Total animaux" : "Total animals"} value={(stats.total).toLocaleString("fr-CA")}/>
+          {available != null && <Kpi label={lang === "fr" ? "Places dispo." : "Available"} value={available.toLocaleString("fr-CA")} color="var(--forest-700)"/>}
+          <Kpi label={lang === "fr" ? "Femelles" : "Females"} value={stats.female.toLocaleString("fr-CA")} color="var(--pertinence-700)"/>
+          <Kpi label={lang === "fr" ? "Mâles" : "Males"} value={stats.male.toLocaleString("fr-CA")} color="var(--forest-700)"/>
+          <Kpi label={lang === "fr" ? "Malades" : "Sick"} value={stats.sick.toLocaleString("fr-CA")} color={stats.sick > 0 ? "var(--oxblood-700)" : "var(--ink-950)"}/>
+        </div>
+
+        {/* KPIs env */}
+        {(building.temperature != null || building.humidity != null || building.hygieneStatus) && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {building.temperature != null && <Kpi label={lang === "fr" ? "Temp." : "Temp."} value={`${building.temperature}°C`}/>}
+            {building.humidity != null && <Kpi label={lang === "fr" ? "Humidité" : "Humidity"} value={`${building.humidity}%`}/>}
+            {building.hygieneStatus && (
+              <div className="card" style={{ padding: "10px 12px", background: "var(--bg-sunken)" }}>
+                <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Hygiène" : "Hygiene"}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-800)", marginTop: 6 }}>{building.hygieneStatus}</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Plan intérieur */}
+        {onViewInterior && (
+          <button className="btn btn-sm" onClick={() => onViewInterior(building)}
+            style={{ background: "rgba(14,100,56,0.06)", border: "1.5px solid rgba(14,100,56,0.2)", color: "var(--forest-800)", fontWeight: 700, gap: 7, justifyContent: "center" }}>
+            <Icon name="grid" size={13} color="var(--forest-700)"/>
+            {lang === "fr" ? "Plan intérieur" : "Interior layout"}
+          </button>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</button>
+          <button className="btn btn-sm btn-primary" onClick={onEdit} style={{ gap: 6 }}>
+            <Icon name="edit" size={12} color="#ECF1EC"/>
+            {lang === "fr" ? "Modifier" : "Edit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BldgDetail = ({ building, lang, femaleCount = 0, maleCount = 0, onEdit, onClose, onViewInterior }) => {
   if (!building) return (
     <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 240, color: "var(--fg-3)" }}>
@@ -4532,6 +4638,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [reloadKey, setReloadKey] = React.useState(0);
   const [viewMode, setViewMode] = React.useState("zones"); // "zones" | "plan" | "cards"
   const [selectedId, setSelectedId] = React.useState(null);
+  const [viewing, setViewing] = React.useState(null); // building en cours de visualisation (modal)
   const [interiorBuilding, setInteriorBuilding] = React.useState(null);
   const [features, setFeatures] = React.useState([]);
   const [planEdit, setPlanEdit] = React.useState(false);
@@ -4578,11 +4685,8 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     (!speciesFilter || b.species === speciesFilter) &&
     (!farmZoneIds || (b.zoneId && farmZoneIds.has(b.zoneId))));
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
-  const bldgAnimalCounts = React.useMemo(() => {
-    if (!selectedBuilding) return { female: 0, male: 0 };
-    const bldgAnimals = animals.filter((a) => a.barn === selectedBuilding.name);
-    return { female: bldgAnimals.filter((a) => a.sex === "F").length, male: bldgAnimals.filter((a) => a.sex === "M").length };
-  }, [selectedBuilding, animals]);
+  const bldgAnimalCounts = React.useMemo(() => bldgAnimalStats(selectedBuilding, animals), [selectedBuilding, animals]);
+  const viewingStats = React.useMemo(() => bldgAnimalStats(viewing, animals), [viewing, animals]);
   // Compteurs par ferme (bâtiments + occupation animaux)
   const farmStats = (fmId) => {
     const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
@@ -4679,7 +4783,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   const sp = speciesById(b.species);
                   return (
                     <div key={b.id} className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, cursor: "pointer", border: `1px solid ${meta.border}` }}
-                      onClick={() => setEditing(b)}>
+                      onClick={() => setViewing(b)}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {sp && <div style={{ width: 28, height: 28, borderRadius: 7, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <AnimalGlyph kind={sp.glyph} size={15} color="currentColor"/>
@@ -4819,7 +4923,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           {filtered.map((b) => {
             const rate = b.occupancyRate;
             return (
-              <div key={b.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }} onClick={() => setEditing(b)}>
+              <div key={b.id} className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, cursor: "pointer" }} onClick={() => setViewing(b)}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600 }}>{b.name}</div>
                   {b.overCapacity && <span className="tag tag-danger" style={{ fontSize: 9.5 }}>{lang === "fr" ? "Surcapacité" : "Over capacity"}</span>}
@@ -4841,6 +4945,12 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             );
           })}
         </div>
+      )}
+      {viewing && (
+        <BuildingViewer building={viewing} lang={lang} stats={viewingStats}
+          onEdit={() => { setEditing(viewing); setViewing(null); }}
+          onClose={() => setViewing(null)}
+          onViewInterior={(b) => { setInteriorBuilding(b); setViewing(null); }}/>
       )}
       {editing && (
         <BuildingEditor lang={lang} building={editing === "new" ? null : editing}
