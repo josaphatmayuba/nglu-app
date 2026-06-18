@@ -7,6 +7,7 @@ import { FORECAST_PRODUCERS } from "./forecast.types";
 import { DomusRentProducer } from "./producers/domus-rent.producer";
 import { HrPayrollProducer } from "./producers/hr-payroll.producer";
 import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
+import { PayablesProducer } from "./producers/payables.producer";
 
 /**
  * Module de prevision generique. Les producteurs (un par module/source)
@@ -21,14 +22,16 @@ import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
     DomusRentProducer,
     LedgerOpeningProducer,
     HrPayrollProducer,
+    PayablesProducer,
     {
       provide: FORECAST_PRODUCERS,
       useFactory: (
         domus: DomusRentProducer,
         ledger: LedgerOpeningProducer,
         hr: HrPayrollProducer,
-      ) => [domus, ledger, hr],
-      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer],
+        payables: PayablesProducer,
+      ) => [domus, ledger, hr, payables],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer],
     },
   ],
 })

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.85.3)
+- Prévisionnel de trésorerie : 4e producteur **Niveau 1** = **dettes fournisseurs** (reste à payer `dueAmount` des factures fournisseurs ouvertes, par devise) projeté en **sortie**. Le N1 couvre désormais 4 sources réelles : solde de départ trésorerie + loyers Domus (entrées) + salaires RH + dettes fournisseurs (sorties). Note : BatiPro non ajouté en N1 (table sans échéances datées ni devise → un échéancier fiable relève d'un travail dédié, non « engagé »).
+
 ### Added (3.85.2)
 - Prévisionnel de trésorerie : 3e producteur **Niveau 1** = **masse salariale** (contrats RH actifs, base + primes transport/logement, par devise) projetée en **sortie mensuelle** sur l'horizon. Le consolidé est désormais équilibré (entrées loyers Domus + sorties salaires HR + solde de départ trésorerie). Note : les **ventes FarmOS** ne sont volontairement pas projetées en N1 (une vente future n'est pas « engagée » → relève de la couche 2 / tendance, à activer en phase 2).
 
