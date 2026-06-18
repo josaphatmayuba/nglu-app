@@ -10,7 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
-import { animalQty, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness } from "./animal-category";
+import { animalQty, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -2882,6 +2882,24 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
   const ratio = (m, f) => (f > 0 ? `1:${(m / f).toFixed(2).replace(/\.?0+$/, "")}` : (m > 0 ? "—" : ""));
+  // Espèce dominante d'un bâtiment (la plus représentée), pour choisir le ratio idéal.
+  const dominantSpecies = (list) => {
+    const cnt = {};
+    (list || []).forEach((a) => { if (a?.species) cnt[a.species] = (cnt[a.species] || 0) + animalQty(a); });
+    return Object.entries(cnt).sort((x, y) => y[1] - x[1])[0]?.[0] || null;
+  };
+  // Diagnostic auto : compare les femelles/mâle réelles au ratio idéal de l'espèce
+  // dominante (tolérance ±20 %). Renvoie { txt, color }.
+  const diagnose = (m, f, sp) => {
+    const ideal = BREEDING_RATIO[sp] ?? 20; // femelles par mâle visées
+    if (m === 0 && f === 0) return { txt: L("Aucun adulte", "No adults"), color: "#888" };
+    if (m === 0) return { txt: L(`Aucun mâle reproducteur (idéal ~1 pour ${ideal} ♀)`, `No breeding male (ideal ~1 per ${ideal} ♀)`), color: "#b91c1c" };
+    if (f === 0) return { txt: L("Que des mâles : à orienter vers l'engraissement", "Only males: redirect to fattening"), color: "#b45309" };
+    const perMale = f / m; // femelles par mâle
+    if (perMale > ideal * 1.2) return { txt: L(`Pas assez de mâles (${perMale.toFixed(0)} ♀/mâle, idéal ~${ideal}) → fécondation insuffisante`, `Too few males (${perMale.toFixed(0)} ♀/male, ideal ~${ideal}) → insufficient breeding`), color: "#b91c1c" };
+    if (perMale < ideal * 0.8) return { txt: L(`Trop de mâles (${perMale.toFixed(1)} ♀/mâle, idéal ~${ideal}) → surplus à engraisser`, `Too many males (${perMale.toFixed(1)} ♀/male, ideal ~${ideal}) → fatten the surplus`), color: "#b45309" };
+    return { txt: L(`Équilibré (${perMale.toFixed(0)} ♀/mâle ≈ idéal ~${ideal})`, `Balanced (${perMale.toFixed(0)} ♀/male ≈ ideal ~${ideal})`), color: "#15803d" };
+  };
   let gM = 0, gF = 0;
   const rows = (buildings || []).map((b) => {
     const bAnimals = (animals || []).filter((a) => a.barn === b.name);
@@ -2889,10 +2907,11 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
     let m = 0, f = 0;
     CATEGORY_ORDER.forEach((c) => { m += sb[c].M; f += sb[c].F; });
     gM += m; gF += f;
-    return `<tr><td>${esc(b.name)}</td><td class="num">${m}</td><td class="num">${f}</td><td class="num"><b>${ratio(m, f)}</b></td></tr>`;
+    const dg = diagnose(m, f, dominantSpecies(bAnimals));
+    return `<tr><td>${esc(b.name)}</td><td class="num">${m}</td><td class="num">${f}</td><td class="num"><b>${ratio(m, f)}</b></td><td style="color:${dg.color}">${esc(dg.txt)}</td></tr>`;
   }).join("");
-  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Mâles (M)", "Males (M)")}</th><th class="num">${L("Femelles (F)", "Females (F)")}</th><th class="num">${L("Ratio M:F", "Ratio M:F")}</th>`;
-  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${gM}</td><td class="num">${gF}</td><td class="num">${ratio(gM, gF)}</td></tr>`;
+  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Mâles (M)", "Males (M)")}</th><th class="num">${L("Femelles (F)", "Females (F)")}</th><th class="num">${L("Ratio M:F", "Ratio M:F")}</th><th>${L("Interprétation", "Interpretation")}</th>`;
+  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${gM}</td><td class="num">${gF}</td><td class="num">${ratio(gM, gF)}</td><td></td></tr>`;
   const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Ratio reproducteur (M:F)", "Breeding ratio (M:F)")}</title>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
@@ -2910,10 +2929,10 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="note">
-    <h2>${L("Comment lire le ratio M:F", "How to read the M:F ratio")}</h2>
+    <h2>${L("Comment lire le ratio M:F et l'interprétation", "How to read the M:F ratio and interpretation")}</h2>
     ${L(
-      "Le ratio indique combien de mâles pour combien de femelles, sous la forme « 1:X ». Exemples : <b>1:20</b> = 1 mâle pour 20 femelles ; <b>1:0,5</b> = 2 mâles pour 1 femelle (plus de mâles que de femelles).",
-      "The ratio shows how many males per females, as “1:X”. Examples: <b>1:20</b> = 1 male per 20 females; <b>1:0.5</b> = 2 males per 1 female (more males than females)."
+      "La colonne <b>Interprétation</b> compare automatiquement le nombre de femelles par mâle de chaque bâtiment au ratio idéal de l'espèce dominante (tolérance ±20 %) : <span style=\"color:#15803d\">vert</span> = équilibré, <span style=\"color:#b45309\">orange</span> = trop de mâles (surplus à engraisser), <span style=\"color:#b91c1c\">rouge</span> = pas assez de mâles (fécondation insuffisante). Le ratio indique combien de mâles pour combien de femelles, sous la forme « 1:X ». Exemples : <b>1:20</b> = 1 mâle pour 20 femelles ; <b>1:0,5</b> = 2 mâles pour 1 femelle (plus de mâles que de femelles).",
+      "The <b>Interpretation</b> column automatically compares each building's females per male to the ideal ratio of the dominant species (±20% tolerance): <span style=\"color:#15803d\">green</span> = balanced, <span style=\"color:#b45309\">orange</span> = too many males (fatten the surplus), <span style=\"color:#b91c1c\">red</span> = too few males (insufficient breeding). The ratio shows how many males per females, as “1:X”. Examples: <b>1:20</b> = 1 male per 20 females; <b>1:0.5</b> = 2 males per 1 female (more males than females)."
     )}
     <ul>
       <li>${L("Chaque espèce a un ratio reproducteur idéal (1 mâle peut féconder N femelles) : porc ~1:20, bovin ~1:25, caprin/ovin ~1:25, volaille ~1:10.", "Each species has an ideal breeding ratio (1 male can serve N females): pig ~1:20, cattle ~1:25, goat/sheep ~1:25, poultry ~1:10.")}</li>

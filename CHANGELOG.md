@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.84.1)
+- FarmOS rapport « Ratio reproducteur M:F » : colonne **Interprétation** par bâtiment qui **diagnostique automatiquement** le résultat (compare les femelles/mâle au ratio idéal de l'espèce dominante, tolérance ±20 %) avec code couleur : vert = équilibré, orange = trop de mâles (surplus à engraisser), rouge = pas assez de mâles (fécondation insuffisante) / aucun mâle reproducteur. Guide de lecture mis à jour en conséquence.
+
 ### Added (3.84.0)
 - FarmOS nouveau rapport imprimable **« Ratio reproducteur M:F »** : par bâtiment, total mâles / femelles et **ratio M:F** (1:X), avec l'encadré explicatif « Comment lire le ratio M:F » (ratios idéaux par espèce, lecture sous/sur-effectif de mâles).
 
