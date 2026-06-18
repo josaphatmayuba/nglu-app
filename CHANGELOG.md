@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.92.0)
+- FarmOS — **Mortalité Zone B (diarrhée, 13 juin 2026)**. Migration **0171** : crée **9 animaux** décédés en Zone B (Ferme Kasangulu) — 2 porcelets femelles + 1 porcelet mâle (nés 2 juin, `Batiment Porcs Kasangulu`) et 6 chevreaux (`Batiment Caprins Kasangulu`), tous `status='deceased'` (sortis du cheptel vivant, traçables `is_active=1`, `external_id` `ZB-PORCELET-MORT-*` / `ZB-CHEVREAU-MORT-*`). Crée aussi **3 événements** `farmos_mortality_events` agrégés (count 2/1/6, cause « Diarrhee (presumee, non confirmee) », pertes estimées 60/30/240 = 330 $). Source : `farmos_mortality_events.csv`. Idempotente (`external_id` unique + `ON DUPLICATE KEY` + flag `data_migration_flags`).
+
 ### Added (3.91.0)
 - Prévisionnel — **projection de production** (grandeur non monétaire, moteur générique multi-grandeurs). Endpoint `GET /forecast/production` + `ForecastProductionService` : **œufs** = tendance (moyenne mensuelle des `farmos_production_logs` type egg des 6 derniers mois, extrapolée — `[estimé]`, en unités) ; **naissances** = **N1 certain** = somme des `offspring_count` attendus par mois d'échéance (`expected_due_date` des reproductions en cours — `[certain]`, en têtes). UI compta (page Prévisionnel) : bloc « Projection de production » avec total sur l'horizon, badge de confiance, mini-barres mensuelles (œufs ambre / naissances vert) et base de calcul.
 

@@ -1030,6 +1030,13 @@
                         "when":  1780542000000,
                         "tag":  "0170_forecast_external_refs",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  147,
+                        "version":  "5",
+                        "when":  1780545600000,
+                        "tag":  "0171_farmos_mortality_zb_deaths",
+                        "breakpoints":  true
                     }
                 ]
 }
