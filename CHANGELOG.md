@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.82.20)
+- FarmOS catégories : le **type saisi reprime pour la destination abattage** — un animal dont le type contient engraissement/abattage/embouche/boucherie est classé **Engraissement** quel que soit son âge (décision humaine = comment on sait qu'un animal part à l'abattage). L'âge classe la maturité (adulte/jeune/cochette) ; le ratio reproducteur ne s'applique plus qu'aux **mâles adultes non marqués** (surplus estimé → engraissement). Corrige le cas où des jeunes marqués engraissement disparaissaient de la catégorie.
+
 ### Changed (3.82.19)
 - FarmOS catégories 100% automatiques (plus basées sur le type saisi) : dérivées de l'**âge** (date de naissance + seuil espèce) et du **sexe**. Jeune femelle de porc → Cochette ; femelle adulte → Adulte ; mâles adultes départagés par un **ratio reproducteur par bâtiment** (1 mâle pour N femelles : porc 1/20, bovin 1/25, caprin/ovin 1/25, volaille/lapin 1/10) — les reproducteurs conservés comptent en Adultes, le surplus en Engraissement (abattage). Calcul par groupe (bâtiment, puis chaque lot). Affichage seulement, rien écrit en base, se met à jour avec l'âge.
 
