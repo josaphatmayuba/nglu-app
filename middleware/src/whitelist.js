@@ -104,7 +104,7 @@ module.exports = [
   { method: '*',    prefix: '/customer',                      auth: true  },
   { method: '*',    prefix: '/customer-profile-image',        auth: true  },
   { method: '*',    prefix: '/ledger',                        auth: true  },
-  { method: '*',    prefix: '/forecast',                      auth: true  },
+  { method: '*',    prefix: '/forecast',                      auth: true  }, // prévisionnel (cash-flow, variance, production)
   { method: '*',    prefix: '/workflow',                      auth: true  },
   { method: '*',    prefix: '/budget',                        auth: true  },
   { method: '*',    prefix: '/procurement',                   auth: true  },
