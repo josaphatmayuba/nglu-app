@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.94.3)
+- FarmOS backend: la garde `assertAnimalWritable` rejette desormais aussi les ecritures sur un animal decede (deceased/dead/decede), en miroir du verrou frontend — protege l'API directe et le mobile Capacitor. Message d'erreur dedie au deces. [SCRUM]
+
 ### Changed (3.94.2)
 - FarmOS: le dossier d'un animal décédé est désormais verrouillé en lecture seule (comme « en vente »/« vendu ») — saisie production/repro/santé/poids/mort bloquée, formulaire de pesée masqué, bandeau « Dossier clôturé (décès) ». Statuts décès reconnus (deceased/dead/decede). [SCRUM]
 

@@ -41,8 +41,13 @@ export class FarmosService {
     private readonly workflow: WorkflowService,
   ) {}
 
+  private isDeceasedStatus(status: unknown) {
+    return ["deceased", "dead", "decede"].includes(String(status || "").trim().toLowerCase());
+  }
+
   private isSaleLockedStatus(status: unknown) {
-    return ["available_sale", "for_sale", "a_vendre", "sold"].includes(String(status || "").trim().toLowerCase());
+    const s = String(status || "").trim().toLowerCase();
+    return ["available_sale", "for_sale", "a_vendre", "sold"].includes(s) || this.isDeceasedStatus(s);
   }
 
   private isSaleListedStatus(status: unknown) {
@@ -55,7 +60,11 @@ export class FarmosService {
 
   private assertAnimalWritable(animal: { status?: unknown } | null | undefined) {
     if (this.isSaleLockedStatus(animal?.status)) {
-      throw new BadRequestException("Ce dossier est verrouille: l'animal est en vente ou vendu.");
+      throw new BadRequestException(
+        this.isDeceasedStatus(animal?.status)
+          ? "Ce dossier est verrouille: l'animal est decede."
+          : "Ce dossier est verrouille: l'animal est en vente ou vendu.",
+      );
     }
   }
 
