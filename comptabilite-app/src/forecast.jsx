@@ -24,6 +24,7 @@ const SIM_LEVERS = [
   { scope: "domus", label: "Loyers" },
   { scope: "hr", label: "Salaires" },
   { scope: "ventes", label: "Ventes" },
+  { scope: "farmos", label: "Ventes élevage" },
 ];
 
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -102,7 +103,7 @@ export function Forecast() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   // Simulation "et si ?" : pourcentage d'ajustement par scope (0 = inchangé).
-  const [sim, setSim] = React.useState({ domus: 0, hr: 0, ventes: 0 });
+  const [sim, setSim] = React.useState({ domus: 0, hr: 0, ventes: 0, farmos: 0 });
 
   // Chaîne "domus:1.1,hr:0.9,compta:1" pour le backend (facteur = 1 + %/100).
   const adjust = React.useMemo(() => {
@@ -190,7 +191,7 @@ export function Forecast() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <strong style={{ fontSize: 14 }}>Simulation « et si ? »</strong>
           {simActive && (
-            <button className="chip" style={{ padding: "4px 10px", borderRadius: 999 }} onClick={() => setSim({ domus: 0, hr: 0, ventes: 0 })}>
+            <button className="chip" style={{ padding: "4px 10px", borderRadius: 999 }} onClick={() => setSim({ domus: 0, hr: 0, ventes: 0, farmos: 0 })}>
               Réinitialiser
             </button>
           )}

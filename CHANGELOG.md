@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.90.1)
+- Prévisionnel de trésorerie : producteur **ventes FarmOS (tendance, couche 2)** = moyenne mensuelle des ventes d'élevage des 6 derniers mois par devise, extrapolée en entrée future (mode Réaliste). Levier de simulation « Ventes élevage » (scope `farmos`) ajouté aux sliders « et si ? ».
+
 ### Added (3.90.0)
 - FarmOS — **Box (loges/emplacements) comme vraies entités**. Migration **0168** : table `farmos_boxes` (rattachée à un bâtiment, `name`/`section`/`capacity`) + colonne `box_id` sur `farmos_animals`. **Box libre** : on place N animaux de n'importe quel lot (ou sans lot) dans un même box via `box_id`, sans contrainte de lot. **Capacité max par box** appliquée à l'affectation : blocage `BOX_FULL` si dépassement, **possibilité de forcer** (surpeuplement temporaire). Endpoints `/farmos/boxes` (CRUD + soft delete), `/farmos/boxes/generate` (génère N box d'un coup, capacité par défaut) et `/farmos/boxes/assign` (affecte/désaffecte des animaux). UI : le plan intérieur du bâtiment devient **réel** (box colorés selon les animaux réellement présents) ; clic sur un box → panneau d'affectation (ajout individuel, **« placer tout un lot »** en 1 clic, retrait), bouton **« Générer les box »** si le bâtiment n'en a aucun.
 
