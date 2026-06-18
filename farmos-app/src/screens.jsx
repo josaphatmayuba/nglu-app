@@ -2863,12 +2863,27 @@ const printSexStructureReport = (buildings, animals, lang) => {
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.tot td { font-weight: 700; background: #eef5ef; }
   .lgd { color: #666; font-size: 11px; margin-top: 10px; }
+  .note { border: 1px solid #ddd; background: #fafaf8; border-radius: 6px; padding: 10px 12px; margin-top: 12px; font-size: 11px; color: #333; line-height: 1.5; }
+  .note h2 { font-size: 12px; margin: 0 0 4px; }
+  .note ul { margin: 4px 0 0; padding-left: 18px; } .note li { margin: 2px 0; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Structure du cheptel — répartition mâles / femelles", "Herd structure — male / female breakdown")}</h1>
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="lgd">${L("♂ = mâles · ♀ = femelles · ? = sexe non renseigné. Le ratio ♂:♀ est calculé sur l'ensemble du bâtiment.", "♂ = males · ♀ = females · ? = sex not set. Ratio ♂:♀ computed over the whole building.")}</div>
+  <div class="note">
+    <h2>${L("Comment lire le ratio ♂:♀", "How to read the ♂:♀ ratio")}</h2>
+    ${L(
+      "Le ratio indique combien de mâles pour combien de femelles, sous la forme « 1:X ». Exemples : <b>1:20</b> = 1 mâle pour 20 femelles ; <b>1:0,5</b> = 2 mâles pour 1 femelle (plus de mâles que de femelles).",
+      "The ratio shows how many males per females, as “1:X”. Examples: <b>1:20</b> = 1 male per 20 females; <b>1:0.5</b> = 2 males per 1 female (more males than females)."
+    )}
+    <ul>
+      <li>${L("Chaque espèce a un ratio reproducteur idéal (1 mâle peut féconder N femelles) : porc ~1:20, bovin ~1:25, caprin/ovin ~1:25, volaille ~1:10.", "Each species has an ideal breeding ratio (1 male can serve N females): pig ~1:20, cattle ~1:25, goat/sheep ~1:25, poultry ~1:10.")}</li>
+      <li>${L("Trop de femelles par mâle (ex. 1:40 chez le porc) → pas assez de reproducteurs, fécondation insuffisante.", "Too many females per male (e.g. 1:40 for pigs) → not enough breeders, insufficient breeding.")}</li>
+      <li>${L("Trop de mâles (ex. 1:0,5) → mâles nourris sans utilité reproductive : à orienter vers l'engraissement / l'abattage.", "Too many males (e.g. 1:0.5) → males fed without breeding use: redirect them to fattening / slaughter.")}</li>
+    </ul>
+  </div>
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
 </body></html>`;
   const w = window.open("", "_blank");

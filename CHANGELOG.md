@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.83.1)
+- FarmOS rapport « Structure du cheptel ♂/♀ » : ajout d'un **encadré explicatif** sous le tableau (« Comment lire le ratio ♂:♀ ») — sens du format 1:X, ratios reproducteurs idéaux par espèce (porc ~1:20, bovin ~1:25, etc.) et lecture pratique (trop de femelles/mâle = fécondation insuffisante ; trop de mâles = à orienter vers l'engraissement).
+
 ### Added (3.83.0)
 - FarmOS **rapport « Structure du cheptel ♂/♀ »** (impression navigateur, sans backend) : nouvelle carte dans l'écran Rapports. Par bâtiment, ventile chaque catégorie (Adultes, Cochettes, Engraissement, Jeunes) en **mâles / femelles** (♂/♀, + « ? » si sexe non renseigné), avec **total ♂**, **total ♀** et **ratio ♂:♀** par bâtiment et au global. Complète le rapport d'effectif qui ne donnait que les totaux par catégorie. Nouvelle fonction `sexBreakdownByGroup` (même logique de catégorisation que `categoryBreakdownByGroup`).
 
