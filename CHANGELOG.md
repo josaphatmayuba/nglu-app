@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.94.2)
+- FarmOS: le dossier d'un animal décédé est désormais verrouillé en lecture seule (comme « en vente »/« vendu ») — saisie production/repro/santé/poids/mort bloquée, formulaire de pesée masqué, bandeau « Dossier clôturé (décès) ». Statuts décès reconnus (deceased/dead/decede). [SCRUM]
+
 ### Changed (3.94.1)
 - FarmOS — **refonte UI de la modale « Plan intérieur / Affectation des box »** (`BldgInteriorPlan`, aucun changement backend). Le plan SVG **reste désormais toujours visible** : la liste d'animaux d'un box scrolle dans sa propre zone (`maxHeight` 230px) au lieu de pousser/masquer le plan quand le box est rempli. En-tête de box **sticky** avec compteur `X/Y têtes` + **barre de remplissage** colorée (vert → ambre plein → rouge dépassé). Lignes d'animaux en cartes lisibles (puce de statut, nom en gras, **lot en chip**, surbrillance au survol) ; « Retirer » remplacé par une **icône poubelle** discrète. Bloc d'ajout (lot / animal) fixé en bas, séparé. Design system existant (`btn`/`input`/`Icon`), pas de nouvelle dépendance. `vite build` OK.
 

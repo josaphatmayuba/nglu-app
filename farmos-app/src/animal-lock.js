@@ -1,5 +1,6 @@
 export const SALE_LISTED_STATUSES = new Set(["available_sale", "for_sale", "a_vendre"]);
-export const SALE_LOCKED_STATUSES = new Set([...SALE_LISTED_STATUSES, "sold"]);
+export const DECEASED_STATUSES = new Set(["deceased", "dead", "decede", "décédé", "mort"]);
+export const SALE_LOCKED_STATUSES = new Set([...SALE_LISTED_STATUSES, "sold", ...DECEASED_STATUSES]);
 
 export function normalizeAnimalStatus(status) {
   return String(status || "").trim().toLowerCase();
@@ -15,6 +16,10 @@ export function isSaleLockedStatus(status) {
 
 export function isSaleLockedAnimal(animal) {
   return isSaleLockedStatus(animal?.status);
+}
+
+export function isDeceasedStatus(status) {
+  return DECEASED_STATUSES.has(normalizeAnimalStatus(status));
 }
 
 export function animalStatusLabel(status, lang = "fr") {
@@ -70,11 +75,14 @@ export function animalStatusColor(status) {
 
 export function lockedAnimalMessage(lang = "fr") {
   return lang === "fr"
-    ? "Ce dossier est verrouillé: l'animal est en vente ou vendu."
-    : "This record is locked: the animal is for sale or sold.";
+    ? "Ce dossier est verrouillé: l'animal est en vente, vendu ou décédé."
+    : "This record is locked: the animal is for sale, sold or deceased.";
 }
 
 export function saleLockTitle(status, lang = "fr") {
+  if (isDeceasedStatus(status)) {
+    return lang === "fr" ? "Dossier clôturé (décès)" : "Closed record (deceased)";
+  }
   if (normalizeAnimalStatus(status) === "sold") {
     return lang === "fr" ? "Dossier vendu" : "Sold record";
   }
@@ -82,6 +90,11 @@ export function saleLockTitle(status, lang = "fr") {
 }
 
 export function saleLockSubtitle(status, lang = "fr") {
+  if (isDeceasedStatus(status)) {
+    return lang === "fr"
+      ? "Animal décédé - dossier en lecture seule permanente"
+      : "Deceased animal - permanent read-only record";
+  }
   if (normalizeAnimalStatus(status) === "sold") {
     return lang === "fr"
       ? "Dossier en lecture seule permanente"
