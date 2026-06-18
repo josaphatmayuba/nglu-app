@@ -10,7 +10,7 @@ import type { ForecastScope } from "./forecast.types";
 
 const HORIZONS = new Set([1, 3, 6, 12, 24, 36]);
 const MODES = new Set<ForecastMode>(["prudent", "realiste", "optimiste"]);
-const SCOPES = new Set<ForecastScope>(["all", "compta", "domus", "farmos", "hr", "batipro"]);
+const SCOPES = new Set<ForecastScope>(["all", "compta", "ventes", "domus", "farmos", "hr", "batipro"]);
 
 @ApiTags("forecast")
 @Controller("forecast")
@@ -28,6 +28,7 @@ export class ForecastController {
     @Query("horizon") horizon?: string,
     @Query("mode") mode?: string,
     @Query("scope") scope?: string,
+    @Query("adjust") adjust?: string,
   ) {
     const horizonMonths = HORIZONS.has(Number(horizon)) ? Number(horizon) : 3;
     const safeMode = MODES.has(mode as ForecastMode) ? (mode as ForecastMode) : "prudent";
@@ -36,6 +37,25 @@ export class ForecastController {
       horizonMonths,
       mode: safeMode,
       scope: safeScope,
+      adjustments: parseAdjust(adjust),
     });
   }
+}
+
+/**
+ * Parse "domus:1.1,hr:0.9" -> { domus: 1.1, hr: 0.9 }. Ignore les scopes
+ * inconnus et les facteurs hors [0, 5] (garde-fou contre les valeurs absurdes).
+ */
+function parseAdjust(raw?: string): Partial<Record<ForecastScope, number>> {
+  const out: Partial<Record<ForecastScope, number>> = {};
+  if (!raw) return out;
+  for (const part of raw.split(",")) {
+    const [scope, factorStr] = part.split(":");
+    const s = scope?.trim() as ForecastScope;
+    const f = Number(factorStr);
+    if (SCOPES.has(s) && s !== "all" && Number.isFinite(f) && f >= 0 && f <= 5) {
+      out[s] = f;
+    }
+  }
+  return out;
 }

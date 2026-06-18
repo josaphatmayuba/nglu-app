@@ -17,7 +17,7 @@ const LOOKBACK_MONTHS = 6;
  */
 @Injectable()
 export class SalesTrendProducer implements ForecastProducer {
-  readonly scope = "compta" as const;
+  readonly scope = "ventes" as const;
 
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 

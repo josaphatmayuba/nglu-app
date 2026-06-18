@@ -21,6 +21,12 @@ export interface CashFlowQuery {
   horizonMonths: number;
   mode: ForecastMode;
   scope: ForecastScope;
+  /**
+   * Simulation "et si ?" : multiplicateurs par scope appliques aux FLUX
+   * (pas au solde de depart, qui est reel). Ex. { domus: 1.1, hr: 0.9 } =
+   * "+10% de loyers, -10% de salaires". Absent ou 1 = inchange.
+   */
+  adjustments?: Partial<Record<ForecastScope, number>>;
 }
 
 interface CurrencyBucket {
@@ -54,9 +60,17 @@ export class ForecastService {
     const produced = await Promise.all(
       producers.map((p) => p.produce(orgId, query.horizonMonths)),
     );
-    const lines = produced
+    const rawLines = produced
       .flat()
       .filter((l) => l.layer <= maxLayer);
+
+    // Simulation "et si ?" : on multiplie le montant des FLUX par le facteur du
+    // scope (le solde de depart `opening` reste reel, jamais ajuste).
+    const adj = query.adjustments ?? {};
+    const lines: ForecastLine[] = rawLines.map((l) => {
+      const factor = l.opening ? 1 : (adj[l.scope] ?? 1);
+      return factor === 1 ? l : { ...l, amount: round2(l.amount * factor) };
+    });
 
     // 2. Agregation par mois x devise.
     const byMonth = new Map<string, Map<string, CurrencyBucket>>();

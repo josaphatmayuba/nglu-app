@@ -19,6 +19,13 @@ const MODES = [
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
 
+// Leviers de simulation "et si ?" (scope backend → libellé).
+const SIM_LEVERS = [
+  { scope: "domus", label: "Loyers" },
+  { scope: "hr", label: "Salaires" },
+  { scope: "ventes", label: "Ventes" },
+];
+
 const nf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const fmtSigned = (v) => (v > 0 ? "+" : "") + nf.format(Math.round(Number(v || 0)));
 
@@ -81,17 +88,29 @@ export function Forecast() {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  // Simulation "et si ?" : pourcentage d'ajustement par scope (0 = inchangé).
+  const [sim, setSim] = React.useState({ domus: 0, hr: 0, ventes: 0 });
+
+  // Chaîne "domus:1.1,hr:0.9,compta:1" pour le backend (facteur = 1 + %/100).
+  const adjust = React.useMemo(() => {
+    const parts = Object.entries(sim)
+      .filter(([, pct]) => pct !== 0)
+      .map(([scope, pct]) => `${scope}:${(1 + pct / 100).toFixed(2)}`);
+    return parts.join(",");
+  }, [sim]);
 
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
     setError("");
-    api.forecastCashFlow({ horizon, mode, scope: "all" })
+    api.forecastCashFlow({ horizon, mode, scope: "all", adjust })
       .then((res) => { if (alive) setData(res); })
       .catch((e) => { if (alive) setError(String(e.message || e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [horizon, mode]);
+  }, [horizon, mode, adjust]);
+
+  const simActive = adjust !== "";
 
   const series = React.useMemo(() => (data ? buildSeries(data.months) : []), [data]);
 
@@ -133,6 +152,35 @@ export function Forecast() {
             {m.label} <span style={{ fontSize: 11, opacity: 0.7 }}>· {m.hint}</span>
           </button>
         ))}
+      </div>
+
+      {/* Simulation "et si ?" — sliders qui recalculent la courbe en direct */}
+      <div className="card pad">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <strong style={{ fontSize: 14 }}>Simulation « et si ? »</strong>
+          {simActive && (
+            <button className="chip" style={{ padding: "4px 10px", borderRadius: 999 }} onClick={() => setSim({ domus: 0, hr: 0, ventes: 0 })}>
+              Réinitialiser
+            </button>
+          )}
+        </div>
+        {SIM_LEVERS.map((lv) => (
+          <div key={lv.scope} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
+            <span style={{ width: 90, fontSize: 13 }}>{lv.label}</span>
+            <input
+              type="range" min={-50} max={50} step={5}
+              value={sim[lv.scope]}
+              onChange={(e) => setSim((s) => ({ ...s, [lv.scope]: Number(e.target.value) }))}
+              style={{ flex: 1, minWidth: 120 }}
+            />
+            <span style={{ width: 48, textAlign: "right", fontSize: 13, fontWeight: 600, color: sim[lv.scope] > 0 ? "#16a34a" : sim[lv.scope] < 0 ? "#dc2626" : "#64748b" }}>
+              {sim[lv.scope] > 0 ? "+" : ""}{sim[lv.scope]}%
+            </span>
+          </div>
+        ))}
+        <p className="muted" style={{ fontSize: 11, margin: "6px 0 0" }}>
+          Ajuste les flux projetés (le solde de départ réel n'est jamais modifié). Les ventes ne s'appliquent qu'en mode Réaliste.
+        </p>
       </div>
 
       {loading && <div className="card pad muted">Calcul de la projection…</div>}

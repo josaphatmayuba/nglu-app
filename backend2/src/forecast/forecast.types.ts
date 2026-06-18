@@ -24,8 +24,12 @@ export type ForecastKind =
   | "project"
   | "headcount";
 
-/** Perimetre d'agregation : "all" = consolide, sinon un module. */
-export type ForecastScope = "all" | "compta" | "domus" | "farmos" | "hr" | "batipro";
+/**
+ * Perimetre d'agregation : "all" = consolide, sinon un module.
+ * "ventes" est un sous-scope compta (recettes commerciales) distinct pour que
+ * la simulation puisse ajuster les ventes sans toucher les dettes fournisseurs.
+ */
+export type ForecastScope = "all" | "compta" | "ventes" | "domus" | "farmos" | "hr" | "batipro";
 
 /**
  * Une ligne de prevision atomique. `amount` positif = entree, negatif = sortie

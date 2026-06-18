@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.87.0)
+- Prévisionnel de trésorerie — **simulation « et si ? »** : 3 sliders (Loyers / Salaires / Ventes, −50 % à +50 %) qui **recalculent la courbe en direct**. Backend : paramètre `adjust=domus:1.1,hr:0.9,…` (multiplicateurs par scope, garde-fou [0;5]) appliqué aux **flux** uniquement — le solde de départ réel n'est jamais modifié. Le producteur de tendance ventes passe sur un sous-scope dédié `ventes` pour que le levier Ventes n'affecte pas les dettes fournisseurs. Bouton Réinitialiser. Tactile-friendly (sliders, mobile Capacitor).
+
 ### Added (3.86.0)
 - Prévisionnel de trésorerie — **couche Tendance (Niveau 2)** : 1er producteur estimé = **ventes (tendance)** = moyenne mensuelle des ventes des 6 derniers mois, par devise, extrapolée en entrée sur les mois futurs. Le curseur **« Réaliste » est désormais activé** (était grisé) : passer de Prudent à Réaliste ajoute les flux estimés à la projection, avec badge `[estimé]` et libellé « engagé + tendance » sur la courbe. (« Optimiste »/IA reste grisé — phase ultérieure.)
 
