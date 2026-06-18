@@ -23,6 +23,7 @@ const NAV = [
   { id: "pos",       icon: "cart",      labelKey: "pos" },
   { id: "sales-management", icon: "settings", labelKey: "salesManagement" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
+  { id: "forecast",  icon: "activity",  labelKey: "forecast" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
 ];
 

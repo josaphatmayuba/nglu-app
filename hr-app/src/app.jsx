@@ -6,7 +6,7 @@ import "react-phone-number-input/style.css";
 import { api, API_ROOT } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
-import { defaultSymbol, symbolFor } from "./currency.js";
+import { defaultSymbol, symbolFor, cleanCurrencySymbol } from "./currency.js";
 import { AV_COLORS } from "./data.js";
 
 /* ───────────────────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ const P = {
   userPlus: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M19 8v6M22 11h-6",
   network: "M9 2h6v6H9zM2 16h6v6H2zM16 16h6v6h-6zM12 8v4M6 16v-2h12v2",
   barChart: "M3 3v18h18M7 16v-5M12 16V8M17 16v-9",
+  activity: "M3 12h4l3 8 4-16 3 8h4",
   circleUser: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M7 20a5 5 0 0 1 10 0M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
   bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0",
   plus: "M12 5v14M5 12h14",
@@ -91,6 +92,7 @@ const NAV = [
   { id: "timesheet", label: "Temps projets", icon: "timer" },
   { section: "Paie & rémunération" },
   { id: "paie", label: "Paie", icon: "wallet" },
+  { id: "previsionnel", label: "Prévisionnel", icon: "activity" },
   { id: "frais", label: "Frais & avances", icon: "receipt" },
   { id: "declarations", label: "Déclarations sociales", icon: "fileCheck" },
   { section: "Développement" },
@@ -1293,6 +1295,7 @@ function App() {
     conges: <Conges {...ctx} />,
     timesheet: <Timesheet data={data} staff={staff} setModal={setModal} />,
     paie: <Paie data={data} staff={staff} masse={masse} setModal={setModal} reload={load} />,
+    previsionnel: <Forecast />,
     frais: <Frais {...ctx} />,
     declarations: <Declarations {...ctx} />,
     performance: <Performance {...ctx} />,
@@ -1386,6 +1389,197 @@ function App() {
       )}
       <Toaster />
       <AiAssistant />
+    </div>
+  );
+}
+
+/* ── Prévisionnel RH (masse salariale projetée) ────────────────────────── */
+// Réutilise le moteur forecast backend2 avec scope "hr" : projette la masse
+// salariale (contrats actifs) comme sortie. Copie adaptée (pas de code partagé
+// entre apps : builds Vite isolés).
+const HRF_HORIZONS = [
+  { v: 1, label: "1 mois" }, { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" },
+  { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
+];
+const HRF_MODES = [
+  { v: "prudent", label: "Prudent", hint: "engagé seul", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
+  { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
+];
+const hrfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const hrfSigned = (v) => (v > 0 ? "+" : "") + hrfNf.format(Math.round(Number(v || 0)));
+function hrfMonth(key) {
+  const [y, m] = key.split("-");
+  const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+  return `${names[Number(m) - 1]} ${y}`;
+}
+function hrfSeries(months) {
+  const byCur = new Map();
+  for (const m of months) {
+    for (const c of m.currencies) {
+      const key = String(c.currencyId ?? "null");
+      const code = cleanCurrencySymbol({ currencyCode: c.currencyCode, currencySymbol: c.currencySymbol }) || c.currencyCode || "?";
+      const entry = byCur.get(key) || { code, points: [] };
+      const last = entry.points.length ? entry.points[entry.points.length - 1] : null;
+      const prev = last ? last.cumul : 0, prevLow = last ? last.low : 0, prevHigh = last ? last.high : 0;
+      const opening = Number(c.opening || 0), net = Number(c.net || 0);
+      const cumul = prev + opening + net;
+      const low = prevLow + opening + Number(c.netLow ?? net);
+      const high = prevHigh + opening + Number(c.netHigh ?? net);
+      entry.points.push({ month: m.month, net, opening, cumul, low, high });
+      byCur.set(key, entry);
+    }
+  }
+  return [...byCur.values()];
+}
+function HrfChart({ serie }) {
+  const W = 560, H = 170, pad = 30, color = "#2563eb";
+  const pts = serie.points;
+  if (pts.length < 2) return <div className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
+  const min = Math.min(0, ...ys), max = Math.max(0, ...ys), span = max - min || 1;
+  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
+  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
+  const zeroY = y(0), gid = `hrf-${serie.code}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.18" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="#cbd5e1" strokeDasharray="3 3" />
+      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
+      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="#fff" stroke={color} strokeWidth="2">
+          <title>{`${hrfMonth(p.month)} : ${hrfSigned(p.cumul)} ${serie.code}`}</title>
+        </circle>
+      ))}
+      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
+        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="#94a3b8">{hrfMonth(p.month)}</text>
+      ))}
+    </svg>
+  );
+}
+function HrfSeg({ active, disabled, onClick, title, children }) {
+  return (
+    <button onClick={onClick} disabled={disabled} title={title}
+      style={{
+        height: 32, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1,
+        border: active ? 0 : "1px solid #e2e8f0",
+        background: active ? "linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%)" : "#fff",
+        color: active ? "#fff" : "#475569",
+      }}>{children}</button>
+  );
+}
+function Forecast() {
+  const [horizon, setHorizon] = React.useState(3);
+  const [mode, setMode] = React.useState("prudent");
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [showSim, setShowSim] = React.useState(false);
+  const [payPct, setPayPct] = React.useState(0);
+  const adjust = payPct !== 0 ? `hr:${(1 + payPct / 100).toFixed(2)}` : "";
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true); setError("");
+    api.forecastCashFlow({ horizon, mode, scope: "hr", adjust })
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { if (alive) setError(String(e.message || e)); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [horizon, mode, adjust]);
+
+  const series = React.useMemo(() => (data ? hrfSeries(data.months) : []), [data]);
+  // Masse salariale = sortie (montants négatifs) → on affiche la valeur absolue cumulée.
+  const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, total: last ? Math.abs(last.cumul) : 0 }; });
+  const horizonLabel = HRF_HORIZONS.find((h) => h.v === horizon)?.label;
+  const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "#64748b" };
+
+  return (
+    <div style={{ maxWidth: 860 }}>
+      <h2 style={{ margin: "0 0 2px" }}>Prévisionnel — Masse salariale</h2>
+      <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>Projection de la masse salariale (contrats actifs), par devise. Aucune conversion entre devises.</p>
+
+      <div className="card" style={{ padding: 18, marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
+        <div>
+          <div style={upper}>Horizon</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {HRF_HORIZONS.map((h) => <HrfSeg key={h.v} active={horizon === h.v} onClick={() => setHorizon(h.v)}>{h.label}</HrfSeg>)}
+          </div>
+        </div>
+        <div>
+          <div style={upper}>Hypothèse</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {HRF_MODES.map((m) => (
+              <HrfSeg key={m.v} active={mode === m.v} disabled={!m.enabled} title={m.enabled ? m.hint : `${m.hint} — à venir`} onClick={() => m.enabled && setMode(m.v)}>
+                {m.label} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {m.hint}</span>
+              </HrfSeg>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto" }}>
+          <div style={upper}>Simulation</div>
+          <HrfSeg active={showSim || payPct !== 0} onClick={() => setShowSim((v) => !v)}>« Et si ? »</HrfSeg>
+        </div>
+      </div>
+
+      {showSim && (
+        <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <strong style={{ fontSize: 14 }}>Simulation « et si ? » — salaires</strong>
+            {payPct !== 0 && <button className="btn btn-ghost" style={{ height: 28, fontSize: 12 }} onClick={() => setPayPct(0)}>Réinitialiser</button>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 96, fontSize: 13 }}>Salaires</span>
+            <input type="range" min={-50} max={50} step={5} value={payPct} onChange={(e) => setPayPct(Number(e.target.value))} style={{ flex: 1, minWidth: 120, accentColor: "#2563eb" }} />
+            <span style={{ width: 46, textAlign: "right", fontSize: 13, fontWeight: 700, color: payPct > 0 ? "#dc2626" : payPct < 0 ? "#16a34a" : "#94a3b8" }}>{payPct > 0 ? "+" : ""}{payPct}%</span>
+          </div>
+          <p className="muted" style={{ fontSize: 11, margin: "8px 0 0" }}>Ajuste la masse salariale projetée (ex. embauches/départs prévus).</p>
+        </div>
+      )}
+
+      {loading && <div className="card" style={{ padding: 18 }}><span className="muted">Calcul de la projection…</span></div>}
+      {error && <div className="card" style={{ padding: 18, color: "#dc2626" }}>Erreur : {error}</div>}
+
+      {!loading && !error && data && (summary.length === 0 ? (
+        <div className="card" style={{ padding: 18 }}><span className="muted">Aucun contrat actif à projeter sur cet horizon.</span></div>
+      ) : (
+        <>
+          <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>
+              À ce rythme, la masse salariale projetée à <strong>{horizonLabel}</strong> représente{" "}
+              {summary.map((s, i) => (<strong key={s.code} style={{ color: "#dc2626" }}>{i > 0 ? " et " : ""}{hrfNf.format(Math.round(s.total))} {s.code}</strong>))}.
+            </div>
+            <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
+              {summary.map((s) => (
+                <div key={s.code} className="card" style={{ padding: 16, borderRadius: 14, background: "#f8fafc" }}>
+                  <div className="kpi-label">Masse salariale · {s.code}</div>
+                  <div className="kpi-value" style={{ color: "#dc2626" }}>{hrfNf.format(Math.round(s.total))} {s.code}</div>
+                  <div className="kpi-sub">sur {horizonLabel}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {series.map((s) => (
+            <div className="card" style={{ padding: 18, marginBottom: 14 }} key={s.code}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <strong style={{ fontSize: 15 }}>Trésorerie projetée (salaires) · {s.code}</strong>
+                <span className="chip">{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
+              </div>
+              <HrfChart serie={s} />
+            </div>
+          ))}
+        </>
+      ))}
     </div>
   );
 }

@@ -5630,4 +5630,225 @@ const BuildingEditor = ({ lang, building, onClose, onSaved }) => {
   );
 };
 
-export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen };
+// ─── Prévisionnel FarmOS ────────────────────────────────────────────────────
+// Réutilise le moteur forecast backend2 avec scope "farmos" : ventes élevage
+// (tendance) + projection de production (œufs/naissances). Copie adaptée du
+// composant compta/domus (pas de code partagé entre apps : builds Vite isolés).
+const FC_HORIZONS = [
+  { v: 1, label: "1 mois" }, { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" },
+  { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
+];
+const FC_MODES = [
+  { v: "prudent", label: "Prudent", hint: "engagé seul", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
+  { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
+];
+const fcNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const fcSigned = (v) => (v > 0 ? "+" : "") + fcNf.format(Math.round(Number(v || 0)));
+function fcMonth(key) {
+  const [y, m] = key.split("-");
+  const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+  return `${names[Number(m) - 1]} ${y}`;
+}
+function fcSeries(months) {
+  const byCur = new Map();
+  for (const m of months) {
+    for (const c of m.currencies) {
+      const key = String(c.currencyId ?? "null");
+      const code = c.currencyCode || c.currencySymbol || "?";
+      const entry = byCur.get(key) || { code, points: [] };
+      const last = entry.points.length ? entry.points[entry.points.length - 1] : null;
+      const prev = last ? last.cumul : 0, prevLow = last ? last.low : 0, prevHigh = last ? last.high : 0;
+      const opening = Number(c.opening || 0), net = Number(c.net || 0);
+      const cumul = prev + opening + net;
+      const low = prevLow + opening + Number(c.netLow ?? net);
+      const high = prevHigh + opening + Number(c.netHigh ?? net);
+      entry.points.push({ month: m.month, net, opening, cumul, low, high });
+      byCur.set(key, entry);
+    }
+  }
+  return [...byCur.values()];
+}
+function FcChart({ serie }) {
+  const W = 560, H = 170, pad = 30, color = "#2f7a4f";
+  const pts = serie.points;
+  if (pts.length < 2) return <div style={{ fontSize: 13, color: "var(--fg-3)", padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
+  const min = Math.min(0, ...ys), max = Math.max(0, ...ys), span = max - min || 1;
+  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
+  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
+  const zeroY = y(0), gid = `fc-${serie.code}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="var(--border-2, #d9d2c6)" strokeDasharray="3 3" />
+      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
+      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="var(--paper, #fff)" stroke={color} strokeWidth="2">
+          <title>{`${fcMonth(p.month)} : ${fcSigned(p.cumul)} ${serie.code}`}</title>
+        </circle>
+      ))}
+      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
+        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="var(--fg-3, #94a3b8)">{fcMonth(p.month)}</text>
+      ))}
+    </svg>
+  );
+}
+function FcSeg({ active, disabled, onClick, title, children }) {
+  return (
+    <button onClick={onClick} disabled={disabled} title={title}
+      style={{
+        height: 32, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1,
+        border: active ? 0 : "1px solid var(--border-1)",
+        background: active ? "var(--forest-700)" : "var(--paper)",
+        color: active ? "var(--paper)" : "var(--fg-2)",
+      }}>{children}</button>
+  );
+}
+const ForecastScreen = ({ lang }) => {
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const [horizon, setHorizon] = React.useState(3);
+  const [mode, setMode] = React.useState("prudent");
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [showSim, setShowSim] = React.useState(false);
+  const [salesPct, setSalesPct] = React.useState(0);
+  const adjust = salesPct !== 0 ? `farmos:${(1 + salesPct / 100).toFixed(2)}` : "";
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true); setError("");
+    api.forecastCashFlow({ horizon, mode, scope: "farmos", adjust })
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { if (alive) setError(String(e.message || e)); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [horizon, mode, adjust]);
+
+  const [prod, setProd] = React.useState(null);
+  React.useEffect(() => { api.forecastProduction({ horizon }).then(setProd).catch(() => setProd(null)); }, [horizon]);
+
+  const series = React.useMemo(() => (data ? fcSeries(data.months) : []), [data]);
+  const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, cumul: last ? last.cumul : 0 }; });
+  const horizonLabel = FC_HORIZONS.find((h) => h.v === horizon)?.label;
+  const hasProd = prod && prod.series && prod.series.length > 0;
+
+  const card = { padding: 18, marginBottom: 14 };
+  const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "var(--fg-3)" };
+
+  return (
+    <div style={{ maxWidth: 860 }}>
+      <div className="card" style={{ ...card, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
+        <div>
+          <div style={upper}>{L("Horizon", "Horizon")}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {FC_HORIZONS.map((h) => <FcSeg key={h.v} active={horizon === h.v} onClick={() => setHorizon(h.v)}>{h.label}</FcSeg>)}
+          </div>
+        </div>
+        <div>
+          <div style={upper}>{L("Hypothèse", "Scenario")}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {FC_MODES.map((m) => (
+              <FcSeg key={m.v} active={mode === m.v} disabled={!m.enabled}
+                title={m.enabled ? m.hint : `${m.hint} — ${L("à venir", "coming")}`} onClick={() => m.enabled && setMode(m.v)}>
+                {m.label} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {m.hint}</span>
+              </FcSeg>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginLeft: "auto" }}>
+          <div style={upper}>{L("Simulation", "Simulation")}</div>
+          <FcSeg active={showSim || salesPct !== 0} onClick={() => setShowSim((v) => !v)}>{L("« Et si ? »", "« What if? »")}</FcSeg>
+        </div>
+      </div>
+
+      {showSim && (
+        <div className="card" style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <strong style={{ fontSize: 14 }}>{L("Simulation « et si ? » — ventes élevage", "Simulation — livestock sales")}</strong>
+            {salesPct !== 0 && <button onClick={() => setSalesPct(0)} style={{ fontSize: 12, border: "1px solid var(--border-1)", background: "var(--paper)", borderRadius: 8, padding: "4px 10px", cursor: "pointer" }}>{L("Réinitialiser", "Reset")}</button>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ width: 110, fontSize: 13 }}>{L("Ventes élevage", "Livestock sales")}</span>
+            <input type="range" min={-50} max={50} step={5} value={salesPct}
+              onChange={(e) => setSalesPct(Number(e.target.value))} style={{ flex: 1, minWidth: 120, accentColor: "var(--forest-700)" }} />
+            <span style={{ width: 46, textAlign: "right", fontSize: 13, fontWeight: 700, color: salesPct > 0 ? "var(--forest-700)" : salesPct < 0 ? "#c0392b" : "var(--fg-3)" }}>
+              {salesPct > 0 ? "+" : ""}{salesPct}%
+            </span>
+          </div>
+          <p style={{ fontSize: 11, margin: "8px 0 0", color: "var(--fg-3)" }}>{L("Ajuste les ventes élevage projetées. S'applique en mode Réaliste.", "Adjusts projected livestock sales. Applies in Realistic mode.")}</p>
+        </div>
+      )}
+
+      {loading && <div className="card" style={card}><span style={{ color: "var(--fg-3)" }}>{L("Calcul de la projection…", "Computing projection…")}</span></div>}
+      {error && <div className="card" style={{ ...card, color: "#c0392b" }}>{L("Erreur", "Error")} : {error}</div>}
+
+      {!loading && !error && data && (summary.length === 0 ? (
+        <div className="card" style={card}><span style={{ color: "var(--fg-3)" }}>{L("Aucune vente élevage à projeter sur cet horizon (pas assez d'historique).", "No livestock sales to project (not enough history).")}</span></div>
+      ) : (
+        <>
+          <div className="card" style={card}>
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>
+              {L("À ce rythme, les ventes élevage projetées à", "At this pace, projected livestock sales at")} <strong>{horizonLabel}</strong> {L("représentent", "amount to")}{" "}
+              {summary.map((s, i) => (
+                <strong key={s.code} style={{ color: s.cumul >= 0 ? "var(--forest-700)" : "#c0392b" }}>{i > 0 ? " et " : ""}{fcSigned(s.cumul)} {s.code}</strong>
+              ))}.
+            </div>
+          </div>
+          {series.map((s) => (
+            <div className="card" style={card} key={s.code}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <strong style={{ fontSize: 15 }}>{L("Ventes élevage projetées", "Projected livestock sales")} · {s.code}</strong>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{mode === "prudent" ? L("certain · engagé", "certain") : L("engagé + tendance", "trend")}</span>
+              </div>
+              <FcChart serie={s} />
+            </div>
+          ))}
+        </>
+      ))}
+
+      {hasProd && (
+        <div className="card" style={card}>
+          <strong style={{ fontSize: 15 }}>{L("Projection de production", "Production forecast")}</strong>
+          {prod.series.map((s) => {
+            const total = s.points.reduce((acc, p) => acc + Number(p.value || 0), 0);
+            const label = s.kind === "eggs" ? L("Œufs", "Eggs") : L("Naissances", "Births");
+            const isCertain = s.points[0]?.confidence === "certain";
+            const color = s.kind === "eggs" ? "#d97706" : "var(--forest-700)";
+            return (
+              <div key={s.kind} style={{ borderTop: "1px solid var(--border-1)", padding: "10px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                  <strong>{label}</strong>
+                  <span>~{fcNf.format(Math.round(total))} {s.unit} {L("sur l'horizon", "over horizon")}{" "}
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: isCertain ? "var(--forest-50)" : "var(--ink-100)", color: isCertain ? "var(--forest-700)" : "var(--fg-2)" }}>{isCertain ? L("certain", "certain") : L("estimé", "estimated")}</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 4, marginTop: 8, alignItems: "flex-end", height: 44 }}>
+                  {s.points.map((p) => {
+                    const mx = Math.max(...s.points.map((x) => Number(x.value || 0)), 1);
+                    const h = Math.max(3, (Number(p.value || 0) / mx) * 40);
+                    return <div key={p.month} title={`${fcMonth(p.month)} : ${fcNf.format(Math.round(p.value))} ${s.unit}`} style={{ flex: 1, height: h, background: color, borderRadius: 3, opacity: 0.85 }} />;
+                  })}
+                </div>
+                <p style={{ fontSize: 11, margin: "4px 0 0", color: "var(--fg-3)" }}>{s.points[0]?.basis}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen, ForecastScreen };

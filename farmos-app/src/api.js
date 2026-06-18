@@ -251,6 +251,13 @@ export const api = {
   listCurrencies: () => globalJsonFetch("/currency?query=all"),
   // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
   listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
+  // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "farmos".
+  forecastCashFlow: ({ horizon, mode, scope = "farmos", adjust } = {}) =>
+    globalJsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`),
+  forecastProduction: ({ horizon } = {}) => globalJsonFetch(`/forecast/production?horizon=${horizon}`),
+  forecastVariance: ({ scope = "farmos" } = {}) => globalJsonFetch(`/forecast/variance?scope=${scope}`),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "farmos" } = {}) =>
+    globalJsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),
   getDashboardSnapshot: () => jsonFetch("/dashboard"),
   getSettings: () => jsonFetch("/settings"),
   updateSpeciesSettings: (enabledSpecies) => jsonFetch("/settings/species", { method: "PUT", body: JSON.stringify({ enabled_species: enabledSpecies }) }),

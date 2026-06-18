@@ -11,7 +11,7 @@ import { Identification } from "./identification";
 import { QuickEntryDrawer, Toast } from "./quickentry";
 import {
   HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen,
-  AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen,
+  AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen, ForecastScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
@@ -184,6 +184,7 @@ function App() {
     pos:        { title: t(lang, "pos"),        subtitle: lang === "fr" ? "Ventes FarmOS" : "FarmOS sales",                    breadcrumb: lang === "fr" ? "FERME · POS" : "FARM · POS" },
     "sales-management": { title: t(lang, "salesManagement"), subtitle: lang === "fr" ? "Produits vendables et prix POS" : "Sellable products and POS prices", breadcrumb: lang === "fr" ? "FERME · GESTION DE VENTE" : "FARM · SALES MANAGEMENT" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
+    forecast:   { title: t(lang, "forecast"),   subtitle: lang === "fr" ? "Ventes élevage & production projetées" : "Projected livestock sales & production", breadcrumb: lang === "fr" ? "FERME · PRÉVISIONNEL" : "FARM · FORECAST" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
     employees:  { title: t(lang, "employees"),  subtitle: lang === "fr" ? "Équipe & présences" : "Team & shifts",               breadcrumb: lang === "fr" ? "FERME · ÉQUIPE" : "FARM · TEAM" },
     settings:   { title: t(lang, "settings"),   subtitle: lang === "fr" ? "Paramètres & permissions" : "Settings & permissions", breadcrumb: lang === "fr" ? "FERME · PARAMÈTRES" : "FARM · SETTINGS" },
@@ -209,6 +210,7 @@ function App() {
       case "pos":        return <PosScreen {...props}/>;
       case "sales-management": return <SalesManagementScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
+      case "forecast":   return <ForecastScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "employees":  return <EmployeesScreen {...props}/>;
       case "settings":   return <SettingsScreen {...props} tweaks={tweaks} setTweak={setTweak}/>;

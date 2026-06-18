@@ -39,6 +39,12 @@ async function jsonFetch(path, init = {}, retried = false) {
 export const api = {
   setting: () => jsonFetch("/setting"),
   currencies: () => jsonFetch("/currency?query=all"),
+  // Prévisionnel (module forecast backend2) — scope "hr" : masse salariale projetée.
+  forecastCashFlow: ({ horizon, mode, scope = "hr", adjust } = {}) =>
+    jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`),
+  forecastVariance: ({ scope = "hr" } = {}) => jsonFetch(`/forecast/variance?scope=${scope}`),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "hr" } = {}) =>
+    jsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),
   roles: () => jsonFetch("/role?query=all"),
   users: () => jsonFetch("/user?query=all"),
   overview: () => jsonFetch("/hr/staff-overview"),

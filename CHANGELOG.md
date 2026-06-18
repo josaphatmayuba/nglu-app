@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.95.0)
+- FarmOS & HR — **page Prévisionnel** branchée (suite de Compta/Domus). FarmOS : menu FarmOS « Prévisionnel » (`scope=farmos`) = ventes élevage projetées (tendance) + **projection de production** œufs/naissances, thème vert (tokens `--forest`/`--fg`). HR : menu Paie « Prévisionnel » (`scope=hr`) = **masse salariale projetée** par devise (cartes KPI + courbe), levier simulation salaires. Composants copiés/adaptés par app (pas de code partagé — builds Vite isolés), avec le `cleanCurrencySymbol`/classes de chaque app. Icône `activity` ajoutée au jeu d'icônes HR. Aucun changement backend (endpoints `/forecast/*` déjà déployés). Builds FarmOS + HR OK. Reste BatiPro (échéancier backend à créer d'abord).
+
 ### Changed (3.94.3)
 - FarmOS backend: la garde `assertAnimalWritable` rejette desormais aussi les ecritures sur un animal decede (deceased/dead/decede), en miroir du verrou frontend — protege l'API directe et le mobile Capacitor. Message d'erreur dedie au deces. [SCRUM]
 
