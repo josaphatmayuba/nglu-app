@@ -34,6 +34,23 @@ Production deploys are more guarded than dev deploys:
   - `https://ongdngolu.org/api/health`
   - bundled API target `https://ongdngolu.org/api`
 
+## Static App Production Rules
+
+All production SPAs served by `nglu_prod_frontend` must follow the same deployment model:
+
+- Build the app in CI or locally, then deploy the built `dist` artifact.
+- Store the artifact on the host under `/opt/nglu-app/<app>/dist`.
+- Create missing first-deploy directories before rebuilding the nginx image.
+- Rebuild the `nglu_prod-frontend` image from `frontend/Dockerfile.prod`.
+- Tag the currently running frontend image as `nglu_prod-frontend:previous` before replacing the container.
+- Recreate only `nglu_prod_frontend` with `docker compose -p nglu_prod ... up -d --force-recreate --no-deps frontend`.
+- Run `nginx -t` plus HTTP smoke checks before considering the deploy successful.
+- Roll back to `nglu_prod-frontend:previous` if the recreate or smoke checks fail.
+
+Normal production deploys must not copy app assets directly into the running `nglu_prod_frontend` container with `docker cp`. That pattern is not durable across container recreates and has no reliable rollback. Use `scripts/ci/deploy-prod-static-app.sh` in Bitbucket or `scripts/deploy-prod-aws.ps1` manually.
+
+If the existing `nglu_prod_frontend` container belongs to the legacy compose project `nglu-app`, tag its current image first, then remove the container and recreate it under `nglu_prod`. Because `container_name: nglu_prod_frontend` is fixed, Docker cannot keep both old and new frontend containers running with the same name.
+
 ## PEM Keys
 
 Frontend/backend AWS production server:

@@ -126,6 +126,10 @@ Rules:
 - After deploying dev frontend, validate `https://dev.ongdngolu.org/admin/company-setting` or another direct `/admin/*` route returns `200`, not nginx `404`.
 - After deploying production frontend, run `node scripts/smoke-routing-contract.mjs --base https://ongdngolu.org` and verify the CRM stays under `/crm`.
 - Do not build the full CRM frontend directly on the small Lightsail instance when memory is constrained. Build `frontend/dist` locally or in CI and deploy the artifact with `scripts/deploy-dev-aws.ps1`.
+- Production static apps served by `nglu_prod_frontend` (`frontend`, `marketing-site`, `farmos-app`, `domus-app`, `journal-app`, `tickets-app`, `batipro-app`, `hr-app`, `comptabilite-app`, `migration-app`, `chat-app`) must deploy through the image rebuild + rollback flow, not by `docker cp` into the live container.
+- The canonical Bitbucket path for these apps is `scripts/ci/deploy-prod-static-app.sh`: upload `dist`, acquire `/tmp/nglu-prod-deploy.lock`, replace `/opt/nglu-app/<app>/dist`, tag the current frontend image as `nglu_prod-frontend:previous`, rebuild `nglu_prod-frontend`, recreate only `nglu_prod_frontend`, smoke test, then rollback on failure.
+- A first production deploy must create missing `/opt/nglu-app/<app>/dist` directories before `frontend/Dockerfile.prod` runs, otherwise Docker `COPY <app>/dist/ ...` can fail.
+- Never run parallel manual operations against `nglu_prod_frontend`; use the lock and let later deploys wait or fail cleanly.
 
 Standard dev deployment command (covers build + assert + upload + smoke):
 
