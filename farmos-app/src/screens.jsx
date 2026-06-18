@@ -5630,12 +5630,14 @@ const FC_HORIZONS = [
   { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
 ];
 const FC_MODES = [
-  { v: "prudent", label: "Prudent", hint: "engagé seul", enabled: true },
-  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
+  { v: "prudent", label: "Prudent", hint: "confirmé seulement", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "moyenne 6 mois", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
 const fcNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const fcPctNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 const fcSigned = (v) => (v > 0 ? "+" : "") + fcNf.format(Math.round(Number(v || 0)));
+const fcSignedPct = (v) => `${Number(v || 0) > 0 ? "+" : ""}${fcPctNf.format(Number(v || 0))}%`;
 function fcMonth(key) {
   const [y, m] = key.split("-");
   const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
@@ -5741,6 +5743,84 @@ function FcSeg({ active, disabled, onClick, title, children }) {
       }}>{children}</button>
   );
 }
+function FcMiniMetric({ icon, label, value, sub, tone = "neutral" }) {
+  const color =
+    tone === "good" ? "var(--forest-700)" :
+    tone === "bad" ? "var(--oxblood-700)" :
+    tone === "warn" ? "#a85a2a" :
+    "var(--ink-950)";
+  return (
+    <div style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--fg-3)", marginBottom: 5 }}>
+        {icon && <Icon name={icon} size={13} color="currentColor"/>}
+        <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".06em", lineHeight: 1.2 }}>{label}</span>
+      </div>
+      <div className="tnum" style={{ fontFamily: "var(--font-display)", fontSize: 22, lineHeight: 1, fontWeight: 700, color }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 4, lineHeight: 1.35 }}>{sub}</div>}
+    </div>
+  );
+}
+function FcFormulaStep({ label, value, tone = "neutral" }) {
+  const color =
+    tone === "plus" ? "var(--forest-700)" :
+    tone === "minus" ? "var(--oxblood-700)" :
+    "var(--ink-950)";
+  return (
+    <div style={{ minWidth: 112, flex: "1 1 112px", border: "1px solid var(--border-1)", borderRadius: 8, padding: "9px 10px", background: "var(--paper)" }}>
+      <div style={{ fontSize: 10, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 700, lineHeight: 1.25 }}>{label}</div>
+      <div className="tnum" style={{ marginTop: 4, fontSize: 17, fontWeight: 800, color }}>{value}</div>
+    </div>
+  );
+}
+function FcHerdRows({ points, L }) {
+  const rows = points.length > 12
+    ? [...points.slice(0, 6), { gap: true, month: "gap" }, ...points.slice(-3)]
+    : points;
+  const cell = { padding: "8px 10px", borderBottom: "1px solid var(--border-1)", whiteSpace: "nowrap" };
+  const num = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+  return (
+    <div style={{ overflowX: "auto", border: "1px solid var(--border-1)", borderRadius: 8 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 620 }}>
+        <thead>
+          <tr style={{ background: "var(--bg-sunken)", color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: ".05em", fontSize: 10, fontWeight: 700 }}>
+            <th style={{ ...cell, textAlign: "left" }}>{L("Mois", "Month")}</th>
+            <th style={num}>{L("Naiss.", "Births")}</th>
+            <th style={num}>{L("Mortalité", "Mortality")}</th>
+            <th style={num}>{L("Sorties", "Exits")}</th>
+            <th style={num}>{L("Solde", "Net")}</th>
+            <th style={num}>{L("Cheptel prévu", "Projected herd")}</th>
+            <th style={num}>{L("Fourchette", "Range")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p, i) => {
+            if (p.gap) {
+              return (
+                <tr key="gap">
+                  <td colSpan={7} style={{ ...cell, textAlign: "center", color: "var(--fg-3)", fontSize: 11 }}>
+                    {L("Mois intermédiaires masqués", "Intermediate months hidden")}
+                  </td>
+                </tr>
+              );
+            }
+            const net = Number(p.births || 0) - Number(p.deaths || 0) - Number(p.exits || 0);
+            return (
+              <tr key={`${p.month}-${i}`}>
+                <td style={{ ...cell, textAlign: "left", color: "var(--fg-2)", fontWeight: 700 }}>{fcMonth(p.month)}</td>
+                <td style={{ ...num, color: "var(--forest-700)" }}>{fcSigned(p.births)}</td>
+                <td style={{ ...num, color: Number(p.deaths || 0) > 0 ? "var(--oxblood-700)" : "var(--fg-3)" }}>{Number(p.deaths || 0) > 0 ? "-" : ""}{fcNf.format(Math.round(Number(p.deaths || 0)))}</td>
+                <td style={{ ...num, color: Number(p.exits || 0) > 0 ? "var(--oxblood-700)" : "var(--fg-3)" }}>{Number(p.exits || 0) > 0 ? "-" : ""}{fcNf.format(Math.round(Number(p.exits || 0)))}</td>
+                <td style={{ ...num, fontWeight: 800, color: net >= 0 ? "var(--forest-700)" : "var(--oxblood-700)" }}>{fcSigned(net)}</td>
+                <td style={{ ...num, fontWeight: 800, color: "var(--ink-950)" }}>{fcNf.format(Math.round(Number(p.head || 0)))}</td>
+                <td style={{ ...num, color: "var(--fg-3)" }}>{fcNf.format(Math.round(Number(p.headLow || 0)))}-{fcNf.format(Math.round(Number(p.headHigh || 0)))}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 const ForecastScreen = ({ lang }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [horizon, setHorizon] = React.useState(3);
@@ -5783,12 +5863,26 @@ const ForecastScreen = ({ lang }) => {
     return [...byCur.entries()];
   }, [herd]);
   const herdEnd = hasHerd ? herd.points[herd.points.length - 1] : null;
+  const herdStats = React.useMemo(() => {
+    if (!hasHerd || !herdEnd) return null;
+    const totals = herd.points.reduce((acc, p) => ({
+      births: acc.births + Number(p.births || 0),
+      deaths: acc.deaths + Number(p.deaths || 0),
+      exits: acc.exits + Number(p.exits || 0),
+    }), { births: 0, deaths: 0, exits: 0 });
+    const current = Number(herd.current || 0);
+    const end = Number(herdEnd.head || 0);
+    const delta = end - current;
+    const deltaPct = current > 0 ? (delta / current) * 100 : 0;
+    const uncertaintyPct = end > 0 ? ((Number(herdEnd.headHigh || end) - Number(herdEnd.headLow || end)) / 2 / end) * 100 : 0;
+    return { ...totals, current, end, delta, deltaPct, uncertaintyPct };
+  }, [hasHerd, herd, herdEnd]);
 
   const card = { padding: 18, marginBottom: 14 };
   const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "var(--fg-3)" };
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div style={{ maxWidth: 1050 }}>
       <div className="card" style={{ ...card, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
         <div>
           <div style={upper}>{L("Horizon", "Horizon")}</div>
@@ -5810,6 +5904,41 @@ const ForecastScreen = ({ lang }) => {
         <div style={{ marginLeft: "auto" }}>
           <div style={upper}>{L("Simulation", "Simulation")}</div>
           <FcSeg active={showSim || salesPct !== 0} onClick={() => setShowSim((v) => !v)}>{L("« Et si ? »", "« What if? »")}</FcSeg>
+        </div>
+      </div>
+
+      <div className="card" style={{ ...card, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14, alignItems: "stretch" }}>
+        <div style={{ borderBottom: "1px solid var(--border-1)", paddingBottom: 12 }}>
+          <div style={upper}>{L("Lecture rapide", "Quick read")}</div>
+          <div style={{ fontSize: 15, lineHeight: 1.45, color: "var(--ink-950)", fontWeight: 700 }}>
+            {mode === "prudent"
+              ? L("Mode Prudent: seules les données confirmées sont retenues.", "Prudent mode: only confirmed data is included.")
+              : L("Mode Réaliste: les tendances des 6 derniers mois sont prolongées.", "Realistic mode: trends from the last 6 months are extended.")}
+          </div>
+          <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--fg-3)", marginTop: 6 }}>
+            {L("Le cheptel est calculé à part: effectif actuel + naissances attendues - mortalité historique - sorties/ventes.", "The herd is calculated separately: current headcount + expected births - historical mortality - exits/sales.")}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          <FcMiniMetric
+            icon="activity"
+            label={L("Hypothèse", "Scenario")}
+            value={FC_MODES.find((m) => m.v === mode)?.label}
+            sub={FC_MODES.find((m) => m.v === mode)?.hint}
+          />
+          <FcMiniMetric
+            icon="chart"
+            label={L("Incertitude", "Uncertainty")}
+            value={L("+/-3% / mois", "+/-3% / month")}
+            sub={L("plafonnée à 40% sur les horizons longs", "capped at 40% on long horizons")}
+            tone="warn"
+          />
+          <FcMiniMetric
+            icon="calendar"
+            label={L("Base historique", "History base")}
+            value={L("6 mois", "6 months")}
+            sub={L("ventes, production, mortalité et sorties", "sales, production, mortality and exits")}
+          />
         </div>
       </div>
 
@@ -5835,7 +5964,29 @@ const ForecastScreen = ({ lang }) => {
       {error && <div className="card" style={{ ...card, color: "#c0392b" }}>{L("Erreur", "Error")} : {error}</div>}
 
       {!loading && !error && data && (summary.length === 0 ? (
-        <div className="card" style={card}><span style={{ color: "var(--fg-3)" }}>{L("Aucune vente élevage à projeter sur cet horizon (pas assez d'historique).", "No livestock sales to project (not enough history).")}</span></div>
+        <div className="card" style={{ ...card, display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: "var(--bg-sunken)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--forest-700)", flexShrink: 0 }}>
+            <Icon name="cart" size={17} color="currentColor"/>
+          </div>
+          <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+            <strong style={{ fontSize: 15 }}>
+              {mode === "prudent"
+                ? L("Ventes élevage: rien à afficher en Prudent", "Livestock sales: nothing to show in Prudent")
+                : L("Aucune vente élevage à projeter", "No livestock sales to project")}
+            </strong>
+            <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.45, color: "var(--fg-3)" }}>
+              {mode === "prudent"
+                ? L("Ce scénario exclut les tendances. Les ventes passées ne deviennent visibles que dans le scénario Réaliste, où la moyenne des 6 derniers mois est prolongée.", "This scenario excludes trends. Past sales appear in the Realistic scenario, where the last 6-month average is extended.")
+                : L("Le système n'a pas assez d'historique de vente sur les 6 derniers mois pour produire une tendance fiable.", "There is not enough sales history over the last 6 months to produce a reliable trend.")}
+            </p>
+          </div>
+          {mode === "prudent" && (
+            <button className="btn btn-sm" onClick={() => setMode("realiste")} style={{ gap: 7, flexShrink: 0 }}>
+              <Icon name="chart" size={13} color="currentColor"/>
+              {L("Voir Réaliste", "View Realistic")}
+            </button>
+          )}
+        </div>
       ) : (
         <>
           <div className="card" style={card}>
@@ -5850,7 +6001,7 @@ const ForecastScreen = ({ lang }) => {
             <div className="card" style={card} key={s.code}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                 <strong style={{ fontSize: 15 }}>{L("Ventes élevage projetées", "Projected livestock sales")} · {s.code}</strong>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{mode === "prudent" ? L("certain · engagé", "certain") : L("engagé + tendance", "trend")}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{mode === "prudent" ? L("confirmé", "confirmed") : L("moyenne 6 mois", "6-month average")}</span>
               </div>
               <FcChart serie={s} />
             </div>
@@ -5890,17 +6041,60 @@ const ForecastScreen = ({ lang }) => {
 
       {hasHerd && (
         <div className="card" style={card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-            <strong style={{ fontSize: 15 }}>{L("Projection du cheptel", "Livestock forecast")}</strong>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+            <div>
+              <strong style={{ fontSize: 16 }}>{L("Projection du cheptel", "Livestock forecast")}</strong>
+              <div style={{ fontSize: 12, color: "var(--fg-3)", marginTop: 3 }}>
+                {L("Formule: effectif actuel + naissances - mortalité - sorties/ventes.", "Formula: current herd + births - mortality - exits/sales.")}
+              </div>
+            </div>
             <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{L("naissances · mortalité · ventes", "births · mortality · sales")}</span>
           </div>
           <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 8 }}>
             {L("À ce rythme, le cheptel passerait de", "At this pace, the herd would go from")}{" "}
             <strong>{fcNf.format(Math.round(herd.current))}</strong> {L("à", "to")}{" "}
             <strong style={{ color: "var(--forest-700)" }}>~{fcNf.format(Math.round(herdEnd.head))} {L("têtes", "head")}</strong> {L("à", "at")} <strong>{horizonLabel}</strong>{" "}
-            <span style={{ color: "var(--fg-3)" }}>({L("entre", "between")} {fcNf.format(Math.round(herdEnd.headLow))} {L("et", "and")} {fcNf.format(Math.round(herdEnd.headHigh))}).</span>
+            <span style={{ color: "var(--fg-3)" }}>({L("fourchette", "range")} {fcNf.format(Math.round(herdEnd.headLow))}-{fcNf.format(Math.round(herdEnd.headHigh))}).</span>
+          </div>
+
+          {herdStats && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 12 }}>
+                <FcMiniMetric icon="layers" label={L("Départ réel", "Actual start")} value={fcNf.format(Math.round(herdStats.current))} sub={L("têtes vivantes aujourd'hui", "live head today")}/>
+                <FcMiniMetric
+                  icon={herdStats.delta >= 0 ? "arrowUp" : "arrowDown"}
+                  label={L("Variation nette", "Net change")}
+                  value={`${fcSigned(herdStats.delta)} ${L("têtes", "head")}`}
+                  sub={fcSignedPct(herdStats.deltaPct)}
+                  tone={herdStats.delta >= 0 ? "good" : "bad"}
+                />
+                <FcMiniMetric icon="pulse" label={L("Fourchette finale", "Final range")} value={`${fcNf.format(Math.round(herdEnd.headLow))}-${fcNf.format(Math.round(herdEnd.headHigh))}`} sub={`${L("incertitude env.", "approx. uncertainty")} ${fcPctNf.format(herdStats.uncertaintyPct)}%`} tone="warn"/>
+                <FcMiniMetric icon="cart" label={L("Sorties prévues", "Projected exits")} value={fcNf.format(Math.round(herdStats.exits))} sub={L("ventes/abattages sur l'horizon", "sales/slaughter over horizon")}/>
+              </div>
+
+              <div style={{ background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <FcFormulaStep label={L("Départ", "Start")} value={fcNf.format(Math.round(herdStats.current))}/>
+                  <FcFormulaStep label={L("+ Naissances", "+ Births")} value={fcSigned(herdStats.births)} tone="plus"/>
+                  <FcFormulaStep label={L("- Mortalité", "- Mortality")} value={`-${fcNf.format(Math.round(herdStats.deaths))}`} tone="minus"/>
+                  <FcFormulaStep label={L("- Sorties", "- Exits")} value={`-${fcNf.format(Math.round(herdStats.exits))}`} tone="minus"/>
+                  <FcFormulaStep label={L("= Prévu", "= Projected")} value={fcNf.format(Math.round(herdStats.end))} tone={herdStats.delta >= 0 ? "plus" : "minus"}/>
+                </div>
+              </div>
+            </>
+          )}
+
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 22, height: 0, borderTop: "3px solid #2f7a4f" }}/>{L("ligne médiane", "median line")}</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 22, height: 10, background: "rgba(47,122,79,0.12)", borderRadius: 3 }}/>{L("fourchette d'incertitude", "uncertainty range")}</span>
           </div>
           <FcHeadChart points={herd.points} current={herd.current} />
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{ ...upper, marginBottom: 8 }}>{L("Détail mensuel", "Monthly detail")}</div>
+            <FcHerdRows points={herd.points} L={L} />
+          </div>
+
           {herdRevenue.length > 0 && (
             <p style={{ fontSize: 13, margin: "10px 0 0", padding: "10px 0 0", borderTop: "1px solid var(--border-1)" }}>
               {L("Recette de vente déduite du cheptel", "Sales revenue from projected herd")} :{" "}
