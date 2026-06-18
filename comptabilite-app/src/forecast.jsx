@@ -126,6 +126,12 @@ export function Forecast() {
 
   const simActive = adjust !== "";
 
+  // Projection de production (œufs, naissances) — grandeur non monétaire.
+  const [prod, setProd] = React.useState(null);
+  React.useEffect(() => {
+    api.forecastProduction({ horizon }).then(setProd).catch(() => setProd(null));
+  }, [horizon]);
+
   // Suivi prévu vs réel.
   const [variance, setVariance] = React.useState(null);
   const [trackMsg, setTrackMsg] = React.useState("");
@@ -282,6 +288,40 @@ export function Forecast() {
             </div>
           )}
         </>
+      )}
+
+      {/* Projection de production (œufs, naissances) */}
+      {prod && prod.series && prod.series.length > 0 && (
+        <div className="card pad">
+          <strong style={{ fontSize: 14 }}>Projection de production</strong>
+          {prod.series.map((s) => {
+            const total = s.points.reduce((t, p) => t + Number(p.value || 0), 0);
+            const label = s.kind === "eggs" ? "Œufs" : "Naissances";
+            const conf = s.points[0]?.confidence === "certain" ? "certain" : "estimé";
+            return (
+              <div key={s.kind} style={{ borderTop: "1px solid #eef2f7", padding: "8px 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <strong>{label}</strong>
+                  <span>
+                    ~{nf.format(Math.round(total))} {s.unit} sur l'horizon{" "}
+                    <span className="chip" style={{ fontSize: 11 }}>[{conf}]</span>
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 4, marginTop: 6, alignItems: "flex-end", height: 40 }}>
+                  {s.points.map((p) => {
+                    const max = Math.max(...s.points.map((x) => Number(x.value || 0)), 1);
+                    const h = Math.max(3, (Number(p.value || 0) / max) * 38);
+                    return (
+                      <div key={p.month} title={`${monthLabel(p.month)} : ${nf.format(Math.round(p.value))} ${s.unit}`}
+                        style={{ flex: 1, height: h, background: s.kind === "eggs" ? "#f59e0b" : "#10b981", borderRadius: 2, opacity: 0.85 }} />
+                    );
+                  })}
+                </div>
+                <p className="muted" style={{ fontSize: 11, margin: "4px 0 0" }}>{s.points[0]?.basis}</p>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Suivi prévu vs réel (boucle d'apprentissage) */}

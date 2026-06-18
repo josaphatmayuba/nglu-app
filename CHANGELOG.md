@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.91.0)
+- Prévisionnel — **projection de production** (grandeur non monétaire, moteur générique multi-grandeurs). Endpoint `GET /forecast/production` + `ForecastProductionService` : **œufs** = tendance (moyenne mensuelle des `farmos_production_logs` type egg des 6 derniers mois, extrapolée — `[estimé]`, en unités) ; **naissances** = **N1 certain** = somme des `offspring_count` attendus par mois d'échéance (`expected_due_date` des reproductions en cours — `[certain]`, en têtes). UI compta (page Prévisionnel) : bloc « Projection de production » avec total sur l'horizon, badge de confiance, mini-barres mensuelles (œufs ambre / naissances vert) et base de calcul.
+
 ### Added (3.90.1)
 - Prévisionnel de trésorerie : producteur **ventes FarmOS (tendance, couche 2)** = moyenne mensuelle des ventes d'élevage des 6 derniers mois par devise, extrapolée en entrée future (mode Réaliste). Levier de simulation « Ventes élevage » (scope `farmos`) ajouté aux sliders « et si ? ».
 

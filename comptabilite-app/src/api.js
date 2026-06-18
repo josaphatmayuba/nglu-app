@@ -101,6 +101,7 @@ export const api = {
   forecastCashFlow: (params) => jsonFetch(withQuery("/forecast/cash-flow", params)),
   forecastSnapshot: (params) => jsonFetch(withQuery("/forecast/snapshot", params), { method: "POST" }),
   forecastVariance: (params) => jsonFetch(withQuery("/forecast/variance", params)),
+  forecastProduction: (params) => jsonFetch(withQuery("/forecast/production", params)),
 
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),

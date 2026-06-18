@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database/database.module";
 import { LedgerModule } from "../ledger/ledger.module";
 import { ForecastController } from "./forecast.controller";
+import { ForecastProductionService } from "./forecast-production.service";
 import { ForecastTrackingService } from "./forecast-tracking.service";
 import { ForecastService } from "./forecast.service";
 import { FORECAST_PRODUCERS } from "./forecast.types";
@@ -24,6 +25,7 @@ import { SalesTrendProducer } from "./producers/sales-trend.producer";
   providers: [
     ForecastService,
     ForecastTrackingService,
+    ForecastProductionService,
     DomusRentProducer,
     LedgerOpeningProducer,
     HrPayrollProducer,

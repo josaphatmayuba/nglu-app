@@ -4,6 +4,7 @@ import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { ForecastProductionService } from "./forecast-production.service";
 import { ForecastTrackingService } from "./forecast-tracking.service";
 import type { ForecastMode } from "./forecast.service";
 import { ForecastService } from "./forecast.service";
@@ -20,6 +21,7 @@ export class ForecastController {
   constructor(
     private readonly forecast: ForecastService,
     private readonly tracking: ForecastTrackingService,
+    private readonly production: ForecastProductionService,
   ) {}
 
   @ApiOperation({ summary: "Projection de tresorerie (par mois x devise)" })
@@ -68,6 +70,15 @@ export class ForecastController {
   variance(@CurrentOrg() orgId: number, @Query("scope") scope?: string) {
     const safeScope = SCOPES.has(scope as ForecastScope) ? (scope as ForecastScope) : "ventes";
     return this.tracking.variance(orgId, safeScope);
+  }
+
+  @ApiOperation({ summary: "Projection de production (oeufs, naissances)" })
+  @ApiOkResponse({ description: "Series de production par grandeur" })
+  @Permissions("readAll-transaction")
+  @Get("production")
+  productionForecast(@CurrentOrg() orgId: number, @Query("horizon") horizon?: string) {
+    const horizonMonths = HORIZONS.has(Number(horizon)) ? Number(horizon) : 6;
+    return this.production.production(orgId, horizonMonths);
   }
 }
 
