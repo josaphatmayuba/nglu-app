@@ -8,6 +8,7 @@ import { DomusRentProducer } from "./producers/domus-rent.producer";
 import { HrPayrollProducer } from "./producers/hr-payroll.producer";
 import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
 import { PayablesProducer } from "./producers/payables.producer";
+import { SalesTrendProducer } from "./producers/sales-trend.producer";
 
 /**
  * Module de prevision generique. Les producteurs (un par module/source)
@@ -23,6 +24,7 @@ import { PayablesProducer } from "./producers/payables.producer";
     LedgerOpeningProducer,
     HrPayrollProducer,
     PayablesProducer,
+    SalesTrendProducer,
     {
       provide: FORECAST_PRODUCERS,
       useFactory: (
@@ -30,8 +32,9 @@ import { PayablesProducer } from "./producers/payables.producer";
         ledger: LedgerOpeningProducer,
         hr: HrPayrollProducer,
         payables: PayablesProducer,
-      ) => [domus, ledger, hr, payables],
-      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer],
+        salesTrend: SalesTrendProducer,
+      ) => [domus, ledger, hr, payables, salesTrend],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer],
     },
   ],
 })

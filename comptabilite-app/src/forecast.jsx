@@ -15,7 +15,7 @@ const HORIZONS = [
 // 2/3 (tendance, IA) n'existent pas côté backend (cf design : producteurs N1 seuls).
 const MODES = [
   { v: "prudent", label: "Prudent", hint: "engagé seulement", enabled: true },
-  { v: "realiste", label: "Réaliste", hint: "+ tendance (à venir)", enabled: false },
+  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
 
@@ -161,7 +161,7 @@ export function Forecast() {
             <div className="card pad" key={s.code}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                 <strong>{s.code}</strong>
-                <span className="chip" style={{ fontSize: 11 }}>certain · engagé</span>
+                <span className="chip" style={{ fontSize: 11 }}>{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
               </div>
               <MiniChart serie={s} />
             </div>

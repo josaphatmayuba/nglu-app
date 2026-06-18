@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.86.0)
+- Prévisionnel de trésorerie — **couche Tendance (Niveau 2)** : 1er producteur estimé = **ventes (tendance)** = moyenne mensuelle des ventes des 6 derniers mois, par devise, extrapolée en entrée sur les mois futurs. Le curseur **« Réaliste » est désormais activé** (était grisé) : passer de Prudent à Réaliste ajoute les flux estimés à la projection, avec badge `[estimé]` et libellé « engagé + tendance » sur la courbe. (« Optimiste »/IA reste grisé — phase ultérieure.)
+
 ### Added (3.85.3)
 - Prévisionnel de trésorerie : 4e producteur **Niveau 1** = **dettes fournisseurs** (reste à payer `dueAmount` des factures fournisseurs ouvertes, par devise) projeté en **sortie**. Le N1 couvre désormais 4 sources réelles : solde de départ trésorerie + loyers Domus (entrées) + salaires RH + dettes fournisseurs (sorties). Note : BatiPro non ajouté en N1 (table sans échéances datées ni devise → un échéancier fiable relève d'un travail dédié, non « engagé »).
 
