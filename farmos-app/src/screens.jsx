@@ -10,7 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
-import { animalQty, isAdultAnimal, categoryBreakdownByGroup, CATEGORY_LABELS, slaughterStats } from "./animal-category";
+import { animalQty, isAdultAnimal, animalCategory, categoryBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -1715,6 +1715,31 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
         date: e.expectedDueDate || "—", icon: "calendar",
       });
     }
+  });
+  // Prêt à abattre / vente : engraissement prêt ou en retard, groupé par bâtiment.
+  const slByBarn = new Map();
+  animals.forEach((a) => {
+    if (animalCategory(a) !== "engraissement") return;
+    const st = slaughterReadiness(a);
+    if (st !== "pret" && st !== "retard") return;
+    const barn = a.barn || (lang === "fr" ? "Sans bâtiment" : "No building");
+    if (!slByBarn.has(barn)) slByBarn.set(barn, { ready: 0, overdue: 0, species: a.species });
+    slByBarn.get(barn)[st === "pret" ? "ready" : "overdue"] += animalQty(a);
+  });
+  slByBarn.forEach((g, barn) => {
+    const tot = g.ready + g.overdue;
+    if (tot <= 0) return;
+    out.push({
+      id: `slaughter-${barn}`, kind: "slaughter", severity: g.overdue > 0 ? "critical" : "high",
+      animal: barn, animalId: lang === "fr" ? "Engraissement" : "Fattening", species: g.species,
+      title: lang === "fr" ? `${tot} animal(aux) à abattre/vendre` : `${tot} animal(s) to slaughter/sell`,
+      subtitle: [
+        g.ready > 0 ? (lang === "fr" ? `${g.ready} prêt(s)` : `${g.ready} ready`) : null,
+        g.overdue > 0 ? (lang === "fr" ? `${g.overdue} en retard (coût net)` : `${g.overdue} overdue (net cost)`) : null,
+        barn,
+      ].filter(Boolean).join(" · "),
+      date: "—", icon: "cart",
+    });
   });
   return out;
 }

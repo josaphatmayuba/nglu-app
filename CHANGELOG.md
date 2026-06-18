@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.23)
+- FarmOS **alertes « à abattre/vendre »** : les animaux d'engraissement prêts ou en retard génèrent une alerte groupée par bâtiment (« N animal(aux) à abattre/vendre · X prêts · Y en retard (coût net) — Bâtiment »). Sévérité critique si retard, sinon élevée. Visible dans le tableau de bord (panneau alertes) et l'écran Alertes.
+
 ### Added (3.82.22)
 - FarmOS **prêt à abattre / vente** : détection par animal selon l'âge OU le poids (seuils par espèce, `SLAUGHTER_THRESHOLDS`). 3 états : en croissance / prêt / en retard (coût net). Sur la carte Engraissement du modal : « ✓ N prêt(s) à abattre » et « ⚠ M en retard ». Évite de garder des animaux qui mangent sans rendement.
 - FarmOS **poids** : carte KPI « Poids moyen » dans le modal (si des poids sont saisis), + colonnes Prêts/Retard/Poids moyen dans les rapports imprimables (par bâtiment et global) + section « Abattage / vente » dans le rapport bâtiment.

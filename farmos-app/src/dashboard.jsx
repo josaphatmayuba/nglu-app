@@ -9,7 +9,7 @@ import { api } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
-import { animalQty, isAdultAnimal } from "./animal-category";
+import { animalQty, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
 
 function formatLongDate(d, lang) {
   try {
@@ -75,6 +75,32 @@ function deriveDashAlerts(d, lang) {
       title: lang === "fr" ? `Stock faible · ${m.name}` : `Low stock · ${m.name}`,
       subtitle: `${Number(m.quantity).toLocaleString("fr-CA")} ${m.unit || ""} restant · seuil ${m.minQuantity}`,
       date: "—", icon: "wheat",
+    });
+  });
+  // Prêt à abattre / vente : animaux d'engraissement prêts ou en retard, groupés par bâtiment.
+  const slByBarn = new Map(); // barn -> { ready, overdue, species }
+  d.animals.forEach((a) => {
+    if (animalCategory(a) !== "engraissement") return;
+    const st = slaughterReadiness(a);
+    if (st !== "pret" && st !== "retard") return;
+    const barn = a.barn || (lang === "fr" ? "Sans bâtiment" : "No building");
+    if (!slByBarn.has(barn)) slByBarn.set(barn, { ready: 0, overdue: 0, species: a.species });
+    const g = slByBarn.get(barn);
+    g[st === "pret" ? "ready" : "overdue"] += animalQty(a);
+  });
+  slByBarn.forEach((g, barn) => {
+    const tot = g.ready + g.overdue;
+    if (tot <= 0) return;
+    out.push({
+      id: `slaughter-${barn}`, kind: "slaughter", severity: g.overdue > 0 ? "critical" : "high",
+      animal: barn, animalId: lang === "fr" ? "Engraissement" : "Fattening", species: g.species || "pig",
+      title: lang === "fr" ? `${tot} animal(aux) à abattre/vendre` : `${tot} animal(s) to slaughter/sell`,
+      subtitle: [
+        g.ready > 0 ? (lang === "fr" ? `${g.ready} prêt(s)` : `${g.ready} ready`) : null,
+        g.overdue > 0 ? (lang === "fr" ? `${g.overdue} en retard (coût net)` : `${g.overdue} overdue (net cost)`) : null,
+        barn,
+      ].filter(Boolean).join(" · "),
+      date: "—", icon: "cart",
     });
   });
   return out;
