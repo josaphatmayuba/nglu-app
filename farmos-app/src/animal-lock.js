@@ -1,6 +1,6 @@
 export const SALE_LISTED_STATUSES = new Set(["available_sale", "for_sale", "a_vendre"]);
 export const DECEASED_STATUSES = new Set(["deceased", "dead", "decede", "décédé", "mort"]);
-export const SALE_LOCKED_STATUSES = new Set([...SALE_LISTED_STATUSES, "sold", ...DECEASED_STATUSES]);
+export const SALE_LOCKED_STATUSES = new Set([...SALE_LISTED_STATUSES, "sold", "vendu", ...DECEASED_STATUSES]);
 
 export function normalizeAnimalStatus(status) {
   return String(status || "").trim().toLowerCase();
@@ -43,6 +43,7 @@ export function animalStatusLabel(status, lang = "fr") {
     case "a_vendre":
       return fr ? "En vente" : "For sale";
     case "sold":
+    case "vendu":
       return fr ? "Vendu" : "Sold";
     case "deceased":
       return fr ? "Décédé" : "Deceased";
@@ -67,6 +68,7 @@ export function animalStatusColor(status) {
     case "a_vendre":
       return "var(--clay-700)";
     case "sold":
+    case "vendu":
       return "var(--ink-700)";
     default:
       return "var(--ink-400)";
@@ -83,7 +85,7 @@ export function saleLockTitle(status, lang = "fr") {
   if (isDeceasedStatus(status)) {
     return lang === "fr" ? "Dossier clôturé (décès)" : "Closed record (deceased)";
   }
-  if (normalizeAnimalStatus(status) === "sold") {
+  if (["sold", "vendu"].includes(normalizeAnimalStatus(status))) {
     return lang === "fr" ? "Dossier vendu" : "Sold record";
   }
   return lang === "fr" ? "Viande bloquée pour vente" : "Meat blocked for sale";
@@ -95,7 +97,7 @@ export function saleLockSubtitle(status, lang = "fr") {
       ? "Animal décédé - dossier en lecture seule permanente"
       : "Deceased animal - permanent read-only record";
   }
-  if (normalizeAnimalStatus(status) === "sold") {
+  if (["sold", "vendu"].includes(normalizeAnimalStatus(status))) {
     return lang === "fr"
       ? "Dossier en lecture seule permanente"
       : "Permanent read-only record";

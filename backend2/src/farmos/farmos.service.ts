@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { renderPdfViaService } from "../common/pdf-client";
-import { and, desc, eq, gte, isNull, like, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
@@ -31,6 +31,10 @@ import type {
 } from "./dto/farmos.dto";
 import { FARMOS_SPECIES, type FarmosSpecies } from "./dto/farmos.dto";
 
+const DECEASED_ANIMAL_STATUSES = ["deceased", "dead", "decede", "décédé", "mort"];
+const SALE_LISTED_ANIMAL_STATUSES = ["available_sale", "for_sale", "a_vendre"];
+const SALE_LOCKED_ANIMAL_STATUSES = [...SALE_LISTED_ANIMAL_STATUSES, "sold", "vendu", ...DECEASED_ANIMAL_STATUSES];
+
 @Injectable()
 export class FarmosService {
   constructor(
@@ -42,16 +46,20 @@ export class FarmosService {
   ) {}
 
   private isDeceasedStatus(status: unknown) {
-    return ["deceased", "dead", "decede"].includes(String(status || "").trim().toLowerCase());
+    return DECEASED_ANIMAL_STATUSES.includes(String(status || "").trim().toLowerCase());
   }
 
   private isSaleLockedStatus(status: unknown) {
     const s = String(status || "").trim().toLowerCase();
-    return ["available_sale", "for_sale", "a_vendre", "sold"].includes(s) || this.isDeceasedStatus(s);
+    return SALE_LOCKED_ANIMAL_STATUSES.includes(s);
   }
 
   private isSaleListedStatus(status: unknown) {
-    return ["available_sale", "for_sale", "a_vendre"].includes(String(status || "").trim().toLowerCase());
+    return SALE_LISTED_ANIMAL_STATUSES.includes(String(status || "").trim().toLowerCase());
+  }
+
+  private activeLivestockSqlCondition() {
+    return or(isNull(farmosAnimals.status), notInArray(farmosAnimals.status, SALE_LOCKED_ANIMAL_STATUSES));
   }
 
   private animalListingNote(animalId: number) {
@@ -1858,7 +1866,7 @@ export class FarmosService {
       this.db
         .select({ barn: farmosAnimals.barn, count: farmosAnimals.count })
         .from(farmosAnimals)
-        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1), this.activeLivestockSqlCondition())),
       this.db.select().from(farmosZones).where(and(eq(farmosZones.organizationId, orgId), eq(farmosZones.isActive, 1))),
     ]);
     const zoneById = new Map(zones.map((z) => [z.id, z]));
@@ -1951,7 +1959,7 @@ export class FarmosService {
       this.db
         .select({ boxId: farmosAnimals.boxId, count: farmosAnimals.count, status: farmosAnimals.status })
         .from(farmosAnimals)
-        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1))),
+        .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1), this.activeLivestockSqlCondition())),
     ]);
     // Occupation par box = somme des count (ou 1/tête) des animaux pointant sur box_id.
     const occByBox = new Map<number, number>();
@@ -2067,7 +2075,7 @@ export class FarmosService {
     const rows = await this.db
       .select({ id: farmosAnimals.id, count: farmosAnimals.count })
       .from(farmosAnimals)
-      .where(and(eq(farmosAnimals.boxId, box.id), eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+      .where(and(eq(farmosAnimals.boxId, box.id), eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1), this.activeLivestockSqlCondition()));
     const exclude = new Set(excludeAnimalIds);
     let occupancy = 0;
     for (const r of rows) {
@@ -2101,6 +2109,7 @@ export class FarmosService {
       .select({ id: farmosAnimals.id, count: farmosAnimals.count, boxId: farmosAnimals.boxId })
       .from(farmosAnimals)
       .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1),
+        this.activeLivestockSqlCondition(),
         sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
     const alreadyHere = animals.filter((a) => a.boxId === targetBoxId).map((a) => a.id);
     const incoming = animals.filter((a) => a.boxId !== targetBoxId)

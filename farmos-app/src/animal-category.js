@@ -1,3 +1,5 @@
+import { isSaleLockedAnimal } from "./animal-lock";
+
 // Classification d'âge/catégorie d'un animal d'élevage, partagée entre le dashboard
 // et l'écran Bâtiments.
 //
@@ -43,9 +45,12 @@ export const SLAUGHTER_THRESHOLDS = {
   rabbit:  { readyDays: 70,  lateDays: 110, readyKg: 2.3, lateKg: 3 },
 };
 
-// Quantité représentée par une ligne (1 ligne peut valoir plusieurs têtes via `count`).
-// Aligné sur le calcul d'occupation backend (somme des count, défaut 1).
-export const animalQty = (a) => (Number(a?.count ?? 0) > 0 ? Number(a.count) : 1);
+export const isActiveLivestock = (a) => !!a && !isSaleLockedAnimal(a);
+
+// Quantité vivante représentée par une ligne (1 ligne peut valoir plusieurs
+// têtes via `count`). Les animaux vendus, en vente ou décédés sortent de
+// l'effectif courant.
+export const animalQty = (a) => (isActiveLivestock(a) ? (Number(a?.count ?? 0) > 0 ? Number(a.count) : 1) : 0);
 
 // Un animal est-il marqué (via type) comme destiné à l'engraissement/abattage ?
 export const isFatteningType = (a) => {

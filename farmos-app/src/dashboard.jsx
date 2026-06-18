@@ -9,7 +9,7 @@ import { api } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
-import { animalQty, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
+import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
 
 function formatLongDate(d, lang) {
   try {
@@ -57,6 +57,7 @@ function deriveDashAlerts(d, lang) {
     if (t.status !== "running" || !t.endDate || t.endDate < today) return;
     if (!t.withdrawalMilkHours && !t.withdrawalMeatDays && !t.withdrawalEggsDays) return;
     const a = aMap.get(t.animalId);
+    if (!isActiveLivestock(a)) return;
     out.push({
       id: `wd-${t.id}`, kind: "withdrawal", severity: "critical",
       animal: a?.name || a?.externalId || "—", animalId: a?.externalId || `#${a?.id}`,
@@ -80,6 +81,7 @@ function deriveDashAlerts(d, lang) {
   // Prêt à abattre / vente : animaux d'engraissement prêts ou en retard, groupés par bâtiment.
   const slByBarn = new Map(); // barn -> { ready, overdue, species }
   d.animals.forEach((a) => {
+    if (!isActiveLivestock(a)) return;
     if (animalCategory(a) !== "engraissement") return;
     const st = slaughterReadiness(a);
     if (st !== "pret" && st !== "retard") return;
@@ -146,7 +148,12 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   if (!d.ready) return null;
   const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
   const keepCurrency = (row) => !activeCurrencyId || String(rowCurrencyId(row) ?? activeCurrencyId) === String(activeCurrencyId);
-  const animals = filterSp(d.animals, (a) => a.species);
+  const animals = filterSp(d.animals, (a) => a.species).filter(isActiveLivestock);
+  const animalById = new Map(d.animals.map((a) => [a.id, a]));
+  const keepActiveAnimalId = (animalId) => {
+    const a = animalById.get(animalId);
+    return isActiveLivestock(a) && (!speciesFilter || a?.species === speciesFilter);
+  };
   // Quantité = champ count (1 ligne = plusieurs têtes possible), aligné sur l'occupation.
   const sum = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
   const sick = sum(animals.filter((a) => a.status && a.status !== "healthy"));
@@ -162,10 +169,10 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
   const expMonth = expenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
   const lowStock = d.medicines.filter((m) => m.minQuantity != null && Number(m.quantity) < Number(m.minQuantity)).length;
-  const runningTreatments = d.treatments.filter((t) => t.status === "running").length;
+  const runningTreatments = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId)).length;
   const todayISO = new Date().toISOString().slice(0, 10);
-  const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
-  const activeRepro = d.repro.filter((e) => (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
+  const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId) && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
+  const activeRepro = d.repro.filter((e) => keepActiveAnimalId(e.animalId) && (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
   return { total, sick, female, male, femaleAdult, maleAdult, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
 }
 
@@ -201,13 +208,13 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
   ] : null;
   const speciesKpis = !isAll && live.ready ? (() => {
-    const animalsSp = live.animals.filter((a) => a.species === species.id);
+    const animalsSp = live.animals.filter((a) => a.species === species.id && isActiveLivestock(a));
     const sumSp = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
     const totalSp = sumSp(animalsSp);
     const sickSp = sumSp(animalsSp.filter((a) => a.status === "sick"));
     const runningTreatmentsSp = live.treatments.filter((t) => {
       const a = live.animals.find((x) => x.id === t.animalId);
-      return a?.species === species.id && t.status === "running";
+      return a?.species === species.id && isActiveLivestock(a) && t.status === "running";
     }).length;
     const vaccUpcomingSp = live.vaccinations.filter((v) => v.species === species.id && v.status !== "done").length;
     const revSp = (live.sales || [])
@@ -241,12 +248,14 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     live.treatments.forEach((t) => {
       if (!t.endDate || t.endDate < todayISO) return;
       const a = aMap.get(t.animalId);
+      if (!isActiveLivestock(a)) return;
       if (speciesFilter && a?.species !== speciesFilter) return;
       items.push({ id: `t-${t.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Fin traitement · " : "Treatment end · ") + (t.medicineName || ""), target: a?.name || a?.externalId || "—", n: 1, due: t.endDate, status: t.endDate === todayISO ? "today" : "scheduled" });
     });
     live.repro.forEach((e) => {
       if (!e.expectedDueDate || e.expectedDueDate < todayISO) return;
       const a = aMap.get(e.animalId);
+      if (!isActiveLivestock(a)) return;
       if (speciesFilter && a?.species !== speciesFilter) return;
       items.push({ id: `r-${e.id}`, species: a?.species || "cow", vaccine: (lang === "fr" ? "Mise bas · " : "Birthing · ") + (a?.name || a?.externalId || "—"), target: a?.name || "—", n: 1, due: e.expectedDueDate, status: e.expectedDueDate === todayISO ? "today" : "scheduled" });
     });
@@ -325,14 +334,13 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
 // - finance: marge (rev - exp) / rev * 100, plafonnée [0..100]. 80 si rev=0.
 function computeFarmScore(live, speciesFilter, dateRange) {
   if (!live?.ready) return { sante: 0, prod: 0, finance: 0 };
-  const animals = (live.animals || []).filter((a) => !speciesFilter || a.species === speciesFilter);
-  const total = animals.length || 1;
-  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+  const animals = (live.animals || []).filter((a) => isActiveLivestock(a) && (!speciesFilter || a.species === speciesFilter));
+  const total = animals.reduce((s, a) => s + animalQty(a), 0) || 1;
+  const sick = animals.filter((a) => a.status && a.status !== "healthy").reduce((s, a) => s + animalQty(a), 0);
   const sante = Math.round(((total - sick) / total) * 100);
   const treatments = (live.treatments || []).filter((t) => {
-    if (!speciesFilter) return t.status === "running";
     const a = live.animals.find((x) => x.id === t.animalId);
-    return t.status === "running" && a?.species === speciesFilter;
+    return t.status === "running" && isActiveLivestock(a) && (!speciesFilter || a?.species === speciesFilter);
   });
   const prodPenalty = Math.min(80, Math.round((10 * treatments.length) / total));
   const prod = Math.max(0, 100 - prodPenalty);
@@ -539,8 +547,16 @@ const ProdChart = ({ series, lang, labels }) => {
 // ─── Species breakdown grid (when "all") ─────────────────────────────────
 const SpeciesBreakdown = ({ lang, onSelect, live, onAll }) => {
   // Replace static counts with live animal counts per species when available.
-  const liveCounts = live?.ready ? live.animals.reduce((acc, a) => { acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
-  const liveSick = live?.ready ? live.animals.reduce((acc, a) => { if (a.status && a.status !== "healthy") acc[a.species] = (acc[a.species] || 0) + 1; return acc; }, {}) : null;
+  const liveCounts = live?.ready ? live.animals.reduce((acc, a) => {
+    if (!isActiveLivestock(a)) return acc;
+    acc[a.species] = (acc[a.species] || 0) + animalQty(a);
+    return acc;
+  }, {}) : null;
+  const liveSick = live?.ready ? live.animals.reduce((acc, a) => {
+    if (!isActiveLivestock(a) || !a.status || a.status === "healthy") return acc;
+    acc[a.species] = (acc[a.species] || 0) + animalQty(a);
+    return acc;
+  }, {}) : null;
   return (
   <div className="card" style={{ padding: "16px 18px" }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>

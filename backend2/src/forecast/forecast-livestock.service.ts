@@ -16,7 +16,7 @@ const DEFAULT_LOOKBACK_MONTHS = 6;
 const UNCERTAINTY_PER_MONTH = 0.03;
 const UNCERTAINTY_CAP = 0.4;
 /** Statuts d'animaux comptant comme SORTIS du cheptel vivant. */
-const DEAD_OR_GONE = ["dead", "deceased", "decede", "décédé", "sold", "vendu"];
+const DEAD_OR_GONE = ["available_sale", "for_sale", "a_vendre", "dead", "deceased", "decede", "décédé", "mort", "sold", "vendu"];
 /** Produits de vente qui retirent un animal du cheptel (vif/abattu), pas l'oeuf/lait. */
 const LIVE_SALE_TYPES = ["animal", "live", "vif", "meat", "viande", "carcass", "carcasse"];
 

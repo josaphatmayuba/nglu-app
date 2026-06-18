@@ -10,7 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
-import { animalQty, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
+import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -88,7 +88,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const completed = treatments.filter(t => t.status === "completed");
 
   // KPIs dérivés des vraies données + filtrés par espèce.
-  const animalsFiltered = allAnimals.filter((a) => !speciesFilter || a.species === speciesFilter);
+  const animalsFiltered = allAnimals.filter((a) => isActiveLivestock(a) && (!speciesFilter || a.species === speciesFilter));
   const quarantineCount = animalsFiltered.filter((a) => {
     const s = String(a.status || "").toLowerCase();
     return s === "quarantine" || s === "quarantaine" || s === "isolated";
@@ -116,7 +116,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   });
   const medCostMonth = medExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
   const activeBySpecies = SPECIES.map((s) => {
-    const rows = allAnimals.filter((a) => (!speciesFilter || a.species === speciesFilter) && a.species === s.id && a.status && a.status !== "healthy");
+    const rows = allAnimals.filter((a) => isActiveLivestock(a) && (!speciesFilter || a.species === speciesFilter) && a.species === s.id && a.status && a.status !== "healthy");
     return { ...s, activeCount: rows.length, statuses: [...new Set(rows.map((a) => a.status).filter(Boolean))] };
   }).filter((s) => s.activeCount > 0);
 
@@ -1311,9 +1311,9 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
     };
   };
   const deriveSpeciesScore = (s, production) => {
-    const animals = live.animals.filter((a) => a.species === s.id);
-    const total = animals.length || 1;
-    const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
+    const animals = live.animals.filter((a) => a.species === s.id && isActiveLivestock(a));
+    const total = animals.reduce((sum, a) => sum + animalQty(a), 0) || 1;
+    const sick = animals.filter((a) => a.status && a.status !== "healthy").reduce((sum, a) => sum + animalQty(a), 0);
     const sante = animals.length ? Math.max(0, Math.round(((total - sick) / total) * 100)) : 0;
     const prod = production.hasData ? Math.max(0, Math.min(100, Math.round(60 + Math.min(40, production.trend.filter((v) => v > 0).length * 6)))) : 0;
     const sales = live.sales.filter((x) => x.species === s.id && inDateRange(x.saleDate || x.sale_date, dateRange));
@@ -1380,7 +1380,7 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
         {visibleSpecies.filter(s => !speciesFilter || s.id === speciesFilter).slice(0, 6).map((s) => {
           const production = deriveSpeciesProduction(s);
           const score = deriveSpeciesScore(s, production);
-          const liveCount = live.animals.filter((a) => a.species === s.id).reduce((sum, a) => sum + (Number(a.count) > 0 ? Number(a.count) : 1), 0);
+          const liveCount = live.animals.filter((a) => a.species === s.id && isActiveLivestock(a)).reduce((sum, a) => sum + animalQty(a), 0);
           return (
           <div key={s.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1659,7 +1659,8 @@ function EggSection({ lang, eggStock, buildings, currencyMeta, harvestForm, setH
 // ─── ALERTS ──────────────────────────────────────────────────────────────
 function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
   const out = [];
-  const aMap = new Map(animals.map((a) => [a.id, a]));
+  const activeAnimals = (animals || []).filter(isActiveLivestock);
+  const aMap = new Map(activeAnimals.map((a) => [a.id, a]));
   const dMap = new Map(diseases.map((d) => [d.id, d]));
   // Low stock
   medicines.forEach((m) => {
@@ -1678,6 +1679,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
   const today = new Date().toISOString().slice(0, 10);
   treatments.forEach((t) => {
     const animal = aMap.get(t.animalId);
+    if (!animal) return;
     const disease = dMap.get(t.diseaseId);
     const milkH = t.withdrawalMilkHours;
     const meat = t.withdrawalMeatDays;
@@ -1718,7 +1720,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
   });
   // Prêt à abattre / vente : engraissement prêt ou en retard, groupé par bâtiment.
   const slByBarn = new Map();
-  animals.forEach((a) => {
+  activeAnimals.forEach((a) => {
     if (animalCategory(a) !== "engraissement") return;
     const st = slaughterReadiness(a);
     if (st !== "pret" && st !== "retard") return;
@@ -2798,7 +2800,7 @@ const printHeadcountReport = (buildings, animals, lang) => {
   const grand = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
   let grandTotal = 0, grandReady = 0, grandOverdue = 0;
   const rows = (buildings || []).map((b) => {
-    const bAnimals = (animals || []).filter((a) => a.barn === b.name);
+    const bAnimals = (animals || []).filter((a) => isActiveLivestock(a) && a.barn === b.name);
     const cats = categoryBreakdownByGroup(bAnimals);
     const sl = slaughterStats(bAnimals, { onlyFattening: true });
     const aw = slaughterStats(bAnimals).avgWeight;
@@ -2844,7 +2846,7 @@ const printSexStructureReport = (buildings, animals, lang) => {
     return `<td class="num">${s.M ? `<b>${s.M}</b>M` : ""}${s.M && s.F ? " " : ""}${s.F ? `<b>${s.F}</b>F` : ""}${s.inconnu ? ` ${s.inconnu}?` : ""}</td>`;
   };
   const rows = (buildings || []).map((b) => {
-    const bAnimals = (animals || []).filter((a) => a.barn === b.name);
+    const bAnimals = (animals || []).filter((a) => isActiveLivestock(a) && a.barn === b.name);
     const sb = sexBreakdownByGroup(bAnimals);
     let m = 0, f = 0, u = 0;
     CATEGORY_ORDER.forEach((c) => { grand[c].M += sb[c].M; grand[c].F += sb[c].F; grand[c].inconnu += sb[c].inconnu; m += sb[c].M; f += sb[c].F; u += sb[c].inconnu; });
@@ -2902,7 +2904,7 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   };
   let gM = 0, gF = 0;
   const rows = (buildings || []).map((b) => {
-    const bAnimals = (animals || []).filter((a) => a.barn === b.name);
+    const bAnimals = (animals || []).filter((a) => isActiveLivestock(a) && a.barn === b.name);
     const sb = sexBreakdownByGroup(bAnimals);
     let m = 0, f = 0;
     CATEGORY_ORDER.forEach((c) => { m += sb[c].M; f += sb[c].F; });
@@ -3692,8 +3694,7 @@ function SaleInventorySettings({ lang, speciesFilter }) {
   const visibleAvailableRows = availableRowsAll.slice(0, availableLimit);
 
   const candidates = animals.filter((a) => {
-    const status = String(a.status || "").toLowerCase();
-    if (["available_sale", "for_sale", "a_vendre", "sold"].includes(status)) return false;
+    if (isSaleLockedAnimal(a)) return false;
     if (speciesFilter && a.species !== speciesFilter) return false;
     if (!query.trim()) return true;
     return [a.name, a.externalId, a.external_id, a.lot, a.species, a.status, a.race, a.barn].filter(Boolean).join(" ").toLowerCase().includes(query.trim().toLowerCase());
@@ -4480,11 +4481,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
 
   // Animaux de ce bâtiment (par building_id, fallback barn == nom) — base de l'affectation.
   // On exclut les animaux décédés / vendus : ils ne s'affectent pas à un box.
-  const PLACEABLE = (a) => {
-    const s = String(a.status || "").toLowerCase();
-    return s !== "deceased" && s !== "dead" && s !== "sold";
-  };
-  const bldgAnimals = animals.filter((a) => PLACEABLE(a) && (
+  const bldgAnimals = animals.filter((a) => isActiveLivestock(a) && (
     (a.buildingId != null && a.buildingId === building.id) ||
     (a.buildingId == null && a.barn && a.barn === building.name)));
   const animalsByBox = new Map();
@@ -4493,7 +4490,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
     if (!animalsByBox.has(a.boxId)) animalsByBox.set(a.boxId, []);
     animalsByBox.get(a.boxId).push(a);
   }
-  const headsIn = (boxId) => (animalsByBox.get(boxId) || []).reduce((s, a) => s + (Number(a.count) || 1), 0);
+  const headsIn = (boxId) => (animalsByBox.get(boxId) || []).reduce((s, a) => s + animalQty(a), 0);
   const boxStatus = (box) => {
     const list = animalsByBox.get(box.id) || [];
     if (list.length === 0) return "empty";
@@ -4828,7 +4825,7 @@ const GenerateBoxesModal = ({ lang, building, existingCount = 0, busy, onCancel,
 // Catégorisation (adulte / cochette / engraissement / jeune) partagée via animal-category.js.
 const bldgAnimalStats = (building, animals) => {
   if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {}, slaughter: { pret: 0, retard: 0, enCroissance: 0, avgWeight: null }, avgWeight: null };
-  const bldgAnimals = animals.filter((a) => a.barn === building.name);
+  const bldgAnimals = animals.filter((a) => isActiveLivestock(a) && a.barn === building.name);
   const lotGroups = new Map(); // nom -> [animaux]
   let female = 0, male = 0, total = 0, sick = 0, femaleAdult = 0, maleAdult = 0;
   bldgAnimals.forEach((a) => {

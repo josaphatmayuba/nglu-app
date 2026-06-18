@@ -6,6 +6,7 @@ import { SPECIES, t } from "./data";
 import { api, adaptAnimal } from "./api";
 import { clearAuth } from "./auth.jsx";
 import { NetStatusPill } from "./offline-status";
+import { animalQty, isActiveLivestock } from "./animal-category";
 
 const NAV = [
   { id: "dashboard", icon: "dashboard", labelKey: "dashboard" },
@@ -651,11 +652,12 @@ function deriveSpeciesCounts(animals) {
   const counts = {};
   const sick = {};
   (animals || []).forEach((a) => {
+    if (!isActiveLivestock(a)) return;
     const sp = a.species;
     if (!sp) return;
-    const n = Number(a.count) > 0 ? Number(a.count) : 1;
+    const n = animalQty(a);
     counts[sp] = (counts[sp] || 0) + n;
-    if (a.status && a.status !== "healthy") sick[sp] = (sick[sp] || 0) + 1;
+    if (a.status && a.status !== "healthy") sick[sp] = (sick[sp] || 0) + n;
   });
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   return { counts, sick, total };
