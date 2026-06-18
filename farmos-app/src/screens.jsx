@@ -4419,20 +4419,28 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 const bldgAnimalStats = (building, animals) => {
   if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {} };
   const bldgAnimals = animals.filter((a) => a.barn === building.name);
-  const lotMap = new Map();
-  const categories = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
+  const newCat = () => ({ adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 });
+  const lotMap = new Map(); // nom -> { count, male, female, categories }
+  const categories = newCat();
   let female = 0, male = 0, total = 0, sick = 0, femaleAdult = 0, maleAdult = 0;
   bldgAnimals.forEach((a) => {
     const n = animalQty(a);
+    const cat = animalCategory(a);
     total += n;
-    categories[animalCategory(a)] += n;
+    categories[cat] += n;
     const adult = isAdultAnimal(a);
     if (a.sex === "F") { female += n; if (adult) femaleAdult += n; }
     else if (a.sex === "M") { male += n; if (adult) maleAdult += n; }
     if (a.status && a.status !== "healthy") sick += n;
-    if (a.lot) lotMap.set(a.lot, (lotMap.get(a.lot) || 0) + n); // têtes du lot, déjà incluses dans total
+    if (a.lot) { // composition du lot (têtes déjà incluses dans le total bâtiment)
+      if (!lotMap.has(a.lot)) lotMap.set(a.lot, { count: 0, male: 0, female: 0, categories: newCat() });
+      const L = lotMap.get(a.lot);
+      L.count += n;
+      if (a.sex === "F") L.female += n; else if (a.sex === "M") L.male += n;
+      L.categories[cat] += n;
+    }
   });
-  const lots = [...lotMap.entries()].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count);
+  const lots = [...lotMap.entries()].map(([name, v]) => ({ name, ...v })).sort((x, y) => y.count - x.count);
   return { female, male, total, sick, femaleAdult, maleAdult, categories, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
 };
 
@@ -4522,11 +4530,24 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
                 {stats.lots.length} {lang === "fr" ? "lot(s)" : "batch(es)"} · {stats.lotTotal.toLocaleString("fr-CA")} {lang === "fr" ? "animaux" : "animals"}
               </span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {stats.lots.map((l) => (
-                <div key={l.name} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 11px", background: "var(--bg-sunken)" }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
-                  <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-800)", flexShrink: 0 }}>{l.count.toLocaleString("fr-CA")}</span>
+                <div key={l.name} className="card" style={{ padding: "8px 11px", background: "var(--bg-sunken)", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
+                    <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-800)", flexShrink: 0 }}>
+                      {l.count.toLocaleString("fr-CA")} · ♀{l.female} ♂{l.male}
+                    </span>
+                  </div>
+                  {/* Répartition du lot par catégorie */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {["adulte", "cochette", "engraissement", "jeune", "inconnu"].filter((c) => (l.categories[c] || 0) > 0).map((c) => (
+                      <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, color: "var(--fg-2)", background: "var(--paper)", border: "1px solid var(--border-2)", borderRadius: 14, padding: "2px 8px" }}>
+                        {lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en}
+                        <strong className="mono" style={{ color: "var(--ink-900)" }}>{l.categories[c]}</strong>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

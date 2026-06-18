@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.17)
+- FarmOS modal Visualiser : chaque lot affiche désormais sa composition — total · ♀femelles ♂mâles + répartition par catégorie (adultes / cochettes / engraissement / jeunes), au lieu du seul total. Permet de voir le détail d'un lot agrégé (ex. Cheptel Zone B = 20 engraissement + 11 porcelets + …).
+
 ### Added (3.82.16)
 - FarmOS comptage par têtes : le **Total animaux**, lots, mâles/femelles, malades du modal Visualiser **et** les KPI du tableau de bord (global + par espèce) somment désormais le champ `count` (1 ligne peut représenter plusieurs têtes) au lieu de compter les lignes — alignement sur le calcul d'occupation backend (corrige l'écart Total 41 vs Occupation 70).
 - Nouveau module partagé `animal-category.js` : classification adulte / **cochette (futures reproductrices)** / **engraissement (abattage)** / jeune (type d'abord, sinon âge via date de naissance + seuils par espèce — porc 6 mois, bovin 24 mois, caprin/ovin 12 mois, volailles 5 mois, lapin 6 mois).
