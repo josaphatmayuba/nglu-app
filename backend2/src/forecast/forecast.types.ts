@@ -56,11 +56,18 @@ export interface ForecastLine {
   opening?: boolean;
 }
 
+export interface ForecastContext {
+  /** Optional FarmOS species filter. Ignored by non-FarmOS producers. */
+  species?: string | null;
+  /** Number of historical months used for trend averages. */
+  lookbackMonths?: number;
+}
+
 /** Un producteur de lignes. Chaque module en implemente un. */
 export interface ForecastProducer {
   readonly scope: ForecastScope;
   /** Renvoie les lignes pour les `horizonMonths` prochains mois. */
-  produce(orgId: number, horizonMonths: number): Promise<ForecastLine[]>;
+  produce(orgId: number, horizonMonths: number, context?: ForecastContext): Promise<ForecastLine[]>;
 }
 
 export const FORECAST_PRODUCERS = Symbol("FORECAST_PRODUCERS");

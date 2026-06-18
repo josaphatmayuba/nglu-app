@@ -25,6 +25,8 @@ export interface CashFlowQuery {
   horizonMonths: number;
   mode: ForecastMode;
   scope: ForecastScope;
+  species?: string | null;
+  lookbackMonths?: number;
   /**
    * Simulation "et si ?" : multiplicateurs par scope appliques aux FLUX
    * (pas au solde de depart, qui est reel). Ex. { domus: 1.1, hr: 0.9 } =
@@ -61,8 +63,9 @@ export class ForecastService {
     const producers = this.producers.filter(
       (p) => query.scope === "all" || p.scope === query.scope,
     );
+    const context = { species: query.species ?? null, lookbackMonths: query.lookbackMonths };
     const produced = await Promise.all(
-      producers.map((p) => p.produce(orgId, query.horizonMonths)),
+      producers.map((p) => p.produce(orgId, query.horizonMonths, context)),
     );
     const rawLines = produced
       .flat()
@@ -126,7 +129,9 @@ export class ForecastService {
       mode: query.mode,
       maxLayer,
       horizonMonths: query.horizonMonths,
+      lookbackMonths: query.lookbackMonths,
       scope: query.scope,
+      species: query.species ?? null,
       months,
     };
   }

@@ -1,11 +1,11 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { farmosProductionLogs, farmosReproductionEvents } from "../database/schema";
+import { farmosAnimals, farmosProductionLogs, farmosReproductionEvents } from "../database/schema";
 import type { Database } from "../database/types";
 import { addMonths, monthKey, round2 } from "./forecast.util";
 
-const LOOKBACK_MONTHS = 6;
+const DEFAULT_LOOKBACK_MONTHS = 6;
 
 export interface ProductionPoint {
   month: string;
@@ -34,30 +34,37 @@ export interface ProductionSeries {
 export class ForecastProductionService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async production(orgId: number, horizonMonths: number) {
+  async production(orgId: number, horizonMonths: number, species?: string | null, lookbackMonths = DEFAULT_LOOKBACK_MONTHS) {
     const [eggs, births] = await Promise.all([
-      this.eggsTrend(orgId, horizonMonths),
-      this.birthsCommitted(orgId, horizonMonths),
+      this.eggsTrend(orgId, horizonMonths, species, lookbackMonths),
+      this.birthsCommitted(orgId, horizonMonths, species),
     ]);
-    return { horizonMonths, series: [eggs, births].filter((s) => s.points.length > 0) };
+    return { horizonMonths, lookbackMonths, species: species ?? null, series: [eggs, births].filter((s) => s.points.length > 0) };
   }
 
-  /** Oeufs — tendance : moyenne mensuelle des 6 derniers mois extrapolee. */
-  private async eggsTrend(orgId: number, horizonMonths: number): Promise<ProductionSeries> {
-    const since = `${monthKey(addMonths(new Date(), -LOOKBACK_MONTHS))}-01`;
-    const [row] = await this.db
-      .select({ total: sql<string>`coalesce(sum(${farmosProductionLogs.quantity}), 0)` })
-      .from(farmosProductionLogs)
-      .where(
-        and(
+  /** Oeufs — tendance : moyenne mensuelle historique extrapolee. */
+  private async eggsTrend(orgId: number, horizonMonths: number, species: string | null | undefined, lookbackMonths: number): Promise<ProductionSeries> {
+    const since = `${monthKey(addMonths(new Date(), -lookbackMonths))}-01`;
+    const where = species
+      ? and(
           eq(farmosProductionLogs.organizationId, orgId),
           eq(farmosProductionLogs.isActive, 1),
           eq(farmosProductionLogs.productType, "egg"),
           gte(farmosProductionLogs.logDate, since),
-        ),
-      );
+          eq(farmosProductionLogs.species, species),
+        )
+      : and(
+          eq(farmosProductionLogs.organizationId, orgId),
+          eq(farmosProductionLogs.isActive, 1),
+          eq(farmosProductionLogs.productType, "egg"),
+          gte(farmosProductionLogs.logDate, since),
+        );
+    const [row] = await this.db
+      .select({ total: sql<string>`coalesce(sum(${farmosProductionLogs.quantity}), 0)` })
+      .from(farmosProductionLogs)
+      .where(where);
 
-    const monthlyAvg = round2(Number(row?.total || 0) / LOOKBACK_MONTHS);
+    const monthlyAvg = round2(Number(row?.total || 0) / lookbackMonths);
     const now = new Date();
     const points: ProductionPoint[] = [];
     if (monthlyAvg > 0) {
@@ -67,7 +74,7 @@ export class ForecastProductionService {
           value: monthlyAvg,
           layer: 2,
           confidence: "estimated",
-          basis: `moyenne ${LOOKBACK_MONTHS} derniers mois`,
+          basis: `moyenne ${lookbackMonths} derniers mois`,
         });
       }
     }
@@ -75,22 +82,30 @@ export class ForecastProductionService {
   }
 
   /** Naissances — CERTAIN : sommes des offspring attendus par mois d'echeance. */
-  private async birthsCommitted(orgId: number, horizonMonths: number): Promise<ProductionSeries> {
+  private async birthsCommitted(orgId: number, horizonMonths: number, species?: string | null): Promise<ProductionSeries> {
     const today = `${monthKey(new Date())}-01`;
+    const where = species
+      ? and(
+          eq(farmosReproductionEvents.organizationId, orgId),
+          eq(farmosReproductionEvents.isActive, 1),
+          isNotNull(farmosReproductionEvents.expectedDueDate),
+          gte(farmosReproductionEvents.expectedDueDate, today),
+          eq(farmosAnimals.species, species),
+        )
+      : and(
+          eq(farmosReproductionEvents.organizationId, orgId),
+          eq(farmosReproductionEvents.isActive, 1),
+          isNotNull(farmosReproductionEvents.expectedDueDate),
+          gte(farmosReproductionEvents.expectedDueDate, today),
+        );
     const rows = await this.db
       .select({
         dueDate: farmosReproductionEvents.expectedDueDate,
         offspring: farmosReproductionEvents.offspringCount,
       })
       .from(farmosReproductionEvents)
-      .where(
-        and(
-          eq(farmosReproductionEvents.organizationId, orgId),
-          eq(farmosReproductionEvents.isActive, 1),
-          isNotNull(farmosReproductionEvents.expectedDueDate),
-          gte(farmosReproductionEvents.expectedDueDate, today),
-        ),
-      );
+      .leftJoin(farmosAnimals, and(eq(farmosAnimals.id, farmosReproductionEvents.animalId), eq(farmosAnimals.organizationId, orgId)))
+      .where(where);
 
     const horizonEnd = monthKey(addMonths(new Date(), horizonMonths));
     const byMonth = new Map<string, number>();

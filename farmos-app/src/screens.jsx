@@ -5629,9 +5629,12 @@ const FC_HORIZONS = [
   { v: 1, label: "1 mois" }, { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" },
   { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
 ];
+const FC_LOOKBACKS = [
+  { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" }, { v: 12, label: "12 mois" },
+];
 const FC_MODES = [
   { v: "prudent", label: "Prudent", hint: "confirmé seulement", enabled: true },
-  { v: "realiste", label: "Réaliste", hint: "moyenne 6 mois", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "tendance historique", enabled: true },
   { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
 ];
 const fcNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
@@ -5821,9 +5824,10 @@ function FcHerdRows({ points, L }) {
     </div>
   );
 }
-const ForecastScreen = ({ lang }) => {
+const ForecastScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [horizon, setHorizon] = React.useState(3);
+  const [lookback, setLookback] = React.useState(6);
   const [mode, setMode] = React.useState("prudent");
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -5831,22 +5835,25 @@ const ForecastScreen = ({ lang }) => {
   const [showSim, setShowSim] = React.useState(false);
   const [salesPct, setSalesPct] = React.useState(0);
   const adjust = salesPct !== 0 ? `farmos:${(1 + salesPct / 100).toFixed(2)}` : "";
+  const selectedSpecies = speciesFilter || null;
+  const selectedSpeciesDef = selectedSpecies ? speciesById(selectedSpecies) : null;
+  const speciesLabel = selectedSpeciesDef ? (lang === "fr" ? selectedSpeciesDef.fr : selectedSpeciesDef.en) : L("toutes espèces", "all species");
 
   React.useEffect(() => {
     let alive = true;
     setLoading(true); setError("");
-    api.forecastCashFlow({ horizon, mode, scope: "farmos", adjust })
+    api.forecastCashFlow({ horizon, mode, scope: "farmos", adjust, species: selectedSpecies, lookback })
       .then((res) => { if (alive) setData(res); })
       .catch((e) => { if (alive) setError(String(e.message || e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [horizon, mode, adjust]);
+  }, [horizon, mode, adjust, selectedSpecies, lookback]);
 
   const [prod, setProd] = React.useState(null);
-  React.useEffect(() => { api.forecastProduction({ horizon }).then(setProd).catch(() => setProd(null)); }, [horizon]);
+  React.useEffect(() => { api.forecastProduction({ horizon, species: selectedSpecies, lookback }).then(setProd).catch(() => setProd(null)); }, [horizon, selectedSpecies, lookback]);
 
   const [herd, setHerd] = React.useState(null);
-  React.useEffect(() => { api.forecastLivestock({ horizon }).then(setHerd).catch(() => setHerd(null)); }, [horizon]);
+  React.useEffect(() => { api.forecastLivestock({ horizon, species: selectedSpecies, lookback }).then(setHerd).catch(() => setHerd(null)); }, [horizon, selectedSpecies, lookback]);
 
   const series = React.useMemo(() => (data ? fcSeries(data.months) : []), [data]);
   const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, cumul: last ? last.cumul : 0 }; });
@@ -5882,13 +5889,17 @@ const ForecastScreen = ({ lang }) => {
   const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "var(--fg-3)" };
 
   return (
-    <div style={{ maxWidth: 1050 }}>
+    <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1050 }}>
       <div className="card" style={{ ...card, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
         <div>
           <div style={upper}>{L("Horizon", "Horizon")}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {FC_HORIZONS.map((h) => <FcSeg key={h.v} active={horizon === h.v} onClick={() => setHorizon(h.v)}>{h.label}</FcSeg>)}
           </div>
+        </div>
+        <div style={{ flex: "1 1 100%" }}>
+          <div style={upper}>{L("Espèce", "Species")}</div>
+          <SpeciesPillBar lang={lang} value={selectedSpecies} onChange={onSpeciesFilter} compact enabledSpecies={enabledSpecies}/>
         </div>
         <div>
           <div style={upper}>{L("Hypothèse", "Scenario")}</div>
@@ -5899,6 +5910,12 @@ const ForecastScreen = ({ lang }) => {
                 {m.label} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {m.hint}</span>
               </FcSeg>
             ))}
+          </div>
+        </div>
+        <div>
+          <div style={upper}>{L("Base tendance", "Trend base")}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {FC_LOOKBACKS.map((b) => <FcSeg key={b.v} active={lookback === b.v} onClick={() => setLookback(b.v)}>{b.label}</FcSeg>)}
           </div>
         </div>
         <div style={{ marginLeft: "auto" }}>
@@ -5913,7 +5930,7 @@ const ForecastScreen = ({ lang }) => {
           <div style={{ fontSize: 15, lineHeight: 1.45, color: "var(--ink-950)", fontWeight: 700 }}>
             {mode === "prudent"
               ? L("Mode Prudent: seules les données confirmées sont retenues.", "Prudent mode: only confirmed data is included.")
-              : L("Mode Réaliste: les tendances des 6 derniers mois sont prolongées.", "Realistic mode: trends from the last 6 months are extended.")}
+              : L(`Mode Réaliste: les tendances des ${lookback} derniers mois sont prolongées.`, `Realistic mode: trends from the last ${lookback} months are extended.`)}
           </div>
           <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--fg-3)", marginTop: 6 }}>
             {L("Le cheptel est calculé à part: effectif actuel + naissances attendues - mortalité historique - sorties/ventes.", "The herd is calculated separately: current headcount + expected births - historical mortality - exits/sales.")}
@@ -5927,6 +5944,12 @@ const ForecastScreen = ({ lang }) => {
             sub={FC_MODES.find((m) => m.v === mode)?.hint}
           />
           <FcMiniMetric
+            icon="layers"
+            label={L("Espèce", "Species")}
+            value={speciesLabel}
+            sub={selectedSpecies ? L("projection filtrée", "filtered forecast") : L("consolidé ferme", "farm total")}
+          />
+          <FcMiniMetric
             icon="chart"
             label={L("Incertitude", "Uncertainty")}
             value={L("+/-3% / mois", "+/-3% / month")}
@@ -5936,7 +5959,7 @@ const ForecastScreen = ({ lang }) => {
           <FcMiniMetric
             icon="calendar"
             label={L("Base historique", "History base")}
-            value={L("6 mois", "6 months")}
+            value={L(`${lookback} mois`, `${lookback} months`)}
             sub={L("ventes, production, mortalité et sorties", "sales, production, mortality and exits")}
           />
         </div>
@@ -5976,8 +5999,8 @@ const ForecastScreen = ({ lang }) => {
             </strong>
             <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.45, color: "var(--fg-3)" }}>
               {mode === "prudent"
-                ? L("Ce scénario exclut les tendances. Les ventes passées ne deviennent visibles que dans le scénario Réaliste, où la moyenne des 6 derniers mois est prolongée.", "This scenario excludes trends. Past sales appear in the Realistic scenario, where the last 6-month average is extended.")
-                : L("Le système n'a pas assez d'historique de vente sur les 6 derniers mois pour produire une tendance fiable.", "There is not enough sales history over the last 6 months to produce a reliable trend.")}
+                ? L(`Ce scénario exclut les tendances. Les ventes passées ne deviennent visibles que dans le scénario Réaliste, où la moyenne des ${lookback} derniers mois est prolongée.`, `This scenario excludes trends. Past sales appear in the Realistic scenario, where the last ${lookback}-month average is extended.`)
+                : L(`Le système n'a pas assez d'historique de vente sur les ${lookback} derniers mois pour produire une tendance fiable.`, `There is not enough sales history over the last ${lookback} months to produce a reliable trend.`)}
             </p>
           </div>
           {mode === "prudent" && (
@@ -6001,7 +6024,7 @@ const ForecastScreen = ({ lang }) => {
             <div className="card" style={card} key={s.code}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                 <strong style={{ fontSize: 15 }}>{L("Ventes élevage projetées", "Projected livestock sales")} · {s.code}</strong>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{mode === "prudent" ? L("confirmé", "confirmed") : L("moyenne 6 mois", "6-month average")}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{mode === "prudent" ? L("confirmé", "confirmed") : L(`moyenne ${lookback} mois`, `${lookback}-month average`)}</span>
               </div>
               <FcChart serie={s} />
             </div>

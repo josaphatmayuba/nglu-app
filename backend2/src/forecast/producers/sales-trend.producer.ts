@@ -3,15 +3,15 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { DRIZZLE } from "../../database/database.constants";
 import { currencies, saleInvoices } from "../../database/schema";
 import type { Database } from "../../database/types";
-import type { ForecastLine, ForecastProducer } from "../forecast.types";
+import type { ForecastContext, ForecastLine, ForecastProducer } from "../forecast.types";
 import { addMonths, monthKey, round2 } from "../forecast.util";
 
 // Fenetre d'historique pour la moyenne mobile (mois).
-const LOOKBACK_MONTHS = 6;
+const DEFAULT_LOOKBACK_MONTHS = 6;
 
 /**
  * Niveau 2 (tendance) — recettes de ventes ESTIMEES : moyenne mensuelle des
- * ventes des LOOKBACK_MONTHS derniers mois, par devise, extrapolee en ENTREE
+ * ventes des derniers mois, par devise, extrapolee en ENTREE
  * sur chaque mois futur de l'horizon. Couche 2 => visible seulement en mode
  * Realiste/Optimiste (curseur). Aucune conversion entre devises.
  */
@@ -21,8 +21,9 @@ export class SalesTrendProducer implements ForecastProducer {
 
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async produce(orgId: number, horizonMonths: number): Promise<ForecastLine[]> {
-    const since = addMonths(new Date(), -LOOKBACK_MONTHS);
+  async produce(orgId: number, horizonMonths: number, context: ForecastContext = {}): Promise<ForecastLine[]> {
+    const lookbackMonths = context.lookbackMonths ?? DEFAULT_LOOKBACK_MONTHS;
+    const since = addMonths(new Date(), -lookbackMonths);
     const sinceStr = `${monthKey(since)}-01`;
 
     // Total des ventes par devise sur la fenetre d'historique.
@@ -48,11 +49,11 @@ export class SalesTrendProducer implements ForecastProducer {
     const lines: ForecastLine[] = [];
 
     for (const r of rows) {
-      const monthlyAvg = round2(Number(r.total || 0) / LOOKBACK_MONTHS);
+      const monthlyAvg = round2(Number(r.total || 0) / lookbackMonths);
       if (monthlyAvg <= 0) continue;
 
       // Le mois courant porte deja du reel : on commence la tendance au mois +1.
-      for (let i = 1; i < horizonMonths; i++) {
+      for (let i = 1; i <= horizonMonths; i++) {
         lines.push({
           month: monthKey(addMonths(now, i)),
           amount: monthlyAvg, // entree estimee
@@ -63,7 +64,7 @@ export class SalesTrendProducer implements ForecastProducer {
           confidence: "estimated",
           scope: "compta",
           source: "Ventes (tendance)",
-          basis: `moyenne ${LOOKBACK_MONTHS} derniers mois`,
+          basis: `moyenne ${lookbackMonths} derniers mois`,
         });
       }
     }

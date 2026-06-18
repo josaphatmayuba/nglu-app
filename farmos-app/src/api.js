@@ -252,10 +252,10 @@ export const api = {
   // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
   listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
   // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "farmos".
-  forecastCashFlow: ({ horizon, mode, scope = "farmos", adjust } = {}) =>
-    globalJsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`),
-  forecastProduction: ({ horizon } = {}) => globalJsonFetch(`/forecast/production?horizon=${horizon}`),
-  forecastLivestock: ({ horizon } = {}) => globalJsonFetch(`/forecast/livestock?horizon=${horizon}`),
+  forecastCashFlow: ({ horizon, mode, scope = "farmos", adjust, species, lookback } = {}) =>
+    globalJsonFetch(`/forecast/cash-flow${buildQuery({ horizon, mode, scope, adjust, species, lookback })}`),
+  forecastProduction: ({ horizon, species, lookback } = {}) => globalJsonFetch(`/forecast/production${buildQuery({ horizon, species, lookback })}`),
+  forecastLivestock: ({ horizon, species, lookback } = {}) => globalJsonFetch(`/forecast/livestock${buildQuery({ horizon, species, lookback })}`),
   forecastVariance: ({ scope = "farmos" } = {}) => globalJsonFetch(`/forecast/variance?scope=${scope}`),
   forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "farmos" } = {}) =>
     globalJsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),
