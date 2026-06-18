@@ -792,6 +792,7 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const submit = async () => {
     if (saving || !animal._pk) return;
+    if (!form.dob) { setErr(lang === "fr" ? "La date de naissance est obligatoire." : "Date of birth is required."); return; }
     setSaving(true);
     setErr(null);
     try {
@@ -833,8 +834,8 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
           <input className="input" value={form.sex} onChange={(e) => set("sex", e.target.value)} placeholder="F / M"/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date naissance" : "DOB"}</span>
-          <input className="input" type="date" value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Date naissance" : "DOB"} <span style={{ color: "var(--oxblood-700)" }}>*</span></span>
+          <input className="input" type="date" required value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
         </label>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Poids (kg)" : "Weight (kg)"}</span>

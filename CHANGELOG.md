@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.82.18)
+- FarmOS : le sous-comptage « dont X adultes » (Mâles/Femelles, modal + dashboard) est désormais calculé **uniquement par l'âge** (date de naissance + seuil par espèce), plus par le `type`. Les puces « Par catégorie » (cochettes/engraissement…) restent basées sur le type métier.
+- **Date de naissance obligatoire** à la saisie d'un animal (création + édition de fiche) : marqueur `*`, `required`, et blocage à l'enregistrement si absente — nécessaire pour fiabiliser le classement adulte/jeune.
+
 ### Added (3.82.17)
 - FarmOS modal Visualiser : chaque lot affiche désormais sa composition — total · ♀femelles ♂mâles + répartition par catégorie (adultes / cochettes / engraissement / jeunes), au lieu du seul total. Permet de voir le détail d'un lot agrégé (ex. Cheptel Zone B = 20 engraissement + 11 porcelets + …).
 

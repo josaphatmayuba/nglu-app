@@ -509,6 +509,10 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
   const [saving, setSaving] = React.useState(false);
   const submit = async () => {
     if (saving) return;
+    if (!form.dob) {
+      onSaved && onSaved({ kind: "animal", severity: "error", message: lang === "fr" ? "La date de naissance est obligatoire." : "Date of birth is required." });
+      return;
+    }
     setSaving(true);
     const payload = {
       species,
@@ -611,8 +615,8 @@ const AnimalForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) 
               </div>
             </FormField>
           )}
-          <FormField label={lang === "fr" ? "Date de naissance" : "Date of birth"}>
-            <input className="input" type="date" value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
+          <FormField label={(lang === "fr" ? "Date de naissance" : "Date of birth") + " *"}>
+            <input className="input" type="date" required value={form.dob || ""} onChange={(e) => set("dob", e.target.value)}/>
           </FormField>
           <FormField label={lang === "fr" ? "Poids (kg)" : "Weight (kg)"}>
             <input className="input mono" type="number" placeholder="450" value={form.weight || ""} onChange={(e) => set("weight", e.target.value)}/>

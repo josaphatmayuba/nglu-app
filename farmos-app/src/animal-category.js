@@ -41,10 +41,15 @@ export const animalCategory = (a) => {
   return "inconnu";
 };
 
-// Un animal compte-t-il comme adulte mature ? (cochette = future reproductrice, comptée adulte)
+// Un animal est-il adulte ? Basé UNIQUEMENT sur l'âge (date de naissance + seuil espèce).
+// La date de naissance est obligatoire à la saisie ; sans date exploitable → non adulte.
 export const isAdultAnimal = (a) => {
-  const c = animalCategory(a);
-  return c === "adulte" || c === "cochette";
+  const dobStr = a?.dateOfBirth || a?.date_of_birth;
+  if (!dobStr) return false;
+  const dob = new Date(dobStr);
+  if (isNaN(dob)) return false;
+  const days = (Date.now() - dob.getTime()) / 86400000;
+  return days >= (ADULT_AGE_DAYS[a.species] ?? 365);
 };
 
 // Libellés affichables des catégories
