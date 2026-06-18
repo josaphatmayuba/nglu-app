@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.85.2)
+- Prévisionnel de trésorerie : 3e producteur **Niveau 1** = **masse salariale** (contrats RH actifs, base + primes transport/logement, par devise) projetée en **sortie mensuelle** sur l'horizon. Le consolidé est désormais équilibré (entrées loyers Domus + sorties salaires HR + solde de départ trésorerie). Note : les **ventes FarmOS** ne sont volontairement pas projetées en N1 (une vente future n'est pas « engagée » → relève de la couche 2 / tendance, à activer en phase 2).
+
 ### Added (3.85.1)
 - Prévisionnel de trésorerie : 2e producteur **Niveau 1** = **solde de départ** (comptes de trésorerie banque/caisse depuis le grand livre, par devise) → la courbe projetée part désormais du solde réel d'aujourd'hui, puis applique les flux futurs. La phrase-réponse indique la **trésorerie projetée** (solde + flux) et le détail mensuel affiche le solde de départ distinct de la variation nette. Producteur ajouté via `LedgerModule` (réutilise `LedgerService.subAccountBalances`), sans toucher le moteur.
 

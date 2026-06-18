@@ -5,6 +5,7 @@ import { ForecastController } from "./forecast.controller";
 import { ForecastService } from "./forecast.service";
 import { FORECAST_PRODUCERS } from "./forecast.types";
 import { DomusRentProducer } from "./producers/domus-rent.producer";
+import { HrPayrollProducer } from "./producers/hr-payroll.producer";
 import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
 
 /**
@@ -19,10 +20,15 @@ import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
     ForecastService,
     DomusRentProducer,
     LedgerOpeningProducer,
+    HrPayrollProducer,
     {
       provide: FORECAST_PRODUCERS,
-      useFactory: (domus: DomusRentProducer, ledger: LedgerOpeningProducer) => [domus, ledger],
-      inject: [DomusRentProducer, LedgerOpeningProducer],
+      useFactory: (
+        domus: DomusRentProducer,
+        ledger: LedgerOpeningProducer,
+        hr: HrPayrollProducer,
+      ) => [domus, ledger, hr],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer],
     },
   ],
 })
