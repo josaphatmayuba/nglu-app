@@ -76,3 +76,6 @@ frontend/.env.local
 # Backend2 storage
 backend2/storage/
 Userspaulnjira.json
+
+# Inventaire animaux (fichier de travail local)
+farmos_inventaire_animaux_reorganise.csv
