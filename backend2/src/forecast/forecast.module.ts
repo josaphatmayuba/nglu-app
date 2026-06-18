@@ -6,6 +6,7 @@ import { ForecastTrackingService } from "./forecast-tracking.service";
 import { ForecastService } from "./forecast.service";
 import { FORECAST_PRODUCERS } from "./forecast.types";
 import { DomusRentProducer } from "./producers/domus-rent.producer";
+import { ExternalRefProducer } from "./producers/external-ref.producer";
 import { HrPayrollProducer } from "./producers/hr-payroll.producer";
 import { LedgerOpeningProducer } from "./producers/ledger-opening.producer";
 import { PayablesProducer } from "./producers/payables.producer";
@@ -27,6 +28,7 @@ import { SalesTrendProducer } from "./producers/sales-trend.producer";
     HrPayrollProducer,
     PayablesProducer,
     SalesTrendProducer,
+    ExternalRefProducer,
     {
       provide: FORECAST_PRODUCERS,
       useFactory: (
@@ -35,8 +37,9 @@ import { SalesTrendProducer } from "./producers/sales-trend.producer";
         hr: HrPayrollProducer,
         payables: PayablesProducer,
         salesTrend: SalesTrendProducer,
-      ) => [domus, ledger, hr, payables, salesTrend],
-      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer],
+        externalRef: ExternalRefProducer,
+      ) => [domus, ledger, hr, payables, salesTrend, externalRef],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer, ExternalRefProducer],
     },
   ],
 })

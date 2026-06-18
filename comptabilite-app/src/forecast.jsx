@@ -46,11 +46,18 @@ function buildSeries(months) {
       const key = String(c.currencyId ?? "null");
       const code = cleanCurrencySymbol({ currencyCode: c.currencyCode, currencySymbol: c.currencySymbol }) || "?";
       const entry = byCur.get(key) || { currencyId: c.currencyId ?? null, code, points: [] };
-      const prev = entry.points.length ? entry.points[entry.points.length - 1].cumul : 0;
+      const last = entry.points.length ? entry.points[entry.points.length - 1] : null;
+      const prev = last ? last.cumul : 0;
+      const prevLow = last ? last.low : 0;
+      const prevHigh = last ? last.high : 0;
       // Le solde d'ouverture (opening) pose le point de départ ; net = flux du mois.
       const opening = Number(c.opening || 0);
-      const cumul = prev + opening + Number(c.net || 0);
-      entry.points.push({ month: m.month, net: c.net, opening, cumul });
+      const net = Number(c.net || 0);
+      const cumul = prev + opening + net;
+      // Cône d'incertitude cumulé : bornes basse/haute fournies par le backend.
+      const low = prevLow + opening + Number(c.netLow ?? net);
+      const high = prevHigh + opening + Number(c.netHigh ?? net);
+      entry.points.push({ month: m.month, net, opening, cumul, low, high });
       byCur.set(key, entry);
     }
   }
@@ -62,16 +69,22 @@ function MiniChart({ serie }) {
   const W = 520, H = 160, pad = 28;
   const pts = serie.points;
   if (pts.length < 2) return <div className="muted" style={{ fontSize: 13 }}>Pas assez de points pour tracer une courbe.</div>;
-  const ys = pts.map((p) => p.cumul);
+  // Bornes du graphe : on tient compte de la bande d'incertitude (low/high).
+  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
   const min = Math.min(0, ...ys), max = Math.max(0, ...ys);
   const span = max - min || 1;
   const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
   const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
   const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
+  // Zone d'incertitude : high à l'aller, low au retour (polygone fermé).
+  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
   const zeroY = y(0);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
       <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="#cbd5e1" strokeDasharray="3 3" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill="#6366f1" opacity="0.12" stroke="none" />}
       <path d={path} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinejoin="round" />
       {pts.map((p, i) => (
         <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="#6366f1">
@@ -257,7 +270,7 @@ export function Forecast() {
                         {c.lines.map((l, i) => (
                           <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b", marginLeft: 8 }}>
                             <span>{l.amount >= 0 ? "+ " : "− "}{l.source} <em style={{ opacity: 0.7 }}>· {l.basis}</em></span>
-                            <span>[{l.confidence === "certain" ? "certain" : "estimé"}]</span>
+                            <span>[{l.confidence === "certain" ? "certain" : (/réf|estimé/i.test(l.basis) ? l.basis : "estimé")}]</span>
                           </div>
                         ))}
                       </div>

@@ -2629,3 +2629,21 @@ export const forecastSnapshots = mysqlTable("forecast_snapshots", {
   predictedNet: decimal("predicted_net", { precision: 15, scale: 2 }).default("0").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// References externes (couche 2) saisies a la main : prix marche/region, taux de
+// reference, etc. Hypothese affichable avec badge de provenance, jamais du N1.
+export const forecastExternalRefs = mysqlTable("forecast_external_refs", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  kind: varchar("kind", { length: 40 }).notNull(),
+  label: varchar("label", { length: 180 }).notNull(),
+  region: varchar("region", { length: 120 }),
+  value: decimal("value", { precision: 15, scale: 4 }).default("0").notNull(),
+  unit: varchar("unit", { length: 40 }),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  source: varchar("source", { length: 40 }).default("manual").notNull(),
+  validFrom: date("valid_from", { mode: "string" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});

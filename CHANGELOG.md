@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.89.0)
+- Prévisionnel de trésorerie — **cône d'incertitude** : la projection affiche désormais une **bande min/max** qui s'élargit avec l'horizon (±3 %/mois d'éloignement, plafonné à ±40 %) au lieu d'un trait sec — plus l'échéance est lointaine, plus la fourchette est large (`netLow`/`netHigh` par mois, zone ombrée sur la courbe SVG).
+- Prévisionnel de trésorerie — **références externes (couche 2, saisie manuelle)**. Migration **0170** : table `forecast_external_refs` (prix marché/région, taux de référence, flux récurrents ; champ `source` = manual/api/ia pour la cascade future). Producteur `ExternalRefProducer` : les références actives de type `cashflow_inflow`/`cashflow_outflow` génèrent des flux mensuels estimés par devise, avec **badge de provenance** (`réf. interne` / `réf. API` / `estimé IA`) affiché dans le détail. Visible en mode Réaliste/Optimiste.
+
 ### Added (3.88.0)
 - Prévisionnel de trésorerie — **boucle prévu vs réel** (système qui apprend). Migration **0169** : table `forecast_snapshots` (seule table du chantier ; le calcul ne stocke rien) qui fige le net prévu par mois cible × devise × scope × mode. Endpoints `POST /forecast/snapshot` (fige la prévision du jour, idempotent par jour) et `GET /forecast/variance` (écart prévu/réel des mois écoulés, réel = ventes du mois, + **biais moyen** pour l'auto-correction). UI : bloc « Suivi prévu vs réel » avec bouton « Figer la prévision du jour », tableau prévu/réel/écart % par mois, et **alerte de biais** (sur/sous-estimation > 10 % → ajustement annoncé). Producteurs FarmOS/BatiPro toujours à venir.
 

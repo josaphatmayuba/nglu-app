@@ -10,6 +10,10 @@ import { round2 } from "./forecast.util";
 
 export type ForecastMode = "prudent" | "realiste" | "optimiste";
 
+// Cone d'incertitude : +/-3% de marge par mois d'eloignement, plafonne a +/-40%.
+const UNCERTAINTY_PER_MONTH = 0.03;
+const UNCERTAINTY_MAX = 0.4;
+
 /** Couche maximale incluse selon le mode (curseur d'hypothese). */
 const MODE_MAX_LAYER: Record<ForecastMode, ForecastLayer> = {
   prudent: 1,
@@ -94,18 +98,29 @@ export class ForecastService {
       byMonth.set(line.month, monthMap);
     }
 
-    // 3. Mise en forme triee par mois croissant.
-    const months = [...byMonth.keys()].sort().map((month) => ({
-      month,
-      currencies: [...byMonth.get(month)!.values()].map((b) => ({
-        currencyId: b.currencyId,
-        currencyCode: b.currencyCode,
-        currencySymbol: b.currencySymbol,
-        net: b.net,
-        opening: b.opening,
-        lines: b.lines,
-      })),
-    }));
+    // 3. Mise en forme triee par mois croissant, avec CONE D'INCERTITUDE :
+    // la marge s'elargit avec l'eloignement (UNCERTAINTY_PER_MONTH par mois,
+    // plafonnee). Plus l'horizon est lointain, moins le chiffre est sec.
+    const sortedMonths = [...byMonth.keys()].sort();
+    const months = sortedMonths.map((month, index) => {
+      const margin = Math.min(index * UNCERTAINTY_PER_MONTH, UNCERTAINTY_MAX);
+      return {
+        month,
+        // Marge d'incertitude appliquee (0 sur le 1er mois, croissante ensuite).
+        uncertainty: round2(margin),
+        currencies: [...byMonth.get(month)!.values()].map((b) => ({
+          currencyId: b.currencyId,
+          currencyCode: b.currencyCode,
+          currencySymbol: b.currencySymbol,
+          net: b.net,
+          opening: b.opening,
+          // Fourchette basse/haute du flux net (cone d'incertitude).
+          netLow: round2(b.net * (1 - margin)),
+          netHigh: round2(b.net * (1 + margin)),
+          lines: b.lines,
+        })),
+      };
+    });
 
     return {
       mode: query.mode,

@@ -1023,6 +1023,13 @@
                         "when":  1780538400000,
                         "tag":  "0169_forecast_snapshots",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  146,
+                        "version":  "5",
+                        "when":  1780542000000,
+                        "tag":  "0170_forecast_external_refs",
+                        "breakpoints":  true
                     }
                 ]
 }
