@@ -9,6 +9,7 @@ import { api } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./date-range-filter.jsx";
 import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
+import { animalQty, isAdultAnimal } from "./animal-category";
 
 function formatLongDate(d, lang) {
   try {
@@ -120,10 +121,16 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   const filterSp = (rows, getSp) => rows.filter((r) => !speciesFilter || getSp(r) === speciesFilter);
   const keepCurrency = (row) => !activeCurrencyId || String(rowCurrencyId(row) ?? activeCurrencyId) === String(activeCurrencyId);
   const animals = filterSp(d.animals, (a) => a.species);
-  const sick = animals.filter((a) => a.status && a.status !== "healthy").length;
-  const total = animals.length;
-  const female = animals.filter((a) => a.sex === "F").length;
-  const male = animals.filter((a) => a.sex === "M").length;
+  // Quantité = champ count (1 ligne = plusieurs têtes possible), aligné sur l'occupation.
+  const sum = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
+  const sick = sum(animals.filter((a) => a.status && a.status !== "healthy"));
+  const total = sum(animals);
+  const females = animals.filter((a) => a.sex === "F");
+  const males = animals.filter((a) => a.sex === "M");
+  const female = sum(females);
+  const male = sum(males);
+  const femaleAdult = sum(females.filter(isAdultAnimal));
+  const maleAdult = sum(males.filter(isAdultAnimal));
   const sales = d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && keepCurrency(s) && inDateRange(s.saleDate || s.sale_date, dateRange));
   const expenses = d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && keepCurrency(e) && inDateRange(e.expenseDate || e.expense_date, dateRange));
   const revMonth = sales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
@@ -133,7 +140,7 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   const todayISO = new Date().toISOString().slice(0, 10);
   const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
   const activeRepro = d.repro.filter((e) => (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
-  return { total, sick, female, male, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
+  return { total, sick, female, male, femaleAdult, maleAdult, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
 }
 
 const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
@@ -157,8 +164,8 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   // KPI set (adapts). Values come from live API/DB data only.
   const liveKpis = k ? [
     { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: Array(12).fill(k.total), icon: "layers" },
-    { label: lang==="fr"?"Femelles":"Females", value: k.female.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: Array(12).fill(k.female), icon: "heart", accent: "var(--pertinence-500)" },
-    { label: lang==="fr"?"Mâles":"Males",     value: k.male.toLocaleString("fr-CA"),   unit: lang==="fr"?"têtes":"head", delta: null, trend: Array(12).fill(k.male),   icon: "user",  accent: "var(--forest-700)" },
+    { label: lang==="fr"?"Femelles":"Females", value: k.female.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", sublabel: k.female > 0 ? (lang==="fr"?`dont ${k.femaleAdult} adulte${k.femaleAdult>1?"s":""}`:`incl. ${k.femaleAdult} adult${k.femaleAdult>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(k.female), icon: "heart", accent: "var(--pertinence-500)" },
+    { label: lang==="fr"?"Mâles":"Males",     value: k.male.toLocaleString("fr-CA"),   unit: lang==="fr"?"têtes":"head", sublabel: k.male > 0 ? (lang==="fr"?`dont ${k.maleAdult} adulte${k.maleAdult>1?"s":""}`:`incl. ${k.maleAdult} adult${k.maleAdult>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(k.male),   icon: "user",  accent: "var(--forest-700)" },
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
     { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
     { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
@@ -169,7 +176,9 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   ] : null;
   const speciesKpis = !isAll && live.ready ? (() => {
     const animalsSp = live.animals.filter((a) => a.species === species.id);
-    const sickSp = animalsSp.filter((a) => a.status === "sick").length;
+    const sumSp = (rows) => rows.reduce((s, a) => s + animalQty(a), 0);
+    const totalSp = sumSp(animalsSp);
+    const sickSp = sumSp(animalsSp.filter((a) => a.status === "sick"));
     const runningTreatmentsSp = live.treatments.filter((t) => {
       const a = live.animals.find((x) => x.id === t.animalId);
       return a?.species === species.id && t.status === "running";
@@ -178,12 +187,16 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     const revSp = (live.sales || [])
       .filter((s) => s.species === species.id && (!activeCurrencyId || String(rowCurrencyId(s) ?? activeCurrencyId) === String(activeCurrencyId)) && inDateRange(s.saleDate || s.sale_date, dateRange))
       .reduce((sum, s) => sum + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
-    const femaleSp = animalsSp.filter((a) => a.sex === "F").length;
-    const maleSp = animalsSp.filter((a) => a.sex === "M").length;
+    const femalesSp = animalsSp.filter((a) => a.sex === "F");
+    const malesSp = animalsSp.filter((a) => a.sex === "M");
+    const femaleSp = sumSp(femalesSp);
+    const maleSp = sumSp(malesSp);
+    const femaleAdultSp = sumSp(femalesSp.filter(isAdultAnimal));
+    const maleAdultSp = sumSp(malesSp.filter(isAdultAnimal));
     return [
-      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: animalsSp.length.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(animalsSp.length), icon: "layers", accent: species.accent },
-      { label: lang === "fr" ? "Femelles" : "Females", value: femaleSp.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(femaleSp), icon: "heart", accent: "var(--pertinence-500)" },
-      { label: lang === "fr" ? "Mâles" : "Males",     value: maleSp.toLocaleString("fr-CA"),   unit: species.countingUnit, delta: null, trend: Array(12).fill(maleSp),   icon: "user",  accent: "var(--forest-700)" },
+      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: totalSp.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(totalSp), icon: "layers", accent: species.accent },
+      { label: lang === "fr" ? "Femelles" : "Females", value: femaleSp.toLocaleString("fr-CA"), unit: species.countingUnit, sublabel: femaleSp > 0 ? (lang==="fr"?`dont ${femaleAdultSp} adulte${femaleAdultSp>1?"s":""}`:`incl. ${femaleAdultSp} adult${femaleAdultSp>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(femaleSp), icon: "heart", accent: "var(--pertinence-500)" },
+      { label: lang === "fr" ? "Mâles" : "Males",     value: maleSp.toLocaleString("fr-CA"),   unit: species.countingUnit, sublabel: maleSp > 0 ? (lang==="fr"?`dont ${maleAdultSp} adulte${maleAdultSp>1?"s":""}`:`incl. ${maleAdultSp} adult${maleAdultSp>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(maleSp),   icon: "user",  accent: "var(--forest-700)" },
       { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },

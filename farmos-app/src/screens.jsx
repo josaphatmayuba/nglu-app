@@ -10,6 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
+import { animalCategory, animalQty, isAdultAnimal, categoryBreakdown, CATEGORY_LABELS } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -4412,25 +4413,27 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 };
 
 // Panneau de détail d'un bâtiment sélectionné
-// Stats animaux d'un bâtiment (par nom de barn) : sexe, total, malades
+// Stats animaux d'un bâtiment (par nom de barn). Quantité = champ `count` (1 ligne peut
+// représenter plusieurs têtes), aligné sur le calcul d'occupation backend (somme des count).
+// Catégorisation (adulte / cochette / engraissement / jeune) partagée via animal-category.js.
 const bldgAnimalStats = (building, animals) => {
-  if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0 };
+  if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {} };
   const bldgAnimals = animals.filter((a) => a.barn === building.name);
-  // Regroupement par lot (les animaux d'un lot sont déjà comptés dans le total du bâtiment)
   const lotMap = new Map();
+  const categories = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
+  let female = 0, male = 0, total = 0, sick = 0, femaleAdult = 0, maleAdult = 0;
   bldgAnimals.forEach((a) => {
-    if (!a.lot) return;
-    lotMap.set(a.lot, (lotMap.get(a.lot) || 0) + 1);
+    const n = animalQty(a);
+    total += n;
+    categories[animalCategory(a)] += n;
+    const adult = isAdultAnimal(a);
+    if (a.sex === "F") { female += n; if (adult) femaleAdult += n; }
+    else if (a.sex === "M") { male += n; if (adult) maleAdult += n; }
+    if (a.status && a.status !== "healthy") sick += n;
+    if (a.lot) lotMap.set(a.lot, (lotMap.get(a.lot) || 0) + n); // têtes du lot, déjà incluses dans total
   });
   const lots = [...lotMap.entries()].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count);
-  return {
-    female: bldgAnimals.filter((a) => a.sex === "F").length,
-    male: bldgAnimals.filter((a) => a.sex === "M").length,
-    total: bldgAnimals.length,
-    sick: bldgAnimals.filter((a) => a.status && a.status !== "healthy").length,
-    lots,
-    lotTotal: lots.reduce((s, l) => s + l.count, 0),
-  };
+  return { female, male, total, sick, femaleAdult, maleAdult, categories, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
 };
 
 // Modal "Visualiser le bâtiment" : KPIs en lecture seule + bouton Modifier
@@ -4442,12 +4445,16 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
   const occ = building.occupancy ?? 0;
   const available = cap != null ? Math.max(0, cap - occ) : null;
   const sp = building.species ? speciesById(building.species) : null;
-  const Kpi = ({ label, value, color }) => (
+  const Kpi = ({ label, value, color, sub }) => (
     <div className="card" style={{ padding: "10px 12px", background: "var(--bg-sunken)" }}>
       <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{label}</div>
       <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: color || "var(--ink-950)", marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 2 }}>{sub}</div>}
     </div>
   );
+  const adultSub = (adult, totalSex) => totalSex > 0
+    ? (lang === "fr" ? `dont ${adult} adulte${adult > 1 ? "s" : ""}` : `incl. ${adult} adult${adult > 1 ? "s" : ""}`)
+    : null;
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(20,16,10,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto", display: "flex", flexDirection: "column", gap: 16, padding: 20 }}>
@@ -4486,10 +4493,25 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
           <Kpi label={lang === "fr" ? "Total animaux" : "Total animals"} value={(stats.total).toLocaleString("fr-CA")}/>
           {available != null && <Kpi label={lang === "fr" ? "Places dispo." : "Available"} value={available.toLocaleString("fr-CA")} color="var(--forest-700)"/>}
-          <Kpi label={lang === "fr" ? "Femelles" : "Females"} value={stats.female.toLocaleString("fr-CA")} color="var(--pertinence-700)"/>
-          <Kpi label={lang === "fr" ? "Mâles" : "Males"} value={stats.male.toLocaleString("fr-CA")} color="var(--forest-700)"/>
+          <Kpi label={lang === "fr" ? "Femelles" : "Females"} value={stats.female.toLocaleString("fr-CA")} color="var(--pertinence-700)" sub={adultSub(stats.femaleAdult, stats.female)}/>
+          <Kpi label={lang === "fr" ? "Mâles" : "Males"} value={stats.male.toLocaleString("fr-CA")} color="var(--forest-700)" sub={adultSub(stats.maleAdult, stats.male)}/>
           <Kpi label={lang === "fr" ? "Malades" : "Sick"} value={stats.sick.toLocaleString("fr-CA")} color={stats.sick > 0 ? "var(--oxblood-700)" : "var(--ink-950)"}/>
         </div>
+
+        {/* Répartition par catégorie d'âge/destination */}
+        {["adulte", "cochette", "engraissement", "jeune", "inconnu"].some((c) => (stats.categories[c] || 0) > 0) && (
+          <div>
+            <div className="overline" style={{ marginBottom: 6 }}>{lang === "fr" ? "Par catégorie" : "By category"}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {["adulte", "cochette", "engraissement", "jeune", "inconnu"].filter((c) => (stats.categories[c] || 0) > 0).map((c) => (
+                <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--fg-2)", background: "var(--bg-sunken)", border: "1px solid var(--border-2)", borderRadius: 20, padding: "4px 11px" }}>
+                  {lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en}
+                  <strong className="mono" style={{ color: "var(--ink-900)" }}>{(stats.categories[c]).toLocaleString("fr-CA")}</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Lots */}
         {stats.lots.length > 0 && (
