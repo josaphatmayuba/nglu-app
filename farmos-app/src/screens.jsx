@@ -4414,13 +4414,22 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 // Panneau de détail d'un bâtiment sélectionné
 // Stats animaux d'un bâtiment (par nom de barn) : sexe, total, malades
 const bldgAnimalStats = (building, animals) => {
-  if (!building) return { female: 0, male: 0, total: 0, sick: 0 };
+  if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0 };
   const bldgAnimals = animals.filter((a) => a.barn === building.name);
+  // Regroupement par lot (les animaux d'un lot sont déjà comptés dans le total du bâtiment)
+  const lotMap = new Map();
+  bldgAnimals.forEach((a) => {
+    if (!a.lot) return;
+    lotMap.set(a.lot, (lotMap.get(a.lot) || 0) + 1);
+  });
+  const lots = [...lotMap.entries()].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count);
   return {
     female: bldgAnimals.filter((a) => a.sex === "F").length,
     male: bldgAnimals.filter((a) => a.sex === "M").length,
     total: bldgAnimals.length,
     sick: bldgAnimals.filter((a) => a.status && a.status !== "healthy").length,
+    lots,
+    lotTotal: lots.reduce((s, l) => s + l.count, 0),
   };
 };
 
@@ -4481,6 +4490,26 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
           <Kpi label={lang === "fr" ? "Mâles" : "Males"} value={stats.male.toLocaleString("fr-CA")} color="var(--forest-700)"/>
           <Kpi label={lang === "fr" ? "Malades" : "Sick"} value={stats.sick.toLocaleString("fr-CA")} color={stats.sick > 0 ? "var(--oxblood-700)" : "var(--ink-950)"}/>
         </div>
+
+        {/* Lots */}
+        {stats.lots.length > 0 && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+              <span className="overline">{lang === "fr" ? "Lots" : "Batches"}</span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                {stats.lots.length} {lang === "fr" ? "lot(s)" : "batch(es)"} · {stats.lotTotal.toLocaleString("fr-CA")} {lang === "fr" ? "animaux" : "animals"}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {stats.lots.map((l) => (
+                <div key={l.name} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 11px", background: "var(--bg-sunken)" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-900)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
+                  <span className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-800)", flexShrink: 0 }}>{l.count.toLocaleString("fr-CA")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* KPIs env */}
         {(building.temperature != null || building.humidity != null || building.hygieneStatus) && (

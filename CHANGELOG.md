@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.15)
+- FarmOS modal « Visualiser » : section Lots (chaque lot du bâtiment + son nombre d'animaux, total des lots). Le « Total animaux » comptabilise déjà les animaux des lots (rattachement par `barn`).
+
 ### Added (3.82.14)
 - FarmOS bâtiments : clic sur un bâtiment (vues Zones et Cartes) ouvre un modal « Visualiser » en lecture seule (occupation + taux, places disponibles, total animaux, mâles/femelles, malades, température/humidité/hygiène, plan intérieur) avec boutons Fermer et Modifier → l'édition n'est plus déclenchée directement au clic. Helper `bldgAnimalStats` factorisé.
 
