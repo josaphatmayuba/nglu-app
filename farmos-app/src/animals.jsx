@@ -70,6 +70,76 @@ function useIsMobile(breakpoint = 768) {
   return m;
 }
 
+const EMPTY_ADVANCED_FILTERS = {
+  status: "",
+  sex: "",
+  lot: "",
+  location: "",
+  weightMin: "",
+  weightMax: "",
+  withdrawal: "all",
+  lock: "all",
+};
+
+const normalizeText = (value) => String(value ?? "").trim().toLowerCase();
+
+function uniqueSorted(values) {
+  return Array.from(new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+}
+
+function countAdvancedAnimalFilters(filters) {
+  return Object.entries(filters).reduce((count, [key, value]) => {
+    if (key === "withdrawal" || key === "lock") return count + (value !== "all" ? 1 : 0);
+    return count + (String(value ?? "").trim() ? 1 : 0);
+  }, 0);
+}
+
+function matchesAdvancedAnimalFilters(animal, filters) {
+  if (filters.status && String(animal.status || "healthy") !== filters.status) return false;
+  if (filters.sex && String(animal.sex || "") !== filters.sex) return false;
+
+  if (filters.lot && !normalizeText(animal.lot).includes(normalizeText(filters.lot))) return false;
+
+  if (filters.location) {
+    const locationText = normalizeText([animal.barn, animal.lot, animal.buildingId, animal.boxId].filter(Boolean).join(" "));
+    if (!locationText.includes(normalizeText(filters.location))) return false;
+  }
+
+  const weight = Number(animal.weight);
+  if (filters.weightMin !== "" && (Number.isNaN(weight) || weight < Number(filters.weightMin))) return false;
+  if (filters.weightMax !== "" && (Number.isNaN(weight) || weight > Number(filters.weightMax))) return false;
+
+  const hasWithdrawal = Boolean(animal.withdrawal && (animal.withdrawal.until || Object.keys(animal.withdrawal).length));
+  if (filters.withdrawal === "active" && !hasWithdrawal) return false;
+  if (filters.withdrawal === "none" && hasWithdrawal) return false;
+
+  const locked = isSaleLockedAnimal(animal);
+  if (filters.lock === "locked" && !locked) return false;
+  if (filters.lock === "unlocked" && locked) return false;
+
+  return true;
+}
+
+function csvCell(value) {
+  const text = value == null ? "" : String(value);
+  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadCsv(filename, rows) {
+  if (typeof document === "undefined") return;
+  const csv = rows.map((row) => row.map(csvCell).join(";")).join("\r\n");
+  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const isMobile = useIsMobile();
   const [selectedId, setSelectedId] = React.useState(null);
@@ -78,6 +148,8 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const [loadState, setLoadState] = React.useState("idle"); // idle | loading | ok | error
   const [query, setQuery] = React.useState("");
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("all"));
+  const [showFilters, setShowFilters] = React.useState(false);
+  const [advancedFilters, setAdvancedFilters] = React.useState(() => ({ ...EMPTY_ADVANCED_FILTERS }));
 
   const [reloadKey, setReloadKey] = React.useState(0);
   const refresh = useDataRefresh(["animals"]);
@@ -120,16 +192,48 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const filtered = animals.filter((a) => {
     if (speciesFilter && a.species !== speciesFilter) return false;
     if (a.dob && !inDateRange(a.dob, dateRange)) return false;
+    if (!matchesAdvancedAnimalFilters(a, advancedFilters)) return false;
     if (!query) return true;
     const q = query.toLowerCase();
-    return [a.name, a.id, a.tag, a.externalId, a.lot, a.race, a.breed]
+    return [a.name, a.id, a.tag, a.externalId, a.lot, a.race, a.breed, a.barn, a.status]
       .some((v) => String(v || "").toLowerCase().includes(q));
   });
+  const statusOptions = React.useMemo(() => uniqueSorted(animals.map((a) => a.status || "healthy")), [animals]);
+  const sexOptions = React.useMemo(() => uniqueSorted(animals.map((a) => a.sex)), [animals]);
+  const activeFilterCount = countAdvancedAnimalFilters(advancedFilters);
+  const filterButtonActive = showFilters || activeFilterCount > 0;
+  const resetAdvancedFilters = () => setAdvancedFilters({ ...EMPTY_ADVANCED_FILTERS });
+  const exportFiltered = () => {
+    const fr = lang === "fr";
+    const headers = fr
+      ? ["Nom", "ID", "Espèce", "Race", "Sexe", "Date de naissance", "Poids", "Statut", "Lot", "Bâtiment", "Dernier événement", "Valeur estimée"]
+      : ["Name", "ID", "Species", "Breed", "Sex", "Date of birth", "Weight", "Status", "Batch", "Barn", "Last event", "Estimated value"];
+    const rows = filtered.map((a) => {
+      const sp = speciesById(a.species);
+      return [
+        a.name || "",
+        a.id || "",
+        sp ? (fr ? sp.frSing || sp.fr : sp.enSing || sp.en) : a.species || "",
+        a.race || "",
+        a.sex || "",
+        a.dob || "",
+        a.weight != null ? `${a.weight} ${a.weightUnit || "kg"}` : "",
+        animalStatusLabel(a.status, lang),
+        a.lot || "",
+        a.barn || "",
+        a.lastEvent || "",
+        a.estimatedValue ?? "",
+      ];
+    });
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(fr ? `farmos-animaux-${date}.csv` : `farmos-animals-${date}.csv`, [headers, ...rows]);
+  };
   // Desktop: auto-select first animal for split view.
   // Mobile: only show detail after explicit row click — single scroll on the list.
+  const selectedInFiltered = selectedId ? filtered.find((a) => a.id === selectedId) : null;
   const selected = isMobile
-    ? (selectedId ? animals.find(a => a.id === selectedId) : null)
-    : (animals.find(a => a.id === selectedId) || filtered[0]);
+    ? selectedInFiltered
+    : (selectedInFiltered || filtered[0]);
 
   // Mobile + selected: render detail full-screen with a back button (single scroll).
   if (isMobile && selected) {
@@ -169,10 +273,30 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
             <Icon name="search" size={14} color="var(--ink-500)"/>
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={lang === "fr" ? "Rechercher par nom, ID, lot, race…" : "Search by name, ID, batch, breed…"} style={{ border: 0, background: "transparent", flex: 1, minWidth: 0, outline: "none", fontSize: 13 }}/>
           </div>
-          <button className="btn btn-sm"><Icon name="filter" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Filtres" : "Filters"}</button>
-          <button className="btn btn-sm"><Icon name="download" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Exporter" : "Export"}</button>
+          <button className="btn btn-sm" onClick={() => setShowFilters((v) => !v)}
+            style={filterButtonActive ? { background: "var(--forest-900)", color: "var(--bone-50)", borderColor: "var(--forest-900)" } : undefined}>
+            <Icon name="filter" size={13} color={filterButtonActive ? "var(--bone-50)" : "var(--ink-700)"}/>
+            {lang === "fr" ? "Filtres" : "Filters"}
+            {activeFilterCount > 0 && <span className="mono" style={{ marginLeft: 2 }}>{activeFilterCount}</span>}
+          </button>
+          <button className="btn btn-sm" onClick={exportFiltered}>
+            <Icon name="download" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Exporter" : "Export"}
+          </button>
           <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "animal" }))}><Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Nouvel animal" : "New animal"}</button>
         </div>
+
+        {showFilters && (
+          <AdvancedAnimalFilters
+            lang={lang}
+            value={advancedFilters}
+            onChange={setAdvancedFilters}
+            onReset={resetAdvancedFilters}
+            statusOptions={statusOptions}
+            sexOptions={sexOptions}
+            resultCount={filtered.length}
+            activeCount={activeFilterCount}
+          />
+        )}
 
         {/* Table */}
         <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
@@ -197,6 +321,106 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
 };
 
 // ─── Animal table ────────────────────────────────────────────────────────
+const AdvancedAnimalFilters = ({ lang, value, onChange, onReset, statusOptions, sexOptions, resultCount, activeCount }) => {
+  const fr = lang === "fr";
+  const set = (key, next) => onChange({ ...value, [key]: next });
+  const locale = fr ? "fr-CA" : "en-CA";
+  const labelStyle = { fontSize: 11, color: "var(--fg-2)", display: "flex", flexDirection: "column", gap: 5, minWidth: 0 };
+  const inputStyle = { width: "100%", height: 32, fontSize: 12.5 };
+
+  return (
+    <div style={{
+      background: "var(--paper)",
+      border: "1px solid var(--border-1)",
+      borderRadius: 8,
+      padding: 12,
+      boxShadow: "var(--shadow-1)",
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <Icon name="filter" size={14} color="var(--forest-700)"/>
+          <span className="overline" style={{ margin: 0 }}>{fr ? "Filtres avancés" : "Advanced filters"}</span>
+          <span className="tag" style={{ background: "var(--bg-sunken)" }}>
+            {resultCount.toLocaleString(locale)} {fr ? "fiche(s)" : "record(s)"}
+          </span>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={onReset} disabled={!activeCount}>
+          <Icon name="refresh" size={12} color="var(--ink-700)"/>
+          {fr ? "Réinitialiser" : "Reset"}
+        </button>
+      </div>
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+        gap: 10,
+        alignItems: "end",
+      }}>
+        <label style={labelStyle}>
+          {fr ? "Statut" : "Status"}
+          <select className="input" value={value.status} onChange={(e) => set("status", e.target.value)} style={inputStyle}>
+            <option value="">{fr ? "Tous" : "All"}</option>
+            {statusOptions.map((status) => (
+              <option key={status} value={status}>{animalStatusLabel(status, lang)}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Sexe" : "Sex"}
+          <select className="input" value={value.sex} onChange={(e) => set("sex", e.target.value)} style={inputStyle}>
+            <option value="">{fr ? "Tous" : "All"}</option>
+            {sexOptions.map((sex) => (
+              <option key={sex} value={sex}>{sex}</option>
+            ))}
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Lot" : "Batch"}
+          <input className="input" value={value.lot} onChange={(e) => set("lot", e.target.value)} placeholder={fr ? "Lot ou groupe" : "Batch or group"} style={inputStyle}/>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Localisation" : "Location"}
+          <input className="input" value={value.location} onChange={(e) => set("location", e.target.value)} placeholder={fr ? "Bâtiment, salle..." : "Barn, room..."} style={inputStyle}/>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Poids min." : "Min weight"}
+          <input className="input mono" type="number" value={value.weightMin} onChange={(e) => set("weightMin", e.target.value)} placeholder="kg" style={inputStyle}/>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Poids max." : "Max weight"}
+          <input className="input mono" type="number" value={value.weightMax} onChange={(e) => set("weightMax", e.target.value)} placeholder="kg" style={inputStyle}/>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Retrait" : "Withdrawal"}
+          <select className="input" value={value.withdrawal} onChange={(e) => set("withdrawal", e.target.value)} style={inputStyle}>
+            <option value="all">{fr ? "Tous" : "All"}</option>
+            <option value="active">{fr ? "En retrait" : "In withdrawal"}</option>
+            <option value="none">{fr ? "Sans retrait" : "No withdrawal"}</option>
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          {fr ? "Dossier" : "Record"}
+          <select className="input" value={value.lock} onChange={(e) => set("lock", e.target.value)} style={inputStyle}>
+            <option value="all">{fr ? "Tous" : "All"}</option>
+            <option value="locked">{fr ? "Verrouillé" : "Locked"}</option>
+            <option value="unlocked">{fr ? "Modifiable" : "Editable"}</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+};
+
 const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
   const isMobile = useIsMobile();
   const rowH = density === "compact" ? 38 : 50;
