@@ -1,3 +1,4 @@
+// build: 3.92.2 (cache-bust redeploiement dev compta — onglet Previsionnel)
 import React from "react";
 import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";

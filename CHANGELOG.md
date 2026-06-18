@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.92.2)
+- Comptabilité — force le redéploiement dev du bundle compta pour exposer l'onglet **Prévisionnel** (le pipeline ne rebuild compta que si `comptabilite-app/**` change ; cache-bust). Aucun changement fonctionnel. Penser au hard reload / désinscription du Service Worker côté client (PWA) si l'ancien bundle persiste.
+
 ### Fixed (3.92.1)
 - FarmOS mortalité Zone B — migration **0172** (réparation) : supprime les **événements de mortalité en doublon** créés en dev avant correction (un jeu intermédiaire count chèvre = 3 + porcs en double), ne garde que la version finale (count 2/1/6). N'agit que sur `farmos_mortality_events` Zone B au 2026-06-13. Migration **0171** rendue idempotente côté événements (garde anti-doublon `NOT EXISTS` sur espèce/date/lot/count) et apostrophes retirées des commentaires SQL (piège de parse au boot). `external_id` conservés en `ZB-PORCELET-MORT-*` / `ZB-CHEVREAU-MORT-*` (pas de renommage = aucun autre animal touché).
 
