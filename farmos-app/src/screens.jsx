@@ -4465,6 +4465,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const [selBoxId, setSelBoxId] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [hoverIdx, setHoverIdx] = React.useState(null);
+  const [genOpen, setGenOpen] = React.useState(false); // modal "Générer les box"
 
   const reload = React.useCallback(() => {
     if (!building) return;
@@ -4504,18 +4505,13 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const hasBoxes = !loading && boxes.length > 0;
   const selBox = hasBoxes ? boxes.find((b) => b.id === selBoxId) || null : null;
 
-  // Génération en masse
-  const onGenerate = async () => {
-    const def = building.capacity || 20;
-    const nStr = window.prompt(L("Combien de box créer ?", "How many boxes?"), String(def));
-    if (!nStr) return;
-    const count = parseInt(nStr, 10);
-    if (!Number.isFinite(count) || count < 1) return;
-    const capStr = window.prompt(L("Capacité par box (têtes) ? Laisser vide = sans limite.", "Capacity per box (heads)? Empty = unlimited."), "");
-    const capacity = capStr && capStr.trim() ? parseInt(capStr, 10) : null;
+  // Génération en masse (via modal GenerateBoxesModal)
+  const onGenerate = () => setGenOpen(true);
+  const doGenerate = async ({ count, capacity }) => {
     setBusy(true);
     try {
       await api.generateBoxes({ building_id: building.id, count, capacity });
+      setGenOpen(false);
       reload();
     } catch (e) { window.alert(String(e.message || e)); }
     setBusy(false);
@@ -4733,6 +4729,82 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
           </button>
         </div>
       </div>
+
+      {genOpen && (
+        <GenerateBoxesModal
+          lang={lang}
+          building={building}
+          existingCount={hasBoxes ? boxes.length : 0}
+          busy={busy}
+          onCancel={() => setGenOpen(false)}
+          onConfirm={doGenerate}/>
+      )}
+    </div>
+  );
+};
+
+// Modal de génération des box (remplace les window.prompt nombre + capacité)
+const GenerateBoxesModal = ({ lang, building, existingCount = 0, busy, onCancel, onConfirm }) => {
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const [count, setCount] = React.useState(String(building?.capacity || 20));
+  const [capacity, setCapacity] = React.useState("");
+  const nCount = parseInt(count, 10);
+  const valid = Number.isFinite(nCount) && nCount >= 1;
+  const submit = (e) => {
+    e.preventDefault();
+    if (!valid || busy) return;
+    const cap = capacity.trim() ? parseInt(capacity, 10) : null;
+    onConfirm({ count: nCount, capacity: Number.isFinite(cap) && cap > 0 ? cap : null });
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(20,16,12,0.55)", backdropFilter: "blur(3px)" }}
+      onClick={onCancel}>
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit}
+        style={{ background: "var(--paper)", borderRadius: 16, boxShadow: "0 8px 48px rgba(0,0,0,0.25)", width: "92vw", maxWidth: 380, overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: "1px solid var(--border-1)" }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--border-1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="plus" size={15} color="var(--ink-700)"/>
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, color: "var(--ink-950)" }}>
+            {L("Générer les box", "Generate boxes")}
+          </div>
+        </div>
+
+        {/* Corps */}
+        <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--ink-700)", marginBottom: 5 }}>
+              {L("Nombre de box", "Number of boxes")}
+            </label>
+            <input className="input" type="number" min="1" inputMode="numeric" autoFocus
+              value={count} onChange={(e) => setCount(e.target.value)}/>
+            {existingCount > 0 && (
+              <div style={{ fontSize: 10.5, color: "var(--fg-3)", marginTop: 4 }}>
+                {L(`${existingCount} box déjà présents dans ce bâtiment.`, `${existingCount} boxes already in this building.`)}
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--ink-700)", marginBottom: 5 }}>
+              {L("Capacité par box (têtes)", "Capacity per box (heads)")}
+            </label>
+            <input className="input" type="number" min="1" inputMode="numeric"
+              placeholder={L("Laisser vide = sans limite", "Empty = unlimited")}
+              value={capacity} onChange={(e) => setCapacity(e.target.value)}/>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid var(--border-1)" }}>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel} disabled={busy} style={{ flex: 1 }}>
+            {L("Annuler", "Cancel")}
+          </button>
+          <button type="submit" className="btn btn-sm" disabled={!valid || busy} style={{ flex: 1 }}>
+            {busy ? L("Génération…", "Generating…") : L("Générer", "Generate")}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

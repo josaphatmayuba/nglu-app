@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.93.1)
+- FarmOS — **génération des box via un vrai modal** au lieu des deux `window.prompt` natifs (« Combien de box créer ? » + capacité). Nouveau composant `GenerateBoxesModal` (formulaire nombre + capacité dans le design system existant : `input`/`btn`, header iconisé, validation, états `busy`). Affiche le nombre de box déjà présents. Aucun changement backend (toujours `api.generateBoxes`). Parse JSX OK.
+
+### Changed (3.93.0)
+- Comptabilité — **refonte UI de la page Prévisionnel** (aucun changement backend). Barre de contrôles regroupée (Horizon + Hypothèse en `segtabs`, bouton « Et si ? » qui replie/déplie les sliders de simulation). Bandeau phrase-réponse suivi de **cartes KPI par devise** (trésorerie projetée + delta sur l'horizon). Courbes par devise enrichies (dégradé de remplissage, points contrastés, libellés d'axe, couleur par série). Détail mensuel passé en `<details>` repliable. **Blocs vides masqués** (production, suivi) ; badges de confiance en `chip` colorées. Utilise le design system existant (`segtab`/`kpi`/`chip`/`card.info/warn/good`). Toujours sans Recharts (graphe SVG maison). `build:dev` OK.
+
 ### Fixed (3.92.3)
 - FarmOS — **Plan intérieur / Affectation des box** : 3 corrections.
   1. Le bouton **« + Box »** relançait la numérotation à `1` à chaque clic → doublons (1..N recréés en double). `generateBoxes` reprend désormais après le plus grand numéro de box existant du bâtiment (`start` explicite toujours respecté).
