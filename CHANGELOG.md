@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.83.0)
+- FarmOS **rapport « Structure du cheptel ♂/♀ »** (impression navigateur, sans backend) : nouvelle carte dans l'écran Rapports. Par bâtiment, ventile chaque catégorie (Adultes, Cochettes, Engraissement, Jeunes) en **mâles / femelles** (♂/♀, + « ? » si sexe non renseigné), avec **total ♂**, **total ♀** et **ratio ♂:♀** par bâtiment et au global. Complète le rapport d'effectif qui ne donnait que les totaux par catégorie. Nouvelle fonction `sexBreakdownByGroup` (même logique de catégorisation que `categoryBreakdownByGroup`).
+
 ### Added (3.82.23)
 - FarmOS **alertes « à abattre/vendre »** : les animaux d'engraissement prêts ou en retard génèrent une alerte groupée par bâtiment (« N animal(aux) à abattre/vendre · X prêts · Y en retard (coût net) — Bâtiment »). Sévérité critique si retard, sinon élevée. Visible dans le tableau de bord (panneau alertes) et l'écran Alertes.
 

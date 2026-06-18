@@ -170,3 +170,49 @@ export const categoryBreakdownByGroup = (animals) => {
   });
   return out;
 };
+
+// Sexe normalisé d'un animal pour la ventilation : "M" | "F" | "inconnu".
+const animalSex = (a) => (a?.sex === "M" ? "M" : a?.sex === "F" ? "F" : "inconnu");
+
+// Ventile un GROUPE d'animaux (= un bâtiment) par catégorie ET par sexe.
+// Même logique de catégorisation que categoryBreakdownByGroup (type prioritaire,
+// puis âge, puis ratio reproducteur sur les mâles adultes non marqués), mais chaque
+// catégorie compte les têtes par sexe { M, F, inconnu }. Pour le ratio reproducteur,
+// les mâles "gardés" et le "surplus engraissement" restent comptés en M.
+export const sexBreakdownByGroup = (animals) => {
+  const mk = () => ({ M: 0, F: 0, inconnu: 0 });
+  const out = { adulte: mk(), cochette: mk(), engraissement: mk(), jeune: mk(), inconnu: mk() };
+  const adultFemalesBySpecies = {};
+  (animals || []).forEach((a) => {
+    if (!isFatteningType(a) && a?.sex === "F" && isAdultAnimal(a)) {
+      adultFemalesBySpecies[a.species] = (adultFemalesBySpecies[a.species] || 0) + animalQty(a);
+    }
+  });
+  const breedersBudget = {};
+  Object.keys(adultFemalesBySpecies).forEach((sp) => {
+    breedersBudget[sp] = Math.max(1, Math.ceil(adultFemalesBySpecies[sp] / (BREEDING_RATIO[sp] ?? 20)));
+  });
+  (animals || []).forEach((a) => {
+    const n = animalQty(a);
+    const sx = animalSex(a);
+    if (isFatteningType(a)) { out.engraissement[sx] += n; return; }
+    const d = ageDays(a);
+    if (d == null) { out.inconnu[sx] += n; return; }
+    const adult = d >= (ADULT_AGE_DAYS[a?.species] ?? 365);
+    if (!adult) {
+      out[a?.sex === "F" && GILT_SPECIES.has(a?.species) ? "cochette" : "jeune"][sx] += n;
+      return;
+    }
+    if (a?.sex === "F") { out.adulte.F += n; return; }
+    if (a?.sex === "M") {
+      const budget = breedersBudget[a.species] ?? 0;
+      const asBreeder = Math.min(n, budget);
+      breedersBudget[a.species] = budget - asBreeder;
+      out.adulte.M += asBreeder;
+      out.engraissement.M += n - asBreeder;
+      return;
+    }
+    out.adulte.inconnu += n; // sexe inconnu mais adulte
+  });
+  return out;
+};
