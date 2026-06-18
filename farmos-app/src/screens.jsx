@@ -4412,7 +4412,7 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 };
 
 // Panneau de détail d'un bâtiment sélectionné
-const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
+const BldgDetail = ({ building, lang, femaleCount = 0, maleCount = 0, onEdit, onClose, onViewInterior }) => {
   if (!building) return (
     <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, minHeight: 240, color: "var(--fg-3)" }}>
       <Icon name="building" size={28} color="var(--ink-300)"/>
@@ -4455,6 +4455,20 @@ const BldgDetail = ({ building, lang, onEdit, onClose, onViewInterior }) => {
               {lang === "fr" ? "⚠ Surcapacité détectée" : "⚠ Over capacity detected"}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Répartition mâle / femelle */}
+      {(femaleCount > 0 || maleCount > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+            <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Femelles" : "Females"}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--pertinence-700)", marginTop: 2 }}>{femaleCount.toLocaleString("fr-CA")}</div>
+          </div>
+          <div className="card" style={{ padding: "8px 10px", background: "var(--bg-sunken)" }}>
+            <div style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{lang === "fr" ? "Mâles" : "Males"}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--forest-700)", marginTop: 2 }}>{maleCount.toLocaleString("fr-CA")}</div>
+          </div>
         </div>
       )}
 
@@ -4512,6 +4526,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [rows, setRows] = React.useState([]);
   const [zones, setZones] = React.useState([]);
   const [farms, setFarms] = React.useState([]);
+  const [animals, setAnimals] = React.useState([]);
   const [farmId, setFarmId] = React.useState(null); // null = toutes les fermes
   const [editing, setEditing] = React.useState(null); // building | "new" | null
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -4530,7 +4545,8 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       api.listZones().catch(() => []),
       api.listLandFeatures().catch(() => []),
       api.listFarms().catch(() => []),
-    ]).then(([b, z, f, fm]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); } });
+      api.listAnimals().catch(() => []),
+    ]).then(([b, z, f, fm, an]) => { if (!cancel) { setRows(Array.isArray(b) ? b : []); setZones(Array.isArray(z) ? z : []); setFeatures(Array.isArray(f) ? f : []); setFarms(Array.isArray(fm) ? fm : []); setAnimals(Array.isArray(an) ? an : []); } });
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   // Persistance d'un déplacement sur le plan (bâtiment ou élément de terrain)
@@ -4562,6 +4578,11 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     (!speciesFilter || b.species === speciesFilter) &&
     (!farmZoneIds || (b.zoneId && farmZoneIds.has(b.zoneId))));
   const selectedBuilding = filtered.find(b => b.id === selectedId) || null;
+  const bldgAnimalCounts = React.useMemo(() => {
+    if (!selectedBuilding) return { female: 0, male: 0 };
+    const bldgAnimals = animals.filter((a) => a.barn === selectedBuilding.name);
+    return { female: bldgAnimals.filter((a) => a.sex === "F").length, male: bldgAnimals.filter((a) => a.sex === "M").length };
+  }, [selectedBuilding, animals]);
   // Compteurs par ferme (bâtiments + occupation animaux)
   const farmStats = (fmId) => {
     const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
@@ -4784,6 +4805,8 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             <BldgDetail
               building={selectedBuilding}
               lang={lang}
+              femaleCount={bldgAnimalCounts.female}
+              maleCount={bldgAnimalCounts.male}
               onEdit={() => setEditing(selectedBuilding)}
               onClose={() => setSelectedId(null)}
               onViewInterior={setInteriorBuilding}
