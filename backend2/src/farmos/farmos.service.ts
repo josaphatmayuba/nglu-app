@@ -2350,15 +2350,25 @@ export class FarmosService {
   }
 
   async createMortalityEvent(input: any, orgId: number) {
+    const deathCount = Number(input.count ?? 1);
+    if (!Number.isInteger(deathCount) || deathCount <= 0) {
+      throw new BadRequestException("Nombre de deces requis.");
+    }
+    let animal: any = null;
     if (input.animal_id) {
-      await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+      animal = await this.assertAnimalWritableById(Number(input.animal_id), orgId);
+      const currentCount = Number(animal.count ?? 0);
+      const availableCount = currentCount > 0 ? currentCount : 1;
+      if (deathCount > availableCount) {
+        throw new BadRequestException(`Nombre de deces superieur au nombre disponible. Maximum: ${availableCount}.`);
+      }
     }
     const [res] = await this.db.insert(farmosMortalityEvents).values({
       organizationId: orgId,
       animalId: input.animal_id ?? null,
       species: input.species,
       eventDate: input.event_date,
-      count: input.count ?? 1,
+      count: deathCount,
       cause: input.cause ?? null,
       necropsyRequested: input.necropsy_requested ? 1 : 0,
       eventTime: input.event_time ?? null,
@@ -2372,12 +2382,20 @@ export class FarmosService {
       necropsyDone: input.necropsy_done ? 1 : 0,
       notes: input.notes ?? null,
     }).$returningId();
-    // Marquer l'animal comme décédé si un ID précis est fourni.
-    if (input.animal_id) {
-      await this.db
-        .update(farmosAnimals)
-        .set({ status: "deceased" })
-        .where(and(eq(farmosAnimals.id, input.animal_id), eq(farmosAnimals.organizationId, orgId)));
+    // Sur un lot, un deces partiel reduit le nombre sans cloturer tout le dossier.
+    if (animal) {
+      const currentCount = Number(animal.count ?? 0);
+      if (currentCount > deathCount) {
+        await this.db
+          .update(farmosAnimals)
+          .set({ count: currentCount - deathCount })
+          .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+      } else {
+        await this.db
+          .update(farmosAnimals)
+          .set({ count: currentCount > 0 ? 0 : animal.count, status: "deceased" })
+          .where(and(eq(farmosAnimals.id, animal.id), eq(farmosAnimals.organizationId, orgId)));
+      }
     }
     await this.publishFarmosUpdate("createMortalityEvent", ["mortalityEvents", "animals"], "created", res.id, orgId);
     return { id: res.id };

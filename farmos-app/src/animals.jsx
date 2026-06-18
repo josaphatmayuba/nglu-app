@@ -324,14 +324,23 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 // saisi ici est stocké dans notes et réaffiché dans la fiche.
 const DeathDeclareModal = ({ lang, animal, onClose, onSaved }) => {
   const fr = lang === "fr";
-  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), cause: "", notes: "" });
+  const availableCount = Math.max(1, Math.floor(Number(animal.count ?? 0)) || 1);
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), count: 1, cause: "", notes: "" });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
+  const typedCount = Number(form.count);
+  const previewCount = Number.isInteger(typedCount) && typedCount > 0 ? typedCount : 0;
+  const remainingCount = Math.max(0, availableCount - previewCount);
+  const isPartialLotDeath = availableCount > 1 && previewCount > 0 && previewCount < availableCount;
   const submit = async () => {
     if (saving) return;
     if (!form.date || !form.cause.trim()) {
       setError(fr ? "Date et cause requises." : "Date and cause required.");
+      return;
+    }
+    if (!Number.isInteger(typedCount) || typedCount < 1 || typedCount > availableCount) {
+      setError(fr ? `Nombre décédés requis entre 1 et ${availableCount}.` : `Death count must be between 1 and ${availableCount}.`);
       return;
     }
     setSaving(true);
@@ -341,7 +350,7 @@ const DeathDeclareModal = ({ lang, animal, onClose, onSaved }) => {
         species: animal.species || null,
         event_date: form.date,
         animal_id: animal._pk,
-        count: 1,
+        count: typedCount,
         cause: form.cause.trim(),
         notes: form.notes.trim() || null,
       });
@@ -368,13 +377,23 @@ const DeathDeclareModal = ({ lang, animal, onClose, onSaved }) => {
         </div>
 
         <div style={{ fontSize: 12.5, color: "var(--oxblood-700)", background: "var(--oxblood-50, #f6e7e2)", borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
-          {fr ? "Le dossier sera verrouillé en lecture seule après la déclaration." : "The record will become read-only after declaration."}
+          {isPartialLotDeath
+            ? (fr ? `Le lot restera actif avec ${remainingCount} ${remainingCount > 1 ? "animaux" : "animal"}.` : `The batch will stay active with ${remainingCount} animal${remainingCount > 1 ? "s" : ""}.`)
+            : (fr ? "Le dossier sera verrouillé en lecture seule après la déclaration." : "The record will become read-only after declaration.")}
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <label style={lbl}>{fr ? "Date du décès" : "Date of death"}
             <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
           </label>
+          {availableCount > 1 && (
+            <label style={lbl}>{fr ? "Nombre décédés" : "Deaths"}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                <input className="input mono" type="number" min="1" max={availableCount} step="1" value={form.count} onChange={(e) => set("count", e.target.value)} style={{ width: 120 }}/>
+                <span className="mono" style={{ fontSize: 12, color: "var(--fg-3)" }}>/ {availableCount}</span>
+              </div>
+            </label>
+          )}
           <label style={lbl}>{fr ? "Cause présumée" : "Suspected cause"}
             <input className="input" type="text" value={form.cause} onChange={(e) => set("cause", e.target.value)} placeholder={fr ? "Maladie, accident…" : "Disease, accident…"} style={{ width: "100%", marginTop: 4 }}/>
           </label>
@@ -421,10 +440,10 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     window.addEventListener("farmos:photo-uploaded", h);
     return () => window.removeEventListener("farmos:photo-uploaded", h);
   }, [reloadPhotos, animal._pk]);
-  // Animal décédé : retrouver l'événement de mortalité lié pour afficher le
-  // commentaire saisi lors de la déclaration de décès.
+  // Retrouver le dernier événement de mortalité lié pour afficher le commentaire
+  // saisi lors de la déclaration, même si le lot reste vivant après un décès partiel.
   React.useEffect(() => {
-    if (!deceased || !animal._pk) { setDeathEvent(null); return; }
+    if (!animal._pk) { setDeathEvent(null); return; }
     let cancel = false;
     api.listMortalityEvents()
       .then((rows) => {
@@ -436,7 +455,7 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       })
       .catch(() => {});
     return () => { cancel = true; };
-  }, [deceased, animal._pk]);
+  }, [animal._pk, animal.status, animal.count]);
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
@@ -588,13 +607,19 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         {/* Withdrawal warning right at the top */}
         {readOnly ? <SaleLockChip lang={lang} status={animal.status}/> : animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
 
-        {/* Décès : commentaire saisi lors de la déclaration */}
-        {deceased && deathEvent && (deathEvent.cause || deathEvent.notes) && (
+        {/* Mortalité : commentaire saisi lors de la déclaration */}
+        {deathEvent && (deathEvent.cause || deathEvent.notes) && (
           <div style={{ marginTop: 12, background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <Icon name="skull" size={13} color="var(--oxblood-700)"/>
               <span style={{ fontSize: 10.5, color: "var(--oxblood-700)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700 }}>
-                {lang === "fr" ? "Décès déclaré" : "Death declared"}
+                {deceased ? (lang === "fr" ? "Décès déclaré" : "Death declared") : (lang === "fr" ? "Mortalité déclarée" : "Mortality declared")}
+              </span>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                {(() => {
+                  const n = Number(deathEvent.count ?? 1) || 1;
+                  return `${n} ${lang === "fr" ? (n > 1 ? "morts" : "mort") : (n > 1 ? "deaths" : "death")}`;
+                })()}
               </span>
               {(deathEvent.eventDate || deathEvent.event_date) && (
                 <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{deathEvent.eventDate || deathEvent.event_date}</span>
