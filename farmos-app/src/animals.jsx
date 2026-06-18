@@ -8,6 +8,7 @@ import { speciesById, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
+import { AutocompleteDB } from "./quickentry";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
 import { animalStatusColor, animalStatusLabel, isDeceasedStatus, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
@@ -1206,10 +1207,18 @@ const AnimalEditCard = ({ lang, animal, onCancel, onSaved }) => {
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Nom" : "Name"}</span>
           <input className="input" value={form.name} onChange={(e) => set("name", e.target.value)}/>
         </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Race" : "Breed"}</span>
-          <input className="input" value={form.race} onChange={(e) => set("race", e.target.value)}/>
-        </label>
+          <AutocompleteDB
+            value={form.race || ""}
+            onChange={(v) => set("race", v)}
+            useLabel
+            lang={lang}
+            category="breed"
+            scope={animal.species || animal.glyph}
+            placeholder={lang === "fr" ? "Rechercher ou ajouter une race…" : "Search or add a breed…"}
+          />
+        </div>
         <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Sexe" : "Sex"}</span>
           <input className="input" value={form.sex} onChange={(e) => set("sex", e.target.value)} placeholder="F / M"/>
