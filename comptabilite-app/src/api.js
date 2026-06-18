@@ -97,6 +97,9 @@ export const api = {
   createTaxRate: (body) => jsonFetch("/product-vat", { method: "POST", body: JSON.stringify(body) }),
   updateTaxRate: (id, body) => jsonFetch(`/product-vat/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 
+  // ── Prévisionnel (cash-flow projeté, par mois × devise) ──────────────
+  forecastCashFlow: (params) => jsonFetch(withQuery("/forecast/cash-flow", params)),
+
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),
   budgetStatus: (id) => jsonFetch(`/budget/${id}/status-ledger`),

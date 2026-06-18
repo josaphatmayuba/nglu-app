@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 import { cleanCurrencySymbol, defaultSymbol } from "./currency.js";
+import { Forecast } from "./forecast.jsx";
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -81,6 +82,7 @@ const NAV = [
   { id: "analytique", label: "Analytique (projets)", icon: "pieChart" },
   { id: "budget", label: "Budget", icon: "piggyBank" },
   { id: "capacite", label: "Plan de trésorerie", icon: "gauge" },
+  { id: "forecast", label: "Prévisionnel", icon: "gauge" },
   { section: "Achats & stock" },
   { id: "fournisseurs", label: "Fournisseurs", icon: "contact" },
   { id: "achats", label: "Factures fournisseurs", icon: "receipt" },
@@ -460,6 +462,7 @@ function App() {
     analytique: <Analytique />,
     budget: <Budget />,
     capacite: <Capacite accounts={fc.accounts} />,
+    forecast: <Forecast />,
     fournisseurs: <Fournisseurs canMutate={canMutate} />,
     achats: <Achats canMutate={canMutate} />,
     stock: <Stock />,

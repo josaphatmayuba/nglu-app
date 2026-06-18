@@ -46,6 +46,7 @@ import { SystemEmailModule } from "./system-email/system-email.module";
 import { TransactionTypesModule } from "./transaction-types/transaction-types.module";
 import { TransactionsModule } from "./transactions/transactions.module";
 import { LedgerModule } from "./ledger/ledger.module";
+import { ForecastModule } from "./forecast/forecast.module";
 import { WorkflowModule } from "./workflow/workflow.module";
 import { BudgetModule } from "./budget/budget.module";
 import { ProcurementModule } from "./procurement/procurement.module";
@@ -102,6 +103,7 @@ import { UsersModule } from "./users/users.module";
     SystemEmailModule,
     TransactionsModule,
     LedgerModule,
+    ForecastModule,
     WorkflowModule,
     BudgetModule,
     ProcurementModule,

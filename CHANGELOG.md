@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.85.0)
+- Comptabilité : nouveau **Prévisionnel de trésorerie** (consolidé, par devise). Backend : module générique `forecast` (lignes typées multi-grandeurs, couches empilables N1/N2/N3, agrégation par mois × devise **sans conversion**) avec un 1er producteur **Niveau 1** (loyers futurs des baux Domus actifs, cycle mensuel). Endpoint `GET /forecast/cash-flow?horizon=&mode=&scope=` (garde `readAll-transaction`), ajouté à la whitelist middleware. Frontend `comptabilite-app` (menu Pilotage > Prévisionnel) : phrase-réponse en langage clair, courbe SVG par devise, curseur d'hypothèse Prudent/Réaliste/Optimiste (Réaliste & Optimiste grisés tant que les couches tendance/IA n'existent pas), détail mensuel avec badges de confiance `[certain]`/`[estimé]`. Conçu pour s'étendre aux autres modules (ledger, HR, FarmOS, BatiPro) en ajoutant un producteur.
+
 ### Added (3.84.1)
 - FarmOS rapport « Ratio reproducteur M:F » : colonne **Interprétation** par bâtiment qui **diagnostique automatiquement** le résultat (compare les femelles/mâle au ratio idéal de l'espèce dominante, tolérance ±20 %) avec code couleur : vert = équilibré, orange = trop de mâles (surplus à engraisser), rouge = pas assez de mâles (fécondation insuffisante) / aucun mâle reproducteur. Guide de lecture mis à jour en conséquence.
 
