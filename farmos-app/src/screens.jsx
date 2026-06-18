@@ -4659,63 +4659,85 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
 
           {/* Panneau d'affectation du box sélectionné */}
           <div style={{ padding: "4px 18px 14px" }}>
-            {!selBox && <div style={{ fontSize: 12, color: "var(--fg-3)", textAlign: "center", padding: "8px 0" }}>
-              {L("Clique un box pour voir et affecter ses animaux.", "Click a box to view and assign its animals.")}
+            {!selBox && <div style={{ fontSize: 12.5, color: "var(--fg-3)", textAlign: "center", padding: "14px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <Icon name="grid" size={20} color="var(--border-2)"/>
+              {L("Clique un box du plan pour voir et affecter ses animaux.", "Click a box on the plan to view and assign its animals.")}
             </div>}
             {selBox && (() => {
               const inBox = animalsByBox.get(selBox.id) || [];
               const heads = headsIn(selBox.id);
-              const capTxt = selBox.capacity != null ? `${heads}/${selBox.capacity}` : `${heads}`;
-              const full = selBox.capacity != null && heads >= selBox.capacity;
+              const cap = selBox.capacity != null ? selBox.capacity : null;
+              const full = cap != null && heads >= cap;
+              const over = cap != null && heads > cap;
+              const pct = cap != null ? Math.min(100, Math.round((heads / cap) * 100)) : 0;
+              const barColor = over ? "#B84040" : (full ? "#C89020" : "#5A9A58");
+              const stColor = { ok: "#5A9A58", sick: "#B84040", quarantine: "#C89020", empty: "#B8B4A8" };
               return (
-                <div style={{ border: "1px solid var(--border-1)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: "var(--ink-950)" }}>Box {selBox.name}</div>
-                    <span className="mono" style={{ fontSize: 11, color: full ? "#B84040" : "var(--fg-2)" }}>
-                      {capTxt} {L("têtes", "heads")}{full ? ` · ${L("plein", "full")}` : ""}
-                    </span>
+                <div style={{ border: "1px solid var(--border-1)", borderRadius: 12, overflow: "hidden", background: "var(--paper)" }}>
+                  {/* En-tête sticky du box : nom + remplissage */}
+                  <div style={{ position: "sticky", top: 0, zIndex: 1, background: "var(--paper)", padding: "11px 13px 9px", borderBottom: "1px solid var(--border-1)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 7 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "var(--ink-950)" }}>Box {selBox.name}</div>
+                      <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
+                        {cap != null ? `${heads}/${cap}` : heads} {L("têtes", "heads")}{over ? ` · ${L("dépassé", "over")}` : (full ? ` · ${L("plein", "full")}` : "")}
+                      </span>
+                    </div>
+                    {cap != null && (
+                      <div style={{ height: 6, borderRadius: 4, background: "var(--border-1)", overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: barColor, borderRadius: 4, transition: "width .2s" }}/>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Animaux présents */}
-                  {inBox.length === 0
-                    ? <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 10 }}>{L("Box vide.", "Empty box.")}</div>
-                    : <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-                        {inBox.map((a) => (
-                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                            <span style={{ flex: 1 }}>{a.name || a.id}{a.lot ? ` · ${L("lot", "lot")} ${a.lot}` : ""}{a.count > 1 ? ` ×${a.count}` : ""}</span>
-                            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => unassign(a.id)}>{L("Retirer", "Remove")}</button>
+                  {/* Animaux présents — liste scrollable (le plan reste visible au-dessus) */}
+                  <div style={{ maxHeight: 230, overflowY: "auto", padding: inBox.length ? "6px 7px" : "0" }}>
+                    {inBox.length === 0
+                      ? <div style={{ fontSize: 12.5, color: "var(--fg-3)", padding: "16px 13px", textAlign: "center" }}>{L("Box vide — ajoute des animaux ci-dessous.", "Empty box — add animals below.")}</div>
+                      : inBox.map((a) => (
+                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 8px", borderRadius: 8, fontSize: 12.5 }}
+                            onMouseEnter={e => e.currentTarget.style.background = "var(--surface-2, #F3F0E9)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                            <span style={{ width: 9, height: 9, borderRadius: "50%", background: stColor[a.status === "sick" ? "sick" : a.status === "quarantine" ? "quarantine" : "ok"], flexShrink: 0 }}/>
+                            <span style={{ fontWeight: 600, color: "var(--ink-900)" }}>{a.name || a.id}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+                            {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>{a.lot}</span>}
+                            <button className="btn btn-sm btn-ghost" disabled={busy} title={L("Retirer du box", "Remove from box")}
+                              onClick={() => unassign(a.id)} style={{ marginLeft: "auto", padding: "3px 6px" }}>
+                              <Icon name="trash" size={13} color="var(--oxblood-700)"/>
+                            </button>
                           </div>
                         ))}
-                      </div>}
+                  </div>
 
                   {/* Ajout : par lot entier ou animal individuel (box libre) */}
-                  {candidates.length === 0
-                    ? <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Aucun autre animal du bâtiment à placer.", "No other building animal to place.")}</div>
-                    : <>
-                        {lotsAvailable.length > 0 && (
-                          <div style={{ marginBottom: 8 }}>
-                            <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>{L("Placer tout un lot :", "Place a whole lot:")}</div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                              {lotsAvailable.map((lot) => (
-                                <button key={lot} className="btn btn-sm" disabled={busy}
-                                  onClick={() => assign(candidates.filter((a) => a.lot === lot).map((a) => a.id))}>
-                                  {L("Lot", "Lot")} {lot}
-                                </button>
-                              ))}
+                  <div style={{ borderTop: "1px solid var(--border-1)", padding: "10px 13px", background: "var(--surface-1, #FAF8F3)" }}>
+                    {candidates.length === 0
+                      ? <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Aucun autre animal du bâtiment à placer.", "No other building animal to place.")}</div>
+                      : <>
+                          {lotsAvailable.length > 0 && (
+                            <div style={{ marginBottom: 9 }}>
+                              <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 5 }}>{L("Placer tout un lot :", "Place a whole lot:")}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                {lotsAvailable.map((lot) => (
+                                  <button key={lot} className="btn btn-sm" disabled={busy}
+                                    onClick={() => assign(candidates.filter((a) => a.lot === lot).map((a) => a.id))}>
+                                    <Icon name="plus" size={11} color="var(--ink-700)"/>{L("Lot", "Lot")} {lot}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 4 }}>{L("Ajouter un animal :", "Add an animal:")}</div>
-                        <select className="input" disabled={busy} defaultValue=""
-                          onChange={(e) => { if (e.target.value) { assign([Number(e.target.value)]); e.target.value = ""; } }}>
-                          <option value="">{L("— choisir —", "— choose —")}</option>
-                          {candidates.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {(a.name || a.id)}{a.lot ? ` (lot ${a.lot})` : ""}{a.count > 1 ? ` ×${a.count}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </>}
+                          )}
+                          <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 5 }}>{L("Ajouter un animal :", "Add an animal:")}</div>
+                          <select className="input" disabled={busy} defaultValue=""
+                            onChange={(e) => { if (e.target.value) { assign([Number(e.target.value)]); e.target.value = ""; } }}>
+                            <option value="">{L("— choisir —", "— choose —")}</option>
+                            {candidates.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {(a.name || a.id)}{a.lot ? ` (lot ${a.lot})` : ""}{a.count > 1 ? ` ×${a.count}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </>}
+                  </div>
                 </div>
               );
             })()}

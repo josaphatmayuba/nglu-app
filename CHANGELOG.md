@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.94.1)
+- FarmOS — **refonte UI de la modale « Plan intérieur / Affectation des box »** (`BldgInteriorPlan`, aucun changement backend). Le plan SVG **reste désormais toujours visible** : la liste d'animaux d'un box scrolle dans sa propre zone (`maxHeight` 230px) au lieu de pousser/masquer le plan quand le box est rempli. En-tête de box **sticky** avec compteur `X/Y têtes` + **barre de remplissage** colorée (vert → ambre plein → rouge dépassé). Lignes d'animaux en cartes lisibles (puce de statut, nom en gras, **lot en chip**, surbrillance au survol) ; « Retirer » remplacé par une **icône poubelle** discrète. Bloc d'ajout (lot / animal) fixé en bas, séparé. Design system existant (`btn`/`input`/`Icon`), pas de nouvelle dépendance. `vite build` OK.
+
+### Added (3.94.0)
+- Domus — **page Prévisionnel** (menu Pilotage). Réutilise le moteur forecast backend2 avec `scope=domus` figé : projette les **loyers à venir** (baux actifs) par devise, avec horizon, hypothèse (Prudent/Réaliste), simulation « et si ? » sur les loyers, cône d'incertitude et suivi prévu vs réel. Composant copié/adapté depuis comptabilite-app (pas de code partagé entre apps — chaque app est un build Vite isolé), classes Domus + `cleanCurrencySymbol` de data.js. Aucun changement backend (endpoints `/forecast/*` déjà déployés). `npm run build` Domus OK. 1re app après Compta ; FarmOS/HR/BatiPro à suivre.
+
 ### Changed (3.93.1)
 - FarmOS — **génération des box via un vrai modal** au lieu des deux `window.prompt` natifs (« Combien de box créer ? » + capacité). Nouveau composant `GenerateBoxesModal` (formulaire nombre + capacité dans le design system existant : `input`/`btn`, header iconisé, validation, états `busy`). Affiche le nombre de box déjà présents. Aucun changement backend (toujours `api.generateBoxes`). Parse JSX OK.
 
