@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.82.21)
+- FarmOS modal Visualiser : la répartition « Par catégorie » passe en **cartes détaillées** (valeur + % du total + pastille de couleur par catégorie), une seule représentation (pas de doublon avec les puces).
+- FarmOS **rapports imprimables** (impression navigateur, sans backend) : bouton « Rapport » dans le modal (effectif d'un bâtiment : synthèse, catégories, lots) + carte « Effectif par bâtiment (généré en direct) » dans l'écran Rapports (tableau global tous bâtiments × catégories avec total).
+
 ### Changed (3.82.20)
 - FarmOS catégories : le **type saisi reprime pour la destination abattage** — un animal dont le type contient engraissement/abattage/embouche/boucherie est classé **Engraissement** quel que soit son âge (décision humaine = comment on sait qu'un animal part à l'abattage). L'âge classe la maturité (adulte/jeune/cochette) ; le ratio reproducteur ne s'applique plus qu'aux **mâles adultes non marqués** (surplus estimé → engraissement). Corrige le cas où des jeunes marqués engraissement disparaissaient de la catégorie.
 

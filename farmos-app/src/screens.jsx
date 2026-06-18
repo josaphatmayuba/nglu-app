@@ -2765,7 +2765,51 @@ const RevExpChart = ({ lang, summary }) => {
 };
 
 // ─── REPORTS ─────────────────────────────────────────────────────────────
+// Imprime un rapport d'effectif GLOBAL : tous les bâtiments + total par catégorie.
+const printHeadcountReport = (buildings, animals, lang) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const grand = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
+  let grandTotal = 0;
+  const rows = (buildings || []).map((b) => {
+    const bAnimals = (animals || []).filter((a) => a.barn === b.name);
+    const cats = categoryBreakdownByGroup(bAnimals);
+    const total = bAnimals.reduce((s, a) => s + animalQty(a), 0);
+    CATEGORY_ORDER.forEach((c) => { grand[c] += cats[c]; });
+    grandTotal += total;
+    return `<tr><td>${esc(b.name)}</td><td class="num">${total}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${cats[c] || 0}</td>`).join("")}</tr>`;
+  }).join("");
+  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Total", "Total")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}`;
+  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${grandTotal}</td>${CATEGORY_ORDER.map((c) => `<td class="num">${grand[c]}</td>`).join("")}</tr>`;
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport d'effectif global", "Global headcount report")}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; } th { background: #f2f2f2; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.tot td { font-weight: 700; background: #eef5ef; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${L("Rapport d'effectif global", "Global headcount report")}</h1>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
+  <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
+  w.document.write(html); w.document.close();
+};
+
 const ReportsScreen = ({ lang }) => {
+  const [hcData, setHcData] = React.useState({ buildings: [], animals: [], loading: true });
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => [])])
+      .then(([b, a]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], loading: false }); });
+    return () => { cancel = true; };
+  }, []);
   const reports = [
     { fr: "Rapport sanitaire mensuel", en: "Monthly health report", icon: "pulse", color: "var(--health-500)", date: "26 mai 2026", size: "12 p." },
     { fr: "Production laitière · trimestre", en: "Milk production · quarter", icon: "droplet", color: "var(--pertinence-500)", date: "1ᵉʳ avril 2026", size: "18 p." },
@@ -2795,6 +2839,19 @@ const ReportsScreen = ({ lang }) => {
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => api.downloadFinancePdf().catch((e) => console.warn(e.message))}>
           <Icon name="download" size={12} color="#FBF8F2"/>PDF
+        </button>
+      </div>
+      {/* Rapport d'effectif global (généré en direct, impression navigateur) */}
+      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--forest-700) 12%, transparent)", color: "var(--forest-700)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="layers" size={18} color="currentColor"/>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Effectif par bâtiment (généré en direct)" : "Headcount by building (live generated)"}</div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment" : "Total and categories per building"}</div>
+        </div>
+        <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printHeadcountReport(hcData.buildings, hcData.animals, lang)}>
+          <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
         </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
@@ -4442,6 +4499,65 @@ const bldgAnimalStats = (building, animals) => {
   return { female, male, total, sick, femaleAdult, maleAdult, categories, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
 };
 
+// Génère et imprime un rapport d'effectif d'un bâtiment (impression navigateur, sans backend).
+const printBuildingReport = (building, stats, lang) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const catRows = CATEGORY_ORDER.filter((c) => (stats.categories[c] || 0) > 0).map((c) => {
+    const pct = stats.total > 0 ? Math.round((stats.categories[c] / stats.total) * 100) : 0;
+    return `<tr><td>${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</td><td class="num">${stats.categories[c]}</td><td class="num">${pct}%</td></tr>`;
+  }).join("");
+  const lotRows = stats.lots.map((l) => {
+    const cats = CATEGORY_ORDER.filter((c) => (l.categories[c] || 0) > 0).map((c) => `${lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en}: ${l.categories[c]}`).join(", ");
+    return `<tr><td>${esc(l.name)}</td><td class="num">${l.count}</td><td class="num">${l.female}</td><td class="num">${l.male}</td><td>${esc(cats)}</td></tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport", "Report")} — ${esc(building.name)}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 22px 0 8px; border-bottom: 2px solid #0E6438; padding-bottom: 4px; color: #0E6438; }
+  .meta { color: #666; font-size: 12px; margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; } th { background: #f2f2f2; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .kpis { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .kpi { border: 1px solid #ddd; border-radius: 6px; padding: 8px 14px; min-width: 110px; }
+  .kpi .lbl { font-size: 10px; text-transform: uppercase; color: #777; } .kpi .val { font-size: 20px; font-weight: 700; }
+  @media print { body { margin: 12mm; } button { display: none; } }
+</style></head><body>
+  <h1>${L("Rapport d'effectif", "Headcount report")} — ${esc(building.name)}</h1>
+  <div class="meta">${esc([building.type, building.species, building.manager].filter(Boolean).join(" · "))}</div>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)}</div>
+  <h2>${L("Synthèse", "Summary")}</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">${L("Total animaux", "Total")}</div><div class="val">${stats.total}</div></div>
+    ${building.capacity != null ? `<div class="kpi"><div class="lbl">${L("Capacité", "Capacity")}</div><div class="val">${building.capacity}</div></div><div class="kpi"><div class="lbl">${L("Places dispo.", "Available")}</div><div class="val">${Math.max(0, building.capacity - (building.occupancy ?? 0))}</div></div>` : ""}
+    <div class="kpi"><div class="lbl">${L("Femelles", "Females")}</div><div class="val">${stats.female}</div><div class="lbl">${L("dont", "incl.")} ${stats.femaleAdult} ${L("adultes", "adults")}</div></div>
+    <div class="kpi"><div class="lbl">${L("Mâles", "Males")}</div><div class="val">${stats.male}</div><div class="lbl">${L("dont", "incl.")} ${stats.maleAdult} ${L("adultes", "adults")}</div></div>
+    <div class="kpi"><div class="lbl">${L("Malades", "Sick")}</div><div class="val">${stats.sick}</div></div>
+  </div>
+  <h2>${L("Par catégorie", "By category")}</h2>
+  <table><thead><tr><th>${L("Catégorie", "Category")}</th><th class="num">${L("Têtes", "Head")}</th><th class="num">%</th></tr></thead><tbody>${catRows}</tbody></table>
+  ${stats.lots.length ? `<h2>${L("Lots", "Batches")}</h2>
+  <table><thead><tr><th>${L("Lot", "Batch")}</th><th class="num">${L("Total", "Total")}</th><th class="num">♀</th><th class="num">♂</th><th>${L("Catégories", "Categories")}</th></tr></thead><tbody>${lotRows}</tbody></table>` : ""}
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
+  w.document.write(html);
+  w.document.close();
+};
+
+// Ordre et couleurs d'affichage des catégories animales
+const CATEGORY_ORDER = ["adulte", "cochette", "engraissement", "jeune", "inconnu"];
+const CATEGORY_COLORS = {
+  adulte: "var(--forest-700)",
+  cochette: "var(--pertinence-700)",
+  engraissement: "var(--clay-700)",
+  jeune: "var(--autorite-700)",
+  inconnu: "var(--fg-3)",
+};
+
 // Modal "Visualiser le bâtiment" : KPIs en lecture seule + bouton Modifier
 const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior }) => {
   if (!building) return null;
@@ -4504,17 +4620,28 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
           <Kpi label={lang === "fr" ? "Malades" : "Sick"} value={stats.sick.toLocaleString("fr-CA")} color={stats.sick > 0 ? "var(--oxblood-700)" : "var(--ink-950)"}/>
         </div>
 
-        {/* Répartition par catégorie d'âge/destination */}
-        {["adulte", "cochette", "engraissement", "jeune", "inconnu"].some((c) => (stats.categories[c] || 0) > 0) && (
+        {/* Répartition par catégorie — cartes détaillées (valeur + % + pastille couleur) */}
+        {CATEGORY_ORDER.some((c) => (stats.categories[c] || 0) > 0) && (
           <div>
             <div className="overline" style={{ marginBottom: 6 }}>{lang === "fr" ? "Par catégorie" : "By category"}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {["adulte", "cochette", "engraissement", "jeune", "inconnu"].filter((c) => (stats.categories[c] || 0) > 0).map((c) => (
-                <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "var(--fg-2)", background: "var(--bg-sunken)", border: "1px solid var(--border-2)", borderRadius: 20, padding: "4px 11px" }}>
-                  {lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en}
-                  <strong className="mono" style={{ color: "var(--ink-900)" }}>{(stats.categories[c]).toLocaleString("fr-CA")}</strong>
-                </span>
-              ))}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+              {CATEGORY_ORDER.filter((c) => (stats.categories[c] || 0) > 0).map((c) => {
+                const val = stats.categories[c];
+                const pct = stats.total > 0 ? Math.round((val / stats.total) * 100) : 0;
+                const col = CATEGORY_COLORS[c];
+                return (
+                  <div key={c} className="card" style={{ padding: "10px 12px", background: "var(--bg-sunken)", borderLeft: `3px solid ${col}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: col, flexShrink: 0 }}/>
+                      <span style={{ fontSize: 9.5, color: "var(--fg-3)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600, lineHeight: 1.25 }}>{lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4 }}>
+                      <span style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: col }}>{val.toLocaleString("fr-CA")}</span>
+                      <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{pct}%</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -4576,8 +4703,12 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
         )}
 
         {/* Actions */}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button className="btn btn-sm btn-ghost" onClick={onClose}>{lang === "fr" ? "Fermer" : "Close"}</button>
+          <button className="btn btn-sm" onClick={() => printBuildingReport(building, stats, lang)} style={{ gap: 6 }}>
+            <Icon name="report" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Rapport" : "Report"}
+          </button>
           <button className="btn btn-sm btn-primary" onClick={onEdit} style={{ gap: 6 }}>
             <Icon name="edit" size={12} color="#ECF1EC"/>
             {lang === "fr" ? "Modifier" : "Edit"}
