@@ -9,7 +9,7 @@ import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
 import { DateRangeFilter, defaultDateRange, inDateRange } from "./date-range-filter.jsx";
-import { animalStatusColor, animalStatusLabel, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
+import { animalStatusColor, animalStatusLabel, isDeceasedStatus, isSaleLockedAnimal, lockedAnimalMessage, saleLockSubtitle, saleLockTitle } from "./animal-lock";
 import QRCode from "qrcode";
 
 const FIELD_DEFS = {
@@ -319,6 +319,83 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
 };
 
 // ─── Animal detail drawer (species-adaptive) ─────────────────────────────
+// Déclaration de décès depuis la fiche animal. Verrouille le dossier (le backend
+// passe l'animal en statut « deceased » sur createMortalityEvent). Le commentaire
+// saisi ici est stocké dans notes et réaffiché dans la fiche.
+const DeathDeclareModal = ({ lang, animal, onClose, onSaved }) => {
+  const fr = lang === "fr";
+  const [form, setForm] = React.useState({ date: new Date().toISOString().slice(0, 10), cause: "", notes: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const submit = async () => {
+    if (saving) return;
+    if (!form.date || !form.cause.trim()) {
+      setError(fr ? "Date et cause requises." : "Date and cause required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await api.createMortalityEvent({
+        species: animal.species || null,
+        event_date: form.date,
+        animal_id: animal._pk,
+        count: 1,
+        cause: form.cause.trim(),
+        notes: form.notes.trim() || null,
+      });
+      onSaved && onSaved();
+    } catch (e) {
+      setError((fr ? "Échec : " : "Failed: ") + (e.message || ""));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const lbl = { fontSize: 12, color: "var(--fg-2)", display: "block" };
+  const title = animal.name || animal.id || `#${animal._pk}`;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ width: 460, maxWidth: "100%", padding: 20 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 14 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: "var(--oxblood-50, #f6e7e2)", color: "var(--oxblood-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Icon name="skull" size={20} color="currentColor"/>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, margin: 0 }}>{fr ? "Déclarer le décès" : "Declare death"}</h3>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12.5, color: "var(--oxblood-700)", background: "var(--oxblood-50, #f6e7e2)", borderRadius: 8, padding: "8px 10px", marginBottom: 14 }}>
+          {fr ? "Le dossier sera verrouillé en lecture seule après la déclaration." : "The record will become read-only after declaration."}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <label style={lbl}>{fr ? "Date du décès" : "Date of death"}
+            <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Cause présumée" : "Suspected cause"}
+            <input className="input" type="text" value={form.cause} onChange={(e) => set("cause", e.target.value)} placeholder={fr ? "Maladie, accident…" : "Disease, accident…"} style={{ width: "100%", marginTop: 4 }}/>
+          </label>
+          <label style={lbl}>{fr ? "Commentaire" : "Comment"}
+            <textarea className="input" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={3} placeholder={fr ? "Note affichée dans la fiche…" : "Note shown on the record…"} style={{ width: "100%", marginTop: 4, resize: "vertical" }}/>
+          </label>
+        </div>
+
+        {error && <div style={{ color: "var(--oxblood-700)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose} disabled={saving}>{fr ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-sm" onClick={submit} disabled={saving} style={{ background: "var(--oxblood-700)", color: "#fff", borderColor: "var(--oxblood-700)" }}>
+            {saving ? (fr ? "Enregistrement…" : "Saving…") : (fr ? "Confirmer le décès" : "Confirm death")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const sp = speciesById(animal.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", frSing: animal.species, enSing: animal.species, fields: [] };
   const groups = groupFields(sp.fields);
@@ -326,6 +403,9 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
   const [tab, setTab] = React.useState("details");
   const [editing, setEditing] = React.useState(false);
   const [showQr, setShowQr] = React.useState(false);
+  const [declaringDeath, setDeclaringDeath] = React.useState(false);
+  const [deathEvent, setDeathEvent] = React.useState(null);
+  const deceased = isDeceasedStatus(animal.status);
   const [related, setRelated] = React.useState({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: true });
   const [photos, setPhotos] = React.useState([]);
   React.useEffect(() => {
@@ -341,6 +421,22 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
     window.addEventListener("farmos:photo-uploaded", h);
     return () => window.removeEventListener("farmos:photo-uploaded", h);
   }, [reloadPhotos, animal._pk]);
+  // Animal décédé : retrouver l'événement de mortalité lié pour afficher le
+  // commentaire saisi lors de la déclaration de décès.
+  React.useEffect(() => {
+    if (!deceased || !animal._pk) { setDeathEvent(null); return; }
+    let cancel = false;
+    api.listMortalityEvents()
+      .then((rows) => {
+        if (cancel || !Array.isArray(rows)) return;
+        const ev = rows
+          .filter((r) => Number(r.animalId ?? r.animal_id) === Number(animal._pk))
+          .sort((a, b) => String(b.eventDate || b.event_date || "").localeCompare(String(a.eventDate || a.event_date || "")))[0];
+        setDeathEvent(ev || null);
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [deceased, animal._pk]);
   React.useEffect(() => {
     if (!animal._pk) { setRelated({ treatments: [], repro: [], production: [], documents: [], alerts: [], weighings: [], finance: null, loading: false }); return; }
     let cancel = false;
@@ -418,6 +514,14 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
       flex: embedded ? "1 1 auto" : undefined,
     }}>
       {showQr && <QrPrintModal lang={lang} animal={animal} sp={sp} onClose={() => setShowQr(false)}/>}
+      {declaringDeath && (
+        <DeathDeclareModal
+          lang={lang}
+          animal={animal}
+          onClose={() => setDeclaringDeath(false)}
+          onSaved={() => { setDeclaringDeath(false); window.dispatchEvent(new CustomEvent("farmos:animal-created")); }}
+        />
+      )}
 
       {/* Hero */}
       <div style={{ background: "var(--paper)", borderBottom: "1px solid var(--border-1)", padding: "20px 22px" }}>
@@ -438,6 +542,11 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
             {animal._pk && (
               <button className="btn btn-sm btn-ghost" onClick={() => setEditing(true)} title={lang === "fr" ? "Modifier" : "Edit"}>
                 <Icon name="edit" size={13} color="var(--ink-700)"/>
+              </button>
+            )}
+            {animal._pk && (
+              <button className="btn btn-sm btn-ghost" onClick={() => setDeclaringDeath(true)} title={lang === "fr" ? "Déclarer le décès" : "Declare death"}>
+                <Icon name="skull" size={13} color="var(--oxblood-700)"/>
               </button>
             )}
             {animal._pk && (
@@ -478,6 +587,29 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
 
         {/* Withdrawal warning right at the top */}
         {readOnly ? <SaleLockChip lang={lang} status={animal.status}/> : animal.withdrawal && <WithdrawalChip lang={lang} w={animal.withdrawal}/>}
+
+        {/* Décès : commentaire saisi lors de la déclaration */}
+        {deceased && deathEvent && (deathEvent.cause || deathEvent.notes) && (
+          <div style={{ marginTop: 12, background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <Icon name="skull" size={13} color="var(--oxblood-700)"/>
+              <span style={{ fontSize: 10.5, color: "var(--oxblood-700)", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 700 }}>
+                {lang === "fr" ? "Décès déclaré" : "Death declared"}
+              </span>
+              {(deathEvent.eventDate || deathEvent.event_date) && (
+                <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginLeft: "auto" }}>{deathEvent.eventDate || deathEvent.event_date}</span>
+              )}
+            </div>
+            {deathEvent.cause && (
+              <div style={{ fontSize: 13, color: "var(--ink-900)", marginBottom: deathEvent.notes ? 4 : 0 }}>
+                <span style={{ color: "var(--fg-3)" }}>{lang === "fr" ? "Cause : " : "Cause: "}</span>{deathEvent.cause}
+              </div>
+            )}
+            {deathEvent.notes && (
+              <div style={{ fontSize: 13, color: "var(--ink-900)", whiteSpace: "pre-wrap" }}>{deathEvent.notes}</div>
+            )}
+          </div>
+        )}
 
         {/* Tabs — wrap sur plusieurs lignes : tous les onglets restent visibles
             sans scroll horizontal caché (peu découvrable sur panneau étroit). */}

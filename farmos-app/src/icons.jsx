@@ -87,6 +87,7 @@ const Icon = ({ name, size = 18, strokeWidth = 1.75, color = "currentColor" }) =
     pause:     <><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>,
     fingerprint: <><path d="M12 3a9 9 0 0 0-9 9c0 4 1 6 2 8M21 12a9 9 0 0 0-15-7M8 21c-1-3-1-6-1-9a5 5 0 0 1 10 0c0 4 1 7 2 9M12 12c0 5 1 8 2 10M16 18c-1-2-1-4-1-6"/></>,
     wallet:    <><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></>,
+    skull:     <><path d="M12 2a8 8 0 0 0-8 8c0 2.5 1.2 4.2 2.5 5.2.5.4.5 1 .5 1.6V19a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2.2c0-.6 0-1.2.5-1.6C18.8 14.2 20 12.5 20 10a8 8 0 0 0-8-8z"/><circle cx="9" cy="11" r="1.4"/><circle cx="15" cy="11" r="1.4"/><path d="M10 20v2M14 20v2"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
