@@ -4477,9 +4477,14 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const meta = bldgMeta(building.type);
 
   // Animaux de ce bâtiment (par building_id, fallback barn == nom) — base de l'affectation.
-  const bldgAnimals = animals.filter((a) =>
+  // On exclut les animaux décédés / vendus : ils ne s'affectent pas à un box.
+  const PLACEABLE = (a) => {
+    const s = String(a.status || "").toLowerCase();
+    return s !== "deceased" && s !== "dead" && s !== "sold";
+  };
+  const bldgAnimals = animals.filter((a) => PLACEABLE(a) && (
     (a.buildingId != null && a.buildingId === building.id) ||
-    (a.buildingId == null && a.barn && a.barn === building.name));
+    (a.buildingId == null && a.barn && a.barn === building.name)));
   const animalsByBox = new Map();
   for (const a of bldgAnimals) {
     if (a.boxId == null) continue;
@@ -4680,9 +4685,9 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                     ? <div style={{ fontSize: 12, color: "var(--fg-3)", marginBottom: 10 }}>{L("Box vide.", "Empty box.")}</div>
                     : <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
                         {inBox.map((a) => (
-                          <div key={a._pk} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                             <span style={{ flex: 1 }}>{a.name || a.id}{a.lot ? ` · ${L("lot", "lot")} ${a.lot}` : ""}{a.count > 1 ? ` ×${a.count}` : ""}</span>
-                            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => unassign(a._pk)}>{L("Retirer", "Remove")}</button>
+                            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => unassign(a.id)}>{L("Retirer", "Remove")}</button>
                           </div>
                         ))}
                       </div>}
@@ -4697,7 +4702,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                               {lotsAvailable.map((lot) => (
                                 <button key={lot} className="btn btn-sm" disabled={busy}
-                                  onClick={() => assign(candidates.filter((a) => a.lot === lot).map((a) => a._pk))}>
+                                  onClick={() => assign(candidates.filter((a) => a.lot === lot).map((a) => a.id))}>
                                   {L("Lot", "Lot")} {lot}
                                 </button>
                               ))}
@@ -4709,7 +4714,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                           onChange={(e) => { if (e.target.value) { assign([Number(e.target.value)]); e.target.value = ""; } }}>
                           <option value="">{L("— choisir —", "— choose —")}</option>
                           {candidates.map((a) => (
-                            <option key={a._pk} value={a._pk}>
+                            <option key={a.id} value={a.id}>
                               {(a.name || a.id)}{a.lot ? ` (lot ${a.lot})` : ""}{a.count > 1 ? ` ×${a.count}` : ""}
                             </option>
                           ))}

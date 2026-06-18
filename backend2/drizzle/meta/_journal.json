@@ -1044,6 +1044,13 @@
                         "when":  1780549200000,
                         "tag":  "0172_farmos_mortality_zb_repair",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  149,
+                        "version":  "5",
+                        "when":  1780552800000,
+                        "tag":  "0173_farmos_boxes_dedupe",
+                        "breakpoints":  true
                     }
                 ]
 }

@@ -2002,7 +2002,21 @@ export class FarmosService {
     const count = Math.max(1, Math.min(500, Math.floor(countRaw)));
     const capacity = input.capacity != null ? Number(input.capacity) : null;
     const prefix = input.prefix != null ? String(input.prefix) : "";
-    const start = Number(input.start ?? 1) || 1;
+    // Numérotation : reprend après le plus grand numéro de box existant du bâtiment
+    // (évite de recréer 1..N en double à chaque clic "+ Box"). Le start explicite l'emporte.
+    let start = input.start != null ? Number(input.start) || 1 : 1;
+    if (input.start == null) {
+      const existing = await this.db
+        .select({ name: farmosBoxes.name })
+        .from(farmosBoxes)
+        .where(and(eq(farmosBoxes.buildingId, buildingId), eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)));
+      let maxNum = 0;
+      for (const b of existing) {
+        const m = String(b.name ?? "").match(/(\d+)\s*$/);
+        if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+      }
+      start = maxNum + 1;
+    }
     const values = Array.from({ length: count }, (_, i) => ({
       organizationId: orgId,
       buildingId,

@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.92.3)
+- FarmOS — **Plan intérieur / Affectation des box** : 3 corrections.
+  1. Le bouton **« + Box »** relançait la numérotation à `1` à chaque clic → doublons (1..N recréés en double). `generateBoxes` reprend désormais après le plus grand numéro de box existant du bâtiment (`start` explicite toujours respecté).
+  2. **Impossible d'affecter un animal** à un box : la liste reçoit les lignes brutes de `listAnimals` (champ `id`) mais l'UI envoyait `a._pk` (inexistant → `NaN`). Corrigé en utilisant `a.id` (sélection, lot entier, retrait).
+  3. Les animaux **décédés/vendus** apparaissaient dans la liste d'affectation. Exclusion de `status` `deceased`/`dead`/`sold`.
+- Migration **0173** (`0173_farmos_boxes_dedupe.sql`, idempotente, au journal Drizzle → auto au boot dev) : réaffecte les animaux des box doublons vers le box gardé, puis **soft-delete** les box en double (garde le plus petit `id` par `building_id`+`name`).
+
 ### Fixed (3.92.2)
 - Comptabilité — force le redéploiement dev du bundle compta pour exposer l'onglet **Prévisionnel** (le pipeline ne rebuild compta que si `comptabilite-app/**` change ; cache-bust). Aucun changement fonctionnel. Penser au hard reload / désinscription du Service Worker côté client (PWA) si l'ancien bundle persiste.
 
