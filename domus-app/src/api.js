@@ -91,6 +91,16 @@ export const api = {
   setCurrencyStatus: (id, status) => jsonFetch(`/currency/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status }) }),
   bulkCurrencyStatus: (ids, status) => jsonFetch("/currency/bulk-status", { method: "PATCH", base: API_ROOT, body: JSON.stringify({ ids, status }) }),
 
+  // Prévisionnel (module forecast backend2) — scope figé "domus" pour cette app.
+  forecastCashFlow: ({ horizon, mode, scope = "domus", adjust } = {}) =>
+    jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { method: "GET", base: API_ROOT }),
+  forecastProduction: ({ horizon } = {}) =>
+    jsonFetch(`/forecast/production?horizon=${horizon}`, { method: "GET", base: API_ROOT }),
+  forecastVariance: ({ scope = "domus" } = {}) =>
+    jsonFetch(`/forecast/variance?scope=${scope}`, { method: "GET", base: API_ROOT }),
+  forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "domus" } = {}) =>
+    jsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST", base: API_ROOT }),
+
   // Moyens de paiement configurables (table paymentMethod partagée avec le CRM).
   paymentMethods: () => jsonFetch("/payment-method?query=all", { method: "GET", base: API_ROOT }),
   createPaymentMethod: (b) => jsonFetch("/payment-method", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),

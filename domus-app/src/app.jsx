@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -17,6 +17,7 @@ import { Baux } from "./screens/baux.jsx";
 import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
+import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
 import { useDeviceMode } from "./data.js";
@@ -24,7 +25,10 @@ import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 
 const NAV = [
-  { sec: "Pilotage", items: [{ key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard }] },
+  { sec: "Pilotage", items: [
+    { key: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+    { key: "previsionnel", label: "Prévisionnel", icon: TrendingUp },
+  ] },
   { sec: "Patrimoine", items: [
     { key: "biens", label: "Propriétés", icon: Building },
     { key: "carte", label: "Carte des propriétés", icon: MapPin },
@@ -46,10 +50,11 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["baux", "contrats", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "baux", "contrats", "onboarding", "carte", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
+  previsionnel: () => <Forecast />,
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (_nav, device) => <Locataires device={device} />,
