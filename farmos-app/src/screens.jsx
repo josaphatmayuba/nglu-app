@@ -4544,8 +4544,8 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
     setBusy(false);
   };
 
-  // Animaux du bâtiment non encore placés dans CE box (candidats à l'ajout)
-  const candidates = bldgAnimals.filter((a) => a.boxId !== (selBox ? selBox.id : -1));
+  // Animaux du bâtiment non encore placés dans un box (candidats à l'ajout).
+  const candidates = bldgAnimals.filter((a) => a.boxId == null);
   const lotsAvailable = [...new Set(candidates.map((a) => a.lot).filter(Boolean))];
 
   const statusLabels = {
