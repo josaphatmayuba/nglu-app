@@ -40,7 +40,10 @@ function buildSeries(months) {
       const code = cleanCurrencySymbol({ currencyCode: c.currencyCode, currencySymbol: c.currencySymbol }) || "?";
       const entry = byCur.get(key) || { currencyId: c.currencyId ?? null, code, points: [] };
       const prev = entry.points.length ? entry.points[entry.points.length - 1].cumul : 0;
-      entry.points.push({ month: m.month, net: c.net, cumul: prev + c.net });
+      // Le solde d'ouverture (opening) pose le point de départ ; net = flux du mois.
+      const opening = Number(c.opening || 0);
+      const cumul = prev + opening + Number(c.net || 0);
+      entry.points.push({ month: m.month, net: c.net, opening, cumul });
       byCur.set(key, entry);
     }
   }
@@ -143,7 +146,7 @@ export function Forecast() {
               <span className="muted">Aucune donnée engagée à projeter sur cet horizon. Ajoutez des baux actifs (Domus) pour voir une projection.</span>
             ) : (
               <span>
-                À ce rythme, votre variation de trésorerie sur {HORIZONS.find((h) => h.v === horizon)?.label} serait de{" "}
+                À ce rythme, votre trésorerie projetée à {HORIZONS.find((h) => h.v === horizon)?.label} serait de{" "}
                 {summary.map((s, i) => (
                   <strong key={s.code} style={{ color: s.cumul >= 0 ? "#16a34a" : "#dc2626" }}>
                     {i > 0 ? " et " : ""}{fmtSigned(s.cumul)} {s.code}
@@ -175,6 +178,12 @@ export function Forecast() {
                     const code = cleanCurrencySymbol({ currencyCode: c.currencyCode, currencySymbol: c.currencySymbol }) || "?";
                     return (
                       <div key={code} style={{ marginLeft: 8 }}>
+                        {Number(c.opening || 0) !== 0 && (
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                            <span className="muted">Solde de départ {code}</span>
+                            <strong>{fmtSigned(c.opening)} {code}</strong>
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                           <span className="muted">Variation nette {code}</span>
                           <strong style={{ color: c.net >= 0 ? "#16a34a" : "#dc2626" }}>{fmtSigned(c.net)} {code}</strong>

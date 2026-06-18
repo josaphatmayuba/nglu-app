@@ -27,8 +27,10 @@ interface CurrencyBucket {
   currencyId: number | null;
   currencyCode: string | null;
   currencySymbol: string | null;
-  /** Variation nette du mois (entrees - sorties). */
+  /** Variation nette du mois (entrees - sorties), HORS solde de depart. */
   net: number;
+  /** Solde de depart (lignes opening) — point de depart de la courbe, pas un flux. */
+  opening: number;
   lines: ForecastLine[];
 }
 
@@ -68,9 +70,11 @@ export class ForecastService {
           currencyCode: line.currencyCode,
           currencySymbol: line.currencySymbol,
           net: 0,
+          opening: 0,
           lines: [],
         } satisfies CurrencyBucket);
-      bucket.net = round2(bucket.net + line.amount);
+      if (line.opening) bucket.opening = round2(bucket.opening + line.amount);
+      else bucket.net = round2(bucket.net + line.amount);
       bucket.lines.push(line);
       monthMap.set(key, bucket);
       byMonth.set(line.month, monthMap);
@@ -84,6 +88,7 @@ export class ForecastService {
         currencyCode: b.currencyCode,
         currencySymbol: b.currencySymbol,
         net: b.net,
+        opening: b.opening,
         lines: b.lines,
       })),
     }));

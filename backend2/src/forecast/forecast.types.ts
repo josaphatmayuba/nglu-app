@@ -48,6 +48,8 @@ export interface ForecastLine {
   source: string;
   /** Base de calcul affichable ("5 baux actifs") — transparence obligatoire. */
   basis: string;
+  /** true = solde de DEPART (point de depart de la courbe), pas un flux du mois. */
+  opening?: boolean;
 }
 
 /** Un producteur de lignes. Chaque module en implemente un. */
