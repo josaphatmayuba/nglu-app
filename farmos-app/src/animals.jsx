@@ -175,7 +175,7 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
         </div>
 
         {/* Table */}
-        <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => setSelectedId(id)} density={density}/>
+        <AnimalTable lang={lang} animals={filtered} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setLayout("split"); }} density={density}/>
 
         {/* Note about adaptation */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--fg-3)", }}>

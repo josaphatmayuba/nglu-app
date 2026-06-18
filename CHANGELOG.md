@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.95.1)
+- FarmOS — fiche animal: après fermeture du panneau de détail (bouton X), recliquer sur un animal ne le rouvrait plus. Le bouton X passait le layout en « full » de façon permanente; le clic sur une ligne remet désormais le layout en « split » et réaffiche le panneau. [SCRUM]
+
 ### Added (3.95.0)
 - FarmOS & HR — **page Prévisionnel** branchée (suite de Compta/Domus). FarmOS : menu FarmOS « Prévisionnel » (`scope=farmos`) = ventes élevage projetées (tendance) + **projection de production** œufs/naissances, thème vert (tokens `--forest`/`--fg`). HR : menu Paie « Prévisionnel » (`scope=hr`) = **masse salariale projetée** par devise (cartes KPI + courbe), levier simulation salaires. Composants copiés/adaptés par app (pas de code partagé — builds Vite isolés), avec le `cleanCurrencySymbol`/classes de chaque app. Icône `activity` ajoutée au jeu d'icônes HR. Aucun changement backend (endpoints `/forecast/*` déjà déployés). Builds FarmOS + HR OK. Reste BatiPro (échéancier backend à créer d'abord).
 
