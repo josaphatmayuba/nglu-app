@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.82.19)
+- FarmOS catégories 100% automatiques (plus basées sur le type saisi) : dérivées de l'**âge** (date de naissance + seuil espèce) et du **sexe**. Jeune femelle de porc → Cochette ; femelle adulte → Adulte ; mâles adultes départagés par un **ratio reproducteur par bâtiment** (1 mâle pour N femelles : porc 1/20, bovin 1/25, caprin/ovin 1/25, volaille/lapin 1/10) — les reproducteurs conservés comptent en Adultes, le surplus en Engraissement (abattage). Calcul par groupe (bâtiment, puis chaque lot). Affichage seulement, rien écrit en base, se met à jour avec l'âge.
+
 ### Changed (3.82.18)
 - FarmOS : le sous-comptage « dont X adultes » (Mâles/Femelles, modal + dashboard) est désormais calculé **uniquement par l'âge** (date de naissance + seuil par espèce), plus par le `type`. Les puces « Par catégorie » (cochettes/engraissement…) restent basées sur le type métier.
 - **Date de naissance obligatoire** à la saisie d'un animal (création + édition de fiche) : marqueur `*`, `required`, et blocage à l'enregistrement si absente — nécessaire pour fiabiliser le classement adulte/jeune.

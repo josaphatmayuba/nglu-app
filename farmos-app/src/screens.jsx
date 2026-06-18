@@ -10,7 +10,7 @@ import { VetDossierSection, FarmosDocumentsSection } from "./vetdossier.jsx";
 import { Autocomplete } from "./quickentry";
 import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurrencyId, symbolFor } from "./currency";
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
-import { animalCategory, animalQty, isAdultAnimal, categoryBreakdown, CATEGORY_LABELS } from "./animal-category";
+import { animalQty, isAdultAnimal, categoryBreakdownByGroup, CATEGORY_LABELS } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
@@ -4419,28 +4419,26 @@ const BldgInteriorPlan = ({ building, lang, onClose }) => {
 const bldgAnimalStats = (building, animals) => {
   if (!building) return { female: 0, male: 0, total: 0, sick: 0, lots: [], lotTotal: 0, femaleAdult: 0, maleAdult: 0, categories: {} };
   const bldgAnimals = animals.filter((a) => a.barn === building.name);
-  const newCat = () => ({ adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 });
-  const lotMap = new Map(); // nom -> { count, male, female, categories }
-  const categories = newCat();
+  const lotGroups = new Map(); // nom -> [animaux]
   let female = 0, male = 0, total = 0, sick = 0, femaleAdult = 0, maleAdult = 0;
   bldgAnimals.forEach((a) => {
     const n = animalQty(a);
-    const cat = animalCategory(a);
     total += n;
-    categories[cat] += n;
     const adult = isAdultAnimal(a);
     if (a.sex === "F") { female += n; if (adult) femaleAdult += n; }
     else if (a.sex === "M") { male += n; if (adult) maleAdult += n; }
     if (a.status && a.status !== "healthy") sick += n;
-    if (a.lot) { // composition du lot (têtes déjà incluses dans le total bâtiment)
-      if (!lotMap.has(a.lot)) lotMap.set(a.lot, { count: 0, male: 0, female: 0, categories: newCat() });
-      const L = lotMap.get(a.lot);
-      L.count += n;
-      if (a.sex === "F") L.female += n; else if (a.sex === "M") L.male += n;
-      L.categories[cat] += n;
-    }
+    if (a.lot) { if (!lotGroups.has(a.lot)) lotGroups.set(a.lot, []); lotGroups.get(a.lot).push(a); }
   });
-  const lots = [...lotMap.entries()].map(([name, v]) => ({ name, ...v })).sort((x, y) => y.count - x.count);
+  // Catégories (avec ratio reproducteur) calculées par groupe : le bâtiment entier,
+  // puis chaque lot indépendamment (le ratio mâle/femelle s'applique au sein du groupe).
+  const categories = categoryBreakdownByGroup(bldgAnimals);
+  const lots = [...lotGroups.entries()].map(([name, rows]) => {
+    const count = rows.reduce((s, a) => s + animalQty(a), 0);
+    const f = rows.filter((a) => a.sex === "F").reduce((s, a) => s + animalQty(a), 0);
+    const m = rows.filter((a) => a.sex === "M").reduce((s, a) => s + animalQty(a), 0);
+    return { name, count, female: f, male: m, categories: categoryBreakdownByGroup(rows) };
+  }).sort((x, y) => y.count - x.count);
   return { female, male, total, sick, femaleAdult, maleAdult, categories, lots, lotTotal: lots.reduce((s, l) => s + l.count, 0) };
 };
 

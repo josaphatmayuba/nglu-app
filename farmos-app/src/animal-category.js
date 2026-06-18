@@ -1,55 +1,56 @@
 // Classification d'âge/catégorie d'un animal d'élevage, partagée entre le dashboard
-// et l'écran Bâtiments. Logique : le `type` (Truie, Verrat, Porcelet, Cochette…)
-// prime ; à défaut, on déduit de la date de naissance + seuils par espèce.
+// et l'écran Bâtiments.
 //
-// Catégories retournées par animalCategory() :
-//   "adulte"        — reproducteur / animal mature
-//   "cochette"      — jeune femelle pas encore mise bas (future reproductrice)
-//   "engraissement" — animal en croissance destiné à l'abattage
-//   "jeune"         — jeune (porcelet, veau, poussin…) sans destination précisée
-//   "inconnu"       — ni type ni date exploitables
+// Logique (100% dérivée de l'ÂGE + SEXE, le type saisi n'est plus utilisé) :
+//   - Âge < seuil espèce      → "jeune"  (sauf jeune femelle de porc → "cochette")
+//   - Âge ≥ seuil, femelle    → "adulte" (reproductrice : truie, vache…)
+//   - Âge ≥ seuil, mâle       → en partie reproducteur ("adulte"), le surplus
+//                               "engraissement" selon le ratio reproducteur du
+//                               groupe (1 mâle pour N femelles adultes).
+//
+// Le ratio se calcule par GROUPE (= par bâtiment) : il faut donc connaître le
+// nombre de femelles adultes du groupe pour départager les mâles adultes. Utiliser
+// categoryBreakdownByGroup() pour un comptage correct ; animalCategory() seul ne
+// peut pas trancher mâle reproducteur vs engraissement (renvoie alors "adulte").
 
 // Âge (jours) à partir duquel un animal est adulte, par espèce
 // (porc ~6 mois, bovin ~24 mois, caprin/ovin ~12 mois, volailles ~5 mois, lapin ~6 mois).
 export const ADULT_AGE_DAYS = { pig: 180, cow: 730, goat: 365, sheep: 365, chicken: 150, duck: 150, turkey: 150, rabbit: 180 };
 
-const ADULT_TYPE_KW = ["adulte", "truie", "verrat", "vache", "taureau", "boeuf", "bouc", "brebis", "belier", "bélier", "chevre", "chèvre", "pondeuse", "poule", "coq", "dinde"];
-const COCHETTE_TYPE_KW = ["cochette"];
-const FATTEN_TYPE_KW = ["engraissement", "abattage", "embouche"];
-const YOUNG_TYPE_KW = ["jeune", "porcelet", "veau", "genisse", "génisse", "chevreau", "agneau", "poussin", "poulet", "lapereau", "cabri"];
+// Ratio reproducteur : 1 mâle adulte conservé pour N femelles adultes ; le surplus
+// de mâles adultes est destiné à l'engraissement / abattage.
+export const BREEDING_RATIO = { pig: 20, cow: 25, goat: 25, sheep: 25, chicken: 10, duck: 10, turkey: 10, rabbit: 10 };
+
+// Espèces où une jeune femelle proche maturité est une "cochette" (future reproductrice).
+const GILT_SPECIES = new Set(["pig"]);
 
 // Quantité représentée par une ligne (1 ligne peut valoir plusieurs têtes via `count`).
 // Aligné sur le calcul d'occupation backend (somme des count, défaut 1).
 export const animalQty = (a) => (Number(a?.count ?? 0) > 0 ? Number(a.count) : 1);
 
-export const animalCategory = (a) => {
-  const t = (a?.type || "").toLowerCase();
-  if (t) {
-    if (COCHETTE_TYPE_KW.some((k) => t.includes(k))) return "cochette";
-    if (FATTEN_TYPE_KW.some((k) => t.includes(k))) return "engraissement";
-    if (ADULT_TYPE_KW.some((k) => t.includes(k))) return "adulte";
-    if (YOUNG_TYPE_KW.some((k) => t.includes(k))) return "jeune";
-  }
+const ageDays = (a) => {
   const dobStr = a?.dateOfBirth || a?.date_of_birth;
-  if (dobStr) {
-    const dob = new Date(dobStr);
-    if (!isNaN(dob)) {
-      const days = (Date.now() - dob.getTime()) / 86400000;
-      return days >= (ADULT_AGE_DAYS[a.species] ?? 365) ? "adulte" : "jeune";
-    }
-  }
-  return "inconnu";
+  if (!dobStr) return null;
+  const dob = new Date(dobStr);
+  if (isNaN(dob)) return null;
+  return (Date.now() - dob.getTime()) / 86400000;
 };
 
 // Un animal est-il adulte ? Basé UNIQUEMENT sur l'âge (date de naissance + seuil espèce).
-// La date de naissance est obligatoire à la saisie ; sans date exploitable → non adulte.
 export const isAdultAnimal = (a) => {
-  const dobStr = a?.dateOfBirth || a?.date_of_birth;
-  if (!dobStr) return false;
-  const dob = new Date(dobStr);
-  if (isNaN(dob)) return false;
-  const days = (Date.now() - dob.getTime()) / 86400000;
-  return days >= (ADULT_AGE_DAYS[a.species] ?? 365);
+  const d = ageDays(a);
+  return d != null && d >= (ADULT_AGE_DAYS[a.species] ?? 365);
+};
+
+// Catégorie d'un animal isolé (sans contexte de groupe). Les mâles adultes sont
+// renvoyés "adulte" car le départage reproducteur/engraissement exige le groupe.
+export const animalCategory = (a) => {
+  const d = ageDays(a);
+  if (d == null) return "inconnu";
+  const adult = d >= (ADULT_AGE_DAYS[a?.species] ?? 365);
+  if (adult) return "adulte";
+  if (a?.sex === "F" && GILT_SPECIES.has(a?.species)) return "cochette";
+  return "jeune";
 };
 
 // Libellés affichables des catégories
@@ -61,9 +62,44 @@ export const CATEGORY_LABELS = {
   inconnu:       { fr: "Non classés",   en: "Unclassified" },
 };
 
-// Agrège un ensemble d'animaux en têtes par catégorie (utilise count).
-export const categoryBreakdown = (animals) => {
+// Agrège un GROUPE d'animaux (= un bâtiment) en têtes par catégorie, en appliquant
+// le ratio reproducteur sur les mâles adultes. Le ratio est calculé par espèce
+// présente dans le groupe.
+export const categoryBreakdownByGroup = (animals) => {
   const out = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
-  (animals || []).forEach((a) => { out[animalCategory(a)] += animalQty(a); });
+  // Compter d'abord les femelles adultes par espèce (base du ratio).
+  const adultFemalesBySpecies = {};
+  (animals || []).forEach((a) => {
+    if (a?.sex === "F" && isAdultAnimal(a)) {
+      adultFemalesBySpecies[a.species] = (adultFemalesBySpecies[a.species] || 0) + animalQty(a);
+    }
+  });
+  // Nombre de mâles reproducteurs à conserver par espèce = ceil(femelles / ratio), min 1.
+  const breedersBudget = {};
+  Object.keys(adultFemalesBySpecies).forEach((sp) => {
+    const ratio = BREEDING_RATIO[sp] ?? 20;
+    breedersBudget[sp] = Math.max(1, Math.ceil(adultFemalesBySpecies[sp] / ratio));
+  });
+  (animals || []).forEach((a) => {
+    const n = animalQty(a);
+    const d = ageDays(a);
+    if (d == null) { out.inconnu += n; return; }
+    const adult = d >= (ADULT_AGE_DAYS[a?.species] ?? 365);
+    if (!adult) {
+      out[a?.sex === "F" && GILT_SPECIES.has(a?.species) ? "cochette" : "jeune"] += n;
+      return;
+    }
+    if (a?.sex === "F") { out.adulte += n; return; }
+    if (a?.sex === "M") {
+      // Conserver d'abord le budget de reproducteurs, le reste → engraissement.
+      const budget = breedersBudget[a.species] ?? 0;
+      const asBreeder = Math.min(n, budget);
+      breedersBudget[a.species] = budget - asBreeder;
+      out.adulte += asBreeder;
+      out.engraissement += n - asBreeder;
+      return;
+    }
+    out.adulte += n; // sexe inconnu mais adulte
+  });
   return out;
 };
