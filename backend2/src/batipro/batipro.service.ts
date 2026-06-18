@@ -78,6 +78,9 @@ export class BatiproService {
       progress: input.progress ?? 0,
       budget: String(input.budget ?? 0),
       spent: String(input.spent ?? 0),
+      currencyId: input.currency_id ?? null,
+      contractAmount: String(input.contract_amount ?? 0),
+      billedAmount: String(input.billed_amount ?? 0),
       startDate: input.start_date ?? null,
       dueDate: input.due_date ?? null,
       location: input.location ?? null,
@@ -100,6 +103,9 @@ export class BatiproService {
     if (input.progress !== undefined) patch.progress = input.progress;
     if (input.budget !== undefined) patch.budget = String(input.budget);
     if (input.spent !== undefined) patch.spent = String(input.spent);
+    if (input.currency_id !== undefined) patch.currencyId = input.currency_id ?? null;
+    if (input.contract_amount !== undefined) patch.contractAmount = String(input.contract_amount);
+    if (input.billed_amount !== undefined) patch.billedAmount = String(input.billed_amount);
     if (input.start_date !== undefined) patch.startDate = input.start_date || null;
     if (input.due_date !== undefined) patch.dueDate = input.due_date || null;
     if (input.location !== undefined) patch.location = input.location || null;

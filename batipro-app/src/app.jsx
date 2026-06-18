@@ -64,6 +64,7 @@ const NAV = [
   { id: "planning", label: "Planning (Gantt)", icon: "gantt" },
   { id: "plan3d", label: "Plan 3D & matériaux", icon: "rotate3d", ia: true },
   { id: "situations", label: "Situations & avenants", icon: "receipt" },
+  { id: "previsionnel", label: "Prévisionnel", icon: "gantt" },
   { id: "materiaux", label: "Matériaux & achats", icon: "package" },
   { id: "soustraitants", label: "Sous-traitants", icon: "users" },
   { id: "parametres", label: "Paramètres", icon: "clipboard" },
@@ -137,6 +138,7 @@ function App() {
     planning: <Planning />,
     plan3d: <Plan3D />,
     situations: <Situations />,
+    previsionnel: <Forecast />,
     materiaux: <Materiaux materials={materialRows} onNew={() => setModal({ kind: "material" })} canMutate={canMutate} />,
     soustraitants: <SousTraitants />,
     parametres: <Parametres />,
@@ -409,7 +411,206 @@ function Journal({ accent, label, sub }) {
   );
 }
 
-/* ── Planning (Gantt) ──────────────────────────────────────────────────── */
+/* ── Prévisionnel (échéancier chantiers : à facturer − coût restant) ────── */
+const BPF_HORIZONS = [
+  { v: 1, label: "1 mois" }, { v: 3, label: "3 mois" }, { v: 6, label: "6 mois" },
+  { v: 12, label: "1 an" }, { v: 24, label: "2 ans" }, { v: 36, label: "3 ans" },
+];
+const BPF_MODES = [
+  { v: "prudent", label: "Prudent", hint: "engagé seul", enabled: true },
+  { v: "realiste", label: "Réaliste", hint: "+ tendance", enabled: true },
+  { v: "optimiste", label: "Optimiste", hint: "+ IA (à venir)", enabled: false },
+];
+const bpfNf = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const bpfSigned = (v) => (v > 0 ? "+" : "") + bpfNf.format(Math.round(Number(v || 0)));
+function bpfMonth(key) {
+  const [y, m] = key.split("-");
+  const names = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc"];
+  return `${names[Number(m) - 1]} ${y}`;
+}
+function bpfSeries(months) {
+  const byCur = new Map();
+  for (const m of months) {
+    for (const c of m.currencies) {
+      const key = String(c.currencyId ?? "null");
+      const code = c.currencyCode || c.currencySymbol || "—";
+      const entry = byCur.get(key) || { code, points: [] };
+      const last = entry.points.length ? entry.points[entry.points.length - 1] : null;
+      const prev = last ? last.cumul : 0, prevLow = last ? last.low : 0, prevHigh = last ? last.high : 0;
+      const opening = Number(c.opening || 0), net = Number(c.net || 0);
+      const cumul = prev + opening + net;
+      const low = prevLow + opening + Number(c.netLow ?? net);
+      const high = prevHigh + opening + Number(c.netHigh ?? net);
+      entry.points.push({ month: m.month, net, opening, cumul, low, high });
+      byCur.set(key, entry);
+    }
+  }
+  return [...byCur.values()];
+}
+function BpfChart({ serie }) {
+  const W = 560, H = 170, pad = 30, color = "#d97706";
+  const pts = serie.points;
+  if (pts.length < 2) return <p className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</p>;
+  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
+  const min = Math.min(0, ...ys), max = Math.max(0, ...ys), span = max - min || 1;
+  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
+  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
+  const zeroY = y(0), gid = `bpf-${serie.code}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="var(--ink-200)" strokeDasharray="3 3" />
+      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
+      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="#fff" stroke={color} strokeWidth="2">
+          <title>{`${bpfMonth(p.month)} : ${bpfSigned(p.cumul)} ${serie.code}`}</title>
+        </circle>
+      ))}
+      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
+        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="var(--ink-400)">{bpfMonth(p.month)}</text>
+      ))}
+    </svg>
+  );
+}
+function BpfSeg({ active, disabled, onClick, title, children }) {
+  return (
+    <button onClick={onClick} disabled={disabled} title={title}
+      style={{
+        height: 32, padding: "0 14px", borderRadius: 999, fontSize: 13, fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.45 : 1,
+        border: active ? 0 : "1px solid var(--ink-200)",
+        background: active ? "var(--amber-500)" : "#fff",
+        color: active ? "#fff" : "var(--ink-500)",
+      }}>{children}</button>
+  );
+}
+function Forecast() {
+  const [horizon, setHorizon] = React.useState(3);
+  const [mode, setMode] = React.useState("prudent");
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    let alive = true;
+    setLoading(true); setError("");
+    api.forecastCashFlow({ horizon, mode, scope: "batipro" })
+      .then((res) => { if (alive) setData(res); })
+      .catch((e) => { if (alive) setError(String(e.message || e)); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [horizon, mode]);
+
+  const series = React.useMemo(() => (data ? bpfSeries(data.months) : []), [data]);
+  const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, cumul: last ? last.cumul : 0 }; });
+  const horizonLabel = BPF_HORIZONS.find((h) => h.v === horizon)?.label;
+  const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "var(--ink-400)" };
+
+  return (
+    <div style={{ maxWidth: 880 }}>
+      <div style={{ marginBottom: 14 }}>
+        <p className="eyebrow">Pilotage</p>
+        <h2 className="title font-display">Prévisionnel — Chantiers</h2>
+        <p className="muted" style={{ fontSize: 13, margin: "2px 0 0" }}>Échéancier de trésorerie des chantiers (à facturer − coût restant), étalé jusqu'à l'échéance, par devise.</p>
+      </div>
+
+      <div className="card" style={{ padding: 18, marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start" }}>
+        <div>
+          <div style={upper}>Horizon</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {BPF_HORIZONS.map((h) => <BpfSeg key={h.v} active={horizon === h.v} onClick={() => setHorizon(h.v)}>{h.label}</BpfSeg>)}
+          </div>
+        </div>
+        <div>
+          <div style={upper}>Hypothèse</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {BPF_MODES.map((m) => (
+              <BpfSeg key={m.v} active={mode === m.v} disabled={!m.enabled} title={m.enabled ? m.hint : `${m.hint} — à venir`} onClick={() => m.enabled && setMode(m.v)}>
+                {m.label} <span style={{ fontWeight: 400, opacity: 0.75 }}>· {m.hint}</span>
+              </BpfSeg>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {loading && <div className="card" style={{ padding: 18 }}><span className="muted">Calcul de la projection…</span></div>}
+      {error && <div className="card" style={{ padding: 18, color: "var(--rose-600)" }}>Erreur : {error}</div>}
+
+      {!loading && !error && data && (summary.length === 0 ? (
+        <div className="card" style={{ padding: 18 }}><span className="muted">Aucun chantier à projeter. Renseignez budget, montant contrat et échéance sur vos chantiers.</span></div>
+      ) : (
+        <>
+          <div className="card" style={{ padding: 18, marginBottom: 14 }}>
+            <div style={{ fontSize: 15, lineHeight: 1.5 }}>
+              À ce rythme, le solde de trésorerie chantiers projeté à <strong>{horizonLabel}</strong> serait de{" "}
+              {summary.map((s, i) => (
+                <strong key={s.code} style={{ color: s.cumul >= 0 ? "var(--emerald-600)" : "var(--rose-600)" }}>{i > 0 ? " et " : ""}{bpfSigned(s.cumul)} {s.code}</strong>
+              ))}.
+            </div>
+            <div className="kpis" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 14 }}>
+              {summary.map((s) => (
+                <div key={s.code} className="card" style={{ padding: 16, background: "var(--amber-50)" }}>
+                  <div className="kpi-label">Solde chantiers · {s.code}</div>
+                  <div className="kpi-value" style={{ color: s.cumul >= 0 ? "var(--emerald-600)" : "var(--rose-600)" }}>{bpfSigned(s.cumul)} {s.code}</div>
+                  <div className="kpi-sub">sur {horizonLabel}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {series.map((s) => (
+            <div className="card" style={{ padding: 18, marginBottom: 14 }} key={s.code}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <strong className="font-display" style={{ fontSize: 15 }}>Trésorerie chantiers · {s.code}</strong>
+                <span className="chip">{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
+              </div>
+              <BpfChart serie={s} />
+            </div>
+          ))}
+          {data.months.length > 0 && (
+            <details className="card" style={{ padding: 18 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: 15 }} className="font-display">Détail mensuel</summary>
+              <div style={{ marginTop: 8 }}>
+                {data.months.map((m) => (
+                  <div key={m.month} style={{ borderTop: "1px solid var(--ink-100)", padding: "10px 0" }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{bpfMonth(m.month)}</div>
+                    {m.currencies.map((c) => {
+                      const code = c.currencyCode || c.currencySymbol || "—";
+                      return (
+                        <div key={code} style={{ marginLeft: 8, marginBottom: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                            <span className="muted">Variation nette {code}</span>
+                            <strong style={{ color: c.net >= 0 ? "var(--emerald-600)" : "var(--rose-600)" }}>{bpfSigned(c.net)} {code}</strong>
+                          </div>
+                          {c.lines.map((l, idx) => (
+                            <div key={idx} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "var(--ink-500)", marginLeft: 8, padding: "1px 0" }}>
+                              <span>{l.amount >= 0 ? "+ " : "− "}{l.source} <em style={{ opacity: 0.7 }}>· {l.basis}</em></span>
+                              <span className="chip">{l.confidence === "certain" ? "certain" : "estimé"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </>
+      ))}
+    </div>
+  );
+}
+
+/* ── Paramètres ────────────────────────────────────────────────────────── */
 function Parametres() {
   const base = import.meta.env.VITE_APP_BASE_VERSION || "—";
   const build = import.meta.env.VITE_APP_BUILD_VERSION || base;
@@ -714,6 +915,8 @@ function payloadFor(kind, form) {
     return {
       code: form.code || `BAT-${Date.now()}`, name: form.name, client: form.client || null, manager: form.manager || null,
       status: form.status || "Planifie", progress: n(form.progress), budget: n(form.budget), spent: n(form.spent),
+      currency_id: form.currency_id ? Number(form.currency_id) : null,
+      contract_amount: n(form.contractAmount), billed_amount: n(form.billedAmount),
       due_date: form.dueDate || form.due || null, location: form.location || null, risk: form.risk || "Faible",
     };
   }
@@ -726,12 +929,20 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
     : { name: "", unit: "unite", stock: 0, minStock: 0, reserved: 0 }));
   const set = (k, v) => setForm((c) => ({ ...c, [k]: v }));
   const [suppliers, setSuppliers] = React.useState([]);
+  const [currencies, setCurrencies] = React.useState([]);
   React.useEffect(() => {
     if (kind !== "material") return;
     api.suppliers().then((r) => {
       const arr = Array.isArray(r) ? r : (r?.getAllSupplier || r?.data || []);
       setSuppliers((arr || []).filter((s) => String(s.status) === "true"));
     }).catch(() => setSuppliers([]));
+  }, [kind]);
+  React.useEffect(() => {
+    if (kind !== "project") return;
+    api.currencies().then((r) => {
+      const arr = Array.isArray(r) ? r : (r?.data || r?.getAllCurrency || []);
+      setCurrencies((arr || []).filter((c) => String(c.status) === "true" || c.status === true));
+    }).catch(() => setCurrencies([]));
   }, [kind]);
   const canSave = Boolean(form.name);
   return (
@@ -749,8 +960,17 @@ function RecordModal({ modal, busy, error, onClose, onSave }) {
               <Field label="Responsable" value={form.manager || ""} onChange={(v) => set("manager", v)} />
               <Field label="Lieu" value={form.location || ""} onChange={(v) => set("location", v)} />
               <Field label="Avancement %" type="number" value={form.progress} onChange={(v) => set("progress", v)} />
-              <Field label="Budget" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
+              <label className="field">
+                <span>Devise</span>
+                <select value={form.currency_id || ""} onChange={(e) => set("currency_id", e.target.value || null)}>
+                  <option value="">— Devise —</option>
+                  {currencies.map((c) => <option key={c.id} value={c.id}>{c.currencyCode || c.currencyName || c.name}</option>)}
+                </select>
+              </label>
+              <Field label="Budget (coût)" type="number" value={form.budget} onChange={(v) => set("budget", v)} />
               <Field label="Dépensé" type="number" value={form.spent} onChange={(v) => set("spent", v)} />
+              <Field label="Montant contrat (client)" type="number" value={form.contractAmount} onChange={(v) => set("contractAmount", v)} />
+              <Field label="Déjà facturé" type="number" value={form.billedAmount} onChange={(v) => set("billedAmount", v)} />
               <Field label="Échéance" type="date" value={form.dueDate || ""} onChange={(v) => set("dueDate", v)} />
             </>
           ) : (

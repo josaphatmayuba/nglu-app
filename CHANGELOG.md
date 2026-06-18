@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.96.0)
+- BatiPro — **échéancier de chantier dans le Prévisionnel** (dernière app du plan forecast). Migration **0174** (idempotente, au journal Drizzle → auto au boot) ajoute `currency_id`, `contract_amount`, `billed_amount` à `batipro_projects`. Nouveau producteur backend `BatiproScheduleProducer` (scope `batipro`, couche 1) : projette **dans les deux sens** — SORTIE = coût restant (`budget − spent`), ENTRÉE = à facturer (`contract_amount − billed_amount`), étalés linéairement du mois courant jusqu'à `due_date`, par devise. Backend : service/DTO BatiPro exposent les 3 nouveaux champs. UI BatiPro : formulaire chantier complété (devise + montant contrat + déjà facturé) et **nouvelle page Prévisionnel** (menu, thème ambre, courbe trésorerie + détail mensuel). `tsc --noEmit` backend OK, build BatiPro OK. **Le moteur forecast couvre désormais les 5 apps** (Compta/Domus/FarmOS/HR/BatiPro).
+
+### Changed (3.95.3)
+- Comptabilité — Prévisionnel: les courbes de trésorerie sont regroupées dans UN seul graphe (aires translucides superposées, hauteur réduite) au lieu d'une grosse carte par devise. Courbes lissées + légende des devises. Distinction réel/projeté: point plein = solde réel actuel, trait pointillé = projection, avec un repère vertical « aujourd'hui ». [SCRUM]
+
 ### Changed (3.95.2)
 - FarmOS — **Plan intérieur des box modernisé**. Le mini-plan SVG (peu lisible, box minuscules) est remplacé par une **grille de cartes de box** (nom + pastille d'état + têtes `9/10` + jauge de remplissage, fonds doux par état). Le clic sur un box ouvre le détail **en remplacement de la grille** avec un **bouton retour `‹`** (manquant auparavant) pour revenir à la vue d'ensemble et rouvrir un autre box — corrige « plus moyen de revoir les box quand on clique ». Tactile/mobile (cartes ≥92px, grille scrollable). Icône `chevron-left` ajoutée au jeu d'icônes FarmOS. Logique d'affectation (assign/unassign/générer/capacité) inchangée. [SCRUM]
 

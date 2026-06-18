@@ -1051,6 +1051,13 @@
                         "when":  1780552800000,
                         "tag":  "0173_farmos_boxes_dedupe",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  150,
+                        "version":  "5",
+                        "when":  1780556400000,
+                        "tag":  "0174_batipro_projects_billing",
+                        "breakpoints":  true
                     }
                 ]
 }

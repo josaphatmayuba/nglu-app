@@ -6,6 +6,7 @@ import { ForecastProductionService } from "./forecast-production.service";
 import { ForecastTrackingService } from "./forecast-tracking.service";
 import { ForecastService } from "./forecast.service";
 import { FORECAST_PRODUCERS } from "./forecast.types";
+import { BatiproScheduleProducer } from "./producers/batipro-schedule.producer";
 import { DomusRentProducer } from "./producers/domus-rent.producer";
 import { ExternalRefProducer } from "./producers/external-ref.producer";
 import { FarmosSalesTrendProducer } from "./producers/farmos-sales-trend.producer";
@@ -33,6 +34,7 @@ import { SalesTrendProducer } from "./producers/sales-trend.producer";
     SalesTrendProducer,
     ExternalRefProducer,
     FarmosSalesTrendProducer,
+    BatiproScheduleProducer,
     {
       provide: FORECAST_PRODUCERS,
       useFactory: (
@@ -43,8 +45,9 @@ import { SalesTrendProducer } from "./producers/sales-trend.producer";
         salesTrend: SalesTrendProducer,
         externalRef: ExternalRefProducer,
         farmosSales: FarmosSalesTrendProducer,
-      ) => [domus, ledger, hr, payables, salesTrend, externalRef, farmosSales],
-      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer, ExternalRefProducer, FarmosSalesTrendProducer],
+        batipro: BatiproScheduleProducer,
+      ) => [domus, ledger, hr, payables, salesTrend, externalRef, farmosSales, batipro],
+      inject: [DomusRentProducer, LedgerOpeningProducer, HrPayrollProducer, PayablesProducer, SalesTrendProducer, ExternalRefProducer, FarmosSalesTrendProducer, BatiproScheduleProducer],
     },
   ],
 })

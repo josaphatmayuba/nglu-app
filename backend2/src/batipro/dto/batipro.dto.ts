@@ -9,6 +9,9 @@ export class CreateBatiproProjectDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) progress?: number;
   @IsOptional() @IsNumber() @Min(0) budget?: number;
   @IsOptional() @IsNumber() @Min(0) spent?: number;
+  @IsOptional() @IsInt() currency_id?: number;
+  @IsOptional() @IsNumber() @Min(0) contract_amount?: number;
+  @IsOptional() @IsNumber() @Min(0) billed_amount?: number;
   @IsOptional() @IsDateString() start_date?: string;
   @IsOptional() @IsDateString() due_date?: string;
   @IsOptional() @IsString() location?: string;

@@ -2089,6 +2089,10 @@ export const batiproProjects = mysqlTable("batipro_projects", {
   progress: int("progress").default(0).notNull(),
   budget: decimal("budget", { precision: 14, scale: 2 }).default("0").notNull(),
   spent: decimal("spent", { precision: 14, scale: 2 }).default("0").notNull(),
+  // Devise + facturation client (echeancier previsionnel forecast scope=batipro).
+  currencyId: bigint("currency_id", { mode: "number" }),
+  contractAmount: decimal("contract_amount", { precision: 14, scale: 2 }).default("0").notNull(),
+  billedAmount: decimal("billed_amount", { precision: 14, scale: 2 }).default("0").notNull(),
   startDate: date("start_date", { mode: "string" }),
   dueDate: date("due_date", { mode: "string" }),
   location: varchar("location", { length: 255 }),

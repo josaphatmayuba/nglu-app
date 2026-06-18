@@ -52,6 +52,10 @@ export const api = {
   deleteTask: (id) => jsonFetch(`/tasks/${id}`, { method: "DELETE" }),
   // Référentiel central fournisseurs (route racine /api/supplier, hors préfixe /batipro)
   suppliers: () => jsonFetch("/supplier?query=all&type=construction", { base: API_ROOT }),
+  currencies: () => jsonFetch("/currency?query=all", { base: API_ROOT }),
+  // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "batipro".
+  forecastCashFlow: ({ horizon, mode, scope = "batipro", adjust } = {}) =>
+    jsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`, { base: API_ROOT }),
   materials: () => jsonFetch("/materials"),
   createMaterial: (b) => jsonFetch("/materials", { method: "POST", body: JSON.stringify(b || {}) }),
   updateMaterial: (id, b) => jsonFetch(`/materials/${id}`, { method: "PUT", body: JSON.stringify(b || {}) }),
