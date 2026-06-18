@@ -10,6 +10,7 @@ import { DateRangeFilter, defaultDateRange, inDateRange, rangeLabel } from "./da
 import { defaultCurrencyId, defaultSymbol, rowCurrencyId, symbolFor } from "./currency";
 import { useDataRefresh } from "./use-data-refresh";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, slaughterReadiness } from "./animal-category";
+import { MaterialLineChart } from "./material-charts.jsx";
 
 function formatLongDate(d, lang) {
   try {
@@ -614,46 +615,20 @@ const ProductionPanel = ({ lang, species, live }) => {
 };
 
 const ProdChart = ({ series, lang, labels }) => {
-  const W = 720, H = 200, PAD_L = 36, PAD_B = 24, PAD_R = 12, PAD_T = 8;
-  const days = labels && labels.length ? labels : ["15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26"];
-  const seriesMaxes = series.map(s => Math.max(...s.data));
-  const seriesMins  = series.map(s => Math.min(...s.data));
+  const chartSeries = series.map((s) => ({
+    name: lang === "fr" ? s.name : (s.en || s.name),
+    data: s.data,
+    color: s.color,
+  }));
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block", overflow: "visible" }}>
-      {/* gridlines */}
-      {[0, 0.25, 0.5, 0.75, 1].map((g, i) => (
-        <g key={i}>
-          <line x1={PAD_L} x2={W-PAD_R} y1={PAD_T + (H-PAD_T-PAD_B)*g} y2={PAD_T + (H-PAD_T-PAD_B)*g} stroke="var(--border-1)" strokeDasharray="2 4"/>
-          <text x={PAD_L - 6} y={PAD_T + (H-PAD_T-PAD_B)*g + 4} textAnchor="end" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{Math.round((1-g) * 100)}</text>
-        </g>
-      ))}
-      {/* x labels */}
-      {days.map((d, i) => (
-        <text key={i} x={PAD_L + (i/(days.length-1)) * (W-PAD_L-PAD_R)} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--fg-3)" fontFamily="var(--font-mono)">{d}</text>
-      ))}
-      {/* series */}
-      {series.map((s, si) => {
-        const min = seriesMins[si], max = seriesMaxes[si], range = max - min || 1;
-        const pts = s.data.map((d, i) => ({
-          x: PAD_L + (i/(s.data.length-1)) * (W-PAD_L-PAD_R),
-          y: PAD_T + (H-PAD_T-PAD_B) * (1 - (d - min) / range),
-        }));
-        const path = "M" + pts.map(p => `${p.x},${p.y}`).join(" L");
-        const area = path + ` L${pts[pts.length-1].x},${H-PAD_B} L${pts[0].x},${H-PAD_B} Z`;
-        return (
-          <g key={si}>
-            <path d={area} fill={s.color} opacity={0.12}/>
-            <path d={path} stroke={s.color} strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-            {pts.map((p, i) => i === pts.length-1 && (
-              <g key={i}>
-                <circle cx={p.x} cy={p.y} r="4" fill={s.color} stroke="var(--paper)" strokeWidth="2"/>
-                <text x={p.x + 8} y={p.y - 6} fontSize="11" fontFamily="var(--font-mono)" fill={s.color}>{s.data[i].toLocaleString("fr-CA")}</text>
-              </g>
-            ))}
-          </g>
-        );
-      })}
-    </svg>
+    <MaterialLineChart
+      type="area"
+      height={220}
+      labels={labels}
+      series={chartSeries}
+      colors={chartSeries.map((s) => s.color)}
+      formatter={(v) => Number(v || 0).toLocaleString("fr-CA")}
+    />
   );
 };
 

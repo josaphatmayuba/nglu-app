@@ -12,6 +12,7 @@ import { currencyOptions, defaultCurrencyId, defaultSymbol, formatMoney, rowCurr
 import { isSaleLockedAnimal, isSaleLockedStatus } from "./animal-lock";
 import { animalQty, isActiveLivestock, isAdultAnimal, animalCategory, categoryBreakdownByGroup, sexBreakdownByGroup, CATEGORY_LABELS, slaughterStats, slaughterReadiness, BREEDING_RATIO } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
+import { MaterialDriverBarChart, MaterialForecastHeadChart, MaterialLineChart } from "./material-charts.jsx";
 
 // All remaining screens: Health, Calendar, Stock, Repro, Production, Alerts, Finances, Reports.
 
@@ -5663,162 +5664,60 @@ function fcSeries(months) {
   return [...byCur.values()];
 }
 function FcChart({ serie }) {
-  const W = 560, H = 170, pad = 30, color = "#2f7a4f";
-  const pts = serie.points;
+  const pts = serie.points || [];
   if (pts.length < 2) return <div style={{ fontSize: 13, color: "var(--fg-3)", padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
-  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
-  const min = Math.min(0, ...ys), max = Math.max(0, ...ys), span = max - min || 1;
-  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
-  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
-  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
-  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
-  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
-  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
-  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
-  const zeroY = y(0), gid = `fc-${serie.code}`;
+  const labels = pts.map((p) => fcMonth(p.month));
+  const values = pts.map((p) => Number(p.cumul || 0));
+  const min = Math.min(0, ...values);
+  const max = Math.max(0, ...values);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
-      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" />
-      </linearGradient></defs>
-      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="var(--border-2, #d9d2c6)" strokeDasharray="3 3" />
-      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
-      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
-      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map((p, i) => (
-        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="var(--paper, #fff)" stroke={color} strokeWidth="2">
-          <title>{`${fcMonth(p.month)} : ${fcSigned(p.cumul)} ${serie.code}`}</title>
-        </circle>
-      ))}
-      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
-        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="var(--fg-3, #94a3b8)">{fcMonth(p.month)}</text>
-      ))}
-    </svg>
+    <MaterialLineChart
+      type="area"
+      height={190}
+      labels={labels}
+      min={min}
+      max={max}
+      series={[{ name: serie.code, data: values, color: "var(--forest-700)" }]}
+      colors={["var(--forest-700)"]}
+      formatter={(v) => `${fcSigned(v)} ${serie.code}`}
+    />
   );
 }
 // Courbe du cheptel projeté (têtes) avec cône d'incertitude (headLow/headHigh).
 // `current` = effectif réel, ajouté en point de départ (trait plein → projection).
 function FcHeadChart({ points, current, L = (fr, en) => fr }) {
-  const W = 760, H = 292;
-  const left = 48, right = 28, plotTop = 28, plotBottom = 172;
-  const driverTop = 210, driverBottom = 268;
-  const color = "#2f7a4f";
-  const pts = [{ month: "now", head: current, headLow: current, headHigh: current }, ...points];
-  if (pts.length < 2) return <div style={{ fontSize: 13, color: "var(--fg-3)", padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
-
-  let rawMin = Math.min(...pts.flatMap((p) => [Number(p.head ?? 0), Number(p.headLow ?? p.head ?? 0), Number(p.headHigh ?? p.head ?? 0)]));
-  let rawMax = Math.max(...pts.flatMap((p) => [Number(p.head ?? 0), Number(p.headLow ?? p.head ?? 0), Number(p.headHigh ?? p.head ?? 0)]));
-  if (rawMin === rawMax) {
-    rawMin = Math.max(0, rawMin - 1);
-    rawMax += 1;
-  }
-  const yPad = Math.max(1, (rawMax - rawMin) * 0.14);
-  const min = Math.max(0, rawMin - yPad);
-  const max = rawMax + yPad;
-  const span = max - min || 1;
-  const x = (i) => left + (i * (W - left - right)) / (pts.length - 1);
-  const y = (v) => plotBottom - ((Number(v ?? 0) - min) * (plotBottom - plotTop)) / span;
-  const pathFor = (getter) => pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(getter(p)).toFixed(1)}`).join(" ");
-  const medianPath = pathFor((p) => p.head);
-  const areaFill = `${medianPath} L${x(pts.length - 1).toFixed(1)},${plotBottom} L${x(0).toFixed(1)},${plotBottom} Z`;
-  const hasBand = pts.some((p) => Number(p.headHigh ?? p.head) !== Number(p.headLow ?? p.head));
-  const bandUp = pathFor((p) => p.headHigh ?? p.head);
-  const bandDown = pts.slice().reverse().map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(p.headLow ?? p.head).toFixed(1)}`).join(" ");
-  const lbl = (p) => (p.month === "now" ? L("aujourd'hui", "today") : fcMonth(p.month));
-  const labelEvery = pts.length <= 7 ? 1 : pts.length <= 13 ? 2 : 6;
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => min + (max - min) * t);
-  const driverMax = Math.max(1, ...points.map((p) => Math.max(Number(p.births || 0), Number(p.deaths || 0) + Number(p.exits || 0))));
-  const driverZero = driverTop + (driverBottom - driverTop) / 2;
-  const driverScale = ((driverBottom - driverTop) / 2 - 6) / driverMax;
-  const barW = Math.max(8, Math.min(22, ((W - left - right) / Math.max(1, pts.length - 1)) * 0.42));
-  const startY = y(current);
-  const last = pts[pts.length - 1];
-  const lastX = x(pts.length - 1);
-  const lastY = y(last.head);
-  const calloutW = 126, calloutH = 48;
-  const calloutX = Math.min(W - right - calloutW, Math.max(left + 4, lastX - calloutW - 12));
-  const calloutY = Math.max(plotTop + 4, Math.min(plotBottom - calloutH - 4, lastY - calloutH / 2));
+  const chartPoints = (points || []).map((p) => ({ ...p, label: fcMonth(p.month) }));
+  if (chartPoints.length < 1) return <div style={{ fontSize: 13, color: "var(--fg-3)", padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const forecastLast = chartPoints[chartPoints.length - 1];
+  const forecastHead = Number(forecastLast?.head ?? current ?? 0);
+  const forecastLow = Number(forecastLast?.headLow ?? forecastHead);
+  const forecastHigh = Number(forecastLast?.headHigh ?? forecastHead);
 
   return (
     <div style={{ width: "100%", overflowX: "auto", paddingBottom: 2 }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", minWidth: 640, height: "auto", overflow: "visible", display: "block" }} role="img" aria-label={L("Projection opérationnelle du cheptel", "Operational livestock forecast")}>
-        <defs>
-          <linearGradient id="fc-head-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="fc-head-band" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.17" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.07" />
-          </linearGradient>
-        </defs>
-
-        {ticks.map((t) => {
-          const gy = y(t);
-          return (
-            <g key={`tick-${t.toFixed(2)}`}>
-              <line x1={left} y1={gy} x2={W - right} y2={gy} stroke="var(--border-1, #e5ded3)" strokeDasharray="3 5" />
-              <text x={left - 9} y={gy + 4} textAnchor="end" fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="600">{fcNf.format(Math.round(t))}</text>
-            </g>
-          );
-        })}
-        <text x={left} y={14} fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="700" letterSpacing=".06em">{L("EFFECTIF PREVU", "PROJECTED HEADCOUNT")}</text>
-        <line x1={left} y1={plotBottom} x2={W - right} y2={plotBottom} stroke="var(--border-2, #d9d2c6)" />
-        <line x1={left} y1={startY} x2={W - right} y2={startY} stroke="var(--ink-400, #9aa79c)" strokeDasharray="6 5" />
-        <text x={W - right} y={startY - 6} textAnchor="end" fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="700">{L("départ réel", "actual start")}</text>
-
-        <path d={areaFill} fill="url(#fc-head-area)" stroke="none" />
-        {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill="url(#fc-head-band)" stroke="none" />}
-        <path d={medianPath} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-
-        {pts.map((p, i) => (
-          <g key={`pt-${i}`}>
-            <circle cx={x(i)} cy={y(p.head)} r={i === 0 || i === pts.length - 1 ? 5 : 3.5} fill="var(--paper, #fff)" stroke={i === 0 ? "var(--ink-600, #647067)" : color} strokeWidth="2.5">
-              <title>{`${lbl(p)} : ${fcNf.format(Math.round(Number(p.head ?? 0)))} ${L("têtes", "head")} · ${L("fourchette", "range")} ${fcNf.format(Math.round(Number(p.headLow ?? p.head ?? 0)))}-${fcNf.format(Math.round(Number(p.headHigh ?? p.head ?? 0)))}`}</title>
-            </circle>
-          </g>
-        ))}
-
-        <line x1={lastX} y1={lastY} x2={calloutX + calloutW} y2={calloutY + calloutH / 2} stroke={color} strokeOpacity=".35" />
-        <rect x={calloutX} y={calloutY} width={calloutW} height={calloutH} rx="8" fill="var(--paper, #fff)" stroke="var(--border-1, #e5ded3)" />
-        <text x={calloutX + 10} y={calloutY + 15} fontSize="9" fill="var(--fg-3, #76877b)" fontWeight="800" letterSpacing=".06em">{L("PREVU", "PROJECTED")}</text>
-        <text x={calloutX + 10} y={calloutY + 32} fontSize="16" fill="var(--ink-950, #172019)" fontWeight="800">{fcNf.format(Math.round(Number(last.head ?? 0)))}</text>
-        <text x={calloutX + 70} y={calloutY + 31} fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="700">{L("têtes", "head")}</text>
-        <text x={calloutX + 10} y={calloutY + 43} fontSize="9" fill="var(--fg-3, #76877b)">{fcNf.format(Math.round(Number(last.headLow ?? last.head ?? 0)))}-{fcNf.format(Math.round(Number(last.headHigh ?? last.head ?? 0)))}</text>
-
-        <text x={left} y={driverTop - 12} fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="700" letterSpacing=".06em">{L("FLUX MENSUELS", "MONTHLY DRIVERS")}</text>
-        <line x1={left} y1={driverZero} x2={W - right} y2={driverZero} stroke="var(--border-2, #d9d2c6)" />
-        {points.map((p, i) => {
-          const cx = x(i + 1);
-          const births = Math.max(0, Number(p.births || 0));
-          const deaths = Math.max(0, Number(p.deaths || 0));
-          const exits = Math.max(0, Number(p.exits || 0));
-          const birthH = births * driverScale;
-          const deathH = deaths * driverScale;
-          const exitH = exits * driverScale;
-          return (
-            <g key={`driver-${p.month}-${i}`}>
-              <rect x={cx - barW / 2} y={driverZero - birthH} width={barW} height={birthH} rx="3" fill="#2f7a4f" opacity=".88">
-                <title>{`${fcMonth(p.month)} · ${L("naissances", "births")} +${fcNf.format(Math.round(births))}`}</title>
-              </rect>
-              <rect x={cx - barW / 2} y={driverZero} width={barW} height={deathH} rx="3" fill="#bc4749" opacity=".82">
-                <title>{`${fcMonth(p.month)} · ${L("mortalité", "mortality")} -${fcNf.format(Math.round(deaths))}`}</title>
-              </rect>
-              <rect x={cx - barW / 2} y={driverZero + deathH} width={barW} height={exitH} rx="3" fill="#c77f42" opacity=".86">
-                <title>{`${fcMonth(p.month)} · ${L("sorties/ventes", "exits/sales")} -${fcNf.format(Math.round(exits))}`}</title>
-              </rect>
-            </g>
-          );
-        })}
-        <text x={left - 9} y={driverTop + 8} textAnchor="end" fontSize="9" fill="var(--fg-3, #76877b)" fontWeight="700">+{fcNf.format(Math.round(driverMax))}</text>
-        <text x={left - 9} y={driverBottom - 2} textAnchor="end" fontSize="9" fill="var(--fg-3, #76877b)" fontWeight="700">-{fcNf.format(Math.round(driverMax))}</text>
-
-        {pts.map((p, i) => (i === 0 || i === pts.length - 1 || i % labelEvery === 0) && (
-          <text key={`x-${i}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : i === pts.length - 1 ? "end" : "middle"} fontSize="10" fill="var(--fg-3, #76877b)" fontWeight="600">{lbl(p)}</text>
-        ))}
-      </svg>
+      <div style={{ minWidth: 640 }}>
+        <div style={{ position: "relative" }}>
+          <div className="overline" style={{ color: "var(--fg-3)", marginBottom: 4 }}>{L("EFFECTIF PREVU", "PROJECTED HEADCOUNT")}</div>
+          <div style={{
+            position: "absolute", top: 16, right: 10, zIndex: 2, minWidth: 134,
+            background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8,
+            padding: "9px 11px", boxShadow: "0 14px 34px rgba(14,36,24,0.12)", pointerEvents: "none",
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".06em", color: "var(--fg-3)", textTransform: "uppercase" }}>{L("PREVU", "PROJECTED")}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 2 }}>
+              <span className="tnum" style={{ fontSize: 24, lineHeight: 1, fontWeight: 800, color: "var(--ink-950)" }}>{fcNf.format(Math.round(forecastHead))}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--fg-3)" }}>{L("têtes", "head")}</span>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 2 }}>{fcNf.format(Math.round(forecastLow))}-{fcNf.format(Math.round(forecastHigh))}</div>
+          </div>
+          <MaterialForecastHeadChart points={chartPoints} current={current} L={L} height={205}/>
+        </div>
+        <div className="overline" style={{ color: "var(--fg-3)", marginTop: 2, marginBottom: 0 }}>{L("FLUX MENSUELS", "MONTHLY DRIVERS")}</div>
+        <MaterialDriverBarChart points={chartPoints} L={L} height={112}/>
+      </div>
     </div>
   );
+
 }
 function FcSeg({ active, disabled, onClick, title, children }) {
   return (
