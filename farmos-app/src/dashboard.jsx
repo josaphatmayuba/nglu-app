@@ -109,9 +109,9 @@ function deriveDashAlerts(d, lang) {
 }
 
 function useDashboardData() {
-  const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
+  const [data, setData] = React.useState({ animals: [], medicines: [], sales: [], expenses: [], treatments: [], repro: [], vaccinations: [], aiInsights: [], productionLogs: [], mortalityEvents: [], finance: { months: [], revenue: [], expense: [], byCategory: [] }, ready: false });
   const [reloadKey, setReloadKey] = React.useState(0);
-  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs"]);
+  const refresh = useDataRefresh(["animals", "medicines", "sales", "expenses", "treatments", "reproductionEvents", "vaccinations", "productionLogs", "mortalityEvents"]);
   React.useEffect(() => {
     let cancel = false;
     api.getDashboardSnapshot()
@@ -128,20 +128,112 @@ function useDashboardData() {
           aiInsights = [],
           finance = { months: [], revenue: [], expense: [], byCategory: [] },
           productionLogs = [],
+          mortalityEvents = [],
         } = snapshot || {};
-        const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs].every((x) => Array.isArray(x));
-        if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
+        const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, mortalityEvents].every((x) => Array.isArray(x));
+        if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, mortalityEvents, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
       })
       .catch(() => {});
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
     const reload = () => setReloadKey((k) => k + 1);
-    const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created"];
+    const events = ["farmos:animal-created", "farmos:treatment-created", "farmos:repro-created", "farmos:expense-created", "farmos:sale-created", "farmos:production-created", "farmos:mortality-created"];
     events.forEach((e) => window.addEventListener(e, reload));
     return () => events.forEach((e) => window.removeEventListener(e, reload));
   }, []);
   return data;
+}
+
+const DAY_MS = 86400000;
+
+function isoDateKey(value) {
+  if (!value) return null;
+  if (typeof value === "string") return value.slice(0, 10);
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+function firstDateKey(row, keys) {
+  for (const key of keys) {
+    const date = isoDateKey(row?.[key]);
+    if (date) return date;
+  }
+  return null;
+}
+
+function previousComparableRange(range) {
+  if (!range?.from || !range?.to || range.preset === "all") return null;
+  const from = new Date(`${range.from}T00:00:00`);
+  const to = new Date(`${range.to}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return null;
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / DAY_MS) + 1);
+  const prevTo = new Date(from.getTime() - DAY_MS);
+  const prevFrom = new Date(from.getTime() - days * DAY_MS);
+  return { from: isoDateKey(prevFrom), to: isoDateKey(prevTo) };
+}
+
+function percentDelta(current, previous) {
+  const c = Number(current);
+  const p = Number(previous);
+  if (!Number.isFinite(c) || !Number.isFinite(p)) return 0;
+  if (p === 0) return c === 0 ? 0 : 100;
+  return Math.round(((c - p) / Math.abs(p)) * 100);
+}
+
+function rawHeadQty(row) {
+  const n = Number(row?.count ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function eventHeadQty(row) {
+  const n = Number(row?.quantity ?? row?.count ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function saleHeadQty(row) {
+  const unit = String(row?.unit || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const weightUnits = new Set(["kg", "kilo", "kilos", "kilogram", "kilograms", "kilogramme", "kilogrammes", "g", "gram", "grams", "gramme", "grammes", "lb", "lbs", "livre", "livres", "t", "tonne", "tonnes"]);
+  return weightUnits.has(unit) ? 1 : eventHeadQty(row);
+}
+
+function animalStartDate(a) {
+  return firstDateKey(a, ["dateOfBirth", "date_of_birth", "dob", "createdAt", "created_at"]);
+}
+
+function animalExistedBy(a, cutoffIso) {
+  const start = animalStartDate(a);
+  return !start || !cutoffIso || start <= cutoffIso;
+}
+
+function addRemovedHeads(map, row, cutoffIso, dateKeys, qtyFn) {
+  const date = firstDateKey(row, dateKeys);
+  if (!date || !cutoffIso || date <= cutoffIso) return;
+  const animalId = row?.animalId ?? row?.animal_id;
+  if (animalId == null) return;
+  const key = String(animalId);
+  map.set(key, (map.get(key) || 0) + qtyFn(row));
+}
+
+function removedHeadsByAnimalAfter(sales, mortalityEvents, cutoffIso) {
+  const map = new Map();
+  (sales || []).forEach((s) => addRemovedHeads(map, s, cutoffIso, ["saleDate", "sale_date"], saleHeadQty));
+  (mortalityEvents || []).forEach((m) => addRemovedHeads(map, m, cutoffIso, ["eventDate", "event_date"], eventHeadQty));
+  return map;
+}
+
+function isSaleListedAnimal(a) {
+  return ["available_sale", "for_sale", "a_vendre"].includes(String(a?.status || "").trim().toLowerCase());
+}
+
+function livestockCountAt(animals, cutoffIso, removedHeadsByAnimal, predicate = () => true) {
+  return (animals || []).reduce((total, a) => {
+    if (!predicate(a) || !animalExistedBy(a, cutoffIso)) return total;
+    const removed = removedHeadsByAnimal.get(String(a.id)) || 0;
+    const current = isActiveLivestock(a) ? animalQty(a) : (removed > 0 && isSaleListedAnimal(a) ? rawHeadQty(a) : 0);
+    return total + current + removed;
+  }, 0);
 }
 
 function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyId) {
@@ -173,7 +265,28 @@ function computeDashboardKpis(d, speciesFilter, lang, dateRange, activeCurrencyI
   const todayISO = new Date().toISOString().slice(0, 10);
   const ongoingWithdrawals = d.treatments.filter((t) => t.status === "running" && keepActiveAnimalId(t.animalId) && t.endDate && t.endDate >= todayISO && (t.withdrawalMilkHours || t.withdrawalMeatDays || t.withdrawalEggsDays)).length;
   const activeRepro = d.repro.filter((e) => keepActiveAnimalId(e.animalId) && (e.eventType === "insemination" || e.eventType === "heat") && e.outcome !== "success").length;
-  return { total, sick, female, male, femaleAdult, maleAdult, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro };
+  const previousRange = previousComparableRange(dateRange);
+  const previousRemoved = previousRange ? removedHeadsByAnimalAfter(d.sales, d.mortalityEvents, previousRange.to) : new Map();
+  const speciesPredicate = (a) => !speciesFilter || a?.species === speciesFilter;
+  const previousTotal = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, speciesPredicate) : total;
+  const previousFemale = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, (a) => speciesPredicate(a) && a?.sex === "F") : female;
+  const previousMale = previousRange ? livestockCountAt(d.animals, previousRange.to, previousRemoved, (a) => speciesPredicate(a) && a?.sex === "M") : male;
+  const previousSales = previousRange
+    ? d.sales.filter((s) => (!speciesFilter || s.species === speciesFilter) && keepCurrency(s) && inDateRange(s.saleDate || s.sale_date, previousRange))
+    : sales;
+  const previousExpenses = previousRange
+    ? d.expenses.filter((e) => (!speciesFilter || e.species === speciesFilter || !e.species) && keepCurrency(e) && inDateRange(e.expenseDate || e.expense_date, previousRange))
+    : expenses;
+  const previousRevMonth = previousSales.reduce((acc, s) => acc + Number(s.totalAmount ?? s.total_amount ?? 0), 0);
+  const previousExpMonth = previousExpenses.reduce((acc, e) => acc + Number(e.amount ?? 0), 0);
+  return {
+    total, sick, female, male, femaleAdult, maleAdult, revMonth, expMonth, lowStock, runningTreatments, ongoingWithdrawals, activeRepro,
+    deltaTotal: percentDelta(total, previousTotal),
+    deltaFemale: percentDelta(female, previousFemale),
+    deltaMale: percentDelta(male, previousMale),
+    deltaRevenue: percentDelta(revMonth, previousRevMonth),
+    deltaExpense: percentDelta(expMonth, previousExpMonth),
+  };
 }
 
 const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
@@ -196,14 +309,14 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
 
   // KPI set (adapts). Values come from live API/DB data only.
   const liveKpis = k ? [
-    { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: null, trend: Array(12).fill(k.total), icon: "layers" },
-    { label: lang==="fr"?"Femelles":"Females", value: k.female.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", sublabel: k.female > 0 ? (lang==="fr"?`dont ${k.femaleAdult} adulte${k.femaleAdult>1?"s":""}`:`incl. ${k.femaleAdult} adult${k.femaleAdult>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(k.female), icon: "heart", accent: "var(--pertinence-500)" },
-    { label: lang==="fr"?"Mâles":"Males",     value: k.male.toLocaleString("fr-CA"),   unit: lang==="fr"?"têtes":"head", sublabel: k.male > 0 ? (lang==="fr"?`dont ${k.maleAdult} adulte${k.maleAdult>1?"s":""}`:`incl. ${k.maleAdult} adult${k.maleAdult>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(k.male),   icon: "user",  accent: "var(--forest-700)" },
+    { label: t(lang, "kTotal"),       value: k.total.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", delta: k.deltaTotal, trend: Array(12).fill(k.total), icon: "layers" },
+    { label: lang==="fr"?"Femelles":"Females", value: k.female.toLocaleString("fr-CA"), unit: lang==="fr"?"têtes":"head", sublabel: k.female > 0 ? (lang==="fr"?`dont ${k.femaleAdult} adulte${k.femaleAdult>1?"s":""}`:`incl. ${k.femaleAdult} adult${k.femaleAdult>1?"s":""}`) : undefined, delta: k.deltaFemale, trend: Array(12).fill(k.female), icon: "heart", accent: "var(--pertinence-500)" },
+    { label: lang==="fr"?"Mâles":"Males",     value: k.male.toLocaleString("fr-CA"),   unit: lang==="fr"?"têtes":"head", sublabel: k.male > 0 ? (lang==="fr"?`dont ${k.maleAdult} adulte${k.maleAdult>1?"s":""}`:`incl. ${k.maleAdult} adult${k.maleAdult>1?"s":""}`) : undefined, delta: k.deltaMale, trend: Array(12).fill(k.male),   icon: "user",  accent: "var(--forest-700)" },
     { label: t(lang, "kSick"),        value: k.sick, unit: lang==="fr"?"animaux":"animals", delta: null, trend: [k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick, k.sick], icon: "pulse", accent: "var(--health-500)" },
     { label: t(lang, "kTreatments"),  value: k.runningTreatments, unit: "", delta: null, trend: [k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments, k.runningTreatments], icon: "pill", accent: "var(--health-500)" },
     { label: t(lang, "kAlerts"),      value: ALERTS.length, unit: lang==="fr"?"actives":"active", delta: null, trend: [ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length, ALERTS.length], icon: "bell", accent: "var(--critical)" },
-    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
-    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
+    { label: t(lang, "kRevenue"),     sublabel: rangeLabel(dateRange, lang), value: k.revMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaRevenue, trend: [k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth, k.revMonth], icon: "coins", accent: "var(--money-500)" },
+    { label: t(lang, "kExpense"),     sublabel: rangeLabel(dateRange, lang), value: k.expMonth.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaExpense, trend: [k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth, k.expMonth], icon: "wallet" },
     { label: lang==="fr"?"Stock faible":"Low stock", value: k.lowStock, unit: lang==="fr"?"réf.":"refs", delta: null, trend: [k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock, k.lowStock], icon: "wheat", accent: k.lowStock > 0 ? "var(--rust-700)" : "var(--health-500)" },
     { label: t(lang, "kRepro"),       value: k.activeRepro, unit: lang==="fr"?"actives":"active", delta: null, trend: [k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro, k.activeRepro], icon: "fingerprint", accent: "var(--pertinence-500)" },
   ] : null;
@@ -227,13 +340,13 @@ const Dashboard = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
     const femaleAdultSp = sumSp(femalesSp.filter(isAdultAnimal));
     const maleAdultSp = sumSp(malesSp.filter(isAdultAnimal));
     return [
-      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: totalSp.toLocaleString("fr-CA"), unit: species.countingUnit, delta: null, trend: Array(12).fill(totalSp), icon: "layers", accent: species.accent },
-      { label: lang === "fr" ? "Femelles" : "Females", value: femaleSp.toLocaleString("fr-CA"), unit: species.countingUnit, sublabel: femaleSp > 0 ? (lang==="fr"?`dont ${femaleAdultSp} adulte${femaleAdultSp>1?"s":""}`:`incl. ${femaleAdultSp} adult${femaleAdultSp>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(femaleSp), icon: "heart", accent: "var(--pertinence-500)" },
-      { label: lang === "fr" ? "Mâles" : "Males",     value: maleSp.toLocaleString("fr-CA"),   unit: species.countingUnit, sublabel: maleSp > 0 ? (lang==="fr"?`dont ${maleAdultSp} adulte${maleAdultSp>1?"s":""}`:`incl. ${maleAdultSp} adult${maleAdultSp>1?"s":""}`) : undefined, delta: null, trend: Array(12).fill(maleSp),   icon: "user",  accent: "var(--forest-700)" },
+      { label: lang === "fr" ? `Cheptel · ${species.fr}` : `Herd · ${species.en}`, value: totalSp.toLocaleString("fr-CA"), unit: species.countingUnit, delta: k.deltaTotal, trend: Array(12).fill(totalSp), icon: "layers", accent: species.accent },
+      { label: lang === "fr" ? "Femelles" : "Females", value: femaleSp.toLocaleString("fr-CA"), unit: species.countingUnit, sublabel: femaleSp > 0 ? (lang==="fr"?`dont ${femaleAdultSp} adulte${femaleAdultSp>1?"s":""}`:`incl. ${femaleAdultSp} adult${femaleAdultSp>1?"s":""}`) : undefined, delta: k.deltaFemale, trend: Array(12).fill(femaleSp), icon: "heart", accent: "var(--pertinence-500)" },
+      { label: lang === "fr" ? "Mâles" : "Males",     value: maleSp.toLocaleString("fr-CA"),   unit: species.countingUnit, sublabel: maleSp > 0 ? (lang==="fr"?`dont ${maleAdultSp} adulte${maleAdultSp>1?"s":""}`:`incl. ${maleAdultSp} adult${maleAdultSp>1?"s":""}`) : undefined, delta: k.deltaMale, trend: Array(12).fill(maleSp),   icon: "user",  accent: "var(--forest-700)" },
       { label: t(lang, "kSick"), value: sickSp, unit: lang === "fr" ? "animaux" : "animals", delta: null, trend: Array(12).fill(sickSp), icon: "pulse", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Traitements actifs" : "Active treatments", value: runningTreatmentsSp, unit: "", delta: null, trend: Array(12).fill(runningTreatmentsSp), icon: "pill", accent: "var(--health-500)" },
       { label: lang === "fr" ? "Vaccins à venir" : "Upcoming vaccines", value: vaccUpcomingSp, unit: "", delta: null, trend: Array(12).fill(vaccUpcomingSp), icon: "syringe", accent: "var(--health-500)" },
-      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: moneyUnit, delta: null, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
+      { label: lang === "fr" ? "Revenu" : "Revenue", sublabel: rangeLabel(dateRange, lang), value: revSp.toLocaleString("fr-CA"), unit: moneyUnit, delta: k.deltaRevenue, trend: Array(12).fill(revSp), icon: "coins", accent: "var(--money-500)" },
     ];
   })() : null;
   const kpis = isAll ? (liveKpis || []) : (speciesKpis || []);

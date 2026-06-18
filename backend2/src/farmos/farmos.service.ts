@@ -95,6 +95,7 @@ export class FarmosService {
       aiInsights,
       finance,
       productionLogs,
+      mortalityEvents,
     ] = await Promise.all([
       this.listAnimals(orgId),
       this.listMedicines(orgId),
@@ -106,6 +107,7 @@ export class FarmosService {
       this.listAiInsights(orgId),
       this.getFinanceSummary(orgId),
       this.listProductionLogs(orgId),
+      this.listMortalityEvents(orgId),
     ]);
     const withdrawalAlerts = this.computeWithdrawalAlerts(treatments, animals);
     return {
@@ -119,6 +121,7 @@ export class FarmosService {
       aiInsights,
       finance,
       productionLogs,
+      mortalityEvents,
       withdrawalAlerts,
     };
   }
