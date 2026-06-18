@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.84.0)
+- FarmOS nouveau rapport imprimable **« Ratio reproducteur M:F »** : par bâtiment, total mâles / femelles et **ratio M:F** (1:X), avec l'encadré explicatif « Comment lire le ratio M:F » (ratios idéaux par espèce, lecture sous/sur-effectif de mâles).
+
+### Changed (3.84.0)
+- FarmOS rapport « Structure du cheptel » : symboles **♂/♀ remplacés par M/F** ; la colonne **Ratio** est remplacée par une colonne **Total** (M + F) par bâtiment. Le guide de lecture du ratio est déplacé vers le nouveau rapport dédié.
+
 ### Added (3.83.1)
 - FarmOS rapport « Structure du cheptel ♂/♀ » : ajout d'un **encadré explicatif** sous le tableau (« Comment lire le ratio ♂:♀ ») — sens du format 1:X, ratios reproducteurs idéaux par espèce (porc ~1:20, bovin ~1:25, etc.) et lecture pratique (trop de femelles/mâle = fécondation insuffisante ; trop de mâles = à orienter vers l'engraissement).
 

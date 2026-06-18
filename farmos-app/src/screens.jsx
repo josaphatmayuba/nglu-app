@@ -2829,20 +2829,19 @@ const printHeadcountReport = (buildings, animals, lang) => {
   w.document.write(html); w.document.close();
 };
 
-// Imprime un rapport de STRUCTURE du cheptel : par bâtiment, mâles / femelles dans
-// chaque catégorie (adultes, cochettes, engraissement, jeunes), + total M/F et ratio.
+// Imprime un rapport de STRUCTURE du cheptel : par bâtiment, mâles / femelles (M/F)
+// dans chaque catégorie (adultes, cochettes, engraissement, jeunes), + total M, total F
+// et total général (M+F) par bâtiment.
 const printSexStructureReport = (buildings, animals, lang) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
-  // Sexe inconnu globalement absent → on masque la colonne "?" pour alléger.
   const grand = {}; CATEGORY_ORDER.forEach((c) => { grand[c] = { M: 0, F: 0, inconnu: 0 }; });
   let gM = 0, gF = 0, gU = 0;
-  const ratio = (m, f) => (f > 0 ? `1:${(m / f).toFixed(2).replace(/\.?0+$/, "")}` : (m > 0 ? "—" : ""));
   const cell = (sb, c) => {
     const s = sb[c];
     if (!s || (s.M + s.F + s.inconnu) === 0) return `<td class="num"></td>`;
-    return `<td class="num">${s.M ? `<b>${s.M}</b>♂` : ""}${s.M && s.F ? " " : ""}${s.F ? `<b>${s.F}</b>♀` : ""}${s.inconnu ? ` ${s.inconnu}?` : ""}</td>`;
+    return `<td class="num">${s.M ? `<b>${s.M}</b>M` : ""}${s.M && s.F ? " " : ""}${s.F ? `<b>${s.F}</b>F` : ""}${s.inconnu ? ` ${s.inconnu}?` : ""}</td>`;
   };
   const rows = (buildings || []).map((b) => {
     const bAnimals = (animals || []).filter((a) => a.barn === b.name);
@@ -2850,11 +2849,11 @@ const printSexStructureReport = (buildings, animals, lang) => {
     let m = 0, f = 0, u = 0;
     CATEGORY_ORDER.forEach((c) => { grand[c].M += sb[c].M; grand[c].F += sb[c].F; grand[c].inconnu += sb[c].inconnu; m += sb[c].M; f += sb[c].F; u += sb[c].inconnu; });
     gM += m; gF += f; gU += u;
-    return `<tr><td>${esc(b.name)}</td>${CATEGORY_ORDER.map((c) => cell(sb, c)).join("")}<td class="num"><b>${m}</b></td><td class="num"><b>${f}</b></td><td class="num">${ratio(m, f)}</td></tr>`;
+    return `<tr><td>${esc(b.name)}</td>${CATEGORY_ORDER.map((c) => cell(sb, c)).join("")}<td class="num"><b>${m}</b></td><td class="num"><b>${f}</b></td><td class="num"><b>${m + f + u}</b></td></tr>`;
   }).join("");
-  const head = `<th>${L("Bâtiment", "Building")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}<th class="num">${L("Total ♂", "Total ♂")}</th><th class="num">${L("Total ♀", "Total ♀")}</th><th class="num">${L("Ratio ♂:♀", "Ratio ♂:♀")}</th>`;
-  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td>${CATEGORY_ORDER.map((c) => cell(grand, c)).join("")}<td class="num">${gM}</td><td class="num">${gF}</td><td class="num">${ratio(gM, gF)}</td></tr>`;
-  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Structure du cheptel (♂/♀)", "Herd structure (♂/♀)")}</title>
+  const head = `<th>${L("Bâtiment", "Building")}</th>${CATEGORY_ORDER.map((c) => `<th class="num">${esc(lang === "fr" ? CATEGORY_LABELS[c].fr : CATEGORY_LABELS[c].en)}</th>`).join("")}<th class="num">${L("Total M", "Total M")}</th><th class="num">${L("Total F", "Total F")}</th><th class="num">${L("Total", "Total")}</th>`;
+  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td>${CATEGORY_ORDER.map((c) => cell(grand, c)).join("")}<td class="num">${gM}</td><td class="num">${gF}</td><td class="num">${gM + gF + gU}</td></tr>`;
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Structure du cheptel (M/F)", "Herd structure (M/F)")}</title>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
   h1 { font-size: 20px; margin: 0 0 2px; } .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
@@ -2863,17 +2862,55 @@ const printSexStructureReport = (buildings, animals, lang) => {
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.tot td { font-weight: 700; background: #eef5ef; }
   .lgd { color: #666; font-size: 11px; margin-top: 10px; }
-  .note { border: 1px solid #ddd; background: #fafaf8; border-radius: 6px; padding: 10px 12px; margin-top: 12px; font-size: 11px; color: #333; line-height: 1.5; }
-  .note h2 { font-size: 12px; margin: 0 0 4px; }
-  .note ul { margin: 4px 0 0; padding-left: 18px; } .note li { margin: 2px 0; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Structure du cheptel — répartition mâles / femelles", "Herd structure — male / female breakdown")}</h1>
   <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
-  <div class="lgd">${L("♂ = mâles · ♀ = femelles · ? = sexe non renseigné. Le ratio ♂:♀ est calculé sur l'ensemble du bâtiment.", "♂ = males · ♀ = females · ? = sex not set. Ratio ♂:♀ computed over the whole building.")}</div>
+  <div class="lgd">${L("M = mâles · F = femelles · ? = sexe non renseigné. La colonne Total = M + F (+ sexe non renseigné).", "M = males · F = females · ? = sex not set. The Total column = M + F (+ sex not set).")}</div>
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
+  w.document.write(html); w.document.close();
+};
+
+// Imprime un rapport RATIO REPRODUCTEUR : par bâtiment, total mâles / femelles et le
+// ratio M:F, + encadré expliquant comment lire le ratio.
+const printBreedingRatioReport = (buildings, animals, lang) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const ratio = (m, f) => (f > 0 ? `1:${(m / f).toFixed(2).replace(/\.?0+$/, "")}` : (m > 0 ? "—" : ""));
+  let gM = 0, gF = 0;
+  const rows = (buildings || []).map((b) => {
+    const bAnimals = (animals || []).filter((a) => a.barn === b.name);
+    const sb = sexBreakdownByGroup(bAnimals);
+    let m = 0, f = 0;
+    CATEGORY_ORDER.forEach((c) => { m += sb[c].M; f += sb[c].F; });
+    gM += m; gF += f;
+    return `<tr><td>${esc(b.name)}</td><td class="num">${m}</td><td class="num">${f}</td><td class="num"><b>${ratio(m, f)}</b></td></tr>`;
+  }).join("");
+  const head = `<th>${L("Bâtiment", "Building")}</th><th class="num">${L("Mâles (M)", "Males (M)")}</th><th class="num">${L("Femelles (F)", "Females (F)")}</th><th class="num">${L("Ratio M:F", "Ratio M:F")}</th>`;
+  const foot = `<tr class="tot"><td>${L("TOTAL", "TOTAL")}</td><td class="num">${gM}</td><td class="num">${gF}</td><td class="num">${ratio(gM, gF)}</td></tr>`;
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Ratio reproducteur (M:F)", "Breeding ratio (M:F)")}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; text-align: left; } th { background: #f2f2f2; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.tot td { font-weight: 700; background: #eef5ef; }
+  .note { border: 1px solid #ddd; background: #fafaf8; border-radius: 6px; padding: 10px 12px; margin-top: 12px; font-size: 11px; color: #333; line-height: 1.5; }
+  .note h2 { font-size: 12px; margin: 0 0 4px; }
+  .note ul { margin: 4px 0 0; padding-left: 18px; } .note li { margin: 2px 0; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  <h1>${L("Ratio reproducteur — mâles / femelles", "Breeding ratio — males / females")}</h1>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
+  <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="note">
-    <h2>${L("Comment lire le ratio ♂:♀", "How to read the ♂:♀ ratio")}</h2>
+    <h2>${L("Comment lire le ratio M:F", "How to read the M:F ratio")}</h2>
     ${L(
       "Le ratio indique combien de mâles pour combien de femelles, sous la forme « 1:X ». Exemples : <b>1:20</b> = 1 mâle pour 20 femelles ; <b>1:0,5</b> = 2 mâles pour 1 femelle (plus de mâles que de femelles).",
       "The ratio shows how many males per females, as “1:X”. Examples: <b>1:20</b> = 1 male per 20 females; <b>1:0.5</b> = 2 males per 1 female (more males than females)."
@@ -2953,6 +2990,19 @@ const ReportsScreen = ({ lang }) => {
           <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀" : "Males / females per category and building, + ♂:♀ ratio"}</div>
         </div>
         <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printSexStructureReport(hcData.buildings, hcData.animals, lang)}>
+          <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
+        </button>
+      </div>
+      {/* Ratio reproducteur M:F (généré en direct, impression navigateur) */}
+      <div className="card" style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--oxblood-500) 12%, transparent)", color: "var(--oxblood-500)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="activity" size={18} color="currentColor"/>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 500 }}>{lang === "fr" ? "Ratio reproducteur M:F (généré en direct)" : "Breeding ratio M:F (live generated)"}</div>
+          <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{lang === "fr" ? "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture" : "Males / females and M:F ratio per building, with reading guide"}</div>
+        </div>
+        <button className="btn btn-primary btn-sm" disabled={hcData.loading} onClick={() => printBreedingRatioReport(hcData.buildings, hcData.animals, lang)}>
           <Icon name="report" size={12} color="#FBF8F2"/>{lang === "fr" ? "Imprimer" : "Print"}
         </button>
       </div>
