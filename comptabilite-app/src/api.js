@@ -99,6 +99,8 @@ export const api = {
 
   // ── Prévisionnel (cash-flow projeté, par mois × devise) ──────────────
   forecastCashFlow: (params) => jsonFetch(withQuery("/forecast/cash-flow", params)),
+  forecastSnapshot: (params) => jsonFetch(withQuery("/forecast/snapshot", params), { method: "POST" }),
+  forecastVariance: (params) => jsonFetch(withQuery("/forecast/variance", params)),
 
   // ── Budget (live depuis le grand livre) ──────────────────────────────
   budgets: () => jsonFetch("/budget"),

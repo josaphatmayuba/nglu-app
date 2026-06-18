@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.88.0)
+- Prévisionnel de trésorerie — **boucle prévu vs réel** (système qui apprend). Migration **0169** : table `forecast_snapshots` (seule table du chantier ; le calcul ne stocke rien) qui fige le net prévu par mois cible × devise × scope × mode. Endpoints `POST /forecast/snapshot` (fige la prévision du jour, idempotent par jour) et `GET /forecast/variance` (écart prévu/réel des mois écoulés, réel = ventes du mois, + **biais moyen** pour l'auto-correction). UI : bloc « Suivi prévu vs réel » avec bouton « Figer la prévision du jour », tableau prévu/réel/écart % par mois, et **alerte de biais** (sur/sous-estimation > 10 % → ajustement annoncé). Producteurs FarmOS/BatiPro toujours à venir.
+
 ### Added (3.87.0)
 - Prévisionnel de trésorerie — **simulation « et si ? »** : 3 sliders (Loyers / Salaires / Ventes, −50 % à +50 %) qui **recalculent la courbe en direct**. Backend : paramètre `adjust=domus:1.1,hr:0.9,…` (multiplicateurs par scope, garde-fou [0;5]) appliqué aux **flux** uniquement — le solde de départ réel n'est jamais modifié. Le producteur de tendance ventes passe sur un sous-scope dédié `ventes` pour que le levier Ventes n'affecte pas les dettes fournisseurs. Bouton Réinitialiser. Tactile-friendly (sliders, mobile Capacitor).
 

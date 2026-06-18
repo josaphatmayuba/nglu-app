@@ -2031,6 +2031,7 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   barn: varchar("barn", { length: 100 }),
   room: varchar("room", { length: 100 }),
   buildingId: bigint("building_id", { mode: "number" }),
+  boxId: bigint("box_id", { mode: "number" }),
   zoneId: bigint("zone_id", { mode: "number" }),
   type: varchar("type", { length: 50 }),
   status: varchar("status", { length: 20 }).default("healthy").notNull(),
@@ -2040,6 +2041,19 @@ export const farmosAnimals = mysqlTable("farmos_animals", {
   fatherId: varchar("father_id", { length: 100 }),
   estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
   lastEvent: varchar("last_event", { length: 255 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
+export const farmosBoxes = mysqlTable("farmos_boxes", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  buildingId: bigint("building_id", { mode: "number" }).notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  section: varchar("section", { length: 30 }),
+  capacity: int("capacity"),
+  notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
@@ -2600,4 +2614,18 @@ export const hrPublicHolidays = mysqlTable("hr_public_holidays", {
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").onUpdateNow(),
+});
+
+// Trace des previsions (boucle prevu vs reel) : net prevu pour un mois cible,
+// fige a une date donnee. Compare au reel pour mesurer l'ecart (auto-correction).
+export const forecastSnapshots = mysqlTable("forecast_snapshots", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  takenAt: date("taken_at", { mode: "string" }).notNull(),
+  targetMonth: varchar("target_month", { length: 7 }).notNull(),
+  scope: varchar("scope", { length: 20 }).default("all").notNull(),
+  mode: varchar("mode", { length: 20 }).default("prudent").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  predictedNet: decimal("predicted_net", { precision: 15, scale: 2 }).default("0").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });

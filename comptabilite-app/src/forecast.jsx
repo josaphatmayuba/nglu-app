@@ -112,6 +112,24 @@ export function Forecast() {
 
   const simActive = adjust !== "";
 
+  // Suivi prévu vs réel.
+  const [variance, setVariance] = React.useState(null);
+  const [trackMsg, setTrackMsg] = React.useState("");
+  const loadVariance = React.useCallback(() => {
+    api.forecastVariance({ scope: "ventes" }).then(setVariance).catch(() => setVariance(null));
+  }, []);
+  React.useEffect(() => { loadVariance(); }, [loadVariance]);
+  const takeSnapshot = async () => {
+    setTrackMsg("Enregistrement…");
+    try {
+      const r = await api.forecastSnapshot({ horizon: 6, mode: "realiste", scope: "ventes" });
+      setTrackMsg(`Prévision figée (${r.saved} point${r.saved > 1 ? "s" : ""}).`);
+      loadVariance();
+    } catch (e) {
+      setTrackMsg("Erreur : " + String(e.message || e));
+    }
+  };
+
   const series = React.useMemo(() => (data ? buildSeries(data.months) : []), [data]);
 
   // Phrase-réponse : net total projeté par devise sur l'horizon.
@@ -251,6 +269,50 @@ export function Forecast() {
           )}
         </>
       )}
+
+      {/* Suivi prévu vs réel (boucle d'apprentissage) */}
+      <div className="card pad">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <strong style={{ fontSize: 14 }}>Suivi prévu vs réel — ventes</strong>
+          <button className="chip" style={{ padding: "4px 10px", borderRadius: 999 }} onClick={takeSnapshot}>
+            Figer la prévision du jour
+          </button>
+        </div>
+        {trackMsg && <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>{trackMsg}</p>}
+
+        {variance && variance.avgBiasPct != null && (
+          <div className="card pad" style={{ marginTop: 8, background: Math.abs(variance.avgBiasPct) > 10 ? "#fff7ed" : "#f0fdf4" }}>
+            {variance.avgBiasPct > 10
+              ? `⚠ En moyenne, le réel dépasse la prévision de ${variance.avgBiasPct}% (sous-estimation) — la prochaine projection sera ajustée à la hausse.`
+              : variance.avgBiasPct < -10
+                ? `⚠ En moyenne, le réel est inférieur de ${Math.abs(variance.avgBiasPct)}% à la prévision (surestimation) — projection à ajuster à la baisse.`
+                : `✅ Prévisions calibrées : écart moyen de ${variance.avgBiasPct}% (dans la marge).`}
+          </div>
+        )}
+
+        {variance && variance.rows.length > 0 ? (
+          <div style={{ marginTop: 8 }}>
+            {variance.rows.map((r, i) => {
+              const code = r.currencyCode || "?";
+              return (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: "1px solid #eef2f7", padding: "6px 0" }}>
+                  <span className="muted">{monthLabel(r.month)} · {code}</span>
+                  <span>
+                    prévu <strong>{fmtSigned(r.predicted)}</strong> · réel <strong>{fmtSigned(r.actual)}</strong>{" "}
+                    <span style={{ color: r.diff >= 0 ? "#16a34a" : "#dc2626" }}>
+                      ({r.pct != null ? `${r.pct > 0 ? "+" : ""}${r.pct}%` : "—"})
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>
+            Aucun historique de prévision encore comparable. Figez la prévision du jour : les mois écoulés seront comparés au réel ici.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

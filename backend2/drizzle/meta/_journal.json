@@ -1009,6 +1009,20 @@
                         "when":  1780531200000,
                         "tag":  "0167_farmos_egg_sales",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  144,
+                        "version":  "5",
+                        "when":  1780534800000,
+                        "tag":  "0168_farmos_boxes",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  145,
+                        "version":  "5",
+                        "when":  1780538400000,
+                        "tag":  "0169_forecast_snapshots",
+                        "breakpoints":  true
                     }
                 ]
 }
