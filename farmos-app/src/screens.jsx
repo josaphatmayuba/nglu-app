@@ -5694,6 +5694,41 @@ function FcChart({ serie }) {
     </svg>
   );
 }
+// Courbe du cheptel projeté (têtes) avec cône d'incertitude (headLow/headHigh).
+// `current` = effectif réel, ajouté en point de départ (trait plein → projection).
+function FcHeadChart({ points, current }) {
+  const W = 560, H = 170, pad = 30, color = "#2f7a4f";
+  const pts = [{ month: "now", head: current, headLow: current, headHigh: current }, ...points];
+  if (pts.length < 2) return <div style={{ fontSize: 13, color: "var(--fg-3)", padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const ys = pts.flatMap((p) => [p.head, p.headLow ?? p.head, p.headHigh ?? p.head]);
+  const min = Math.min(...ys), max = Math.max(...ys), span = max - min || 1;
+  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
+  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.head).toFixed(1)}`).join(" ");
+  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+  const hasBand = pts.some((p) => (p.headHigh ?? p.head) !== (p.headLow ?? p.head));
+  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.headHigh ?? p.head).toFixed(1)}`).join(" ");
+  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].headLow ?? pts[pts.length - 1 - i].head).toFixed(1)}`).join(" ");
+  const lbl = (p) => (p.month === "now" ? "aujourd'hui" : fcMonth(p.month));
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label="Cheptel projeté">
+      <defs><linearGradient id="fc-head" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <path d={areaFill} fill="url(#fc-head)" stroke="none" />
+      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.1" stroke="none" />}
+      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts.map((p, i) => (
+        <circle key={i} cx={x(i)} cy={y(p.head)} r="3.5" fill="var(--paper, #fff)" stroke={color} strokeWidth="2">
+          <title>{`${lbl(p)} : ${fcNf.format(Math.round(p.head))} têtes`}</title>
+        </circle>
+      ))}
+      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
+        <text key={`x-${i}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="var(--fg-3, #94a3b8)">{lbl(p)}</text>
+      ))}
+    </svg>
+  );
+}
 function FcSeg({ active, disabled, onClick, title, children }) {
   return (
     <button onClick={onClick} disabled={disabled} title={title}
@@ -5730,10 +5765,24 @@ const ForecastScreen = ({ lang }) => {
   const [prod, setProd] = React.useState(null);
   React.useEffect(() => { api.forecastProduction({ horizon }).then(setProd).catch(() => setProd(null)); }, [horizon]);
 
+  const [herd, setHerd] = React.useState(null);
+  React.useEffect(() => { api.forecastLivestock({ horizon }).then(setHerd).catch(() => setHerd(null)); }, [horizon]);
+
   const series = React.useMemo(() => (data ? fcSeries(data.months) : []), [data]);
   const summary = series.map((s) => { const last = s.points[s.points.length - 1]; return { code: s.code, cumul: last ? last.cumul : 0 }; });
   const horizonLabel = FC_HORIZONS.find((h) => h.v === horizon)?.label;
   const hasProd = prod && prod.series && prod.series.length > 0;
+  const hasHerd = herd && Array.isArray(herd.points) && herd.points.length > 0;
+  const herdRevenue = React.useMemo(() => {
+    if (!herd || !Array.isArray(herd.revenue)) return [];
+    const byCur = new Map();
+    for (const r of herd.revenue) {
+      const code = r.currencyCode || r.currencySymbol || "?";
+      byCur.set(code, (byCur.get(code) || 0) + Number(r.amount || 0));
+    }
+    return [...byCur.entries()];
+  }, [herd]);
+  const herdEnd = hasHerd ? herd.points[herd.points.length - 1] : null;
 
   const card = { padding: 18, marginBottom: 14 };
   const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 6, color: "var(--fg-3)" };
@@ -5836,6 +5885,32 @@ const ForecastScreen = ({ lang }) => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {hasHerd && (
+        <div className="card" style={card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+            <strong style={{ fontSize: 15 }}>{L("Projection du cheptel", "Livestock forecast")}</strong>
+            <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: "var(--forest-50)", color: "var(--forest-700)" }}>{L("naissances · mortalité · ventes", "births · mortality · sales")}</span>
+          </div>
+          <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 8 }}>
+            {L("À ce rythme, le cheptel passerait de", "At this pace, the herd would go from")}{" "}
+            <strong>{fcNf.format(Math.round(herd.current))}</strong> {L("à", "to")}{" "}
+            <strong style={{ color: "var(--forest-700)" }}>~{fcNf.format(Math.round(herdEnd.head))} {L("têtes", "head")}</strong> {L("à", "at")} <strong>{horizonLabel}</strong>{" "}
+            <span style={{ color: "var(--fg-3)" }}>({L("entre", "between")} {fcNf.format(Math.round(herdEnd.headLow))} {L("et", "and")} {fcNf.format(Math.round(herdEnd.headHigh))}).</span>
+          </div>
+          <FcHeadChart points={herd.points} current={herd.current} />
+          {herdRevenue.length > 0 && (
+            <p style={{ fontSize: 13, margin: "10px 0 0", padding: "10px 0 0", borderTop: "1px solid var(--border-1)" }}>
+              {L("Recette de vente déduite du cheptel", "Sales revenue from projected herd")} :{" "}
+              {herdRevenue.map(([code, amt], i) => (
+                <strong key={code} style={{ color: "var(--forest-700)" }}>{i > 0 ? " et " : ""}{fcNf.format(Math.round(amt))} {code}</strong>
+              ))}{" "}
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: "var(--ink-100)", color: "var(--fg-2)" }}>{L("estimé", "estimated")}</span>
+            </p>
+          )}
+          <p style={{ fontSize: 11, margin: "6px 0 0", color: "var(--fg-3)" }}>{herd.basis}</p>
         </div>
       )}
     </div>

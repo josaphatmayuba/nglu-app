@@ -255,6 +255,7 @@ export const api = {
   forecastCashFlow: ({ horizon, mode, scope = "farmos", adjust } = {}) =>
     globalJsonFetch(`/forecast/cash-flow?horizon=${horizon}&mode=${mode}&scope=${scope}${adjust ? `&adjust=${encodeURIComponent(adjust)}` : ""}`),
   forecastProduction: ({ horizon } = {}) => globalJsonFetch(`/forecast/production?horizon=${horizon}`),
+  forecastLivestock: ({ horizon } = {}) => globalJsonFetch(`/forecast/livestock?horizon=${horizon}`),
   forecastVariance: ({ scope = "farmos" } = {}) => globalJsonFetch(`/forecast/variance?scope=${scope}`),
   forecastSnapshot: ({ horizon = 6, mode = "realiste", scope = "farmos" } = {}) =>
     globalJsonFetch(`/forecast/snapshot?horizon=${horizon}&mode=${mode}&scope=${scope}`, { method: "POST" }),

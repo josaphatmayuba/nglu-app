@@ -62,45 +62,85 @@ function buildSeries(months) {
   return [...byCur.values()];
 }
 
-/** Mini-graphe SVG (cumul par devise) — pas de dépendance, tactile-friendly. */
-function MiniChart({ serie, color = "#2563eb" }) {
-  const W = 560, H = 170, pad = 30;
-  const pts = serie.points;
-  if (pts.length < 2) return <div className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
-  const ys = pts.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]);
-  const min = Math.min(0, ...ys), max = Math.max(0, ...ys);
+/** Chemin lissé (Catmull-Rom → Bézier) pour des courbes douces façon "area chart". */
+function smoothPath(coords) {
+  if (coords.length < 2) return "";
+  let d = `M${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i - 1] || coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+/**
+ * Graphe unique multi-devises en aires superposées translucides (façon maquette).
+ * Compact (hauteur réduite). Le 1er point = solde RÉEL de départ (trait plein),
+ * la suite = projection (trait pointillé), séparés par la ligne "aujourd'hui".
+ */
+function StackedChart({ series, colors }) {
+  const W = 720, H = 230, padX = 12, padTop = 16, padBottom = 26;
+  const drawn = series.filter((s) => s.points.length >= 2);
+  if (drawn.length === 0) return <div className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
+  const n = drawn[0].points.length;
+  const months = drawn[0].points.map((p) => p.month);
+  const allY = drawn.flatMap((s) => s.points.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]));
+  const min = Math.min(0, ...allY), max = Math.max(0, ...allY);
   const span = max - min || 1;
-  const x = (i) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
-  const y = (v) => H - pad - ((v - min) * (H - 2 * pad)) / span;
-  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.cumul).toFixed(1)}`).join(" ");
-  const areaFill = `${line} L${x(pts.length - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
-  const hasBand = pts.some((p) => (p.high ?? p.cumul) !== (p.low ?? p.cumul));
-  const bandUp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(p.high ?? p.cumul).toFixed(1)}`).join(" ");
-  const bandDown = pts.map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(pts[pts.length - 1 - i].low ?? pts[pts.length - 1 - i].cumul).toFixed(1)}`).join(" ");
+  const x = (i) => padX + (i * (W - 2 * padX)) / (n - 1);
+  const y = (v) => H - padBottom - ((v - min) * (H - padTop - padBottom)) / span;
   const zeroY = y(0);
-  const gid = `g-${serie.code}`;
+  const x0 = x(0); // "aujourd'hui" = point de départ réel
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label={`Courbe ${serie.code}`}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label="Trésorerie projetée par devise">
       <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
+        {drawn.map((s, i) => (
+          <linearGradient key={s.code} id={`fc-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={colors[i % colors.length]} stopOpacity="0.28" />
+            <stop offset="100%" stopColor={colors[i % colors.length]} stopOpacity="0.04" />
+          </linearGradient>
+        ))}
       </defs>
-      <line x1={pad} y1={zeroY} x2={W - pad} y2={zeroY} stroke="#cbd5e1" strokeDasharray="3 3" />
-      <path d={areaFill} fill={`url(#${gid})`} stroke="none" />
-      {hasBand && <path d={`${bandUp} ${bandDown} Z`} fill={color} opacity="0.10" stroke="none" />}
-      <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {pts.map((p, i) => (
-        <circle key={p.month} cx={x(i)} cy={y(p.cumul)} r="3.5" fill="#fff" stroke={color} strokeWidth="2">
-          <title>{`${monthLabel(p.month)} : ${fmtSigned(p.cumul)} ${serie.code}`}</title>
-        </circle>
-      ))}
-      {pts.map((p, i) => (i === 0 || i === pts.length - 1) && (
-        <text key={`x-${p.month}`} x={x(i)} y={H - 8} textAnchor={i === 0 ? "start" : "end"} fontSize="10" fill="#94a3b8">
-          {monthLabel(p.month)}
-        </text>
-      ))}
+
+      {/* ligne du zéro */}
+      <line x1={padX} y1={zeroY} x2={W - padX} y2={zeroY} stroke="#e2e8f0" />
+      {/* repère "aujourd'hui" */}
+      <line x1={x0} y1={padTop} x2={x0} y2={H - padBottom} stroke="#cbd5e1" strokeDasharray="2 3" />
+      <text x={x0 + 4} y={padTop + 9} fontSize="9" fill="#94a3b8">aujourd'hui</text>
+
+      {drawn.map((s, i) => {
+        const color = colors[i % colors.length];
+        const coords = s.points.map((p, k) => [x(k), y(p.cumul)]);
+        const linePath = smoothPath(coords);
+        const areaPath = `${linePath} L${x(n - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
+        return (
+          <g key={s.code}>
+            <path d={areaPath} fill={`url(#fc-grad-${i})`} stroke="none" />
+            {/* projection en pointillé */}
+            <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" opacity="0.95" />
+            {/* point de départ réel (plein, marqueur net) */}
+            <circle cx={coords[0][0]} cy={coords[0][1]} r="4" fill={color} stroke="#fff" strokeWidth="1.5">
+              <title>{`${monthLabel(s.points[0].month)} (réel) : ${fmtSigned(s.points[0].cumul)} ${s.code}`}</title>
+            </circle>
+            {/* point final projeté */}
+            <circle cx={coords[n - 1][0]} cy={coords[n - 1][1]} r="4" fill="#fff" stroke={color} strokeWidth="2.2">
+              <title>{`${monthLabel(s.points[n - 1].month)} (projeté) : ${fmtSigned(s.points[n - 1].cumul)} ${s.code}`}</title>
+            </circle>
+          </g>
+        );
+      })}
+
+      {/* labels début / fin */}
+      <text x={x(0)} y={H - 8} textAnchor="start" fontSize="10" fill="#94a3b8">{monthLabel(months[0])}</text>
+      <text x={x(n - 1)} y={H - 8} textAnchor="end" fontSize="10" fill="#94a3b8">{monthLabel(months[n - 1])}</text>
     </svg>
   );
 }
@@ -282,16 +322,26 @@ export function Forecast() {
                 </div>
               </div>
 
-              {/* ── Une courbe par devise ── */}
-              {series.map((s, i) => (
-                <div className="card pad" key={s.code}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                    <strong className="font-display" style={{ fontSize: 15 }}>Trésorerie projetée · {s.code}</strong>
-                    <span className={`chip ${mode === "prudent" ? "accent-soft" : "amber"}`}>{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
-                  </div>
-                  <MiniChart serie={s} color={SERIE_COLORS[i % SERIE_COLORS.length]} />
+              {/* ── Graphe unique : toutes les devises en aires superposées ── */}
+              <div className="card pad">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+                  <strong className="font-display" style={{ fontSize: 15 }}>Trésorerie projetée</strong>
+                  <span className={`chip ${mode === "prudent" ? "accent-soft" : "amber"}`}>{mode === "prudent" ? "certain · engagé" : "engagé + tendance"}</span>
                 </div>
-              ))}
+                <p className="muted" style={{ fontSize: 11, margin: "0 0 6px" }}>
+                  Point plein = solde réel actuel · trait pointillé = projection. Une courbe par devise (sans conversion).
+                </p>
+                {/* légende devises */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", margin: "0 0 6px" }}>
+                  {series.filter((s) => s.points.length >= 2).map((s, i) => (
+                    <span key={s.code} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: 3, background: SERIE_COLORS[i % SERIE_COLORS.length], opacity: 0.85 }} />
+                      {s.code}
+                    </span>
+                  ))}
+                </div>
+                <StackedChart series={series} colors={SERIE_COLORS} />
+              </div>
 
               {/* ── Détail mensuel repliable ── */}
               {data.months.length > 0 && (

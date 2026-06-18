@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.97.0)
+- FarmOS — **projection du cheptel dans le Prévisionnel** (combien d'animaux après tel temps + impact financier). Nouveau service backend `ForecastLivestockService` + endpoint `GET /forecast/livestock?horizon=`. Part de l'**effectif réel courant** (somme des têtes des animaux actifs non sortis) et applique mois par mois les leviers, dont les **taux sont calculés sur l'historique FarmOS réel** (6 mois) : naissances = N1 certain (gestations en cours, `farmos_reproduction_events`), mortalité = N2 estimé (taux mensuel historique × cheptel), ventes/abattage/sorties = N2 tendance (têtes sorties/mois). Sortie = **courbe des têtes par mois avec cône d'incertitude** (3%/mois, plafond 40%) + **impact financier** : têtes vendues projetées × prix moyen historique par devise → recette d'élevage prévisionnelle (jamais de conversion entre devises). `tsc --noEmit` backend OK. Route déjà couverte par la whitelist `/forecast`. UI à brancher. [SCRUM]
+
+### Fixed (3.96.1)
+- FarmOS — **déclaration de mortalité de nouveau possible**. La garde anti-écriture « animal décédé » (ajoutée en 3.94.3, `assertAnimalWritableById`) était aussi appliquée dans `createMortalityEvent`, ce qui rejetait la déclaration de décès elle-même (l'unique action légitime sur un animal mort). Garde retirée de ce seul endpoint ; elle reste active sur les autres écritures (traitements, ventes…). `tsc --noEmit` backend OK. [SCRUM]
+
 ### Added (3.96.0)
 - BatiPro — **échéancier de chantier dans le Prévisionnel** (dernière app du plan forecast). Migration **0174** (idempotente, au journal Drizzle → auto au boot) ajoute `currency_id`, `contract_amount`, `billed_amount` à `batipro_projects`. Nouveau producteur backend `BatiproScheduleProducer` (scope `batipro`, couche 1) : projette **dans les deux sens** — SORTIE = coût restant (`budget − spent`), ENTRÉE = à facturer (`contract_amount − billed_amount`), étalés linéairement du mois courant jusqu'à `due_date`, par devise. Backend : service/DTO BatiPro exposent les 3 nouveaux champs. UI BatiPro : formulaire chantier complété (devise + montant contrat + déjà facturé) et **nouvelle page Prévisionnel** (menu, thème ambre, courbe trésorerie + détail mensuel). `tsc --noEmit` backend OK, build BatiPro OK. **Le moteur forecast couvre désormais les 5 apps** (Compta/Domus/FarmOS/HR/BatiPro).
 

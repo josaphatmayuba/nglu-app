@@ -4,6 +4,7 @@ import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { ForecastLivestockService } from "./forecast-livestock.service";
 import { ForecastProductionService } from "./forecast-production.service";
 import { ForecastTrackingService } from "./forecast-tracking.service";
 import type { ForecastMode } from "./forecast.service";
@@ -22,6 +23,7 @@ export class ForecastController {
     private readonly forecast: ForecastService,
     private readonly tracking: ForecastTrackingService,
     private readonly production: ForecastProductionService,
+    private readonly livestock: ForecastLivestockService,
   ) {}
 
   @ApiOperation({ summary: "Projection de tresorerie (par mois x devise)" })
@@ -79,6 +81,15 @@ export class ForecastController {
   productionForecast(@CurrentOrg() orgId: number, @Query("horizon") horizon?: string) {
     const horizonMonths = HORIZONS.has(Number(horizon)) ? Number(horizon) : 6;
     return this.production.production(orgId, horizonMonths);
+  }
+
+  @ApiOperation({ summary: "Projection du cheptel (têtes dans le temps + impact ventes)" })
+  @ApiOkResponse({ description: "Effectif projeté par mois + recette de vente déduite" })
+  @Permissions("readAll-transaction")
+  @Get("livestock")
+  livestockForecast(@CurrentOrg() orgId: number, @Query("horizon") horizon?: string) {
+    const horizonMonths = HORIZONS.has(Number(horizon)) ? Number(horizon) : 6;
+    return this.livestock.livestock(orgId, horizonMonths);
   }
 }
 
