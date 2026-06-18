@@ -1,0 +1,142 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<style>
+  :root{
+    --paper:#FBF9F4; --ink-950:#1A1410; --ink-900:#2A211A; --ink-700:#5A4F44;
+    --fg-2:#6B6258; --fg-3:#9A9087; --border-1:#E7E1D6; --border-2:#D6CFC2;
+    --surface-1:#F6F3EC; --surface-2:#F0ECE3;
+    --green:#5A9A58; --green-bg:#E7F1E6; --red:#C0524C; --red-bg:#FBE9E7;
+    --amber:#C89020; --amber-bg:#FBF1DC;
+    --font:'Inter',-apple-system,'Segoe UI',sans-serif;
+    --font-display:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:#3a322b;padding:30px;display:flex;justify-content:center;gap:30px;flex-wrap:wrap;align-items:flex-start}
+  .panel{background:var(--paper);border-radius:18px;box-shadow:0 12px 48px rgba(0,0,0,.35);width:560px;overflow:hidden;display:flex;flex-direction:column}
+  .cap{color:#fff;text-align:center;font-size:12px;width:100%;margin-bottom:-12px;opacity:.7;font-weight:600;letter-spacing:.5px}
+  /* header */
+  .hd{display:flex;align-items:center;gap:13px;padding:16px 20px;border-bottom:1px solid var(--border-1)}
+  .hd .ic{width:38px;height:38px;border-radius:10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .hd .t{flex:1}
+  .hd .t b{font-family:var(--font-display);font-weight:700;font-size:17px;color:var(--ink-950);display:block}
+  .hd .t span{font-size:11px;color:var(--fg-3)}
+  .btn{border:1px solid var(--border-2);background:var(--paper);border-radius:9px;padding:7px 13px;font-size:12.5px;font-weight:600;color:var(--ink-700);cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font)}
+  .btn.dark{background:var(--ink-950);color:#fff;border-color:var(--ink-950)}
+  .btn.ghost{border-color:transparent;background:transparent}
+  /* legend */
+  .lg{display:flex;gap:18px;padding:10px 20px;border-bottom:1px solid var(--border-1);flex-wrap:wrap}
+  .lg .it{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-700)}
+  .lg .sw{width:13px;height:13px;border-radius:4px;border:1.5px solid}
+  .lg .n{font-size:10.5px;color:var(--fg-3);font-family:monospace}
+  /* box grid */
+  .gridwrap{padding:16px 20px 6px;max-height:300px;overflow-y:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px}
+  .box{border-radius:12px;border:1.5px solid var(--border-2);background:#fff;padding:10px 11px;cursor:pointer;position:relative;transition:.12s;min-height:74px;display:flex;flex-direction:column;justify-content:space-between}
+  .box:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+  .box .nm{font-weight:700;font-size:14px;color:var(--ink-950);display:flex;align-items:center;gap:5px}
+  .box .dot{width:8px;height:8px;border-radius:50%}
+  .box .hc{font-size:11px;color:var(--fg-2);font-weight:600;font-family:monospace}
+  .box .bar{height:5px;border-radius:3px;background:var(--border-1);overflow:hidden;margin-top:8px}
+  .box .bar>i{display:block;height:100%;border-radius:3px}
+  .box.sel{border-color:var(--ink-950);border-width:2px;box-shadow:0 4px 16px rgba(0,0,0,.14)}
+  .box.empty{background:var(--surface-1);border-style:dashed;border-color:var(--border-2)}
+  .box.empty .nm{color:var(--fg-2)}
+  .box.sick{background:var(--red-bg);border-color:#E5B5B0}
+  /* detail */
+  .detail{margin:6px 20px 0;border:1px solid var(--border-1);border-radius:14px;overflow:hidden;background:#fff}
+  .dh{display:flex;align-items:center;gap:10px;padding:12px 15px;background:var(--surface-1);border-bottom:1px solid var(--border-1)}
+  .dh .back{width:30px;height:30px;border-radius:8px;border:1px solid var(--border-2);background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;color:var(--ink-700)}
+  .dh b{font-size:15px;font-weight:700;color:var(--ink-950)}
+  .dh .hc{margin-left:auto;font-size:13px;font-weight:700;font-family:monospace;color:var(--green)}
+  .dbar{height:6px;background:var(--border-1)}
+  .dbar>i{display:block;height:100%;background:var(--green);width:90%}
+  .row{display:flex;align-items:center;gap:10px;padding:9px 13px;font-size:13px;border-bottom:1px solid var(--surface-1)}
+  .row .dot{width:9px;height:9px;border-radius:50%;background:var(--red)}
+  .row .nm{font-weight:600;color:var(--ink-900)}
+  .row .lot{font-size:10.5px;color:var(--ink-700);background:var(--green-bg);padding:2px 9px;border-radius:20px}
+  .row .tr{margin-left:auto;color:var(--red);cursor:pointer;font-size:14px}
+  .add{padding:12px 15px;background:var(--surface-1)}
+  .add .lbl{font-size:11px;color:var(--fg-3);margin-bottom:6px}
+  .add select{width:100%;padding:10px 12px;border:1px solid var(--border-2);border-radius:9px;background:#fff;font-size:13px;font-family:var(--font);color:var(--ink-900)}
+  .add .chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+  .ft{display:flex;padding:12px 20px;border-top:1px solid var(--border-1);margin-top:12px}
+  .ft .btn{flex:1;justify-content:center}
+</style></head>
+<body>
+
+<!-- ===== ÉTAT A : vue d'ensemble ===== -->
+<div>
+<div class="cap">A · Vue d'ensemble (grille de box, plan lisible)</div>
+<div class="panel">
+  <div class="hd">
+    <div class="ic">🏠</div>
+    <div class="t"><b>Bâtiment Porcs Kasangulu</b><span>Plan intérieur · Affectation des box</span></div>
+    <button class="btn">＋ Box</button>
+    <button class="btn ghost">✕</button>
+  </div>
+  <div class="lg">
+    <div class="it"><span class="sw" style="background:var(--green-bg);border-color:var(--green)"></span>Occupée <span class="n">(8)</span></div>
+    <div class="it"><span class="sw" style="background:var(--red-bg);border-color:var(--red)"></span>Malade <span class="n">(2)</span></div>
+    <div class="it"><span class="sw" style="background:var(--surface-1);border-color:var(--border-2)"></span>Vide <span class="n">(138)</span></div>
+  </div>
+  <div class="gridwrap">
+    <div class="grid">
+      <div class="box">
+        <div class="nm"><span class="dot" style="background:var(--green)"></span>Box 1</div>
+        <div class="hc">7/10 têtes</div>
+        <div class="bar"><i style="width:70%;background:var(--green)"></i></div>
+      </div>
+      <div class="box sel sick">
+        <div class="nm"><span class="dot" style="background:var(--red)"></span>Box 10</div>
+        <div class="hc">9/10 têtes</div>
+        <div class="bar"><i style="width:90%;background:var(--green)"></i></div>
+      </div>
+      <div class="box empty"><div class="nm">Box 100</div><div class="hc">0/10</div><div class="bar"><i style="width:0"></i></div></div>
+      <div class="box empty"><div class="nm">Box 101</div><div class="hc">0/10</div><div class="bar"><i style="width:0"></i></div></div>
+      <div class="box"><div class="nm"><span class="dot" style="background:var(--green)"></span>Box 102</div><div class="hc">4/10 têtes</div><div class="bar"><i style="width:40%;background:var(--green)"></i></div></div>
+      <div class="box empty"><div class="nm">Box 103</div><div class="hc">0/10</div><div class="bar"><i style="width:0"></i></div></div>
+      <div class="box"><div class="nm"><span class="dot" style="background:var(--amber)"></span>Box 104</div><div class="hc">10/10 plein</div><div class="bar"><i style="width:100%;background:var(--amber)"></i></div></div>
+      <div class="box empty"><div class="nm">Box 105</div><div class="hc">0/10</div><div class="bar"><i style="width:0"></i></div></div>
+      <div class="box empty"><div class="nm">Box 106</div><div class="hc">0/10</div><div class="bar"><i style="width:0"></i></div></div>
+    </div>
+  </div>
+  <div class="ft"><button class="btn ghost">Fermer</button></div>
+</div>
+</div>
+
+<!-- ===== ÉTAT B : box sélectionné ===== -->
+<div>
+<div class="cap">B · Box ouvert (bouton retour ‹ + détail clair)</div>
+<div class="panel">
+  <div class="hd">
+    <div class="ic">🏠</div>
+    <div class="t"><b>Bâtiment Porcs Kasangulu</b><span>Plan intérieur · Affectation des box</span></div>
+    <button class="btn">＋ Box</button>
+    <button class="btn ghost">✕</button>
+  </div>
+  <div class="detail" style="margin-top:16px">
+    <div class="dh">
+      <div class="back">‹</div>
+      <b>Box 10</b>
+      <span style="font-size:10.5px;color:var(--ink-700);background:var(--red-bg);padding:2px 9px;border-radius:20px;font-weight:600">Malade</span>
+      <span class="hc">9/10 têtes</span>
+    </div>
+    <div class="dbar"><i></i></div>
+    <div>
+      <div class="row"><span class="dot"></span><span class="nm">Diane</span><span class="lot">Cheptel Zone B</span><span class="tr">🗑</span></div>
+      <div class="row"><span class="dot"></span><span class="nm">Hélène</span><span class="lot">Cheptel Zone B</span><span class="tr">🗑</span></div>
+      <div class="row"><span class="dot"></span><span class="nm">Jade</span><span class="lot">Cheptel Zone B</span><span class="tr">🗑</span></div>
+      <div class="row"><span class="dot"></span><span class="nm">Nora</span><span class="lot">Cheptel Zone B</span><span class="tr">🗑</span></div>
+      <div class="row"><span class="dot"></span><span class="nm">Paule</span><span class="lot">Cheptel Zone B</span><span class="tr">🗑</span></div>
+    </div>
+    <div class="add">
+      <div class="lbl">Placer tout un lot :</div>
+      <div class="chips"><button class="btn">＋ Lot Cheptel Zone B</button></div>
+      <div class="lbl">Ajouter un animal :</div>
+      <select><option>— choisir —</option></select>
+    </div>
+  </div>
+  <div class="ft"><button class="btn ghost">Fermer</button></div>
+</div>
+</div>
+
+</body></html>
