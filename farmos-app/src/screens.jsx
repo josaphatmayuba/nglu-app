@@ -5135,6 +5135,7 @@ const printFieldSheets = (building, stats, lang) => {
     sheet(L("Fiche alimentation", "Feeding sheet"), [L("Aliment", "Feed")], L("quantité distribuée (kg)", "amount given (kg)")),
     sheet(L("Fiche production", "Production sheet"), [L("Type", "Type")], L("quantité produite par jour", "output per day")),
     sheet(L("Fiche soins / traitements", "Care / treatment sheet"), [L("Produit", "Product"), L("Dose", "Dose"), L("Délai retrait", "Withdrawal")], L("traitements appliqués", "treatments applied")),
+    sheet(L("Fiche naissances", "Birth sheet"), [L("Vivants M", "Live M"), L("Vivants F", "Live F"), L("Mort-nés", "Stillborn")], L("naissances par jour", "births per day")),
   ].join("");
 
   const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Fiches de terrain", "Field sheets")} — ${esc(building.name)}</title>
