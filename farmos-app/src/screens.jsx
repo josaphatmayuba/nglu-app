@@ -3067,11 +3067,13 @@ const printForecastReport = async (lang, horizon = 6) => {
 // Imprime un rapport de MORTALITÉ : liste chaque événement de décès (date, espèce,
 // nombre, cause présumée / confirmée, lieu, perte estimée, symptômes, notes), avec
 // totaux par cause / espèce et une explication en langage naturel.
-const printMortalityReport = (events, lang) => {
+const printMortalityReport = (events, lang, moneyUnit = "") => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
   const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
+  const cur = moneyUnit ? " " + esc(moneyUnit) : "";
+  const money = (v) => nf.format(Math.round(Number(v || 0))) + cur;
   const list = Array.isArray(events) ? events.slice().sort((a, b) => String(b.eventDate ?? "").localeCompare(String(a.eventDate ?? ""))) : [];
   const spLabel = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.fr : s.en) : (id || "—"); };
   let totalDeaths = 0, totalLoss = 0, confirmedCount = 0;
@@ -3099,22 +3101,22 @@ const printMortalityReport = (events, lang) => {
       + `<td>${esc(cause)}</td>`
       + `<td>${confirmed ? `<b>${esc(e.confirmedCause)}</b>` : `<span style="color:#999">${L("présumée", "presumed")}</span>`}</td>`
       + `<td>${place}</td>`
-      + `<td class="num">${e.estimatedLoss != null && e.estimatedLoss !== "" ? nf.format(Number(e.estimatedLoss)) : ""}</td>`
+      + `<td class="num">${e.estimatedLoss != null && e.estimatedLoss !== "" ? money(e.estimatedLoss) : ""}</td>`
       + `<td style="max-width:280px">${notes || "—"}</td>`
       + `</tr>`;
   }).join("");
   const head = `<th>${L("Date", "Date")}</th><th>${L("Espèce", "Species")}</th><th class="num">${L("Nb", "Qty")}</th>`
     + `<th>${L("Cause", "Cause")}</th><th>${L("Confirmée ?", "Confirmed?")}</th><th>${L("Lieu", "Location")}</th>`
-    + `<th class="num">${L("Perte est.", "Est. loss")}</th><th>${L("Notes / symptômes", "Notes / symptoms")}</th>`;
-  const foot = `<tr class="tot"><td colspan="2">${L("TOTAL", "TOTAL")}</td><td class="num">${totalDeaths}</td><td colspan="3"></td><td class="num">${totalLoss ? nf.format(Math.round(totalLoss)) : ""}</td><td></td></tr>`;
+    + `<th class="num">${L("Perte est.", "Est. loss")}${moneyUnit ? ` (${esc(moneyUnit)})` : ""}</th><th>${L("Notes / symptômes", "Notes / symptoms")}</th>`;
+  const foot = `<tr class="tot"><td colspan="2">${L("TOTAL", "TOTAL")}</td><td class="num">${totalDeaths}</td><td colspan="3"></td><td class="num">${totalLoss ? money(totalLoss) : ""}</td><td></td></tr>`;
   const topCause = Object.entries(byCause).sort((a, b) => b[1] - a[1])[0];
   const topSpecies = Object.entries(bySpecies).sort((a, b) => b[1] - a[1])[0];
   const confirmedPct = totalDeaths > 0 ? Math.round((confirmedCount / totalDeaths) * 100) : 0;
   const nlText = list.length === 0
     ? L("Aucun décès n'a été enregistré. Continuez à saisir les mortalités au fur et à mesure : c'est ce qui permet de détecter tôt une maladie ou un problème d'élevage.", "No deaths have been recorded. Keep logging mortalities as they happen: this is what lets you spot a disease or husbandry problem early.")
     : L(
-      `En clair : <b>${totalDeaths}</b> animal(aux) sont décédés sur <b>${list.length}</b> événement(s) enregistré(s)${totalLoss ? `, pour une perte estimée d'environ <b>${nf.format(Math.round(totalLoss))}</b>` : ""}. La cause la plus fréquente est <b>${esc(topCause[0])}</b> (${topCause[1]} décès) et l'espèce la plus touchée est <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} décès). Seulement <b>${confirmedPct}%</b> des décès ont une cause confirmée (examen / nécropsie) : les autres reposent sur une cause présumée par l'éleveur. Confirmer la cause (faire examiner les carcasses) aide à savoir s'il s'agit d'une maladie contagieuse à enrayer. Chaque ligne décrit un décès : quand, quelle espèce, combien d'animaux, la cause, le lieu et les observations.`,
-      `In plain words: <b>${totalDeaths}</b> animal(s) died across <b>${list.length}</b> recorded event(s)${totalLoss ? `, for an estimated loss of about <b>${nf.format(Math.round(totalLoss))}</b>` : ""}. The most frequent cause is <b>${esc(topCause[0])}</b> (${topCause[1]} deaths) and the most affected species is <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} deaths). Only <b>${confirmedPct}%</b> of deaths have a confirmed cause (exam / necropsy): the rest rely on a cause presumed by the farmer. Confirming the cause (having carcasses examined) helps tell whether it is a contagious disease to contain. Each row describes one death event: when, which species, how many animals, the cause, the location and the observations.`
+      `En clair : <b>${totalDeaths}</b> animal(aux) sont décédés sur <b>${list.length}</b> événement(s) enregistré(s)${totalLoss ? `, pour une perte estimée d'environ <b>${money(totalLoss)}</b>` : ""}. La cause la plus fréquente est <b>${esc(topCause[0])}</b> (${topCause[1]} décès) et l'espèce la plus touchée est <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} décès). Seulement <b>${confirmedPct}%</b> des décès ont une cause confirmée (examen / nécropsie) : les autres reposent sur une cause présumée par l'éleveur. Confirmer la cause (faire examiner les carcasses) aide à savoir s'il s'agit d'une maladie contagieuse à enrayer. Chaque ligne décrit un décès : quand, quelle espèce, combien d'animaux, la cause, le lieu et les observations.`,
+      `In plain words: <b>${totalDeaths}</b> animal(s) died across <b>${list.length}</b> recorded event(s)${totalLoss ? `, for an estimated loss of about <b>${money(totalLoss)}</b>` : ""}. The most frequent cause is <b>${esc(topCause[0])}</b> (${topCause[1]} deaths) and the most affected species is <b>${esc(spLabel(topSpecies[0]))}</b> (${topSpecies[1]} deaths). Only <b>${confirmedPct}%</b> of deaths have a confirmed cause (exam / necropsy): the rest rely on a cause presumed by the farmer. Confirming the cause (having carcasses examined) helps tell whether it is a contagious disease to contain. Each row describes one death event: when, which species, how many animals, the cause, the location and the observations.`
     );
   const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Rapport de mortalité", "Mortality report")}</title>
 <style>
@@ -3140,6 +3142,8 @@ const printMortalityReport = (events, lang) => {
 };
 
 const ReportsScreen = ({ lang }) => {
+  const currencyMeta = useCurrencyCatalog();
+  const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], loading: true });
   React.useEffect(() => {
     let cancel = false;
@@ -3165,7 +3169,7 @@ const ReportsScreen = ({ lang }) => {
     { fr: "Structure du cheptel ♂/♀", en: "Herd structure ♂/♀", descFr: "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀", descEn: "Males / females per category and building, + ♂:♀ ratio", icon: "fingerprint", color: "var(--pertinence-500)", needsData: true, action: () => printSexStructureReport(hcData.buildings, hcData.animals, lang) },
     { fr: "Ratio reproducteur M:F", en: "Breeding ratio M:F", descFr: "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture", descEn: "Males / females and M:F ratio per building, with reading guide", icon: "activity", color: "var(--oxblood-500)", needsData: true, action: () => printBreedingRatioReport(hcData.buildings, hcData.animals, lang) },
     { fr: "Prévision (6 mois)", en: "Forecast (6 months)", descFr: "Trésorerie et cheptel projetés sur 6 mois, avec fourchette et explication", descEn: "Cash flow and livestock projected over 6 months, with range and explanation", icon: "pulse", color: "var(--pertinence-500)", action: () => printForecastReport(lang, 6) },
-    { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(hcData.mortality, lang) },
+    { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(hcData.mortality, lang, moneyUnit) },
   ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.98.1)
+- FarmOS — **rapport de mortalité : la perte estimée affiche désormais la devise** (ex. « 330 USD » au lieu de « 330 » nu) dans la colonne, le total et l'explication en langage naturel. La table `farmos_mortality_events` n'ayant pas de colonne devise, le symbole vient de la **devise par défaut** de la ferme (`useCurrencyCatalog` → `symbolFor`), comme les autres montants FarmOS. [SCRUM]
+
 ### Changed (3.98.0)
 - FarmOS — **page Rapports réorganisée** : les rapports « générés en direct » (Rentabilité, Effectif par bâtiment, Structure du cheptel ♂/♀, Ratio reproducteur M:F) ne sont plus des bannières pleine largeur mais des **cartes** dans une grille homogène (section « Générés en direct · données réelles »), au-dessus de la bibliothèque d'archives. [SCRUM]
 
