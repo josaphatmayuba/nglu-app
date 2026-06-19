@@ -5120,9 +5120,9 @@ const printFieldSheets = (building, stats, lang) => {
 
   // Fiche Mortalité
   const sheetMortalite = () => {
-    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+    const rows = Array(lotNames.length + BLANK_ROWS).fill("").map(() =>
       dayLabels.map((day) => `<tr>
-        <td class="entity">${esc(name)}</td>
+        <td class="entity"></td>
         <td class="day-col">${day}</td>
         <td class="hour-col"></td>
         <td class="wide"></td>
@@ -5161,9 +5161,9 @@ const printFieldSheets = (building, stats, lang) => {
 
   // Fiche Alimentation
   const sheetAlimentation = () => {
-    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+    const rows = Array(lotNames.length + BLANK_ROWS).fill("").map(() =>
       dayLabels.map((day) => `<tr>
-        <td class="entity">${esc(name)}</td>
+        <td class="entity"></td>
         <td class="day-col">${day}</td>
         <td class="hour-col"></td>
         <td class="wide"></td>
@@ -5202,9 +5202,9 @@ const printFieldSheets = (building, stats, lang) => {
 
   // Fiche Production
   const sheetProduction = () => {
-    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+    const rows = Array(lotNames.length + BLANK_ROWS).fill("").map(() =>
       dayLabels.map((day) => `<tr>
-        <td class="entity">${esc(name)}</td>
+        <td class="entity"></td>
         <td class="day-col">${day}</td>
         <td class="hour-col"></td>
         <td class="wide"></td>
@@ -5244,8 +5244,8 @@ const printFieldSheets = (building, stats, lang) => {
   // Fiche Soins/Traitements
   const sheetSoins = () => {
     const SOIN_ROWS = (lotNames.length + BLANK_ROWS) * 2;
-    const rows = Array(SOIN_ROWS).fill("").map((_, i) => `<tr>
-      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+    const rows = Array(SOIN_ROWS).fill("").map(() => `<tr>
+      <td class="entity"></td>
       <td class="date-col"></td>
       <td class="hour-col"></td>
       <td class="wide"></td>
@@ -5290,8 +5290,8 @@ const printFieldSheets = (building, stats, lang) => {
   // Fiche Vaccination
   const sheetVaccination = () => {
     const VAC_ROWS = lotNames.length + BLANK_ROWS + 4;
-    const rows = Array(VAC_ROWS).fill("").map((_, i) => `<tr>
-      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+    const rows = Array(VAC_ROWS).fill("").map(() => `<tr>
+      <td class="entity"></td>
       <td class="date-col"></td>
       <td class="hour-col"></td>
       <td class="wide"></td>
@@ -5333,8 +5333,8 @@ const printFieldSheets = (building, stats, lang) => {
   // Fiche Naissances
   const sheetNaissances = () => {
     const NAI_ROWS = lotNames.length + BLANK_ROWS + 4;
-    const rows = Array(NAI_ROWS).fill("").map((_, i) => `<tr>
-      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+    const rows = Array(NAI_ROWS).fill("").map(() => `<tr>
+      <td class="entity"></td>
       <td class="wide"></td>
       <td class="date-col"></td>
       <td class="hour-col"></td>
