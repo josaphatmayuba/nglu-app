@@ -5098,6 +5098,69 @@ const printBuildingReport = (building, stats, lang) => {
   w.document.close();
 };
 
+// Génère et imprime les fiches de terrain hebdomadaires d'un bâtiment (4 fiches, 1 page chacune,
+// pré-remplies avec les lots + lignes vierges, à remplir au stylo puis scanner). Impression navigateur, sans backend.
+const printFieldSheets = (building, stats, lang) => {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  // Semaine prochaine : lundi -> dimanche
+  const today = new Date();
+  const dow = today.getDay() || 7; // 1 = lundi … 7 = dimanche
+  const nextMon = new Date(today); nextMon.setDate(today.getDate() - dow + 1 + 7);
+  const fmt = (d) => d.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { day: "2-digit", month: "2-digit" });
+  const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
+  const dayLabels = (lang === "fr" ? ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  const dayDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(nextMon); d.setDate(nextMon.getDate() + i); return fmt(d); });
+  const lotNames = stats.lots.map((l) => l.name);
+  const BLANK_ROWS = 4; // lignes vierges pour ajouts manuels
+
+  // Construit une page de fiche : title, colonnes "valeur" supplémentaires avant les 7 jours, et libellé d'unité.
+  const sheet = (title, extraCols, unitNote) => {
+    const dayHead = dayLabels.map((d, i) => `<th class="day">${d}<br><span class="dt">${dayDates[i]}</span></th>`).join("");
+    const extraHead = extraCols.map((c) => `<th>${esc(c)}</th>`).join("");
+    const colsPerRow = extraCols.length + 7;
+    const dataRow = (name) => `<tr><td class="lot">${esc(name)}</td>${Array.from({ length: colsPerRow }).map(() => `<td></td>`).join("")}<td class="obs"></td></tr>`;
+    const rows = lotNames.map(dataRow).join("") + Array.from({ length: BLANK_ROWS }).map(() => dataRow("")).join("");
+    return `<section class="page">
+  <h1>${esc(title)}</h1>
+  <div class="meta">${esc([building.name, building.type, building.species].filter(Boolean).join(" · "))}</div>
+  <div class="meta">${L("Semaine du", "Week of")} ${fmt(nextMon)} ${L("au", "to")} ${fmt(nextSun)}${unitNote ? ` · ${esc(unitNote)}` : ""}</div>
+  <table><thead><tr><th class="lot">${L("Lot / Animal", "Batch / Animal")}</th>${extraHead}${dayHead}<th class="obs">${L("Observations", "Notes")}</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="sign">${L("Rempli par", "Filled by")}: _________________________   ${L("Signature", "Signature")}: _________________________</div>
+</section>`;
+  };
+
+  const pages = [
+    sheet(L("Fiche mortalité", "Mortality sheet"), [L("Cause", "Cause")], L("nombre de morts par jour", "deaths per day")),
+    sheet(L("Fiche alimentation", "Feeding sheet"), [L("Aliment", "Feed")], L("quantité distribuée (kg)", "amount given (kg)")),
+    sheet(L("Fiche production", "Production sheet"), [L("Type", "Type")], L("quantité produite par jour", "output per day")),
+    sheet(L("Fiche soins / traitements", "Care / treatment sheet"), [L("Produit", "Product"), L("Dose", "Dose"), L("Délai retrait", "Withdrawal")], L("traitements appliqués", "treatments applied")),
+  ].join("");
+
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Fiches de terrain", "Field sheets")} — ${esc(building.name)}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  h1 { font-size: 19px; margin: 0 0 2px; color: #0E6438; }
+  .meta { color: #555; font-size: 12px; margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  th, td { border: 1px solid #999; padding: 6px 6px; text-align: left; }
+  th { background: #eef5ef; font-size: 11px; }
+  th.day, td.day { text-align: center; } th .dt { font-weight: 400; color: #777; font-size: 9px; }
+  td { height: 26px; } td.lot, th.lot { min-width: 90px; } td.obs, th.obs { min-width: 90px; }
+  .sign { margin-top: 14px; font-size: 12px; color: #333; }
+  @media print { body { margin: 12mm; } }
+</style></head><body>
+  ${pages}
+  <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { alert(L("Autorisez les pop-ups pour imprimer les fiches.", "Allow pop-ups to print the sheets.")); return; }
+  w.document.write(html);
+  w.document.close();
+};
+
 // Ordre et couleurs d'affichage des catégories animales
 const CATEGORY_ORDER = ["adulte", "cochette", "engraissement", "jeune", "inconnu"];
 const CATEGORY_COLORS = {
@@ -5274,6 +5337,10 @@ const BuildingViewer = ({ building, lang, stats, onEdit, onClose, onViewInterior
           <button className="btn btn-sm" onClick={() => printBuildingReport(building, stats, lang)} style={{ gap: 6 }}>
             <Icon name="report" size={12} color="var(--ink-700)"/>
             {lang === "fr" ? "Rapport" : "Report"}
+          </button>
+          <button className="btn btn-sm" onClick={() => printFieldSheets(building, stats, lang)} style={{ gap: 6 }}>
+            <Icon name="report" size={12} color="var(--ink-700)"/>
+            {lang === "fr" ? "Fiches terrain" : "Field sheets"}
           </button>
           <button className="btn btn-sm btn-primary" onClick={onEdit} style={{ gap: 6 }}>
             <Icon name="edit" size={12} color="#ECF1EC"/>

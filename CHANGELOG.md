@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.100.0)
+- FarmOS — **fiches de terrain hebdomadaires imprimables** (bouton « Fiches terrain » dans le modal d'un bâtiment, à côté de « Rapport »). Génère 4 fiches HTML imprimables (une page chacune) pour la **semaine prochaine** (lundi→dimanche, dates calculées auto) : Mortalité, Alimentation, Production et Soins/traitements. Chaque fiche est pré-remplie avec les **lots du bâtiment** (`stats.lots`) plus quelques **lignes vierges** pour ajouts manuels, 7 colonnes jour à remplir au stylo, colonne Observations et pied « Rempli par / Signature ». Usage prévu : imprimer → remplir à la main sur le terrain (travailleurs sans accès au téléphone) → scanner → ressaisir dans l'app. 100 % frontend (pattern d'impression `window.print`, sans backend ni migration). [SCRUM]
+- FarmOS — **attachement de scan papier dans les formulaires de saisie** (phase 2 du workflow fiches terrain). Les formulaires Mortalité (`DeathForm`), Production (`ProductionForm`) et Soins/traitements (`HealthForm`) intègrent un champ optionnel « Scan fiche terrain » : le manager choisit la photo ou le PDF du scan, celui-ci est converti en base64 et envoyé dans `farmos_documents` (`doc_type="field_scan"`) après la saisie principale, sans bloquer si l'upload échoue. Titre auto incluant la date et le contexte (espèce, bâtiment, médicament). Aucune migration ni modification backend (réutilise l'endpoint `/documents` existant). [SCRUM]
+
 ### Added (3.99.0)
 - FarmOS — **filtre par espèce sur la page Rapports** (`SpeciesPillBar` sous le titre). Les rapports générés en direct ne montrent alors que les données de l'espèce sélectionnée : Effectif, Structure ♂/♀, Ratio reproducteur (animaux filtrés), Mortalité (décès de l'espèce) et Prévision (paramètre `species` passé au moteur forecast trésorerie + cheptel). L'espèce active apparaît dans le titre de la page et dans l'en-tête de chaque rapport imprimé. La **Rentabilité** (PDF financier global, qui ne sait pas filtrer par espèce) est désactivée quand une espèce est sélectionnée, avec un message « retirer le filtre espèce ». [SCRUM]
 

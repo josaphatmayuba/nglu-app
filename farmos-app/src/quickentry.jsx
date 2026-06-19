@@ -768,6 +768,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
   const animalsForSpecies = (liveAnimals || []).filter((a) => a.species === species);
   const writableAnimalsForSpecies = animalsForSpecies.filter((a) => !isSaleLockedAnimal(a));
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
   const submit = async () => {
     if (saving) return;
     if (!form.value || !form.date) {
@@ -806,6 +807,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
     try {
       await api.createProductionLog(payload);
       window.dispatchEvent(new CustomEvent("farmos:production-created"));
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan production" : "Production scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${species} · ${productKind} · ${form.value} ${unit}`);
       onSaved && onSaved({ kind: "production", severity: "success", message: lang === "fr" ? `Production ${productKind === "milk" ? "lait" : productKind === "eggs" ? "œufs" : "poids"} enregistrée — ${form.value} ${unit}` : `Production saved — ${form.value} ${unit}` });
       onClose();
     } catch (err) {
@@ -931,6 +933,7 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
         <textarea className="input" style={{ height: 64, padding: 10 }} placeholder={lang === "fr" ? "Observations…" : "Observations…"} value={form.notes || ""} onChange={(e) => set("notes", e.target.value)}/>
       </FormSection>
 
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
@@ -972,6 +975,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
   const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
   const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : [];
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
 
   const submit = async () => {
     if (saving) return;
@@ -989,6 +993,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
           animal_count: form.n ? Number(form.n) : null,
           notes: form.booster ? `Prochain rappel: ${form.booster}` : null,
         });
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan vaccin" : "Vaccine scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species} · ${form.vaccine}`);
         onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré` : `Vaccine ${form.vaccine} saved` });
         onClose();
       } catch (err) {
@@ -1011,6 +1016,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
           vet: form.vet || null,
           diagnosis: form.diagnosis || null,
         });
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan examen vét" : "Vet exam scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species}${form.vet ? ` · ${form.vet}` : ""}`);
         onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? "Examen vétérinaire enregistré" : "Vet exam saved" });
         onClose();
       } catch (err) {
@@ -1058,6 +1064,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     try {
       await api.createTreatment(payload);
       window.dispatchEvent(new CustomEvent("farmos:treatment-created"));
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan traitement" : "Treatment scan"} — ${startDate}`, `${lang === "fr" ? "Animal" : "Animal"}: ${selectedAnimal?.name || form.animal}${selectedMed?.name ? ` · ${selectedMed.name}` : ""}`);
       onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? "Traitement enregistré" : "Treatment saved" });
       onClose();
     } catch (err) {
@@ -1229,6 +1236,7 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
         </FormSection>
       )}
 
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
@@ -1738,6 +1746,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [lossCurrencySymbol, setLossCurrencySymbol] = React.useState("");
   const [saving, setSaving] = React.useState(false);
+  const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
   React.useEffect(() => {
     api.listAnimals().then((rows) => { if (Array.isArray(rows)) setLiveAnimals(rows); }).catch(() => {});
     Promise.allSettled([api.getAppSetting(), api.listCurrencies()])
@@ -1779,6 +1788,7 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         necropsy_done: !!form.necropsy_done,
         notes: form.notes || null,
       });
+      await submitScanDocument(scan, `${lang === "fr" ? "Scan mortalité" : "Mortality scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species}${form.barn ? ` · ${lang === "fr" ? "Bâtiment" : "Barn"}: ${form.barn}` : ""}${form.lot ? ` · Lot: ${form.lot}` : ""}`);
       onSaved && onSaved({ kind: "death", severity: "high", message: lang === "fr" ? `Mortalité enregistrée — ${form.count || 1} animal·aux` : `Mortality saved — ${form.count || 1} animal(s)` });
       onClose();
     } catch (err) {
@@ -1887,9 +1897,60 @@ const DeathForm = ({ lang, defaultSpecies, enabledSpecies, onSaved, onClose }) =
         </FormGrid>
       </FormSection>
 
+      <ScanAttachmentField lang={lang} scan={scan} onFile={handleScanFile} onClear={clearScan}/>
       <FormActions lang={lang} onCancel={onClose} onSubmit={submit}/>
     </div>
   );
+};
+
+// ─── Scan attachment (fiche papier numérisée) ────────────────────────────
+// Lit un fichier image ou PDF, le convertit en base64, et expose dataUrl + meta.
+// Utilisé dans les formulaires de saisie pour joindre le scan de la fiche terrain.
+const useScanAttachment = () => {
+  const [scan, setScan] = React.useState(null); // { dataUrl, filename, contentType, sizeBytes }
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) { setScan(null); return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => setScan({ dataUrl: ev.target.result, filename: file.name, contentType: file.type, sizeBytes: file.size });
+    reader.readAsDataURL(file);
+  };
+  const clear = () => setScan(null);
+  return { scan, handleFile, clear };
+};
+
+const ScanAttachmentField = ({ lang, scan, onFile, onClear }) => (
+  <FormSection label={lang === "fr" ? "Scan fiche terrain (optionnel)" : "Field sheet scan (optional)"}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 12, color: "var(--fg-3)", lineHeight: 1.4 }}>
+        {lang === "fr"
+          ? "Joindre la photo ou le scan de la fiche papier remplie pour archivage."
+          : "Attach the photo or scan of the filled paper sheet for archiving."}
+      </div>
+      {scan ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg-sunken)", borderRadius: 8, border: "1px solid var(--border-1)" }}>
+          <Icon name="report" size={14} color="var(--forest-700)"/>
+          <span style={{ fontSize: 12, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scan.filename}</span>
+          <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{(scan.sizeBytes / 1024).toFixed(0)} Ko</span>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onClear} style={{ padding: "2px 8px", minWidth: 0, height: 26 }}>✕</button>
+        </div>
+      ) : (
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", padding: "8px 12px", border: "1px dashed var(--border-2)", borderRadius: 8, fontSize: 12, color: "var(--fg-2)", background: "var(--bg-sunken)", width: "fit-content" }}>
+          <Icon name="report" size={13} color="var(--fg-3)"/>
+          {lang === "fr" ? "Choisir un fichier…" : "Choose a file…"}
+          <input type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={onFile}/>
+        </label>
+      )}
+    </div>
+  </FormSection>
+);
+
+// Après soumission réussie d'un form, envoie le scan comme document farmos_documents.
+const submitScanDocument = async (scan, title, notes) => {
+  if (!scan?.dataUrl) return;
+  try {
+    await api.createDocument({ doc_type: "field_scan", title, data_url: scan.dataUrl, filename: scan.filename, content_type: scan.contentType, size_bytes: scan.sizeBytes, notes });
+  } catch (_) { /* scan non bloquant */ }
 };
 
 // ─── Form helpers ────────────────────────────────────────────────────────
