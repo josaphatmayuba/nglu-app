@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.100.2)
+- FarmOS — **refonte complète des fiches terrain** : format vertical (1 ligne par événement, grandes cases), semaine à remplir manuellement, colonne Heure sur toutes les fiches, exemples de remplissage en bas de chaque page. Fiche Soins : ajout Raison/Maladie + Durée (j). Fiche Vaccination : nouvelle fiche séparée. Fiche Naissances : colonne Mère (nom/N° oreille). [SCRUM]
+
 ### Added (3.100.1)
 - FarmOS — **fiche naissances** ajoutée aux fiches de terrain imprimables (5e page). Colonnes : Lot/Animal, Vivants M, Vivants F, Mort-nés, 7 jours, Observations. [SCRUM]
 

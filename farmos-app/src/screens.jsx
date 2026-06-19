@@ -5103,55 +5103,317 @@ const printBuildingReport = (building, stats, lang) => {
 const printFieldSheets = (building, stats, lang) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
-  // Semaine prochaine : lundi -> dimanche
-  const today = new Date();
-  const dow = today.getDay() || 7; // 1 = lundi … 7 = dimanche
-  const nextMon = new Date(today); nextMon.setDate(today.getDate() - dow + 1 + 7);
-  const fmt = (d) => d.toLocaleDateString(lang === "fr" ? "fr-FR" : "en-US", { day: "2-digit", month: "2-digit" });
-  const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
-  const dayLabels = (lang === "fr" ? ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
-  const dayDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(nextMon); d.setDate(nextMon.getDate() + i); return fmt(d); });
+  const fr = lang === "fr";
   const lotNames = stats.lots.map((l) => l.name);
-  const BLANK_ROWS = 4; // lignes vierges pour ajouts manuels
+  const BLANK_ROWS = 4;
+  const bldgMeta = esc([building.name, building.type, building.species].filter(Boolean).join(" · "));
 
-  // Construit une page de fiche : title, colonnes "valeur" supplémentaires avant les 7 jours, et libellé d'unité.
-  const sheet = (title, extraCols, unitNote) => {
-    const dayHead = dayLabels.map((d, i) => `<th class="day">${d}<br><span class="dt">${dayDates[i]}</span></th>`).join("");
-    const extraHead = extraCols.map((c) => `<th>${esc(c)}</th>`).join("");
-    const colsPerRow = extraCols.length + 7;
-    const dataRow = (name) => `<tr><td class="lot">${esc(name)}</td>${Array.from({ length: colsPerRow }).map(() => `<td></td>`).join("")}<td class="obs"></td></tr>`;
-    const rows = lotNames.map(dataRow).join("") + Array.from({ length: BLANK_ROWS }).map(() => dataRow("")).join("");
-    return `<section class="page">
+  const header = (title) => `
   <h1>${esc(title)}</h1>
-  <div class="meta">${esc([building.name, building.type, building.species].filter(Boolean).join(" · "))}</div>
-  <div class="meta">${L("Semaine du", "Week of")} ${fmt(nextMon)} ${L("au", "to")} ${fmt(nextSun)}${unitNote ? ` · ${esc(unitNote)}` : ""}</div>
-  <table><thead><tr><th class="lot">${L("Lot / Animal", "Batch / Animal")}</th>${extraHead}${dayHead}<th class="obs">${L("Observations", "Notes")}</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="sign">${L("Rempli par", "Filled by")}: _________________________   ${L("Signature", "Signature")}: _________________________</div>
+  <div class="meta">${bldgMeta}</div>
+  <div class="week-line">${L("Semaine du", "Week of")} <span class="week-blank"></span> ${L("au", "to")} <span class="week-blank"></span> 2026</div>`;
+
+  const sign = () => `<div class="sign">${L("Rempli par","Filled by")}: <span class="sign-line"></span> &nbsp; ${L("Signature","Signature")}: <span class="sign-line"></span></div>`;
+
+  const exTitle = fr ? "Exemple de remplissage :" : "Example:";
+  const dayLabels = fr ? ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"] : ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+
+  // Fiche Mortalité
+  const sheetMortalite = () => {
+    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+      dayLabels.map((day) => `<tr>
+        <td class="entity">${esc(name)}</td>
+        <td class="day-col">${day}</td>
+        <td class="hour-col"></td>
+        <td class="wide"></td>
+        <td class="num"></td>
+        <td class="wide"></td>
+      </tr>`).join("")
+    ).join("");
+    return `<section class="page">
+  ${header(L("Fiche mortalité","Mortality sheet"))}
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="day-col">${L("Jour","Day")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="wide">${L("Cause du décès","Cause of death")}</th>
+    <th class="num">${L("Nb morts","Deaths")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="day-col">${L("Jour","Day")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="wide">${L("Cause du décès","Cause of death")}</th>
+      <th class="num">${L("Nb morts","Deaths")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Lot Poulets A","Batch Hens A")}</td><td class="day-col ex-val">${L("Lundi","Monday")}</td><td class="hour-col ex-val">07h00</td><td class="wide ex-val">${L("Écrasement","Crushing")}</td><td class="num ex-val">2</td><td class="wide ex-val">${L("Retrouvés le matin","Found in the morning")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Poulets A","Batch Hens A")}</td><td class="day-col ex-val">${L("Mercredi","Wednesday")}</td><td class="hour-col ex-val">14h30</td><td class="wide ex-val">${L("Maladie inconnue","Unknown disease")}</td><td class="num ex-val">1</td><td class="wide ex-val">${L("Animal isolé avant mort","Animal was isolated")}</td></tr>
+      <tr><td class="entity ex-val">${L("Bessie #001","Bessie #001")}</td><td class="day-col ex-val">${L("Vendredi","Friday")}</td><td class="hour-col ex-val">02h00</td><td class="wide ex-val">${L("Accouchement difficile","Difficult birth")}</td><td class="num ex-val">1</td><td class="wide ex-val"></td></tr>
+    </tbody></table>
+  </div>
+</section>`;
+  };
+
+  // Fiche Alimentation
+  const sheetAlimentation = () => {
+    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+      dayLabels.map((day) => `<tr>
+        <td class="entity">${esc(name)}</td>
+        <td class="day-col">${day}</td>
+        <td class="hour-col"></td>
+        <td class="wide"></td>
+        <td class="num"></td>
+        <td class="wide"></td>
+      </tr>`).join("")
+    ).join("");
+    return `<section class="page">
+  ${header(L("Fiche alimentation","Feeding sheet"))}
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="day-col">${L("Jour","Day")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="wide">${L("Aliment distribué","Feed given")}</th>
+    <th class="num">${L("Quantité (kg)","Qty (kg)")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="day-col">${L("Jour","Day")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="wide">${L("Aliment distribué","Feed given")}</th>
+      <th class="num">${L("Quantité (kg)","Qty (kg)")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Lot Porcs B","Batch Pigs B")}</td><td class="day-col ex-val">${L("Lundi","Monday")}</td><td class="hour-col ex-val">07h00</td><td class="wide ex-val">${L("Maïs concassé","Crushed corn")}</td><td class="num ex-val">45</td><td class="wide ex-val">${L("Distribution matin","Morning feed")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Porcs B","Batch Pigs B")}</td><td class="day-col ex-val">${L("Lundi","Monday")}</td><td class="hour-col ex-val">17h00</td><td class="wide ex-val">${L("Son de blé","Wheat bran")}</td><td class="num ex-val">12</td><td class="wide ex-val">${L("Distribution soir","Evening feed")}</td></tr>
+      <tr><td class="entity ex-val">${L("Bessie #001","Bessie #001")}</td><td class="day-col ex-val">${L("Mardi","Tuesday")}</td><td class="hour-col ex-val">08h00</td><td class="wide ex-val">${L("Herbe + concentré","Grass + concentrate")}</td><td class="num ex-val">8</td><td class="wide ex-val"></td></tr>
+    </tbody></table>
+  </div>
+</section>`;
+  };
+
+  // Fiche Production
+  const sheetProduction = () => {
+    const rows = [...lotNames, ...Array(BLANK_ROWS).fill("")].map((name) =>
+      dayLabels.map((day) => `<tr>
+        <td class="entity">${esc(name)}</td>
+        <td class="day-col">${day}</td>
+        <td class="hour-col"></td>
+        <td class="wide"></td>
+        <td class="num"></td>
+        <td class="wide"></td>
+      </tr>`).join("")
+    ).join("");
+    return `<section class="page">
+  ${header(L("Fiche production","Production sheet"))}
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="day-col">${L("Jour","Day")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="wide">${L("Type de production","Production type")}</th>
+    <th class="num">${L("Quantité","Quantity")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="day-col">${L("Jour","Day")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="wide">${L("Type de production","Production type")}</th>
+      <th class="num">${L("Quantité","Quantity")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Lot Poules","Batch Hens")}</td><td class="day-col ex-val">${L("Lundi","Monday")}</td><td class="hour-col ex-val">06h30</td><td class="wide ex-val">${L("Œufs","Eggs")}</td><td class="num ex-val">184</td><td class="wide ex-val">${L("12 cassés","12 broken")}</td></tr>
+      <tr><td class="entity ex-val">${L("Bessie #001","Bessie #001")}</td><td class="day-col ex-val">${L("Lundi","Monday")}</td><td class="hour-col ex-val">05h00</td><td class="wide ex-val">${L("Lait (L)","Milk (L)")}</td><td class="num ex-val">22</td><td class="wide ex-val">${L("Traite matin","Morning milking")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Engraissement","Fattening Batch")}</td><td class="day-col ex-val">${L("Jeudi","Thursday")}</td><td class="hour-col ex-val">08h00</td><td class="wide ex-val">${L("Poids vif (kg)","Live weight (kg)")}</td><td class="num ex-val">87</td><td class="wide ex-val">${L("Pesée hebdomadaire","Weekly weighing")}</td></tr>
+    </tbody></table>
+  </div>
+</section>`;
+  };
+
+  // Fiche Soins/Traitements
+  const sheetSoins = () => {
+    const SOIN_ROWS = (lotNames.length + BLANK_ROWS) * 2;
+    const rows = Array(SOIN_ROWS).fill("").map((_, i) => `<tr>
+      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+      <td class="date-col"></td>
+      <td class="hour-col"></td>
+      <td class="wide"></td>
+      <td class="wide"></td>
+      <td class="num"></td>
+      <td class="num"></td>
+      <td class="wide"></td>
+    </tr>`).join("");
+    return `<section class="page">
+  ${header(L("Fiche soins / traitements","Care / treatment sheet"))}
+  <p class="hint">${L("Une ligne par traitement. Écrire la date et l'heure exactes.","One row per treatment. Write the exact date and time.")}</p>
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="date-col">${L("Date","Date")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="wide">${L("Raison / Maladie","Reason / Disease")}</th>
+    <th class="wide">${L("Médicament / Produit","Medicine / Product")}</th>
+    <th class="num">${L("Dose","Dose")}</th>
+    <th class="num">${L("Durée (j)","Duration (d)")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="date-col">${L("Date","Date")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="wide">${L("Raison / Maladie","Reason / Disease")}</th>
+      <th class="wide">${L("Médicament / Produit","Medicine / Product")}</th>
+      <th class="num">${L("Dose","Dose")}</th>
+      <th class="num">${L("Durée (j)","Duration (d)")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Bessie #001","Bessie #001")}</td><td class="date-col ex-val">23/06</td><td class="hour-col ex-val">08h00</td><td class="wide ex-val">${L("Diarrhée","Diarrhea")}</td><td class="wide ex-val">Amoxicilline</td><td class="num ex-val">5 ml</td><td class="num ex-val">5</td><td class="wide ex-val">${L("Injection matin","Morning injection")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Porcs B","Batch Pigs B")}</td><td class="date-col ex-val">25/06</td><td class="hour-col ex-val">10h00</td><td class="wide ex-val">${L("Parasites","Parasites")}</td><td class="wide ex-val">Ivermectine</td><td class="num ex-val">2 ml/10kg</td><td class="num ex-val">1</td><td class="wide ex-val">${L("Tout le lot traité","Whole batch treated")}</td></tr>
+    </tbody></table>
+  </div>
+</section>`;
+  };
+
+  // Fiche Vaccination
+  const sheetVaccination = () => {
+    const VAC_ROWS = lotNames.length + BLANK_ROWS + 4;
+    const rows = Array(VAC_ROWS).fill("").map((_, i) => `<tr>
+      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+      <td class="date-col"></td>
+      <td class="hour-col"></td>
+      <td class="wide"></td>
+      <td class="num"></td>
+      <td class="date-col"></td>
+      <td class="wide"></td>
+    </tr>`).join("");
+    return `<section class="page">
+  ${header(L("Fiche vaccination","Vaccination sheet"))}
+  <p class="hint">${L("Une ligne par vaccin administré. Indiquer le nombre d'animaux vaccinés et la date du prochain rappel si connu.","One row per vaccine. Write the number of animals vaccinated and the next booster date if known.")}</p>
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="date-col">${L("Date","Date")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="wide">${L("Nom du vaccin","Vaccine name")}</th>
+    <th class="num">${L("Nb animaux","Nb animals")}</th>
+    <th class="date-col">${L("Rappel prévu","Next booster")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="date-col">${L("Date","Date")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="wide">${L("Nom du vaccin","Vaccine name")}</th>
+      <th class="num">${L("Nb animaux","Nb animals")}</th>
+      <th class="date-col">${L("Rappel prévu","Next booster")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Lot Poulets A","Batch Hens A")}</td><td class="date-col ex-val">24/06</td><td class="hour-col ex-val">07h30</td><td class="wide ex-val">Newcastle ND</td><td class="num ex-val">200</td><td class="date-col ex-val">24/09</td><td class="wide ex-val">${L("Eau de boisson","Drinking water")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Porcs B","Batch Pigs B")}</td><td class="date-col ex-val">24/06</td><td class="hour-col ex-val">09h00</td><td class="wide ex-val">PPA (Rouget)</td><td class="num ex-val">18</td><td class="date-col ex-val">24/12</td><td class="wide ex-val">${L("Injection sous-cutanée","Subcutaneous injection")}</td></tr>
+    </tbody></table>
+  </div>
+</section>`;
+  };
+
+  // Fiche Naissances
+  const sheetNaissances = () => {
+    const NAI_ROWS = lotNames.length + BLANK_ROWS + 4;
+    const rows = Array(NAI_ROWS).fill("").map((_, i) => `<tr>
+      <td class="entity">${i < lotNames.length ? esc(lotNames[i]) : ""}</td>
+      <td class="wide"></td>
+      <td class="date-col"></td>
+      <td class="hour-col"></td>
+      <td class="num"></td>
+      <td class="num"></td>
+      <td class="num"></td>
+      <td class="wide"></td>
+    </tr>`).join("");
+    return `<section class="page">
+  ${header(L("Fiche naissances","Birth sheet"))}
+  <p class="hint">${L("Une ligne par mise bas. Écrire le nom ou le numéro d'oreille de la mère.","One row per birth. Write the mother name or ear tag.")}</p>
+  <table><thead><tr>
+    <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+    <th class="wide">${L("Mère (nom / N° oreille)","Mother (name / ear tag)")}</th>
+    <th class="date-col">${L("Date","Date")}</th>
+    <th class="hour-col">${L("Heure","Time")}</th>
+    <th class="num">${L("Vivants M","Live M")}</th>
+    <th class="num">${L("Vivants F","Live F")}</th>
+    <th class="num">${L("Mort-nés","Stillborn")}</th>
+    <th class="wide">${L("Observations","Notes")}</th>
+  </tr></thead><tbody>${rows}</tbody></table>
+  ${sign()}
+  <div class="example-box">
+    <div class="ex-title">${exTitle}</div>
+    <table class="ex-table"><thead><tr>
+      <th class="entity">${L("Lot / Animal","Batch / Animal")}</th>
+      <th class="wide">${L("Mère (nom / N° oreille)","Mother (name / ear tag)")}</th>
+      <th class="date-col">${L("Date","Date")}</th>
+      <th class="hour-col">${L("Heure","Time")}</th>
+      <th class="num">${L("Vivants M","Live M")}</th>
+      <th class="num">${L("Vivants F","Live F")}</th>
+      <th class="num">${L("Mort-nés","Stillborn")}</th>
+      <th class="wide">${L("Observations","Notes")}</th>
+    </tr></thead><tbody>
+      <tr><td class="entity ex-val">${L("Lot Truies C","Sow Batch C")}</td><td class="wide ex-val">${L("Rose #042","Rose #042")}</td><td class="date-col ex-val">25/06</td><td class="hour-col ex-val">02h15</td><td class="num ex-val">6</td><td class="num ex-val">5</td><td class="num ex-val">1</td><td class="wide ex-val">${L("Mise bas assistée","Assisted birth")}</td></tr>
+      <tr><td class="entity ex-val">${L("Lot Truies C","Sow Batch C")}</td><td class="wide ex-val">${L("Noire #019","Noire #019")}</td><td class="date-col ex-val">27/06</td><td class="hour-col ex-val">10h45</td><td class="num ex-val">4</td><td class="num ex-val">7</td><td class="num ex-val">0</td><td class="wide ex-val">${L("Mise bas normale","Normal birth")}</td></tr>
+    </tbody></table>
+  </div>
 </section>`;
   };
 
   const pages = [
-    sheet(L("Fiche mortalité", "Mortality sheet"), [L("Cause", "Cause")], L("nombre de morts par jour", "deaths per day")),
-    sheet(L("Fiche alimentation", "Feeding sheet"), [L("Aliment", "Feed")], L("quantité distribuée (kg)", "amount given (kg)")),
-    sheet(L("Fiche production", "Production sheet"), [L("Type", "Type")], L("quantité produite par jour", "output per day")),
-    sheet(L("Fiche soins / traitements", "Care / treatment sheet"), [L("Produit", "Product"), L("Dose", "Dose"), L("Délai retrait", "Withdrawal")], L("traitements appliqués", "treatments applied")),
-    sheet(L("Fiche naissances", "Birth sheet"), [L("Vivants M", "Live M"), L("Vivants F", "Live F"), L("Mort-nés", "Stillborn")], L("naissances par jour", "births per day")),
+    sheetMortalite(),
+    sheetAlimentation(),
+    sheetProduction(),
+    sheetSoins(),
+    sheetVaccination(),
+    sheetNaissances(),
   ].join("");
 
-  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Fiches de terrain", "Field sheets")} — ${esc(building.name)}</title>
+  const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><title>${L("Fiches de terrain","Field sheets")} — ${esc(building.name)}</title>
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 32px; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 20mm 15mm; font-size: 13px; }
   .page { page-break-after: always; }
   .page:last-child { page-break-after: auto; }
-  h1 { font-size: 19px; margin: 0 0 2px; color: #0E6438; }
-  .meta { color: #555; font-size: 12px; margin-bottom: 4px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-  th, td { border: 1px solid #999; padding: 6px 6px; text-align: left; }
-  th { background: #eef5ef; font-size: 11px; }
-  th.day, td.day { text-align: center; } th .dt { font-weight: 400; color: #777; font-size: 9px; }
-  td { height: 26px; } td.lot, th.lot { min-width: 90px; } td.obs, th.obs { min-width: 90px; }
-  .sign { margin-top: 14px; font-size: 12px; color: #333; }
-  @media print { body { margin: 12mm; } }
+  h1 { font-size: 20px; margin: 0 0 3px; color: #0E6438; }
+  .meta { color: #555; font-size: 12px; margin-bottom: 6px; }
+  .week-line { font-size: 13px; margin-bottom: 10px; font-weight: 600; }
+  .week-blank { display: inline-block; width: 90px; border-bottom: 1.5px solid #333; margin: 0 4px; vertical-align: bottom; }
+  .hint { font-size: 11px; color: #666; margin: 4px 0 8px; font-style: italic; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #888; padding: 8px 7px; text-align: left; vertical-align: top; }
+  th { background: #ddeedd; font-size: 11px; font-weight: 700; }
+  td { min-height: 32px; height: 32px; }
+  td.entity, th.entity { width: 18%; }
+  td.day-col, th.day-col { width: 12%; }
+  td.date-col, th.date-col { width: 12%; }
+  td.wide, th.wide { width: 22%; }
+  td.num, th.num { width: 7%; text-align: center; }
+  td.hour-col, th.hour-col { width: 8%; text-align: center; }
+  .sign { margin-top: 18px; font-size: 12px; color: #333; display: flex; gap: 40px; }
+  .sign-line { display: inline-block; width: 160px; border-bottom: 1px solid #555; vertical-align: bottom; }
+  .example-box { margin-top: 18px; border: 1px dashed #aaa; border-radius: 4px; padding: 8px 10px; background: #f9fdf9; }
+  .ex-title { font-size: 11px; font-weight: 700; color: #0E6438; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  table.ex-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table.ex-table th { background: #e8f3e8; font-size: 10px; padding: 4px 5px; border: 1px solid #bbb; }
+  table.ex-table td { border: 1px solid #bbb; padding: 4px 5px; height: 22px; }
+  td.ex-val { color: #1a6e2e; font-style: italic; }
+  @media print { body { margin: 12mm 10mm; } .example-box { border-color: #ccc; } }
 </style></head><body>
   ${pages}
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
