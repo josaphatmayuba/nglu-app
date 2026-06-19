@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.99.0)
+- FarmOS — **filtre par espèce sur la page Rapports** (`SpeciesPillBar` sous le titre). Les rapports générés en direct ne montrent alors que les données de l'espèce sélectionnée : Effectif, Structure ♂/♀, Ratio reproducteur (animaux filtrés), Mortalité (décès de l'espèce) et Prévision (paramètre `species` passé au moteur forecast trésorerie + cheptel). L'espèce active apparaît dans le titre de la page et dans l'en-tête de chaque rapport imprimé. La **Rentabilité** (PDF financier global, qui ne sait pas filtrer par espèce) est désactivée quand une espèce est sélectionnée, avec un message « retirer le filtre espèce ». [SCRUM]
+
 ### Fixed (3.98.1)
 - FarmOS — **rapport de mortalité : la perte estimée affiche désormais la devise** (ex. « 330 USD » au lieu de « 330 » nu) dans la colonne, le total et l'explication en langage naturel. La table `farmos_mortality_events` n'ayant pas de colonne devise, le symbole vient de la **devise par défaut** de la ferme (`useCurrencyCatalog` → `symbolFor`), comme les autres montants FarmOS. [SCRUM]
 

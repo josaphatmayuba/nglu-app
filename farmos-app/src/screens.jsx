@@ -2794,10 +2794,11 @@ const RevExpChart = ({ lang, summary }) => {
 
 // ─── REPORTS ─────────────────────────────────────────────────────────────
 // Imprime un rapport d'effectif GLOBAL : tous les bâtiments + total par catégorie.
-const printHeadcountReport = (buildings, animals, lang) => {
+const printHeadcountReport = (buildings, animals, lang, speciesLabel = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const spSuffix = speciesLabel ? ` · ${esc(speciesLabel)}` : ` · ${L("toutes espèces", "all species")}`;
   const grand = { adulte: 0, cochette: 0, engraissement: 0, jeune: 0, inconnu: 0 };
   let grandTotal = 0, grandReady = 0, grandOverdue = 0;
   const rows = (buildings || []).map((b) => {
@@ -2831,7 +2832,7 @@ const printHeadcountReport = (buildings, animals, lang) => {
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Rapport d'effectif global", "Global headcount report")}</h1>
-  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}${spSuffix}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${nlText}</div>
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
@@ -2844,10 +2845,11 @@ const printHeadcountReport = (buildings, animals, lang) => {
 // Imprime un rapport de STRUCTURE du cheptel : par bâtiment, mâles / femelles (M/F)
 // dans chaque catégorie (adultes, cochettes, engraissement, jeunes), + total M, total F
 // et total général (M+F) par bâtiment.
-const printSexStructureReport = (buildings, animals, lang) => {
+const printSexStructureReport = (buildings, animals, lang, speciesLabel = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const spSuffix = speciesLabel ? ` · ${esc(speciesLabel)}` : ` · ${L("toutes espèces", "all species")}`;
   const grand = {}; CATEGORY_ORDER.forEach((c) => { grand[c] = { M: 0, F: 0, inconnu: 0 }; });
   let gM = 0, gF = 0, gU = 0;
   const cell = (sb, c) => {
@@ -2879,7 +2881,7 @@ const printSexStructureReport = (buildings, animals, lang) => {
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Structure du cheptel — répartition mâles / femelles", "Herd structure — male / female breakdown")}</h1>
-  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}${spSuffix}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="lgd">${L("M = mâles · F = femelles · ? = sexe non renseigné. La colonne Total = M + F (+ sexe non renseigné).", "M = males · F = females · ? = sex not set. The Total column = M + F (+ sex not set).")}</div>
   <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${L(
@@ -2895,10 +2897,11 @@ const printSexStructureReport = (buildings, animals, lang) => {
 
 // Imprime un rapport RATIO REPRODUCTEUR : par bâtiment, total mâles / femelles et le
 // ratio M:F, + encadré expliquant comment lire le ratio.
-const printBreedingRatioReport = (buildings, animals, lang) => {
+const printBreedingRatioReport = (buildings, animals, lang, speciesLabel = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const spSuffix = speciesLabel ? ` · ${esc(speciesLabel)}` : ` · ${L("toutes espèces", "all species")}`;
   const ratio = (m, f) => (f > 0 ? `1:${(m / f).toFixed(2).replace(/\.?0+$/, "")}` : (m > 0 ? "—" : ""));
   // Espèce dominante d'un bâtiment (la plus représentée), pour choisir le ratio idéal.
   const dominantSpecies = (list) => {
@@ -2946,7 +2949,7 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Ratio reproducteur — mâles / femelles", "Breeding ratio — males / females")}</h1>
-  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}</div>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${(buildings || []).length} ${L("bâtiments", "buildings")}${spSuffix}</div>
   <table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>
   <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${L(
     `En clair : la ferme compte au total <b>${gM}</b> mâles pour <b>${gF}</b> femelles, soit un ratio global de <b>${ratio(gM, gF)}</b>${gF > 0 ? ` (environ ${(gF / Math.max(gM, 1)).toFixed(0)} femelle(s) par mâle)` : ""}. ${gM === 0 ? "Sans mâle reproducteur, aucune saillie naturelle n'est possible : il faut introduire au moins un mâle ou recourir à l'insémination." : (gF / gM) > 30 ? "Il y a relativement peu de mâles pour beaucoup de femelles : surveillez que toutes les femelles soient bien fécondées." : (gF / gM) < 5 && gM > 1 ? "Il y a beaucoup de mâles par rapport aux femelles : un mâle peut couvrir plusieurs femelles, le surplus de mâles peut être engraissé pour la vente." : "L'équilibre mâles / femelles est globalement cohérent pour la reproduction."} La colonne <b>Interprétation</b> précise, bâtiment par bâtiment, si ce ratio est bon (vert), s'il manque des mâles (rouge) ou s'il y en a trop (orange).`,
@@ -2974,19 +2977,21 @@ const printBreedingRatioReport = (buildings, animals, lang) => {
 // Imprime un rapport de PRÉVISION (forecast) : projette trésorerie, cheptel et
 // production sur un horizon donné en réutilisant le moteur forecast backend2
 // (scope "farmos"), puis ajoute une explication en langage naturel.
-const printForecastReport = async (lang, horizon = 6) => {
+const printForecastReport = async (lang, horizon = 6, species = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
   const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
   const horizonLabel = horizon >= 12 ? L(`${horizon / 12} an(s)`, `${horizon / 12} year(s)`) : L(`${horizon} mois`, `${horizon} months`);
+  const spDef = species ? speciesById(species) : null;
+  const speciesLabel = spDef ? (lang === "fr" ? spDef.fr : spDef.en) : null;
   const w = window.open("", "_blank");
   if (!w) { alert(L("Autorisez les pop-ups pour imprimer le rapport.", "Allow pop-ups to print the report.")); return; }
   w.document.write(`<!DOCTYPE html><html lang="${lang}"><body style="font-family:Arial,sans-serif;color:#666;margin:40px">${L("Génération de la prévision…", "Generating forecast…")}</body></html>`);
   w.document.close();
   const [cash, herd] = await Promise.all([
-    api.forecastCashFlow({ horizon, mode: "realiste", scope: "farmos" }).catch(() => null),
-    api.forecastLivestock({ horizon }).catch(() => null),
+    api.forecastCashFlow({ horizon, mode: "realiste", scope: "farmos", species }).catch(() => null),
+    api.forecastLivestock({ horizon, species }).catch(() => null),
   ]);
 
   // Trésorerie : cumul net final par devise
@@ -3049,8 +3054,8 @@ const printForecastReport = async (lang, horizon = 6) => {
   .disc { color: #888; font-size: 10.5px; margin-top: 10px; line-height: 1.5; }
   @media print { body { margin: 12mm; } }
 </style></head><body>
-  <h1>${L("Rapport de prévision", "Forecast report")}</h1>
-  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${L("horizon", "horizon")} ${horizonLabel} · ${L("scénario réaliste", "realistic scenario")}</div>
+  <h1>${L("Rapport de prévision", "Forecast report")}${speciesLabel ? ` — ${esc(speciesLabel)}` : ""}</h1>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${L("horizon", "horizon")} ${horizonLabel} · ${L("scénario réaliste", "realistic scenario")}${speciesLabel ? ` · ${esc(speciesLabel)}` : ` · ${L("toutes espèces", "all species")}`}</div>
   <h2>${L("Trésorerie projetée", "Projected cash flow")}</h2>
   ${cashTable}
   <h2>${L("Cheptel projeté", "Projected livestock")}</h2>
@@ -3067,10 +3072,11 @@ const printForecastReport = async (lang, horizon = 6) => {
 // Imprime un rapport de MORTALITÉ : liste chaque événement de décès (date, espèce,
 // nombre, cause présumée / confirmée, lieu, perte estimée, symptômes, notes), avec
 // totaux par cause / espèce et une explication en langage naturel.
-const printMortalityReport = (events, lang, moneyUnit = "") => {
+const printMortalityReport = (events, lang, moneyUnit = "", speciesLabel = null) => {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m]));
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const now = new Date().toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+  const spSuffix = speciesLabel ? ` · ${esc(speciesLabel)}` : "";
   const nf = new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-US", { maximumFractionDigits: 0 });
   const cur = moneyUnit ? " " + esc(moneyUnit) : "";
   const money = (v) => nf.format(Math.round(Number(v || 0))) + cur;
@@ -3131,7 +3137,7 @@ const printMortalityReport = (events, lang, moneyUnit = "") => {
   @media print { body { margin: 12mm; } }
 </style></head><body>
   <h1>${L("Rapport de mortalité — animaux décédés", "Mortality report — deceased animals")}</h1>
-  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${list.length} ${L("événement(s)", "event(s)")} · ${totalDeaths} ${L("décès", "deaths")}</div>
+  <div class="meta">${L("Généré le", "Generated")} ${esc(now)} · ${list.length} ${L("événement(s)", "event(s)")} · ${totalDeaths} ${L("décès", "deaths")}${spSuffix}</div>
   ${list.length ? `<table><thead><tr>${head}</tr></thead><tbody>${rows}${foot}</tbody></table>` : `<p style="color:#888;font-size:12px">${L("Aucun décès enregistré.", "No deaths recorded.")}</p>`}
   <div class="nl"><h2>${L("Ce que disent ces données", "What this data says")}</h2>${nlText}</div>
   <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 200); };<\/script>
@@ -3141,10 +3147,14 @@ const printMortalityReport = (events, lang, moneyUnit = "") => {
   w.document.write(html); w.document.close();
 };
 
-const ReportsScreen = ({ lang }) => {
+const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const currencyMeta = useCurrencyCatalog();
   const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], loading: true });
+  // Données restreintes à l'espèce sélectionnée (null = toutes espèces).
+  const fAnimals = React.useMemo(() => (speciesFilter ? hcData.animals.filter((a) => a.species === speciesFilter) : hcData.animals), [hcData.animals, speciesFilter]);
+  const fMortality = React.useMemo(() => (speciesFilter ? hcData.mortality.filter((m) => m.species === speciesFilter) : hcData.mortality), [hcData.mortality, speciesFilter]);
+  const speciesLabel = speciesFilter ? (lang === "fr" ? speciesById(speciesFilter)?.fr : speciesById(speciesFilter)?.en) : null;
   React.useEffect(() => {
     let cancel = false;
     Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => [])])
@@ -3164,25 +3174,33 @@ const ReportsScreen = ({ lang }) => {
   // Rapports générés en direct : lisent les données réelles et finissent par une
   // explication en langage naturel à l'impression. cta "pdf" = bouton PDF, sinon Imprimer.
   const liveReports = [
-    { fr: "Rentabilité", en: "Profitability", descFr: "Revenus, dépenses, profit + ventes/dépenses récentes", descEn: "Revenue, expenses, profit + recent sales/expenses", icon: "coins", color: "var(--money-500)", cta: "pdf", action: () => api.downloadFinancePdf().catch((e) => console.warn(e.message)) },
-    { fr: "Effectif par bâtiment", en: "Headcount by building", descFr: "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment", descEn: "Total and categories per building", icon: "layers", color: "var(--forest-700)", needsData: true, action: () => printHeadcountReport(hcData.buildings, hcData.animals, lang) },
-    { fr: "Structure du cheptel ♂/♀", en: "Herd structure ♂/♀", descFr: "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀", descEn: "Males / females per category and building, + ♂:♀ ratio", icon: "fingerprint", color: "var(--pertinence-500)", needsData: true, action: () => printSexStructureReport(hcData.buildings, hcData.animals, lang) },
-    { fr: "Ratio reproducteur M:F", en: "Breeding ratio M:F", descFr: "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture", descEn: "Males / females and M:F ratio per building, with reading guide", icon: "activity", color: "var(--oxblood-500)", needsData: true, action: () => printBreedingRatioReport(hcData.buildings, hcData.animals, lang) },
-    { fr: "Prévision (6 mois)", en: "Forecast (6 months)", descFr: "Trésorerie et cheptel projetés sur 6 mois, avec fourchette et explication", descEn: "Cash flow and livestock projected over 6 months, with range and explanation", icon: "pulse", color: "var(--pertinence-500)", action: () => printForecastReport(lang, 6) },
-    { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(hcData.mortality, lang, moneyUnit) },
+    // Rentabilité = PDF financier global (ne sait pas filtrer par espèce) → désactivé si une espèce est sélectionnée.
+    { fr: "Rentabilité", en: "Profitability", descFr: "Revenus, dépenses, profit + ventes/dépenses récentes", descEn: "Revenue, expenses, profit + recent sales/expenses", icon: "coins", color: "var(--money-500)", cta: "pdf", disabled: !!speciesFilter, disabledHint: lang === "fr" ? "Rapport global ferme — retirer le filtre espèce" : "Farm-wide report — clear the species filter", action: () => api.downloadFinancePdf().catch((e) => console.warn(e.message)) },
+    { fr: "Effectif par bâtiment", en: "Headcount by building", descFr: "Total et catégories (adultes, cochettes, engraissement, jeunes) par bâtiment", descEn: "Total and categories per building", icon: "layers", color: "var(--forest-700)", needsData: true, action: () => printHeadcountReport(hcData.buildings, fAnimals, lang, speciesLabel) },
+    { fr: "Structure du cheptel ♂/♀", en: "Herd structure ♂/♀", descFr: "Mâles / femelles par catégorie et par bâtiment, + ratio ♂:♀", descEn: "Males / females per category and building, + ♂:♀ ratio", icon: "fingerprint", color: "var(--pertinence-500)", needsData: true, action: () => printSexStructureReport(hcData.buildings, fAnimals, lang, speciesLabel) },
+    { fr: "Ratio reproducteur M:F", en: "Breeding ratio M:F", descFr: "Mâles / femelles et ratio M:F par bâtiment, avec guide de lecture", descEn: "Males / females and M:F ratio per building, with reading guide", icon: "activity", color: "var(--oxblood-500)", needsData: true, action: () => printBreedingRatioReport(hcData.buildings, fAnimals, lang, speciesLabel) },
+    { fr: "Prévision (6 mois)", en: "Forecast (6 months)", descFr: "Trésorerie et cheptel projetés sur 6 mois, avec fourchette et explication", descEn: "Cash flow and livestock projected over 6 months, with range and explanation", icon: "pulse", color: "var(--pertinence-500)", action: () => printForecastReport(lang, 6, speciesFilter) },
+    { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(fMortality, lang, moneyUnit, speciesLabel) },
   ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
         <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Rapports · Reports" : "Reports · Rapports"}</div>
         <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
-          {lang === "fr" ? <>Rapports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>bibliothèque</span></> : <>Reports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>library</span></>}
+          {lang === "fr"
+            ? <>Rapports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesLabel ? speciesLabel.toLowerCase() : "bibliothèque"}</span></>
+            : <>Reports & analytics, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>{speciesLabel ? speciesLabel.toLowerCase() : "library"}</span></>}
         </h1>
       </div>
+      {/* Filtre espèce : restreint les rapports générés en direct à une espèce. */}
+      <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} animals={hcData.animals} enabledSpecies={enabledSpecies} compact/>
       {/* Rapports générés en direct — chacun lit les données réelles et se
           termine, à l'impression, par une explication en langage naturel. */}
       <div>
-        <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>{lang === "fr" ? "Générés en direct · données réelles" : "Live generated · real data"}</div>
+        <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>
+          {lang === "fr" ? "Générés en direct · données réelles" : "Live generated · real data"}
+          {speciesLabel ? <span style={{ color: "var(--fg-3)" }}> · {speciesLabel}</span> : null}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
           {liveReports.map((r, i) => (
             <div key={i} className="card" style={{ display: "flex", flexDirection: "column" }}>
@@ -3191,7 +3209,8 @@ const ReportsScreen = ({ lang }) => {
               </div>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink-950)", fontWeight: 500, lineHeight: 1.25 }}>{lang === "fr" ? r.fr : r.en}</div>
               <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 6, flex: 1 }}>{lang === "fr" ? r.descFr : r.descEn}</div>
-              <button className="btn btn-primary btn-sm" disabled={r.needsData && hcData.loading} style={{ marginTop: 12, justifyContent: "center" }} onClick={r.action}>
+              {r.disabled ? <div style={{ fontSize: 10.5, color: "var(--oxblood-500)", marginTop: 6 }}>{r.disabledHint}</div> : null}
+              <button className="btn btn-primary btn-sm" disabled={r.disabled || (r.needsData && hcData.loading)} title={r.disabled ? r.disabledHint : undefined} style={{ marginTop: r.disabled ? 6 : 12, justifyContent: "center" }} onClick={r.action}>
                 <Icon name={r.cta === "pdf" ? "download" : "report"} size={12} color="#FBF8F2"/>{r.cta === "pdf" ? "PDF" : (lang === "fr" ? "Imprimer" : "Print")}
               </button>
             </div>
