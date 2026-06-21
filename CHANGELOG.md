@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.100.11)
+- CI — relance du build Frontend → dev (le step précédent avait échoué de façon transitoire ; le build local et `npm install --legacy-peer-deps` passent). [SCRUM]
+
 ### Fixed (3.100.10)
 - Frontend (CRM) — **racine de la boucle de requêtes identifiée** : le reducer `loadPermissionById.fulfilled` réassignait `state.auth.list` à un **nouveau tableau** à chaque poll (toutes les 60 s) même quand les permissions étaient identiques. Or l'effet d'alertes du Header dépend de `permissions` (`[isLogged, permissions, startupAlerts]`) → nouvelle référence = re-déclenchement → re-fetch de **toutes** les sources d'alertes (`sale-invoice`, `leases`, `maintenance`, `product`…) → cascade visible dans Network. Fix : helper `samePermissions` qui **préserve la référence** du tableau quand le contenu n'a pas changé. [SCRUM]
 
