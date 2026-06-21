@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.100.4)
+- Frontend (CRM) — `npm audit fix` (non-breaking) : correction de 2 vulnérabilités, dont `undici` (**high**) et `dompurify` (moderate). Restent 2 vulns `quill`/`react-quill` (moderate, XSS) non corrigées car le fix nécessite `--force` qui rétrograderait `react-quill` à 0.0.2 (breaking change cassant l'éditeur de texte riche) — à traiter dans un ticket dédié (migration react-quill). [SCRUM]
+
 ### Fixed (3.100.3)
 - CI/CD — **déploiement Frontend (CRM) bloqué** : `npm audit --audit-level=high` retournait exit 1 sur une vuln transitive de build (`undici` high), ce qui coupait la chaîne `&&` AVANT `npm run build:dev` → `dist/` vide → `scp frontend/dist/*` échouait (`No such file or directory`). Audit passé en mode informatif (`|| true`) sur les steps Frontend dev et prod : il s'affiche toujours mais ne bloque plus le build. [SCRUM]
 
