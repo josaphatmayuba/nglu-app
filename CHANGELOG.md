@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.5)
+- Frontend (CRM) — **boucle infinie de requêtes** `/role-permission/permission?roleId=…` (des milliers d'appels sans arrêt, visible dans le panneau Network). L'effet de garde dans `AdminLayout` redispatchait `loadPermissionById` tant que `state.auth.list` était falsy ; or le reducer remettait `list` à `undefined` quand la réponse ne contenait pas `data.permissions` → la garde repassait vraie → boucle. Fix : flag `attempted` posé dès la 1re réponse (succès **ou** échec) pour ne dispatcher qu'une fois, `list` retombe sur `[]` au lieu de `undefined`, ajout du case `.rejected` (échec auparavant silencieux). [SCRUM]
+
 ### Security (3.100.4)
 - Frontend (CRM) — `npm audit fix` (non-breaking) : correction de 2 vulnérabilités, dont `undici` (**high**) et `dompurify` (moderate). Restent 2 vulns `quill`/`react-quill` (moderate, XSS) non corrigées car le fix nécessite `--force` qui rétrograderait `react-quill` à 0.0.2 (breaking change cassant l'éditeur de texte riche) — à traiter dans un ticket dédié (migration react-quill). [SCRUM]
 

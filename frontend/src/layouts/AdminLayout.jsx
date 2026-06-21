@@ -56,6 +56,7 @@ function AdminLayout() {
     list: permissions,
     loading: permissionLoad,
     error,
+    attempted: permissionAttempted,
   } = useSelector((state) => state.auth) || {};
   const handleCollapsed = (val) => {
     setCollapsed(val);
@@ -69,10 +70,14 @@ function AdminLayout() {
   const openDrawer = () => setVisible(!visible);
 
   useEffect(() => {
-    if (!permissions && !permissionLoad && !error) {
+    // Ne dispatch qu'UNE fois tant qu'on n'a pas encore tente le chargement.
+    // `attempted` est mis a true des la reponse (succes/echec), ce qui empeche
+    // la boucle infinie de /role-permission/permission quand la reponse ne
+    // contient pas de permissions (ancienne garde basee sur `!permissions`).
+    if (!permissionAttempted && !permissionLoad) {
       dispatch(loadPermissionById(roleId));
     }
-  }, [dispatch, error, permissionLoad, permissions, roleId]);
+  }, [dispatch, permissionAttempted, permissionLoad, roleId]);
 
   useEffect(() => {
     startRealtimeClient();

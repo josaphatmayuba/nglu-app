@@ -6,6 +6,7 @@ const initialState = {
   list: null,
   error: "",
   loading: false,
+  attempted: false,
 };
 
 // 1 ================== get load Permission By Id ==================
@@ -33,10 +34,19 @@ const authSlice = createSlice({
     });
     builder.addCase(loadPermissionById.fulfilled, (state, action) => {
       state.loading = false;
-      state.list = action.payload?.data?.permissions;
+      // Marque la tentative comme effectuee : evite que l'effect de garde
+      // (qui dispatch tant que `list` est falsy) reboucle a l'infini quand
+      // la reponse ne contient pas de permissions (liste vide / erreur).
+      state.attempted = true;
+      state.list = action.payload?.data?.permissions ?? [];
       if (action.payload?.error) {
         state.error = action.payload?.error;
       }
+    });
+    builder.addCase(loadPermissionById.rejected, (state, action) => {
+      state.loading = false;
+      state.attempted = true;
+      state.error = action.error?.message || "Erreur de chargement des permissions";
     });
   },
 });
