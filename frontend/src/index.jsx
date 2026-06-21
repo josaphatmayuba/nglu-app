@@ -31,6 +31,30 @@ window.addEventListener("load", () => {
 const root = ReactDOM.createRoot(document.getElementById("root"));
 
 axios.defaults.baseURL = import.meta.env.VITE_APP_API;
+
+// [DIAG-LOOP] Detecteur temporaire de boucle de requetes : compte les appels par
+// URL (sans querystring) sur une fenetre glissante de 3s ; au-dela de 10 appels,
+// console.trace() crache la pile d'appels du coupable. A RETIRER apres diagnostic.
+const __loopWindow = new Map(); // key -> [timestamps]
+const __loopTraced = new Set();
+axios.interceptors.request.use((config) => {
+  try {
+    const key = String(config.url || "").split("?")[0];
+    const now = Date.now();
+    const arr = (__loopWindow.get(key) || []).filter((t) => now - t < 3000);
+    arr.push(now);
+    __loopWindow.set(key, arr);
+    if (arr.length > 10 && !__loopTraced.has(key)) {
+      __loopTraced.add(key);
+      // eslint-disable-next-line no-console
+      console.error(`[DIAG-LOOP] ${key} appele ${arr.length}x en 3s — pile ci-dessous`);
+      // eslint-disable-next-line no-console
+      console.trace(`[DIAG-LOOP] ${key}`);
+    }
+  } catch { /* ignore */ }
+  return config;
+});
+
 axios.interceptors.request.use(async (config) => {
   const query = getQuery();
   const isAdminPath = window.location.pathname.includes("/admin");

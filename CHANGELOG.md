@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.100.6)
+- Frontend (CRM) — **diagnostic temporaire** : intercepteur axios qui détecte les boucles de requêtes (>10 appels d'une même URL en 3s) et logge `console.trace` pour localiser la source (boucle sur l'écran Produits). **À retirer** une fois le coupable identifié. [SCRUM]
+
 ### Fixed (3.100.5)
 - Frontend (CRM) — **boucle infinie de requêtes** `/role-permission/permission?roleId=…` (des milliers d'appels sans arrêt, visible dans le panneau Network). L'effet de garde dans `AdminLayout` redispatchait `loadPermissionById` tant que `state.auth.list` était falsy ; or le reducer remettait `list` à `undefined` quand la réponse ne contenait pas `data.permissions` → la garde repassait vraie → boucle. Fix : flag `attempted` posé dès la 1re réponse (succès **ou** échec) pour ne dispatcher qu'une fois, `list` retombe sur `[]` au lieu de `undefined`, ajout du case `.rejected` (échec auparavant silencieux). [SCRUM]
 
