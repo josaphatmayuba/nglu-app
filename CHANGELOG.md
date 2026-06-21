@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.10)
+- Frontend (CRM) — **racine de la boucle de requêtes identifiée** : le reducer `loadPermissionById.fulfilled` réassignait `state.auth.list` à un **nouveau tableau** à chaque poll (toutes les 60 s) même quand les permissions étaient identiques. Or l'effet d'alertes du Header dépend de `permissions` (`[isLogged, permissions, startupAlerts]`) → nouvelle référence = re-déclenchement → re-fetch de **toutes** les sources d'alertes (`sale-invoice`, `leases`, `maintenance`, `product`…) → cascade visible dans Network. Fix : helper `samePermissions` qui **préserve la référence** du tableau quand le contenu n'a pas changé. [SCRUM]
+
 ### Fixed (3.100.9)
 - Frontend (CRM) — **boucle de remount d'AdminLayout (vraie racine)** : le garde de session `if (!hasSession) { clearAdminSession(); <Navigate login/> }` appelait `clearAdminSession()` **pendant le rendu** (effet de bord interdit en React). Quand un refresh de token était en cours, l'access-token en mémoire était momentanément vide → `hasSession=false` → `clearAdminSession()` effaçait `isLogged`/`roleId` → au retour du refresh, session à moitié détruite → 401 → remount d'AdminLayout → re-SSE → boucle. Fix : suppression de l'appel `clearAdminSession()` dans le chemin de rendu (le nettoyage réel se fait déjà dans l'intercepteur axios quand le refresh échoue vraiment). [SCRUM]
 
