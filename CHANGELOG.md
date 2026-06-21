@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.12)
+- Backend — **devise ISO complète sur tous les endpoints** : SaleInvoicesService.findOne() + PurchaseInvoicesService.findOne/create/findAll() + HR SalaryHistoryService.findSalaryHistory/listSalaryHistory() + PayrollService.findPayroll/listPayrolls() maintenant **leftJoin currency** et retournent l'objet {id, currencyCode, currencyName, currencySymbol, ...} au lieu de juste currencyId; Frontend SalariesPage utilise l'objet devise du backend au lieu de chercher par ID en liste locale. FormattedAmount reçoit toujours currency complet → affichage ISO garanti. [SCRUM]
+
 ### Changed (3.100.11)
 - CI — relance du build Frontend → dev (le step précédent avait échoué de façon transitoire ; le build local et `npm install --legacy-peer-deps` passent). [SCRUM]
 
