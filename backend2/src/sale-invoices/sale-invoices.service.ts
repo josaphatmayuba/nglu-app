@@ -9,6 +9,7 @@ import {
   products,
   saleInvoiceProducts,
   saleInvoices,
+  suppliers,
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -331,6 +332,7 @@ export class SaleInvoicesService {
         customerFirstName: customers.firstName,
         customerLastName: customers.lastName,
         customerPhone: customers.phone,
+        currencyCode: currencies.currencyCode,
         currencyName: currencies.currencyName,
         currencySymbol: currencies.currencySymbol,
       })
@@ -370,7 +372,42 @@ export class SaleInvoicesService {
     const where = orgId !== undefined
       ? and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId), eq(saleInvoices.status, "true"))
       : and(eq(saleInvoices.id, id), eq(saleInvoices.status, "true"));
-    const rows = await this.db.select().from(saleInvoices).where(where).limit(1);
+
+    const rows = await this.db
+      .select({
+        id: saleInvoices.id,
+        organizationId: saleInvoices.organizationId,
+        date: saleInvoices.date,
+        invoiceMemoNo: saleInvoices.invoiceMemoNo,
+        totalAmount: saleInvoices.totalAmount,
+        totalTaxAmount: saleInvoices.totalTaxAmount,
+        totalDiscountAmount: saleInvoices.totalDiscountAmount,
+        paidAmount: saleInvoices.paidAmount,
+        dueAmount: saleInvoices.dueAmount,
+        profit: saleInvoices.profit,
+        customerId: saleInvoices.customerId,
+        currencyId: saleInvoices.currencyId,
+        userId: saleInvoices.userId,
+        note: saleInvoices.note,
+        dueDate: saleInvoices.dueDate,
+        isHold: saleInvoices.isHold,
+        orderStatus: saleInvoices.orderStatus,
+        status: saleInvoices.status,
+        createdAt: saleInvoices.createdAt,
+        updatedAt: saleInvoices.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(saleInvoices)
+      .leftJoin(currencies, eq(saleInvoices.currencyId, currencies.id))
+      .where(where)
+      .limit(1);
 
     if (!rows.length) {
       throw new NotFoundException("Sale invoice not found.");

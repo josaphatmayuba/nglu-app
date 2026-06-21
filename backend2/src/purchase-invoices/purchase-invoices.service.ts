@@ -2,6 +2,8 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from "@nes
 import { and, count, desc, eq, gte, lte, sql, sum } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import {
+  appSettings,
+  currencies,
   paymentPurchaseInvoices,
   products,
   purchaseInvoiceProducts,
@@ -92,6 +94,13 @@ export class PurchaseInvoicesService {
     // 3. Create invoice
     const invoiceId = generateInvoiceId("P");
 
+    // Resolve currency: explicit input or fallback to app default
+    let currencyId = input.currencyId ?? null;
+    if (!currencyId) {
+      const [setting] = await this.db.select({ currencyId: appSettings.currencyId }).from(appSettings).limit(1);
+      currencyId = setting?.currencyId ?? null;
+    }
+
     await this.db.insert(purchaseInvoices).values({
       id: invoiceId,
       organizationId: orgId,
@@ -103,6 +112,7 @@ export class PurchaseInvoicesService {
       paidAmount: totalPaidAmount,
       dueAmount,
       supplierId: input.supplierId,
+      currencyId,
       note: input.note ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -296,14 +306,19 @@ export class PurchaseInvoicesService {
         paidAmount: purchaseInvoices.paidAmount,
         dueAmount: purchaseInvoices.dueAmount,
         supplierId: purchaseInvoices.supplierId,
+        currencyId: purchaseInvoices.currencyId,
         note: purchaseInvoices.note,
         createdAt: purchaseInvoices.createdAt,
         updatedAt: purchaseInvoices.updatedAt,
         supplierName: suppliers.name,
         supplierPhone: suppliers.phone,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
       })
       .from(purchaseInvoices)
       .leftJoin(suppliers, eq(suppliers.id, purchaseInvoices.supplierId))
+      .leftJoin(currencies, eq(currencies.id, purchaseInvoices.currencyId))
       .where(where)
       .orderBy(desc(purchaseInvoices.createdAt))
       .limit(limit)
@@ -323,8 +338,33 @@ export class PurchaseInvoicesService {
       : and(eq(purchaseInvoices.id, id), eq(purchaseInvoices.status, "true"));
 
     const rows = await this.db
-      .select()
+      .select({
+        id: purchaseInvoices.id,
+        organizationId: purchaseInvoices.organizationId,
+        date: purchaseInvoices.date,
+        invoiceMemoNo: purchaseInvoices.invoiceMemoNo,
+        supplierMemoNo: purchaseInvoices.supplierMemoNo,
+        totalAmount: purchaseInvoices.totalAmount,
+        totalTax: purchaseInvoices.totalTax,
+        paidAmount: purchaseInvoices.paidAmount,
+        dueAmount: purchaseInvoices.dueAmount,
+        supplierId: purchaseInvoices.supplierId,
+        currencyId: purchaseInvoices.currencyId,
+        note: purchaseInvoices.note,
+        status: purchaseInvoices.status,
+        createdAt: purchaseInvoices.createdAt,
+        updatedAt: purchaseInvoices.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
       .from(purchaseInvoices)
+      .leftJoin(currencies, eq(purchaseInvoices.currencyId, currencies.id))
       .where(where)
       .limit(1);
 

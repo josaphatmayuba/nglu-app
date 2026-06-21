@@ -71,8 +71,7 @@ const SalariesPage = () => {
     return c ? cleanCurrencySymbol(c) : "";
   };
 
-  const fmtSalary = (amount, currencyId) => {
-    const currency = currenciesList.find((x) => x.id === currencyId || x.currencyId === currencyId);
+  const fmtSalary = (amount, currency) => {
     return (
       <FormattedAmount
         amount={amount}
@@ -90,7 +89,7 @@ const SalariesPage = () => {
         pagination={{ total: total || 0 }}
         columns={[
           { title: "Employé", render: (_, record) => staffName(record.userId) },
-          { title: "Salaire", render: (_, r) => fmtSalary(r.salary, r.currencyId) },
+          { title: "Salaire", render: (_, r) => fmtSalary(r.salary, r.currency) },
           { title: "Début", dataIndex: "startDate" },
           { title: "Fin", dataIndex: "endDate" },
           { title: "Commentaire", dataIndex: "comment" },

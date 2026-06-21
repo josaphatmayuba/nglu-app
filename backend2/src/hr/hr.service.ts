@@ -351,8 +351,38 @@ export class HrService {
     return this.findDesignationHistory(id);
   }
 
-  listSalaryHistory(q: Record<string, string>) {
-    return this.listHistory(q, salaryHistories, "getAllSalaryHistory", "totalSalaryHistory");
+  async listSalaryHistory(q: Record<string, string>) {
+    const { skip, limit } = this.pagination(q);
+    const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const where = userId ? eq(salaryHistories.userId, userId) : undefined;
+    const rows = await this.db
+      .select({
+        id: salaryHistories.id,
+        userId: salaryHistories.userId,
+        salary: salaryHistories.salary,
+        currencyId: salaryHistories.currencyId,
+        startDate: salaryHistories.startDate,
+        endDate: salaryHistories.endDate,
+        comment: salaryHistories.comment,
+        createdAt: salaryHistories.createdAt,
+        updatedAt: salaryHistories.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(salaryHistories)
+      .leftJoin(currencies, eq(salaryHistories.currencyId, currencies.id))
+      .where(where)
+      .orderBy(desc(salaryHistories.id))
+      .limit(limit)
+      .offset(skip);
+    const [{ total }] = await this.db.select({ total: count(salaryHistories.id) }).from(salaryHistories).where(where);
+    return { getAllSalaryHistory: rows, totalSalaryHistory: Number(total ?? 0) };
   }
 
   async createSalaryHistory(input: CreateSalaryHistoryDto) {
@@ -423,8 +453,33 @@ export class HrService {
     return this.findSalaryHistory(salaryHistoryId);
   }
 
-  findSalaryHistory(id: number) {
-    return this.findOne(salaryHistories, id, "Salary history not found.");
+  async findSalaryHistory(id: number) {
+    const rows = await this.db
+      .select({
+        id: salaryHistories.id,
+        userId: salaryHistories.userId,
+        salary: salaryHistories.salary,
+        currencyId: salaryHistories.currencyId,
+        startDate: salaryHistories.startDate,
+        endDate: salaryHistories.endDate,
+        comment: salaryHistories.comment,
+        createdAt: salaryHistories.createdAt,
+        updatedAt: salaryHistories.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(salaryHistories)
+      .leftJoin(currencies, eq(salaryHistories.currencyId, currencies.id))
+      .where(eq(salaryHistories.id, id))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Salary history not found.");
+    return rows[0];
   }
 
   async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto) {
@@ -446,12 +501,152 @@ export class HrService {
     return this.findSalaryHistory(id);
   }
 
-  listPayrolls(q: Record<string, string>) {
-    return this.listHrRecords(q, hrPayrolls, "getAllHrPayroll", "totalHrPayroll");
+  async listPayrolls(q: Record<string, string>) {
+    const userId = q["userId"] ? Number(q["userId"]) : undefined;
+    const status = q["status"];
+    const where = and(
+      userId ? eq(hrPayrolls.userId, userId) : undefined,
+      status ? eq(hrPayrolls.status, status) : ne(hrPayrolls.status, "false"),
+    );
+    if (q["query"] === "all") {
+      return this.db
+        .select({
+          id: hrPayrolls.id,
+          userId: hrPayrolls.userId,
+          contractId: hrPayrolls.contractId,
+          period: hrPayrolls.period,
+          currencyId: hrPayrolls.currencyId,
+          baseSalary: hrPayrolls.baseSalary,
+          transportAllowance: hrPayrolls.transportAllowance,
+          housingAllowance: hrPayrolls.housingAllowance,
+          riskAllowance: hrPayrolls.riskAllowance,
+          otherAllowances: hrPayrolls.otherAllowances,
+          overtimeHours: hrPayrolls.overtimeHours,
+          overtimeAmount: hrPayrolls.overtimeAmount,
+          unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+          advanceDeduction: hrPayrolls.advanceDeduction,
+          taxAmount: hrPayrolls.taxAmount,
+          cnssAmount: hrPayrolls.cnssAmount,
+          otherDeductions: hrPayrolls.otherDeductions,
+          workedDays: hrPayrolls.workedDays,
+          absenceDays: hrPayrolls.absenceDays,
+          paidLeaveDays: hrPayrolls.paidLeaveDays,
+          status: hrPayrolls.status,
+          notes: hrPayrolls.notes,
+          createdAt: hrPayrolls.createdAt,
+          updatedAt: hrPayrolls.updatedAt,
+          currency: {
+            id: currencies.id,
+            currencyCode: currencies.currencyCode,
+            currencyName: currencies.currencyName,
+            currencySymbol: currencies.currencySymbol,
+            decimalPlaces: currencies.decimalPlaces,
+            status: currencies.status,
+          },
+        })
+        .from(hrPayrolls)
+        .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+        .where(where)
+        .orderBy(desc(hrPayrolls.id));
+    }
+    const { skip, limit } = this.pagination(q);
+    const rows = await this.db
+      .select({
+        id: hrPayrolls.id,
+        userId: hrPayrolls.userId,
+        contractId: hrPayrolls.contractId,
+        period: hrPayrolls.period,
+        currencyId: hrPayrolls.currencyId,
+        baseSalary: hrPayrolls.baseSalary,
+        transportAllowance: hrPayrolls.transportAllowance,
+        housingAllowance: hrPayrolls.housingAllowance,
+        riskAllowance: hrPayrolls.riskAllowance,
+        otherAllowances: hrPayrolls.otherAllowances,
+        overtimeHours: hrPayrolls.overtimeHours,
+        overtimeAmount: hrPayrolls.overtimeAmount,
+        unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+        advanceDeduction: hrPayrolls.advanceDeduction,
+        taxAmount: hrPayrolls.taxAmount,
+        cnssAmount: hrPayrolls.cnssAmount,
+        otherDeductions: hrPayrolls.otherDeductions,
+        workedDays: hrPayrolls.workedDays,
+        absenceDays: hrPayrolls.absenceDays,
+        paidLeaveDays: hrPayrolls.paidLeaveDays,
+        status: hrPayrolls.status,
+        notes: hrPayrolls.notes,
+        createdAt: hrPayrolls.createdAt,
+        updatedAt: hrPayrolls.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(hrPayrolls)
+      .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+      .where(where)
+      .orderBy(desc(hrPayrolls.id))
+      .limit(limit)
+      .offset(skip);
+    const [{ total }] = await this.db.select({ total: count(hrPayrolls.id) }).from(hrPayrolls).where(where);
+    return { getAllHrPayroll: rows, totalHrPayroll: Number(total ?? 0) };
   }
 
-  findPayroll(id: number) {
-    return this.findOne(hrPayrolls, id, "Payroll not found.");
+  async findPayroll(id: number) {
+    const rows = await this.db
+      .select({
+        id: hrPayrolls.id,
+        userId: hrPayrolls.userId,
+        contractId: hrPayrolls.contractId,
+        period: hrPayrolls.period,
+        currencyId: hrPayrolls.currencyId,
+        baseSalary: hrPayrolls.baseSalary,
+        transportAllowance: hrPayrolls.transportAllowance,
+        housingAllowance: hrPayrolls.housingAllowance,
+        riskAllowance: hrPayrolls.riskAllowance,
+        otherAllowances: hrPayrolls.otherAllowances,
+        overtimeHours: hrPayrolls.overtimeHours,
+        overtimeAmount: hrPayrolls.overtimeAmount,
+        unpaidAbsenceDeduction: hrPayrolls.unpaidAbsenceDeduction,
+        advanceDeduction: hrPayrolls.advanceDeduction,
+        taxAmount: hrPayrolls.taxAmount,
+        cnssAmount: hrPayrolls.cnssAmount,
+        otherDeductions: hrPayrolls.otherDeductions,
+        workedDays: hrPayrolls.workedDays,
+        absenceDays: hrPayrolls.absenceDays,
+        paidLeaveDays: hrPayrolls.paidLeaveDays,
+        status: hrPayrolls.status,
+        notes: hrPayrolls.notes,
+        submittedBy: hrPayrolls.submittedBy,
+        submittedAt: hrPayrolls.submittedAt,
+        approvedBy: hrPayrolls.approvedBy,
+        approvedAt: hrPayrolls.approvedAt,
+        approvalComment: hrPayrolls.approvalComment,
+        rejectedBy: hrPayrolls.rejectedBy,
+        rejectedAt: hrPayrolls.rejectedAt,
+        rejectionComment: hrPayrolls.rejectionComment,
+        paidBy: hrPayrolls.paidBy,
+        paidAt: hrPayrolls.paidAt,
+        createdAt: hrPayrolls.createdAt,
+        updatedAt: hrPayrolls.updatedAt,
+        currency: {
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          decimalPlaces: currencies.decimalPlaces,
+          status: currencies.status,
+        },
+      })
+      .from(hrPayrolls)
+      .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
+      .where(eq(hrPayrolls.id, id))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Payroll not found.");
+    return rows[0];
   }
 
   async payrollPdfHtml(id: number): Promise<string> {
