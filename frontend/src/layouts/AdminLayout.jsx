@@ -24,7 +24,7 @@ import { createAuthBroadcastChannel } from "../realtime/authBroadcastChannel";
 import { createDataBroadcastChannel } from "../realtime/dataBroadcastChannel";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { clearAdminSession, hasValidAdminSession } from "../utils/authSession";
+import { hasValidAdminSession } from "../utils/authSession";
 import { AiAssistant } from "../utils/aiAssistant.jsx";
 
 const PERMISSIONS_POLL_INTERVAL_MS = 60_000;
@@ -179,7 +179,11 @@ function AdminLayout() {
   }, [location.pathname]);
 
   if (!isLoginPath && !hasSession) {
-    clearAdminSession();
+    // Ne PAS appeler clearAdminSession() ici : c'est un effet de bord pendant le
+    // rendu qui efface isLogged/roleId alors qu'un refresh de token peut etre en
+    // cours (token en memoire momentanement vide) -> au retour, session a moitie
+    // effacee -> 401 -> remount -> boucle infinie. Le nettoyage reel de session
+    // se fait deja dans l'intercepteur axios quand le refresh echoue vraiment.
     return <Navigate to="/admin/auth/login" replace />;
   }
 

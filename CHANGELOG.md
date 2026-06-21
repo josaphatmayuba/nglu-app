@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.9)
+- Frontend (CRM) — **boucle de remount d'AdminLayout (vraie racine)** : le garde de session `if (!hasSession) { clearAdminSession(); <Navigate login/> }` appelait `clearAdminSession()` **pendant le rendu** (effet de bord interdit en React). Quand un refresh de token était en cours, l'access-token en mémoire était momentanément vide → `hasSession=false` → `clearAdminSession()` effaçait `isLogged`/`roleId` → au retour du refresh, session à moitié détruite → 401 → remount d'AdminLayout → re-SSE → boucle. Fix : suppression de l'appel `clearAdminSession()` dans le chemin de rendu (le nettoyage réel se fait déjà dans l'intercepteur axios quand le refresh échoue vraiment). [SCRUM]
+
 ### Fixed (3.100.8)
 - Frontend (CRM) — **boucle infinie de requêtes / remount d'AdminLayout** (des milliers d'appels, app qui se réinitialise en continu). Cause confirmée par diagnostic : `roleId` valait `null` en localStorage → `AdminLayout` dispatchait `loadPermissionById(null)` → `/role-permission/permission?roleId=null` répondait **401** → l'intercepteur axios tentait un refresh → `AdminLayout` remontait → nouvelle connexion SSE → 401 → boucle. Fix : ne dispatcher `loadPermissionById` que si `roleId` est un identifiant valide (ni `null`/`"null"`/`"undefined"`). Diagnostics temporaires (`DIAG-LOOP`/`DIAG-SSE`/`DIAG-MOUNT`) retirés. [SCRUM]
 
