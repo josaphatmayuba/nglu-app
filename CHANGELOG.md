@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.8)
+- Frontend (CRM) — **boucle infinie de requêtes / remount d'AdminLayout** (des milliers d'appels, app qui se réinitialise en continu). Cause confirmée par diagnostic : `roleId` valait `null` en localStorage → `AdminLayout` dispatchait `loadPermissionById(null)` → `/role-permission/permission?roleId=null` répondait **401** → l'intercepteur axios tentait un refresh → `AdminLayout` remontait → nouvelle connexion SSE → 401 → boucle. Fix : ne dispatcher `loadPermissionById` que si `roleId` est un identifiant valide (ni `null`/`"null"`/`"undefined"`). Diagnostics temporaires (`DIAG-LOOP`/`DIAG-SSE`/`DIAG-MOUNT`) retirés. [SCRUM]
+
 ### Changed (3.100.7)
 - Frontend (CRM) — **diagnostic boucle (suite)** : logs `[DIAG-SSE]` (chaque ouverture de connexion SSE) et `[DIAG-MOUNT]` (mount de l'effet realtime d'AdminLayout) pour distinguer reconnexion SSE en rafale vs remount de layout. **À retirer** avec le détecteur axios une fois la cause confirmée. [SCRUM]
 

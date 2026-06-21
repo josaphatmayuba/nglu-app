@@ -74,15 +74,16 @@ function AdminLayout() {
     // `attempted` est mis a true des la reponse (succes/echec), ce qui empeche
     // la boucle infinie de /role-permission/permission quand la reponse ne
     // contient pas de permissions (ancienne garde basee sur `!permissions`).
-    if (!permissionAttempted && !permissionLoad) {
+    // IMPORTANT: ne pas appeler avec roleId falsy (null/"null") -> sinon
+    // /role-permission/permission?roleId=null renvoie 401 -> refresh -> remount
+    // d'AdminLayout -> nouvelle connexion SSE -> boucle infinie.
+    const validRoleId = roleId && roleId !== "null" && roleId !== "undefined";
+    if (validRoleId && !permissionAttempted && !permissionLoad) {
       dispatch(loadPermissionById(roleId));
     }
   }, [dispatch, permissionAttempted, permissionLoad, roleId]);
 
   useEffect(() => {
-    // [DIAG-LOOP] trace mount/unmount d'AdminLayout pour reperer un remount en boucle. A RETIRER.
-    // eslint-disable-next-line no-console
-    console.error("[DIAG-MOUNT] AdminLayout effect realtime MONTE");
     startRealtimeClient();
     const dataHandler = createDataUpdateHandler(dispatch);
     const permsHandler = createPermissionsUpdateHandler(dispatch, navigate, toast);
