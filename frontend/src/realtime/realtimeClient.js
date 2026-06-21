@@ -51,10 +51,16 @@ function token() {
   );
 }
 
+let __diagConnectCount = 0;
 function connect() {
   if (source) return;
   const t = token();
   if (!t) return;
+
+  // [DIAG-LOOP] trace chaque ouverture de connexion SSE pour reperer une reconnexion en rafale. A RETIRER.
+  __diagConnectCount += 1;
+  // eslint-disable-next-line no-console
+  console.error(`[DIAG-SSE] connect() #${__diagConnectCount} backoff=${backoffMs}ms`);
 
   try {
     source = new EventSource(`${SSE_PATH}?token=${encodeURIComponent(t)}`);

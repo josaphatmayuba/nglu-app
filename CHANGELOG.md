@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.100.7)
+- Frontend (CRM) — **diagnostic boucle (suite)** : logs `[DIAG-SSE]` (chaque ouverture de connexion SSE) et `[DIAG-MOUNT]` (mount de l'effet realtime d'AdminLayout) pour distinguer reconnexion SSE en rafale vs remount de layout. **À retirer** avec le détecteur axios une fois la cause confirmée. [SCRUM]
+
 ### Changed (3.100.6)
 - Frontend (CRM) — **diagnostic temporaire** : intercepteur axios qui détecte les boucles de requêtes (>10 appels d'une même URL en 3s) et logge `console.trace` pour localiser la source (boucle sur l'écran Produits). **À retirer** une fois le coupable identifié. [SCRUM]
 

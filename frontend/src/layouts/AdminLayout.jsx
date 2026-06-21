@@ -80,6 +80,9 @@ function AdminLayout() {
   }, [dispatch, permissionAttempted, permissionLoad, roleId]);
 
   useEffect(() => {
+    // [DIAG-LOOP] trace mount/unmount d'AdminLayout pour reperer un remount en boucle. A RETIRER.
+    // eslint-disable-next-line no-console
+    console.error("[DIAG-MOUNT] AdminLayout effect realtime MONTE");
     startRealtimeClient();
     const dataHandler = createDataUpdateHandler(dispatch);
     const permsHandler = createPermissionsUpdateHandler(dispatch, navigate, toast);
