@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.100.3)
+- CI/CD — **déploiement Frontend (CRM) bloqué** : `npm audit --audit-level=high` retournait exit 1 sur une vuln transitive de build (`undici` high), ce qui coupait la chaîne `&&` AVANT `npm run build:dev` → `dist/` vide → `scp frontend/dist/*` échouait (`No such file or directory`). Audit passé en mode informatif (`|| true`) sur les steps Frontend dev et prod : il s'affiche toujours mais ne bloque plus le build. [SCRUM]
+
 ### Added (3.100.2)
 - FarmOS — **refonte complète des fiches terrain** : format vertical (1 ligne par événement, grandes cases), semaine à remplir manuellement, colonne Heure sur toutes les fiches, exemples de remplissage en bas de chaque page. Fiche Soins : ajout Raison/Maladie + Durée (j). Fiche Vaccination : nouvelle fiche séparée. Fiche Naissances : colonne Mère (nom/N° oreille). [SCRUM]
 
