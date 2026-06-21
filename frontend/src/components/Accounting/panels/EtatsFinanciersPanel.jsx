@@ -2,9 +2,29 @@
 // Falls back to backend aggregated data when transactions have no currency info.
 
 import { useMemo } from "react";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
-const fmt = (v, sym) => v ? `${sym} ${FMT.format(Number(v))}` : "—";
+
+const getCurrencyCode = (symbol, currencyName) => {
+  if (currencyName) {
+    const name = String(currencyName).toUpperCase();
+    if (name.includes("FRANC CONGOLAIS")) return "CDF";
+    if (name.includes("DOLLAR")) return "USD";
+    if (name.includes("EURO")) return "EUR";
+  }
+  if (symbol === "$") return "USD";
+  if (symbol === "€") return "EUR";
+  if (symbol === "£") return "GBP";
+  if (symbol === "CDF") return "CDF";
+  return "N/A";
+};
+
+const fmt = (v, sym, currencyName) => {
+  if (!v) return "—";
+  const code = getCurrencyCode(sym, currencyName);
+  return `${code} ${FMT.format(Number(v))}`;
+};
 
 const decodeHTML = (str) => {
   if (typeof document === "undefined" || !str) return str ?? "";

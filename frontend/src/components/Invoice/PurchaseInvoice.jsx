@@ -6,6 +6,26 @@ import { useReactToPrint } from "react-to-print";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
 import numberToWords from "../../utils/numberToWords";
 
+const getCurrencyCode = (currency) => {
+  if (!currency) return "N/A";
+  const code = String(currency.currencyCode || "").trim().toUpperCase();
+  if (code && code.length === 3) return code;
+  const name = String(currency.currencyName || "").toUpperCase();
+  if (name.includes("FRANC CONGOLAIS")) return "CDF";
+  if (name.includes("DOLLAR")) return "USD";
+  if (name.includes("EURO")) return "EUR";
+  return code || "N/A";
+};
+
+const formatAmountWithCurrency = (amount, currency) => {
+  const code = getCurrencyCode(currency);
+  const num = Number(amount || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${code} ${num}`;
+};
+
 const PrintToPdf = forwardRef(({ data }, ref) => {
   const dispatch = useDispatch();
   const invoiceData = useSelector((state) => state?.setting?.data) || null;
@@ -126,10 +146,10 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                         {d.productQuantity}
                       </td>
                       <td className="text-left p-[5px] border border-solid border-[#c0c0c0]">
-                        {d.productPurchasePrice}
+                        {formatAmountWithCurrency(d.productPurchasePrice, data.currency)}
                       </td>
                       <td className="text-left p-[5px] border border-solid border-[#c0c0c0]">
-                        {d.productQuantity * d.productPurchasePrice}
+                        {formatAmountWithCurrency(d.productQuantity * d.productPurchasePrice, data.currency)}
                       </td>
                     </tr>
                   ))}
@@ -141,7 +161,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
             <div className="">
               <p className="p-[6px]">
                 <b>In Words: </b>
-                {numberToWords(Math.round(data.totalAmount - data.discount))}
+                {numberToWords(Math.round(data.totalAmount - data.discount))} {getCurrencyCode(data.currency)}
               </p>
               <p className="p-[6px]">
                 <b>Notes: </b>
@@ -156,7 +176,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                     Sub total
                   </th>
                   <td className="text-black p-1 text-left border-b border-solid border-[#ddd]">
-                    {data.totalAmount}
+                    {formatAmountWithCurrency(data.totalAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -164,7 +184,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                     Discount (-)
                   </th>
                   <td className="text-black p-1 text-left border-b border-solid border-[#ddd]">
-                    {data.discount}
+                    {formatAmountWithCurrency(data.discount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -172,7 +192,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                     Grand total
                   </th>
                   <td className="text-black p-1 text-left border-b border-solid border-[#ddd]">
-                    {data.totalAmount - data.discount}
+                    {formatAmountWithCurrency(data.totalAmount - data.discount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -180,7 +200,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                     Paid
                   </th>
                   <td className="text-black p-1 text-left border-b border-solid border-[#ddd]">
-                    {data.paidAmount}
+                    {formatAmountWithCurrency(data.paidAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -188,7 +208,7 @@ const PrintToPdf = forwardRef(({ data }, ref) => {
                     Due
                   </th>
                   <td className="text-black p-1 text-left border-b border-solid border-[#ddd]">
-                    {data.dueAmount}
+                    {formatAmountWithCurrency(data.dueAmount, data.currency)}
                   </td>
                 </tr>
               </table>

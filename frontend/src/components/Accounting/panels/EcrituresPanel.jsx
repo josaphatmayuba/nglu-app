@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import moment from "moment";
 import usePermissions from "@/utils/usePermissions";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 
 const PAGE_SIZE = 15;
 
@@ -21,10 +22,18 @@ export default function EcrituresPanel({
   const colSpan = showActions ? 7 : 6;
 
   // Use per-transaction currency if available, otherwise fall back to app default
-  const fmtTx = (t) => {
-    const sym = t.currencySymbol || currencySymbol;
-    return `${sym} ${FMT.format(Number(t.amount || 0))}`;
-  };
+  const fmtTx = (t) => (
+    <FormattedAmount
+      amount={t.amount || 0}
+      currency={{
+        currencyCode: t.currencyCode,
+        currencyName: t.currencyName,
+        currencySymbol: t.currencySymbol,
+        ...t.currency
+      }}
+      fractionDigits={0}
+    />
+  );
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
 

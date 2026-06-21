@@ -7,6 +7,26 @@ import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
 import { nameRender } from "../../utils/functions";
 import numberToWords from "../../utils/numberToWords";
 
+const getCurrencyCode = (currency) => {
+  if (!currency) return "N/A";
+  const code = String(currency.currencyCode || "").trim().toUpperCase();
+  if (code && code.length === 3) return code;
+  const name = String(currency.currencyName || "").toUpperCase();
+  if (name.includes("FRANC CONGOLAIS")) return "CDF";
+  if (name.includes("DOLLAR")) return "USD";
+  if (name.includes("EURO")) return "EUR";
+  return code || "N/A";
+};
+
+const formatAmountWithCurrency = (amount, currency) => {
+  const code = getCurrencyCode(currency);
+  const num = Number(amount || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${code} ${num}`;
+};
+
 const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
   return (
     <div ref={ref} className='invoice flex flex-col p-5 min-h-screen'>
@@ -125,10 +145,10 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                       {d.productQuantity}
                     </td>
                     <td className='text-left p-[5px] border border-solid border-[#c0c0c0]'>
-                      {d.productSalePrice}
+                      {formatAmountWithCurrency(d.productSalePrice, data.currency)}
                     </td>
                     <td className='text-left p-[5px] border border-solid border-[#c0c0c0]'>
-                      {d.productQuantity * d.productSalePrice}
+                      {formatAmountWithCurrency(d.productQuantity * d.productSalePrice, data.currency)}
                     </td>
                   </tr>
                 ))}
@@ -139,7 +159,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
           <div className=''>
             <p>
               <b>In Words: </b>
-              {numberToWords(Math.round(data.totalAmount - data?.discount))}
+              {numberToWords(Math.round(data.totalAmount - data?.discount))} {getCurrencyCode(data.currency)}
             </p>
             <p className='mt-4'>
               <span className='font-semibold'>Terms and Conditions:</span>{" "}
@@ -155,7 +175,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Total
                   </td>
                   <td className='color-black p-2 text-left border-b border-dotted border-[#ddd]'>
-                    {data.totalAmount - vatAmount}
+                    {formatAmountWithCurrency(data.totalAmount - vatAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -163,7 +183,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     VAT / TAX{" "}
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {vatAmount}
+                    {formatAmountWithCurrency(vatAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -171,7 +191,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Sub total
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {data.totalAmount}
+                    {formatAmountWithCurrency(data.totalAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -179,7 +199,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Discount (-)
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {data.discount}
+                    {formatAmountWithCurrency(data.discount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -187,7 +207,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Grand total
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {data.totalAmount - data.discount}
+                    {formatAmountWithCurrency(data.totalAmount - data.discount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -195,7 +215,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Paid
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {data.paidAmount}
+                    {formatAmountWithCurrency(data.paidAmount, data.currency)}
                   </td>
                 </tr>
                 <tr>
@@ -203,7 +223,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
                     Due
                   </td>
                   <td className='color-black p-1 text-left border-b border-dotted border-[#ddd]'>
-                    {data.dueAmount}
+                    {formatAmountWithCurrency(data.dueAmount, data.currency)}
                   </td>
                 </tr>
               </tbody>

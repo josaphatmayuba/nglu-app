@@ -4,7 +4,20 @@
 import { useMemo } from "react";
 
 const FMT = new Intl.NumberFormat("fr-CD", { maximumFractionDigits: 2 });
-const fmt = (v) => (v ? FMT.format(Number(v)) : "—");
+
+const getCurrencyCode = (symbol) => {
+  if (symbol === "$") return "USD";
+  if (symbol === "€") return "EUR";
+  if (symbol === "£") return "GBP";
+  if (symbol === "CDF") return "CDF";
+  return "N/A";
+};
+
+const fmt = (v, symbol) => {
+  if (!v) return "—";
+  const code = getCurrencyCode(symbol);
+  return `${code} ${FMT.format(Number(v))}`;
+};
 
 const decodeHTML = (str) => {
   if (typeof document === "undefined" || !str) return str ?? "";
@@ -104,10 +117,10 @@ export default function PlanComptablePanel({
                         <span className="ml-2 text-xs text-ink-400 font-mono">{row.symbol}</span>
                       </td>
                       <td className="py-2 px-4 text-right tabular-nums font-medium text-emerald-700">
-                        {row.debit > 0 ? `${row.symbol} ${fmt(row.debit)}` : ""}
+                        {row.debit > 0 ? fmt(row.debit, row.symbol) : ""}
                       </td>
                       <td className="py-2 px-4 text-right tabular-nums font-medium text-rose-700">
-                        {row.credit > 0 ? `${row.symbol} ${fmt(row.credit)}` : ""}
+                        {row.credit > 0 ? fmt(row.credit, row.symbol) : ""}
                       </td>
                     </tr>
                   ))
@@ -116,7 +129,7 @@ export default function PlanComptablePanel({
                       <tr key={`d-${i}`} className="border-b border-ink-50 hover:bg-ink-50 transition-colors">
                         <td className="py-2 px-4 text-ink-900">{item.subAccount}</td>
                         <td className="py-2 px-4 text-right tabular-nums font-medium text-emerald-700">
-                          {item.balance ? `${currencySymbol} ${fmt(item.balance)}` : ""}
+                          {item.balance ? fmt(item.balance, currencySymbol) : ""}
                         </td>
                         <td className="py-2 px-4" />
                       </tr>
@@ -126,7 +139,7 @@ export default function PlanComptablePanel({
                         <td className="py-2 px-4 text-ink-900">{item.subAccount}</td>
                         <td className="py-2 px-4" />
                         <td className="py-2 px-4 text-right tabular-nums font-medium text-rose-700">
-                          {item.balance ? `${currencySymbol} ${fmt(Math.abs(item.balance))}` : ""}
+                          {item.balance ? fmt(Math.abs(item.balance), currencySymbol) : ""}
                         </td>
                       </tr>
                     )),
@@ -143,8 +156,8 @@ export default function PlanComptablePanel({
                 return Object.entries(totals).map(([key, t]) => (
                   <tr key={`tot-${key}`} className="bg-ink-100 font-semibold border-t-2 border-ink-200">
                     <td className="py-3 px-4 text-ink-900 text-xs uppercase">Total {t.symbol}</td>
-                    <td className="py-3 px-4 text-right tabular-nums text-ink-900">{`${t.symbol} ${fmt(t.debit)}`}</td>
-                    <td className="py-3 px-4 text-right tabular-nums text-ink-900">{`${t.symbol} ${fmt(t.credit)}`}</td>
+                    <td className="py-3 px-4 text-right tabular-nums text-ink-900">{fmt(t.debit, t.symbol)}</td>
+                    <td className="py-3 px-4 text-right tabular-nums text-ink-900">{fmt(t.credit, t.symbol)}</td>
                   </tr>
                 ));
               })()}
@@ -154,10 +167,10 @@ export default function PlanComptablePanel({
                 <tr className="bg-ink-100 font-semibold border-t-2 border-ink-200">
                   <td className="py-3 px-4 text-ink-900 text-xs uppercase">Total</td>
                   <td className="py-3 px-4 text-right tabular-nums text-ink-900">
-                    {trailBalance?.totalDebit ? `${currencySymbol} ${fmt(trailBalance.totalDebit)}` : "—"}
+                    {trailBalance?.totalDebit ? fmt(trailBalance.totalDebit, currencySymbol) : "—"}
                   </td>
                   <td className="py-3 px-4 text-right tabular-nums text-ink-900">
-                    {trailBalance?.totalCredit ? `${currencySymbol} ${fmt(Math.abs(trailBalance.totalCredit))}` : "—"}
+                    {trailBalance?.totalCredit ? fmt(Math.abs(trailBalance.totalCredit), currencySymbol) : "—"}
                   </td>
                 </tr>
               )}

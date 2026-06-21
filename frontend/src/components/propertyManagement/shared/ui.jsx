@@ -4,6 +4,7 @@
 import { Building2 } from "lucide-react";
 
 import { compactMoney } from "./format";
+import FormattedAmount from "@/components/Shared/FormattedAmount";
 
 export const Kpi = ({ icon, label, value, tone = "slate" }) => (
   <div className={`pm-kpi pm-kpi-${tone}`}>
@@ -32,15 +33,35 @@ export const MultiCurrencyValue = ({ byCurrency = [], fallback = "CDF 0" }) => {
 
   if (!rows.length) return <span>{fallback}</span>;
   if (rows.length === 1) {
-    const { amount, currencySymbol } = rows[0];
-    return <span>{compactMoney(amount, currencySymbol)}</span>;
+    const { amount, currencySymbol, currencyCode, currencyName, currency } = rows[0];
+    return (
+      <FormattedAmount
+        amount={amount}
+        currency={{
+          currencyCode,
+          currencyName,
+          currencySymbol,
+          ...currency
+        }}
+        compact
+      />
+    );
   }
 
   return (
     <span className="immo-multicurrency">
       {rows.map((entry, index) => (
         <span key={entry.currencyId ?? index} className="immo-multicurrency-line">
-          {compactMoney(entry.amount, entry.currencySymbol)}
+          <FormattedAmount
+            amount={entry.amount}
+            currency={{
+              currencyCode: entry.currencyCode,
+              currencyName: entry.currencyName,
+              currencySymbol: entry.currencySymbol,
+              ...entry.currency
+            }}
+            compact
+          />
         </span>
       ))}
     </span>

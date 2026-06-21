@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Card from "../../UI/Card";
 import MoneyInput from "../Shared/MoneyInput";
+import FormattedAmount from "../Shared/FormattedAmount";
 import {
   addSalaryHistory,
   deleteSalaryHistory,
@@ -71,9 +72,13 @@ const SalariesPage = () => {
   };
 
   const fmtSalary = (amount, currencyId) => {
-    const code = currencyCodeFor(currencyId);
-    const n = Number(amount || 0).toLocaleString();
-    return code ? `${n} ${code}` : n;
+    const currency = currenciesList.find((x) => x.id === currencyId || x.currencyId === currencyId);
+    return (
+      <FormattedAmount
+        amount={amount}
+        currency={currency}
+      />
+    );
   };
 
   return (
