@@ -19,7 +19,6 @@ import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
 import { api } from "./api";
 import { AiAssistant } from "./aiAssistant.jsx";
-import { AdminOrgsScreen } from "./admin-orgs";
 
 const DEFAULTS = {
   lang: "fr",
@@ -70,7 +69,6 @@ const ROUTE_SLUGS = {
   reports: "rapports",
   employees: "employes",
   settings: "parametres",
-  "admin-orgs": "admin/organisations",
 };
 const SLUGS_TO_ROUTE = Object.fromEntries(Object.entries(ROUTE_SLUGS).map(([k, v]) => [v, k]));
 const BASE = "/farmos/";

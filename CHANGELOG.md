@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Removed (3.100.13)
+- FarmOS (farmos-app) — **suppression du code « gestion des organisations » issu d'un modèle multi-tenant erroné** (super-propriétaire mono-tenant) : composant `admin-orgs.jsx` supprimé + retrait des références dans `app.jsx` (import, route `admin-orgs` de `ROUTE_SLUGS`, entrée `routeMeta`, case `renderScreen`) et `shell.jsx` (const `NAV_ADMIN` + bloc de nav admin ; bouton « Retour au CRM » remis dans la nav secondaire). Le vrai SaaS multi-tenant (inscription client self-service, isolation par organization_id) sera repris proprement par phases. Build vite OK. [SCRUM]
+
 ### Fixed (3.100.12)
 - Backend — **devise ISO complète sur tous les endpoints** : SaleInvoicesService.findOne() + PurchaseInvoicesService.findOne/create/findAll() + HR SalaryHistoryService.findSalaryHistory/listSalaryHistory() + PayrollService.findPayroll/listPayrolls() maintenant **leftJoin currency** et retournent l'objet {id, currencyCode, currencyName, currencySymbol, ...} au lieu de juste currencyId; Frontend SalariesPage utilise l'objet devise du backend au lieu de chercher par ID en liste locale. FormattedAmount reçoit toujours currency complet → affichage ISO garanti. [SCRUM]
 
