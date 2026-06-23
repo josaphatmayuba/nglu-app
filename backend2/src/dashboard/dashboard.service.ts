@@ -23,21 +23,21 @@ import { DashboardQueryDto } from "./dto/dashboard-query.dto";
 export class DashboardService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async getDashboardData(query: DashboardQueryDto) {
+  async getDashboardData(query: DashboardQueryDto, org: number) {
     const { start, end } = this.resolveDates(query);
 
     const [salesAgg, purchaseAgg, salesReturn, purchaseReturn, monthly, accounts, topCustomers, topProducts, kpis, revenueByCurrency] =
       await Promise.all([
-        this.salesAggregates(start, end),
-        this.purchaseAggregates(start, end),
+        this.salesAggregates(start, end, org),
+        this.purchaseAggregates(start, end, org),
         this.salesReturnTotal(start, end),
         this.purchaseReturnTotal(start, end),
-        this.monthlyChart(start, end),
-        this.accountsBalance(start, end),
-        this.topCustomers(start, end),
-        this.topProducts(start, end),
-        this.kpiTrends(end),
-        this.salesByCurrency(start, end),
+        this.monthlyChart(start, end, org),
+        this.accountsBalance(start, end, org),
+        this.topCustomers(start, end, org),
+        this.topProducts(start, end, org),
+        this.kpiTrends(end, org),
+        this.salesByCurrency(start, end, org),
       ]);
 
     return {
@@ -69,7 +69,7 @@ export class DashboardService {
     };
   }
 
-  private async salesAggregates(start: Date, end: Date) {
+  private async salesAggregates(start: Date, end: Date, org: number) {
     const [row] = await this.db
       .select({
         total: sql<number>`COALESCE(SUM(${saleInvoices.totalAmount}), 0)`,
@@ -77,11 +77,11 @@ export class DashboardService {
         due: sql<number>`COALESCE(SUM(${saleInvoices.dueAmount}), 0)`,
       })
       .from(saleInvoices)
-      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")));
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)));
     return { total: Number(row.total), paid: Number(row.paid), due: Number(row.due) };
   }
 
-  private async purchaseAggregates(start: Date, end: Date) {
+  private async purchaseAggregates(start: Date, end: Date, org: number) {
     const [row] = await this.db
       .select({
         total: sql<number>`COALESCE(SUM(${purchaseInvoices.totalAmount}), 0)`,
@@ -89,10 +89,13 @@ export class DashboardService {
         due: sql<number>`COALESCE(SUM(${purchaseInvoices.dueAmount}), 0)`,
       })
       .from(purchaseInvoices)
-      .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true")));
+      .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true"), eq(purchaseInvoices.organizationId, org)));
     return { total: Number(row.total), paid: Number(row.paid), due: Number(row.due) };
   }
 
+  // NOTE isolation P2 : returnSaleInvoices / returnPurchaseInvoices n ont PAS
+  // encore organization_id (migration a prevoir). Ces totaux de retours ne sont
+  // donc pas filtres par org pour l instant. A scoper quand la colonne sera ajoutee.
   private async salesReturnTotal(start: Date, end: Date) {
     const [row] = await this.db
       .select({ total: sql<number>`COALESCE(SUM(${returnSaleInvoices.totalAmount}), 0)` })
@@ -109,7 +112,7 @@ export class DashboardService {
     return Number(row.total);
   }
 
-  private async monthlyChart(start: Date, end: Date) {
+  private async monthlyChart(start: Date, end: Date, org: number) {
     const [salesRows, purchaseRows] = await Promise.all([
       this.db
         .select({
@@ -118,7 +121,7 @@ export class DashboardService {
           sales: sql<number>`COALESCE(SUM(${saleInvoices.totalAmount}), 0)`,
         })
         .from(saleInvoices)
-        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
+        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)))
         .groupBy(sql`DATE_FORMAT(${saleInvoices.date}, '%b %y')`)
         .orderBy(sql`MIN(${saleInvoices.date})`),
 
@@ -128,7 +131,7 @@ export class DashboardService {
           purchases: sql<number>`COALESCE(SUM(${purchaseInvoices.totalAmount}), 0)`,
         })
         .from(purchaseInvoices)
-        .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true")))
+        .where(and(between(purchaseInvoices.date, start, end), eq(purchaseInvoices.status, "true"), eq(purchaseInvoices.organizationId, org)))
         .groupBy(sql`DATE_FORMAT(${purchaseInvoices.date}, '%b %y')`),
     ]);
 
@@ -141,8 +144,12 @@ export class DashboardService {
     }));
   }
 
-  private async accountsBalance(start: Date, end: Date) {
-    const allAccounts = await this.db.select({ id: subAccounts.id, name: subAccounts.name }).from(subAccounts);
+  private async accountsBalance(start: Date, end: Date, org: number) {
+    // Sous-comptes ET ecritures filtres par org (isolation P2).
+    const allAccounts = await this.db
+      .select({ id: subAccounts.id, name: subAccounts.name })
+      .from(subAccounts)
+      .where(eq(subAccounts.organizationId, org));
 
     const [credits, debits] = await Promise.all([
       this.db
@@ -151,7 +158,7 @@ export class DashboardService {
           total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
         })
         .from(transactions)
-        .where(and(between(transactions.date, start, end), eq(transactions.status, "true")))
+        .where(and(between(transactions.date, start, end), eq(transactions.status, "true"), eq(transactions.organizationId, org)))
         .groupBy(transactions.creditId),
 
       this.db
@@ -160,7 +167,7 @@ export class DashboardService {
           total: sql<number>`COALESCE(SUM(${transactions.amount}), 0)`,
         })
         .from(transactions)
-        .where(and(between(transactions.date, start, end), eq(transactions.status, "true")))
+        .where(and(between(transactions.date, start, end), eq(transactions.status, "true"), eq(transactions.organizationId, org)))
         .groupBy(transactions.debitId),
     ]);
 
@@ -176,14 +183,14 @@ export class DashboardService {
       .sort((a, b) => b.amount - a.amount);
   }
 
-  private async topCustomers(start: Date, end: Date) {
+  private async topCustomers(start: Date, end: Date, org: number) {
     const rows = await this.db
       .select({
         customerId: saleInvoices.customerId,
         totalSales: sql<number>`SUM(${saleInvoices.totalAmount})`,
       })
       .from(saleInvoices)
-      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), isNotNull(saleInvoices.customerId)))
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org), isNotNull(saleInvoices.customerId)))
       .groupBy(saleInvoices.customerId)
       .orderBy(desc(sql`SUM(${saleInvoices.totalAmount})`))
       .limit(5);
@@ -210,7 +217,7 @@ export class DashboardService {
     });
   }
 
-  private async topProducts(start: Date, end: Date) {
+  private async topProducts(start: Date, end: Date, org: number) {
     const rows = await this.db
       .select({
         productId: saleInvoiceProducts.productId,
@@ -222,6 +229,7 @@ export class DashboardService {
         eq(saleInvoices.id, saleInvoiceProducts.invoiceId),
         between(saleInvoices.date, start, end),
         eq(saleInvoices.status, "true"),
+        eq(saleInvoices.organizationId, org),
       ))
       .groupBy(saleInvoiceProducts.productId)
       .orderBy(desc(sql`SUM(${saleInvoiceProducts.productFinalAmount})`))
@@ -244,7 +252,7 @@ export class DashboardService {
     }));
   }
 
-  private async kpiTrends(end: Date) {
+  private async kpiTrends(end: Date, org: number) {
     const trendStart = new Date(end);
     trendStart.setDate(trendStart.getDate() - 6);
     trendStart.setHours(0, 0, 0, 0);
@@ -252,10 +260,10 @@ export class DashboardService {
     trendEnd.setHours(23, 59, 59, 999);
 
     const [saleTrend, saleDueTrend, purTrend, purDueTrend] = await Promise.all([
-      this.dailyTrend(saleInvoices, saleInvoices.totalAmount, saleInvoices.date, trendStart, trendEnd),
-      this.dailyTrend(saleInvoices, saleInvoices.dueAmount, saleInvoices.date, trendStart, trendEnd),
-      this.dailyTrend(purchaseInvoices, purchaseInvoices.totalAmount, purchaseInvoices.date, trendStart, trendEnd),
-      this.dailyTrend(purchaseInvoices, purchaseInvoices.dueAmount, purchaseInvoices.date, trendStart, trendEnd),
+      this.dailyTrend(saleInvoices, saleInvoices.totalAmount, saleInvoices.date, trendStart, trendEnd, org, saleInvoices.organizationId),
+      this.dailyTrend(saleInvoices, saleInvoices.dueAmount, saleInvoices.date, trendStart, trendEnd, org, saleInvoices.organizationId),
+      this.dailyTrend(purchaseInvoices, purchaseInvoices.totalAmount, purchaseInvoices.date, trendStart, trendEnd, org, purchaseInvoices.organizationId),
+      this.dailyTrend(purchaseInvoices, purchaseInvoices.dueAmount, purchaseInvoices.date, trendStart, trendEnd, org, purchaseInvoices.organizationId),
     ]);
 
     return {
@@ -266,9 +274,11 @@ export class DashboardService {
     };
   }
 
-  private async dailyTrend(table: any, amountCol: any, dateCol: any, start: Date, end: Date): Promise<number[]> {
-    const activeStatus = table.status ? eq(table.status, "true") : undefined;
-    const where = activeStatus ? and(between(dateCol, start, end), activeStatus) : between(dateCol, start, end);
+  private async dailyTrend(table: any, amountCol: any, dateCol: any, start: Date, end: Date, org: number, orgCol: any): Promise<number[]> {
+    const conditions = [between(dateCol, start, end)];
+    if (table.status) conditions.push(eq(table.status, "true"));
+    if (orgCol) conditions.push(eq(orgCol, org));
+    const where = and(...conditions);
     const rows = await this.db
       .select({
         day: sql<string>`DATE(${dateCol})`,
@@ -316,7 +326,7 @@ export class DashboardService {
     return cur ?? null;
   }
 
-  private async salesByCurrency(start: Date, end: Date) {
+  private async salesByCurrency(start: Date, end: Date, org: number) {
     const rows = await this.db
       .select({
         currencyId: saleInvoices.currencyId,
@@ -327,7 +337,7 @@ export class DashboardService {
       })
       .from(saleInvoices)
       .leftJoin(currencies, eq(currencies.id, saleInvoices.currencyId))
-      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
+      .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)))
       .groupBy(saleInvoices.currencyId, currencies.currencyCode, currencies.currencyName, currencies.currencySymbol);
 
     // Fallback = devise par defaut du parametre (pas une constante en dur).
@@ -342,7 +352,7 @@ export class DashboardService {
   }
 
   // ── SCRUM-142: aggregated startup endpoint ──────────────────────────────
-  async getStartupData(query: DashboardQueryDto) {
+  async getStartupData(query: DashboardQueryDto, org: number) {
     const { start, end } = this.resolveDates(query);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -350,7 +360,7 @@ export class DashboardService {
 
     const [dashboardData, overdueLeases, pendingMaintenance, lowStock, invoiceCount] =
       await Promise.all([
-        this.getDashboardData(query),
+        this.getDashboardData(query, org),
 
         // Active leases where nextInvoiceDate is past today
         this.db
@@ -360,6 +370,7 @@ export class DashboardService {
             and(
               eq(realEstateLeases.status, "active"),
               lt(realEstateLeases.nextInvoiceDate, todayStr),
+              eq(realEstateLeases.organizationId, org),
             ),
           ),
 
@@ -371,6 +382,7 @@ export class DashboardService {
             and(
               inArray(realEstateMaintenanceRequests.status, ["open", "in_progress"]),
               eq(realEstateMaintenanceRequests.isActive, true),
+              eq(realEstateMaintenanceRequests.organizationId, org),
             ),
           ),
 
@@ -381,6 +393,7 @@ export class DashboardService {
           .where(
             and(
               eq(products.status, "true"),
+              eq(products.organizationId, org),
               sql`${products.reorderQuantity} > 0`,
               sql`${products.productQuantity} <= ${products.reorderQuantity}`,
             ),
@@ -390,7 +403,7 @@ export class DashboardService {
         this.db
           .select({ count: sql<number>`COUNT(*)` })
           .from(saleInvoices)
-          .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"))),
+          .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org))),
       ]);
 
     return {
@@ -408,20 +421,20 @@ export class DashboardService {
   }
 
   // ── SCRUM-142: aggregated recent-activity endpoint ───────────────────────
-  async getRecentActivity(query: DashboardQueryDto) {
+  async getRecentActivity(query: DashboardQueryDto, org: number) {
     const { start, end } = this.resolveDates(query);
 
     const [recentSales, pendingOrders, receivedOrders, deliveredOrders] = await Promise.all([
       this.db
         .select()
         .from(saleInvoices)
-        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true")))
+        .where(and(between(saleInvoices.date, start, end), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)))
         .orderBy(desc(saleInvoices.date))
         .limit(5),
 
-      this.cartOrdersByStatus("PENDING"),
-      this.cartOrdersByStatus("RECEIVED"),
-      this.cartOrdersByStatus("DELIVERED"),
+      this.cartOrdersByStatus("PENDING", org),
+      this.cartOrdersByStatus("RECEIVED", org),
+      this.cartOrdersByStatus("DELIVERED", org),
     ]);
 
     return {
@@ -434,16 +447,16 @@ export class DashboardService {
     };
   }
 
-  private async cartOrdersByStatus(status: string) {
+  private async cartOrdersByStatus(status: string, org: number) {
     const [countRow] = await this.db
       .select({ count: sql<number>`COUNT(*)` })
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true")));
+      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)));
 
     const items = await this.db
       .select()
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.orderStatus, status), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, org)))
       .orderBy(desc(saleInvoices.date))
       .limit(5);
 

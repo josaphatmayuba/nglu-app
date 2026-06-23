@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.101.4)
+- Multi-tenant SaaS **P2 (suite) — isolation dashboard** : `dashboard` controller (`@CurrentOrg()` sur les 3 routes) + service entièrement threadé par org. Toutes les requêtes dont la table porte `organization_id` filtrent désormais l'org : ventes, achats, graphe mensuel, soldes de comptes (subAccounts + transactions), top clients, top produits, tendances KPI (dailyTrend générique reçoit la colonne org), ventes par devise, alertes (baux en retard, maintenance, stock bas), badge sidenav, activité récente, commandes panier. Limitation documentée : `returnSaleInvoices`/`returnPurchaseInvoices` (totaux de retours) et `appSettings` n'ont pas encore `organization_id` → non filtrés, migration à prévoir. Typecheck OK. **RESTE P2** : suppliers, property-management, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
+
 ### Added (3.101.3)
 - Multi-tenant SaaS **P2 (suite) — audit ledger** : revue des 4 jointures `account`/`subAccount` du module ledger. 3 sont déjà sûres (ancrées sur `journalEntryLines`/`transactionTypeRules` filtrés par org → les montants ne peuvent pas fuiter, le join ne sert qu'au libellé). 1 corrigée : `migrateLegacyTransactions` validait les références sur **tous** les sous-comptes → restreint aux sous-comptes de l'org. Le ledger (journal_entries/lines, déjà org-aware partout) est désormais isolation-correct. Typecheck OK. **RESTE P2** : dashboard (pas org-aware, ~13 tables), suppliers, property-management, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
 
