@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.105.1)
+- Multi-tenant SaaS **P4 (frontend) — console super-owner branchée sur l'API** : `saas-platform-mockup.html` gagne un **mode LIVE** opt-in (activé si `window.NGLU_OWNER_TOKEN` est fourni ; `NGLU_API_BASE` surchargeable). En mode LIVE : `GET /organizations` alimente la liste réelle (mappée vers la forme des renderers, champs démo par défaut), suspend/réactiver appellent `POST /organizations/:publicId/(suspend|reactivate)` par publicId. Sans token → reste la démo simulée autonome. Les sections plans/billing/usage restent simulées (pas d'endpoint backend correspondant). Syntaxe JS vérifiée. **RESTE** : déploiement (servir signup en route publique, sous-domaine wildcard) ; **test réel à 2 orgs** (non exécuté, Docker arrêté). [SCRUM]
+
 ### Added (3.105.0)
 - Multi-tenant SaaS **P4 (backend) — console super-owner** : nouveau `SuperOwnerGuard` (s'appuie sur `request.user.isSuperOwner` calculé en DB par le JwtAuthGuard en P1 → fiable, jamais le token). Nouveau module `organizations` (gardé `JwtAuthGuard` + `SuperOwnerGuard`) : `GET /organizations` (liste + nb d'utilisateurs actifs), `GET /organizations/:publicId`, `POST /organizations` (crée une org cliente + 1er admin + plan comptable via `provisionOrgChartOfAccounts`, sans auto-login), `POST /organizations/:publicId/suspend` (soft, status='suspended', motif audité), `POST /organizations/:publicId/reactivate`. Les orgs sont référencées par `publicId` opaque, jamais l'id interne. La bascule d'org pour le support utilise l'en-tête `X-Active-Org` déjà géré en P1. Module enregistré dans app.module + route `/organizations` ajoutée à la whitelist middleware. Typecheck OK (runtime non vérifié : Docker local arrêté). [SCRUM]
 
