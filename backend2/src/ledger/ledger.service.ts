@@ -861,8 +861,12 @@ export class LedgerService {
       .orderBy(transactions.date)
       .limit(opts.limit ?? 100000);
 
-    // Comptes valides (sous-comptes existants) pour ignorer les references cassees.
-    const subs = await this.db.select({ id: subAccounts.id }).from(subAccounts);
+    // Comptes valides (sous-comptes de CETTE org) pour ignorer les references
+    // cassees ou inter-org (isolation P2).
+    const subs = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(eq(subAccounts.organizationId, orgId));
     const validAccounts = new Set(subs.map((s) => s.id));
 
     const report = {

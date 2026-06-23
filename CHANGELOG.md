@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.101.3)
+- Multi-tenant SaaS **P2 (suite) — audit ledger** : revue des 4 jointures `account`/`subAccount` du module ledger. 3 sont déjà sûres (ancrées sur `journalEntryLines`/`transactionTypeRules` filtrés par org → les montants ne peuvent pas fuiter, le join ne sert qu'au libellé). 1 corrigée : `migrateLegacyTransactions` validait les références sur **tous** les sous-comptes → restreint aux sous-comptes de l'org. Le ledger (journal_entries/lines, déjà org-aware partout) est désormais isolation-correct. Typecheck OK. **RESTE P2** : dashboard (pas org-aware, ~13 tables), suppliers, property-management, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
+
 ### Added (3.101.2)
 - Multi-tenant SaaS **P2 (suite) — isolation transaction-types + sub-accounts** : `transaction-types` controller (`@CurrentOrg()` sur les 5 routes) + service (findAll/findOne/create/update/remove filtrent `organizationId`, `ensureAccountsExist` vérifie que les sous-comptes débit/crédit appartiennent à l'org). `sub-accounts` controller + service (findAll filtre l'org). `transactions.service.ts` était déjà org-aware mais `ensureAccountsExist` ne filtrait pas l'org → corrigé (un client ne peut plus passer une écriture sur le sous-compte d'une autre org). Typecheck OK. **RESTE P2** : payment-methods, suppliers, property-management, dashboard, ledger, projects, farmos + seeders compta par org. [SCRUM]
 
