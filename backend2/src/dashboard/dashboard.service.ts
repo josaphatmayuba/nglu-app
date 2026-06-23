@@ -30,8 +30,8 @@ export class DashboardService {
       await Promise.all([
         this.salesAggregates(start, end, org),
         this.purchaseAggregates(start, end, org),
-        this.salesReturnTotal(start, end),
-        this.purchaseReturnTotal(start, end),
+        this.salesReturnTotal(start, end, org),
+        this.purchaseReturnTotal(start, end, org),
         this.monthlyChart(start, end, org),
         this.accountsBalance(start, end, org),
         this.topCustomers(start, end, org),
@@ -93,22 +93,21 @@ export class DashboardService {
     return { total: Number(row.total), paid: Number(row.paid), due: Number(row.due) };
   }
 
-  // NOTE isolation P2 : returnSaleInvoices / returnPurchaseInvoices n ont PAS
-  // encore organization_id (migration a prevoir). Ces totaux de retours ne sont
-  // donc pas filtres par org pour l instant. A scoper quand la colonne sera ajoutee.
-  private async salesReturnTotal(start: Date, end: Date) {
+  // Isolation P2 : returnSaleInvoice / returnPurchaseInvoice portent desormais
+  // organization_id (migration 0178, backfille depuis la facture parente).
+  private async salesReturnTotal(start: Date, end: Date, org: number) {
     const [row] = await this.db
       .select({ total: sql<number>`COALESCE(SUM(${returnSaleInvoices.totalAmount}), 0)` })
       .from(returnSaleInvoices)
-      .where(between(returnSaleInvoices.date, start, end));
+      .where(and(between(returnSaleInvoices.date, start, end), eq(returnSaleInvoices.organizationId, org)));
     return Number(row.total);
   }
 
-  private async purchaseReturnTotal(start: Date, end: Date) {
+  private async purchaseReturnTotal(start: Date, end: Date, org: number) {
     const [row] = await this.db
       .select({ total: sql<number>`COALESCE(SUM(${returnPurchaseInvoices.totalAmount}), 0)` })
       .from(returnPurchaseInvoices)
-      .where(between(returnPurchaseInvoices.date, start, end));
+      .where(and(between(returnPurchaseInvoices.date, start, end), eq(returnPurchaseInvoices.organizationId, org)));
     return Number(row.total);
   }
 

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.106.0)
+- Multi-tenant SaaS **P2 (finalisation) — isolation des dernières tables compta** : migration `0178_remaining_tables_org.sql` ajoute `organization_id` à `returnSaleInvoice`, `returnPurchaseInvoice`, `paymentSaleInvoice`, `paymentPurchaseInvoice` (backfill **depuis la facture parente** qui porte déjà l'org) + `appSetting` (backfill → org #1), avec index par org (idempotent INFORMATION_SCHEMA+PREPARE). Schéma Drizzle mis à jour (5 colonnes). Code : les 2 inserts de paiement (`createPayment` sale/purchase) renseignent `organizationId`, les listes de paiements (`findAllPayments` sale/purchase) filtrent l'org (+ `@CurrentOrg()` aux 2 routes), et les totaux de retours du dashboard (`salesReturnTotal`/`purchaseReturnTotal`) filtrent l'org. **`appSetting` reste lu en global** (singleton, ~20 lecteurs HR/property/sale/purchase/dashboard) — la colonne est ajoutée pour le futur mais le rewiring par org est un chantier dédié (documenté). Typecheck OK. [SCRUM]
+
 ### Added (3.105.2)
 - Multi-tenant SaaS — **script de test d'isolation** `backend2/test-scripts/multitenant-isolation.mjs` (diagnostic manuel, Node 18+ fetch natif). Crée 2 orgs via `/auth/register` (slugs suffixés timestamp = rejouable) puis vérifie les 5 garanties P1→P4 : (1) publicId hexa distinct et non numérique, (2) plan comptable isolé (0 sous-compte partagé), (3) écriture de A invisible chez B, (4) `X-Active-Org` ignoré pour un client, (5) `GET /organizations` → 403 pour un client. Usage : `NGLU_API=http://localhost:3001/api node backend2/test-scripts/multitenant-isolation.mjs`. **Non encore exécuté** (Docker local arrêté) — prêt à lancer dès que le stack dev tourne. [SCRUM]
 

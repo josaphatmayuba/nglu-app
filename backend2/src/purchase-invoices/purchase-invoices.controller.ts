@@ -62,8 +62,8 @@ export class PurchaseInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get all purchase invoice payments" })
   @Get("payment-purchase-invoice")
-  findAllPayments(@Query() query: Record<string, string>) {
-    return this.purchaseInvoicesService.findAllPayments(query);
+  findAllPayments(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.purchaseInvoicesService.findAllPayments(query, orgId);
   }
 
   @ApiBearerAuth()

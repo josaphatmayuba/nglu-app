@@ -1690,6 +1690,7 @@ export const attachments = mysqlTable("attachment", {
 });
 
 export const appSettings = mysqlTable("appSetting", {
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   id: serial("id").primaryKey(),
   companyName: varchar("companyName", { length: 255 }),
   dashboardType: varchar("dashboardType", { length: 255 }),
@@ -1906,6 +1907,7 @@ export const purchaseInvoices = mysqlTable("purchaseInvoice", {
 });
 
 export const returnSaleInvoices = mysqlTable("returnSaleInvoice", {
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   id: varchar("id", { length: 50 }).primaryKey(),
   date: datetime("date").notNull(),
   totalAmount: double("totalAmount").default(0).notNull(),
@@ -1919,6 +1921,7 @@ export const returnSaleInvoices = mysqlTable("returnSaleInvoice", {
 });
 
 export const returnPurchaseInvoices = mysqlTable("returnPurchaseInvoice", {
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   id: varchar("id", { length: 50 }).primaryKey(),
   date: datetime("date").notNull(),
   totalAmount: double("totalAmount").default(0).notNull(),
@@ -1932,6 +1935,7 @@ export const returnPurchaseInvoices = mysqlTable("returnPurchaseInvoice", {
 });
 
 export const paymentSaleInvoices = mysqlTable("paymentSaleInvoice", {
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   id: serial("id").primaryKey(),
   date: datetime("date").notNull(),
   amount: double("amount").default(0).notNull(),
@@ -1942,6 +1946,7 @@ export const paymentSaleInvoices = mysqlTable("paymentSaleInvoice", {
 });
 
 export const paymentPurchaseInvoices = mysqlTable("paymentPurchaseInvoice", {
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   id: serial("id").primaryKey(),
   date: datetime("date").notNull(),
   amount: double("amount").default(0).notNull(),

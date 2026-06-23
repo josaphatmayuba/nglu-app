@@ -537,6 +537,7 @@ export class SaleInvoicesService {
 
     // Create payment record
     await this.db.insert(paymentSaleInvoices).values({
+      organizationId: orgId,
       date: new Date(input.date),
       amount: input.amount,
       saleInvoiceId: input.saleInvoiceId,
@@ -577,18 +578,21 @@ export class SaleInvoicesService {
     return { message: "Payment recorded successfully." };
   }
 
-  async findAllPayments(query: Record<string, string>) {
+  async findAllPayments(query: Record<string, string>, org: number) {
+    const orgFilter = eq(paymentSaleInvoices.organizationId, org);
     if (query["query"] === "all") {
       return this.db
         .select()
         .from(paymentSaleInvoices)
+        .where(orgFilter)
         .orderBy(desc(paymentSaleInvoices.id));
     }
 
     if (query["query"] === "info") {
       const [row] = await this.db
         .select({ total: sum(paymentSaleInvoices.amount), cnt: count(paymentSaleInvoices.id) })
-        .from(paymentSaleInvoices);
+        .from(paymentSaleInvoices)
+        .where(orgFilter);
       return { _count: { id: Number(row.cnt ?? 0) }, _sum: { amount: row.total ?? null } };
     }
 
@@ -597,13 +601,15 @@ export class SaleInvoicesService {
     const rows = await this.db
       .select()
       .from(paymentSaleInvoices)
+      .where(orgFilter)
       .orderBy(desc(paymentSaleInvoices.id))
       .limit(limit)
       .offset(skip);
 
     const [{ total }] = await this.db
       .select({ total: count(paymentSaleInvoices.id) })
-      .from(paymentSaleInvoices);
+      .from(paymentSaleInvoices)
+      .where(orgFilter);
 
     return { getAllPayment: rows, totalPayment: Number(total ?? 0) };
   }
