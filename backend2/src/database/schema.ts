@@ -64,6 +64,8 @@ export const organizations = mysqlTable("organizations", {
 
 export const subAccounts = mysqlTable("subAccount", {
   id: serial("id").primaryKey(),
+  // P2 multi-tenant : org denormalisee depuis le compte parent (migration 0176).
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   accountId: bigint("accountId", { mode: "number" }).notNull(),
   status: varchar("status", { length: 255 }).default("true").notNull(),
@@ -73,6 +75,8 @@ export const subAccounts = mysqlTable("subAccount", {
 
 export const accounts = mysqlTable("account", {
   id: serial("id").primaryKey(),
+  // P2 multi-tenant : plan comptable isole par organisation (migration 0176).
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   type: varchar("type", { length: 255 }).notNull(),
   createdAt: timestamp("created_at"),
@@ -81,6 +85,8 @@ export const accounts = mysqlTable("account", {
 
 export const transactionTypes = mysqlTable("transaction_types", {
   id: serial("id").primaryKey(),
+  // P2 multi-tenant : regles de transaction isolees par organisation (migration 0176).
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   debitAccountId: bigint("debit_account_id", { mode: "number" }).notNull(),
   creditAccountId: bigint("credit_account_id", { mode: "number" }).notNull(),
