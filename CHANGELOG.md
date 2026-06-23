@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.104.1)
+- Multi-tenant SaaS **P3 (frontend) — page d'inscription câblée sur l'API** : `signup-onboarding-mockup.html` n'est plus un mockup simulé — `submitSignup()` appelle réellement `POST /api/auth/register` (fetch, `credentials: include` pour le cookie refresh), split nom complet → firstName/lastName, gère les erreurs (409 slug pris → retour étape 2 + message ; 400 validation → toast), désactive le bouton pendant l'appel, stocke le token en mémoire (pas localStorage, conforme à la règle projet). `enterWorkspace()` redirige vers l'espace réel quand servi en HTTP (fallback aperçu en ouverture locale). UI passée au format **sous-domaine `<slug>.nglu.cloud`** (préfixe→suffixe, hints, récap, écran succès). `API_BASE`/`NGLU_WORKSPACE_URL` surchargeables pour les tests. Syntaxe JS vérifiée. [SCRUM]
+
 ### Added (3.104.0)
 - Multi-tenant SaaS **P3 (backend) — inscription self-service** : nouvel endpoint **public** `POST /auth/register` (déjà whitelisté côté middleware). `RegisterDto` (firstName/lastName/email/password fort/accountType org|solo/orgName?/slug sous-domaine/sector?/phone?/acceptedTerms). `AuthService.register` : vérifie CGU + unicité email (= username) + unicité slug, hash bcrypt, génère le `public_id` hexa, puis **transaction atomique** créant l'organisation (`status='trial'`) + le 1er utilisateur (rôle `admin` de SA propre org) + `provisionOrgChartOfAccounts(tx, orgId)` (plan comptable canonique isolé) + log d'audit ; émet ensuite JWT + cookie refresh (connexion immédiate). Solo = org à 1 user (orgName = nom de la personne). Réponse expose l'`organization.publicId` opaque, jamais l'id interne. Typecheck OK (runtime non vérifié : Docker local arrêté). **Prochaine étape** : câbler `signup-onboarding-mockup.html` sur l'endpoint + test réel 2 orgs. [SCRUM]
 
