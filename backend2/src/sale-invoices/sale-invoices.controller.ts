@@ -73,8 +73,8 @@ export class SaleInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Create payment for sale invoice" })
   @Post("payment-sale-invoice")
-  createPayment(@Body() body: CreatePaymentSaleInvoiceDto) {
-    return this.saleInvoicesService.createPayment(body);
+  createPayment(@Body() body: CreatePaymentSaleInvoiceDto, @CurrentOrg() orgId: number) {
+    return this.saleInvoicesService.createPayment(body, orgId);
   }
 
   @ApiBearerAuth()

@@ -523,12 +523,12 @@ export class SaleInvoicesService {
   }
 
   // Payment sale invoices
-  async createPayment(input: CreatePaymentSaleInvoiceDto) {
-    // Validate invoice exists
+  async createPayment(input: CreatePaymentSaleInvoiceDto, orgId: number) {
+    // Validate invoice exists (de CETTE org : on ne paie pas la facture d une autre).
     const [invoice] = await this.db
       .select({ id: saleInvoices.id, dueAmount: saleInvoices.dueAmount })
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.id, input.saleInvoiceId), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!invoice) {
@@ -547,6 +547,7 @@ export class SaleInvoicesService {
 
     // Create transaction
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: sql`CURRENT_TIMESTAMP`,
       debitId: 1,
       creditId: 4,

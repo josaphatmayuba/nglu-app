@@ -4,6 +4,7 @@ import type { Request, Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import {
   awardHistories,
   awards,
@@ -192,7 +193,7 @@ export class SalaryHistoryController {
 
   @Get() list(@Query() q: Record<string, string>) { return this.service.listSalaryHistory(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findSalaryHistory(id); }
-  @Post() create(@Body() body: CreateSalaryHistoryDto) { return this.service.createSalaryHistory(body); }
+  @Post() create(@Body() body: CreateSalaryHistoryDto, @CurrentOrg() orgId: number) { return this.service.createSalaryHistory(body, orgId); }
   @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: { comment?: string }) { return this.service.approveSalary(id, body?.comment); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSalaryHistoryDto) { return this.service.updateSalaryHistory(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number) { return this.service.deleteRow(salaryHistories, id); }

@@ -54,8 +54,8 @@ export class PurchaseInvoicesController {
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Create payment for purchase invoice" })
   @Post("payment-purchase-invoice")
-  createPayment(@Body() body: CreatePaymentPurchaseInvoiceDto) {
-    return this.purchaseInvoicesService.createPayment(body);
+  createPayment(@Body() body: CreatePaymentPurchaseInvoiceDto, @CurrentOrg() orgId: number) {
+    return this.purchaseInvoicesService.createPayment(body, orgId);
   }
 
   @ApiBearerAuth()

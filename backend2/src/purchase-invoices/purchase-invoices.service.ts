@@ -395,11 +395,11 @@ export class PurchaseInvoicesService {
   }
 
   // Payment purchase invoices
-  async createPayment(input: CreatePaymentPurchaseInvoiceDto) {
+  async createPayment(input: CreatePaymentPurchaseInvoiceDto, orgId: number) {
     const [invoice] = await this.db
       .select({ id: purchaseInvoices.id, dueAmount: purchaseInvoices.dueAmount })
       .from(purchaseInvoices)
-      .where(and(eq(purchaseInvoices.id, input.purchaseInvoiceId), eq(purchaseInvoices.status, "true")))
+      .where(and(eq(purchaseInvoices.id, input.purchaseInvoiceId), eq(purchaseInvoices.status, "true"), eq(purchaseInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!invoice) {
@@ -416,6 +416,7 @@ export class PurchaseInvoicesService {
     });
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: sql`CURRENT_TIMESTAMP`,
       debitId: 5,
       creditId: 1,

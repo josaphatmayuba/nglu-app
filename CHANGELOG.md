@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.102.2)
+- Multi-tenant SaaS **P2 — chasse globale aux écritures non isolées** : audit de TOUS les `insert(transactions)` du backend. 3 fuites réelles corrigées (les autres mettaient déjà `organizationId` plus bas dans le bloc) : `hr.service.createSalaryHistory` (paie), `purchase-invoices.service.createPayment`, `sale-invoices.service.createPayment` — ces 3 méthodes n'avaient pas de paramètre `orgId` et écrivaient donc sur l'org #1. Threadé `@CurrentOrg() orgId` controller→service ; `organizationId: orgId` sur chaque insert ; lookups de factures filtrés par org (on ne paie plus la facture d'une autre org) ; dans HR, `ledger.post(...)` et `workflow.submit(...)` recevaient `1` en dur → désormais `orgId`. **Résultat : 0 `insert(transactions)` sans `organizationId` dans le backend.** Limitation : tables `paymentSaleInvoices`/`paymentPurchaseInvoices` sans `organization_id` (parent facture désormais vérifié). Typecheck OK. **RESTE P2** : suppliers, projects, payment-methods + seeders compta par org. [SCRUM]
+
 ### Fixed (3.102.1)
 - Multi-tenant SaaS **P2 (suite) — isolation property-management + correction de fuites compta** : les helpers de résolution de comptes par nom (`getOrCreateSubAccount`/Liability/Expense, `getRentPaymentType`, `getRealEstateTaxTypeOptional`, `getTransactionTypeByName`) filtrent désormais l'org (un même libellé « Maintenance »/« Rent Payment » peut exister dans plusieurs organisations → on prenait celui de l'org #1). **Bug corrigé** : 6 insertions dans la table `transaction` (loyers, taxes immobilières, cautions collectées/restituées, coûts de maintenance) ne renseignaient PAS `organization_id` → toutes les écritures immobilières étaient comptabilisées sur l'org #1 quelle que soit l'organisation réelle. Désormais `organizationId: orgId` sur chaque insert. Typecheck OK. **RESTE P2** : suppliers, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
 

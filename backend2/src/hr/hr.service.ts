@@ -385,7 +385,7 @@ export class HrService {
     return { getAllSalaryHistory: rows, totalSalaryHistory: Number(total ?? 0) };
   }
 
-  async createSalaryHistory(input: CreateSalaryHistoryDto) {
+  async createSalaryHistory(input: CreateSalaryHistoryDto, orgId: number) {
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -409,6 +409,7 @@ export class HrService {
     const txType = creditAccountId === 1 ? "SAL - Payroll Cash" : "SAL - Payroll Journal";
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: input.salaryStartDate ? new Date(input.salaryStartDate) : sql`CURRENT_TIMESTAMP` as any,
       debitId: 10, // Salary expense sub-account
       creditId: creditAccountId,
@@ -422,7 +423,6 @@ export class HrService {
     });
 
     // Ecriture moderne (dual-write) : debit charge salaire (10) / credit caisse ou banque.
-    // orgId par defaut 1 (cohérent avec l'insert plat ; createSalaryHistory n'a pas d'orgId).
     await this.ledger.post(
       {
         date: input.salaryStartDate ? new Date(input.salaryStartDate) : undefined,
@@ -437,14 +437,14 @@ export class HrService {
           { accountId: creditAccountId, side: "CREDIT", amount: Number(input.salary), description: creditAccountId === 1 ? "Cash" : "Bank" },
         ],
       },
-      1,
+      orgId,
     );
 
     // Soumet la paie au circuit d'approbation (effectif si le module payroll est gate).
     try {
       await this.workflow.submit(
         { workflowKey: "exp_approval", entityType: "payroll", entityId: String(salaryHistoryId) },
-        1,
+        orgId,
       );
     } catch (err) {
       console.warn("[HR] submit payroll approval skipped:", (err as Error).message);
