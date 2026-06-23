@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.102.0)
+- Multi-tenant SaaS — **identifiant public hexa des organisations** (décision owner : pas de numéro simple exposé). Migration `0177_org_public_id.sql` ajoute `organizations.public_id` (VARCHAR(24) unique, format `org_` + 12 hexa, idempotente INFORMATION_SCHEMA+PREPARE, backfill UUID des orgs existantes). La PK `organizations.id` reste un entier interne (perf, FK, `@CurrentOrg()` inchangé) ; seul `public_id` opaque est exposé côté client (URLs/API/sous-domaine) — approche Stripe/GitHub. Le générateur côté app sera branché dans l'inscription P3. Schéma Drizzle mis à jour. [SCRUM]
+
 ### Added (3.101.4)
 - Multi-tenant SaaS **P2 (suite) — isolation dashboard** : `dashboard` controller (`@CurrentOrg()` sur les 3 routes) + service entièrement threadé par org. Toutes les requêtes dont la table porte `organization_id` filtrent désormais l'org : ventes, achats, graphe mensuel, soldes de comptes (subAccounts + transactions), top clients, top produits, tendances KPI (dailyTrend générique reçoit la colonne org), ventes par devise, alertes (baux en retard, maintenance, stock bas), badge sidenav, activité récente, commandes panier. Limitation documentée : `returnSaleInvoices`/`returnPurchaseInvoices` (totaux de retours) et `appSettings` n'ont pas encore `organization_id` → non filtrés, migration à prévoir. Typecheck OK. **RESTE P2** : suppliers, property-management, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
 

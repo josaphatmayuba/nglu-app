@@ -55,6 +55,9 @@ export const refreshTokens = mysqlTable("refresh_tokens", {
 
 export const organizations = mysqlTable("organizations", {
   id: serial("id").primaryKey(),
+  // Identifiant PUBLIC opaque hexa (ex: org_a3f90c2b4d1e) expose dans les URLs/API.
+  // La PK entiere reste interne (perf, FK). Le client ne voit jamais le numero.
+  publicId: varchar("public_id", { length: 24 }).unique(),
   name: varchar("name", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   status: varchar("status", { length: 50 }).default("active").notNull(),
