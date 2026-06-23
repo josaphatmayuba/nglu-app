@@ -23,6 +23,7 @@ import type { Request, Response } from "express";
 import { AuthService } from "./auth.service";
 import { AuthResponseDto } from "./dto/auth-response.dto";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
 import { MfaService } from "./mfa.service";
 import { PasswordResetService } from "./password-reset.service";
 import { Throttle } from "@nestjs/throttler";
@@ -96,6 +97,22 @@ export class AuthController {
     res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
 
     return { ...user, role, token };
+  }
+
+  @ApiOperation({ summary: "Inscription self-service (cree une organisation + son 1er admin)" })
+  @ApiOkResponse({ description: "Organisation creee, utilisateur connecte" })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Post("register")
+  @HttpCode(201)
+  async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const result = await this.authService.register(body, ctx);
+    res.cookie("refreshToken", result.refreshToken, REFRESH_COOKIE_OPTS);
+    const { refreshToken: _omit, ...safe } = result;
+    return safe;
   }
 
   @ApiOperation({ summary: "Logout" })

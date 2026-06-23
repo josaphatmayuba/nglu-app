@@ -1,14 +1,16 @@
-import { randomUUID } from "crypto";
-import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { randomBytes, randomUUID } from "crypto";
+import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
-import { refreshTokens, roles, sessions, users } from "../database/schema";
+import { provisionOrgChartOfAccounts } from "../database/provisioning/chart-of-accounts";
+import { organizations, refreshTokens, roles, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterDto } from "./dto/register.dto";
 
 const ACCESS_TTL_MS = 15 * 60 * 1000; // 15 min — must match expiresIn
 const REFRESH_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 d — must match expiresIn
@@ -212,6 +214,90 @@ export class AuthService {
 
     const { password: _, refreshToken: __, isLogin: ___, totpSecret: ____, ...safe } = user;
     return { user: safe, role: role?.name ?? null, token: accessToken, refreshToken };
+  }
+
+  // ── P3 multi-tenant : inscription self-service d un client ────────────────
+  // Cree une organisation (status 'trial') + son 1er admin + seed le plan
+  // comptable canonique de l org, le tout dans UNE transaction atomique, puis
+  // connecte l utilisateur (JWT + refresh). Solo = org a 1 user (orgName = nom).
+  async register(dto: RegisterDto, ctx: AuditContext = {}) {
+    if (!dto.acceptedTerms) {
+      throw new BadRequestException("Vous devez accepter les conditions d utilisation.");
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const slug = dto.slug.trim().toLowerCase();
+    const orgName = dto.accountType === "org"
+      ? (dto.orgName?.trim() || "")
+      : `${dto.firstName} ${dto.lastName}`.trim();
+    if (dto.accountType === "org" && !orgName) {
+      throw new BadRequestException("Le nom de l organisation est requis.");
+    }
+
+    // Unicite email (= username de connexion) et slug, hors transaction (lecture).
+    const [emailTaken] = await this.db.select({ id: users.id }).from(users).where(eq(users.username, email)).limit(1);
+    if (emailTaken) throw new ConflictException("Un compte existe deja avec cet email.");
+    const [slugTaken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
+    if (slugTaken) throw new ConflictException("Cette adresse est deja utilisee.");
+
+    // Role 'admin' = administrateur de SA propre organisation (pas plateforme).
+    const [adminRole] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.name, "admin")).limit(1);
+    if (!adminRole) throw new BadRequestException("Role admin introuvable (seed manquant).");
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const publicId = `org_${randomBytes(6).toString("hex")}`; // 12 hexa opaques
+
+    // Transaction atomique : org + user + plan comptable. Tout ou rien.
+    const created = await this.db.transaction(async (tx) => {
+      const [orgRes] = await tx.insert(organizations).values({
+        publicId,
+        name: orgName,
+        slug,
+        status: "trial",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+      const orgId = Number((orgRes as any).insertId);
+
+      const [userRes] = await tx.insert(users).values({
+        organizationId: orgId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        username: email,
+        email,
+        phone: dto.phone ?? null,
+        password: passwordHash,
+        roleId: adminRole.id,
+        status: "true",
+        isLogin: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+      const userId = Number((userRes as any).insertId);
+
+      // Plan comptable canonique isole pour cette nouvelle org (memes IDs resolus
+      // par nom). Le handle tx garantit l atomicite avec l org + user.
+      await provisionOrgChartOfAccounts(tx as unknown as Database, orgId);
+
+      return { orgId, userId };
+    });
+
+    await this.audit.log("auth.register.ok", `org:${created.orgId}`, { ...ctx, userId: created.userId }, {
+      slug, publicId, accountType: dto.accountType,
+    });
+
+    // Connexion immediate : JWT + refresh (nouvelle famille = 1er device).
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(created.userId, adminRole.id, "admin", created.orgId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(created.userId, "admin", familyId, ctx);
+
+    return {
+      token: accessToken,
+      refreshToken,
+      role: "admin",
+      user: { id: created.userId, firstName: dto.firstName, lastName: dto.lastName, email, organizationId: created.orgId },
+      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial" },
+    };
   }
 
   /** Complete MFA login after TOTP/recovery verification. Exchanges mfaToken for full tokens. */
