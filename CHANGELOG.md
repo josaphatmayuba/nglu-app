@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.101.0)
+- Multi-tenant SaaS **P1 — rôle super-owner + bascule d'organisation** : nouveau rôle système `super_owner` (propriétaire de la plateforme, au-dessus des organisations). Migration `0175_super_owner_role.sql` (idempotente, INSERT IF NOT EXISTS) + ajout au `roles.seeder.ts` (avec `is_system=1`). Le guard `jwt-auth.guard.ts` **recalcule `isSuperOwner` depuis le rôle en DB** (jamais le token → pas d'auto-promotion) et honore l'en-tête **`X-Active-Org`** UNIQUEMENT pour ce rôle (support/monitoring) : un client reste enfermé dans son organisation, l'en-tête est ignoré pour les autres rôles. Org active inconnue → 401. `isSuperOwner` exposé sur `request.user` pour les guards/décorateurs en aval (future console super-owner). Étape 1/4 du chantier multi-tenant (cf. `docs/PLAN_SAAS_MULTITENANT.md`). [SCRUM]
+
 ### Removed (3.100.13)
 - FarmOS (farmos-app) — **suppression du code « gestion des organisations » issu d'un modèle multi-tenant erroné** (super-propriétaire mono-tenant) : composant `admin-orgs.jsx` supprimé + retrait des références dans `app.jsx` (import, route `admin-orgs` de `ROUTE_SLUGS`, entrée `routeMeta`, case `renderScreen`) et `shell.jsx` (const `NAV_ADMIN` + bloc de nav admin ; bouton « Retour au CRM » remis dans la nav secondaire). Le vrai SaaS multi-tenant (inscription client self-service, isolation par organization_id) sera repris proprement par phases. Build vite OK. [SCRUM]
 

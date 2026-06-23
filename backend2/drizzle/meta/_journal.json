@@ -1058,6 +1058,13 @@
                         "when":  1780556400000,
                         "tag":  "0174_batipro_projects_billing",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  151,
+                        "version":  "5",
+                        "when":  1780560000000,
+                        "tag":  "0175_super_owner_role",
+                        "breakpoints":  true
                     }
                 ]
 }

@@ -2,7 +2,9 @@ import { inArray, sql } from "drizzle-orm";
 import { db } from "../seed.db";
 import { roles } from "../schema";
 
-const ROLES = ["super-admin", "admin", "customer", "manager", "salesman", "delivery-boy", "Locataire"];
+// "super_owner" = role systeme du proprietaire de la plateforme (multi-tenant P1).
+// Au-dessus des organisations : bascule d org via X-Active-Org (cf. jwt-auth.guard).
+const ROLES = ["super_owner", "super-admin", "admin", "customer", "manager", "salesman", "delivery-boy", "Locataire"];
 
 export async function seedRoles() {
   const existing = await db.select({ name: roles.name }).from(roles).where(inArray(roles.name, ROLES));
@@ -22,6 +24,8 @@ export async function seedRoles() {
       // users.seeder.ts. Avant ce fix le seeder posait "active" et les
       // rôles seedés étaient invisibles dans le UI.
       status: "true",
+      // super_owner = rôle systeme (proprietaire plateforme, P1 multi-tenant).
+      isSystem: name === "super_owner" ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })),
