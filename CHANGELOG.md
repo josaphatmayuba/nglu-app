@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.102.1)
+- Multi-tenant SaaS **P2 (suite) — isolation property-management + correction de fuites compta** : les helpers de résolution de comptes par nom (`getOrCreateSubAccount`/Liability/Expense, `getRentPaymentType`, `getRealEstateTaxTypeOptional`, `getTransactionTypeByName`) filtrent désormais l'org (un même libellé « Maintenance »/« Rent Payment » peut exister dans plusieurs organisations → on prenait celui de l'org #1). **Bug corrigé** : 6 insertions dans la table `transaction` (loyers, taxes immobilières, cautions collectées/restituées, coûts de maintenance) ne renseignaient PAS `organization_id` → toutes les écritures immobilières étaient comptabilisées sur l'org #1 quelle que soit l'organisation réelle. Désormais `organizationId: orgId` sur chaque insert. Typecheck OK. **RESTE P2** : suppliers, projects, payment-methods, farmos + seeders compta par org. [SCRUM]
+
 ### Added (3.102.0)
 - Multi-tenant SaaS — **identifiant public hexa des organisations** (décision owner : pas de numéro simple exposé). Migration `0177_org_public_id.sql` ajoute `organizations.public_id` (VARCHAR(24) unique, format `org_` + 12 hexa, idempotente INFORMATION_SCHEMA+PREPARE, backfill UUID des orgs existantes). La PK `organizations.id` reste un entier interne (perf, FK, `@CurrentOrg()` inchangé) ; seul `public_id` opaque est exposé côté client (URLs/API/sous-domaine) — approche Stripe/GitHub. Le générateur côté app sera branché dans l'inscription P3. Schéma Drizzle mis à jour. [SCRUM]
 

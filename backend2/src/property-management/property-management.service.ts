@@ -1028,7 +1028,7 @@ export class PropertyManagementService {
     // Un bail ne « démarre » pas tant que le locataire n'a pas signé : on
     // refuse d'enregistrer un paiement si le contrat lié n'est pas signé.
     await this.ensureLeaseContractSigned(input.leaseId);
-    const rentPaymentType = await this.getRentPaymentType();
+    const rentPaymentType = await this.getRentPaymentType(orgId);
     // Le compte débité (où arrive l'argent) dépend du moyen de paiement :
     // Espèces → Cash, Bancaire/Carte/Chèque → Banque, Mobile money → Mobile Money.
     const debitId = input.paymentAccountId
@@ -1042,6 +1042,7 @@ export class PropertyManagementService {
       ?? (await this.resolveDefaultCurrency());
 
     const [transactionResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId: rentPaymentType.creditAccountId,
@@ -1079,9 +1080,10 @@ export class PropertyManagementService {
 
     // Comptabilisation de la part de taxe (type dédié "Real Estate Tax").
     if (taxAmt != null && taxAmt > 0) {
-      const taxType = await this.getRealEstateTaxTypeOptional();
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
       if (taxType) {
         await this.db.insert(transactions).values({
+          organizationId: orgId,
           date: new Date(input.paymentDate),
           debitId: taxType.debitAccountId,
           creditId: taxType.creditAccountId,
@@ -1104,7 +1106,7 @@ export class PropertyManagementService {
       { accountId: rentPaymentType.creditAccountId, side: "CREDIT" as const, amount: Number(input.amount), description: input.notes || "Payment for rent" },
     ];
     if (taxAmt != null && taxAmt > 0) {
-      const taxType = await this.getRealEstateTaxTypeOptional();
+      const taxType = await this.getRealEstateTaxTypeOptional(orgId);
       if (taxType) {
         rentLines.push(
           { accountId: taxType.debitAccountId, side: "DEBIT" as const, amount: taxAmt, description: `${(lease as any).taxName || "Taxe"} sur loyer (bail ${lease.reference || lease.id})` },
@@ -1146,7 +1148,7 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateSecurityDeposits.id));
   }
 
-  private async getTransactionTypeByName(name: string) {
+  private async getTransactionTypeByName(name: string, orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1154,7 +1156,7 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, name), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
     if (!rows.length) throw new BadRequestException(`Transaction type "${name}" is missing.`);
     return rows[0];
@@ -1187,11 +1189,12 @@ export class PropertyManagementService {
     // Comptes résolus directement (robuste même si les types ne sont pas seedés).
     const bank = this.isBankMethod(input.method);
     const debitId = bank ? 2 : 1; // 2=Bank, 1=Cash
-    const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const currencyId =
       (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
 
     const [txResult] = await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: new Date(input.paymentDate),
       debitId,
       creditId,
@@ -1267,13 +1270,14 @@ export class PropertyManagementService {
 
     // Restitution : on solde le passif « Tenant Deposits » (débit) ; la part rendue
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
-    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits");
+    const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const refundCredit = this.isBankMethod(input.returnMethod) ? 2 : 1; // 2=Bank, 1=Cash
     const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
 
     let returnTransactionId: number | null = null;
     if (returned > 0) {
       const [txResult] = await this.db.insert(transactions).values({
+        organizationId: orgId,
         date: new Date(input.returnDate),
         debitId: tenantDeposits,
         creditId: refundCredit,
@@ -1291,8 +1295,9 @@ export class PropertyManagementService {
     // Retenue pour dégâts : le passif est soldé (débit) contre un revenu/compensation
     // de maintenance (crédit Maintenance expense → réduit la charge).
     if (deduction > 0) {
-      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance");
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance", orgId);
       await this.db.insert(transactions).values({
+        organizationId: orgId,
         date: new Date(input.returnDate),
         debitId: tenantDeposits,
         creditId: maintenance,
@@ -1331,7 +1336,7 @@ export class PropertyManagementService {
       );
     }
     if (deduction > 0) {
-      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance");
+      const maintenance = await this.getOrCreateExpenseSubAccount("Maintenance", orgId);
       returnLines.push(
         { accountId: tenantDeposits, side: "DEBIT", amount: deduction, description: "Solde passif caution (retenue)" },
         { accountId: maintenance, side: "CREDIT", amount: deduction, description: input.deductionReason || "Retenue sur caution (dégâts)" },
@@ -1369,22 +1374,25 @@ export class PropertyManagementService {
     return rows[0];
   }
 
-  private async getOrCreateLiabilitySubAccount(name: string) {
-    return this.getOrCreateSubAccount(name, 2); // 2 = Liability
+  private async getOrCreateLiabilitySubAccount(name: string, orgId: number) {
+    return this.getOrCreateSubAccount(name, 2, orgId); // 2 = Liability
   }
 
-  private async getOrCreateExpenseSubAccount(name: string) {
-    return this.getOrCreateSubAccount(name, 6); // 6 = Expense
+  private async getOrCreateExpenseSubAccount(name: string, orgId: number) {
+    return this.getOrCreateSubAccount(name, 6, orgId); // 6 = Expense
   }
 
-  private async getOrCreateSubAccount(name: string, accountId: number): Promise<number> {
+  private async getOrCreateSubAccount(name: string, accountId: number, orgId: number): Promise<number> {
+    // Recherche ET creation scopees a l org (isolation P2) : un meme libelle
+    // (ex "Maintenance") peut exister dans plusieurs organisations.
     const existing = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(eq(subAccounts.name, name))
+      .where(and(eq(subAccounts.name, name), eq(subAccounts.organizationId, orgId)))
       .limit(1);
     if (existing.length) return existing[0].id;
     const [result] = await this.db.insert(subAccounts).values({
+      organizationId: orgId,
       name,
       accountId,
       status: "true",
@@ -1755,14 +1763,16 @@ export class PropertyManagementService {
 
     // Auto-create accounting transaction
     const creditId = input.paymentMethod === "bank" ? 2 : 1; // 2=Bank, 1=Cash
+    // Sous-compte "Maintenance" de CETTE org (isolation P2).
     const maintenanceSubAccount = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(eq(subAccounts.name, "Maintenance"))
+      .where(and(eq(subAccounts.name, "Maintenance"), eq(subAccounts.organizationId, orgId)))
       .limit(1);
     const debitId = maintenanceSubAccount[0]?.id ?? 12;
 
     await this.db.insert(transactions).values({
+      organizationId: orgId,
       date: input.paymentDate ? new Date(input.paymentDate) : sql`CURRENT_TIMESTAMP` as any,
       debitId,
       creditId,
@@ -1954,7 +1964,7 @@ export class PropertyManagementService {
     return Number((result as any).insertId);
   }
 
-  private async getRealEstateTaxTypeOptional() {
+  private async getRealEstateTaxTypeOptional(orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1962,12 +1972,12 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, "Real Estate Tax"), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, "Real Estate Tax"), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
     return rows[0] || null;
   }
 
-  private async getRentPaymentType() {
+  private async getRentPaymentType(orgId: number) {
     const rows = await this.db
       .select({
         id: transactionTypes.id,
@@ -1975,7 +1985,7 @@ export class PropertyManagementService {
         creditAccountId: transactionTypes.creditAccountId,
       })
       .from(transactionTypes)
-      .where(and(eq(transactionTypes.name, "Rent Payment"), eq(transactionTypes.isActive, true)))
+      .where(and(eq(transactionTypes.name, "Rent Payment"), eq(transactionTypes.isActive, true), eq(transactionTypes.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
