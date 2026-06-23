@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.101.2)
+- Multi-tenant SaaS **P2 (suite) — isolation transaction-types + sub-accounts** : `transaction-types` controller (`@CurrentOrg()` sur les 5 routes) + service (findAll/findOne/create/update/remove filtrent `organizationId`, `ensureAccountsExist` vérifie que les sous-comptes débit/crédit appartiennent à l'org). `sub-accounts` controller + service (findAll filtre l'org). `transactions.service.ts` était déjà org-aware mais `ensureAccountsExist` ne filtrait pas l'org → corrigé (un client ne peut plus passer une écriture sur le sous-compte d'une autre org). Typecheck OK. **RESTE P2** : payment-methods, suppliers, property-management, dashboard, ledger, projects, farmos + seeders compta par org. [SCRUM]
+
 ### Added (3.101.1)
 - Multi-tenant SaaS **P2 (début) — isolation du plan comptable** : migration `0176_chart_of_accounts_org.sql` ajoute `organization_id` (NOT NULL DEFAULT 1, idempotent INFORMATION_SCHEMA+PREPARE pour MySQL 8) sur `account`, `subAccount` (colonne dénormalisée, backfillée depuis le compte parent), `transaction_types` + index par org. Backfill = lignes existantes → org #1. Schéma Drizzle mis à jour. **Module `accounts` entièrement isolé** : controller (`@CurrentOrg()` sur les 6 routes) + service (toutes les requêtes filtrent `organizationId` : mainAccounts, subAccounts, balances, trial balance, bilan, compte de résultat, recherche, pagination, ensure*). Point délicat traité : dans `subAccountBalances`, le filtre org sur `transactions` est dans la condition de JOIN (pas WHERE) pour préserver le LEFT JOIN (sous-comptes sans écriture). Typecheck OK. **RESTE P2** : transaction-types, sub-accounts, suppliers, property-management, dashboard, ledger, projects + seeders compta par org (12 services à scoper). Note : `transaction`/`journal_entries` ont DÉJÀ `organization_id`. [SCRUM]
 

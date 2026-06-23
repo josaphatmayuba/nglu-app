@@ -31,7 +31,7 @@ export class TransactionsService {
   ) {}
 
   async create(input: CreateTransactionDto, orgId: number) {
-    await this.ensureAccountsExist([input.debitId, input.creditId]);
+    await this.ensureAccountsExist([input.debitId, input.creditId], orgId);
 
     const [result] = await this.db.insert(transactions).values({
       organizationId: orgId,
@@ -182,7 +182,7 @@ export class TransactionsService {
     const accountIds = [input.debitId, input.creditId].filter(
       (accountId): accountId is number => typeof accountId === "number",
     );
-    await this.ensureAccountsExist(accountIds);
+    await this.ensureAccountsExist(accountIds, orgId);
 
     await this.db
       .update(transactions)
@@ -336,14 +336,16 @@ export class TransactionsService {
     }
   }
 
-  private async ensureAccountsExist(accountIds: number[]) {
+  private async ensureAccountsExist(accountIds: number[], orgId: number) {
     const uniqueAccountIds = [...new Set(accountIds)];
     if (!uniqueAccountIds.length) return;
 
+    // Les sous-comptes debites/credites doivent appartenir a l org (anti-fuite :
+    // pas d ecriture sur le compte d une autre organisation).
     const rows = await this.db
       .select({ id: subAccounts.id })
       .from(subAccounts)
-      .where(inArray(subAccounts.id, uniqueAccountIds));
+      .where(and(inArray(subAccounts.id, uniqueAccountIds), eq(subAccounts.organizationId, orgId)));
 
     if (rows.length !== uniqueAccountIds.length) {
       throw new BadRequestException("Debit or credit account does not exist.");
