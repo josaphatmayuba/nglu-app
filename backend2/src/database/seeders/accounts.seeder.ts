@@ -1,25 +1,11 @@
-import { sql } from "drizzle-orm";
 import { db } from "../seed.db";
-import { accounts } from "../schema";
+import { provisionOrgChartOfAccounts } from "../provisioning/chart-of-accounts";
 
-const ACCOUNTS = [
-  { name: "Asset", type: "Asset" },
-  { name: "Liability", type: "Liability" },
-  { name: "Equity", type: "Equity" },
-  { name: "Withdrawal", type: "Equity" },
-  { name: "Revenue", type: "Revenue" },
-  { name: "Expense", type: "Expense" },
-];
-
+// Bootstrap du plan comptable pour l org #1 (base historique). Toute la logique
+// (idempotente, par org, resolution des IDs par NOM) vit dans
+// provisionOrgChartOfAccounts, partagee avec l inscription P3 d un nouveau tenant.
+// Cette fonction seede d un coup comptes + sous-comptes + types pour l org #1.
 export async function seedAccounts() {
-  const existing = await db.select({ id: accounts.id }).from(accounts).limit(1);
-  if (existing.length) {
-    console.log("  [accounts] already seeded, skipping.");
-    return;
-  }
-
-  await db.insert(accounts).values(
-    ACCOUNTS.map((a) => ({ ...a, createdAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })),
-  );
-  console.log(`  [accounts] ✔ ${ACCOUNTS.length} records inserted.`);
+  await provisionOrgChartOfAccounts(db as any, 1);
+  console.log("  [accounts] ✔ plan comptable garanti pour l org #1 (comptes + sous-comptes + types).");
 }
