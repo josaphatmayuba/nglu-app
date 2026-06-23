@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.105.2)
+- Multi-tenant SaaS — **script de test d'isolation** `backend2/test-scripts/multitenant-isolation.mjs` (diagnostic manuel, Node 18+ fetch natif). Crée 2 orgs via `/auth/register` (slugs suffixés timestamp = rejouable) puis vérifie les 5 garanties P1→P4 : (1) publicId hexa distinct et non numérique, (2) plan comptable isolé (0 sous-compte partagé), (3) écriture de A invisible chez B, (4) `X-Active-Org` ignoré pour un client, (5) `GET /organizations` → 403 pour un client. Usage : `NGLU_API=http://localhost:3001/api node backend2/test-scripts/multitenant-isolation.mjs`. **Non encore exécuté** (Docker local arrêté) — prêt à lancer dès que le stack dev tourne. [SCRUM]
+
 ### Added (3.105.1)
 - Multi-tenant SaaS **P4 (frontend) — console super-owner branchée sur l'API** : `saas-platform-mockup.html` gagne un **mode LIVE** opt-in (activé si `window.NGLU_OWNER_TOKEN` est fourni ; `NGLU_API_BASE` surchargeable). En mode LIVE : `GET /organizations` alimente la liste réelle (mappée vers la forme des renderers, champs démo par défaut), suspend/réactiver appellent `POST /organizations/:publicId/(suspend|reactivate)` par publicId. Sans token → reste la démo simulée autonome. Les sections plans/billing/usage restent simulées (pas d'endpoint backend correspondant). Syntaxe JS vérifiée. **RESTE** : déploiement (servir signup en route publique, sous-domaine wildcard) ; **test réel à 2 orgs** (non exécuté, Docker arrêté). [SCRUM]
 
