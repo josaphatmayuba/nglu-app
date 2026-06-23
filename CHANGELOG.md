@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.105.0)
+- Multi-tenant SaaS **P4 (backend) — console super-owner** : nouveau `SuperOwnerGuard` (s'appuie sur `request.user.isSuperOwner` calculé en DB par le JwtAuthGuard en P1 → fiable, jamais le token). Nouveau module `organizations` (gardé `JwtAuthGuard` + `SuperOwnerGuard`) : `GET /organizations` (liste + nb d'utilisateurs actifs), `GET /organizations/:publicId`, `POST /organizations` (crée une org cliente + 1er admin + plan comptable via `provisionOrgChartOfAccounts`, sans auto-login), `POST /organizations/:publicId/suspend` (soft, status='suspended', motif audité), `POST /organizations/:publicId/reactivate`. Les orgs sont référencées par `publicId` opaque, jamais l'id interne. La bascule d'org pour le support utilise l'en-tête `X-Active-Org` déjà géré en P1. Module enregistré dans app.module + route `/organizations` ajoutée à la whitelist middleware. Typecheck OK (runtime non vérifié : Docker local arrêté). [SCRUM]
+
 ### Added (3.104.1)
 - Multi-tenant SaaS **P3 (frontend) — page d'inscription câblée sur l'API** : `signup-onboarding-mockup.html` n'est plus un mockup simulé — `submitSignup()` appelle réellement `POST /api/auth/register` (fetch, `credentials: include` pour le cookie refresh), split nom complet → firstName/lastName, gère les erreurs (409 slug pris → retour étape 2 + message ; 400 validation → toast), désactive le bouton pendant l'appel, stocke le token en mémoire (pas localStorage, conforme à la règle projet). `enterWorkspace()` redirige vers l'espace réel quand servi en HTTP (fallback aperçu en ouverture locale). UI passée au format **sous-domaine `<slug>.nglu.cloud`** (préfixe→suffixe, hints, récap, écran succès). `API_BASE`/`NGLU_WORKSPACE_URL` surchargeables pour les tests. Syntaxe JS vérifiée. [SCRUM]
 

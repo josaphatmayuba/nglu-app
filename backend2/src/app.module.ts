@@ -28,6 +28,7 @@ import { ManufacturersModule } from "./manufacturers/manufacturers.module";
 import { MessagesModule } from "./messages/messages.module";
 import { MigrationModule } from "./migration/migration.module";
 import { NotificationPreferencesModule } from "./notification-preferences/notification-preferences.module";
+import { OrganizationsModule } from "./organizations/organizations.module";
 import { PaymentMethodsModule } from "./payment-methods/payment-methods.module";
 import { PermissionsModule } from "./permissions/permissions.module";
 import { ProductBrandsModule } from "./product-brands/product-brands.module";
@@ -86,6 +87,7 @@ import { UsersModule } from "./users/users.module";
     MessagesModule,
     MigrationModule,
     NotificationPreferencesModule,
+    OrganizationsModule,
     PaymentMethodsModule,
     PermissionsModule,
     ProductBrandsModule,
