@@ -139,13 +139,14 @@ export class HrService {
       : this.findOneInOrg(designations, id, orgId, "Designation not found.");
   }
 
-  async createDesignation(input: CreateDesignationDto) {
+  async createDesignation(input: CreateDesignationDto, orgId: number) {
     const [result] = await this.db.insert(designations).values({
+      organizationId: orgId,
       name: input.name,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findDesignation(Number(result.insertId));
+    return this.findDesignation(Number(result.insertId), orgId);
   }
 
   async updateDesignation(id: number, input: UpdateDesignationDto, orgId: number) {
@@ -171,8 +172,9 @@ export class HrService {
       : this.findOneInOrg(shifts, id, orgId, "Shift not found.");
   }
 
-  async createShift(input: CreateShiftDto) {
+  async createShift(input: CreateShiftDto, orgId: number) {
     const [result] = await this.db.insert(shifts).values({
+      organizationId: orgId,
       name: input.name,
       startTime: this.normalizeTime(input.startTime),
       endTime: this.normalizeTime(input.endTime),
@@ -180,7 +182,7 @@ export class HrService {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findShift(Number(result.insertId));
+    return this.findShift(Number(result.insertId), orgId);
   }
 
   async updateShift(id: number, input: UpdateShiftDto, orgId: number) {
@@ -211,17 +213,17 @@ export class HrService {
       : this.findOneInOrg(hrAttendances, id, orgId, "Attendance not found.");
   }
 
-  async createAttendance(input: CreateHrAttendanceDto) {
+  async createAttendance(input: CreateHrAttendanceDto, orgId: number) {
     await this.validateAttendanceRefs(input);
     const payload = await this.attendancePayload(input);
-    return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id));
+    return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id), orgId);
   }
 
   async updateAttendance(id: number, input: UpdateHrAttendanceDto, orgId: number) {
     const current = await this.findAttendance(id, orgId);
     await this.validateAttendanceRefs(input);
     const payload = await this.attendancePayload({ ...current, ...input });
-    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id, orgId));
+    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id, orgId), orgId);
   }
 
   async attendanceSummary(q: Record<string, string>) {
@@ -302,14 +304,15 @@ export class HrService {
       : this.findOneInOrg(awards, id, orgId, "Award not found.");
   }
 
-  async createAward(input: CreateAwardDto) {
+  async createAward(input: CreateAwardDto, orgId: number) {
     const [result] = await this.db.insert(awards).values({
+      organizationId: orgId,
       name: input.name,
       description: input.description ?? null,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
-    return this.findAward(Number(result.insertId));
+    return this.findAward(Number(result.insertId), orgId);
   }
 
   async updateAward(id: number, input: UpdateAwardDto, orgId: number) {
@@ -330,8 +333,9 @@ export class HrService {
     return this.listHistory(q, designationHistories, "getAllDesignationHistory", "totalDesignationHistory", orgId);
   }
 
-  async createDesignationHistory(input: CreateDesignationHistoryDto) {
+  async createDesignationHistory(input: CreateDesignationHistoryDto, orgId: number) {
     const [result] = await this.db.insert(designationHistories).values({
+      organizationId: orgId,
       userId: input.userId,
       designationId: input.designationId,
       startDate: input.designationStartDate ?? null,
@@ -816,12 +820,12 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return { buffer, reference: String(doc.reference || `document-${id}`) };
   }
 
-  async createPayroll(input: CreateHrPayrollDto) {
+  async createPayroll(input: CreateHrPayrollDto, orgId: number) {
     await this.validatePayrollRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...input, currencyId });
-    return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id));
+    return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id), orgId);
   }
 
   async updatePayroll(id: number, input: UpdateHrPayrollDto, orgId: number) {
@@ -831,7 +835,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     await this.validatePayrollRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...current, ...input });
-    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id, orgId));
+    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id, orgId), orgId);
   }
 
   async submitPayroll(id: number, submittedBy?: number | null) {
@@ -1098,7 +1102,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(hrProjects, id, orgId, "HR project not found.");
   }
 
-  async createProject(input: CreateHrProjectDto) {
+  async createProject(input: CreateHrProjectDto, orgId: number) {
     await this.validateProjectRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -1109,7 +1113,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       currencyId: currencyId ?? null,
       hrBudget: Number(input.hrBudget || 0),
       status: input.status || "active",
-    }, (id) => this.findProject(id));
+    }, (id) => this.findProject(id), orgId);
   }
 
   async updateProject(id: number, input: UpdateHrProjectDto, orgId: number) {
@@ -1119,7 +1123,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.updateRecord(hrProjects, id, {
       ...input,
       ...(input.hrBudget !== undefined ? { hrBudget: Number(input.hrBudget || 0) } : {}),
-    }, () => this.findProject(id, orgId));
+    }, () => this.findProject(id, orgId), orgId);
   }
 
   listProjectAssignments(q: Record<string, string>, orgId: number) {
@@ -1132,7 +1136,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(hrProjectAssignments, id, orgId, "HR project assignment not found.");
   }
 
-  async createProjectAssignment(input: CreateHrProjectAssignmentDto) {
+  async createProjectAssignment(input: CreateHrProjectAssignmentDto, orgId: number) {
     await this.validateProjectAssignmentRefs(input);
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
     if (currencyId) await this.ensureExists(currencies, currencyId, "Currency not found.");
@@ -1142,7 +1146,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       timePercent: Number(input.timePercent ?? 100),
       monthlyCost: Number(input.monthlyCost || 0),
       status: input.status || "active",
-    }, (id) => this.findProjectAssignment(id));
+    }, (id) => this.findProjectAssignment(id), orgId);
   }
 
   async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto, orgId: number) {
@@ -1153,7 +1157,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       ...input,
       ...(input.timePercent !== undefined ? { timePercent: Number(input.timePercent ?? 100) } : {}),
       ...(input.monthlyCost !== undefined ? { monthlyCost: Number(input.monthlyCost || 0) } : {}),
-    }, () => this.findProjectAssignment(id, orgId));
+    }, () => this.findProjectAssignment(id, orgId), orgId);
   }
 
   async projectAnalytics(q: Record<string, string>, orgId: number) {
@@ -1296,8 +1300,9 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory", orgId);
   }
 
-  async createAwardHistory(input: CreateAwardHistoryDto) {
+  async createAwardHistory(input: CreateAwardHistoryDto, orgId: number) {
     const [result] = await this.db.insert(awardHistories).values({
+      organizationId: orgId,
       userId: input.userId,
       awardId: input.awardId,
       awardedDate: input.awardedDate,
@@ -1336,11 +1341,11 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(hrLeaveRequests, id, orgId, "Leave request not found.");
   }
 
-  async createLeaveRequest(input: CreateHrLeaveRequestDto) {
+  async createLeaveRequest(input: CreateHrLeaveRequestDto, orgId: number) {
     await this.validateLeaveRefs(input);
     await this.assertNoLockedPayroll(Number(input.userId), String(input.startDate), String(input.endDate));
     const payload = await this.leavePayload(input);
-    const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id));
+    const saved = await this.createRecord(hrLeaveRequests, payload, (id) => this.findLeaveRequest(id), orgId);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     return saved;
   }
@@ -1353,7 +1358,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     await this.assertNoLockedPayroll(userId, String(current.startDate), String(current.endDate));
     await this.assertNoLockedPayroll(userId, String(input.startDate ?? current.startDate), String(input.endDate ?? current.endDate));
     const payload = await this.leavePayload({ ...current, ...input }, id);
-    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id, orgId));
+    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id, orgId), orgId);
     const saved = await this.findLeaveRequest(id, orgId);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     if (["rejected", "cancelled"].includes(String(saved.status || "").toLowerCase())) await this.clearLeaveAttendance(saved.id);
@@ -1429,16 +1434,16 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(hrContracts, id, orgId, "HR contract not found.");
   }
 
-  async createContract(input: CreateHrContractDto) {
+  async createContract(input: CreateHrContractDto, orgId: number) {
     await this.validateContractRefs(input);
     const reference = input.reference || (await this.nextContractReference(input.startDate));
-    return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id));
+    return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id), orgId);
   }
 
   async updateContract(id: number, input: UpdateHrContractDto, orgId: number) {
     await this.findContract(id, orgId);
     await this.validateContractRefs(input);
-    return this.updateRecord(hrContracts, id, input, () => this.findContract(id, orgId));
+    return this.updateRecord(hrContracts, id, input, () => this.findContract(id, orgId), orgId);
   }
 
   listDocuments(q: Record<string, string>, orgId: number) {
@@ -1451,15 +1456,15 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(hrDocuments, id, orgId, "HR document not found.");
   }
 
-  async createDocument(input: CreateHrDocumentDto) {
+  async createDocument(input: CreateHrDocumentDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrDocuments, input, (id) => this.findDocument(id));
+    return this.createRecord(hrDocuments, input, (id) => this.findDocument(id), orgId);
   }
 
   async updateDocument(id: number, input: UpdateHrDocumentDto, orgId: number) {
     await this.findDocument(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id, orgId));
+    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id, orgId), orgId);
   }
 
   // Workflow document RH : draft/rejected -> pending_validation -> approved -> signed.
@@ -1571,7 +1576,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  async generateDocument(input: GenerateHrDocumentDto) {
+  async generateDocument(input: GenerateHrDocumentDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     const [userRow] = await this.db.select().from(users).where(eq(users.id, input.userId)).limit(1);
     const contracts = await this.db.select().from(hrContracts)
@@ -1609,7 +1614,7 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       generatedBy: input.generatedBy ?? null,
       generatedAt: sql`CURRENT_TIMESTAMP`,
       note: `Genere automatiquement le ${today}`,
-    }, (id) => this.findDocument(id));
+    }, (id) => this.findDocument(id), orgId);
   }
 
   private async nextDocumentVersion(userId: number, templateType: string) {
@@ -1725,15 +1730,15 @@ ${footer}`;
       : this.findOneInOrg(hrExpenseRequests, id, orgId, "Expense request not found.");
   }
 
-  async createExpenseRequest(input: CreateHrExpenseRequestDto) {
+  async createExpenseRequest(input: CreateHrExpenseRequestDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id));
+    return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id), orgId);
   }
 
   async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto, orgId: number) {
     await this.findExpenseRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id, orgId));
+    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id, orgId), orgId);
   }
 
   listSocialDeclarations(q: Record<string, string>, orgId: number) {
@@ -1746,13 +1751,13 @@ ${footer}`;
       : this.findOneInOrg(hrSocialDeclarations, id, orgId, "Social declaration not found.");
   }
 
-  async createSocialDeclaration(input: CreateHrSocialDeclarationDto) {
-    return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id));
+  async createSocialDeclaration(input: CreateHrSocialDeclarationDto, orgId: number) {
+    return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id), orgId);
   }
 
   async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto, orgId: number) {
     await this.findSocialDeclaration(id, orgId);
-    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id, orgId));
+    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id, orgId), orgId);
   }
 
   listPerformanceReviews(q: Record<string, string>, orgId: number) {
@@ -1765,17 +1770,17 @@ ${footer}`;
       : this.findOneInOrg(hrPerformanceReviews, id, orgId, "Performance review not found.");
   }
 
-  async createPerformanceReview(input: CreateHrPerformanceReviewDto) {
+  async createPerformanceReview(input: CreateHrPerformanceReviewDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
-    return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id));
+    return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id), orgId);
   }
 
   async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto, orgId: number) {
     await this.findPerformanceReview(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
-    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id, orgId));
+    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id, orgId), orgId);
   }
 
   listTrainingSessions(q: Record<string, string>, orgId: number) {
@@ -1788,13 +1793,13 @@ ${footer}`;
       : this.findOneInOrg(hrTrainingSessions, id, orgId, "Training session not found.");
   }
 
-  async createTrainingSession(input: CreateHrTrainingSessionDto) {
-    return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id));
+  async createTrainingSession(input: CreateHrTrainingSessionDto, orgId: number) {
+    return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id), orgId);
   }
 
   async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto, orgId: number) {
     await this.findTrainingSession(id, orgId);
-    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id, orgId));
+    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id, orgId), orgId);
   }
 
   listTimesheets(q: Record<string, string>, orgId: number) {
@@ -1807,17 +1812,17 @@ ${footer}`;
       : this.findOneInOrg(hrTimesheets, id, orgId, "Timesheet not found.");
   }
 
-  async createTimesheet(input: CreateHrTimesheetDto) {
+  async createTimesheet(input: CreateHrTimesheetDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
     const payload = await this.timesheetPayload(input);
-    return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id));
+    return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id), orgId);
   }
 
   async updateTimesheet(id: number, input: UpdateHrTimesheetDto, orgId: number) {
     const current = await this.findTimesheet(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const payload = await this.timesheetPayload({ ...current, ...input });
-    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id, orgId));
+    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id, orgId), orgId);
   }
 
   listEmployeeRequests(q: Record<string, string>, orgId: number) {
@@ -1830,16 +1835,16 @@ ${footer}`;
       : this.findOneInOrg(hrEmployeeRequests, id, orgId, "Employee request not found.");
   }
 
-  async createEmployeeRequest(input: CreateHrEmployeeRequestDto) {
+  async createEmployeeRequest(input: CreateHrEmployeeRequestDto, orgId: number) {
     await this.ensureExists(users, input.userId, "User not found.");
-    return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id));
+    return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id), orgId);
   }
 
   async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto, orgId: number) {
     await this.findEmployeeRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
-    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id, orgId));
+    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id, orgId), orgId);
   }
 
   listRecruitmentOffers(q: Record<string, string>, orgId: number) {
@@ -1852,15 +1857,15 @@ ${footer}`;
       : this.findOneInOrg(hrRecruitmentOffers, id, orgId, "Recruitment offer not found.");
   }
 
-  async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto) {
+  async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto, orgId: number) {
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
-    return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id));
+    return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id), orgId);
   }
 
   async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto, orgId: number) {
     await this.findRecruitmentOffer(id, orgId);
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
-    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id, orgId));
+    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id, orgId), orgId);
   }
 
   // ─── Stade 9: Recrutement / Candidats ────────────────────────────────────────
@@ -1875,15 +1880,15 @@ ${footer}`;
       : this.findOneInOrg(hrCandidates, id, orgId, "Candidate not found.");
   }
 
-  async createCandidate(input: CreateHrCandidateDto) {
+  async createCandidate(input: CreateHrCandidateDto, orgId: number) {
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id));
+    return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id), orgId);
   }
 
   async updateCandidate(id: number, input: UpdateHrCandidateDto, orgId: number) {
     const previous = await this.findCandidate(id, orgId) as Record<string, any>;
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id, orgId)) as Record<string, any>;
+    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id, orgId), orgId) as Record<string, any>;
     const oldStage = String(previous.stage || "").toLowerCase();
     const newStage = String(updated.stage || "").toLowerCase();
     if (newStage && newStage !== oldStage) {
@@ -2281,7 +2286,7 @@ ${footer}`;
   // Le contexte RH agrégé (aiContext) est injecté dans le prompt système, et le
   // LLM peut déclencher la génération d'un document RH via un tool contrôlé.
   // La clé API reste côté serveur (jamais exposée au client).
-  async aiChat(message: string, extraContext?: string | null, actorId?: number | null) {
+  async aiChat(message: string, extraContext?: string | null, actorId?: number | null, orgId = 1) {
     const trimmed = String(message || "").trim();
     if (!trimmed) throw new BadRequestException("Message is required.");
     if (!env.anthropic.apiKey) {
@@ -2325,7 +2330,7 @@ ${footer}`;
         messages.push({ role: "assistant", content: data.content });
         const toolResults: any[] = [];
         for (const tu of toolUses) {
-          const result = await this.runAiDocumentTool(tu.input, actorId);
+          const result = await this.runAiDocumentTool(tu.input, actorId, orgId);
           if (result.document) generatedDocuments.push(result.document);
           toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: result.message, is_error: result.isError });
         }
@@ -2345,7 +2350,7 @@ ${footer}`;
 
   // Exécute le tool generate_hr_document demandé par le LLM, avec garde-fous.
   // Renvoie un message texte pour le LLM (jamais d'exception : on rapporte l'erreur au modèle).
-  private async runAiDocumentTool(input: any, actorId?: number | null): Promise<{ message: string; isError: boolean; document?: { id: number; reference: string; documentType: string; userId: number } }> {
+  private async runAiDocumentTool(input: any, actorId?: number | null, orgId = 1): Promise<{ message: string; isError: boolean; document?: { id: number; reference: string; documentType: string; userId: number } }> {
     const userId = Number(input?.userId);
     const templateType = String(input?.templateType || "");
     if (!Number.isInteger(userId) || userId <= 0) return { message: "userId invalide.", isError: true };
@@ -2353,7 +2358,7 @@ ${footer}`;
       return { message: `templateType invalide. Valeurs autorisées : ${this.documentTemplateTypes.join(", ")}.`, isError: true };
     }
     try {
-      const doc = await this.generateDocument({ userId, templateType, generatedBy: actorId ?? null }) as Record<string, any>;
+      const doc = await this.generateDocument({ userId, templateType, generatedBy: actorId ?? null }, orgId) as Record<string, any>;
       const document = { id: Number(doc.id), reference: String(doc.reference), documentType: String(doc.documentType), userId };
       return { message: `Document généré (brouillon) : ${document.documentType}, référence ${document.reference}, id ${document.id}.`, isError: false, document };
     } catch (error) {
@@ -2493,20 +2498,21 @@ ${footer}`;
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async createRecord(table: any, input: Record<string, any>, find: (id: number) => Promise<any>) {
+  private async createRecord(table: any, input: Record<string, any>, find: (id: number) => Promise<any>, orgId: number) {
     const [result] = await this.db.insert(table).values({
       ...this.compact(input),
+      organizationId: orgId,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
     return find(Number(result.insertId));
   }
 
-  private async updateRecord(table: any, id: number, input: Record<string, any>, find: () => Promise<any>) {
+  private async updateRecord(table: any, id: number, input: Record<string, any>, find: () => Promise<any>, orgId: number) {
     await this.db.update(table).set({
       ...this.compact(input),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(table.id, id));
+    }).where(and(eq(table.id, id), eq(table.organizationId, orgId)));
     return find();
   }
 
