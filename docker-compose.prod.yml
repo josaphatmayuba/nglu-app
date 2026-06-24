@@ -129,6 +129,7 @@ services:
       # (/opt/nglu-app-dev/) and follow the develop branch independently.
       - /opt/nglu-app-dev/frontend/dist:/usr/share/nginx/html-dev:ro
       - /opt/nglu-app-dev/marketing-site/dist:/usr/share/nginx/html-marketing-dev:ro
+      - /opt/nglu-app-dev/avelomi-site/dist:/usr/share/nginx/html-avelomi-dev:ro
       - /opt/nglu-app-dev/farmos-app/dist:/usr/share/nginx/html-farmos-dev:ro
       - /opt/nglu-app-dev/batipro-app/dist:/usr/share/nginx/html-batipro-dev:ro
       - /opt/nglu-app-dev/hr-app/dist:/usr/share/nginx/html-hr-dev:ro

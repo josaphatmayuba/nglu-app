@@ -1,28 +1,45 @@
 #!/bin/bash
-# Issue Let's Encrypt SSL certificate for dev.ongdngolu.org
-# Prerequisite: prod nginx must be running and serving /.well-known/acme-challenge/
-#               (it does — see nginx.frontend.conf HTTP server block)
-# Prerequisite: DNS for dev.ongdngolu.org must point to this server (16.54.167.125)
+# Issue / expand the shared development Let's Encrypt certificate.
+#
+# Prerequisites:
+#   - DNS for dev.ongdngolu.org must point to 16.54.167.125.
+#   - DNS for dev.avelomi.com must point to 16.54.167.125.
+#   - The prod nginx container must be running and serving /.well-known/acme-challenge/.
 
-set -e
+set -euo pipefail
 
 EMAIL="${CERT_EMAIL:-admin@ongdngolu.org}"
-DOMAIN="dev.ongdngolu.org"
+PRIMARY_DOMAIN="${DEV_DOMAIN:-dev.ongdngolu.org}"
+AVELOMI_DEV_DOMAIN="${AVELOMI_DEV_DOMAIN:-dev.avelomi.com}"
 
-echo "─── Issuing cert for $DOMAIN ───"
+DOMAINS=("$PRIMARY_DOMAIN")
+if [ -n "$AVELOMI_DEV_DOMAIN" ]; then
+  DOMAINS+=("$AVELOMI_DEV_DOMAIN")
+fi
+
+CERTBOT_DOMAIN_ARGS=()
+for domain in "${DOMAINS[@]}"; do
+  CERTBOT_DOMAIN_ARGS+=("-d" "$domain")
+done
+
+echo "Issuing/expanding dev cert: ${DOMAINS[*]}"
 sudo certbot certonly --webroot \
   -w /var/www/certbot \
-  -d "$DOMAIN" \
+  --cert-name "$PRIMARY_DOMAIN" \
+  "${CERTBOT_DOMAIN_ARGS[@]}" \
+  --expand \
   --email "$EMAIL" \
   --agree-tos \
   --non-interactive
 
 echo ""
-echo "─── Reloading prod nginx to pick up new cert ───"
+echo "Reloading prod nginx to pick up the dev cert"
 docker exec nglu_prod_frontend nginx -t
 docker exec nglu_prod_frontend nginx -s reload
 
 echo ""
-echo "✓ Certificate issued and nginx reloaded."
-echo "  Verify: curl -I https://$DOMAIN"
-echo "  Cert location: /etc/letsencrypt/live/$DOMAIN/"
+echo "Certificate issued and nginx reloaded."
+for domain in "${DOMAINS[@]}"; do
+  echo "  Verify: curl -I https://$domain"
+done
+echo "  Cert location: /etc/letsencrypt/live/$PRIMARY_DOMAIN/"

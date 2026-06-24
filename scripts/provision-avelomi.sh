@@ -28,7 +28,7 @@ CERT_EMAIL="${CERT_EMAIL:-admin@avelomi.com}"
 # Static apps that the prod compose bind-mounts from /opt/nglu-app-dev (dev assets).
 # On a server WITHOUT a dev stack these paths don't exist and the frontend
 # container fails to start, so we create empty dirs to satisfy the :ro mounts.
-DEV_MOUNT_APPS="frontend marketing-site farmos-app batipro-app hr-app comptabilite-app domus-app journal-app migration-app tickets-app chat-app"
+DEV_MOUNT_APPS="frontend marketing-site avelomi-site farmos-app batipro-app hr-app comptabilite-app domus-app journal-app migration-app tickets-app chat-app"
 
 log() { echo "─── $* ───"; }
 
