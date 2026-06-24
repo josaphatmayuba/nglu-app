@@ -114,8 +114,8 @@ export class DesignationController {
     if (q["query"] === "createmany") return Promise.all([body].map((item) => this.service.createDesignation(item)));
     return this.service.createDesignation(body);
   }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationDto) { return this.service.updateDesignation(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationDto) { return this.service.updateDesignation(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationDto, @CurrentOrg() orgId: number) { return this.service.updateDesignation(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationDto, @CurrentOrg() orgId: number) { return this.service.updateDesignation(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(designations, id, orgId); }
 }
 
@@ -130,8 +130,8 @@ export class ShiftController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listShifts(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findShift(id, orgId); }
   @Post() create(@Body() body: CreateShiftDto) { return this.service.createShift(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto, @CurrentOrg() orgId: number) { return this.service.updateShift(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto, @CurrentOrg() orgId: number) { return this.service.updateShift(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(shifts, id, orgId); }
 }
 
@@ -147,8 +147,8 @@ export class HrAttendanceController {
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.attendanceSummary(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAttendance(id, orgId); }
   @Post() create(@Body() body: CreateHrAttendanceDto) { return this.service.createAttendance(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto, @CurrentOrg() orgId: number) { return this.service.updateAttendance(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto, @CurrentOrg() orgId: number) { return this.service.updateAttendance(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrAttendances, id, orgId); }
 }
 
@@ -163,8 +163,8 @@ export class AwardController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listAwards(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAward(id, orgId); }
   @Post() create(@Body() body: CreateAwardDto) { return this.service.createAward(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto) { return this.service.updateAward(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto) { return this.service.updateAward(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto, @CurrentOrg() orgId: number) { return this.service.updateAward(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto, @CurrentOrg() orgId: number) { return this.service.updateAward(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(awards, id, orgId); }
 }
 
@@ -179,7 +179,7 @@ export class DesignationHistoryController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listDesignationHistory(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findDesignationHistory(id, orgId); }
   @Post() create(@Body() body: CreateDesignationHistoryDto) { return this.service.createDesignationHistory(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationHistoryDto) { return this.service.updateDesignationHistory(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationHistoryDto, @CurrentOrg() orgId: number) { return this.service.updateDesignationHistory(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(designationHistories, id, orgId); }
 }
 
@@ -235,8 +235,8 @@ export class HrPayrollController {
   @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.approvePayroll(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.rejectPayroll(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/pay") pay(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.markPayrollPaid(id, body.approvedBy); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto) { return this.service.updatePayroll(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto, @CurrentOrg() orgId: number) { return this.service.updatePayroll(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPayrollDto, @CurrentOrg() orgId: number) { return this.service.updatePayroll(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrPayrolls, id, orgId); }
 }
 
@@ -252,8 +252,8 @@ export class HrProjectController {
   @Get("report") report(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.projectAnalytics(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findProject(id, orgId); }
   @Post() create(@Body() body: CreateHrProjectDto) { return this.service.createProject(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto, @CurrentOrg() orgId: number) { return this.service.updateProject(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto, @CurrentOrg() orgId: number) { return this.service.updateProject(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrProjects, id, orgId); }
 }
 
@@ -268,8 +268,8 @@ export class HrProjectAssignmentController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listProjectAssignments(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findProjectAssignment(id, orgId); }
   @Post() create(@Body() body: CreateHrProjectAssignmentDto) { return this.service.createProjectAssignment(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto, @CurrentOrg() orgId: number) { return this.service.updateProjectAssignment(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto, @CurrentOrg() orgId: number) { return this.service.updateProjectAssignment(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrProjectAssignments, id, orgId); }
 }
 
@@ -284,7 +284,7 @@ export class AwardHistoryController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listAwardHistory(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAwardHistory(id, orgId); }
   @Post() create(@Body() body: CreateAwardHistoryDto) { return this.service.createAwardHistory(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardHistoryDto) { return this.service.updateAwardHistory(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardHistoryDto, @CurrentOrg() orgId: number) { return this.service.updateAwardHistory(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(awardHistories, id, orgId); }
 }
 
@@ -300,8 +300,8 @@ export class HrLeaveRequestController {
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.leaveSummary(q); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findLeaveRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrLeaveRequestDto) { return this.service.createLeaveRequest(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto, @CurrentOrg() orgId: number) { return this.service.updateLeaveRequest(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto, @CurrentOrg() orgId: number) { return this.service.updateLeaveRequest(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteLeaveRequest(id, orgId); }
 }
 
@@ -316,8 +316,8 @@ export class HrContractController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listContracts(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findContract(id, orgId); }
   @Post() create(@Body() body: CreateHrContractDto) { return this.service.createContract(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto) { return this.service.updateContract(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto) { return this.service.updateContract(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto, @CurrentOrg() orgId: number) { return this.service.updateContract(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto, @CurrentOrg() orgId: number) { return this.service.updateContract(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrContracts, id, orgId); }
 }
 
@@ -351,8 +351,8 @@ export class HrDocumentController {
   @Post(":id/reject") reject(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.rejectDocument(id, this.actorId(req) ?? body.approvedBy, body.comment); }
   @Post(":id/sign") sign(@Param("id", ParseIntPipe) id: number, @Body() body: { signedBy: string }) { return this.service.signDocument(id, body.signedBy); }
   @Get(":id/verify") verify(@Param("id", ParseIntPipe) id: number) { return this.service.verifyDocumentSignature(id); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto) { return this.service.updateDocument(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto, @CurrentOrg() orgId: number) { return this.service.updateDocument(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrDocumentDto, @CurrentOrg() orgId: number) { return this.service.updateDocument(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrDocuments, id, orgId); }
 }
 
@@ -367,8 +367,8 @@ export class HrExpenseRequestController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listExpenseRequests(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findExpenseRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrExpenseRequestDto) { return this.service.createExpenseRequest(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto) { return this.service.updateExpenseRequest(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto) { return this.service.updateExpenseRequest(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto, @CurrentOrg() orgId: number) { return this.service.updateExpenseRequest(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto, @CurrentOrg() orgId: number) { return this.service.updateExpenseRequest(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrExpenseRequests, id, orgId); }
 }
 
@@ -383,8 +383,8 @@ export class HrSocialDeclarationController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listSocialDeclarations(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findSocialDeclaration(id, orgId); }
   @Post() create(@Body() body: CreateHrSocialDeclarationDto) { return this.service.createSocialDeclaration(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto) { return this.service.updateSocialDeclaration(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto) { return this.service.updateSocialDeclaration(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto, @CurrentOrg() orgId: number) { return this.service.updateSocialDeclaration(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto, @CurrentOrg() orgId: number) { return this.service.updateSocialDeclaration(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrSocialDeclarations, id, orgId); }
 }
 
@@ -399,8 +399,8 @@ export class HrPerformanceReviewController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listPerformanceReviews(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findPerformanceReview(id, orgId); }
   @Post() create(@Body() body: CreateHrPerformanceReviewDto) { return this.service.createPerformanceReview(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto) { return this.service.updatePerformanceReview(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto) { return this.service.updatePerformanceReview(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto, @CurrentOrg() orgId: number) { return this.service.updatePerformanceReview(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto, @CurrentOrg() orgId: number) { return this.service.updatePerformanceReview(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrPerformanceReviews, id, orgId); }
 }
 
@@ -415,8 +415,8 @@ export class HrTrainingSessionController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listTrainingSessions(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findTrainingSession(id, orgId); }
   @Post() create(@Body() body: CreateHrTrainingSessionDto) { return this.service.createTrainingSession(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto, @CurrentOrg() orgId: number) { return this.service.updateTrainingSession(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto, @CurrentOrg() orgId: number) { return this.service.updateTrainingSession(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrTrainingSessions, id, orgId); }
 }
 
@@ -431,8 +431,8 @@ export class HrTimesheetController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listTimesheets(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findTimesheet(id, orgId); }
   @Post() create(@Body() body: CreateHrTimesheetDto) { return this.service.createTimesheet(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto, @CurrentOrg() orgId: number) { return this.service.updateTimesheet(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto, @CurrentOrg() orgId: number) { return this.service.updateTimesheet(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrTimesheets, id, orgId); }
 }
 
@@ -447,8 +447,8 @@ export class HrEmployeeRequestController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listEmployeeRequests(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findEmployeeRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrEmployeeRequestDto) { return this.service.createEmployeeRequest(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto, @CurrentOrg() orgId: number) { return this.service.updateEmployeeRequest(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto, @CurrentOrg() orgId: number) { return this.service.updateEmployeeRequest(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrEmployeeRequests, id, orgId); }
 }
 
@@ -463,8 +463,8 @@ export class HrRecruitmentOfferController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listRecruitmentOffers(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findRecruitmentOffer(id, orgId); }
   @Post() create(@Body() body: CreateHrRecruitmentOfferDto) { return this.service.createRecruitmentOffer(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto, @CurrentOrg() orgId: number) { return this.service.updateRecruitmentOffer(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto, @CurrentOrg() orgId: number) { return this.service.updateRecruitmentOffer(id, body, orgId); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(hrRecruitmentOffers, id, orgId); }
 }
 
@@ -480,8 +480,8 @@ export class HrCandidateController {
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listCandidates(q, orgId); }
   @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findCandidate(id, orgId); }
   @Post() create(@Body() body: CreateHrCandidateDto) { return this.service.createCandidate(body); }
-  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
-  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
+  @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto, @CurrentOrg() orgId: number) { return this.service.updateCandidate(id, body, orgId); }
+  @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto, @CurrentOrg() orgId: number) { return this.service.updateCandidate(id, body, orgId); }
   @Post(":id/convert") convert(@Param("id", ParseIntPipe) id: number, @Body() body: ConvertCandidateDto) { return this.service.convertCandidateToEmployee(id, body); }
 
   @Post(":id/upload")
@@ -569,49 +569,49 @@ export class HrEmployeesController {
   }
 
   @Get("tax-rules")
-  listTaxRules() { return this.service.listTaxRules(); }
+  listTaxRules(@CurrentOrg() orgId: number) { return this.service.listTaxRules(orgId); }
 
   @Get("tax-rules/:id")
-  findTaxRule(@Param("id", ParseIntPipe) id: number) { return this.service.findTaxRule(id); }
+  findTaxRule(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findTaxRule(id, orgId); }
 
   @Post("tax-rules")
-  createTaxRule(@Body() body: CreateHrTaxRuleDto) { return this.service.createTaxRule(body); }
+  createTaxRule(@Body() body: CreateHrTaxRuleDto, @CurrentOrg() orgId: number) { return this.service.createTaxRule(body, orgId); }
 
   @Patch("tax-rules/:id")
-  updateTaxRule(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTaxRuleDto) { return this.service.updateTaxRule(id, body); }
+  updateTaxRule(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTaxRuleDto, @CurrentOrg() orgId: number) { return this.service.updateTaxRule(id, body, orgId); }
 
   @Delete("tax-rules/:id")
-  deleteTaxRule(@Param("id", ParseIntPipe) id: number) { return this.service.deleteTaxRule(id); }
+  deleteTaxRule(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteTaxRule(id, orgId); }
 
   @Get("public-holidays")
-  listPublicHolidays(@Query() q: Record<string, string>) { return this.service.listPublicHolidays(q); }
+  listPublicHolidays(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listPublicHolidays(q, orgId); }
 
   @Get("public-holidays/:id")
-  findPublicHoliday(@Param("id", ParseIntPipe) id: number) { return this.service.findPublicHoliday(id); }
+  findPublicHoliday(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findPublicHoliday(id, orgId); }
 
   @Post("public-holidays")
-  createPublicHoliday(@Body() body: CreateHrPublicHolidayDto) { return this.service.createPublicHoliday(body); }
+  createPublicHoliday(@Body() body: CreateHrPublicHolidayDto, @CurrentOrg() orgId: number) { return this.service.createPublicHoliday(body, orgId); }
 
   @Patch("public-holidays/:id")
-  updatePublicHoliday(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPublicHolidayDto) { return this.service.updatePublicHoliday(id, body); }
+  updatePublicHoliday(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPublicHolidayDto, @CurrentOrg() orgId: number) { return this.service.updatePublicHoliday(id, body, orgId); }
 
   @Delete("public-holidays/:id")
-  deletePublicHoliday(@Param("id", ParseIntPipe) id: number) { return this.service.deletePublicHoliday(id); }
+  deletePublicHoliday(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deletePublicHoliday(id, orgId); }
 
   @Get("leave-entitlements")
-  listLeaveEntitlements(@Query() q: Record<string, string>) { return this.service.listLeaveEntitlements(q); }
+  listLeaveEntitlements(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listLeaveEntitlements(q, orgId); }
 
   @Get("leave-entitlements/:id")
-  findLeaveEntitlement(@Param("id", ParseIntPipe) id: number) { return this.service.findLeaveEntitlement(id); }
+  findLeaveEntitlement(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findLeaveEntitlement(id, orgId); }
 
   @Post("leave-entitlements")
-  createLeaveEntitlement(@Body() body: CreateHrLeaveEntitlementDto) { return this.service.createLeaveEntitlement(body); }
+  createLeaveEntitlement(@Body() body: CreateHrLeaveEntitlementDto, @CurrentOrg() orgId: number) { return this.service.createLeaveEntitlement(body, orgId); }
 
   @Patch("leave-entitlements/:id")
-  updateLeaveEntitlement(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveEntitlementDto) { return this.service.updateLeaveEntitlement(id, body); }
+  updateLeaveEntitlement(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveEntitlementDto, @CurrentOrg() orgId: number) { return this.service.updateLeaveEntitlement(id, body, orgId); }
 
   @Delete("leave-entitlements/:id")
-  deleteLeaveEntitlement(@Param("id", ParseIntPipe) id: number) { return this.service.deleteLeaveEntitlement(id); }
+  deleteLeaveEntitlement(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteLeaveEntitlement(id, orgId); }
 
   @Get("payroll-lock-stage")
   getPayrollLockStage() { return this.service.getPayrollLockStage(); }

@@ -148,8 +148,8 @@ export class HrService {
     return this.findDesignation(Number(result.insertId));
   }
 
-  async updateDesignation(id: number, input: UpdateDesignationDto) {
-    await this.findDesignation(id);
+  async updateDesignation(id: number, input: UpdateDesignationDto, orgId: number) {
+    await this.findDesignation(id, orgId);
     await this.db
       .update(designations)
       .set({
@@ -157,8 +157,8 @@ export class HrService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(designations.id, id));
-    return this.findDesignation(id);
+      .where(and(eq(designations.id, id), eq(designations.organizationId, orgId)));
+    return this.findDesignation(id, orgId);
   }
 
   listShifts(q: Record<string, string>, orgId: number) {
@@ -183,8 +183,8 @@ export class HrService {
     return this.findShift(Number(result.insertId));
   }
 
-  async updateShift(id: number, input: UpdateShiftDto) {
-    const current = await this.findShift(id);
+  async updateShift(id: number, input: UpdateShiftDto, orgId: number) {
+    const current = await this.findShift(id, orgId);
     const startTime = input.startTime ?? current.startTime;
     const endTime = input.endTime ?? current.endTime;
     await this.db
@@ -197,8 +197,8 @@ export class HrService {
         workHour: this.workHours(startTime, endTime),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(shifts.id, id));
-    return this.findShift(id);
+      .where(and(eq(shifts.id, id), eq(shifts.organizationId, orgId)));
+    return this.findShift(id, orgId);
   }
 
   listAttendances(q: Record<string, string>, orgId: number) {
@@ -217,11 +217,11 @@ export class HrService {
     return this.createRecord(hrAttendances, payload, (id) => this.findAttendance(id));
   }
 
-  async updateAttendance(id: number, input: UpdateHrAttendanceDto) {
-    const current = await this.findAttendance(id);
+  async updateAttendance(id: number, input: UpdateHrAttendanceDto, orgId: number) {
+    const current = await this.findAttendance(id, orgId);
     await this.validateAttendanceRefs(input);
     const payload = await this.attendancePayload({ ...current, ...input });
-    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id));
+    return this.updateRecord(hrAttendances, id, payload, () => this.findAttendance(id, orgId));
   }
 
   async attendanceSummary(q: Record<string, string>) {
@@ -312,8 +312,8 @@ export class HrService {
     return this.findAward(Number(result.insertId));
   }
 
-  async updateAward(id: number, input: UpdateAwardDto) {
-    await this.findAward(id);
+  async updateAward(id: number, input: UpdateAwardDto, orgId: number) {
+    await this.findAward(id, orgId);
     await this.db
       .update(awards)
       .set({
@@ -322,8 +322,8 @@ export class HrService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(awards.id, id));
-    return this.findAward(id);
+      .where(and(eq(awards.id, id), eq(awards.organizationId, orgId)));
+    return this.findAward(id, orgId);
   }
 
   listDesignationHistory(q: Record<string, string>, orgId: number) {
@@ -349,8 +349,8 @@ export class HrService {
       : this.findOneInOrg(designationHistories, id, orgId, "Designation history not found.");
   }
 
-  async updateDesignationHistory(id: number, input: UpdateDesignationHistoryDto) {
-    await this.findDesignationHistory(id);
+  async updateDesignationHistory(id: number, input: UpdateDesignationHistoryDto, orgId: number) {
+    await this.findDesignationHistory(id, orgId);
     await this.db.update(designationHistories).set({
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.designationId !== undefined ? { designationId: input.designationId } : {}),
@@ -358,8 +358,8 @@ export class HrService {
       ...(input.designationEndDate !== undefined ? { endDate: input.designationEndDate } : {}),
       ...(input.designationComment !== undefined ? { comment: input.designationComment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(designationHistories.id, id));
-    return this.findDesignationHistory(id);
+    }).where(and(eq(designationHistories.id, id), eq(designationHistories.organizationId, orgId)));
+    return this.findDesignationHistory(id, orgId);
   }
 
   async listSalaryHistory(q: Record<string, string>, orgId: number) {
@@ -824,14 +824,14 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.createRecord(hrPayrolls, payload, (id) => this.findPayroll(id));
   }
 
-  async updatePayroll(id: number, input: UpdateHrPayrollDto) {
-    const current = await this.findPayroll(id);
+  async updatePayroll(id: number, input: UpdateHrPayrollDto, orgId: number) {
+    const current = await this.findPayroll(id, orgId);
     const currentStatus = String(current.status || "draft");
     if (currentStatus === "paid") throw new BadRequestException("Cannot modify a paid payroll.");
     await this.validatePayrollRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     const payload = this.payrollPayload({ ...current, ...input });
-    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id));
+    return this.updateRecord(hrPayrolls, id, payload, () => this.findPayroll(id, orgId));
   }
 
   async submitPayroll(id: number, submittedBy?: number | null) {
@@ -1112,14 +1112,14 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     }, (id) => this.findProject(id));
   }
 
-  async updateProject(id: number, input: UpdateHrProjectDto) {
-    await this.findProject(id);
+  async updateProject(id: number, input: UpdateHrProjectDto, orgId: number) {
+    await this.findProject(id, orgId);
     await this.validateProjectRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     return this.updateRecord(hrProjects, id, {
       ...input,
       ...(input.hrBudget !== undefined ? { hrBudget: Number(input.hrBudget || 0) } : {}),
-    }, () => this.findProject(id));
+    }, () => this.findProject(id, orgId));
   }
 
   listProjectAssignments(q: Record<string, string>, orgId: number) {
@@ -1145,15 +1145,15 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     }, (id) => this.findProjectAssignment(id));
   }
 
-  async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto) {
-    await this.findProjectAssignment(id);
+  async updateProjectAssignment(id: number, input: UpdateHrProjectAssignmentDto, orgId: number) {
+    await this.findProjectAssignment(id, orgId);
     await this.validateProjectAssignmentRefs(input);
     if (input.currencyId !== undefined && input.currencyId !== null) await this.ensureExists(currencies, input.currencyId, "Currency not found.");
     return this.updateRecord(hrProjectAssignments, id, {
       ...input,
       ...(input.timePercent !== undefined ? { timePercent: Number(input.timePercent ?? 100) } : {}),
       ...(input.monthlyCost !== undefined ? { monthlyCost: Number(input.monthlyCost || 0) } : {}),
-    }, () => this.findProjectAssignment(id));
+    }, () => this.findProjectAssignment(id, orgId));
   }
 
   async projectAnalytics(q: Record<string, string>, orgId: number) {
@@ -1314,16 +1314,16 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       : this.findOneInOrg(awardHistories, id, orgId, "Award history not found.");
   }
 
-  async updateAwardHistory(id: number, input: UpdateAwardHistoryDto) {
-    await this.findAwardHistory(id);
+  async updateAwardHistory(id: number, input: UpdateAwardHistoryDto, orgId: number) {
+    await this.findAwardHistory(id, orgId);
     await this.db.update(awardHistories).set({
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.awardId !== undefined ? { awardId: input.awardId } : {}),
       ...(input.awardedDate !== undefined ? { awardedDate: input.awardedDate } : {}),
       ...(input.comment !== undefined ? { comment: input.comment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(awardHistories.id, id));
-    return this.findAwardHistory(id);
+    }).where(and(eq(awardHistories.id, id), eq(awardHistories.organizationId, orgId)));
+    return this.findAwardHistory(id, orgId);
   }
 
   listLeaveRequests(q: Record<string, string>, orgId: number) {
@@ -1345,16 +1345,16 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return saved;
   }
 
-  async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto) {
-    const current = await this.findLeaveRequest(id);
+  async updateLeaveRequest(id: number, input: UpdateHrLeaveRequestDto, orgId: number) {
+    const current = await this.findLeaveRequest(id, orgId);
     await this.validateLeaveRefs(input);
     const userId = Number(input.userId ?? current.userId);
     // Verrou sur l'ancienne ET la nouvelle plage (déplacer hors/dans une période verrouillée).
     await this.assertNoLockedPayroll(userId, String(current.startDate), String(current.endDate));
     await this.assertNoLockedPayroll(userId, String(input.startDate ?? current.startDate), String(input.endDate ?? current.endDate));
     const payload = await this.leavePayload({ ...current, ...input }, id);
-    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id));
-    const saved = await this.findLeaveRequest(id);
+    await this.updateRecord(hrLeaveRequests, id, payload, () => this.findLeaveRequest(id, orgId));
+    const saved = await this.findLeaveRequest(id, orgId);
     if (this.isFinalLeaveApproval(saved.status)) await this.applyLeaveToAttendance(saved);
     if (["rejected", "cancelled"].includes(String(saved.status || "").toLowerCase())) await this.clearLeaveAttendance(saved.id);
     return saved;
@@ -1435,10 +1435,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.createRecord(hrContracts, { ...input, reference, status: input.status || "draft" }, (id) => this.findContract(id));
   }
 
-  async updateContract(id: number, input: UpdateHrContractDto) {
-    await this.findContract(id);
+  async updateContract(id: number, input: UpdateHrContractDto, orgId: number) {
+    await this.findContract(id, orgId);
     await this.validateContractRefs(input);
-    return this.updateRecord(hrContracts, id, input, () => this.findContract(id));
+    return this.updateRecord(hrContracts, id, input, () => this.findContract(id, orgId));
   }
 
   listDocuments(q: Record<string, string>, orgId: number) {
@@ -1456,10 +1456,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.createRecord(hrDocuments, input, (id) => this.findDocument(id));
   }
 
-  async updateDocument(id: number, input: UpdateHrDocumentDto) {
-    await this.findDocument(id);
+  async updateDocument(id: number, input: UpdateHrDocumentDto, orgId: number) {
+    await this.findDocument(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id));
+    return this.updateRecord(hrDocuments, id, input, () => this.findDocument(id, orgId));
   }
 
   // Workflow document RH : draft/rejected -> pending_validation -> approved -> signed.
@@ -1730,10 +1730,10 @@ ${footer}`;
     return this.createRecord(hrExpenseRequests, input, (id) => this.findExpenseRequest(id));
   }
 
-  async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto) {
-    await this.findExpenseRequest(id);
+  async updateExpenseRequest(id: number, input: UpdateHrExpenseRequestDto, orgId: number) {
+    await this.findExpenseRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
-    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id));
+    return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id, orgId));
   }
 
   listSocialDeclarations(q: Record<string, string>, orgId: number) {
@@ -1750,9 +1750,9 @@ ${footer}`;
     return this.createRecord(hrSocialDeclarations, input, (id) => this.findSocialDeclaration(id));
   }
 
-  async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto) {
-    await this.findSocialDeclaration(id);
-    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id));
+  async updateSocialDeclaration(id: number, input: UpdateHrSocialDeclarationDto, orgId: number) {
+    await this.findSocialDeclaration(id, orgId);
+    return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id, orgId));
   }
 
   listPerformanceReviews(q: Record<string, string>, orgId: number) {
@@ -1771,11 +1771,11 @@ ${footer}`;
     return this.createRecord(hrPerformanceReviews, input, (id) => this.findPerformanceReview(id));
   }
 
-  async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto) {
-    await this.findPerformanceReview(id);
+  async updatePerformanceReview(id: number, input: UpdateHrPerformanceReviewDto, orgId: number) {
+    await this.findPerformanceReview(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     if (input.managerId) await this.ensureExists(users, input.managerId, "Manager not found.");
-    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id));
+    return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id, orgId));
   }
 
   listTrainingSessions(q: Record<string, string>, orgId: number) {
@@ -1792,9 +1792,9 @@ ${footer}`;
     return this.createRecord(hrTrainingSessions, input, (id) => this.findTrainingSession(id));
   }
 
-  async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto) {
-    await this.findTrainingSession(id);
-    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id));
+  async updateTrainingSession(id: number, input: UpdateHrTrainingSessionDto, orgId: number) {
+    await this.findTrainingSession(id, orgId);
+    return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id, orgId));
   }
 
   listTimesheets(q: Record<string, string>, orgId: number) {
@@ -1813,11 +1813,11 @@ ${footer}`;
     return this.createRecord(hrTimesheets, payload, (id) => this.findTimesheet(id));
   }
 
-  async updateTimesheet(id: number, input: UpdateHrTimesheetDto) {
-    const current = await this.findTimesheet(id);
+  async updateTimesheet(id: number, input: UpdateHrTimesheetDto, orgId: number) {
+    const current = await this.findTimesheet(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const payload = await this.timesheetPayload({ ...current, ...input });
-    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id));
+    return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id, orgId));
   }
 
   listEmployeeRequests(q: Record<string, string>, orgId: number) {
@@ -1835,11 +1835,11 @@ ${footer}`;
     return this.createRecord(hrEmployeeRequests, input, (id) => this.findEmployeeRequest(id));
   }
 
-  async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto) {
-    await this.findEmployeeRequest(id);
+  async updateEmployeeRequest(id: number, input: UpdateHrEmployeeRequestDto, orgId: number) {
+    await this.findEmployeeRequest(id, orgId);
     if (input.userId !== undefined) await this.ensureExists(users, input.userId, "User not found.");
     const decision = input.status && input.status !== "pending" ? { decidedAt: sql`CURRENT_TIMESTAMP` } : {};
-    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id));
+    return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id, orgId));
   }
 
   listRecruitmentOffers(q: Record<string, string>, orgId: number) {
@@ -1857,10 +1857,10 @@ ${footer}`;
     return this.createRecord(hrRecruitmentOffers, input, (id) => this.findRecruitmentOffer(id));
   }
 
-  async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto) {
-    await this.findRecruitmentOffer(id);
+  async updateRecruitmentOffer(id: number, input: UpdateHrRecruitmentOfferDto, orgId: number) {
+    await this.findRecruitmentOffer(id, orgId);
     if (input.departmentId) await this.ensureExists(departments, input.departmentId, "Department not found.");
-    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id));
+    return this.updateRecord(hrRecruitmentOffers, id, input, () => this.findRecruitmentOffer(id, orgId));
   }
 
   // ─── Stade 9: Recrutement / Candidats ────────────────────────────────────────
@@ -1880,10 +1880,10 @@ ${footer}`;
     return this.createRecord(hrCandidates, input, (id) => this.findCandidate(id));
   }
 
-  async updateCandidate(id: number, input: UpdateHrCandidateDto) {
-    const previous = await this.findCandidate(id) as Record<string, any>;
+  async updateCandidate(id: number, input: UpdateHrCandidateDto, orgId: number) {
+    const previous = await this.findCandidate(id, orgId) as Record<string, any>;
     if (input.offerId) await this.ensureExists(hrRecruitmentOffers, input.offerId, "Recruitment offer not found.");
-    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id)) as Record<string, any>;
+    const updated = await this.updateRecord(hrCandidates, id, input, () => this.findCandidate(id, orgId)) as Record<string, any>;
     const oldStage = String(previous.stage || "").toLowerCase();
     const newStage = String(updated.stage || "").toLowerCase();
     if (newStage && newStage !== oldStage) {
@@ -3160,18 +3160,23 @@ ${footer}`;
     return { deleted: true };
   }
 
-  listTaxRules() {
-    return this.db.select().from(hrTaxRules).orderBy(hrTaxRules.countryName);
+  listTaxRules(orgId: number) {
+    return this.db.select().from(hrTaxRules)
+      .where(eq(hrTaxRules.organizationId, orgId))
+      .orderBy(hrTaxRules.countryName);
   }
 
-  async findTaxRule(id: number) {
-    const [row] = await this.db.select().from(hrTaxRules).where(eq(hrTaxRules.id, id)).limit(1);
+  async findTaxRule(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrTaxRules)
+      .where(orgId === undefined ? eq(hrTaxRules.id, id) : and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Tax rule not found.");
     return row;
   }
 
-  async createTaxRule(input: CreateHrTaxRuleDto) {
+  async createTaxRule(input: CreateHrTaxRuleDto, orgId: number) {
     const [result] = await this.db.insert(hrTaxRules).values({
+      organizationId: orgId,
       countryCode: input.countryCode.toUpperCase(),
       countryName: input.countryName,
       cnssEmployeeRate: Number(input.cnssEmployeeRate ?? 0),
@@ -3182,10 +3187,10 @@ ${footer}`;
       notes: input.notes ?? null,
       isActive: 1,
     });
-    return this.findTaxRule((result as any).insertId);
+    return this.findTaxRule((result as any).insertId, orgId);
   }
 
-  async updateTaxRule(id: number, input: UpdateHrTaxRuleDto) {
+  async updateTaxRule(id: number, input: UpdateHrTaxRuleDto, orgId: number) {
     await this.findTaxRule(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
@@ -3198,41 +3203,45 @@ ${footer}`;
     if (input.notes !== undefined) patch["notes"] = input.notes ?? null;
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrTaxRules).set(patch).where(eq(hrTaxRules.id, id));
+      await this.db.update(hrTaxRules).set(patch).where(and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)));
     }
     return this.findTaxRule(id);
   }
 
-  async deleteTaxRule(id: number) {
+  async deleteTaxRule(id: number, orgId: number) {
     await this.findTaxRule(id);
-    await this.db.delete(hrTaxRules).where(eq(hrTaxRules.id, id));
+    await this.db.delete(hrTaxRules).where(and(eq(hrTaxRules.id, id), eq(hrTaxRules.organizationId, orgId)));
     return { deleted: true };
   }
 
-  listPublicHolidays(q: Record<string, string> = {}) {
-    const where = q["country"]
-      ? eq(hrPublicHolidays.countryCode, String(q["country"]).toUpperCase())
-      : undefined;
+  listPublicHolidays(q: Record<string, string> = {}, orgId: number) {
+    const where = and(
+      eq(hrPublicHolidays.organizationId, orgId),
+      q["country"] ? eq(hrPublicHolidays.countryCode, String(q["country"]).toUpperCase()) : undefined,
+    );
     return this.db.select().from(hrPublicHolidays).where(where).orderBy(hrPublicHolidays.date);
   }
 
-  async findPublicHoliday(id: number) {
-    const [row] = await this.db.select().from(hrPublicHolidays).where(eq(hrPublicHolidays.id, id)).limit(1);
+  async findPublicHoliday(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrPublicHolidays)
+      .where(orgId === undefined ? eq(hrPublicHolidays.id, id) : and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Public holiday not found.");
     return row;
   }
 
-  async createPublicHoliday(input: CreateHrPublicHolidayDto) {
+  async createPublicHoliday(input: CreateHrPublicHolidayDto, orgId: number) {
     const [result] = await this.db.insert(hrPublicHolidays).values({
+      organizationId: orgId,
       countryCode: input.countryCode.toUpperCase(),
       date: input.date,
       name: input.name,
       isActive: input.isActive === 0 ? 0 : 1,
     });
-    return this.findPublicHoliday((result as any).insertId);
+    return this.findPublicHoliday((result as any).insertId, orgId);
   }
 
-  async updatePublicHoliday(id: number, input: UpdateHrPublicHolidayDto) {
+  async updatePublicHoliday(id: number, input: UpdateHrPublicHolidayDto, orgId: number) {
     await this.findPublicHoliday(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = input.countryCode.toUpperCase();
@@ -3240,43 +3249,47 @@ ${footer}`;
     if (input.name !== undefined) patch["name"] = input.name;
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrPublicHolidays).set(patch).where(eq(hrPublicHolidays.id, id));
+      await this.db.update(hrPublicHolidays).set(patch).where(and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)));
     }
     return this.findPublicHoliday(id);
   }
 
-  async deletePublicHoliday(id: number) {
+  async deletePublicHoliday(id: number, orgId: number) {
     await this.findPublicHoliday(id);
-    await this.db.delete(hrPublicHolidays).where(eq(hrPublicHolidays.id, id));
+    await this.db.delete(hrPublicHolidays).where(and(eq(hrPublicHolidays.id, id), eq(hrPublicHolidays.organizationId, orgId)));
     return { deleted: true };
   }
 
-  listLeaveEntitlements(q: Record<string, string> = {}) {
-    const where = q["country"]
-      ? eq(hrLeaveEntitlements.countryCode, String(q["country"]).toUpperCase())
-      : undefined;
+  listLeaveEntitlements(q: Record<string, string> = {}, orgId: number) {
+    const where = and(
+      eq(hrLeaveEntitlements.organizationId, orgId),
+      q["country"] ? eq(hrLeaveEntitlements.countryCode, String(q["country"]).toUpperCase()) : undefined,
+    );
     return this.db.select().from(hrLeaveEntitlements).where(where)
       .orderBy(hrLeaveEntitlements.countryCode, hrLeaveEntitlements.leaveType);
   }
 
-  async findLeaveEntitlement(id: number) {
-    const [row] = await this.db.select().from(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id)).limit(1);
+  async findLeaveEntitlement(id: number, orgId?: number) {
+    const [row] = await this.db.select().from(hrLeaveEntitlements)
+      .where(orgId === undefined ? eq(hrLeaveEntitlements.id, id) : and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)))
+      .limit(1);
     if (!row) throw new NotFoundException("Leave entitlement not found.");
     return row;
   }
 
-  async createLeaveEntitlement(input: CreateHrLeaveEntitlementDto) {
+  async createLeaveEntitlement(input: CreateHrLeaveEntitlementDto, orgId: number) {
     const [result] = await this.db.insert(hrLeaveEntitlements).values({
+      organizationId: orgId,
       countryCode: (input.countryCode || "*").toUpperCase(),
       leaveType: input.leaveType,
       contractType: input.contractType ?? null,
       entitlementDays: Number(input.entitlementDays ?? 0),
       isActive: input.isActive === 0 ? 0 : 1,
     });
-    return this.findLeaveEntitlement((result as any).insertId);
+    return this.findLeaveEntitlement((result as any).insertId, orgId);
   }
 
-  async updateLeaveEntitlement(id: number, input: UpdateHrLeaveEntitlementDto) {
+  async updateLeaveEntitlement(id: number, input: UpdateHrLeaveEntitlementDto, orgId: number) {
     await this.findLeaveEntitlement(id);
     const patch: Record<string, any> = {};
     if (input.countryCode !== undefined) patch["countryCode"] = (input.countryCode || "*").toUpperCase();
@@ -3285,14 +3298,14 @@ ${footer}`;
     if (input.entitlementDays !== undefined) patch["entitlementDays"] = Number(input.entitlementDays);
     if (input.isActive !== undefined) patch["isActive"] = Number(input.isActive);
     if (Object.keys(patch).length > 0) {
-      await this.db.update(hrLeaveEntitlements).set(patch).where(eq(hrLeaveEntitlements.id, id));
+      await this.db.update(hrLeaveEntitlements).set(patch).where(and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)));
     }
     return this.findLeaveEntitlement(id);
   }
 
-  async deleteLeaveEntitlement(id: number) {
+  async deleteLeaveEntitlement(id: number, orgId: number) {
     await this.findLeaveEntitlement(id);
-    await this.db.delete(hrLeaveEntitlements).where(eq(hrLeaveEntitlements.id, id));
+    await this.db.delete(hrLeaveEntitlements).where(and(eq(hrLeaveEntitlements.id, id), eq(hrLeaveEntitlements.organizationId, orgId)));
     return { deleted: true };
   }
 
