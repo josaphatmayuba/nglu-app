@@ -6,6 +6,7 @@ import {
   UpdateSupplierDto,
   UpdateSupplierStatusDto,
 } from "./dto/supplier.dto";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { SuppliersService } from "./suppliers.service";
 
 @ApiTags("supplier")
@@ -16,35 +17,39 @@ export class SuppliersController {
   @ApiOperation({ summary: "Create a supplier" })
   @ApiCreatedResponse({ description: "Created supplier" })
   @Post()
-  create(@Body() body: CreateSupplierDto) {
-    return this.suppliersService.create(body);
+  create(@Body() body: CreateSupplierDto, @CurrentOrg() orgId: number) {
+    return this.suppliersService.create(body, orgId);
   }
 
   @ApiOperation({ summary: "List, search, info, or report suppliers" })
   @ApiOkResponse({ description: "Supplier result" })
   @Get()
-  findAll(@Query() query: SupplierQueryDto) {
-    return this.suppliersService.findAll(query);
+  findAll(@Query() query: SupplierQueryDto, @CurrentOrg() orgId: number) {
+    return this.suppliersService.findAll(query, orgId);
   }
 
   @ApiOperation({ summary: "Get one supplier" })
   @ApiParam({ name: "id", example: 1, type: Number })
   @Get(":id")
-  findOne(@Param("id", ParseIntPipe) id: number) {
-    return this.suppliersService.findOne(id);
+  findOne(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.suppliersService.findOne(id, orgId);
   }
 
   @ApiOperation({ summary: "Update one supplier" })
   @ApiParam({ name: "id", example: 1, type: Number })
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSupplierDto) {
-    return this.suppliersService.update(id, body);
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSupplierDto, @CurrentOrg() orgId: number) {
+    return this.suppliersService.update(id, body, orgId);
   }
 
   @ApiOperation({ summary: "Update supplier status, compatible with Laravel delete route" })
   @ApiParam({ name: "id", example: 1, type: Number })
   @Patch(":id")
-  updateStatus(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateSupplierStatusDto) {
-    return this.suppliersService.updateStatus(id, body.status);
+  updateStatus(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateSupplierStatusDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.suppliersService.updateStatus(id, body.status, orgId);
   }
 }

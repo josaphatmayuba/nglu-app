@@ -13,10 +13,11 @@ import {
 export class PaymentMethodsService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async create(input: CreatePaymentMethodDto) {
-    await this.ensureSubAccountExists(input.subAccountId);
+  async create(input: CreatePaymentMethodDto, orgId: number) {
+    await this.ensureSubAccountExists(input.subAccountId, orgId);
 
     const [result] = await this.db.insert(paymentMethods).values({
+      organizationId: orgId,
       subAccountId: input.subAccountId,
       methodName: input.methodName,
       logo: input.logo ?? null,
@@ -28,30 +29,30 @@ export class PaymentMethodsService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.findOne(Number(result.insertId));
+    return this.findOne(Number(result.insertId), orgId);
   }
 
-  async findAll(query: PaymentMethodQueryDto) {
+  async findAll(query: PaymentMethodQueryDto, orgId: number) {
     if (query.query === "all") {
-      return this.baseQuery().orderBy(desc(paymentMethods.id));
+      return this.baseQuery().where(eq(paymentMethods.organizationId, orgId)).orderBy(desc(paymentMethods.id));
     }
 
     if (query.query === "search") {
-      return this.search(query);
+      return this.search(query, orgId);
     }
 
-    return this.paginated(query);
+    return this.paginated(query, orgId);
   }
 
-  async update(id: number, input: UpdatePaymentMethodDto) {
-    await this.ensurePaymentMethodExists(id);
+  async update(id: number, input: UpdatePaymentMethodDto, orgId: number) {
+    await this.ensurePaymentMethodExists(id, orgId);
 
     if (id === 1 && (input.methodName || input.ownerAccount || input.instruction || input.subAccountId)) {
       throw new BadRequestException("This payment method has update restrictions!");
     }
 
     if (input.subAccountId !== undefined) {
-      await this.ensureSubAccountExists(input.subAccountId);
+      await this.ensureSubAccountExists(input.subAccountId, orgId);
     }
 
     await this.db
@@ -66,13 +67,13 @@ export class PaymentMethodsService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(paymentMethods.id, id));
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.organizationId, orgId)));
 
     return { message: "Payment Method Update Successful!" };
   }
 
-  async updateStatus(id: number, status: string) {
-    await this.ensurePaymentMethodExists(id);
+  async updateStatus(id: number, status: string, orgId: number) {
+    await this.ensurePaymentMethodExists(id, orgId);
 
     if (id === 1) {
       throw new BadRequestException("This payment method has removal restrictions!");
@@ -81,28 +82,33 @@ export class PaymentMethodsService {
     await this.db
       .update(paymentMethods)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(paymentMethods.id, id));
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.organizationId, orgId)));
 
     return { message: "Payment Method deleted successfully!" };
   }
 
-  private async findOne(id: number) {
-    const rows = await this.baseQuery().where(eq(paymentMethods.id, id)).limit(1);
+  private async findOne(id: number, orgId: number) {
+    const rows = await this.baseQuery()
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Payment method not found.");
     }
     return rows[0];
   }
 
-  private async search(query: PaymentMethodQueryDto) {
+  private async search(query: PaymentMethodQueryDto, orgId: number) {
     const pagination = this.pagination(query);
     const key = `%${query.key?.trim() || ""}%`;
-    const where = or(
-      like(paymentMethods.methodName, key),
-      like(paymentMethods.ownerAccount, key),
-      like(paymentMethods.isActive, key),
-      like(paymentMethods.status, key),
-      like(sql`cast(${paymentMethods.subAccountId} as char)`, key),
+    const where = and(
+      eq(paymentMethods.organizationId, orgId),
+      or(
+        like(paymentMethods.methodName, key),
+        like(paymentMethods.ownerAccount, key),
+        like(paymentMethods.isActive, key),
+        like(paymentMethods.status, key),
+        like(sql`cast(${paymentMethods.subAccountId} as char)`, key),
+      ),
     );
 
     const rows = await this.baseQuery()
@@ -118,9 +124,12 @@ export class PaymentMethodsService {
     };
   }
 
-  private async paginated(query: PaymentMethodQueryDto) {
+  private async paginated(query: PaymentMethodQueryDto, orgId: number) {
     const pagination = this.pagination(query);
-    const where = query.status ? eq(paymentMethods.status, query.status) : undefined;
+    const where = and(
+      eq(paymentMethods.organizationId, orgId),
+      query.status ? eq(paymentMethods.status, query.status) : undefined,
+    );
     const rows = await this.baseQuery()
       .where(where)
       .orderBy(desc(paymentMethods.id))
@@ -158,19 +167,23 @@ export class PaymentMethodsService {
       .leftJoin(subAccounts, eq(subAccounts.id, paymentMethods.subAccountId));
   }
 
-  private async ensurePaymentMethodExists(id: number) {
+  private async ensurePaymentMethodExists(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: paymentMethods.id })
       .from(paymentMethods)
-      .where(eq(paymentMethods.id, id))
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.organizationId, orgId)))
       .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Payment method not found.");
     }
   }
 
-  private async ensureSubAccountExists(id: number) {
-    const rows = await this.db.select({ id: subAccounts.id }).from(subAccounts).where(eq(subAccounts.id, id)).limit(1);
+  private async ensureSubAccountExists(id: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: subAccounts.id })
+      .from(subAccounts)
+      .where(and(eq(subAccounts.id, id), eq(subAccounts.organizationId, orgId)))
+      .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Sub account not found.");
     }

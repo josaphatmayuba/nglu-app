@@ -684,6 +684,7 @@ export const tenantOnboardings = mysqlTable("tenant_onboardings", {
 
 export const paymentMethods = mysqlTable("paymentMethod", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   subAccountId: bigint("subAccountId", { mode: "number" }).notNull(),
   methodName: varchar("methodName", { length: 255 }).notNull(),
   logo: varchar("logo", { length: 255 }),
@@ -697,6 +698,7 @@ export const paymentMethods = mysqlTable("paymentMethod", {
 
 export const suppliers = mysqlTable("supplier", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   phone: varchar("phone", { length: 255 }).notNull(),
   address: varchar("address", { length: 255 }),

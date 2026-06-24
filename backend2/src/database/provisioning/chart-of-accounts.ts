@@ -1,5 +1,5 @@
-import { eq, sql } from "drizzle-orm";
-import { accounts, subAccounts, transactionTypes } from "../schema";
+import { and, eq, sql } from "drizzle-orm";
+import { accounts, paymentMethods, subAccounts, transactionTypes } from "../schema";
 import type { Database } from "../types";
 
 // Plan comptable canonique (multi-tenant P2/P3) : rejoue pour UNE organisation
@@ -120,6 +120,30 @@ export async function provisionOrgChartOfAccounts(db: Database, orgId: number) {
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     } as any);
+  }
+
+  // 4) Moyen de paiement « Cash » par defaut (lie au sous-compte Cash de l org).
+  //    Sinon la liste des moyens de paiement d une org neuve est vide.
+  const cashSubId = subIdByName.get("Cash");
+  if (cashSubId) {
+    const existingCash = await db
+      .select({ id: paymentMethods.id })
+      .from(paymentMethods)
+      .where(and(eq(paymentMethods.organizationId, orgId), eq(paymentMethods.methodName, "Cash")))
+      .limit(1);
+    if (!existingCash.length) {
+      await db.insert(paymentMethods).values({
+        organizationId: orgId,
+        subAccountId: cashSubId,
+        methodName: "Cash",
+        ownerAccount: "Cash Account",
+        instruction: "Pay in cash at the office",
+        isActive: "true",
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      } as any);
+    }
   }
 
   return { accountIdByName, subIdByName };

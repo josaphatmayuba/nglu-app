@@ -1086,6 +1086,13 @@
                         "when":  1780570800000,
                         "tag":  "0178_remaining_tables_org",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  155,
+                        "version":  "5",
+                        "when":  1780574400000,
+                        "tag":  "0179_supplier_payment_method_org",
+                        "breakpoints":  true
                     }
                 ]
 }
