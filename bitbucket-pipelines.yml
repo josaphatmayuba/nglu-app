@@ -14,15 +14,31 @@ image: node:20-alpine
 definitions:
   # ── Avelomi (2e prod, serveur séparé 3.128.45.29 / avelomi.com) ──────────────
   # Bitbucket n'a qu'UNE clé SSH CI par défaut (celle d'ongdngolu). Pour le 2e
-  # hôte on charge une clé dédiée depuis la variable secure AVELOMI_SSH_KEY
-  # (clé privée encodée base64 : `base64 -w0 LightsailDefaultKey-...pem`).
-  # À mettre dans Repository settings → Repository variables (Secured).
+  # hôte on charge une clé dédiée depuis AVELOMI_SSH_KEY, ou par compatibilité
+  # LIGHTSAIL_PRIVATE_KEY si c'est le nom déjà configuré dans Bitbucket.
+  # La valeur peut être une clé PEM brute ou une clé encodée base64.
   yaml-anchors:
     avelomi-ssh-setup: &avelomi-ssh-setup |
       apk add --no-cache openssh-client
       mkdir -p ~/.ssh && chmod 700 ~/.ssh
-      echo "$AVELOMI_SSH_KEY" | base64 -d > ~/.ssh/avelomi.pem
+      SSH_KEY_MATERIAL="${AVELOMI_SSH_KEY:-${LIGHTSAIL_PRIVATE_KEY:-}}"
+      if [ -z "$SSH_KEY_MATERIAL" ]; then
+        echo "Missing Avelomi SSH key: set AVELOMI_SSH_KEY or LIGHTSAIL_PRIVATE_KEY in Bitbucket secured variables." >&2
+        exit 1
+      fi
+      if printf '%s\n' "$SSH_KEY_MATERIAL" | grep -q -- "-----BEGIN .*PRIVATE KEY-----"; then
+        printf '%b\n' "$SSH_KEY_MATERIAL" > ~/.ssh/avelomi.pem
+      else
+        printf '%s' "$SSH_KEY_MATERIAL" | base64 -d > ~/.ssh/avelomi.pem || {
+          echo "Avelomi SSH key is neither PEM nor valid base64." >&2
+          exit 1
+        }
+      fi
       chmod 600 ~/.ssh/avelomi.pem
+      ssh-keygen -y -f ~/.ssh/avelomi.pem >/dev/null || {
+        echo "Avelomi SSH key file is invalid or encrypted with a passphrase." >&2
+        exit 1
+      }
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
