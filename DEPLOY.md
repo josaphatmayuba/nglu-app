@@ -5,7 +5,8 @@ Three environments, three configurations.
 | Environnement | Domaine | Branche Git | Localisation | BD |
 |---|---|---|---|---|
 | **Local** | http://localhost:3000 | n'importe quelle branche | Machine du dev | MySQL container local |
-| **Development** | https://dev.ongdngolu.org + https://dev.avelomi.com | `develop` | Lightsail (16.54.167.125) | MySQL container sur le serveur |
+| **Development** | https://dev.ongdngolu.org | `develop` | Lightsail (16.54.167.125) | MySQL container sur le serveur |
+| **Avelomi Development** | https://dev.avelomi.com | `develop` | Lightsail (3.128.45.29) | Static site only |
 | **Production** | https://ongdngolu.org | `master` | Lightsail (16.54.167.125) | MySQL externe (35.169.124.49) |
 
 ---
@@ -187,11 +188,10 @@ nano /opt/nglu-app-dev/.env.dev   # Remplir DB_PASSWORD, DB_ROOT_PASSWORD
 cp /opt/nglu-app-dev/.env.dev /opt/nglu-app-dev/.env
 ```
 
-### c. Émettre le certificat SSL pour les domaines dev
+### c. Émettre le certificat SSL pour dev.ongdngolu.org
 
 **Prérequis** :
 - DNS `dev.ongdngolu.org` doit pointer vers `16.54.167.125`
-- DNS `dev.avelomi.com` doit pointer vers `16.54.167.125`
 - Le port 80 doit être accessible
 - Le container `nglu_prod_frontend` doit tourner (il sert le challenge ACME)
 

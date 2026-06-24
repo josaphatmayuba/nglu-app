@@ -1,32 +1,20 @@
 #!/bin/bash
-# Issue / expand the shared development Let's Encrypt certificate.
+# Issue / expand the ongdngolu development Let's Encrypt certificate.
 #
 # Prerequisites:
 #   - DNS for dev.ongdngolu.org must point to 16.54.167.125.
-#   - DNS for dev.avelomi.com must point to 16.54.167.125.
 #   - The prod nginx container must be running and serving /.well-known/acme-challenge/.
 
 set -euo pipefail
 
 EMAIL="${CERT_EMAIL:-admin@ongdngolu.org}"
 PRIMARY_DOMAIN="${DEV_DOMAIN:-dev.ongdngolu.org}"
-AVELOMI_DEV_DOMAIN="${AVELOMI_DEV_DOMAIN:-dev.avelomi.com}"
 
-DOMAINS=("$PRIMARY_DOMAIN")
-if [ -n "$AVELOMI_DEV_DOMAIN" ]; then
-  DOMAINS+=("$AVELOMI_DEV_DOMAIN")
-fi
-
-CERTBOT_DOMAIN_ARGS=()
-for domain in "${DOMAINS[@]}"; do
-  CERTBOT_DOMAIN_ARGS+=("-d" "$domain")
-done
-
-echo "Issuing/expanding dev cert: ${DOMAINS[*]}"
+echo "Issuing/expanding dev cert: $PRIMARY_DOMAIN"
 sudo certbot certonly --webroot \
   -w /var/www/certbot \
   --cert-name "$PRIMARY_DOMAIN" \
-  "${CERTBOT_DOMAIN_ARGS[@]}" \
+  -d "$PRIMARY_DOMAIN" \
   --expand \
   --email "$EMAIL" \
   --agree-tos \
@@ -39,7 +27,5 @@ docker exec nglu_prod_frontend nginx -s reload
 
 echo ""
 echo "Certificate issued and nginx reloaded."
-for domain in "${DOMAINS[@]}"; do
-  echo "  Verify: curl -I https://$domain"
-done
+echo "  Verify: curl -I https://$PRIMARY_DOMAIN"
 echo "  Cert location: /etc/letsencrypt/live/$PRIMARY_DOMAIN/"

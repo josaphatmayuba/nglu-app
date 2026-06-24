@@ -15,6 +15,7 @@
 #
 # Prerequisites you must arrange BEFORE running:
 #   - DNS: avelomi.com (and www) → 3.128.45.29
+#   - DNS: dev.avelomi.com → 3.128.45.29
 #   - The Bitbucket CI SSH *public* key is in ~/.ssh/authorized_keys here, so the
 #     pipeline can deploy after provisioning (see "Pipeline access" at the end).
 # ──────────────────────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ APP=/opt/nglu-app
 REPO_URL="${REPO_URL:-https://bitbucket.org/ngolu-ong-gestion/nglu-app.git}"
 BRANCH="${BRANCH:-master}"
 DOMAIN="${DOMAIN:-avelomi.com}"
+DEV_DOMAIN="${DEV_DOMAIN:-dev.$DOMAIN}"
 CERT_EMAIL="${CERT_EMAIL:-admin@avelomi.com}"
 # Static apps that the prod compose bind-mounts from /opt/nglu-app-dev (dev assets).
 # On a server WITHOUT a dev stack these paths don't exist and the frontend
@@ -108,17 +110,32 @@ else
 fi
 
 # ── 6. TLS certificate (needs nginx serving the ACME challenge OR standalone) ─
+CERT_DOMAINS=(-d "$DOMAIN" -d "www.$DOMAIN")
+if [ -n "$DEV_DOMAIN" ]; then
+  CERT_DOMAINS+=(-d "$DEV_DOMAIN")
+fi
+
 if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
   log "Issuing Let's Encrypt cert for $DOMAIN (standalone — port 80 must be free)"
   sudo certbot certonly --standalone \
-    -d "$DOMAIN" -d "www.$DOMAIN" \
+    "${CERT_DOMAINS[@]}" \
     --email "$CERT_EMAIL" --agree-tos --non-interactive
   echo "  ✓ cert issued"
 else
   echo "  ✓ cert for $DOMAIN already present"
+  if [ -n "$DEV_DOMAIN" ] && ! sudo openssl x509 -in "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" -noout -text | grep -q "DNS:$DEV_DOMAIN"; then
+    log "Expanding $DOMAIN cert to include $DEV_DOMAIN"
+    sudo certbot certonly --webroot \
+      -w /var/www/certbot \
+      --cert-name "$DOMAIN" \
+      "${CERT_DOMAINS[@]}" \
+      --expand \
+      --email "$CERT_EMAIL" --agree-tos --non-interactive
+    echo "  ✓ cert expanded"
+  fi
 fi
 
-# ── 7. Install Avelomi nginx config (single-domain avelomi.com) ──────────────
+# ── 7. Install Avelomi nginx config (avelomi.com + dev.avelomi.com) ──────────
 # The compose frontend mounts nginx/nginx.frontend.conf. On Avelomi that path
 # must hold the avelomi.com config, NOT the ongdngolu dual-domain one (whose
 # dev.ongdngolu.org cert is absent here -> nginx -t fails). The pipeline keeps
@@ -148,7 +165,5 @@ Pipeline access (pour que Bitbucket déploie ensuite) :
   - Côté pipeline : le step master déploiera vers ce serveur via les variables
     AVELOMI_SERVER / AVELOMI_BASE_URL (voir bitbucket-pipelines.yml).
 
-NB nginx : nginx/nginx.frontend.conf contient des server_name ongdngolu.org en dur.
-Le frontend répond quand même par défaut, mais pour un vrai vhost avelomi.com
-(redirections/HSTS propres), adapte la conf — étape distincte de ce provisioning.
+NB nginx : nginx/nginx.avelomi.conf sert avelomi.com et dev.avelomi.com.
 EOF

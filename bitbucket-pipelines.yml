@@ -1,7 +1,7 @@
 image: node:20-alpine
 
 # CI/CD multi-projets NgluApp — deploiement cible.
-#   develop -> dev  (dev.ongdngolu.org + dev.avelomi.com, /opt/nglu-app-dev, projet compose nglu_dev)
+#   develop -> dev  (dev.ongdngolu.org on ongdngolu, dev.avelomi.com on Avelomi)
 #   master  -> prod (ongdngolu.org,     /opt/nglu-app,      projet compose nglu_prod)
 #
 # Chaque projet a son propre step build+deploy, conditionne sur son dossier
@@ -264,17 +264,19 @@ pipelines:
           - step:
               name: Avelomi-site → dev
               caches: [node-avelomi]
-              condition: { changesets: { includePaths: ["avelomi-site/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["avelomi-site/**", "nginx/nginx.avelomi.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
               script:
-                - apk add --no-cache openssh-client
+                - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "mkdir -p $APP/avelomi-site/dist $PROD_APP/nginx"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
-                - scp -o StrictHostKeyChecking=no -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
+                - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
                 - $SSH $SERVER "find $APP/avelomi-site/dist -mindepth 1 -delete && cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && rm -rf /tmp/avelomi-site-dist"
-                - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                - $SCP nginx/nginx.avelomi.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SCP docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
                 - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
@@ -640,12 +642,29 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd frontend && npm install --legacy-peer-deps && npm run build:dev && cd ..
-                - for a in domus-app farmos-app batipro-app hr-app marketing-site avelomi-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
+                - for a in domus-app farmos-app batipro-app hr-app marketing-site; do (cd $a && npm install --legacy-peer-deps && npm run build && cd ..); done
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site avelomi-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
+                - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+          - step:
+              name: Avelomi-site → dev (full)
+              caches: [node-avelomi]
+              script:
+                - *avelomi-ssh-setup
+                - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "mkdir -p $APP/avelomi-site/dist $PROD_APP/nginx"
+                - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
+                - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
+                - $SSH $SERVER "find $APP/avelomi-site/dist -mindepth 1 -delete && cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && rm -rf /tmp/avelomi-site-dist"
+                - $SCP nginx/nginx.avelomi.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
+                - $SCP docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
                 - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
