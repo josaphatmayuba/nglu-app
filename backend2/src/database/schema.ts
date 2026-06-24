@@ -965,6 +965,7 @@ export const realEstateContractTemplates = mysqlTable("real_estate_contract_temp
 
 export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audit_logs", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   contractId: bigint("contract_id", { mode: "number" }).notNull(),
   event: varchar("event", { length: 100 }).notNull(),
   ip: varchar("ip", { length: 100 }),
@@ -1026,6 +1027,7 @@ export const mfaRecoveryCodes = mysqlTable("mfa_recovery_codes", {
 
 export const departments = mysqlTable("department", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   status: varchar("status", { length: 10 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
@@ -1034,6 +1036,7 @@ export const departments = mysqlTable("department", {
 
 export const employmentStatuses = mysqlTable("employmentStatus", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   colourValue: varchar("colourValue", { length: 255 }).notNull(),
   description: varchar("description", { length: 255 }),
@@ -1044,6 +1047,7 @@ export const employmentStatuses = mysqlTable("employmentStatus", {
 
 export const educations = mysqlTable("education", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   degree: varchar("degree", { length: 255 }).notNull(),
   institution: varchar("institution", { length: 255 }).notNull(),
@@ -1058,6 +1062,7 @@ export const educations = mysqlTable("education", {
 
 export const designations = mysqlTable("designations", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   status: varchar("status", { length: 10 }).default("true").notNull(),
   createdAt: timestamp("created_at"),
@@ -1066,6 +1071,7 @@ export const designations = mysqlTable("designations", {
 
 export const shifts = mysqlTable("shifts", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   startTime: varchar("startTime", { length: 20 }).notNull(),
   endTime: varchar("endTime", { length: 20 }).notNull(),
@@ -1099,6 +1105,7 @@ export const hrAttendances = mysqlTable("hr_attendances", {
 
 export const awards = mysqlTable("awards", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   status: varchar("status", { length: 10 }).default("true").notNull(),
@@ -1108,6 +1115,7 @@ export const awards = mysqlTable("awards", {
 
 export const designationHistories = mysqlTable("designation_histories", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   designationId: bigint("designationId", { mode: "number" }).notNull(),
   startDate: date("startDate", { mode: "string" }),
@@ -1119,6 +1127,7 @@ export const designationHistories = mysqlTable("designation_histories", {
 
 export const salaryHistories = mysqlTable("salary_histories", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   salary: double("salary").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
@@ -1211,6 +1220,7 @@ export const hrProjectAssignments = mysqlTable("hr_project_assignments", {
 
 export const awardHistories = mysqlTable("award_histories", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   awardId: bigint("awardId", { mode: "number" }).notNull(),
   awardedDate: date("awardedDate", { mode: "string" }).notNull(),
@@ -1441,6 +1451,7 @@ export const hrCandidateEvaluations = mysqlTable("hr_candidate_evaluations", {
 
 export const hrPersonalDocuments = mysqlTable("hr_personal_documents", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("userId", { mode: "number" }).notNull(),
   documentType: varchar("documentType", { length: 100 }).notNull(),
   fileName: varchar("fileName", { length: 255 }).notNull(),
