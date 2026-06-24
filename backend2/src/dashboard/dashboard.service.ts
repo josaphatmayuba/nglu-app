@@ -17,6 +17,7 @@ import {
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { DashboardQueryDto } from "./dto/dashboard-query.dto";
 
 @Injectable()
@@ -306,12 +307,10 @@ export class DashboardService {
   }
 
   /** Devise par defaut lue depuis le parametre (appSetting.currencyId). Jamais codee en dur. */
-  private async defaultCurrency() {
-    const [setting] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
-    if (!setting?.currencyId) return null;
+  private async defaultCurrency(org: number) {
+    const setting = await readOrgAppSetting(this.db, org, { currencyId: appSettings.currencyId });
+    const settingCurrencyId = setting?.currencyId as number | null | undefined;
+    if (!settingCurrencyId) return null;
     const [cur] = await this.db
       .select({
         id: currencies.id,
@@ -320,7 +319,7 @@ export class DashboardService {
         currencySymbol: currencies.currencySymbol,
       })
       .from(currencies)
-      .where(eq(currencies.id, setting.currencyId))
+      .where(eq(currencies.id, settingCurrencyId))
       .limit(1);
     return cur ?? null;
   }
@@ -340,7 +339,7 @@ export class DashboardService {
       .groupBy(saleInvoices.currencyId, currencies.currencyCode, currencies.currencyName, currencies.currencySymbol);
 
     // Fallback = devise par defaut du parametre (pas une constante en dur).
-    const def = await this.defaultCurrency();
+    const def = await this.defaultCurrency(org);
     return rows.map((r) => ({
       currencyId: r.currencyId ?? def?.id ?? null,
       currencyCode: r.currencyCode ?? def?.currencyCode ?? null,

@@ -12,6 +12,7 @@ import {
   transactions,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService, type LedgerLineInput } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import {
@@ -97,8 +98,8 @@ export class PurchaseInvoicesService {
     // Resolve currency: explicit input or fallback to app default
     let currencyId = input.currencyId ?? null;
     if (!currencyId) {
-      const [setting] = await this.db.select({ currencyId: appSettings.currencyId }).from(appSettings).limit(1);
-      currencyId = setting?.currencyId ?? null;
+      const setting = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+      currencyId = (setting?.currencyId as number | null) ?? null;
     }
 
     await this.db.insert(purchaseInvoices).values({

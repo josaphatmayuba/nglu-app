@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Put, Req, UploadedFiles, UseGuar
 import { AnyFilesInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { AppSettingsService } from "./app-settings.service";
 import { UpdateAppSettingDto } from "./dto/update-app-setting.dto";
@@ -25,8 +26,13 @@ export class AppSettingsController {
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: APP_SETTING_UPLOAD_LIMIT_BYTES, files: 1 } }))
   @Put()
-  update(@Body() body: UpdateAppSettingDto, @UploadedFiles() files: any[], @Req() req: Request) {
-    return this.appSettingsService.update(body, files, this.publicApiBase(req));
+  update(
+    @Body() body: UpdateAppSettingDto,
+    @UploadedFiles() files: any[],
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.appSettingsService.update(body, files, this.publicApiBase(req), orgId);
   }
 
   @ApiOperation({ summary: "Update app settings (Laravel-compatible form method)" })
@@ -35,8 +41,13 @@ export class AppSettingsController {
   @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: APP_SETTING_UPLOAD_LIMIT_BYTES, files: 1 } }))
   @Post()
   @HttpCode(200)
-  updateFromForm(@Body() body: UpdateAppSettingDto, @UploadedFiles() files: any[], @Req() req: Request) {
-    return this.appSettingsService.update(body, files, this.publicApiBase(req));
+  updateFromForm(
+    @Body() body: UpdateAppSettingDto,
+    @UploadedFiles() files: any[],
+    @Req() req: Request,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.appSettingsService.update(body, files, this.publicApiBase(req), orgId);
   }
 
   private publicApiBase(req: Request) {

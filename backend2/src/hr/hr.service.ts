@@ -46,6 +46,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
 import {
@@ -657,8 +658,8 @@ export class HrService {
       ? await this.db.select({ currencyCode: currencies.currencyCode }).from(currencies).where(eq(currencies.id, Number(payroll.currencyId))).limit(1)
       : [null];
 
-    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
-    const orgName = settingRow?.companyName || "Mon Organisation";
+    const settingRow = await readOrgAppSetting(this.db, 1, { companyName: appSettings.companyName });
+    const orgName = (settingRow?.companyName as string | null) || "Mon Organisation";
     const employeeName = [userRow?.firstName, userRow?.lastName].filter(Boolean).join(" ") || `Employé #${payroll.userId}`;
     const matricule = userRow?.employeeId || `EMP-${String(payroll.userId).padStart(6, "0")}`;
     const curr = currencyRow?.currencyCode || "USD";
@@ -1550,8 +1551,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
       .orderBy(desc(hrContracts.id)).limit(1);
     const contract = contracts[0] ?? null;
 
-    const [settingRow] = await this.db.select({ companyName: appSettings.companyName }).from(appSettings).limit(1);
-    const orgName = settingRow?.companyName || "Mon Organisation";
+    const settingRow = await readOrgAppSetting(this.db, 1, { companyName: appSettings.companyName });
+    const orgName = (settingRow?.companyName as string | null) || "Mon Organisation";
     const today = new Date().toLocaleDateString("fr-FR", { year: "numeric", month: "long", day: "numeric" });
     const employeeName = [userRow.firstName, userRow.lastName].filter(Boolean).join(" ");
     const poste = contract?.designationId ? `Poste #${contract.designationId}` : "Non defini";
@@ -2458,12 +2459,9 @@ ${footer}`;
     return rows[0];
   }
 
-  private async resolveDefaultCurrency(): Promise<number | null> {
-    const [row] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
-    return row?.currencyId ?? null;
+  private async resolveDefaultCurrency(orgId = 1): Promise<number | null> {
+    const row = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+    return (row?.currencyId as number | null) ?? null;
   }
 
   private async ensureExists(table: any, id: number, message: string) {
@@ -2890,9 +2888,9 @@ ${footer}`;
   }
 
   // Statut à partir duquel un bulletin verrouille sa période (réglage RH).
-  private async payrollLockStage(): Promise<"validated" | "paid"> {
-    const [row] = await this.db.select({ stage: appSettings.payrollLockStage }).from(appSettings).limit(1);
-    return String(row?.stage || "paid") === "validated" ? "validated" : "paid";
+  private async payrollLockStage(orgId = 1): Promise<"validated" | "paid"> {
+    const row = await readOrgAppSetting(this.db, orgId, { stage: appSettings.payrollLockStage });
+    return String((row?.stage as string | null) || "paid") === "validated" ? "validated" : "paid";
   }
 
   // Refuse l'opération si un bulletin verrouillant (statut >= seuil réglé) de
@@ -3241,11 +3239,17 @@ ${footer}`;
 
   async setPayrollLockStage(stage: string) {
     const value = String(stage) === "validated" ? "validated" : "paid";
-    const [row] = await this.db.select({ id: appSettings.id }).from(appSettings).limit(1);
+    // HR n'est pas (encore) scope par org : on cible la ligne org #1.
+    const [row] = await this.db
+      .select({ id: appSettings.id })
+      .from(appSettings)
+      .where(eq(appSettings.organizationId, 1))
+      .orderBy(appSettings.id)
+      .limit(1);
     if (row) {
       await this.db.update(appSettings).set({ payrollLockStage: value }).where(eq(appSettings.id, row.id));
     } else {
-      await this.db.insert(appSettings).values({ payrollLockStage: value });
+      await this.db.insert(appSettings).values({ organizationId: 1, payrollLockStage: value });
     }
     return { stage: value };
   }

@@ -29,6 +29,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { CompatService } from "../compat/compat.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -354,11 +355,8 @@ export class PropertyManagementService {
     if (!input?.email || !input?.url) {
       throw new BadRequestException("email and url are required.");
     }
-    const [company] = await this.db
-      .select({ name: appSettings.companyName })
-      .from(appSettings)
-      .limit(1);
-    const companyName = company?.name || "votre gestionnaire";
+    const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
     const greeting = input.firstName ? `Bonjour ${input.firstName}` : "Bonjour";
     const html =
       `<p>${greeting},</p>` +
@@ -491,10 +489,7 @@ export class PropertyManagementService {
       })
       .from(currencies)
       .where(eq(currencies.status, "true"));
-    const [setting] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
+    const setting = await readOrgAppSetting(this.db, 1, { currencyId: appSettings.currencyId });
     return {
       id: onboarding.id,
       phone: onboarding.phone,
@@ -502,7 +497,7 @@ export class PropertyManagementService {
       data: this.parseOnboardingData(onboarding.data),
       expiresAt: onboarding.expiresAt,
       currencies: activeCurrencies,
-      defaultCurrencyId: setting?.currencyId ?? null,
+      defaultCurrencyId: (setting?.currencyId as number | null) ?? null,
     };
   }
 
@@ -642,7 +637,7 @@ export class PropertyManagementService {
 
   async createProperty(input: CreatePropertyDto, orgId: number) {
     const code = input.code?.trim() || (await this.nextPropertyCode());
-    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
@@ -771,7 +766,7 @@ export class PropertyManagementService {
 
   async createUnit(input: CreateUnitDto, orgId: number) {
     await this.ensureActiveProperty(input.propertyId, orgId);
-    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
     if (currencyId) {
       await this.ensureExists(currencies, currencyId, "Currency not found.");
     }
@@ -869,7 +864,7 @@ export class PropertyManagementService {
 
   async createLease(input: CreateLeaseDto, orgId: number) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId, orgId);
-    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
     const [result] = await this.db.insert(realEstateLeases).values({
       organizationId: orgId,
       reference: input.reference || `LEASE-${Date.now()}`,
@@ -1039,7 +1034,7 @@ export class PropertyManagementService {
     const paymentCurrencyId =
       (input as any).currencyId
       ?? (lease as any).currencyId
-      ?? (await this.resolveDefaultCurrency());
+      ?? (await this.resolveDefaultCurrency(orgId));
 
     const [transactionResult] = await this.db.insert(transactions).values({
       organizationId: orgId,
@@ -1191,7 +1186,7 @@ export class PropertyManagementService {
     const debitId = bank ? 2 : 1; // 2=Bank, 1=Cash
     const creditId = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const currencyId =
-      (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+      (input as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
 
     const [txResult] = await this.db.insert(transactions).values({
       organizationId: orgId,
@@ -1272,7 +1267,7 @@ export class PropertyManagementService {
     // sort de Caisse/Banque (crédit) et la retenue couvre la maintenance (crédit).
     const tenantDeposits = await this.getOrCreateLiabilitySubAccount("Tenant Deposits", orgId);
     const refundCredit = this.isBankMethod(input.returnMethod) ? 2 : 1; // 2=Bank, 1=Cash
-    const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency());
+    const currencyId = (deposit as any).currencyId ?? (lease as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
 
     let returnTransactionId: number | null = null;
     if (returned > 0) {
@@ -2245,12 +2240,9 @@ export class PropertyManagementService {
   // Returns the appSetting's currencyId or null if no row exists yet.
   // Used as fallback when a transaction is created without an explicit
   // currencyId (legacy clients).
-  private async resolveDefaultCurrency(): Promise<number | null> {
-    const [row] = await this.db
-      .select({ currencyId: appSettings.currencyId })
-      .from(appSettings)
-      .limit(1);
-    return row?.currencyId ?? null;
+  private async resolveDefaultCurrency(orgId = 1): Promise<number | null> {
+    const row = await readOrgAppSetting(this.db, orgId, { currencyId: appSettings.currencyId });
+    return (row?.currencyId as number | null) ?? null;
   }
 
   private money(value: number | undefined | null) {

@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { basename, join } from "path";
 import { DRIZZLE } from "../database/database.constants";
@@ -13,7 +13,7 @@ export class AppSettingsService {
 
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async findOne() {
+  async findOne(orgId = 1) {
     const rows = await this.db
       .select({
         id: appSettings.id,
@@ -42,7 +42,8 @@ export class AppSettingsService {
       })
       .from(appSettings)
       .leftJoin(currencies, eq(currencies.id, appSettings.currencyId!))
-      .where(eq(appSettings.id, 1))
+      .where(sql`(${appSettings.organizationId} = ${orgId} OR ${appSettings.organizationId} = 1)`)
+      .orderBy(desc(sql`(${appSettings.organizationId} = ${orgId})`), eq(appSettings.organizationId, 1))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("App setting not found");
@@ -59,8 +60,11 @@ export class AppSettingsService {
     };
   }
 
-  async update(dto: UpdateAppSettingDto, files: any[] = [], publicApiBase?: string) {
-    const current = await this.findOne();
+  async update(dto: UpdateAppSettingDto, files: any[] = [], publicApiBase?: string, orgId = 1) {
+    const current = await this.findOne(orgId);
+    // Cible la ligne PROPRE a l'org. Si l'org n'a pas encore sa ligne (findOne a
+    // renvoye le fallback org #1), on en cree une pour ne pas ecraser org #1.
+    const ownRow = await this.ensureOrgRow(orgId);
 
     const uploadedLogo = this.saveLogo(files, publicApiBase);
     const logo = dto.clearLogo === "true" ? null : (uploadedLogo ?? dto.logo ?? current.logo);
@@ -94,9 +98,49 @@ export class AppSettingsService {
         defaultPaymentTermDays: dto.defaultPaymentTermDays ?? current.defaultPaymentTermDays,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(appSettings.id, 1));
+      .where(eq(appSettings.id, ownRow));
 
-    return this.findOne();
+    return this.findOne(orgId);
+  }
+
+  /**
+   * Renvoie l'id de la ligne appSetting PROPRE a l'org. La cree (copie des
+   * valeurs du fallback org #1) si elle n'existe pas encore. Pour org #1, renvoie
+   * directement la ligne existante.
+   */
+  private async ensureOrgRow(orgId: number): Promise<number> {
+    const own = await this.db
+      .select({ id: appSettings.id })
+      .from(appSettings)
+      .where(eq(appSettings.organizationId, orgId))
+      .orderBy(appSettings.id)
+      .limit(1);
+    if (own.length) return own[0].id;
+
+    // Pas de ligne pour cette org : on en provisionne une a partir du fallback.
+    const base = await this.findOne(orgId);
+    const [res] = await this.db.insert(appSettings).values({
+      organizationId: orgId,
+      companyName: base.companyName,
+      dashboardType: base.dashboardType,
+      tagLine: base.tagLine,
+      address: base.address,
+      phone: base.phone,
+      email: base.email,
+      website: base.website,
+      footer: base.footer,
+      currencyId: base.currencyId,
+      isPos: base.isPos,
+      isDiscount: base.isDiscount,
+      isTax: base.isTax,
+      invoicePrefix: base.invoicePrefix,
+      leasePrefix: base.leasePrefix,
+      defaultVatRate: base.defaultVatRate,
+      defaultPaymentTermDays: base.defaultPaymentTermDays,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    } as any);
+    return Number((res as any).insertId);
   }
 
   private saveLogo(files: any[], publicApiBase?: string) {

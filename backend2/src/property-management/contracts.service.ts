@@ -14,6 +14,7 @@ import {
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { CompatService } from "../compat/compat.service";
 import type { DataUpdateAction, DataUpdateScope } from "../realtime/data-update-event";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
@@ -689,20 +690,16 @@ export class ContractsService {
       .replace(/'/g, "&#39;");
   }
 
-  private async getCompanyInfo(): Promise<CompanyInfo> {
-    const rows = await this.db
-      .select({
-        companyName: appSettings.companyName,
-        address: appSettings.address,
-        phone: appSettings.phone,
-        email: appSettings.email,
-        landlordSignature: appSettings.landlordSignature,
-      })
-      .from(appSettings)
-      .where(eq(appSettings.id, 1))
-      .limit(1);
+  private async getCompanyInfo(orgId = 1): Promise<CompanyInfo> {
+    const row = await readOrgAppSetting(this.db, orgId, {
+      companyName: appSettings.companyName,
+      address: appSettings.address,
+      phone: appSettings.phone,
+      email: appSettings.email,
+      landlordSignature: appSettings.landlordSignature,
+    });
 
-    return rows[0] ?? { companyName: null, address: null, phone: null, email: null, landlordSignature: null };
+    return (row as CompanyInfo) ?? { companyName: null, address: null, phone: null, email: null, landlordSignature: null };
   }
 
   private formatDate(value: Date | string | null | undefined) {

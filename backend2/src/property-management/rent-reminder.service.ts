@@ -13,6 +13,7 @@ import {
   tenantDetails,
 } from "../database/schema";
 import type { Database } from "../database/types";
+import { readOrgAppSetting } from "../app-settings/org-app-setting";
 import { SystemEmailService } from "../system-email/system-email.service";
 
 @Injectable()
@@ -43,13 +44,14 @@ export class RentReminderService {
     cutoff.setDate(cutoff.getDate() - overdueDays);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-    const [company] = await this.db
-      .select({ name: appSettings.companyName, phone: appSettings.phone, address: appSettings.address })
-      .from(appSettings)
-      .limit(1);
+    const company = await readOrgAppSetting(this.db, 1, {
+      name: appSettings.companyName,
+      phone: appSettings.phone,
+      address: appSettings.address,
+    });
 
-    const companyName = company?.name || "votre gestionnaire";
-    const companyPhone = (company?.phone || "").trim();
+    const companyName = (company?.name as string | null) || "votre gestionnaire";
+    const companyPhone = ((company?.phone as string | null) || "").trim();
     const contactLine = companyPhone ? ` au ${companyPhone}` : "";
 
     const rows = await this.db
