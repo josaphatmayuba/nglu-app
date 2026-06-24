@@ -109,7 +109,7 @@ export class DesignationController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listDesignations(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findDesignation(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findDesignation(id, orgId); }
   @Post() create(@Body() body: CreateDesignationDto, @Query() q: Record<string, string>) {
     if (q["query"] === "createmany") return Promise.all([body].map((item) => this.service.createDesignation(item)));
     return this.service.createDesignation(body);
@@ -128,7 +128,7 @@ export class ShiftController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listShifts(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findShift(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findShift(id, orgId); }
   @Post() create(@Body() body: CreateShiftDto) { return this.service.createShift(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateShiftDto) { return this.service.updateShift(id, body); }
@@ -145,7 +145,7 @@ export class HrAttendanceController {
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listAttendances(q, orgId); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.attendanceSummary(q); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findAttendance(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAttendance(id, orgId); }
   @Post() create(@Body() body: CreateHrAttendanceDto) { return this.service.createAttendance(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrAttendanceDto) { return this.service.updateAttendance(id, body); }
@@ -161,7 +161,7 @@ export class AwardController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listAwards(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findAward(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAward(id, orgId); }
   @Post() create(@Body() body: CreateAwardDto) { return this.service.createAward(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto) { return this.service.updateAward(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardDto) { return this.service.updateAward(id, body); }
@@ -177,7 +177,7 @@ export class DesignationHistoryController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listDesignationHistory(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findDesignationHistory(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findDesignationHistory(id, orgId); }
   @Post() create(@Body() body: CreateDesignationHistoryDto) { return this.service.createDesignationHistory(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateDesignationHistoryDto) { return this.service.updateDesignationHistory(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(designationHistories, id, orgId); }
@@ -229,7 +229,7 @@ export class HrPayrollController {
     res.setHeader("Content-Length", pdfBuffer.length);
     res.end(pdfBuffer);
   }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPayroll(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findPayroll(id, orgId); }
   @Post() create(@Body() body: CreateHrPayrollDto) { return this.service.createPayroll(body); }
   @Post(":id/submit") submit(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto) { return this.service.submitPayroll(id, body.approvedBy); }
   @Post(":id/approve") approve(@Param("id", ParseIntPipe) id: number, @Body() body: PayrollApprovalDto, @Req() req: Request) { return this.service.approvePayroll(id, this.actorId(req) ?? body.approvedBy, body.comment); }
@@ -250,7 +250,7 @@ export class HrProjectController {
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listProjects(q, orgId); }
   @Get("report") report(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.projectAnalytics(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findProject(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findProject(id, orgId); }
   @Post() create(@Body() body: CreateHrProjectDto) { return this.service.createProject(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectDto) { return this.service.updateProject(id, body); }
@@ -266,7 +266,7 @@ export class HrProjectAssignmentController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listProjectAssignments(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findProjectAssignment(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findProjectAssignment(id, orgId); }
   @Post() create(@Body() body: CreateHrProjectAssignmentDto) { return this.service.createProjectAssignment(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrProjectAssignmentDto) { return this.service.updateProjectAssignment(id, body); }
@@ -282,7 +282,7 @@ export class AwardHistoryController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listAwardHistory(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findAwardHistory(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findAwardHistory(id, orgId); }
   @Post() create(@Body() body: CreateAwardHistoryDto) { return this.service.createAwardHistory(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateAwardHistoryDto) { return this.service.updateAwardHistory(id, body); }
   @Delete(":id") delete(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.deleteRow(awardHistories, id, orgId); }
@@ -298,7 +298,7 @@ export class HrLeaveRequestController {
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listLeaveRequests(q, orgId); }
   @Get("summary") summary(@Query() q: Record<string, string>) { return this.service.leaveSummary(q); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findLeaveRequest(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findLeaveRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrLeaveRequestDto) { return this.service.createLeaveRequest(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrLeaveRequestDto) { return this.service.updateLeaveRequest(id, body); }
@@ -314,7 +314,7 @@ export class HrContractController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listContracts(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findContract(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findContract(id, orgId); }
   @Post() create(@Body() body: CreateHrContractDto) { return this.service.createContract(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto) { return this.service.updateContract(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrContractDto) { return this.service.updateContract(id, body); }
@@ -336,7 +336,7 @@ export class HrDocumentController {
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listDocuments(q, orgId); }
   @Get("summary") summary() { return this.service.documentSummary(); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findDocument(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findDocument(id, orgId); }
   @Post() create(@Body() body: CreateHrDocumentDto) { return this.service.createDocument(body); }
   @Post("generate") generate(@Body() body: GenerateHrDocumentDto) { return this.service.generateDocument(body); }
   @Get(":id/pdf") async pdf(@Param("id", ParseIntPipe) id: number, @Res() res: Response) {
@@ -365,7 +365,7 @@ export class HrExpenseRequestController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listExpenseRequests(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findExpenseRequest(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findExpenseRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrExpenseRequestDto) { return this.service.createExpenseRequest(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto) { return this.service.updateExpenseRequest(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrExpenseRequestDto) { return this.service.updateExpenseRequest(id, body); }
@@ -381,7 +381,7 @@ export class HrSocialDeclarationController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listSocialDeclarations(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findSocialDeclaration(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findSocialDeclaration(id, orgId); }
   @Post() create(@Body() body: CreateHrSocialDeclarationDto) { return this.service.createSocialDeclaration(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto) { return this.service.updateSocialDeclaration(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrSocialDeclarationDto) { return this.service.updateSocialDeclaration(id, body); }
@@ -397,7 +397,7 @@ export class HrPerformanceReviewController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listPerformanceReviews(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findPerformanceReview(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findPerformanceReview(id, orgId); }
   @Post() create(@Body() body: CreateHrPerformanceReviewDto) { return this.service.createPerformanceReview(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto) { return this.service.updatePerformanceReview(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrPerformanceReviewDto) { return this.service.updatePerformanceReview(id, body); }
@@ -413,7 +413,7 @@ export class HrTrainingSessionController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listTrainingSessions(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findTrainingSession(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findTrainingSession(id, orgId); }
   @Post() create(@Body() body: CreateHrTrainingSessionDto) { return this.service.createTrainingSession(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTrainingSessionDto) { return this.service.updateTrainingSession(id, body); }
@@ -429,7 +429,7 @@ export class HrTimesheetController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listTimesheets(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findTimesheet(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findTimesheet(id, orgId); }
   @Post() create(@Body() body: CreateHrTimesheetDto) { return this.service.createTimesheet(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrTimesheetDto) { return this.service.updateTimesheet(id, body); }
@@ -445,7 +445,7 @@ export class HrEmployeeRequestController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listEmployeeRequests(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findEmployeeRequest(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findEmployeeRequest(id, orgId); }
   @Post() create(@Body() body: CreateHrEmployeeRequestDto) { return this.service.createEmployeeRequest(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrEmployeeRequestDto) { return this.service.updateEmployeeRequest(id, body); }
@@ -461,7 +461,7 @@ export class HrRecruitmentOfferController {
   constructor(private readonly service: HrService) {}
 
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listRecruitmentOffers(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findRecruitmentOffer(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findRecruitmentOffer(id, orgId); }
   @Post() create(@Body() body: CreateHrRecruitmentOfferDto) { return this.service.createRecruitmentOffer(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrRecruitmentOfferDto) { return this.service.updateRecruitmentOffer(id, body); }
@@ -478,7 +478,7 @@ export class HrCandidateController {
 
   @Get("summary") summary() { return this.service.candidateSummary(); }
   @Get() list(@Query() q: Record<string, string>, @CurrentOrg() orgId: number) { return this.service.listCandidates(q, orgId); }
-  @Get(":id") one(@Param("id", ParseIntPipe) id: number) { return this.service.findCandidate(id); }
+  @Get(":id") one(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) { return this.service.findCandidate(id, orgId); }
   @Post() create(@Body() body: CreateHrCandidateDto) { return this.service.createCandidate(body); }
   @Put(":id") update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }
   @Patch(":id") patch(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateHrCandidateDto) { return this.service.updateCandidate(id, body); }

@@ -133,8 +133,10 @@ export class HrService {
     return this.listSimple(q, designations, "getAllDesignation", "totalDesignation", orgId);
   }
 
-  findDesignation(id: number) {
-    return this.findOne(designations, id, "Designation not found.");
+  findDesignation(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(designations, id, "Designation not found.")
+      : this.findOneInOrg(designations, id, orgId, "Designation not found.");
   }
 
   async createDesignation(input: CreateDesignationDto) {
@@ -163,8 +165,10 @@ export class HrService {
     return this.listSimple(q, shifts, "getAllShift", "totalShift", orgId);
   }
 
-  findShift(id: number) {
-    return this.findOne(shifts, id, "Shift not found.");
+  findShift(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(shifts, id, "Shift not found.")
+      : this.findOneInOrg(shifts, id, orgId, "Shift not found.");
   }
 
   async createShift(input: CreateShiftDto) {
@@ -201,8 +205,10 @@ export class HrService {
     return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance", orgId);
   }
 
-  findAttendance(id: number) {
-    return this.findOne(hrAttendances, id, "Attendance not found.");
+  findAttendance(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrAttendances, id, "Attendance not found.")
+      : this.findOneInOrg(hrAttendances, id, orgId, "Attendance not found.");
   }
 
   async createAttendance(input: CreateHrAttendanceDto) {
@@ -290,8 +296,10 @@ export class HrService {
     return this.listSimple(q, awards, "getAllAward", "totalAward", orgId);
   }
 
-  findAward(id: number) {
-    return this.findOne(awards, id, "Award not found.");
+  findAward(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(awards, id, "Award not found.")
+      : this.findOneInOrg(awards, id, orgId, "Award not found.");
   }
 
   async createAward(input: CreateAwardDto) {
@@ -335,8 +343,10 @@ export class HrService {
     return this.findDesignationHistory(Number(result.insertId));
   }
 
-  findDesignationHistory(id: number) {
-    return this.findOne(designationHistories, id, "Designation history not found.");
+  findDesignationHistory(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(designationHistories, id, "Designation history not found.")
+      : this.findOneInOrg(designationHistories, id, orgId, "Designation history not found.");
   }
 
   async updateDesignationHistory(id: number, input: UpdateDesignationHistoryDto) {
@@ -600,7 +610,7 @@ export class HrService {
     return { getAllHrPayroll: rows, totalHrPayroll: Number(total ?? 0) };
   }
 
-  async findPayroll(id: number) {
+  async findPayroll(id: number, orgId?: number) {
     const rows = await this.db
       .select({
         id: hrPayrolls.id,
@@ -648,7 +658,9 @@ export class HrService {
       })
       .from(hrPayrolls)
       .leftJoin(currencies, eq(hrPayrolls.currencyId, currencies.id))
-      .where(eq(hrPayrolls.id, id))
+      .where(orgId === undefined
+        ? eq(hrPayrolls.id, id)
+        : and(eq(hrPayrolls.id, id), eq(hrPayrolls.organizationId, orgId)))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Payroll not found.");
     return rows[0];
@@ -1080,8 +1092,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     `);
   }
 
-  findProject(id: number) {
-    return this.findOne(hrProjects, id, "HR project not found.");
+  findProject(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrProjects, id, "HR project not found.")
+      : this.findOneInOrg(hrProjects, id, orgId, "HR project not found.");
   }
 
   async createProject(input: CreateHrProjectDto) {
@@ -1112,8 +1126,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment", orgId);
   }
 
-  findProjectAssignment(id: number) {
-    return this.findOne(hrProjectAssignments, id, "HR project assignment not found.");
+  findProjectAssignment(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrProjectAssignments, id, "HR project assignment not found.")
+      : this.findOneInOrg(hrProjectAssignments, id, orgId, "HR project assignment not found.");
   }
 
   async createProjectAssignment(input: CreateHrProjectAssignmentDto) {
@@ -1292,8 +1308,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.findAwardHistory(Number(result.insertId));
   }
 
-  findAwardHistory(id: number) {
-    return this.findOne(awardHistories, id, "Award history not found.");
+  findAwardHistory(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(awardHistories, id, "Award history not found.")
+      : this.findOneInOrg(awardHistories, id, orgId, "Award history not found.");
   }
 
   async updateAwardHistory(id: number, input: UpdateAwardHistoryDto) {
@@ -1312,8 +1330,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest", orgId);
   }
 
-  findLeaveRequest(id: number) {
-    return this.findOne(hrLeaveRequests, id, "Leave request not found.");
+  findLeaveRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrLeaveRequests, id, "Leave request not found.")
+      : this.findOneInOrg(hrLeaveRequests, id, orgId, "Leave request not found.");
   }
 
   async createLeaveRequest(input: CreateHrLeaveRequestDto) {
@@ -1403,8 +1423,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract", orgId);
   }
 
-  findContract(id: number) {
-    return this.findOne(hrContracts, id, "HR contract not found.");
+  findContract(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrContracts, id, "HR contract not found.")
+      : this.findOneInOrg(hrContracts, id, orgId, "HR contract not found.");
   }
 
   async createContract(input: CreateHrContractDto) {
@@ -1423,8 +1445,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument", orgId);
   }
 
-  findDocument(id: number) {
-    return this.findOne(hrDocuments, id, "HR document not found.");
+  findDocument(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrDocuments, id, "HR document not found.")
+      : this.findOneInOrg(hrDocuments, id, orgId, "HR document not found.");
   }
 
   async createDocument(input: CreateHrDocumentDto) {
@@ -1695,8 +1719,10 @@ ${footer}`;
     return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest", orgId);
   }
 
-  findExpenseRequest(id: number) {
-    return this.findOne(hrExpenseRequests, id, "Expense request not found.");
+  findExpenseRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrExpenseRequests, id, "Expense request not found.")
+      : this.findOneInOrg(hrExpenseRequests, id, orgId, "Expense request not found.");
   }
 
   async createExpenseRequest(input: CreateHrExpenseRequestDto) {
@@ -1714,8 +1740,10 @@ ${footer}`;
     return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration", orgId);
   }
 
-  findSocialDeclaration(id: number) {
-    return this.findOne(hrSocialDeclarations, id, "Social declaration not found.");
+  findSocialDeclaration(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrSocialDeclarations, id, "Social declaration not found.")
+      : this.findOneInOrg(hrSocialDeclarations, id, orgId, "Social declaration not found.");
   }
 
   async createSocialDeclaration(input: CreateHrSocialDeclarationDto) {
@@ -1731,8 +1759,10 @@ ${footer}`;
     return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview", orgId);
   }
 
-  findPerformanceReview(id: number) {
-    return this.findOne(hrPerformanceReviews, id, "Performance review not found.");
+  findPerformanceReview(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrPerformanceReviews, id, "Performance review not found.")
+      : this.findOneInOrg(hrPerformanceReviews, id, orgId, "Performance review not found.");
   }
 
   async createPerformanceReview(input: CreateHrPerformanceReviewDto) {
@@ -1752,8 +1782,10 @@ ${footer}`;
     return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession", orgId);
   }
 
-  findTrainingSession(id: number) {
-    return this.findOne(hrTrainingSessions, id, "Training session not found.");
+  findTrainingSession(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrTrainingSessions, id, "Training session not found.")
+      : this.findOneInOrg(hrTrainingSessions, id, orgId, "Training session not found.");
   }
 
   async createTrainingSession(input: CreateHrTrainingSessionDto) {
@@ -1769,8 +1801,10 @@ ${footer}`;
     return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet", orgId);
   }
 
-  findTimesheet(id: number) {
-    return this.findOne(hrTimesheets, id, "Timesheet not found.");
+  findTimesheet(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrTimesheets, id, "Timesheet not found.")
+      : this.findOneInOrg(hrTimesheets, id, orgId, "Timesheet not found.");
   }
 
   async createTimesheet(input: CreateHrTimesheetDto) {
@@ -1790,8 +1824,10 @@ ${footer}`;
     return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest", orgId);
   }
 
-  findEmployeeRequest(id: number) {
-    return this.findOne(hrEmployeeRequests, id, "Employee request not found.");
+  findEmployeeRequest(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrEmployeeRequests, id, "Employee request not found.")
+      : this.findOneInOrg(hrEmployeeRequests, id, orgId, "Employee request not found.");
   }
 
   async createEmployeeRequest(input: CreateHrEmployeeRequestDto) {
@@ -1810,8 +1846,10 @@ ${footer}`;
     return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer", orgId);
   }
 
-  findRecruitmentOffer(id: number) {
-    return this.findOne(hrRecruitmentOffers, id, "Recruitment offer not found.");
+  findRecruitmentOffer(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrRecruitmentOffers, id, "Recruitment offer not found.")
+      : this.findOneInOrg(hrRecruitmentOffers, id, orgId, "Recruitment offer not found.");
   }
 
   async createRecruitmentOffer(input: CreateHrRecruitmentOfferDto) {
@@ -1831,8 +1869,10 @@ ${footer}`;
     return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate", orgId);
   }
 
-  findCandidate(id: number) {
-    return this.findOne(hrCandidates, id, "Candidate not found.");
+  findCandidate(id: number, orgId?: number) {
+    return orgId === undefined
+      ? this.findOne(hrCandidates, id, "Candidate not found.")
+      : this.findOneInOrg(hrCandidates, id, orgId, "Candidate not found.");
   }
 
   async createCandidate(input: CreateHrCandidateDto) {
