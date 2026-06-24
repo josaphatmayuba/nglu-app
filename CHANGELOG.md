@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.108.2)
+- Multi-tenant SaaS — **`docs/PLAN_SAAS_MULTITENANT.md` mis à jour** : statut passé de « conception » à **P1→P4 codés et poussés sur develop** (état par phase détaillé). Section 6 « décisions à trancher » → **décisions tranchées** (subAccount dénormalisé ✅, facturation trial+suspend ✅, domaine **sous-domaine `<slug>.nglu.cloud`** ✅). Nouvelle **section 7 « Déploiement »** : étapes concrètes du sous-domaine wildcard (DNS `*.nglu.cloud`, TLS wildcard via Certbot DNS-01, bloc nginx `server_name` regex tenant réutilisant les locations SPA existantes, routes publiques signup + console gardée), ancrée sur la vraie conf `nginx/nginx.frontend.conf`. Note clé : le **path actuel (`/comptabilite/` etc.) est déjà pleinement multi-tenant** (isolation au token) — le sous-domaine est du branding/vernis, pas une exigence fonctionnelle ; à exécuter avec **feu vert owner** (DNS/TLS/nginx prod). [SCRUM]
+
 ### Added (3.108.1)
 - Multi-tenant SaaS **P4 (frontend) — bascule support `X-Active-Org` réelle** : dans `saas-platform-mockup.html`, `startSupportSession` mémorise désormais le `publicId` de l'org cible (`activeOrgRef`) et `authHeaders()` ajoute l'en-tête `X-Active-Org` sur toutes les requêtes LIVE pendant la session support → le super-owner consulte réellement les données de l'org (le backend P1 n'honore l'en-tête que pour un `super_owner`). L'en-tête est nettoyé en fin de session et à chaque sortie de la vue client (`setView`), pour que les actions plateforme (liste/suspend/reactivate) restent dans le contexte propre du super-owner. Les sections plans/billing restent simulées. Syntaxe JS vérifiée. **RESTE déploiement** : servir signup + console en routes publiques/gardées ; sous-domaine `<slug>.nglu.cloud` (wildcard DNS + TLS + routage nginx par host) = infra. [SCRUM]
 

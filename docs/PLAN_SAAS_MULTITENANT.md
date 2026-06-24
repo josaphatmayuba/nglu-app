@@ -1,6 +1,8 @@
 # Plan technique — SaaS multi-tenant (inscription client self-service)
 
-> Statut : **conception** (juin 2026). Aucune ligne de prod écrite. À exécuter **par phases, dev d'abord puis PR develop→master**. Modèle de travail = **fort** (auth + isolation données).
+> Statut : **P1→P4 codés et poussés sur `develop`** (24 juin 2026, VERSION 3.108.1). Reste : (1) **test d'isolation** non exécuté (backend dev/Docker indisponibles), (2) **déploiement infra** = sous-domaine wildcard (section 7), (3) threader l'org dans HR + contracts (chantier dédié). Rien encore en prod (pas de PR develop→master). Modèle de travail = **fort** (auth + isolation données).
+>
+> **État par phase :** P1 super_owner + X-Active-Org ✅ · P2 isolation compta (account/subAccount/transaction_types/transactions/ledger/dashboard/property-management + 0 insert sans org + seeders par org + supplier/paymentMethod + appSetting/org fallback) ✅ · P3 inscription self-service (backend `/auth/register` + front signup câblé) ✅ · P4 console super-owner (backend `/organizations` gardé + front console LIVE + bascule X-Active-Org) ✅.
 
 ## 1. Modèle cible (rappel)
 
@@ -131,8 +133,27 @@ API gardée `manage_organizations` : liste / créer / suspendre (soft, `status=f
 - **Demander avant** : migration destructive, changement prod, reset DB.
 - Déploiement = pipelines (push develop→dev, PR develop→master→prod). Pas de SSH manuel.
 
-## 6. Décisions encore à trancher
+## 6. Décisions tranchées (owner, 22 juin 2026)
 
-1. **subAccount** : colonne dénormalisée (proposé) vs filtrage par jointure. → impacte 2a/2b.
-2. **Facturation/plans** : le mockup a déjà MRR/plans/cycles. v1 = juste `trial` + suspend, ou on câble la facturation dès P4 ? (reco : trial + suspend d'abord, facturation = lot ultérieur.)
-3. **Domaine** : `nglu.cloud/<slug>` (path) vs sous-domaine `<slug>.nglu.cloud` ? Le mockup montre `app.nglu.cloud/<slug>`. Path = plus simple (pas de wildcard DNS/TLS). → reco path.
+1. **subAccount** : ✅ **colonne `organization_id` dénormalisée** (backfill depuis account parent), pas de jointure. — FAIT (migration 0176).
+2. **Facturation/plans** : ✅ **v1 = `trial` + suspend seulement**. Plans/MRR/cycles du mockup = lot ultérieur (restent simulés côté front).
+3. **Domaine** : ✅ **sous-domaine `<slug>.nglu.cloud`** (PAS path). Implique wildcard DNS + TLS wildcard + routage nginx par host → voir section 7.
+
+## 7. Déploiement — sous-domaine `<slug>.nglu.cloud` (à exécuter, feu vert owner requis)
+
+> Sensible (touche DNS + TLS + nginx prod). À faire **par le pipeline / les scripts officiels**, pas de SSH manuel. La conf nginx est montée `:ro` → toute modif = MAJ du fichier hôte + **recreate** du conteneur frontend (reload insuffisant), cf. mémoire `project_frontend_compose_project_nglu-app`.
+
+État actuel (réf `nginx/nginx.frontend.conf`) : un seul `server_name ongdngolu.org dev.ongdngolu.org`, tout servi par **path** (`/`, `/crm`, `/hr/`, `/comptabilite/`, `/farmos/`, `/batipro/`, `/api/`). Le multi-tenant est déjà au backend (token → org), donc le path actuel **fonctionne tel quel** : un client peut utiliser `/comptabilite/` et ne voir que son org. Le sous-domaine est un **vernis d'isolation visuelle/branding**, pas une exigence fonctionnelle.
+
+**Étapes (ordre conseillé) :**
+
+1. **DNS wildcard** : enregistrement `*.nglu.cloud` → IP du frontend (Lightsail). + `nglu.cloud` et `www` pour le marketing/signup.
+2. **TLS wildcard** : certificat `*.nglu.cloud` (Certbot DNS-01 obligatoire pour un wildcard — le challenge HTTP-01 ne couvre pas `*`). Prévoir le renouvellement (hook DNS).
+3. **nginx** : nouveau bloc `server` `server_name ~^(?<tenant>[a-z0-9-]+)\.nglu\.cloud$;` qui sert les **mêmes** SPA/locations que le bloc principal (les `location ^~ /comptabilite/` etc. sont réutilisables). Le `<tenant>` capturé peut être passé au backend en en-tête (`proxy_set_header X-Tenant-Slug $tenant;`) **pour info/branding** — l'isolation réelle reste le token. NE PAS faire dépendre la sécurité du host.
+4. **Backend** : résoudre l'org par slug à la connexion n'est PAS nécessaire (le login se fait par email→user→org). Le slug d'URL sert au branding ; si on veut forcer un tenant par host, valider que `user.org.slug == X-Tenant-Slug` et refuser sinon (option durcissement, pas v1).
+5. **Pages publiques signup + console** : décider la route.
+   - **Signup** : servir `signup-onboarding-mockup.html` sur `nglu.cloud/signup` (ou `app.nglu.cloud/signup`), hors `/crm`. Route publique → ajouter un `location = /signup` qui sert le HTML (ou l'intégrer comme page de la SPA marketing). `/api/auth/register` est **déjà whitelisté** middleware.
+   - **Console super-owner** : servir `saas-platform-mockup.html` sur une route **gardée** (ex. `admin.nglu.cloud` ou `/platform`), protégée — l'accès aux données passe déjà par le `SuperOwnerGuard` backend, mais éviter d'exposer le HTML publiquement. Fournir `window.NGLU_OWNER_TOKEN` (mode LIVE).
+6. **Vérif** : `curl -I https://<slug>.nglu.cloud/comptabilite/` → 200 ; login d'un user de l'org → ne voit que son org ; `https://nglu.cloud/signup` → wizard ; création d'org → sous-domaine accessible.
+
+**Risque :** élevé côté infra (DNS/TLS/nginx prod). **Aucune** de ces étapes ne doit être faite sans validation owner. Tant que c'est en attente, **le path actuel `/comptabilite/` etc. reste pleinement multi-tenant** — le produit est utilisable par plusieurs orgs sans le sous-domaine.
