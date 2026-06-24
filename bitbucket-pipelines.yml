@@ -228,10 +228,10 @@ pipelines:
                 # ...puis on RECREE le conteneur frontend (projet prod, qui sert dev+prod) pour qu'il
                 # re-binde la conf :ro a jour + le nouveau volume html-migration-dev. `docker cp`/`cat >`
                 # sont impossibles ici (mount read-only). Bref flicker de tous les sites front (~secondes).
-                # NB: le conteneur frontend existant appartient au projet compose `nglu-app` (et non
-                # `nglu_prod` comme backend2/middleware) — heritage de l'incident du 2 juin. On recree
-                # avec SON projet reel, sinon conflit de nom (« container name already in use »).
-                - $SSH $SERVER "cd $PROD_APP && docker compose -p nglu-app -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                # NB: le projet compose reel du conteneur frontend a change au fil des deploys.
+                # On inspecte son label avant de recreer, sinon Docker refuse avec
+                # "container name already in use" quand le projet hardcode ne correspond pas.
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
           - step:
@@ -275,7 +275,7 @@ pipelines:
                 - $SSH $SERVER "find $APP/avelomi-site/dist -mindepth 1 -delete && cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && rm -rf /tmp/avelomi-site-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
-                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu-app; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
@@ -646,7 +646,7 @@ pipelines:
                 - for a in frontend domus-app farmos-app batipro-app hr-app comptabilite-app marketing-site avelomi-site; do $SSH $SERVER "mkdir -p $APP/$a/dist"; scp -o StrictHostKeyChecking=no -r $a/dist $SERVER:$APP/$a/; done
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - scp -o StrictHostKeyChecking=no docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
-                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu-app; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
 
     deploy-all-prod:
