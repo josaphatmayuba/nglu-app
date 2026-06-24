@@ -19,6 +19,9 @@ COMPOSE_PROJECT="${COMPOSE_PROJECT:-nglu_prod}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env.prod}"
 LOCK_WAIT_SECONDS="${LOCK_WAIT_SECONDS:-900}"
+# Public base URL used by the remote smoke test. Override for other targets
+# (e.g. BASE_URL=https://avelomi.com) so the deploy verifies the right domain.
+BASE_URL="${BASE_URL:-https://ongdngolu.org}"
 
 if [ ! -d "$DIST_DIR" ]; then
   echo "Missing dist directory: $DIST_DIR" >&2
@@ -48,19 +51,39 @@ cleanup_local() {
 trap cleanup_local EXIT INT TERM
 
 tar -czf "$LOCAL_DIST_ARCHIVE" -C "$DIST_DIR" .
-tar -czf "$LOCAL_SUPPORT_ARCHIVE" \
-  docker-compose.prod.yml \
-  frontend/Dockerfile.prod \
-  nginx/nginx.frontend.conf
+# Per-target nginx config. The server always mounts nginx/nginx.frontend.conf,
+# so whichever source file SUPPORT_CONF names is shipped UNDER that path.
+# ongdngolu keeps the default (dual-domain); Avelomi passes SUPPORT_CONF=
+# nginx/nginx.avelomi.conf so it gets its own single-domain config without the
+# shared file overwriting it. Lets the two prods diverge over time.
+# Portable rename (busybox tar on alpine has no --transform): stage a copy
+# under the canonical name in a temp dir, then tar that path.
+SUPPORT_CONF="${SUPPORT_CONF:-nginx/nginx.frontend.conf}"
+CONF_STAGE=""
+if [ "$SUPPORT_CONF" != "nginx/nginx.frontend.conf" ]; then
+  CONF_STAGE="$(mktemp -d)"
+  mkdir -p "$CONF_STAGE/nginx"
+  cp "$SUPPORT_CONF" "$CONF_STAGE/nginx/nginx.frontend.conf"
+  tar -czf "$LOCAL_SUPPORT_ARCHIVE" \
+    docker-compose.prod.yml \
+    frontend/Dockerfile.prod \
+    -C "$CONF_STAGE" nginx/nginx.frontend.conf
+  rm -rf "$CONF_STAGE"
+else
+  tar -czf "$LOCAL_SUPPORT_ARCHIVE" \
+    docker-compose.prod.yml \
+    frontend/Dockerfile.prod \
+    nginx/nginx.frontend.conf
+fi
 
 $SCP_CMD "$LOCAL_DIST_ARCHIVE" "$SERVER:$REMOTE_DIST_ARCHIVE"
 $SCP_CMD "$LOCAL_SUPPORT_ARCHIVE" "$SERVER:$REMOTE_SUPPORT_ARCHIVE"
 
 $SSH_CMD "$SERVER" \
-  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' bash -s" <<'REMOTE_SCRIPT'
+  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' BASE_URL='$BASE_URL' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
-BASE_URL="https://ongdngolu.org"
+BASE_URL="${BASE_URL:-https://ongdngolu.org}"
 LOCK_DIR="/tmp/nglu-prod-deploy.lock"
 LOCK_META="$LOCK_DIR/meta.txt"
 START_TS="$(date +%s)"
@@ -130,7 +153,7 @@ sudo chown "$REMOTE_USER:$REMOTE_USER" \
   "$REMOTE_ROOT/nginx/nginx.frontend.conf"
 
 echo "[remote] ensuring first-deploy dist directories exist"
-for static_app in frontend marketing-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do
+for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do
   write_placeholder "$REMOTE_ROOT/$static_app/dist" "$static_app"
 done
 

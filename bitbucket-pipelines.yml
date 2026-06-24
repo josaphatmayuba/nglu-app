@@ -12,6 +12,17 @@ image: node:20-alpine
 # main depuis Bitbucket) forcent le redeploiement complet si besoin.
 
 definitions:
+  # ── Avelomi (2e prod, serveur séparé 3.128.45.29 / avelomi.com) ──────────────
+  # Bitbucket n'a qu'UNE clé SSH CI par défaut (celle d'ongdngolu). Pour le 2e
+  # hôte on charge une clé dédiée depuis la variable secure AVELOMI_SSH_KEY
+  # (clé privée encodée base64 : `base64 -w0 LightsailDefaultKey-...pem`).
+  # À mettre dans Repository settings → Repository variables (Secured).
+  yaml-anchors:
+    avelomi-ssh-setup: &avelomi-ssh-setup |
+      apk add --no-cache openssh-client
+      mkdir -p ~/.ssh && chmod 700 ~/.ssh
+      echo "$AVELOMI_SSH_KEY" | base64 -d > ~/.ssh/avelomi.pem
+      chmod 600 ~/.ssh/avelomi.pem
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
@@ -24,6 +35,7 @@ definitions:
     node-migration: migration-app/node_modules
     node-tickets: tickets-app/node_modules
     node-marketing: marketing-site/node_modules
+    node-avelomi: avelomi-site/node_modules
     node-chat: chat-app/node_modules
 
 pipelines:
@@ -406,6 +418,190 @@ pipelines:
                 - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh marketing-site /
+
+      # ══════════════════════ MASTER → AVELOMI (2e prod) ══════════════════════
+      # Même push master, 2e serveur séparé (3.128.45.29 / avelomi.com), sa propre
+      # DB et son propre .env.prod. Toutes les cibles sont surchargées via env :
+      #   SERVER/BASE_URL/SSH/SCP pointent Avelomi ; le reste du flux est identique.
+      # NB: bloc parallel séparé (après ongdngolu) — si Avelomi est down, seuls ses
+      # steps échouent, pas le déploiement ongdngolu déjà terminé au-dessus.
+      - parallel:
+          - step:
+              name: Backend2 → Avelomi
+              caches: [node-backend2]
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
+                - $SCP -r backend2/dist $SERVER:$APP/backend2/
+                - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: PDF Service → Avelomi
+              condition: { changesets: { includePaths: ["pdf-service/**", "docker-compose.prod.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - $SCP -r pdf-service $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Middleware → Avelomi
+              condition: { changesets: { includePaths: ["middleware/**", "docker-compose.prod.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
+                - $SCP -r middleware $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+
+          - step:
+              name: Frontend → Avelomi
+              caches: [node-frontend]
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                # Vite lit ces VITE_* au build (priorité sur .env.production qui code ongdngolu en dur).
+                # API → avelomi.com ; VITE_SIGNUP_ENABLED active l'inscription self-service (Avelomi seul).
+                - export VITE_APP_API=https://avelomi.com/api VITE_API_URL=https://avelomi.com/api VITE_APP_API_NODE=https://avelomi.com/api VITE_SIGNUP_ENABLED=true
+                - cd frontend && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run build:prod && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
+
+          - step:
+              name: Domus → Avelomi
+              caches: [node-domus]
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
+
+          - step:
+              name: Journal → Avelomi
+              caches: [node-journal]
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
+
+          - step:
+              name: Tickets → Avelomi
+              caches: [node-tickets]
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
+
+          - step:
+              name: FarmOS → Avelomi
+              caches: [node-farmos]
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
+
+          - step:
+              name: BatiPro → Avelomi
+              caches: [node-batipro]
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
+
+          - step:
+              name: HR → Avelomi
+              caches: [node-hr]
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
+
+          - step:
+              name: Comptabilite → Avelomi
+              caches: [node-comptabilite]
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
+
+          - step:
+              name: Migration Cockpit → Avelomi
+              caches: [node-migration]
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
+
+          - step:
+              name: Chat → Avelomi
+              caches: [node-chat]
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+
+          - step:
+              name: Avelomi-site → Avelomi
+              caches: [node-avelomi]
+              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf", "bitbucket-pipelines.yml"] } }
+              script:
+                - *avelomi-ssh-setup
+                - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - sh scripts/ci/deploy-prod-static-app.sh avelomi-site /
 
   # ═══════════ Override manuel : tout redeployer (Bitbucket → Run pipeline → custom) ═══════════
   custom:

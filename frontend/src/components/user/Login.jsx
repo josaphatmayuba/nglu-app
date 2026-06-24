@@ -290,6 +290,16 @@ export default function Login() {
             )}
           </form>}
 
+          {/* Inscription self-service : Avelomi uniquement (flag de build). */}
+          {import.meta.env.VITE_SIGNUP_ENABLED === "true" && (
+            <p className="text-sm text-ink-500 text-center mt-6">
+              Pas encore de compte ?{" "}
+              <a href="/admin/auth/register" className="font-semibold text-indigo-600 hover:text-indigo-700">
+                Créer mon espace
+              </a>
+            </p>
+          )}
+
           <p className="text-xs text-ink-400 text-center mt-8">
             © {new Date().getFullYear()} {companyName} · Tous droits réservés
           </p>

@@ -10,6 +10,10 @@ import { useDispatch, useSelector } from "react-redux";
 import Page404 from "./components/404/404Page";
 import LoaderSpinner from "./components/loader/LoaderSpinner";
 import Login from "./components/user/Login";
+// Inscription self-service : Avelomi UNIQUEMENT (build avec VITE_SIGNUP_ENABLED=true).
+// ongdngolu ne définit pas le flag → la route /admin/auth/register n'est pas montée.
+const SaasSignUp = lazy(() => import("./components/user/SaasSignUp"));
+const signupEnabled = import.meta.env.VITE_SIGNUP_ENABLED === "true";
 import { getSetting } from "./redux/rtk/features/setting/settingSlice";
 import ServerError from "./components/404/ServerError";
 import SignContractPage from "./components/propertyManagement/SignContractPage";
@@ -88,6 +92,9 @@ function App() {
         />
 
         <Route path="/admin/auth/login" exact element={<Login />} />
+        {signupEnabled && (
+          <Route path="/admin/auth/register" exact element={<SaasSignUp />} />
+        )}
         <Route path="/*" element={<Page404 />} />
       </Routes>
     );

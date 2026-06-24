@@ -2,8 +2,11 @@ FROM nginx:alpine
 # Build context is the REPO ROOT (see docker-compose.prod.yml).
 # CRM (admin SPA) — served under /crm -> /admin
 COPY frontend/dist/ /usr/share/nginx/html
-# Production marketing landing — baked into the image (no host bind mount).
+# Production marketing landing (ONG ongdngolu) — baked into the image.
 COPY marketing-site/dist/ /usr/share/nginx/html-marketing-prod
+# Avelomi product landing (SaaS vitrine) — baked too. Only Avelomi's nginx
+# config serves it at /; on ongdngolu it is present but unreferenced (inert).
+COPY avelomi-site/dist/ /usr/share/nginx/html-avelomi-prod
 # Production FarmOS SPA at /farmos/ — baked into the image.
 COPY farmos-app/dist/ /usr/share/nginx/html-farmos-prod
 # Production product SPAs.
