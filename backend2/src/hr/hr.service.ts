@@ -129,8 +129,8 @@ export class HrService {
     return { salaryHistoryId, approval: result };
   }
 
-  listDesignations(q: Record<string, string>) {
-    return this.listSimple(q, designations, "getAllDesignation", "totalDesignation");
+  listDesignations(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, designations, "getAllDesignation", "totalDesignation", orgId);
   }
 
   findDesignation(id: number) {
@@ -159,8 +159,8 @@ export class HrService {
     return this.findDesignation(id);
   }
 
-  listShifts(q: Record<string, string>) {
-    return this.listSimple(q, shifts, "getAllShift", "totalShift");
+  listShifts(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, shifts, "getAllShift", "totalShift", orgId);
   }
 
   findShift(id: number) {
@@ -197,8 +197,8 @@ export class HrService {
     return this.findShift(id);
   }
 
-  listAttendances(q: Record<string, string>) {
-    return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance");
+  listAttendances(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrAttendances, "getAllHrAttendance", "totalHrAttendance", orgId);
   }
 
   findAttendance(id: number) {
@@ -286,8 +286,8 @@ export class HrService {
     };
   }
 
-  listAwards(q: Record<string, string>) {
-    return this.listSimple(q, awards, "getAllAward", "totalAward");
+  listAwards(q: Record<string, string>, orgId: number) {
+    return this.listSimple(q, awards, "getAllAward", "totalAward", orgId);
   }
 
   findAward(id: number) {
@@ -318,8 +318,8 @@ export class HrService {
     return this.findAward(id);
   }
 
-  listDesignationHistory(q: Record<string, string>) {
-    return this.listHistory(q, designationHistories, "getAllDesignationHistory", "totalDesignationHistory");
+  listDesignationHistory(q: Record<string, string>, orgId: number) {
+    return this.listHistory(q, designationHistories, "getAllDesignationHistory", "totalDesignationHistory", orgId);
   }
 
   async createDesignationHistory(input: CreateDesignationHistoryDto) {
@@ -352,10 +352,13 @@ export class HrService {
     return this.findDesignationHistory(id);
   }
 
-  async listSalaryHistory(q: Record<string, string>) {
+  async listSalaryHistory(q: Record<string, string>, orgId: number) {
     const { skip, limit } = this.pagination(q);
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
-    const where = userId ? eq(salaryHistories.userId, userId) : undefined;
+    const where = and(
+      eq(salaryHistories.organizationId, orgId),
+      userId ? eq(salaryHistories.userId, userId) : undefined,
+    );
     const rows = await this.db
       .select({
         id: salaryHistories.id,
@@ -451,10 +454,10 @@ export class HrService {
       console.warn("[HR] submit payroll approval skipped:", (err as Error).message);
     }
 
-    return this.findSalaryHistory(salaryHistoryId);
+    return this.findSalaryHistory(salaryHistoryId, orgId);
   }
 
-  async findSalaryHistory(id: number) {
+  async findSalaryHistory(id: number, orgId: number) {
     const rows = await this.db
       .select({
         id: salaryHistories.id,
@@ -477,14 +480,14 @@ export class HrService {
       })
       .from(salaryHistories)
       .leftJoin(currencies, eq(salaryHistories.currencyId, currencies.id))
-      .where(eq(salaryHistories.id, id))
+      .where(and(eq(salaryHistories.id, id), eq(salaryHistories.organizationId, orgId)))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Salary history not found.");
     return rows[0];
   }
 
-  async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto) {
-    await this.findSalaryHistory(id);
+  async updateSalaryHistory(id: number, input: UpdateSalaryHistoryDto, orgId: number) {
+    await this.findSalaryHistory(id, orgId);
 
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
@@ -498,14 +501,15 @@ export class HrService {
       ...(input.salaryEndDate !== undefined ? { endDate: input.salaryEndDate } : {}),
       ...(input.salaryComment !== undefined ? { comment: input.salaryComment } : {}),
       updatedAt: sql`CURRENT_TIMESTAMP`,
-    }).where(eq(salaryHistories.id, id));
-    return this.findSalaryHistory(id);
+    }).where(and(eq(salaryHistories.id, id), eq(salaryHistories.organizationId, orgId)));
+    return this.findSalaryHistory(id, orgId);
   }
 
-  async listPayrolls(q: Record<string, string>) {
+  async listPayrolls(q: Record<string, string>, orgId: number) {
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
     const status = q["status"];
     const where = and(
+      eq(hrPayrolls.organizationId, orgId),
       userId ? eq(hrPayrolls.userId, userId) : undefined,
       status ? eq(hrPayrolls.status, status) : ne(hrPayrolls.status, "false"),
     );
@@ -1027,16 +1031,16 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  async listProjects(q: Record<string, string>) {
+  async listProjects(q: Record<string, string>, orgId: number) {
     // Reflete le registre partage `projects` (projets compta/maintenance/app projet)
     // dans hr_projects pour que HR voie tout. Best-effort : un drift de schema ne
     // doit pas casser la liste.
     try {
-      await this.ensureHrProjectsFromRegistry(Number(q["organizationId"]) || 1);
+      await this.ensureHrProjectsFromRegistry(orgId);
     } catch (err) {
       this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
     }
-    return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject");
+    return this.listHrRecords(q, hrProjects, "getAllHrProject", "totalHrProject", orgId);
   }
 
   /**
@@ -1104,8 +1108,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     }, () => this.findProject(id));
   }
 
-  listProjectAssignments(q: Record<string, string>) {
-    return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment");
+  listProjectAssignments(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrProjectAssignments, "getAllHrProjectAssignment", "totalHrProjectAssignment", orgId);
   }
 
   findProjectAssignment(id: number) {
@@ -1136,34 +1140,34 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     }, () => this.findProjectAssignment(id));
   }
 
-  async projectAnalytics(q: Record<string, string>) {
+  async projectAnalytics(q: Record<string, string>, orgId: number) {
     const monthFilter = q["month"] || "";
     const startFilter = q["startDate"] || "";
     const endFilter = q["endDate"] || "";
 
     try {
-      await this.ensureHrProjectsFromRegistry(Number(q["organizationId"]) || 1);
+      await this.ensureHrProjectsFromRegistry(orgId);
     } catch (err) {
       this.logger.warn(`ensureHrProjectsFromRegistry ignore: ${(err as Error)?.message}`);
     }
 
     const [projectRows, assignmentRows, timesheetRows, staffRows, salaryRows, departmentRows] = await Promise.all([
-      this.db.select().from(hrProjects).where(ne(hrProjects.status, "false")).orderBy(desc(hrProjects.id)),
-      this.db.select().from(hrProjectAssignments).where(ne(hrProjectAssignments.status, "false")).orderBy(desc(hrProjectAssignments.id)),
-      this.db.select().from(hrTimesheets).where(ne(hrTimesheets.status, "false")).orderBy(desc(hrTimesheets.id)),
+      this.db.select().from(hrProjects).where(and(eq(hrProjects.organizationId, orgId), ne(hrProjects.status, "false"))).orderBy(desc(hrProjects.id)),
+      this.db.select().from(hrProjectAssignments).where(and(eq(hrProjectAssignments.organizationId, orgId), ne(hrProjectAssignments.status, "false"))).orderBy(desc(hrProjectAssignments.id)),
+      this.db.select().from(hrTimesheets).where(and(eq(hrTimesheets.organizationId, orgId), ne(hrTimesheets.status, "false"))).orderBy(desc(hrTimesheets.id)),
       this.db.select({
         id: users.id,
         firstName: users.firstName,
         lastName: users.lastName,
         departmentId: users.departmentId,
-      }).from(users),
+      }).from(users).where(eq(users.organizationId, orgId)),
       this.db.select({
         userId: salaryHistories.userId,
         salary: salaryHistories.salary,
         currencyId: salaryHistories.currencyId,
         id: salaryHistories.id,
-      }).from(salaryHistories).orderBy(desc(salaryHistories.id)),
-      this.db.select({ id: departments.id, name: departments.name }).from(departments),
+      }).from(salaryHistories).where(eq(salaryHistories.organizationId, orgId)).orderBy(desc(salaryHistories.id)),
+      this.db.select({ id: departments.id, name: departments.name }).from(departments).where(eq(departments.organizationId, orgId)),
     ]);
 
     const projectsById = new Map(projectRows.map((project) => [Number(project.id), project]));
@@ -1272,8 +1276,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listAwardHistory(q: Record<string, string>) {
-    return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory");
+  listAwardHistory(q: Record<string, string>, orgId: number) {
+    return this.listHistory(q, awardHistories, "getAllAwardHistory", "totalAwardHistory", orgId);
   }
 
   async createAwardHistory(input: CreateAwardHistoryDto) {
@@ -1304,8 +1308,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.findAwardHistory(id);
   }
 
-  listLeaveRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest");
+  listLeaveRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrLeaveRequests, "getAllHrLeaveRequest", "totalHrLeaveRequest", orgId);
   }
 
   findLeaveRequest(id: number) {
@@ -1336,10 +1340,10 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return saved;
   }
 
-  async deleteLeaveRequest(id: number) {
+  async deleteLeaveRequest(id: number, orgId: number) {
     const current = await this.findLeaveRequest(id);
     await this.assertNoLockedPayroll(Number(current.userId), String(current.startDate), String(current.endDate));
-    return this.deleteRow(hrLeaveRequests, id);
+    return this.deleteRow(hrLeaveRequests, id, orgId);
   }
 
   async leaveSummary(q: Record<string, string>) {
@@ -1395,8 +1399,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     };
   }
 
-  listContracts(q: Record<string, string>) {
-    return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract");
+  listContracts(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrContracts, "getAllHrContract", "totalHrContract", orgId);
   }
 
   findContract(id: number) {
@@ -1415,8 +1419,8 @@ ${payroll.notes ? `<div class="notes">Note : ${payroll.notes}</div>` : ""}
     return this.updateRecord(hrContracts, id, input, () => this.findContract(id));
   }
 
-  listDocuments(q: Record<string, string>) {
-    return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument");
+  listDocuments(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrDocuments, "getAllHrDocument", "totalHrDocument", orgId);
   }
 
   findDocument(id: number) {
@@ -1687,8 +1691,8 @@ ${footer}`;
     return `${header}<p>Template <strong>${templateType}</strong> non reconnu.</p>${footer}`;
   }
 
-  listExpenseRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest");
+  listExpenseRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrExpenseRequests, "getAllHrExpenseRequest", "totalHrExpenseRequest", orgId);
   }
 
   findExpenseRequest(id: number) {
@@ -1706,8 +1710,8 @@ ${footer}`;
     return this.updateRecord(hrExpenseRequests, id, input, () => this.findExpenseRequest(id));
   }
 
-  listSocialDeclarations(q: Record<string, string>) {
-    return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration");
+  listSocialDeclarations(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrSocialDeclarations, "getAllHrSocialDeclaration", "totalHrSocialDeclaration", orgId);
   }
 
   findSocialDeclaration(id: number) {
@@ -1723,8 +1727,8 @@ ${footer}`;
     return this.updateRecord(hrSocialDeclarations, id, input, () => this.findSocialDeclaration(id));
   }
 
-  listPerformanceReviews(q: Record<string, string>) {
-    return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview");
+  listPerformanceReviews(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrPerformanceReviews, "getAllHrPerformanceReview", "totalHrPerformanceReview", orgId);
   }
 
   findPerformanceReview(id: number) {
@@ -1744,8 +1748,8 @@ ${footer}`;
     return this.updateRecord(hrPerformanceReviews, id, input, () => this.findPerformanceReview(id));
   }
 
-  listTrainingSessions(q: Record<string, string>) {
-    return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession");
+  listTrainingSessions(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrTrainingSessions, "getAllHrTrainingSession", "totalHrTrainingSession", orgId);
   }
 
   findTrainingSession(id: number) {
@@ -1761,8 +1765,8 @@ ${footer}`;
     return this.updateRecord(hrTrainingSessions, id, input, () => this.findTrainingSession(id));
   }
 
-  listTimesheets(q: Record<string, string>) {
-    return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet");
+  listTimesheets(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrTimesheets, "getAllHrTimesheet", "totalHrTimesheet", orgId);
   }
 
   findTimesheet(id: number) {
@@ -1782,8 +1786,8 @@ ${footer}`;
     return this.updateRecord(hrTimesheets, id, payload, () => this.findTimesheet(id));
   }
 
-  listEmployeeRequests(q: Record<string, string>) {
-    return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest");
+  listEmployeeRequests(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrEmployeeRequests, "getAllHrEmployeeRequest", "totalHrEmployeeRequest", orgId);
   }
 
   findEmployeeRequest(id: number) {
@@ -1802,8 +1806,8 @@ ${footer}`;
     return this.updateRecord(hrEmployeeRequests, id, { ...input, ...decision }, () => this.findEmployeeRequest(id));
   }
 
-  listRecruitmentOffers(q: Record<string, string>) {
-    return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer");
+  listRecruitmentOffers(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrRecruitmentOffers, "getAllHrRecruitmentOffer", "totalHrRecruitmentOffer", orgId);
   }
 
   findRecruitmentOffer(id: number) {
@@ -1823,8 +1827,8 @@ ${footer}`;
 
   // ─── Stade 9: Recrutement / Candidats ────────────────────────────────────────
 
-  listCandidates(q: Record<string, string>) {
-    return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate");
+  listCandidates(q: Record<string, string>, orgId: number) {
+    return this.listHrRecords(q, hrCandidates, "getAllHrCandidate", "totalHrCandidate", orgId);
   }
 
   findCandidate(id: number) {
@@ -2317,7 +2321,7 @@ ${footer}`;
     }
   }
 
-  async staffOverview() {
+  async staffOverview(orgId: number) {
     const rows = await this.db
       .select({
         user: users,
@@ -2329,6 +2333,7 @@ ${footer}`;
       .leftJoin(roles, eq(roles.id, users.roleId))
       .leftJoin(designations, eq(designations.id, users.designationId))
       .leftJoin(departments, eq(departments.id, users.departmentId))
+      .where(eq(users.organizationId, orgId))
       .orderBy(desc(users.id));
 
     const userIds = rows.map((r) => r.user.id);
@@ -2342,7 +2347,7 @@ ${footer}`;
           currencyId: salaryHistories.currencyId,
         })
         .from(salaryHistories)
-        .where(inArray(salaryHistories.userId, userIds))
+        .where(and(eq(salaryHistories.organizationId, orgId), inArray(salaryHistories.userId, userIds)))
         .orderBy(desc(salaryHistories.id));
       for (const s of allSalaries) {
         if (!(s.userId in salaryMap)) {
@@ -2354,9 +2359,9 @@ ${footer}`;
 
     const [allDesignations, allDepartments] = await Promise.all([
       this.db.select({ id: designations.id, name: designations.name })
-        .from(designations).where(eq(designations.status, "true")).orderBy(designations.name),
+        .from(designations).where(and(eq(designations.organizationId, orgId), eq(designations.status, "true"))).orderBy(designations.name),
       this.db.select({ id: departments.id, name: departments.name })
-        .from(departments).where(eq(departments.status, "true")).orderBy(departments.name),
+        .from(departments).where(and(eq(departments.organizationId, orgId), eq(departments.status, "true"))).orderBy(departments.name),
     ]);
 
     return {
@@ -2378,21 +2383,33 @@ ${footer}`;
     };
   }
 
-  async deleteRow(table: any, id: number) {
+  async deleteRow(table: any, id: number, orgId: number) {
     if (!table.status) {
       throw new BadRequestException("Soft delete is not available for this HR record type yet.");
     }
-    await this.findOne(table, id, "Record not found.");
+    await this.findOneInOrg(table, id, orgId, "Record not found.");
     await this.db
       .update(table)
       .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(table.id, id));
+      .where(and(eq(table.id, id), eq(table.organizationId, orgId)));
     return { message: "Deleted successfully." };
   }
 
-  private async listSimple(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  // Verifie qu une ligne existe ET appartient a l org (isolation multi-tenant).
+  private async findOneInOrg(table: any, id: number, orgId: number, message: string) {
+    const [row] = await this.db
+      .select()
+      .from(table)
+      .where(and(eq(table.id, id), eq(table.organizationId, orgId)))
+      .limit(1);
+    if (!row) throw new NotFoundException(message);
+    return row;
+  }
+
+  private async listSimple(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const status = q["status"];
     const where = and(
+      eq(table.organizationId, orgId),
       q["query"] === "search" ? like(table.name, `%${q["key"] ?? ""}%`) : undefined,
       eq(table.status, status ?? "true"),
     );
@@ -2405,20 +2422,24 @@ ${footer}`;
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async listHistory(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  private async listHistory(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const { skip, limit } = this.pagination(q);
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
-    const where = userId ? eq(table.userId, userId) : undefined;
+    const where = and(
+      eq(table.organizationId, orgId),
+      userId ? eq(table.userId, userId) : undefined,
+    );
     const rows = await this.db.select().from(table).where(where).orderBy(desc(table.id)).limit(limit).offset(skip);
     const [{ total }] = await this.db.select({ total: count(table.id) }).from(table).where(where);
     return { [rowsKey]: rows, [totalKey]: Number(total ?? 0) };
   }
 
-  private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string) {
+  private async listHrRecords(q: Record<string, string>, table: any, rowsKey: string, totalKey: string, orgId: number) {
     const userId = q["userId"] ? Number(q["userId"]) : undefined;
     const projectId = q["projectId"] && table.projectId ? Number(q["projectId"]) : undefined;
     const status = q["status"];
     const where = and(
+      eq(table.organizationId, orgId),
       userId ? eq(table.userId, userId) : undefined,
       projectId ? eq(table.projectId, projectId) : undefined,
       status ? eq(table.status, status) : ne(table.status, "false"),
@@ -3057,22 +3078,23 @@ ${footer}`;
     return { [field]: path };
   }
 
-  async listPersonalDocuments(userId: number) {
+  async listPersonalDocuments(userId: number, orgId: number) {
     return this.db.select().from(hrPersonalDocuments)
-      .where(eq(hrPersonalDocuments.userId, userId))
+      .where(and(eq(hrPersonalDocuments.organizationId, orgId), eq(hrPersonalDocuments.userId, userId)))
       .orderBy(desc(hrPersonalDocuments.createdAt));
   }
 
-  async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto) {
+  async createPersonalDocument(file: HrUploadedFile, dto: CreateHrPersonalDocumentDto, orgId: number) {
     await this.ensureExists(users, dto.userId, "Employee not found.");
     const { name, path } = this.saveFile(file);
     const [existing] = await this.db.select({ version: hrPersonalDocuments.version })
       .from(hrPersonalDocuments)
-      .where(and(eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
+      .where(and(eq(hrPersonalDocuments.organizationId, orgId), eq(hrPersonalDocuments.userId, dto.userId), eq(hrPersonalDocuments.documentType, dto.documentType)))
       .orderBy(desc(hrPersonalDocuments.version))
       .limit(1);
     const version = (existing?.version ?? 0) + 1;
     const [result] = await this.db.insert(hrPersonalDocuments).values({
+      organizationId: orgId,
       userId: dto.userId,
       documentType: dto.documentType,
       fileName: file.originalname,
@@ -3084,16 +3106,17 @@ ${footer}`;
       uploadedBy: dto.uploadedBy ?? null,
     });
     return this.db.select().from(hrPersonalDocuments)
-      .where(eq(hrPersonalDocuments.id, Number((result as any).insertId)))
+      .where(and(eq(hrPersonalDocuments.id, Number((result as any).insertId)), eq(hrPersonalDocuments.organizationId, orgId)))
       .limit(1).then((r) => r[0]);
   }
 
-  async deletePersonalDocument(id: number) {
-    const [doc] = await this.db.select().from(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id)).limit(1);
+  async deletePersonalDocument(id: number, orgId: number) {
+    const [doc] = await this.db.select().from(hrPersonalDocuments)
+      .where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId))).limit(1);
     if (!doc) throw new NotFoundException("Document not found.");
     const localFile = join(this.uploadDir, doc.filePath.replace(/^\/files\//, ""));
     if (existsSync(localFile)) unlinkSync(localFile);
-    await this.db.delete(hrPersonalDocuments).where(eq(hrPersonalDocuments.id, id));
+    await this.db.delete(hrPersonalDocuments).where(and(eq(hrPersonalDocuments.id, id), eq(hrPersonalDocuments.organizationId, orgId)));
     return { deleted: true };
   }
 
