@@ -396,7 +396,7 @@ const lang = computed({
             <span class="st-t"><small data-fr>Télécharger sur</small><small data-en>Download on the</small><b>App Store</b></span>
           </a>
           <a class="store" href="#">
-            <svg viewBox="0 0 24 24"><path fill="#00e0ff" d="M3.3 2.1c-.2.2-.3.5-.3.9v18c0 .4.1.7.3.9l10.1-10.1z"/><path fill="#00f076" d="M3.3 2.1 17 9.9l-3.3 3.3z"/><path fill="#ffd400" d="m17 9.9 3.7 2.1c.7.4.7 1.6 0 2L17 16.1l-3.3-3.2z"/><path fill="#ff3a44" d="m3.3 21.9 10.4-9 3.3 3.2z"/></svg>
+            <svg viewBox="0 0 24 24"><path fill="#00d3ff" d="M3.27 1.84A1.5 1.5 0 0 0 3 2.7v18.6c0 .35.1.65.27.86L13.4 12 3.27 1.84z"/><path fill="#00f076" d="M16.95 8.37 4.9 1.46a1.46 1.46 0 0 0-1.63.38L13.4 12l3.55-3.63z"/><path fill="#ffce00" d="m16.95 8.37-3.55 3.63 3.55 3.63 3.06-1.76c.99-.57.99-2.17 0-2.74l-3.06-1.76z"/><path fill="#ff3a44" d="M3.27 22.16c.43.5 1.12.62 1.63.38l12.05-6.91L13.4 12 3.27 22.16z"/></svg>
             <span class="st-t"><small data-fr>Disponible sur</small><small data-en>Get it on</small><b>Google Play</b></span>
           </a>
         </div>
@@ -481,13 +481,13 @@ const lang = computed({
       <div class="fvisual">
         <div class="ui-win">
           <div class="ui-top"><b data-fr>Chiffre d'affaires consolidé</b><b data-en>Consolidated revenue</b><span class="ui-badge up">▲ 18.2%</span></div>
-          <div class="fx-row"><span class="fx-cur">🇺🇸 USD</span><span class="fx-bar"><i style="width:100%"></i></span><b>$284,910</b></div>
-          <div class="fx-row"><span class="fx-cur">🇪🇺 EUR</span><span class="fx-bar"><i style="width:62%;background:#5fe0c2"></i></span><b>€176,400</b></div>
-          <div class="fx-row"><span class="fx-cur">🇨🇩 CDF</span><span class="fx-bar"><i style="width:38%;background:var(--gold)"></i></span><b>108M FC</b></div>
-          <div class="fx-row"><span class="fx-cur">🇬🇧 GBP</span><span class="fx-bar"><i style="width:54%;background:#7c3aed"></i></span><b>£149,200</b></div>
-          <div class="fx-row"><span class="fx-cur">🇯🇵 JPY</span><span class="fx-bar"><i style="width:46%;background:#f59e0b"></i></span><b>¥21.8M</b></div>
-          <div class="fx-row"><span class="fx-cur">🇨🇦 CAD</span><span class="fx-bar"><i style="width:30%;background:#fb7185"></i></span><b>C$96,500</b></div>
-          <div class="fx-row"><span class="fx-cur">🌍 CFA</span><span class="fx-bar"><i style="width:24%;background:#38bdf8"></i></span><b>71M FCFA</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">$</span>USD</span><span class="fx-bar"><i style="width:100%"></i></span><b>$284,910</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">€</span>EUR</span><span class="fx-bar"><i style="width:62%;background:#5fe0c2"></i></span><b>€176,400</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">FC</span>CDF</span><span class="fx-bar"><i style="width:38%;background:var(--gold)"></i></span><b>108M FC</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">£</span>GBP</span><span class="fx-bar"><i style="width:54%;background:#7c3aed"></i></span><b>£149,200</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">¥</span>JPY</span><span class="fx-bar"><i style="width:46%;background:#f59e0b"></i></span><b>¥21.8M</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">C$</span>CAD</span><span class="fx-bar"><i style="width:30%;background:#fb7185"></i></span><b>C$96,500</b></div>
+          <div class="fx-row"><span class="fx-cur"><span class="cflag">F</span>CFA</span><span class="fx-bar"><i style="width:24%;background:#38bdf8"></i></span><b>71M FCFA</b></div>
           <div class="ui-foot"><span class="dotg"></span><span data-fr>Taux de change appliqués automatiquement</span><span data-en>Exchange rates applied automatically</span></div>
         </div>
       </div>
@@ -657,8 +657,8 @@ const lang = computed({
   <div class="wrap">
     <div class="statsrow">
       <div class="stat"><b>12+</b><span data-fr>applications intégrées</span><span data-en>integrated apps</span></div>
-      <div class="stat"><b>40%</b><span data-fr>de temps admin en moins</span><span data-en>less admin time</span></div>
-      <div class="stat"><b>99.9%</b><span data-fr>de disponibilité</span><span data-en>uptime</span></div>
+      <div class="stat"><b>0</b><span data-fr>double saisie</span><span data-en>double entry</span></div>
+      <div class="stat"><b>24/7</b><span data-fr>web & mobile hors-ligne</span><span data-en>web & offline mobile</span></div>
       <div class="stat"><b>5 min</b><span data-fr>pour démarrer</span><span data-en>to get started</span></div>
     </div>
   </div>
@@ -845,7 +845,7 @@ const lang = computed({
             <span class="st-t"><small data-fr>Sur</small><small data-en>On</small><b>App Store</b></span>
           </a>
           <a class="store" href="#" style="padding:8px 13px">
-            <svg viewBox="0 0 24 24"><path fill="#00e0ff" d="M3.3 2.1c-.2.2-.3.5-.3.9v18c0 .4.1.7.3.9l10.1-10.1z"/><path fill="#00f076" d="M3.3 2.1 17 9.9l-3.3 3.3z"/><path fill="#ffd400" d="m17 9.9 3.7 2.1c.7.4.7 1.6 0 2L17 16.1l-3.3-3.2z"/><path fill="#ff3a44" d="m3.3 21.9 10.4-9 3.3 3.2z"/></svg>
+            <svg viewBox="0 0 24 24"><path fill="#00d3ff" d="M3.27 1.84A1.5 1.5 0 0 0 3 2.7v18.6c0 .35.1.65.27.86L13.4 12 3.27 1.84z"/><path fill="#00f076" d="M16.95 8.37 4.9 1.46a1.46 1.46 0 0 0-1.63.38L13.4 12l3.55-3.63z"/><path fill="#ffce00" d="m16.95 8.37-3.55 3.63 3.55 3.63 3.06-1.76c.99-.57.99-2.17 0-2.74l-3.06-1.76z"/><path fill="#ff3a44" d="M3.27 22.16c.43.5 1.12.62 1.63.38l12.05-6.91L13.4 12 3.27 22.16z"/></svg>
             <span class="st-t"><small data-fr>Sur</small><small data-en>On</small><b>Google Play</b></span>
           </a>
         </div>
