@@ -36,8 +36,14 @@ function relTime(dt) {
   if (diff < 86400000) return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
   return d.toLocaleDateString("fr-FR",{day:"2-digit",month:"short"});
 }
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
 function parseContent(text) {
-  return (text||"").replace(/@(\w+)/g, '<span class="mention">@$1</span>');
+  // Echappe d'abord tout le HTML (anti-XSS stocke) PUIS surligne les mentions.
+  return escapeHtml(text).replace(/@(\w+)/g, '<span class="mention">@$1</span>');
 }
 
 // ── Fil de messages ──────────────────────────────────────────────────────────

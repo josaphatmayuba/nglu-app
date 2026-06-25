@@ -4,6 +4,17 @@ import { DRIZZLE } from "../database/database.constants";
 import type { Database } from "../database/types";
 
 // Module chat : SQL via le client Drizzle (db.execute(sql`...`)), pas le pool mysql2 direct.
+
+// Anti-XSS stocke : les messages sont du texte simple. On retire toute balise HTML
+// avant persistance (defense en profondeur, en plus de l'echappement cote front).
+const MAX_MESSAGE_LENGTH = 5000;
+function sanitizeMessageContent(content: string): string {
+  return String(content ?? "")
+    .replace(/<[^>]*>/g, "") // supprime toute balise <...>
+    .trim()
+    .slice(0, MAX_MESSAGE_LENGTH);
+}
+
 @Injectable()
 export class ChatService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
@@ -137,9 +148,10 @@ export class ChatService {
   }
 
   async sendMessage(discussionId: number, userId: number, content: string, mentions: number[] = []) {
+    const safeContent = sanitizeMessageContent(content);
     const messageId = await this.insert(sql`
       INSERT INTO journal_messages (discussion_id, sender_id, content, mentions)
-      VALUES (${discussionId}, ${userId}, ${content}, ${JSON.stringify(mentions)})
+      VALUES (${discussionId}, ${userId}, ${safeContent}, ${JSON.stringify(mentions)})
     `);
 
     await this.db.execute(sql`
