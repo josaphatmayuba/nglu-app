@@ -90,14 +90,21 @@ const pwdColor = computed(() => ['#dc2626', '#f59e0b', '#eab308', '#1fbf73'][Mat
 function validateStep(n) {
   Object.keys(fieldErr).forEach(k => delete fieldErr[k]);
   let ok = true;
+  // Format noms : lettres (accents), espaces, tirets, apostrophes, points (idem backend).
+  const NAME_RE = /^\p{L}[\p{L} '.-]*$/u;
   if (n === 1) {
     if (!reg.firstName.trim()) { fieldErr.firstName = t('Prénom requis.', 'First name required.'); ok = false; }
+    else if (!NAME_RE.test(reg.firstName.trim())) { fieldErr.firstName = t('Prénom invalide.', 'Invalid first name.'); ok = false; }
     if (!reg.lastName.trim()) { fieldErr.lastName = t('Nom requis.', 'Last name required.'); ok = false; }
+    else if (!NAME_RE.test(reg.lastName.trim())) { fieldErr.lastName = t('Nom invalide.', 'Invalid last name.'); ok = false; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(reg.email.trim())) { fieldErr.email = t('Email invalide.', 'Invalid email.'); ok = false; }
     if (reg.password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*\d).+$/.test(reg.password)) { fieldErr.password = t('Au moins 8 caractères, une lettre et un chiffre.', 'At least 8 characters, one letter and one digit.'); ok = false; }
   }
   if (n === 2) {
-    if (accountType.value === 'org' && !reg.orgName.trim()) { fieldErr.orgName = t('Indiquez un nom.', 'Enter a name.'); ok = false; }
+    if (accountType.value === 'org') {
+      if (!reg.orgName.trim()) { fieldErr.orgName = t('Indiquez un nom.', 'Enter a name.'); ok = false; }
+      else if (!/^[\p{L}\p{N}][\p{L}\p{N} &.,'-]*$/u.test(reg.orgName.trim())) { fieldErr.orgName = t('Nom d’entreprise invalide.', 'Invalid company name.'); ok = false; }
+    }
     const s = effectiveSlug.value;
     if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(s) || s.length < 3 || s.length > 63) {
       fieldErr.slug = t('Adresse invalide (3+ caractères : minuscules, chiffres, tirets).', 'Invalid address (3+ chars: lowercase, digits, hyphens).'); ok = false;
