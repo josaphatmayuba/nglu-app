@@ -295,17 +295,18 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/avelomi-site/dist $PROD_APP/nginx"
+                - $SSH $SERVER "sudo mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "find $APP/avelomi-site/dist -mindepth 1 -delete && cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && rm -rf /tmp/avelomi-site-dist"
-                - $SCP nginx/nginx.avelomi.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SCP docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
-                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+                - $SSH $SERVER "sudo find $APP/avelomi-site/dist -mindepth 1 -delete && sudo cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SCP nginx/nginx.avelomi.conf $SERVER:/tmp/nginx.avelomi.conf
+                - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
+                - $SSH $SERVER "sudo install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml"
+                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Déploiement prod AUTOMATIQUE au push/merge sur master (comme develop→dev).
@@ -683,17 +684,18 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "mkdir -p $APP/avelomi-site/dist $PROD_APP/nginx"
+                - $SSH $SERVER "sudo mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "find $APP/avelomi-site/dist -mindepth 1 -delete && cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && rm -rf /tmp/avelomi-site-dist"
-                - $SCP nginx/nginx.avelomi.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
-                - $SCP docker-compose.prod.yml $SERVER:$PROD_APP/docker-compose.prod.yml
-                - $SSH $SERVER "set -e; cd $PROD_APP; FRONTEND_PROJECT=\$(docker inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; docker compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
-                - $SSH $SERVER "docker exec nglu_prod_frontend nginx -t"
+                - $SSH $SERVER "sudo find $APP/avelomi-site/dist -mindepth 1 -delete && sudo cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SCP nginx/nginx.avelomi.conf $SERVER:/tmp/nginx.avelomi.conf
+                - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
+                - $SSH $SERVER "sudo install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml"
+                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --no-deps --force-recreate frontend"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
 
     deploy-all-prod:
       - parallel:
