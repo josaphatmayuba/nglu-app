@@ -11,10 +11,10 @@ const lang = computed({
   set: (v) => emit('update:lang', v),
 });
 
-// Cibles applicatives (ERP Avelomi), routes auth existantes (frontend React).
-// Relatif = meme domaine que la landing (comme AllApps.vue qui pointe vers /crm).
-const LOGIN_URL = '/admin/auth/login';
-const SIGNUP_URL = '/admin/auth/register';
+// Cibles applicatives (ERP Avelomi). Aligne sur AllApps.vue qui pointe vers /crm.
+// NB: l'ERP doit etre servi sous ce domaine (reverse-proxy) pour que /crm reponde.
+const LOGIN_URL = '/crm';
+const SIGNUP_URL = '/crm';
 </script>
 
 <template>
