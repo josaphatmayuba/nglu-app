@@ -14,26 +14,37 @@ image: node:20-alpine
 definitions:
   # ── Avelomi (2e prod, serveur séparé 3.128.45.29 / avelomi.com) ──────────────
   # Bitbucket n'a qu'UNE clé SSH CI par défaut (celle d'ongdngolu). Pour le 2e
-  # hôte on charge une clé dédiée depuis AVELOMI_SSH_KEY, ou par compatibilité
-  # LIGHTSAIL_PRIVATE_KEY si c'est le nom déjà configuré dans Bitbucket.
-  # La valeur peut être une clé PEM brute ou une clé encodée base64.
+  # hôte on charge AVELOMI_SSH_KEY si elle existe, sinon la clé SSH native
+  # Bitbucket (BITBUCKET_SSH_KEY_FILE). La valeur AVELOMI_SSH_KEY peut être une
+  # clé PEM brute, un PEM avec \n échappés, ou une clé encodée base64.
   yaml-anchors:
     avelomi-ssh-setup: &avelomi-ssh-setup |
       apk add --no-cache openssh-client
       mkdir -p ~/.ssh && chmod 700 ~/.ssh
-      SSH_KEY_MATERIAL="${AVELOMI_SSH_KEY:-${LIGHTSAIL_PRIVATE_KEY:-}}"
-      if [ -z "$SSH_KEY_MATERIAL" ]; then
-        echo "Missing Avelomi SSH key: set AVELOMI_SSH_KEY or LIGHTSAIL_PRIVATE_KEY in Bitbucket secured variables." >&2
+
+      write_ssh_key_material() {
+        key_material="$1"
+        if printf '%s\n' "$key_material" | grep -q -- "-----BEGIN .*PRIVATE KEY-----"; then
+          printf '%b\n' "$key_material" > ~/.ssh/avelomi.pem
+        else
+          printf '%s' "$key_material" | base64 -d > ~/.ssh/avelomi.pem || {
+            echo "Avelomi SSH key is neither PEM nor valid base64." >&2
+            exit 1
+          }
+        fi
+      }
+
+      if [ -n "${AVELOMI_SSH_KEY:-}" ]; then
+        write_ssh_key_material "$AVELOMI_SSH_KEY"
+      elif [ -n "${BITBUCKET_SSH_KEY_FILE:-}" ] && [ -f "$BITBUCKET_SSH_KEY_FILE" ]; then
+        cp "$BITBUCKET_SSH_KEY_FILE" ~/.ssh/avelomi.pem
+      elif [ -n "${SSH_PRIVATE_KEY:-}" ]; then
+        write_ssh_key_material "$SSH_PRIVATE_KEY"
+      else
+        echo "Missing Avelomi SSH key: set AVELOMI_SSH_KEY or authorize Bitbucket's default SSH key on the Avelomi server." >&2
         exit 1
       fi
-      if printf '%s\n' "$SSH_KEY_MATERIAL" | grep -q -- "-----BEGIN .*PRIVATE KEY-----"; then
-        printf '%b\n' "$SSH_KEY_MATERIAL" > ~/.ssh/avelomi.pem
-      else
-        printf '%s' "$SSH_KEY_MATERIAL" | base64 -d > ~/.ssh/avelomi.pem || {
-          echo "Avelomi SSH key is neither PEM nor valid base64." >&2
-          exit 1
-        }
-      fi
+
       chmod 600 ~/.ssh/avelomi.pem
       ssh-keygen -y -f ~/.ssh/avelomi.pem >/dev/null || {
         echo "Avelomi SSH key file is invalid or encrypted with a passphrase." >&2
