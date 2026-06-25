@@ -10,6 +10,11 @@ const lang = computed({
   get: () => props.lang,
   set: (v) => emit('update:lang', v),
 });
+
+// Cibles applicatives (ERP Avelomi), routes auth existantes (frontend React).
+// Relatif = meme domaine que la landing (comme AllApps.vue qui pointe vers /crm).
+const LOGIN_URL = '/admin/auth/login';
+const SIGNUP_URL = '/admin/auth/register';
 </script>
 
 <template>
@@ -32,8 +37,8 @@ const lang = computed({
           <button :class="{active: lang==='fr'}" @click="lang='fr'">FR</button>
           <button :class="{active: lang==='en'}" @click="lang='en'">EN</button>
         </div>
-        <a class="btn btn-ghost btn-connexion" href="#"><span data-fr>Connexion</span><span data-en>Sign in</span></a>
-        <a class="btn btn-primary" href="#"><span data-fr>Commencer</span><span data-en>Start now</span></a>
+        <a class="btn btn-ghost btn-connexion" :href="LOGIN_URL"><span data-fr>Connexion</span><span data-en>Sign in</span></a>
+        <a class="btn btn-primary" :href="SIGNUP_URL"><span data-fr>Commencer</span><span data-en>Start now</span></a>
       </div>
     </nav>
   </div>
@@ -57,7 +62,7 @@ const lang = computed({
       <span data-en>Accounting, sales, HR, inventory, real estate, agriculture, projects — simple apps, 100% integrated. The power of a major ERP, without the complexity or the bill.</span>
     </p>
     <div class="hero-cta">
-      <a class="btn btn-primary btn-lg" href="#"><span data-fr>Commencer — c'est gratuit</span><span data-en>Start now — it's free</span></a>
+      <a class="btn btn-primary btn-lg" :href="SIGNUP_URL"><span data-fr>Commencer — c'est gratuit</span><span data-en>Start now — it's free</span></a>
       <a class="btn btn-ghost btn-lg" href="#"><span data-fr>▶ Voir la démo</span><span data-en>▶ Watch demo</span></a>
     </div>
     <p class="hero-note">
@@ -680,7 +685,7 @@ const lang = computed({
         <div class="pdesc" data-fr>Pour démarrer et tester tout l'ERP.</div><div class="pdesc" data-en>To get started and test the whole ERP.</div>
         <div class="pprice"><b>0 $</b><span data-fr>/ pour toujours</span><span data-en>/ forever</span></div>
         <div class="pbill" data-fr>Aucune carte bancaire</div><div class="pbill" data-en>No credit card</div>
-        <a class="btn btn-ghost btn-lg" href="#"><span data-fr>Commencer gratuitement</span><span data-en>Start for free</span></a>
+        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL"><span data-fr>Commencer gratuitement</span><span data-en>Start for free</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Toutes les applications</b> incluses</span><span data-en><b>All apps</b> included</span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 3 utilisateurs</span><span data-en>1 company · up to 3 users</span></li>
@@ -695,7 +700,7 @@ const lang = computed({
         <div class="pdesc" data-fr>Plus d'IA au quotidien, petit budget.</div><div class="pdesc" data-en>More daily AI on a small budget.</div>
         <div class="pprice"><b>5 $</b><span data-fr>/ mois</span><span data-en>/ month</span></div>
         <div class="pbill" data-fr>Facturé mensuellement</div><div class="pbill" data-en>Billed monthly</div>
-        <a class="btn btn-ghost btn-lg" href="#"><span data-fr>Choisir Starter</span><span data-en>Choose Starter</span></a>
+        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL"><span data-fr>Choisir Starter</span><span data-en>Choose Starter</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Tout du forfait Gratuit</b></span><span data-en><b>Everything in Free</b></span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 50 utilisateurs</span><span data-en>1 company · up to 50 users</span></li>
@@ -712,7 +717,7 @@ const lang = computed({
         <div class="pdesc" data-fr>L'IA à pleine puissance, tout illimité.</div><div class="pdesc" data-en>AI at full power, everything unlimited.</div>
         <div class="pprice"><b>19 $</b><span data-fr>/ mois</span><span data-en>/ month</span></div>
         <div class="pbill" data-fr>Facturé mensuellement</div><div class="pbill" data-en>Billed monthly</div>
-        <a class="btn btn-primary btn-lg" href="#"><span data-fr>Choisir Business</span><span data-en>Choose Business</span></a>
+        <a class="btn btn-primary btn-lg" :href="SIGNUP_URL"><span data-fr>Choisir Business</span><span data-en>Choose Business</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Tout du forfait Starter</b></span><span data-en><b>Everything in Starter</b></span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 100 utilisateurs</span><span data-en>1 company · up to 100 users</span></li>
@@ -729,7 +734,7 @@ const lang = computed({
         <div class="pdesc" data-fr>Pour les groupes multi-entités.</div><div class="pdesc" data-en>For multi-entity groups.</div>
         <div class="pprice"><b data-fr>Sur devis</b><b data-en>Custom</b></div>
         <div class="pbill" data-fr>Adapté à votre organisation</div><div class="pbill" data-en>Tailored to your organization</div>
-        <a class="btn btn-ghost btn-lg" href="#"><span data-fr>Parler à un expert</span><span data-en>Talk to sales</span></a>
+        <a class="btn btn-ghost btn-lg" href="#faq"><span data-fr>Parler à un expert</span><span data-en>Talk to sales</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Tout du forfait Business</b></span><span data-en><b>Everything in Business</b></span></li>
           <li><span class="pk">✓</span><span data-fr><b>Multi-entreprises</b> & consolidation</span><span data-en><b>Multi-company</b> & consolidation</span></li>
@@ -824,8 +829,8 @@ const lang = computed({
       <p data-fr>Essai gratuit · Sans carte bancaire · Migration assistée incluse.</p>
       <p data-en>Free trial · No credit card · Assisted migration included.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="#"><span data-fr>Commencer maintenant</span><span data-en>Start now</span></a>
-        <a class="btn btn-ghost btn-lg" href="#"><span data-fr>Parler à un expert</span><span data-en>Talk to an advisor</span></a>
+        <a class="btn btn-primary btn-lg" :href="SIGNUP_URL"><span data-fr>Commencer maintenant</span><span data-en>Start now</span></a>
+        <a class="btn btn-ghost btn-lg" href="#faq"><span data-fr>Parler à un expert</span><span data-en>Talk to an advisor</span></a>
       </div>
     </div>
   </div>
@@ -852,10 +857,10 @@ const lang = computed({
       </div>
       <div class="fcol">
         <h5 data-fr>Produit</h5><h5 data-en>Product</h5>
-        <a href="#" data-fr>Applications</a><a href="#" data-en>Apps</a>
-        <a href="#" data-fr>Plateforme</a><a href="#" data-en>Platform</a>
-        <a href="#" data-fr>Tarifs</a><a href="#" data-en>Pricing</a>
-        <a href="#" data-fr>Sécurité</a><a href="#" data-en>Security</a>
+        <a href="#/apps" data-fr>Applications</a><a href="#/apps" data-en>Apps</a>
+        <a href="#features" data-fr>Plateforme</a><a href="#features" data-en>Platform</a>
+        <a href="#pricing" data-fr>Tarifs</a><a href="#pricing" data-en>Pricing</a>
+        <a href="#faq" data-fr>Sécurité</a><a href="#faq" data-en>Security</a>
       </div>
       <div class="fcol">
         <h5 data-fr>Entreprise</h5><h5 data-en>Company</h5>
