@@ -11,10 +11,9 @@ const lang = computed({
   set: (v) => emit('update:lang', v),
 });
 
-// Cibles applicatives (ERP Avelomi). Aligne sur AllApps.vue qui pointe vers /crm.
-// NB: l'ERP doit etre servi sous ce domaine (reverse-proxy) pour que /crm reponde.
-const LOGIN_URL = '/crm';
-const SIGNUP_URL = '/crm';
+// Pages auth Avelomi natives (Auth.vue) — memes endpoints backend que l'ERP via /api.
+const LOGIN_URL = '#/login';
+const SIGNUP_URL = '#/signup';
 </script>
 
 <template>
