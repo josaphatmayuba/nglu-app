@@ -38,6 +38,10 @@ export class RegisterDto {
   @IsOptional() @IsString() @MaxLength(40)
   phone?: string;
 
+  // Plan d abonnement choisi sur la grille de prix (defaut: free).
+  @IsOptional() @IsIn(["free", "starter", "business", "enterprise"])
+  plan?: "free" | "starter" | "business" | "enterprise";
+
   @IsBoolean()
   acceptedTerms: boolean;
 }

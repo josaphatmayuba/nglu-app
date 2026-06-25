@@ -61,6 +61,8 @@ export const organizations = mysqlTable("organizations", {
   name: varchar("name", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   status: varchar("status", { length: 50 }).default("active").notNull(),
+  // Plan d abonnement choisi a l inscription (free|starter|business|enterprise).
+  plan: varchar("plan", { length: 30 }).default("free").notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

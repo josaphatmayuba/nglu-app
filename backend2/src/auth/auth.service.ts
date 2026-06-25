@@ -254,6 +254,7 @@ export class AuthService {
         name: orgName,
         slug,
         status: "trial",
+        plan: dto.plan ?? "free",
         createdAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       } as any);
@@ -296,7 +297,7 @@ export class AuthService {
       refreshToken,
       role: "admin",
       user: { id: created.userId, firstName: dto.firstName, lastName: dto.lastName, email, organizationId: created.orgId },
-      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial" },
+      organization: { id: created.orgId, publicId, name: orgName, slug, status: "trial", plan: dto.plan ?? "free" },
     };
   }
 
