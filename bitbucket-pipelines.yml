@@ -60,6 +60,17 @@ definitions:
           "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
         chmod 600 "$f"; echo "[deploy] .env.dev genere (secrets openssl serveur)";
       else echo "[deploy] .env.dev deja present — inchange"; fi'
+    # Garde prod Avelomi : le serveur 3.128.45.29 doit etre provisionne
+    # (provision-avelomi.sh : clone /opt/nglu-app + .env.prod avec secrets) AVANT
+    # tout deploiement master. Tant que .env.prod (= secrets, jamais en CI) est
+    # absent, on SKIP proprement (exit 0) au lieu de planter sur un scp vers un
+    # dossier inexistant. Suppose SERVER/SSH deja exportes par le step appelant.
+    avelomi-prod-guard: &avelomi-prod-guard |
+      if ! $SSH $SERVER 'test -f /opt/nglu-app/.env.prod'; then
+        echo "[deploy] Serveur prod Avelomi NON provisionne (/opt/nglu-app/.env.prod absent)."
+        echo "[deploy] Lance scripts/provision-avelomi.sh sur 3.128.45.29, puis re-merge master. Step ignore."
+        exit 0
+      fi
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
@@ -554,6 +565,7 @@ pipelines:
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - *avelomi-prod-guard
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
@@ -569,6 +581,7 @@ pipelines:
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - *avelomi-prod-guard
                 - $SCP -r pdf-service $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
@@ -581,6 +594,7 @@ pipelines:
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - *avelomi-prod-guard
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - $SCP -r middleware $SERVER:$APP/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"

@@ -23,6 +23,16 @@ LOCK_WAIT_SECONDS="${LOCK_WAIT_SECONDS:-900}"
 # (e.g. BASE_URL=https://avelomi.com) so the deploy verifies the right domain.
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
 
+# Garde provisionnement : si le serveur cible n'a pas $ENV_FILE (ex. prod Avelomi
+# pas encore provisionnee via provision-avelomi.sh), on SKIP proprement (exit 0)
+# au lieu de planter sur `cd $REMOTE_ROOT` / --env-file inexistant. Evite un echec
+# rouge trompeur sur chaque merge master tant que le serveur n'est pas pret.
+if ! $SSH_CMD "$SERVER" "test -f '$REMOTE_ROOT/$ENV_FILE'"; then
+  echo "[deploy] $SERVER non provisionne ($REMOTE_ROOT/$ENV_FILE absent)." >&2
+  echo "[deploy] Lance scripts/provision-avelomi.sh sur ce serveur, puis re-merge master. Step ignore." >&2
+  exit 0
+fi
+
 if [ ! -d "$DIST_DIR" ]; then
   echo "Missing dist directory: $DIST_DIR" >&2
   exit 1
