@@ -220,18 +220,19 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 
     <!-- INSCRIPTION (4 etapes) -->
     <div v-else-if="view === 'signup'" class="auth-card">
+      <h1>{{ t('Créer votre compte', 'Create your account') }}</h1>
+      <div class="steps-head"><span class="step-label">{{ stepLabel }}</span><span class="step-count">{{ step }}/{{ TOTAL }}</span></div>
       <div class="steps-bar"><span class="seg" v-for="i in TOTAL" :key="i" :class="{ done: i <= step }"></span></div>
-      <div class="step-label">{{ stepLabel }}</div>
 
       <!-- Etape 1 : compte -->
       <form v-if="step === 1" @submit.prevent="next">
         <div class="auth-row">
-          <label>{{ t('Prénom','First name') }}<input v-model="reg.firstName" type="text" :class="{err:fieldErr.firstName}" /><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
-          <label>{{ t('Nom','Last name') }}<input v-model="reg.lastName" type="text" :class="{err:fieldErr.lastName}" /><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
+          <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
+          <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
         </div>
-        <label>{{ t('Email professionnel','Work email') }}<input v-model="reg.email" type="email" :class="{err:fieldErr.email}" /><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
-        <label>{{ t('Mot de passe','Password') }}<input v-model="reg.password" type="password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" :class="{err:fieldErr.password}" />
-          <span class="pwd-bar"><i :style="{ width: (pwdScore/4*100)+'%', background: pwdColor }"></i></span>
+        <label>{{ t('Email professionnel','Work email') }}<span class="field" :class="{err:fieldErr.email}"><i class="fi">✉️</i><input v-model="reg.email" type="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></span><small v-if="fieldErr.email" class="fe">{{ fieldErr.email }}</small></label>
+        <label>{{ t('Mot de passe','Password') }}<span class="field" :class="{err:fieldErr.password}"><i class="fi">🔒</i><input v-model="reg.password" type="password" :placeholder="t('Au moins 8 caractères','At least 8 characters')" /></span>
+          <span v-if="reg.password" class="pwd-bar"><i :style="{ width: (pwdScore/4*100)+'%', background: pwdColor }"></i></span>
           <small v-if="fieldErr.password" class="fe">{{ fieldErr.password }}</small>
         </label>
         <button class="auth-btn">{{ t('Continuer →','Continue →') }}</button>
@@ -302,23 +303,35 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 .auth-logo{display:inline-flex;align-items:center;gap:9px;font-weight:850;font-size:22px;letter-spacing:-.5px;color:#0e2418;text-decoration:none}
 .auth-logo .mark,.ws-brand .mark{width:30px;height:30px;display:inline-grid;place-items:center}
 .auth-logo .mark svg,.ws-brand .mark svg{width:30px;height:30px}
-.auth-card{width:min(440px,94vw);background:#fff;border:1px solid #e7ebf2;border-radius:20px;padding:28px 26px;box-shadow:0 30px 60px -34px rgba(20,40,30,.4);display:flex;flex-direction:column;gap:13px}
-.auth-card h1{font-size:24px;letter-spacing:-.7px;font-weight:850;color:#0f1729}
-.auth-sub{color:#6b7a90;font-size:14.5px;margin-top:-4px}
-.auth-card label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:#3a4a63}
-.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1px solid #d7deea;border-radius:11px;padding:11px 13px;font-size:15px;font-family:inherit;color:#0f1729;outline:none;transition:.15s;background:#fff}
-.auth-card input:focus,.auth-card select:focus{border-color:#1fbf73;box-shadow:0 0 0 3px rgba(31,191,115,.15)}
+.auth-card{width:min(452px,94vw);background:#fff;border:1px solid #eef1f4;border-radius:24px;padding:34px 32px;box-shadow:0 40px 80px -38px rgba(20,40,30,.45),0 2px 8px -4px rgba(20,40,30,.08);display:flex;flex-direction:column;gap:16px}
+.auth-card h1{font-size:26px;letter-spacing:-.8px;font-weight:850;color:#0f1729;line-height:1.15}
+.auth-sub{color:#6b7a90;font-size:14.5px;margin-top:-8px}
+.auth-card label{display:flex;flex-direction:column;gap:7px;font-size:12.5px;font-weight:700;color:#3a4a63;letter-spacing:.01em}
+/* wrapper champ avec icone */
+.field{display:flex;align-items:center;gap:9px;border:1.5px solid #e2e8f0;border-radius:12px;padding:0 13px;background:#fbfcfd;transition:.16s}
+.field:focus-within{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
+.field.err{border-color:#dc2626;background:#fff}
+.field .fi{font-size:15px;opacity:.6;flex-shrink:0;line-height:1}
+.field input{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:12px 0;font-size:15px;font-family:inherit;color:#0f1729}
+/* champs hors wrapper (select, slug, tel des autres etapes) */
+.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 13px;font-size:15px;font-family:inherit;color:#0f1729;outline:none;transition:.16s;background:#fbfcfd}
+.field input{border-radius:0!important}
+.auth-card input:not(.field input):focus,.auth-card select:focus{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
 .auth-card input.err{border-color:#dc2626}
 .auth-row{display:flex;gap:12px}
 .auth-row label{flex:1;min-width:0}
+/* en-tete des etapes */
+.steps-head{display:flex;justify-content:space-between;align-items:baseline;margin-top:-6px}
+.step-count{font-size:12px;font-weight:800;color:#1fbf73}
 .fe{color:#dc2626;font-size:12px;font-weight:600}
 .hint{color:#94a0b4;font-size:12px;font-weight:600}
 .pwd-bar{height:4px;border-radius:99px;background:#e7ebf2;overflow:hidden;margin-top:2px}
 .pwd-bar i{display:block;height:100%;border-radius:99px;transition:.3s}
 .auth-check{flex-direction:row!important;align-items:flex-start;gap:9px;font-weight:600;color:#3a4a63;font-size:13.5px}
 .auth-check input{width:17px;height:17px;flex-shrink:0;margin-top:2px}
-.auth-btn{margin-top:2px;border:none;border-radius:12px;padding:13px 18px;font-size:15.5px;font-weight:800;letter-spacing:-.2px;cursor:pointer;background:linear-gradient(135deg,#1fbf73,#0e7a48);color:#fff;transition:.15s;text-decoration:none;text-align:center;display:block}
-.auth-btn:hover{filter:brightness(1.05)}
+.auth-btn{margin-top:4px;border:none;border-radius:13px;padding:14px 18px;font-size:15.5px;font-weight:800;letter-spacing:-.2px;cursor:pointer;background:linear-gradient(135deg,#22c97b,#0e7a48);color:#fff;transition:.16s;text-decoration:none;text-align:center;display:block;box-shadow:0 10px 22px -10px rgba(14,122,72,.7)}
+.auth-btn:hover{filter:brightness(1.04);transform:translateY(-1px)}
+.auth-btn:active{transform:translateY(0)}
 .auth-btn:disabled{opacity:.6;cursor:default}
 .auth-btn.ghost{background:#fff;color:#0e7a48;border:1.5px solid #1fbf73}
 .btn-row{display:flex;gap:10px}
