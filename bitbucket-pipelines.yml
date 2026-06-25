@@ -50,6 +50,16 @@ definitions:
         echo "Avelomi SSH key file is invalid or encrypted with a passphrase." >&2
         exit 1
       }
+    # Cree /opt/nglu-app-dev/.env.dev SI ABSENT, secrets generes SUR LE SERVEUR
+    # Avelomi (openssl) : ils ne transitent jamais par le repo ni le runner.
+    # Idempotent : si le fichier existe deja, inchange (preserve la DB dev peuplee).
+    # Suppose SERVER/SSH deja exportes par le step appelant.
+    avelomi-dev-env: &avelomi-dev-env |
+      $SSH $SERVER 'set -e; f=/opt/nglu-app-dev/.env.dev; if [ ! -f "$f" ]; then
+        printf "DB_ROOT_PASSWORD=%s\nDB_DATABASE=nglu_dev_db\nDB_USERNAME=nglu_dev\nDB_PASSWORD=%s\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nCORS_ORIGIN=https://dev.avelomi.com\nAPP_URL=https://dev.avelomi.com\nFRONTEND_URL=https://dev.avelomi.com/crm\nREDIS_ENABLED=true\n" \
+          "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
+        chmod 600 "$f"; echo "[deploy] .env.dev genere (secrets openssl serveur)";
+      else echo "[deploy] .env.dev deja present — inchange"; fi'
   caches:
     node-frontend: frontend/node_modules
     node-backend2: backend2/node_modules
@@ -329,6 +339,7 @@ pipelines:
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "sudo mkdir -p $APP/backend2 && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - *avelomi-dev-env
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 # Sync package.json AVANT le --build (Dockerfile = COPY package*.json + npm ci).
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
@@ -347,6 +358,7 @@ pipelines:
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - *avelomi-dev-env
                 - $SCP -r pdf-service $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
@@ -361,6 +373,7 @@ pipelines:
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - *avelomi-dev-env
                 - $SCP -r middleware $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
