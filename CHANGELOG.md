@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.115.3)
+- **Build backend cassé — `currencyId` manquant dans `CreatePurchaseInvoiceDto`**. `purchase-invoices.service.ts:99` lisait `input.currencyId` alors que le DTO ne déclarait pas ce champ → `nest build` en échec (TS2339) → pas de `dist/` → déploiement dev avorté. Le champ (`@IsOptional() @IsInt() @Min(1) currencyId?`) est ajouté au DTO. Régression préexistante sur `develop`, révélée par le 1er build déclenché. **Vérifié** : `npx tsc --noEmit` backend OK (exit 0). [SCRUM]
+
 ### Security (3.115.2)
 - **Chat — correction d'une XSS stockée** (audit sécurité statique du backend partagé Avelomi + ongdngolu/CRM). Le fil de discussion rendait `msg.content` via `dangerouslySetInnerHTML` après un `parseContent` qui n'échappait que les `@mentions` (`chat-app/src/app.jsx`) → un message du type `<img onerror=…>` stocké s'exécutait chez les autres utilisateurs. **Correctif double** : (1) **front** — `parseContent` échappe désormais tout le HTML (`& < > " '`) AVANT de surligner les mentions ; (2) **backend (défense en profondeur)** — `ChatService.sendMessage` passe le contenu par `sanitizeMessageContent` (suppression de toute balise `<…>`, trim, plafond 5000 car.) — point de passage commun des deux portes d'entrée (controller HTTP **et** WebSocket gateway, ce dernier ne traversant pas la `ValidationPipe`). Le reste de l'audit (SQLi via Drizzle paramétré, JWT+JTI en DB, anti-brute-force, étanchéité multi-tenant, helmet/CSP/CORS) est ressorti sain. **Vérifié** : `npx tsc --noEmit` backend OK. NON déployé. [SCRUM]
 
