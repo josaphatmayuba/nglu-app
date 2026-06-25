@@ -14,6 +14,11 @@ const lang = computed({
 // Pages auth Avelomi natives (Auth.vue) — memes endpoints backend que l'ERP via /api.
 const LOGIN_URL = '#/login';
 const SIGNUP_URL = '#/signup';
+
+// Logos clients : la section reste MASQUEE tant que la liste est vide.
+// Ajouter une entree { name, src } (src = chemin image) -> elle apparait.
+// A terme alimentable depuis une administration.
+const clientLogos = [];
 </script>
 
 <template>
@@ -634,7 +639,7 @@ const SIGNUP_URL = '#/signup';
         <div class="col-me yes">✓</div><div class="no">—</div><div class="no">—</div><div class="no">—</div><div class="no" data-fr>Module tiers</div><div class="no" data-en>3rd-party</div><div class="no">—</div><div class="no">—</div>
       </div>
       <div class="crow">
-        <div class="feat" data-fr>Multi-devises (USD / EUR / GBP / JPY / CAD / CDF…) sans surcoût</div><div class="feat" data-en>Multi-currency (USD / EUR / GBP / JPY / CAD / CDF…), no add-on</div>
+        <div class="feat" data-fr>Multi-devises (USD, EUR, GBP, CFA…) sans surcoût</div><div class="feat" data-en>Multi-currency (USD, EUR, GBP, CFA…), no add-on</div>
         <div class="col-me yes">✓</div><div class="no" data-fr>Payant</div><div class="no" data-en>Paid</div><div class="no" data-fr>Payant</div><div class="no" data-en>Paid</div><div class="no" data-fr>Limité</div><div class="no" data-en>Limited</div><div class="no" data-fr>Payant</div><div class="no" data-en>Paid</div><div class="no" data-fr>Limité</div><div class="no" data-en>Limited</div><div class="no" data-fr>Payant</div><div class="no" data-en>Paid</div>
       </div>
       <div class="crow">
@@ -684,7 +689,7 @@ const SIGNUP_URL = '#/signup';
         <div class="pdesc" data-fr>Pour démarrer et tester tout l'ERP.</div><div class="pdesc" data-en>To get started and test the whole ERP.</div>
         <div class="pprice"><b>0 $</b><span data-fr>/ pour toujours</span><span data-en>/ forever</span></div>
         <div class="pbill" data-fr>Aucune carte bancaire</div><div class="pbill" data-en>No credit card</div>
-        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL"><span data-fr>Commencer gratuitement</span><span data-en>Start for free</span></a>
+        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL + '?plan=free'"><span data-fr>Commencer gratuitement</span><span data-en>Start for free</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Toutes les applications</b> incluses</span><span data-en><b>All apps</b> included</span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 3 utilisateurs</span><span data-en>1 company · up to 3 users</span></li>
@@ -699,7 +704,7 @@ const SIGNUP_URL = '#/signup';
         <div class="pdesc" data-fr>Plus d'IA au quotidien, petit budget.</div><div class="pdesc" data-en>More daily AI on a small budget.</div>
         <div class="pprice"><b>5 $</b><span data-fr>/ mois</span><span data-en>/ month</span></div>
         <div class="pbill" data-fr>Facturé mensuellement</div><div class="pbill" data-en>Billed monthly</div>
-        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL"><span data-fr>Choisir Starter</span><span data-en>Choose Starter</span></a>
+        <a class="btn btn-ghost btn-lg" :href="SIGNUP_URL + '?plan=starter'"><span data-fr>Choisir Starter</span><span data-en>Choose Starter</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Tout du forfait Gratuit</b></span><span data-en><b>Everything in Free</b></span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 50 utilisateurs</span><span data-en>1 company · up to 50 users</span></li>
@@ -716,7 +721,7 @@ const SIGNUP_URL = '#/signup';
         <div class="pdesc" data-fr>L'IA à pleine puissance, tout illimité.</div><div class="pdesc" data-en>AI at full power, everything unlimited.</div>
         <div class="pprice"><b>19 $</b><span data-fr>/ mois</span><span data-en>/ month</span></div>
         <div class="pbill" data-fr>Facturé mensuellement</div><div class="pbill" data-en>Billed monthly</div>
-        <a class="btn btn-primary btn-lg" :href="SIGNUP_URL"><span data-fr>Choisir Business</span><span data-en>Choose Business</span></a>
+        <a class="btn btn-primary btn-lg" :href="SIGNUP_URL + '?plan=business'"><span data-fr>Choisir Business</span><span data-en>Choose Business</span></a>
         <ul class="plist">
           <li><span class="pk">✓</span><span data-fr><b>Tout du forfait Starter</b></span><span data-en><b>Everything in Starter</b></span></li>
           <li><span class="pk">✓</span><span data-fr>1 entreprise · jusqu'à 100 utilisateurs</span><span data-en>1 company · up to 100 users</span></li>
@@ -761,20 +766,18 @@ const SIGNUP_URL = '#/signup';
     <div class="trust-row">
       <div class="trust-item"><span class="trust-ic">🆓</span><b data-fr>Gratuit pour démarrer</b><b data-en>Free to start</b><small data-fr>Toutes les apps, sans carte bancaire</small><small data-en>All apps, no credit card</small></div>
       <div class="trust-item"><span class="trust-ic">📶</span><b data-fr>Fonctionne hors-ligne</b><b data-en>Works offline</b><small data-fr>Sync automatique au retour réseau</small><small data-en>Auto-sync when back online</small></div>
-      <div class="trust-item"><span class="trust-ic">🌍</span><b data-fr>Multi-devises inclus</b><b data-en>Multi-currency included</b><small data-fr>USD, EUR, CDF, CFA… sans surcoût</small><small data-en>USD, EUR, CDF, CFA… no add-on</small></div>
+      <div class="trust-item"><span class="trust-ic">🌍</span><b data-fr>Multi-devises inclus</b><b data-en>Multi-currency included</b><small data-fr>USD, EUR, GBP, CFA… sans surcoût</small><small data-en>USD, EUR, GBP, CFA… no add-on</small></div>
       <div class="trust-item"><span class="trust-ic">🤝</span><b data-fr>Migration assistée</b><b data-en>Assisted migration</b><small data-fr>On reprend vos données Excel</small><small data-en>We bring over your Excel data</small></div>
     </div>
 
-    <!-- Bandeau logos clients — emplacements à remplir plus tard -->
-    <p class="trust-kick" data-fr>Bientôt : les entreprises qui pilotent leur activité avec Avelomi</p>
-    <p class="trust-kick" data-en>Coming soon: companies running their business on Avelomi</p>
-    <div class="logos">
-      <span class="logo-ph" data-fr>Votre logo ici</span><span class="logo-ph" data-en>Your logo here</span>
-      <span class="logo-ph" data-fr>Votre logo ici</span><span class="logo-ph" data-en>Your logo here</span>
-      <span class="logo-ph" data-fr>Votre logo ici</span><span class="logo-ph" data-en>Your logo here</span>
-      <span class="logo-ph" data-fr>Votre logo ici</span><span class="logo-ph" data-en>Your logo here</span>
-      <span class="logo-ph" data-fr>Votre logo ici</span><span class="logo-ph" data-en>Your logo here</span>
-    </div>
+    <!-- Bandeau logos clients — masque tant qu'aucun logo n'est ajoute (clientLogos vide) -->
+    <template v-if="clientLogos.length">
+      <p class="trust-kick" data-fr>Les entreprises qui pilotent leur activité avec Avelomi</p>
+      <p class="trust-kick" data-en>Companies running their business on Avelomi</p>
+      <div class="logos">
+        <img v-for="l in clientLogos" :key="l.name" class="logo-img" :src="l.src" :alt="l.name" />
+      </div>
+    </template>
   </div>
 </section>
 
