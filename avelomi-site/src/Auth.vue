@@ -169,10 +169,10 @@ function logout() { accessToken = null; me.value = null; go('#/login'); }
 .auth-card h1{font-size:25px;letter-spacing:-.7px;font-weight:850;color:#0f1729}
 .auth-sub{color:#6b7a90;font-size:14.5px;margin-top:-6px;margin-bottom:6px}
 .auth-card label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:700;color:#3a4a63}
-.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel]{border:1px solid #d7deea;border-radius:11px;padding:11px 13px;font-size:15px;font-family:inherit;color:#0f1729;outline:none;transition:.15s}
+.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel]{width:100%;min-width:0;box-sizing:border-box;border:1px solid #d7deea;border-radius:11px;padding:11px 13px;font-size:15px;font-family:inherit;color:#0f1729;outline:none;transition:.15s}
 .auth-card input:focus{border-color:#1fbf73;box-shadow:0 0 0 3px rgba(31,191,115,.15)}
 .auth-row{display:flex;gap:12px}
-.auth-row label{flex:1}
+.auth-row label{flex:1;min-width:0}
 .auth-check{flex-direction:row!important;align-items:center;gap:9px;font-weight:600;color:#3a4a63}
 .auth-check input{width:17px;height:17px;flex-shrink:0}
 .auth-btn{margin-top:4px;border:none;border-radius:12px;padding:13px 18px;font-size:15.5px;font-weight:800;letter-spacing:-.2px;cursor:pointer;background:linear-gradient(135deg,#1fbf73,#0e7a48);color:#fff;transition:.15s}
