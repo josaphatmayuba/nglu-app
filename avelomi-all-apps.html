@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Avelomi — Toutes les applications</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff;--bg-soft:#f6f7fb;--bg-tint:#f0f3ff;
+    --ink:#0f1729;--ink-2:#3a4a63;--muted:#6b7a90;--line:#e7ebf2;
+    --brand:#6d5efc;--brand-d:#5847e8;--gold:#ffce3a;--green:#1fbf8f;--pink:#ff6f91;
+    --radius:18px;
+    --shadow-sm:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+    --shadow:0 22px 50px -24px rgba(20,28,60,.28);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{width:min(1180px,92vw);margin:0 auto}
+
+  /* nav (identique à la landing) */
+  header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav{display:flex;align-items:center;gap:28px;height:70px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:-.6px}
+  .logo .mark{width:32px;height:32px;border-radius:9px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden}
+  .logo .mark svg{width:32px;height:32px;display:block}
+  .nav-links{display:flex;gap:24px;margin-left:12px;font-size:15px;color:var(--ink-2);font-weight:500}
+  .nav-links a:hover{color:var(--brand)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .lang{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;font-size:12.5px}
+  .lang button{background:#fff;color:var(--muted);border:0;padding:6px 12px;cursor:pointer;font-weight:700}
+  .lang button.active{background:var(--ink);color:#fff}
+  .btn{display:inline-flex;align-items:center;gap:8px;justify-content:center;border-radius:999px;font-weight:700;font-size:15px;cursor:pointer;border:1px solid transparent;padding:11px 20px;transition:.18s;white-space:nowrap}
+  .btn-ghost{color:var(--ink);border-color:var(--line);background:#fff}
+  .btn-ghost:hover{border-color:#cdd5e2;background:var(--bg-soft)}
+  .btn-primary{color:#fff;background:var(--brand)}
+  .btn-primary:hover{background:var(--brand-d);transform:translateY(-1px)}
+
+  /* page head */
+  .apps-head{text-align:center;padding:60px 0 26px}
+  .eyebrow{color:var(--brand-d);font-weight:800;font-size:13px;letter-spacing:1.4px;text-transform:uppercase;margin-bottom:14px}
+  .apps-head h1{font-size:clamp(34px,5vw,56px);letter-spacing:-1.8px;font-weight:850;line-height:1.05;margin-bottom:14px}
+  .apps-head h1 .hl{position:relative;white-space:nowrap}
+  .apps-head h1 .hl:after{content:"";position:absolute;left:-2%;right:-2%;bottom:.08em;height:.34em;background:var(--gold);z-index:-1;border-radius:4px;transform:rotate(-1deg)}
+  .apps-head p{color:var(--muted);font-size:18px;max-width:54ch;margin:0 auto}
+  .crumb{display:inline-flex;gap:7px;align-items:center;color:var(--muted);font-size:13.5px;margin-bottom:22px}
+  .crumb a{color:var(--brand-d);font-weight:700}
+
+  /* search + category chips (Odoo-like) */
+  .apps-tools{display:flex;flex-direction:column;align-items:center;gap:16px;margin:6px 0 40px}
+  .apps-search{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:11px 18px;width:min(440px,90vw);box-shadow:var(--shadow-sm);color:var(--muted);font-size:14px}
+  .apps-search input{border:0;outline:0;flex:1;font-size:14px;font-family:inherit;color:var(--ink);background:transparent}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:860px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 15px;font-size:13px;font-weight:700;color:var(--ink-2);cursor:pointer;transition:.15s}
+  .chip:hover{border-color:#cdd5e2}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  /* category sections */
+  main{padding:0 0 80px}
+  .cat{margin-bottom:50px}
+  .cat-head{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .cat-head .ci{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#fff;flex-shrink:0}
+  .cat-head .ci svg{width:18px;height:18px}
+  .cat-head h2{font-size:21px;letter-spacing:-.6px;font-weight:850}
+  .cat-head span{color:var(--muted);font-size:13.5px;margin-left:2px}
+  .agrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .acard{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 16px;transition:.16s;box-shadow:var(--shadow-sm)}
+  .acard:hover{transform:translateY(-3px);border-color:#d7deea;box-shadow:var(--shadow)}
+  .acard .ab{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;flex-shrink:0;overflow:hidden}
+  .acard .ab svg{width:22px;height:22px}
+  .acard .ab img{width:100%;height:100%;object-fit:cover;display:block}
+  .acard b{display:block;font-size:14.5px;letter-spacing:-.2px;line-height:1.15}
+  .acard small{color:var(--muted);font-size:12px}
+  .soon{margin-left:auto;font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--brand-d);background:var(--bg-tint);padding:3px 7px;border-radius:999px;flex-shrink:0}
+
+  /* cta */
+  .apps-cta{text-align:center;padding:54px 40px;border-radius:28px;background:linear-gradient(135deg,var(--brand),#8b7dff);color:#fff;box-shadow:0 30px 60px -28px rgba(109,94,252,.7)}
+  .apps-cta h2{font-size:clamp(26px,4vw,38px);letter-spacing:-1px;margin-bottom:12px;font-weight:850}
+  .apps-cta p{opacity:.92;margin-bottom:24px;font-size:17px}
+  .apps-cta .btn-primary{background:#fff;color:var(--brand-d)}
+  .apps-cta .btn-primary:hover{background:#f3f1ff}
+
+  footer{border-top:1px solid var(--line);padding:40px 0;background:var(--bg-soft);text-align:center;color:#93a0b4;font-size:13.5px;margin-top:30px}
+
+  /* ===== app detail modal ===== */
+  .acard{cursor:pointer}
+  .ov{position:fixed;inset:0;z-index:100;background:rgba(15,23,41,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:20px}
+  .ov.show{display:flex}
+  .modal{background:#fff;border-radius:22px;width:min(560px,96vw);max-height:92vh;overflow:auto;box-shadow:0 40px 90px -30px rgba(20,28,60,.5);transform:translateY(8px);opacity:0;transition:.18s}
+  .ov.show .modal{transform:none;opacity:1}
+  .m-top{display:flex;align-items:center;gap:15px;padding:26px 26px 18px;position:relative}
+  .m-ic{width:58px;height:58px;border-radius:15px;display:grid;place-items:center;flex-shrink:0;overflow:hidden;box-shadow:var(--shadow-sm)}
+  .m-ic svg{width:30px;height:30px}
+  .m-ic img{width:100%;height:100%;object-fit:cover}
+  .m-top h3{font-size:21px;letter-spacing:-.5px;font-weight:850;line-height:1.1}
+  .m-top .m-cat{color:var(--brand-d);font-size:12.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+  .m-x{position:absolute;top:18px;right:18px;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--muted);font-size:16px;cursor:pointer;display:grid;place-items:center;line-height:1}
+  .m-x:hover{background:var(--bg-soft)}
+  .m-body{padding:0 26px 6px}
+  .m-desc{color:var(--ink-2);font-size:15.5px;margin-bottom:18px}
+  .m-list{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+  .m-list li{display:flex;gap:9px;align-items:flex-start;font-size:14.5px;color:var(--ink-2)}
+  .m-list .mk{color:var(--green);font-weight:900;margin-top:1px;flex-shrink:0}
+  .m-prev{background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-size:13.5px;color:var(--ink-2);display:flex;gap:10px;align-items:center;margin-bottom:6px}
+  .m-prev .mp-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 4px rgba(31,191,143,.16);flex-shrink:0}
+  .m-foot{display:flex;gap:12px;padding:18px 26px 26px;flex-wrap:wrap}
+  .m-foot .btn{flex:1;min-width:150px}
+  .m-soon{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--brand-d);background:var(--bg-tint);padding:4px 10px;border-radius:999px;margin-left:8px;vertical-align:middle}
+
+  [data-en]{display:none!important}
+  html[lang="en"] [data-fr]{display:none!important}
+  html[lang="en"] [data-en]{display:revert!important}
+
+  @media (max-width:980px){.agrid{grid-template-columns:repeat(3,1fr)}}
+  @media (max-width:760px){.nav-links{display:none}.agrid{grid-template-columns:1fr 1fr}nav{gap:14px}}
+  @media (max-width:560px){
+    nav{gap:9px;height:62px}.logo{font-size:17px}.nav-right{gap:7px}
+    .btn{padding:9px 13px;font-size:13.5px}.btn-connexion{display:none}.lang button{padding:5px 9px}
+  }
+  @media (max-width:460px){.agrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="avelomi-landing-mockup.html"><span class="mark"><svg viewBox="0 0 64 64" aria-label="Avelomi"><g transform="translate(32 32)"><rect x="-17.5" y="-17.5" width="14" height="14" rx="4.5" fill="#34d27e"/><rect x="3.5" y="-17.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="-17.5" y="3.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="3.5" y="3.5" width="14" height="14" rx="4.5" fill="#0e7a48"/><rect x="-6.5" y="-6.5" width="13" height="13" rx="3.5" transform="rotate(45)" fill="#0e7a48"/><rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="1.6" transform="rotate(45)" fill="#ffffff"/></g></svg></span> Avelomi</a>
+      <div class="nav-links">
+        <a href="avelomi-landing-mockup.html#modules" data-fr>Applications</a><a href="avelomi-landing-mockup.html#modules" data-en>Apps</a>
+        <a href="avelomi-landing-mockup.html#features" data-fr>Plateforme</a><a href="avelomi-landing-mockup.html#features" data-en>Platform</a>
+        <a href="avelomi-landing-mockup.html#compare" data-fr>Comparer</a><a href="avelomi-landing-mockup.html#compare" data-en>Compare</a>
+        <a href="avelomi-landing-mockup.html#pricing" data-fr>Tarifs</a><a href="avelomi-landing-mockup.html#pricing" data-en>Pricing</a>
+      </div>
+      <div class="nav-right">
+        <div class="lang">
+          <button id="btn-fr" class="active" onclick="setLang('fr')">FR</button>
+          <button id="btn-en" onclick="setLang('en')">EN</button>
+        </div>
+        <a class="btn btn-ghost btn-connexion" href="#"><span data-fr>Connexion</span><span data-en>Sign in</span></a>
+        <a class="btn btn-primary" href="#"><span data-fr>Commencer</span><span data-en>Start now</span></a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="apps-head">
+    <div class="crumb"><a href="avelomi-landing-mockup.html" data-fr>← Accueil</a><a href="avelomi-landing-mockup.html" data-en>← Home</a></div>
+    <div class="eyebrow" data-fr>Toutes les applications</div><div class="eyebrow" data-en>All apps</div>
+    <h1>
+      <span data-fr>Un besoin ? <span class="hl">Il y a une appli</span> pour ça.</span>
+      <span data-en>Got a need? <span class="hl">There's an app</span> for that.</span>
+    </h1>
+    <p data-fr>Toutes les applications Avelomi sont incluses, même dans le forfait gratuit, et <b>chacune existe aussi en app mobile</b> (iOS &amp; Android, hors-ligne). Activez celles dont vous avez besoin, ajoutez les autres en grandissant.</p>
+    <p data-en>Every Avelomi app is included, even on the free plan, and <b>each one also ships as a mobile app</b> (iOS &amp; Android, offline-ready). Turn on what you need, add the rest as you grow.</p>
+  </div>
+
+  <div class="apps-tools">
+    <div class="apps-search">🔎 <input id="q" type="text" placeholder="Rechercher une application…" oninput="filterApps()" /></div>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+
+<main class="wrap" id="apps-root"></main>
+
+<div class="wrap">
+  <div class="apps-cta">
+    <h2 data-fr>Toutes ces apps. Gratuitement.</h2>
+    <h2 data-en>All these apps. For free.</h2>
+    <p data-fr>Créez votre espace en 5 minutes, sans carte bancaire.</p>
+    <p data-en>Set up your workspace in 5 minutes, no credit card.</p>
+    <a class="btn btn-primary" style="padding:15px 28px;font-size:16.5px" href="#"><span data-fr>Commencer — c'est gratuit</span><span data-en>Start now — it's free</span></a>
+  </div>
+</div>
+
+<!-- APP DETAIL MODAL -->
+<div class="ov" id="ov" onclick="if(event.target===this)closeApp()">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="m-top">
+      <span class="m-ic" id="m-ic"></span>
+      <div>
+        <div class="m-cat" id="m-cat"></div>
+        <h3 id="m-name"></h3>
+      </div>
+      <button class="m-x" onclick="closeApp()" aria-label="Fermer">✕</button>
+    </div>
+    <div class="m-body">
+      <p class="m-desc" id="m-desc"></p>
+      <ul class="m-list" id="m-list"></ul>
+      <div class="m-prev"><span class="mp-dot"></span><span id="m-prev"></span></div>
+    </div>
+    <div class="m-foot" id="m-foot"></div>
+  </div>
+</div>
+
+<footer>
+  <span>© 2026 Avelomi. <span data-fr>Tous droits réservés.</span><span data-en>All rights reserved.</span></span>
+</footer>
+
+<script>
+  // ===== icônes réutilisées (Lucide-like) =====
+  const I = {
+    wallet:'<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+    file:'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+    pkg:'<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+    brief:'<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/>',
+    kanban:'<path d="M6 5v11"/><path d="M12 5v6"/><path d="M18 5v14"/>',
+    building:'<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+    hat:'<path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><path d="M14 6a6 6 0 0 1 6 6v3"/>',
+    truck:'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
+    cart:'<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>',
+    chart:'<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+    spark:'<path d="M12 3v3"/><path d="M12 18v3"/><path d="M5.6 5.6l2.1 2.1"/><path d="M16.3 16.3l2.1 2.1"/><path d="M3 12h3"/><path d="M18 12h3"/><circle cx="12" cy="12" r="4"/>',
+    users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    receipt:'<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8H8"/><path d="M16 12H8"/>',
+    target:'<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    leaf:'<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6"/>',
+    mail:'<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    headset:'<path d="M3 11h3v8H4a1 1 0 0 1-1-1zM21 11h-3v8h2a1 1 0 0 0 1-1z"/><path d="M3 11a9 9 0 0 1 18 0"/>',
+    book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+    clock:'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
+  };
+  function grad(a,b){return `linear-gradient(135deg,${a},${b})`}
+  const FARMOS_IMG='avelomi-assets/farmos-icon.png';
+
+  // ===== catalogue d'apps par catégorie =====
+  const CATS = [
+    {key:'finance', icon:I.wallet, c:grad('#2563eb','#0ea5e9'),
+     fr:'Finance', en:'Finance', fr_s:'Compta, factures, trésorerie', en_s:'Accounting, billing, cash',
+     apps:[
+      {fr:'Comptabilité',en:'Accounting',fr_d:'Multi-devises',en_d:'Multi-currency',icon:I.wallet,c:grad('#2563eb','#0ea5e9')},
+      {fr:'Facturation',en:'Invoicing',fr_d:'Devis & factures',en_d:'Quotes & bills',icon:I.file,c:grad('#38bdf8','#0284c7')},
+      {fr:'Dépenses',en:'Expenses',fr_d:'Notes de frais',en_d:'Expense reports',icon:I.receipt,c:grad('#0ea5e9','#0369a1')},
+      {fr:'Analytique',en:'Analytics',fr_d:'Tableaux de bord',en_d:'Dashboards',icon:I.chart,c:grad('#60a5fa','#2563eb')},
+     ]},
+    {key:'sales', icon:I.target, c:grad('#a78bfa','#7c3aed'),
+     fr:'Ventes', en:'Sales', fr_s:'CRM, devis, point de vente', en_s:'CRM, quotes, POS',
+     apps:[
+      {fr:'CRM',en:'CRM',fr_d:'Pipeline & opportunités',en_d:'Pipeline & deals',icon:I.target,c:grad('#a78bfa','#7c3aed')},
+      {fr:'Ventes',en:'Sales',fr_d:'Bons de commande',en_d:'Sales orders',icon:I.file,c:grad('#8b5cf6','#6d28d9')},
+      {fr:'Point de vente',en:'Point of Sale',fr_d:'Caisse & terrain',en_d:'Cashier & field',icon:I.cart,c:grad('#fb923c','#ea580c')},
+      {fr:'Emailing',en:'Email Marketing',fr_d:'Campagnes',en_d:'Campaigns',icon:I.mail,c:grad('#f472b6','#db2777')},
+     ]},
+    {key:'ops', icon:I.pkg, c:grad('#34d399','#059669'),
+     fr:'Opérations', en:'Operations', fr_s:'Stock, achats, logistique', en_s:'Inventory, purchase, logistics',
+     apps:[
+      {fr:'Stock',en:'Inventory',fr_d:'Entrepôts & lots',en_d:'Warehouses & lots',icon:I.pkg,c:grad('#34d399','#059669')},
+      {fr:'Achats',en:'Purchase',fr_d:'Fournisseurs',en_d:'Suppliers',icon:I.truck,c:grad('#fb7185','#e11d48')},
+      {fr:'Maintenance',en:'Maintenance',fr_d:'Interventions',en_d:'Work orders',icon:I.wrench,c:grad('#f59e0b','#d97706')},
+     ]},
+    {key:'field', icon:FARMOS_IMG, img:true,
+     fr:'Métiers de terrain', en:'Field businesses', fr_s:'Immobilier, chantier, élevage', en_s:'Real estate, construction, livestock',
+     apps:[
+      {fr:'Immobilier',en:'Real Estate',fr_d:'Baux & loyers',en_d:'Leases & rent',icon:I.building,c:grad('#2dd4bf','#0d9488')},
+      {fr:'BatiPro',en:'BatiPro',fr_d:'Chantiers BTP',en_d:'Construction sites',icon:I.hat,c:grad('#1d4ed8','#f59e0b')},
+      {fr:'FarmOS',en:'FarmOS',fr_d:'Élevage & culture',en_d:'Livestock & crops',img:FARMOS_IMG},
+      {fr:'Cultures',en:'Crops',fr_d:'Parcelles & récoltes',en_d:'Plots & harvests',icon:I.leaf,c:grad('#84cc16','#4d7c0f'),soon:true},
+     ]},
+    {key:'hr', icon:I.brief, c:grad('#14b8a6','#0f766e'),
+     fr:'Ressources humaines', en:'Human Resources', fr_s:'Paie, congés, recrutement', en_s:'Payroll, leave, hiring',
+     apps:[
+      {fr:'Employés',en:'Employees',fr_d:'Annuaire RH',en_d:'HR directory',icon:I.users,c:grad('#14b8a6','#0f766e')},
+      {fr:'Paie',en:'Payroll',fr_d:'Bulletins & cotisations',en_d:'Payslips & contributions',icon:I.wallet,c:grad('#0d9488','#115e59')},
+      {fr:'Congés',en:'Time Off',fr_d:'Demandes & soldes',en_d:'Requests & balances',icon:I.calendar,c:grad('#2dd4bf','#0d9488')},
+      {fr:'Recrutement',en:'Recruitment',fr_d:'Candidats & CV',en_d:'Applicants & CVs',icon:I.brief,c:grad('#5eead4','#14b8a6')},
+     ]},
+    {key:'prod', icon:I.kanban, c:grad('#a3e635','#65a30d'),
+     fr:'Productivité', en:'Productivity', fr_s:'Projets, IA, paramétrage', en_s:'Projects, AI, settings',
+     apps:[
+      {fr:'Projets',en:'Projects',fr_d:'Tâches & temps',en_d:'Tasks & time',icon:I.kanban,c:grad('#a3e635','#65a30d')},
+      {fr:'Assistant IA',en:'AI Assistant',fr_d:'Demandez, il agit',en_d:'Ask, it acts',icon:I.spark,c:grad('#6d5efc','#a78bfa')},
+      {fr:'Feuilles de temps',en:'Timesheets',fr_d:'Suivi des heures',en_d:'Hours tracking',icon:I.clock,c:grad('#a3e635','#4d7c0f')},
+      {fr:'Documents',en:'Documents',fr_d:'GED & signatures',en_d:'Files & e-sign',icon:I.book,c:grad('#94a3b8','#475569')},
+      {fr:'Paramètres',en:'Settings',fr_d:'Rôles & permissions',en_d:'Roles & permissions',icon:I.cog,c:grad('#64748b','#334155')},
+     ]},
+  ];
+
+  // ===== détails par app (clé = nom EN). Fallback générique sinon. =====
+  const DET = {
+    'Accounting':{fr_p:'Balance équilibrée : Débit 1 180 $ = Crédit 1 180 $',en_p:'Balanced entry: Debit $1,180 = Credit $1,180',
+      f:[['Comptabilité en partie double, plan comptable complet','Double-entry accounting, full chart of accounts'],['Multi-devises (USD/CDF/EUR) avec taux automatiques','Multi-currency (USD/CDF/EUR) with auto FX rates'],['Compte de résultat & bilan en temps réel','Real-time P&L and balance sheet']]},
+    'Invoicing':{fr_p:'Facture VTE/2026/0184 — payée, écriture générée',en_p:'Invoice SAL/2026/0184 — paid, entry posted',
+      f:[['Devis → facture → encaissement en un flux','Quote → invoice → payment in one flow'],['Relances automatiques des impayés','Automatic dunning of overdue bills'],['PDF personnalisé, envoi par email','Branded PDF, email delivery']]},
+    'Expenses':{fr_p:'Note de frais 250 $ — en attente d\'approbation',en_p:'Expense report $250 — awaiting approval',
+      f:[['Saisie mobile avec photo du reçu','Mobile capture with receipt photo'],['Validation par le supérieur','Manager approval workflow'],['Remboursement et comptabilisation auto','Auto reimbursement and posting']]},
+    'Analytics':{fr_p:'CA consolidé ▲ 18.2 % ce trimestre',en_p:'Consolidated revenue ▲ 18.2% this quarter',
+      f:[['Tableaux de bord temps réel par module','Real-time dashboards per module'],['Prévisions multi-scénarios','Multi-scenario forecasts'],['Export PDF & Excel en un clic','One-click PDF & Excel export']]},
+    'CRM':{fr_p:'7 opportunités · 1 en retard, 1 aujourd\'hui',en_p:'7 opportunities · 1 late, 1 today',
+      f:[['Pipeline visuel glisser-déposer','Visual drag-and-drop pipeline'],['Suivi des relances et activités','Follow-ups and activity tracking'],['Conversion devis depuis l\'opportunité','Quote conversion from the deal']]},
+    'Sales':{fr_p:'Bon de commande confirmé → stock réservé',en_p:'Sales order confirmed → stock reserved',
+      f:[['Bons de commande & livraisons','Sales orders & deliveries'],['Tarifs et remises par client','Customer-specific pricing & discounts'],['Mise à jour stock et compta automatique','Auto stock and accounting update']]},
+    'Point of Sale':{fr_p:'Caisse ouverte · paiement Mobile Money accepté',en_p:'Register open · Mobile Money accepted',
+      f:[['Interface caisse tactile, rapide','Fast touch cashier interface'],['Fonctionne hors-ligne','Works offline'],['Stock et ventes synchronisés','Stock and sales synced']]},
+    'Email Marketing':{fr_p:'Campagne envoyée à 1 240 contacts',en_p:'Campaign sent to 1,240 contacts',
+      f:[['Éditeur d\'emails par blocs','Block-based email editor'],['Segmentation des contacts','Contact segmentation'],['Statistiques d\'ouverture et de clics','Open and click analytics']]},
+    'Inventory':{fr_p:'Lot #34 · 312 kg · délai de retrait respecté',en_p:'Lot #34 · 312 kg · withdrawal period cleared',
+      f:[['Multi-entrepôts et suivi par lot','Multi-warehouse and lot tracking'],['Mouvements et inventaires','Stock moves and counts'],['Alertes de réapprovisionnement','Reordering alerts']]},
+    'Purchase':{fr_p:'Demande d\'achat ACH/041 — 2 niveaux validés',en_p:'Purchase request PUR/041 — 2 levels approved',
+      f:[['Demandes d\'achat avec approbation','Purchase requests with approval'],['Suivi fournisseurs et réceptions','Supplier and receipt tracking'],['Lien direct avec le stock et la compta','Direct link to stock and accounting']]},
+    'Maintenance':{fr_p:'Intervention #18 planifiée — équipe terrain',en_p:'Work order #18 scheduled — field team',
+      f:[['Interventions préventives et correctives','Preventive and corrective work orders'],['Planning des équipes','Team scheduling'],['Historique par équipement','History per asset']]},
+    'Real Estate':{fr_p:'Bail Apt. B12 · loyer à jour · caution 1 300 $',en_p:'Lease Apt. B12 · rent up to date · deposit $1,300',
+      f:[['Baux, loyers et quittances PDF','Leases, rent and PDF receipts'],['Cautions et taxe par bail','Deposits and per-lease tax'],['Rappels d\'échéance automatiques','Automatic due-date reminders']]},
+    'BatiPro':{fr_p:'Chantier Matete · situation n°3 · 68 %',en_p:'Matete site · progress claim #3 · 68%',
+      f:[['Planning et situations de chantier','Site planning and progress claims'],['Plan 3D depuis une photo','3D plan from a photo'],['Facturation à l\'avancement','Progress-based invoicing']]},
+    'FarmOS':{fr_p:'Lot bovin #34 · marge 184 $/tête · sain',en_p:'Cattle lot #34 · margin $184/head · healthy',
+      f:[['Cheptel, zones et bâtiments','Herd, zones and buildings'],['Dossier vétérinaire et délai de retrait','Vet records and withdrawal period'],['Rentabilité par animal ou par lot','Profitability per animal or lot']]},
+    'Crops':{fr_p:'Parcelle Nord · semis prévu en avril',en_p:'North plot · sowing planned in April',
+      f:[['Parcelles, semis et récoltes','Plots, sowing and harvests'],['Suivi des intrants','Input tracking'],['Rendement par parcelle','Yield per plot']]},
+    'Employees':{fr_p:'Annuaire · 42 employés · 3 contrats à renouveler',en_p:'Directory · 42 employees · 3 contracts to renew',
+      f:[['Dossiers employés et contrats','Employee files and contracts'],['Organigramme et équipes','Org chart and teams'],['Documents RH signés','Signed HR documents']]},
+    'Payroll':{fr_p:'Bulletin juin · net à payer 551 $ · approuvé',en_p:'June payslip · net pay $551 · approved',
+      f:[['Bulletins de paie et cotisations (CNSS)','Payslips and contributions (CNSS)'],['Adapté au contexte africain','Built for the African context'],['Génération PDF et historique','PDF generation and history']]},
+    'Time Off':{fr_p:'2 demandes de congé en attente',en_p:'2 leave requests pending',
+      f:[['Demandes et validation des congés','Leave requests and approval'],['Soldes et jours fériés','Balances and public holidays'],['Calendrier d\'équipe','Team calendar']]},
+    'Recruitment':{fr_p:'6 candidats à traiter · 1 entretien aujourd\'hui',en_p:'6 applicants to review · 1 interview today',
+      f:[['Suivi des candidatures par étape','Stage-based applicant tracking'],['Upload de CV et notes','CV upload and notes'],['Du candidat à l\'embauche','From applicant to hire']]},
+    'Projects':{fr_p:'Refonte site · Phase 2 · 72 % · 86 h pointées',en_p:'Site revamp · Phase 2 · 72% · 86 h logged',
+      f:[['Tableaux Kanban et tâches','Kanban boards and tasks'],['Suivi du temps et des coûts','Time and cost tracking'],['Facturation au temps passé','Time-based billing']]},
+    'AI Assistant':{fr_p:'« Ajoute une dépense 250 $ » → ✓ créée, à valider',en_p:'"Add a $250 expense" → ✓ created, to confirm',
+      f:[['Saisie en langage naturel (crée des données)','Plain-language data entry (creates records)'],['Prévisions et multi-scénarios','Forecasts and multi-scenario'],['Lit vos vraies données, sans saisie en plus','Reads your real data, no extra input']]},
+    'Timesheets':{fr_p:'86 h pointées cette semaine sur 3 projets',en_p:'86 h logged this week across 3 projects',
+      f:[['Saisie des heures par projet','Hours entry per project'],['Validation hebdomadaire','Weekly approval'],['Lien avec la paie et la facturation','Link to payroll and billing']]},
+    'Documents':{fr_p:'Contrat signé électroniquement · archivé',en_p:'Contract e-signed · archived',
+      f:[['GED centralisée et recherche','Central document store and search'],['Signature électronique','Electronic signature'],['Partage et permissions','Sharing and permissions']]},
+    'Settings':{fr_p:'Rôle « Comptable » · 12 permissions actives',en_p:'"Accountant" role · 12 active permissions',
+      f:[['Rôles et permissions fines','Roles and fine-grained permissions'],['Utilisateurs et sécurité (2FA)','Users and security (2FA)'],['Paramétrage par module','Per-module configuration']]}
+  };
+  function det(a){
+    const d = DET[a.en] || {fr_p:a.fr_d,en_p:a.en_d,f:[[a.fr_d,a.en_d],['Intégré au reste de la plateforme','Integrated with the rest of the platform'],['Inclus, même dans le forfait gratuit','Included, even on the free plan']]};
+    return d;
+  }
+
+  // index global des apps (pour le clic)
+  const FLAT=[]; CATS.forEach(c=>c.apps.forEach(a=>{a._cat=c; FLAT.push(a);}));
+
+  function appCard(a){
+    const badge = a.img
+      ? `<span class="ab"><img src="${a.img}" alt=""></span>`
+      : `<span class="ab" style="background:${a.c}"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${a.icon}</svg></span>`;
+    const soon = a.soon ? `<span class="soon" data-fr>Bientôt</span><span class="soon" data-en>Soon</span>` : '';
+    const idx = FLAT.indexOf(a);
+    return `<a class="acard" href="#" onclick="openApp(${idx});return false" data-name="${(a.fr+' '+a.en).toLowerCase()}">${badge}
+      <span><b><span data-fr>${a.fr}</span><span data-en>${a.en}</span></b>
+      <small><span data-fr>${a.fr_d}</span><span data-en>${a.en_d}</span></small></span>${soon}</a>`;
+  }
+  function catSection(cat){
+    const ci = cat.img
+      ? `<span class="ci" style="overflow:hidden;background:#fff;border:1px solid var(--line)"><img src="${cat.icon}" alt="" style="width:100%;height:100%;object-fit:cover"></span>`
+      : `<span class="ci" style="background:${cat.c}"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${cat.icon}</svg></span>`;
+    return `<section class="cat" data-cat="${cat.key}">
+      <div class="cat-head">${ci}<h2><span data-fr>${cat.fr}</span><span data-en>${cat.en}</span></h2>
+      <span><span data-fr>${cat.fr_s}</span><span data-en>${cat.en_s}</span></span></div>
+      <div class="agrid">${cat.apps.map(appCard).join('')}</div></section>`;
+  }
+
+  document.getElementById('apps-root').innerHTML = CATS.map(catSection).join('');
+
+  // chips de catégories
+  const chips = document.getElementById('chips');
+  chips.innerHTML = `<button class="chip on" data-cat="all" onclick="setCat('all',this)"><span data-fr>Toutes</span><span data-en>All</span></button>` +
+    CATS.map(c=>`<button class="chip" data-cat="${c.key}" onclick="setCat('${c.key}',this)"><span data-fr>${c.fr}</span><span data-en>${c.en}</span></button>`).join('');
+
+  function setCat(key,el){
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+    el.classList.add('on');
+    document.getElementById('q').value='';
+    document.querySelectorAll('.cat').forEach(s=>{
+      s.style.display = (key==='all'||s.dataset.cat===key)?'':'none';
+    });
+    document.querySelectorAll('.acard').forEach(c=>c.style.display='');
+  }
+  function filterApps(){
+    const q=document.getElementById('q').value.trim().toLowerCase();
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+    document.querySelector('.chip[data-cat="all"]').classList.add('on');
+    document.querySelectorAll('.cat').forEach(sec=>{
+      let any=false;
+      sec.querySelectorAll('.acard').forEach(c=>{
+        const hit = !q || c.dataset.name.includes(q);
+        c.style.display = hit?'':'none';
+        if(hit) any=true;
+      });
+      sec.style.display = any?'':'none';
+    });
+  }
+
+  // ===== modal détail app =====
+  function openApp(idx){
+    const a=FLAT[idx], d=det(a), cat=a._cat;
+    document.getElementById('m-ic').innerHTML = a.img
+      ? `<img src="${a.img}" alt="">`
+      : `<span style="width:100%;height:100%;display:grid;place-items:center;border-radius:15px;background:${a.c}"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${a.icon}</svg></span>`;
+    document.getElementById('m-cat').innerHTML = `<span data-fr>${cat.fr}</span><span data-en>${cat.en}</span>`;
+    const soon = a.soon ? `<span class="m-soon" data-fr>Bientôt</span><span class="m-soon" data-en>Soon</span>` : '';
+    document.getElementById('m-name').innerHTML = `<span data-fr>${a.fr}</span><span data-en>${a.en}</span>${soon}`;
+    document.getElementById('m-desc').innerHTML = `<span data-fr>${a.fr_d} — intégré à toute votre activité sur Avelomi.</span><span data-en>${a.en_d} — connected to your whole business on Avelomi.</span>`;
+    document.getElementById('m-list').innerHTML = d.f.map(x=>`<li><span class="mk">✓</span><span data-fr>${x[0]}</span><span data-en>${x[1]}</span></li>`).join('');
+    document.getElementById('m-prev').innerHTML = `<span data-fr>${d.fr_p}</span><span data-en>${d.en_p}</span>`;
+    const cta = a.soon
+      ? `<a class="btn btn-ghost" href="#"><span data-fr>Être prévenu au lancement</span><span data-en>Notify me at launch</span></a>`
+      : `<a class="btn btn-primary" href="#"><span data-fr>Activer cette app</span><span data-en>Enable this app</span></a>`;
+    document.getElementById('m-foot').innerHTML = cta +
+      `<a class="btn btn-ghost" href="avelomi-landing-mockup.html#features"><span data-fr>En savoir plus</span><span data-en>Learn more</span></a>`;
+    document.getElementById('ov').classList.add('show');
+    document.body.style.overflow='hidden';
+  }
+  function closeApp(){
+    document.getElementById('ov').classList.remove('show');
+    document.body.style.overflow='';
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeApp()});
+
+  function setLang(l){
+    document.documentElement.lang=l;
+    document.getElementById('btn-fr').classList.toggle('active',l==='fr');
+    document.getElementById('btn-en').classList.toggle('active',l==='en');
+  }
+</script>
+</body>
+</html>

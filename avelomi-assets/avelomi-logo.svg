@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Avelomi">
+  <rect width="64" height="64" rx="16" fill="#ffffff"/>
+  <g transform="translate(32 32)">
+    <!-- four module tiles -->
+    <rect x="-17.5" y="-17.5" width="14" height="14" rx="4.5" fill="#34d27e"/>
+    <rect x="3.5"  y="-17.5" width="14" height="14" rx="4.5" fill="#1fbf73"/>
+    <rect x="-17.5" y="3.5"  width="14" height="14" rx="4.5" fill="#1fbf73"/>
+    <rect x="3.5"  y="3.5"  width="14" height="14" rx="4.5" fill="#0e7a48"/>
+    <!-- unifying core -->
+    <rect x="-6.5" y="-6.5" width="13" height="13" rx="3.5" transform="rotate(45)" fill="#0e7a48"/>
+    <rect x="-3.2" y="-3.2" width="6.4" height="6.4" rx="1.6" transform="rotate(45)" fill="#ffffff"/>
+  </g>
+</svg>
