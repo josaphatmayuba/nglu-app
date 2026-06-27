@@ -54,6 +54,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allExpenses, setAllExpenses] = React.useState([]);
   const [vetExams, setVetExams] = React.useState([]);
   const [allDiseases, setAllDiseases] = React.useState([]);
+  const [vets, setVets] = React.useState([]);
   const [editingDisease, setEditingDisease] = React.useState(null); // null=fermé, {}=nouveau, row=édition
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("today"));
@@ -77,6 +78,9 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         setVetExams(Array.isArray(exams) ? exams : []);
       })
       .catch((e) => console.warn("listTreatments failed:", e.message));
+    api.listFarmosStaff("vet")
+      .then((r) => { if (!cancel) setVets(Array.isArray(r) ? r : []); })
+      .catch((e) => console.warn("listFarmosStaff(vet) failed:", e.message));
     return () => { cancel = true; };
   }, [reloadKey, refresh]);
   React.useEffect(() => {
@@ -283,21 +287,34 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </div>
 
           {/* Vet card */}
-          <div className="card" style={{ background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-800)" }}>
-            <div className="overline" style={{ color: "rgba(251,248,242,0.6)", marginBottom: 8 }}>{lang === "fr" ? "Vétérinaire de garde" : "On-call veterinarian"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--oxblood-700)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>EB</div>
-              <div>
-                <div className="italic-serif" style={{ fontSize: 17, color: "var(--parchment-50)" }}>Dr. Émilie Boucher</div>
-                <div style={{ fontSize: 12, color: "var(--ink-300)" }}>Clinique Vétérinaire des Laurentides</div>
-                <div className="mono" style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 2 }}>+1 450 555 0124 · disponible 24/7</div>
+          {(() => {
+            const vet = vets[0];
+            const fullName = vet ? [vet.firstName, vet.lastName].filter(Boolean).join(" ").trim() : "";
+            const initials = (fullName || "").split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || "VT";
+            return (
+              <div className="card" style={{ background: "var(--ink-900)", color: "var(--parchment-50)", borderColor: "var(--ink-800)" }}>
+                <div className="overline" style={{ color: "rgba(251,248,242,0.6)", marginBottom: 8 }}>{lang === "fr" ? "Vétérinaire de garde" : "On-call veterinarian"}</div>
+                {!vet ? (
+                  <div style={{ fontSize: 12, color: "var(--ink-300)" }}>{lang === "fr" ? "Aucun vétérinaire enregistré." : "No veterinarian registered."}</div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--oxblood-700)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{initials}</div>
+                      <div>
+                        <div className="italic-serif" style={{ fontSize: 17, color: "var(--parchment-50)" }}>{fullName || (lang === "fr" ? "Vétérinaire" : "Veterinarian")}</div>
+                        {vet.designation && <div style={{ fontSize: 12, color: "var(--ink-300)" }}>{vet.designation}</div>}
+                        {vet.phone && <div className="mono" style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 2 }}>{vet.phone}</div>}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+                      <a href={vet.phone ? `tel:${vet.phone}` : undefined} className="btn btn-sm" style={{ background: "rgba(255,255,255,0.1)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.15)", flex: 1, textAlign: "center", textDecoration: "none", pointerEvents: vet.phone ? "auto" : "none", opacity: vet.phone ? 1 : 0.5 }}>{lang === "fr" ? "Appeler" : "Call"}</a>
+                      <a href={vet.email ? `mailto:${vet.email}` : undefined} className="btn btn-sm" style={{ background: "rgba(255,255,255,0.1)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.15)", flex: 1, textAlign: "center", textDecoration: "none", pointerEvents: vet.email ? "auto" : "none", opacity: vet.email ? 1 : 0.5 }}>{lang === "fr" ? "Contacter" : "Contact"}</a>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-              <button className="btn btn-sm" style={{ background: "rgba(255,255,255,0.1)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.15)", flex: 1 }}>{lang === "fr" ? "Appeler" : "Call"}</button>
-              <button className="btn btn-sm" style={{ background: "rgba(255,255,255,0.1)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.15)", flex: 1 }}>{lang === "fr" ? "Visite" : "Schedule"}</button>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       </div>
 

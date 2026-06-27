@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.117.4)
+- **FarmOS — Vétérinaire de garde réel (Santé)**. La carte « Vétérinaire de garde » de l'écran Santé n'affiche plus un contact codé en dur ; elle utilise le premier vétérinaire enregistré dans le staff FarmOS (`listFarmosStaff("vet")`), avec initiales, désignation, téléphone, et boutons Appeler/Contacter (tel:/mailto:) activés selon les coordonnées disponibles. Message « aucun vétérinaire enregistré » sinon. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.117.3)
 - **FarmOS — Tests des workflows critiques (COMP-P0-005)**. Tests unitaires Jest sur `FarmosService` couvrant les workflows métier sensibles : import CSV d'animaux (`importAnimals` — espèce requise/valide, détection des doublons par `external_id` en base ET dans le fichier insensible à la casse, mode `dryRun` sans écriture) et tâches d'équipe (`createTask`/`updateTask`/`deleteTask` — `done_at` posé/effacé selon le statut, soft delete `is_active=0`, erreur sur tâche inexistante). DB Drizzle mockée (pas de base réelle). 12 tests ajoutés ; suite backend complète au vert (51/51). **Vérifié** : `jest` OK. [SCRUM]
 
