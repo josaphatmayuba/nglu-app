@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.11)
+- **Auth Google — `GOOGLE_CLIENT_ID` jamais transmis au backend**. Le service `backend2` du compose liste explicitement ses variables via `environment:` ; `GOOGLE_CLIENT_ID` n'y figurait pas, donc même renseigne dans `.env` il n'atteignait jamais le conteneur (`env.google.clientId` vide → endpoint Google en « non configure »). Ajout de `GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}` au backend2 dans `docker-compose.dev.yml` et `docker-compose.prod.yml`. La valeur runtime reste dans le `.env` serveur (non versionne). [SCRUM]
+
 ### Fixed (3.117.10)
 - **FarmOS — Alertes stock dédupliquées + 3 paliers de sévérité**. L'écran Alertes n'affiche plus de doublon quand plusieurs lignes de stock portent le même libellé (ex. « Tylan 200 ») : les alertes « Stock faible » sont regroupées par nom de produit (quantités cumulées, seuil le plus contraignant). Sévérité passée de 2 à 3 paliers — `critical` (qty < seuil/2), `high` (qty < seuil×0,75), `medium` (qty < seuil) — l'onglet « Moyenne » se remplit désormais pour le stock. Données toujours pilotées par la DB (`quantity`/`minQuantity`), rien en dur. `farmos-app/src/screens.jsx` (`deriveAlerts`). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 
