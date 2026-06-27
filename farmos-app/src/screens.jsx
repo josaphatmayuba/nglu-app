@@ -1125,10 +1125,13 @@ const StockTable = ({ lang, kind, items, title, accent, onAdd, onRowClick }) => 
 );
 
 // ─── REPRODUCTION ────────────────────────────────────────────────────────
+const GESTATION_PAGE_SIZE = 8;
+
 const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [allGestations, setAllGestations] = React.useState([]);
   const [reloadKey, setReloadKey] = React.useState(0);
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("quarter"));
+  const [gestationExpanded, setGestationExpanded] = React.useState(false);
   const refresh = useDataRefresh(["reproductionEvents", "animals"]);
   React.useEffect(() => {
     let cancel = false;
@@ -1148,6 +1151,18 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     return () => window.removeEventListener("farmos:repro-created", onCreated);
   }, []);
   const gestations = allGestations.filter(g => (!speciesFilter || g.species === speciesFilter) && inDateRange(g.start, dateRange));
+  const activeGestations = gestations
+    .filter((g) => !g.complete)
+    .sort((a, b) => {
+      const aDue = /^\d{4}-\d{2}-\d{2}/.test(String(a.due || "")) ? String(a.due) : "9999-12-31";
+      const bDue = /^\d{4}-\d{2}-\d{2}/.test(String(b.due || "")) ? String(b.due) : "9999-12-31";
+      return aDue.localeCompare(bDue) || String(a.animal || "").localeCompare(String(b.animal || ""));
+    });
+  React.useEffect(() => {
+    setGestationExpanded(false);
+  }, [speciesFilter, dateRange.from, dateRange.to, activeGestations.length]);
+  const visibleGestations = gestationExpanded ? activeGestations : activeGestations.slice(0, GESTATION_PAGE_SIZE);
+  const hiddenGestations = activeGestations.length - visibleGestations.length;
 
   // KPIs dérivés des events repro réels + filtrés par espèce.
   // - Chaleurs sem. = events de type 'heat' dans les 7 derniers jours.
@@ -1211,7 +1226,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
-        <KpiCard label={lang === "fr" ? "Gestations actives" : "Active gestations"} value={gestations.filter(g=>!g.complete).length} icon="fingerprint" accent="var(--pertinence-700)"/>
+        <KpiCard label={lang === "fr" ? "Gestations actives" : "Active gestations"} value={activeGestations.length} icon="fingerprint" accent="var(--pertinence-700)"/>
         <KpiCard label={lang === "fr" ? "Chaleurs détectées · sem." : "Heats detected · week"} value={heatsWeek} icon="pulse" accent={heatsWeek > 0 ? "var(--oxblood-700)" : "var(--ink-500)"}/>
         <KpiCard label={lang === "fr" ? "Taux fertilité" : "Fertility rate"} value={fertilityRate != null ? fertilityRate : "—"} unit={fertilityRate != null ? "%" : ""} icon="chart" accent={fertilityRate != null && fertilityRate >= 60 ? "var(--solidite-500)" : "var(--ink-500)"}/>
         <KpiCard label={lang === "fr" ? "Mises bas · 30 j" : "Births · 30 d"} value={birthsMonth} icon="sparkle"/>
@@ -1222,14 +1237,20 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div className="bilang">
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Gestations en cours" : "Active gestations"}</h3>
-            <span className="sec">{lang === "fr" ? "timeline" : "timeline"}</span>
+            <span className="sec">{lang === "fr" ? `${activeGestations.length} en cours` : `${activeGestations.length} active`}</span>
           </div>
           <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "repro" }))}><Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Saillie / IA" : "Mating / AI"}</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {gestations.map((g) => {
+          {visibleGestations.length === 0 && (
+            <div style={{ padding: "18px 0", color: "var(--fg-3)", fontSize: 13 }}>
+              {lang === "fr" ? "Aucune gestation en cours sur la période." : "No active gestation in this period."}
+            </div>
+          )}
+          {visibleGestations.map((g) => {
             const sp = speciesById(g.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
-            const pct = (g.day / g.total) * 100;
+            const pct = g.total > 0 ? Math.max(0, Math.min(100, (g.day / g.total) * 100)) : 0;
+            const remainingDays = g.total > 0 ? Math.max(0, Math.round(g.total - g.day)) : null;
             const locked = isSaleLockedStatus(g.animalStatus);
             return (
               <div key={g.id} style={{ display: "grid", gridTemplateColumns: "32px 160px 1fr 120px 32px", gap: 14, alignItems: "center" }}>
@@ -1259,7 +1280,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                     </>
                   ) : (
                     <>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-800)" }}>{Math.round(g.total - g.day)} j</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-800)" }}>{remainingDays != null ? `${remainingDays} j` : (lang === "fr" ? "en cours" : "active")}</span>
                       <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{g.due}</div>
                     </>
                   )}
@@ -1276,6 +1297,19 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               </div>
             );
           })}
+          {activeGestations.length > GESTATION_PAGE_SIZE && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, paddingTop: 4, borderTop: "1px dashed var(--border-1)" }}>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
+                {visibleGestations.length} / {activeGestations.length} {lang === "fr" ? "affichées" : "shown"}
+              </span>
+              <button type="button" className="btn btn-sm" onClick={() => setGestationExpanded((v) => !v)}>
+                <Icon name={gestationExpanded ? "arrowUp" : "chevDown"} size={12} color="currentColor"/>
+                {gestationExpanded
+                  ? (lang === "fr" ? "Réduire" : "Collapse")
+                  : (lang === "fr" ? `Afficher les ${hiddenGestations} autres` : `Show ${hiddenGestations} more`)}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
