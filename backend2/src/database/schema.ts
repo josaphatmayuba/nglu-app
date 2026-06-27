@@ -2344,6 +2344,19 @@ export const farmosFieldNotes = mysqlTable("farmos_field_notes", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Rapports personnalises sauvegardes (COMP-P2-017).
+export const farmosSavedReports = mysqlTable("farmos_saved_reports", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  baseType: varchar("base_type", { length: 40 }).notNull(),
+  config: json("config").$type<{ columns?: string[]; filters?: Record<string, unknown> } | null>(),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosVetExams = mysqlTable("farmos_vet_exams", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

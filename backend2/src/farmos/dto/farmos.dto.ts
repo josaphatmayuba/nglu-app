@@ -668,6 +668,14 @@ export class CreateTaskDto {
   @ApiPropertyOptional({ description: "Photo (data URL ou URL)." }) @IsOptional() @IsString() photo_url?: string | null;
 }
 
+export class SaveReportDto {
+  @ApiProperty({ example: "Inventaire bovins actifs" }) @IsString() @IsNotEmpty() name: string;
+  @ApiProperty({ example: "inventory", description: "inventory | mortality | reproduction | lot_performance" })
+    @IsString() @IsNotEmpty() base_type: string;
+  @ApiPropertyOptional({ description: "{ columns:[], filters:{ species, period, lot } }" })
+    @IsOptional() config?: { columns?: string[]; filters?: Record<string, unknown> } | null;
+}
+
 export class CreateFieldNoteDto {
   @ApiProperty({ example: "Clôture endommagée au nord du paddock 3" }) @IsString() @IsNotEmpty() note: string;
   @ApiPropertyOptional({ example: -4.325 }) @IsOptional() @Type(() => Number) @IsNumber() latitude?: number | null;

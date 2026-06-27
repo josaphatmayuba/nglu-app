@@ -347,6 +347,10 @@ export const api = {
   listFieldNotes: () => jsonFetch("/field-notes"),
   createFieldNote: (body) => jsonFetch("/field-notes", { method: "POST", body: JSON.stringify(body) }),
   deleteFieldNote: (id) => jsonFetch(`/field-notes/${id}`, { method: "DELETE" }),
+  // Rapports custom sauvegardés (COMP-P2-017)
+  listSavedReports: () => jsonFetch("/saved-reports"),
+  createSavedReport: (body) => jsonFetch("/saved-reports", { method: "POST", body: JSON.stringify(body) }),
+  deleteSavedReport: (id) => jsonFetch(`/saved-reports/${id}`, { method: "DELETE" }),
   // Bâtiments
   listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),

@@ -40,6 +40,7 @@ import {
   CreateTaskDto,
   UpdateTaskDto,
   CreateFieldNoteDto,
+  SaveReportDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
@@ -922,6 +923,29 @@ export class FarmosController {
   @Delete("field-notes/:id")
   deleteFieldNote(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteFieldNote(id, orgId);
+  }
+
+  // ─── Saved reports (rapports custom, COMP-P2-017) ─────────────────────────
+
+  @ApiOperation({ summary: "List saved custom reports." })
+  @Permissions("readAll-farmos")
+  @Get("saved-reports")
+  listSavedReports(@CurrentOrg() orgId: number) {
+    return this.farmos.listSavedReports(orgId);
+  }
+
+  @ApiOperation({ summary: "Save a custom report (columns + filters)." })
+  @Permissions("create-farmos")
+  @Post("saved-reports")
+  createSavedReport(@Body() body: SaveReportDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createSavedReport(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a saved report." })
+  @Permissions("delete-farmos")
+  @Delete("saved-reports/:id")
+  deleteSavedReport(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteSavedReport(id, orgId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────

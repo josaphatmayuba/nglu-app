@@ -3379,11 +3379,30 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     downloadReportCsv(`farmos-performance-lots-${today}.csv`, [headers, ...rows]);
   };
   const csvExports = [
-    { fr: "Inventaire animaux (CSV)", en: "Animal inventory (CSV)", descFr: `${fAnimals.length} animal(aux)`, descEn: `${fAnimals.length} animal(s)`, action: exportInventoryCsv, disabled: fAnimals.length === 0 },
-    { fr: "Mortalité (CSV)", en: "Mortality (CSV)", descFr: `${fMortality.length} décès`, descEn: `${fMortality.length} death(s)`, action: exportMortalityCsv, disabled: fMortality.length === 0 },
-    { fr: "Reproduction / portées (CSV)", en: "Reproduction / litters (CSV)", descFr: `${fCalvings.length} mise(s) bas`, descEn: `${fCalvings.length} calving(s)`, action: exportReproCsv, disabled: fCalvings.length === 0 },
-    { fr: "Performance par lot (CSV)", en: "Batch performance (CSV)", descFr: `${profByLot.length} lot(s) · marge & mortalité`, descEn: `${profByLot.length} batch(es) · margin & mortality`, action: exportLotPerfCsv, disabled: profByLot.length === 0 },
+    { baseType: "inventory", fr: "Inventaire animaux (CSV)", en: "Animal inventory (CSV)", descFr: `${fAnimals.length} animal(aux)`, descEn: `${fAnimals.length} animal(s)`, action: exportInventoryCsv, disabled: fAnimals.length === 0 },
+    { baseType: "mortality", fr: "Mortalité (CSV)", en: "Mortality (CSV)", descFr: `${fMortality.length} décès`, descEn: `${fMortality.length} death(s)`, action: exportMortalityCsv, disabled: fMortality.length === 0 },
+    { baseType: "reproduction", fr: "Reproduction / portées (CSV)", en: "Reproduction / litters (CSV)", descFr: `${fCalvings.length} mise(s) bas`, descEn: `${fCalvings.length} calving(s)`, action: exportReproCsv, disabled: fCalvings.length === 0 },
+    { baseType: "lot_performance", fr: "Performance par lot (CSV)", en: "Batch performance (CSV)", descFr: `${profByLot.length} lot(s) · marge & mortalité`, descEn: `${profByLot.length} batch(es) · margin & mortality`, action: exportLotPerfCsv, disabled: profByLot.length === 0 },
   ];
+  // Rapports sauvegardés (COMP-P2-017) — un rapport = base_type + filtres (espèce).
+  const exporterByType = { inventory: exportInventoryCsv, mortality: exportMortalityCsv, reproduction: exportReproCsv, lot_performance: exportLotPerfCsv };
+  const baseTypeLabel = (bt) => (csvExports.find((e) => e.baseType === bt) || {})[lang === "fr" ? "fr" : "en"] || bt;
+  const [savedReports, setSavedReports] = React.useState([]);
+  const reloadSaved = React.useCallback(() => { api.listSavedReports().then((r) => setSavedReports(Array.isArray(r) ? r : [])).catch(() => {}); }, []);
+  React.useEffect(() => { reloadSaved(); }, [reloadSaved]);
+  const saveCurrentReport = async (exp) => {
+    const name = window.prompt(lang === "fr" ? "Nom du rapport :" : "Report name:", `${lang === "fr" ? exp.fr : exp.en}${speciesLabel ? " · " + speciesLabel : ""}`);
+    if (!name) return;
+    try {
+      await api.createSavedReport({ name, base_type: exp.baseType, config: { filters: { species: speciesFilter || null } } });
+      reloadSaved();
+    } catch (e) { alert(e.message); }
+  };
+  const runSavedReport = (rep) => { const fn = exporterByType[rep.baseType]; if (fn) fn(); };
+  const deleteSavedReport = async (rep) => {
+    if (!window.confirm(lang === "fr" ? "Supprimer ce rapport sauvegardé ?" : "Delete this saved report?")) return;
+    try { await api.deleteSavedReport(rep.id); reloadSaved(); } catch (e) { alert(e.message); }
+  };
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
@@ -3433,13 +3452,40 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
               </div>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink-950)", fontWeight: 500, lineHeight: 1.25 }}>{lang === "fr" ? r.fr : r.en}</div>
               <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 6, flex: 1 }}>{lang === "fr" ? r.descFr : r.descEn}</div>
-              <button className="btn btn-sm" disabled={r.disabled || hcData.loading} style={{ marginTop: 12, justifyContent: "center" }} onClick={r.action}>
-                <Icon name="download" size={12} color="var(--ink-700)"/>CSV
-              </button>
+              <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+                <button className="btn btn-sm" disabled={r.disabled || hcData.loading} style={{ flex: 1, justifyContent: "center" }} onClick={r.action}>
+                  <Icon name="download" size={12} color="var(--ink-700)"/>CSV
+                </button>
+                <button className="btn btn-sm btn-ghost" title={lang === "fr" ? "Sauvegarder ce rapport" : "Save this report"} onClick={() => saveCurrentReport(r)}>
+                  <Icon name="plus" size={12} color="var(--ink-700)"/>
+                </button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Rapports sauvegardés (COMP-P2-017) */}
+      {savedReports.length > 0 && (
+        <div>
+          <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>{lang === "fr" ? "Rapports sauvegardés" : "Saved reports"}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {savedReports.map((rep) => (
+              <div key={rep.id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rep.name}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg-3)" }}>{baseTypeLabel(rep.baseType)}{rep.config?.filters?.species ? ` · ${speciesById(rep.config.filters.species)?.[lang === "fr" ? "fr" : "en"] || rep.config.filters.species}` : ""}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button className="btn btn-sm" onClick={() => runSavedReport(rep)}><Icon name="download" size={12} color="var(--ink-700)"/>CSV</button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => deleteSavedReport(rep)}><Icon name="trash" size={12} color="var(--oxblood-700)"/></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="overline" style={{ marginTop: 4, color: "var(--fg-3)" }}>{lang === "fr" ? "Bibliothèque · archives" : "Library · archives"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
         {reports.map((r, i) => (

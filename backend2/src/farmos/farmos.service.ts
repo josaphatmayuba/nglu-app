@@ -4,7 +4,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -2571,6 +2571,48 @@ export class FarmosService {
     await this.db.update(farmosFieldNotes).set({ isActive: 0 }).where(eq(farmosFieldNotes.id, id));
     await this.publishFarmosUpdate("deleteFieldNote", ["fieldNotes"], "deleted", id, orgId);
     return { message: "Note supprimée." };
+  }
+
+  // ─── Saved reports (rapports custom, COMP-P2-017) ─────────────────────────
+  async listSavedReports(orgId: number) {
+    return this.db
+      .select({
+        id: farmosSavedReports.id,
+        name: farmosSavedReports.name,
+        baseType: farmosSavedReports.baseType,
+        config: farmosSavedReports.config,
+        createdAt: farmosSavedReports.createdAt,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(farmosSavedReports)
+      .leftJoin(users, eq(users.id, farmosSavedReports.createdBy))
+      .where(and(eq(farmosSavedReports.organizationId, orgId), eq(farmosSavedReports.isActive, 1)))
+      .orderBy(desc(farmosSavedReports.id));
+  }
+
+  async createSavedReport(input: any, orgId: number, currentUserId: number) {
+    const [res] = await this.db.insert(farmosSavedReports).values({
+      organizationId: orgId,
+      name: input.name,
+      baseType: input.base_type,
+      config: input.config ?? null,
+      createdBy: currentUserId ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createSavedReport", ["savedReports"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async deleteSavedReport(id: number, orgId: number) {
+    const [row] = await this.db
+      .select({ id: farmosSavedReports.id })
+      .from(farmosSavedReports)
+      .where(and(eq(farmosSavedReports.id, id), eq(farmosSavedReports.organizationId, orgId), eq(farmosSavedReports.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Rapport introuvable.");
+    await this.db.update(farmosSavedReports).set({ isActive: 0 }).where(eq(farmosSavedReports.id, id));
+    await this.publishFarmosUpdate("deleteSavedReport", ["savedReports"], "deleted", id, orgId);
+    return { message: "Rapport supprimé." };
   }
 
   async listMortalityEvents(orgId: number) {

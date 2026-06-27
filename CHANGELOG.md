@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.8)
+- **FarmOS — Rapports custom sauvegardés (COMP-P2-017)**. Chaque export CSV de l'écran Rapports peut désormais être **sauvegardé** (nom + type de base + filtre espèce), puis **relancé** depuis un bloc « Rapports sauvegardés » (export CSV en un clic) ou supprimé. Table `farmos_saved_reports` (migration 0185, journal Drizzle → auto au boot) : name, base_type (inventory/mortality/reproduction/lot_performance), config JSON {columns, filters}, scope par organisation + créateur, soft delete. Backend2 : `SaveReportDto`, service list/create/delete, routes `GET/POST /farmos/saved-reports` + `DELETE /farmos/saved-reports/:id` (permissions read/create/delete-farmos). Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app OK. [SCRUM]
+
 ### Added (3.117.7)
 - **FarmOS — Comparaison des fermes (COMP-P2-018)**. Tableau comparatif multi-fermes dans l'écran Bâtiments, affiché quand « Toutes les fermes » est sélectionné et qu'il y a plusieurs fermes : par ferme — bâtiments, animaux, capacité, taux d'occupation (coloré : vert < 85 %, ambre 85-100 %, rouge > 100 %). Clic sur une ligne = filtre sur cette ferme. Réutilise la chaîne ferme→zone→bâtiment existante. Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 
