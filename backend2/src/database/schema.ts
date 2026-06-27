@@ -2598,6 +2598,13 @@ export const farmosReproductionEvents = mysqlTable("farmos_reproduction_events",
   breedingType: varchar("breeding_type", { length: 20 }).default("unknown").notNull(), // ai | natural | unknown
   sireStrawId: bigint("sire_straw_id", { mode: "number" }),
   sireAnimalId: bigint("sire_animal_id", { mode: "number" }),
+  // Indicateurs de portee / sevrage (COMP-P2-007). offspringCount = nes vivants.
+  stillbornCount: int("stillborn_count"),
+  mummifiedCount: int("mummified_count"),
+  avgBirthWeight: decimal("avg_birth_weight", { precision: 7, scale: 2 }),
+  birthDifficulty: varchar("birth_difficulty", { length: 20 }),
+  weanedCount: int("weaned_count"),
+  weaningDate: date("weaning_date", { mode: "string" }),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),

@@ -574,6 +574,13 @@ export class CreateReproductionEventDto {
     @IsOptional() @Type(() => Number) @IsInt() sire_straw_id?: number | null;
   @ApiPropertyOptional({ description: "Mâle du troupeau utilisé pour saillie naturelle." })
     @IsOptional() @Type(() => Number) @IsInt() sire_animal_id?: number | null;
+  // Indicateurs de portee / sevrage (COMP-P2-007).
+  @ApiPropertyOptional({ description: "Mort-nés." }) @IsOptional() @Type(() => Number) @IsInt() stillborn_count?: number | null;
+  @ApiPropertyOptional({ description: "Momifiés." }) @IsOptional() @Type(() => Number) @IsInt() mummified_count?: number | null;
+  @ApiPropertyOptional({ description: "Poids moyen à la naissance (kg)." }) @IsOptional() @Type(() => Number) @IsNumber() @Min(0) avg_birth_weight?: number | null;
+  @ApiPropertyOptional({ description: "Difficulté: easy/assisted/hard/cesarean." }) @IsOptional() @IsString() birth_difficulty?: string | null;
+  @ApiPropertyOptional({ description: "Nombre de sevrés." }) @IsOptional() @Type(() => Number) @IsInt() weaned_count?: number | null;
+  @ApiPropertyOptional({ description: "Date de sevrage." }) @IsOptional() @IsDateString() weaning_date?: string | null;
 }
 
 // ─── Semen straws (banque de semence pour IA) ───────────────────────────

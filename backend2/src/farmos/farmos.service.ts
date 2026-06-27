@@ -1266,6 +1266,12 @@ export class FarmosService {
       breedingType,
       sireStrawId: input.sire_straw_id ?? null,
       sireAnimalId: input.sire_animal_id ?? null,
+      stillbornCount: input.stillborn_count ?? null,
+      mummifiedCount: input.mummified_count ?? null,
+      avgBirthWeight: input.avg_birth_weight != null ? String(input.avg_birth_weight) : null,
+      birthDifficulty: input.birth_difficulty ?? null,
+      weanedCount: input.weaned_count ?? null,
+      weaningDate: input.weaning_date ?? null,
     }).$returningId();
     await this.publishFarmosUpdate("createReproductionEvent", ["reproductionEvents", "semenStraws"], "created", res.id, orgId);
     return { id: res.id };

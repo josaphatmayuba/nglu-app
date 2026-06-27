@@ -1311,8 +1311,10 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
                   {g.partner && <span style={{ fontSize: 11, color: "var(--fg-3)" }}>♂ {g.partner}</span>}
                   <span className="tag" style={{ background: "var(--solidite-50)", color: "var(--solidite-900)", fontSize: 11 }}>
-                    {Number(g.offspring) > 0 ? `${g.offspring} ${lang === "fr" ? "petit(s)" : "young"}` : (lang === "fr" ? "mise bas ✓" : "calved ✓")}
+                    {Number(g.offspring) > 0 ? `${g.offspring} ${lang === "fr" ? "vivant(s)" : "live"}` : (lang === "fr" ? "mise bas ✓" : "calved ✓")}
                   </span>
+                  {Number(g.stillborn) > 0 && <span className="tag" style={{ background: "var(--critical-bg)", color: "var(--rust-900)", fontSize: 10.5 }}>{g.stillborn} {lang === "fr" ? "mort-né(s)" : "stillborn"}</span>}
+                  {Number(g.mummified) > 0 && <span className="tag" style={{ background: "var(--ink-100)", color: "var(--ink-700)", fontSize: 10.5 }}>{g.mummified} {lang === "fr" ? "momifié(s)" : "mummified"}</span>}
                   <span className="mono" style={{ fontSize: 11.5, color: "var(--ink-700)" }}>{g.start}</span>
                 </span>
               </div>

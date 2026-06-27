@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.21)
+- **FarmOS — Indicateurs de portée porcine (COMP-P2-007)**. Les mises bas enregistrent désormais, en plus des nés vivants : **mort-nés**, **momifiés** (porc), **poids moyen à la naissance**, **difficulté** et **sevrés / date de sevrage**. Migration 0184 (ADD COLUMN IF NOT EXISTS sur `farmos_reproduction_events`, idempotente, dans le journal Drizzle → auto au boot). Backend2 : `CreateReproductionEventDto` + `createReproductionEvent` étendus. Front : champ « Momifiés » ajouté au formulaire de mise bas (porc), et les champs mort-nés/poids/difficulté déjà saisis sont maintenant **persistés** (ils étaient ignorés). Le Livre de vêlage affiche nés vivants / mort-nés / momifiés. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.116.20)
 - **FarmOS — Alerte baisse de production anormale (COMP-P2-004)**. Les cartes de production par espèce affichent désormais une alerte visuelle quand la production chute fortement sur la période (≥ 20 % de baisse, avec au moins 3 points de données pour éviter le bruit), invitant à vérifier santé/alimentation/retrait. Complète le module Production lait existant (KPI lait/période, saisie par vache/lot via `production_logs`, courbe Sparkline, retrait lait/viande/œufs) — réutilise le `delta` déjà calculé, aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

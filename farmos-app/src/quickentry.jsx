@@ -1559,6 +1559,11 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
       event_type: eventType,
       event_date: form.date,
       offspring_count: kind === "birth" ? (form.live ? Number(form.live) : null) : null,
+      // Indicateurs de portee (COMP-P2-007) — surtout porc, valables toutes especes.
+      stillborn_count: kind === "birth" && form.dead ? Number(form.dead) : null,
+      mummified_count: kind === "birth" && form.mummified ? Number(form.mummified) : null,
+      avg_birth_weight: kind === "birth" && form.weight ? Number(form.weight) : null,
+      birth_difficulty: kind === "birth" ? (form.difficulty || null) : null,
       outcome: kind === "birth" ? "success" : "pending",
       partner_external_id: form.male || null,
       notes: form.notes || null,
@@ -1710,6 +1715,11 @@ const ReproForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onC
             <FormField label={lang === "fr" ? "Mort-nés" : "Stillborn"}>
               <input className="input mono" type="number" placeholder="0" value={form.dead || ""} onChange={(e) => set("dead", e.target.value)}/>
             </FormField>
+            {form.species === "pig" && (
+              <FormField label={lang === "fr" ? "Momifiés" : "Mummified"}>
+                <input className="input mono" type="number" placeholder="0" value={form.mummified || ""} onChange={(e) => set("mummified", e.target.value)}/>
+              </FormField>
+            )}
             <FormField label={lang === "fr" ? "Poids moyen (kg)" : "Avg weight (kg)"}>
               <input className="input mono" type="number" step="0.01" placeholder={form.species === "pig" ? "1.4" : "40"} value={form.weight || ""} onChange={(e) => set("weight", e.target.value)}/>
             </FormField>
