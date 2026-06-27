@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.16)
+- **FarmOS — Prévention des crashs `accentBg` sur espèce non résolue (suite)**. Sécurisation des accès `speciesById(...)` restants qui lisaient directement `.accentBg`/`.glyph`/`.fr` sur un résultat potentiellement `undefined` : écran Santé (carte traitement), Calendrier (« À faire aujourd'hui » + « En retard »), Prévision (cartes feed forecast). Fallback espèce inconnue. Évite le même `TypeError` que sur l'écran Reproduction. **Vérifié** : build farmos-app OK. [SCRUM]
+
 ### Fixed (3.117.15)
 - **FarmOS — Écran Reproduction plantait (`Cannot read properties of undefined (reading 'accentBg')`)**. Le Livre de vêlage (P2-001) charge tous les événements de reproduction, y compris ceux dont l'espèce n'est pas résolue ; `speciesById()` renvoyait alors `undefined` et la timeline des gestations lisait `.accentBg` dessus → crash de l'écran `/farmos/reproduction`. Fallback ajouté sur espèce inconnue (timeline gestations + pastilles du calendrier). **Vérifié** : build farmos-app OK. [SCRUM]
 

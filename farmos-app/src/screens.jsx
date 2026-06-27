@@ -164,7 +164,7 @@ const HealthScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </div>
           <div style={{ borderTop: "1px solid var(--border-1)" }}>
             {treatments.map((tr, i) => {
-              const sp = speciesById(tr.species);
+              const sp = speciesById(tr.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", fr: "—", en: "—" };
               const ongoing = tr.status === "running";
               const locked = isSaleLockedStatus(tr.animalStatus);
               return (
@@ -568,7 +568,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "À faire aujourd'hui" : "Due today"}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {todayEvents.map((v) => {
-                    const sp = speciesById(v.species);
+                    const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
                     return (
                       <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px dashed var(--border-1)" }}>
                         <AnimalGlyph kind={sp.glyph} size={12} color="var(--ink-500)"/>
@@ -587,7 +587,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun rappel en retard." : "No overdue reminders."}</div>
             )}
             {allEvents.filter(v => v.status === "overdue").map((v) => {
-              const sp = speciesById(v.species);
+              const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
               return (
                 <div key={v.id} className="pulse-critical" style={{ background: "var(--critical-bg)", border: "1px solid var(--rust-300)", borderRadius: 8, padding: 12 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -749,7 +749,7 @@ function FeedForecastBlock({ lang, forecasts }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
           {forecasts.map((p) => {
-            const sp = speciesById(p.species);
+            const sp = speciesById(p.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)", fr: "—", en: "—" };
             return (
               <div key={p.id} style={{ background: "var(--paper)", border: "1px solid var(--border-1)", borderRadius: 8, padding: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
