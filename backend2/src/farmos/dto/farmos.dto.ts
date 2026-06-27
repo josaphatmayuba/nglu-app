@@ -365,6 +365,24 @@ export class CreateWeighingDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+export class ImportWeighingRowDto {
+  @ApiPropertyOptional({ description: "external_id / tag de l'animal (résolu côté serveur)." })
+    @IsOptional() @IsString() external_id?: string | null;
+  @ApiPropertyOptional({ description: "id interne de l'animal (alternative à external_id)." })
+    @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiProperty({ example: "2026-06-10" }) @IsDateString() weigh_date: string;
+  @ApiProperty({ example: 612 }) @Type(() => Number) @IsNumber() @Min(0) weight: number;
+  @ApiPropertyOptional({ default: "kg" }) @IsOptional() @IsString() weight_unit?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
+export class ImportWeighingsDto {
+  @ApiProperty({ type: [ImportWeighingRowDto], description: "Pesées à importer (CSV mappé client)." })
+  @IsArray() @ValidateNested({ each: true }) @Type(() => ImportWeighingRowDto)
+  rows: ImportWeighingRowDto[];
+  @ApiPropertyOptional({ default: false }) @IsOptional() dryRun?: boolean;
+}
+
 export class UpdateFarmosStaffDto {
   @ApiPropertyOptional() @IsOptional() @IsString() firstName?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() lastName?: string | null;

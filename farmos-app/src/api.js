@@ -279,6 +279,8 @@ export const api = {
   updateAnimal:    (id, body) => mutate({ kind: "updateAnimal", method: "PATCH", path: `/animals/${id}`, body }),
   // Import CSV en masse (COMP-P1-001) — action en ligne uniquement (pas offline).
   importAnimals:   (rows, dryRun = false) => jsonFetch("/animals/import", { method: "POST", body: JSON.stringify({ rows, dryRun }) }),
+  // Import CSV de pesées (COMP-P2-014)
+  importWeighings: (rows, dryRun = false) => jsonFetch("/weighings/import", { method: "POST", body: JSON.stringify({ rows, dryRun }) }),
   createTreatment: (body) => mutate({ kind: "createTreatment", method: "POST", path: "/treatments", body,
                        optimistic: { table: "treatments", row: { id: tempId("t"), ...body, _pending: true } } }),
   createSale:      (body) => mutate({ kind: "createSale", method: "POST", path: "/sales", body,

@@ -317,6 +317,96 @@ function ImportAnimalsModal({ lang, onClose, onDone }) {
   );
 }
 
+// Import CSV de pesées (COMP-P2-014). Réutilise parseCsv. Colonnes: ID/tag, Date, Poids, Unité, Notes.
+const WEIGHING_HEADER_MAP = {
+  id: "external_id", "id externe": "external_id", "external id": "external_id", tag: "external_id", nom: "external_id", name: "external_id",
+  date: "weigh_date", "date pesee": "weigh_date", "date pesée": "weigh_date", "weigh date": "weigh_date",
+  poids: "weight", weight: "weight",
+  unite: "weight_unit", "unité": "weight_unit", unit: "weight_unit",
+  notes: "notes", note: "notes",
+};
+const WEIGHING_TEMPLATE_HEADERS = ["ID", "Date", "Poids", "Unité", "Notes"];
+
+function ImportWeighingsModal({ lang, onClose, onDone }) {
+  const fr = lang === "fr";
+  const [mapped, setMapped] = React.useState([]);
+  const [result, setResult] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [fileName, setFileName] = React.useState("");
+
+  const onFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name); setResult(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { headers, rows } = parseCsv(String(reader.result || ""));
+      const fields = headers.map((h) => WEIGHING_HEADER_MAP[h.trim().toLowerCase()] || null);
+      const out = rows.map((cells) => {
+        const obj = {};
+        fields.forEach((f, i) => {
+          if (!f) return;
+          let v = String(cells[i] ?? "").trim();
+          if (v === "") return;
+          if (f === "weight") { const n = Number(v.replace(/[^\d.,-]/g, "").replace(",", ".")); if (!Number.isNaN(n)) obj[f] = n; return; }
+          obj[f] = v;
+        });
+        return obj;
+      });
+      setMapped(out);
+    };
+    reader.readAsText(file);
+  };
+
+  const run = async (dryRun) => {
+    if (!mapped.length) return;
+    setBusy(true);
+    try {
+      const res = await api.importWeighings(mapped, dryRun);
+      setResult(res);
+      if (!dryRun && res.inserted > 0) onDone?.();
+    } catch (err) { setResult({ error: err.message }); } finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 12, width: "min(560px,100%)", maxHeight: "90vh", overflow: "auto", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{fr ? "Importer des pesées (CSV)" : "Import weighings (CSV)"}</h3>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={14} color="var(--ink-700)"/></button>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+            <Icon name="upload" size={13} color="var(--ink-700)"/>{fr ? "Choisir un fichier" : "Choose file"}
+            <input type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }}/>
+          </label>
+          <button className="btn btn-sm btn-ghost" onClick={() => downloadCsv("farmos-pesees-template.csv", [WEIGHING_TEMPLATE_HEADERS])}>
+            <Icon name="download" size={13} color="var(--ink-700)"/>{fr ? "Modèle CSV" : "CSV template"}
+          </button>
+          {fileName && <span style={{ fontSize: 12, color: "var(--fg-3)", alignSelf: "center" }}>{fileName}</span>}
+        </div>
+        {mapped.length > 0 && <div style={{ fontSize: 12.5, marginBottom: 10 }}>{fr ? `${mapped.length} ligne(s) détectée(s). L'animal est identifié par ID/tag.` : `${mapped.length} row(s) detected. Animal matched by ID/tag.`}</div>}
+        {result && !result.error && (
+          <div style={{ fontSize: 13, background: "var(--bg-2)", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+            <div><b>{result.dryRun ? (fr ? "Test (rien enregistré)" : "Test (nothing saved)") : (fr ? "Import terminé" : "Import done")}</b></div>
+            <div>{fr ? "Total" : "Total"}: {result.total} · {fr ? "Importées" : "Imported"}: {result.inserted} · {fr ? "Erreurs" : "Errors"}: {result.errors?.length || 0}</div>
+            {result.errors?.length > 0 && (
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, maxHeight: 160, overflow: "auto" }}>
+                {result.errors.map((er, i) => <li key={i} style={{ color: "var(--oxblood-700)" }}>{fr ? "Ligne" : "Line"} {er.line} · {er.field}: {er.message}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+        {result?.error && <div style={{ color: "var(--oxblood-700)", fontSize: 13, marginBottom: 10 }}>{result.error}</div>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn btn-sm btn-ghost" disabled={busy || !mapped.length} onClick={() => run(true)}>{fr ? "Tester (sans enregistrer)" : "Test (no save)"}</button>
+          <button className="btn btn-sm btn-primary" disabled={busy || !mapped.length} onClick={() => run(false)}>{busy ? "…" : (fr ? "Importer" : "Import")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const isMobile = useIsMobile();
   const [selectedId, setSelectedId] = React.useState(null);
@@ -327,6 +417,7 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("all"));
   const [showFilters, setShowFilters] = React.useState(false);
   const [showImport, setShowImport] = React.useState(false);
+  const [showImportWeighings, setShowImportWeighings] = React.useState(false);
   const [advancedFilters, setAdvancedFilters] = React.useState(() => ({ ...EMPTY_ADVANCED_FILTERS }));
 
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -463,6 +554,9 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
           <button className="btn btn-sm" onClick={() => setShowImport(true)}>
             <Icon name="upload" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Importer" : "Import"}
           </button>
+          <button className="btn btn-sm" onClick={() => setShowImportWeighings(true)}>
+            <Icon name="upload" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Importer pesées" : "Import weighings"}
+          </button>
           <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "animal" }))}><Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Nouvel animal" : "New animal"}</button>
         </div>
 
@@ -496,6 +590,13 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
           <ImportAnimalsModal
             lang={lang}
             onClose={() => setShowImport(false)}
+            onDone={() => setReloadKey((k) => k + 1)}
+          />
+        )}
+        {showImportWeighings && (
+          <ImportWeighingsModal
+            lang={lang}
+            onClose={() => setShowImportWeighings(false)}
             onDone={() => setReloadKey((k) => k + 1)}
           />
         )}

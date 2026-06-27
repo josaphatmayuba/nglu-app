@@ -2739,6 +2739,67 @@ export class FarmosService {
     return { id: res.id };
   }
 
+  // Import CSV de pesées (COMP-P2-014). Résout l'animal par external_id (ou id),
+  // valide poids/date ligne par ligne, dryRun = aucune écriture. Met à jour le
+  // poids courant de l'animal avec la pesée la plus récente importée.
+  async importWeighings(input: any, orgId: number) {
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    // Index des animaux actifs de l'org : external_id (lower) -> id, et set des id.
+    const animals = await this.db
+      .select({ id: farmosAnimals.id, externalId: farmosAnimals.externalId })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+    const byExt = new Map(animals.filter((a) => a.externalId).map((a) => [String(a.externalId).trim().toLowerCase(), a.id]));
+    const ids = new Set(animals.map((a) => a.id));
+
+    const errors: { line: number; field: string; message: string }[] = [];
+    const toInsert: { line: number; animalId: number; weighDate: string; weight: number; weightUnit: string; notes: string | null }[] = [];
+
+    rows.forEach((row: any, idx: number) => {
+      const line = idx + 1;
+      let animalId: number | null = null;
+      if (row.animal_id != null && ids.has(Number(row.animal_id))) animalId = Number(row.animal_id);
+      else if (row.external_id) animalId = byExt.get(String(row.external_id).trim().toLowerCase()) ?? null;
+      if (!animalId) { errors.push({ line, field: "animal", message: "Animal introuvable (external_id/id)." }); return; }
+      if (!row.weigh_date) { errors.push({ line, field: "weigh_date", message: "Date requise." }); return; }
+      const w = Number(row.weight);
+      if (!Number.isFinite(w) || w <= 0) { errors.push({ line, field: "weight", message: "Poids invalide." }); return; }
+      toInsert.push({ line, animalId, weighDate: String(row.weigh_date).slice(0, 10), weight: w, weightUnit: row.weight_unit ?? "kg", notes: row.notes ?? null });
+    });
+
+    if (input.dryRun) {
+      return { dryRun: true, total: rows.length, inserted: toInsert.length, errors };
+    }
+
+    let inserted = 0;
+    // Dernière pesée par animal (pour MAJ du poids courant).
+    const latestByAnimal = new Map<number, { date: string; weight: number; unit: string }>();
+    for (const item of toInsert) {
+      try {
+        await this.db.insert(farmosWeighings).values({
+          organizationId: orgId,
+          animalId: item.animalId,
+          weighDate: item.weighDate,
+          weight: String(item.weight),
+          weightUnit: item.weightUnit,
+          notes: item.notes,
+        });
+        inserted += 1;
+        const prev = latestByAnimal.get(item.animalId);
+        if (!prev || item.weighDate >= prev.date) latestByAnimal.set(item.animalId, { date: item.weighDate, weight: item.weight, unit: item.weightUnit });
+      } catch {
+        errors.push({ line: item.line, field: "_row", message: "Insertion échouée." });
+      }
+    }
+    for (const [animalId, last] of latestByAnimal) {
+      await this.db.update(farmosAnimals)
+        .set({ weight: String(last.weight), weightUnit: last.unit })
+        .where(and(eq(farmosAnimals.id, animalId), eq(farmosAnimals.organizationId, orgId)));
+    }
+    if (inserted > 0) await this.publishFarmosUpdate("importWeighings", ["weighings", "animals"], "created", 0, orgId);
+    return { dryRun: false, total: rows.length, inserted, errors };
+  }
+
   async deleteWeighing(id: number, orgId: number) {
     const [previous] = await this.db.select().from(farmosWeighings).where(and(eq(farmosWeighings.id, id), eq(farmosWeighings.organizationId, orgId))).limit(1);
     if (!previous) throw new NotFoundException("Weighing not found.");

@@ -29,6 +29,7 @@ import {
   CreateMedicineDto,
   CreateMortalityEventDto,
   CreateWeighingDto,
+  ImportWeighingsDto,
   UpdateFarmosStaffDto,
   SetFarmosStaffStatusDto,
   CreateVaccinationDto,
@@ -750,6 +751,13 @@ export class FarmosController {
   @Post("weighings")
   createWeighing(@Body() body: CreateWeighingDto, @CurrentOrg() orgId: number) {
     return this.farmos.createWeighing(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Import weighings in bulk from a mapped CSV (COMP-P2-014)." })
+  @Permissions("create-farmos")
+  @Post("weighings/import")
+  importWeighings(@Body() body: ImportWeighingsDto, @CurrentOrg() orgId: number) {
+    return this.farmos.importWeighings(body, orgId);
   }
 
   @Permissions("delete-farmos")
