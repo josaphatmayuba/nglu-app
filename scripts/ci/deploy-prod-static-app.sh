@@ -23,13 +23,20 @@ LOCK_WAIT_SECONDS="${LOCK_WAIT_SECONDS:-900}"
 # (e.g. BASE_URL=https://avelomi.com) so the deploy verifies the right domain.
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
 
-# Garde provisionnement : si le serveur cible n'a pas $ENV_FILE (ex. prod Avelomi
-# pas encore provisionnee via provision-avelomi.sh), on SKIP proprement (exit 0)
-# au lieu de planter sur `cd $REMOTE_ROOT` / --env-file inexistant. Evite un echec
-# rouge trompeur sur chaque merge master tant que le serveur n'est pas pret.
-if ! $SSH_CMD "$SERVER" "test -f '$REMOTE_ROOT/$ENV_FILE'"; then
-  echo "[deploy] $SERVER non provisionne ($REMOTE_ROOT/$ENV_FILE absent)." >&2
-  echo "[deploy] Lance scripts/provision-avelomi.sh sur ce serveur, puis re-merge master. Step ignore." >&2
+# Garde provisionnement : on SKIP proprement (exit 0) tant que le serveur cible
+# n'est pas reellement pret, au lieu de planter (tar/scp/cd sur des fichiers
+# absents). Trois conditions, car un .env.prod VIDE existe deja sur Avelomi
+# (provision a cree le fichier sans le remplir) et faisait passer un simple
+# `test -f` a tort :
+#   1. $ENV_FILE present ET NON vide (test -s) ;
+#   2. docker-compose.prod.yml present cote serveur (repo clone) ;
+#   3. frontend/Dockerfile.prod present cote serveur (rebuild image possible).
+# Sinon : message explicite + exit 0. Evite l'echec rouge trompeur sur master
+# tant que provision-avelomi.sh (clone repo + .env.prod rempli) n'a pas tourne.
+if ! $SSH_CMD "$SERVER" "test -s '$REMOTE_ROOT/$ENV_FILE' && test -f '$REMOTE_ROOT/docker-compose.prod.yml' && test -f '$REMOTE_ROOT/frontend/Dockerfile.prod'"; then
+  echo "[deploy] $SERVER pas pret : $ENV_FILE vide/absent ou repo ($REMOTE_ROOT) non clone." >&2
+  echo "[deploy] Lance scripts/provision-avelomi.sh sur ce serveur (clone repo + .env.prod rempli)," >&2
+  echo "[deploy] puis re-merge master. Step ignore." >&2
   exit 0
 fi
 

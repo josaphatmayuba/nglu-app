@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.116.5)
+- **Deploy master `frontend → Avelomi` plantait (`tar: docker-compose.prod.yml: No such file`) au lieu de skipper**. Le merge `develop`→`master` (PR #43) a relancé le déploiement prod Avelomi ; le step front a échoué car `/opt/nglu-app` sur `3.128.45.29` n'a pas le repo cloné (provisionnement partiel). La garde de `scripts/ci/deploy-prod-static-app.sh` testait `test -f .env.prod`, mais le `.env.prod` Avelomi **existe vide** → la garde passait à tort et le script continuait jusqu'au `tar`/`scp` sur fichiers absents. Garde renforcée : skip propre (exit 0) tant que `.env.prod` est **non vide** (`test -s`) **ET** que `docker-compose.prod.yml` + `frontend/Dockerfile.prod` existent côté serveur (repo cloné). Plus d'échec rouge trompeur sur master tant que `provision-avelomi.sh` n'a pas tourné. ongdngolu (déjà provisionné) non affecté. **Vérifié** : `sh -n` OK. NON déployé. [SCRUM]
+
 ### Changed (3.116.4)
 - **`DB_PASSWORD` Avelomi désormais auto-généré par le pipeline** (au lieu du placeholder `__A_REMPLIR__`). L'anchor `&avelomi-prod-env` génère tous les secrets — `DB_PASSWORD` inclus — via `openssl` **sur le serveur** (jamais en CI ni dans le transcript), et écrit le mot de passe en clair dans un fichier dédié `chmod 600` `/opt/nglu-app/.avelomi_db_password.txt`. Le propriétaire le lit en SSH (`cat`) pour créer l'utilisateur MySQL `avelomi` avec ce mot de passe (la base `avelomi_db` + le user restent à créer à la main : compte admin MySQL requis, hors de portée du pipeline). Garde `&avelomi-prod-guard` simplifiée : skip propre tant que `.env.prod` est absent/vide. **Vérifié** : YAML valide (parse OK). NON déployé. [SCRUM]
 
