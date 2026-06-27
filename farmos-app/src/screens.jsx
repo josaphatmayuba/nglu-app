@@ -1488,6 +1488,18 @@ const ProductionScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies
               )}
             </div>
             <Sparkline data={production.trend} color={s.accent} height={48}/>
+            {/* Alerte baisse anormale (COMP-P2-004) : chute >=20% sur la periode,
+                avec assez de points pour que ce ne soit pas du bruit. */}
+            {production.hasData && production.delta != null && production.delta <= -20 && production.trend.filter((v) => v > 0).length >= 3 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", borderRadius: 6, background: "var(--critical-bg)", border: "1px solid var(--rust-300)" }}>
+                <Icon name="alert" size={13} color="var(--rust-700)"/>
+                <span style={{ fontSize: 11.5, color: "var(--rust-900)" }}>
+                  {lang === "fr"
+                    ? `Baisse anormale de production (${production.delta.toFixed(0)}%) — vérifier santé, alimentation ou retrait en cours.`
+                    : `Abnormal production drop (${production.delta.toFixed(0)}%) — check health, feed or active withdrawal.`}
+                </span>
+              </div>
+            )}
           </div>
         );})}
       </div>

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.20)
+- **FarmOS — Alerte baisse de production anormale (COMP-P2-004)**. Les cartes de production par espèce affichent désormais une alerte visuelle quand la production chute fortement sur la période (≥ 20 % de baisse, avec au moins 3 points de données pour éviter le bruit), invitant à vérifier santé/alimentation/retrait. Complète le module Production lait existant (KPI lait/période, saisie par vache/lot via `production_logs`, courbe Sparkline, retrait lait/viande/œufs) — réutilise le `delta` déjà calculé, aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Fixed (3.116.19)
 - **CI Avelomi — accès Docker (permission denied socket)**. Le déploiement Avelomi (3.128.45.29, user `admin` hors groupe `docker`) échouait sur `unable to get image ... permission denied ... /var/run/docker.sock`. Les commandes `docker compose` des steps Avelomi (dev `nglu_dev` + prod `nglu_prod` : backend2/pdf-service/middleware) auto-détectent désormais l'accès et basculent sur `sudo docker` au besoin (`D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'`). `scripts/ci/deploy-prod-static-app.sh` applique la même auto-détection (variable `$DOCKER`) pour tous les déploiements de frontends statiques. ongdngolu (groupe docker OK) reste inchangé. **Vérifié** : `bash -n` + parse YAML OK. [SCRUM]
 
