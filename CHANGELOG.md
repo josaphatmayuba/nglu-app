@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.116.19)
+- **CI Avelomi — accès Docker (permission denied socket)**. Le déploiement Avelomi (3.128.45.29, user `admin` hors groupe `docker`) échouait sur `unable to get image ... permission denied ... /var/run/docker.sock`. Les commandes `docker compose` des steps Avelomi (dev `nglu_dev` + prod `nglu_prod` : backend2/pdf-service/middleware) auto-détectent désormais l'accès et basculent sur `sudo docker` au besoin (`D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'`). `scripts/ci/deploy-prod-static-app.sh` applique la même auto-détection (variable `$DOCKER`) pour tous les déploiements de frontends statiques. ongdngolu (groupe docker OK) reste inchangé. **Vérifié** : `bash -n` + parse YAML OK. [SCRUM]
+
 ### Added (3.116.18)
 - **FarmOS — Livre de vêlage (COMP-P2-001)**. Nouvelle section « Livre de vêlage » dans l'écran Reproduction : liste des **mises bas attendues** (mère, partenaire ♂, date prévue, marqueur imminent) et des **naissances enregistrées** (mère, partenaire, nombre de petits, date), filtrées par espèce/période. Réutilise les événements de reproduction existants (`farmos_reproduction_events` : eventType, expected_due_date, offspring_count, breeding_type, sire) — aucune modification DB/backend. Adaptateur `adaptReproEvent` enrichi (champs `eventType`, `outcome`, `motherName`, `partner`, ajout non cassant). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

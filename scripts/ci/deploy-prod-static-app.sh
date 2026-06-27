@@ -97,10 +97,14 @@ $SCP_CMD "$LOCAL_DIST_ARCHIVE" "$SERVER:$REMOTE_DIST_ARCHIVE"
 $SCP_CMD "$LOCAL_SUPPORT_ARCHIVE" "$SERVER:$REMOTE_SUPPORT_ARCHIVE"
 
 $SSH_CMD "$SERVER" \
-  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' BASE_URL='$BASE_URL' bash -s" <<'REMOTE_SCRIPT'
+  "APP_DIR='$APP_DIR' SMOKE_ROUTE='$SMOKE_ROUTE' REMOTE_ROOT='$REMOTE_ROOT' REMOTE_DIST_ARCHIVE='$REMOTE_DIST_ARCHIVE' REMOTE_SUPPORT_ARCHIVE='$REMOTE_SUPPORT_ARCHIVE' COMPOSE_PROJECT='$COMPOSE_PROJECT' COMPOSE_FILE='$COMPOSE_FILE' ENV_FILE='$ENV_FILE' LOCK_WAIT_SECONDS='$LOCK_WAIT_SECONDS' BASE_URL='$BASE_URL' DOCKER='${DOCKER:-docker}' bash -s" <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
+# Avelomi: l'utilisateur SSH n'est pas dans le groupe docker => bascule sur 'sudo docker'.
+# ongdngolu: groupe docker OK => 'docker'. Auto-detecte si DOCKER non fourni.
+DOCKER="${DOCKER:-docker}"
+$DOCKER ps >/dev/null 2>&1 || DOCKER="sudo docker"
 LOCK_DIR="/tmp/nglu-prod-deploy.lock"
 LOCK_META="$LOCK_DIR/meta.txt"
 START_TS="$(date +%s)"
@@ -133,14 +137,14 @@ REMOTE_USER="$(id -un)"
 TARGET_DIST="$REMOTE_ROOT/$APP_DIR/dist"
 FE_IMG="$COMPOSE_PROJECT-frontend"
 FE_HAVE_PREV=0
-FE_CURRENT_IMAGE="$(docker inspect -f '{{.Config.Image}}' nglu_prod_frontend 2>/dev/null || true)"
-FE_CURRENT_PROJECT="$(docker inspect -f '{{with index .Config.Labels "com.docker.compose.project"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true)"
+FE_CURRENT_IMAGE="$($DOCKER inspect -f '{{.Config.Image}}' nglu_prod_frontend 2>/dev/null || true)"
+FE_CURRENT_PROJECT="$($DOCKER inspect -f '{{with index .Config.Labels "com.docker.compose.project"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true)"
 
 rollback_frontend() {
   if [ "$FE_HAVE_PREV" = "1" ]; then
     echo "[remote] rolling back frontend image to $FE_IMG:previous"
-    docker tag "$FE_IMG:previous" "$FE_IMG:latest"
-    docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps frontend || true
+    $DOCKER tag "$FE_IMG:previous" "$FE_IMG:latest"
+    $DOCKER compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps frontend || true
   else
     echo "[remote] no previous frontend image available for rollback" >&2
   fi
@@ -185,18 +189,18 @@ fi
 sudo chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
 rm -f "$REMOTE_DIST_ARCHIVE" "$REMOTE_SUPPORT_ARCHIVE"
 
-if [ -n "$FE_CURRENT_IMAGE" ] && docker image inspect "$FE_CURRENT_IMAGE" >/dev/null 2>&1; then
-  docker tag "$FE_CURRENT_IMAGE" "$FE_IMG:previous"
+if [ -n "$FE_CURRENT_IMAGE" ] && $DOCKER image inspect "$FE_CURRENT_IMAGE" >/dev/null 2>&1; then
+  $DOCKER tag "$FE_CURRENT_IMAGE" "$FE_IMG:previous"
   FE_HAVE_PREV=1
   echo "[remote] tagged current container image ($FE_CURRENT_IMAGE) as $FE_IMG:previous"
-elif docker image inspect "$FE_IMG:latest" >/dev/null 2>&1; then
-  docker tag "$FE_IMG:latest" "$FE_IMG:previous"
+elif $DOCKER image inspect "$FE_IMG:latest" >/dev/null 2>&1; then
+  $DOCKER tag "$FE_IMG:latest" "$FE_IMG:previous"
   FE_HAVE_PREV=1
   echo "[remote] tagged current frontend image as $FE_IMG:previous"
 fi
 
 echo "[remote] building prod frontend image"
-if ! docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build frontend; then
+if ! $DOCKER compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build frontend; then
   echo "[remote] frontend image build failed; live container was not changed" >&2
   exit 1
 fi
@@ -204,9 +208,9 @@ fi
 echo "[remote] recreating prod frontend container"
 if [ -n "$FE_CURRENT_PROJECT" ] && [ "$FE_CURRENT_PROJECT" != "$COMPOSE_PROJECT" ]; then
   echo "[remote] existing nglu_prod_frontend belongs to compose project $FE_CURRENT_PROJECT; replacing it under $COMPOSE_PROJECT"
-  docker rm -f nglu_prod_frontend
+  $DOCKER rm -f nglu_prod_frontend
 fi
-if ! docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps frontend; then
+if ! $DOCKER compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate --no-deps frontend; then
   echo "[remote] frontend recreate failed" >&2
   rollback_frontend
   exit 1
@@ -222,7 +226,7 @@ smoke_once() {
     && check_url "$BASE_URL/crm" \
     && check_url "$BASE_URL/admin/auth/login" \
     && check_url "$route_url" \
-    && docker exec nglu_prod_frontend nginx -t >/dev/null 2>&1
+    && $DOCKER exec nglu_prod_frontend nginx -t >/dev/null 2>&1
 }
 
 diagnose_smoke() {
@@ -245,7 +249,7 @@ diagnose_smoke() {
   done
 
   nginx_test_log="$(mktemp)"
-  if docker exec nglu_prod_frontend nginx -t >"$nginx_test_log" 2>&1; then
+  if $DOCKER exec nglu_prod_frontend nginx -t >"$nginx_test_log" 2>&1; then
     echo "[remote] smoke ok: nginx config"
   else
     echo "[remote] smoke fail: nginx config" >&2

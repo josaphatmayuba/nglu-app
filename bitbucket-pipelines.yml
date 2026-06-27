@@ -414,8 +414,8 @@ pipelines:
                 # Sync migrations explicitement (ne pas dependre d'un git pull serveur).
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
               name: PDF Service → Avelomi-dev
@@ -429,8 +429,8 @@ pipelines:
                 - *avelomi-dev-env
                 - $SCP -r pdf-service $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
               name: Middleware → Avelomi-dev
@@ -444,8 +444,8 @@ pipelines:
                 - *avelomi-dev-env
                 - $SCP -r middleware $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Déploiement prod AUTOMATIQUE au push/merge sur master (comme develop→dev).
@@ -632,8 +632,8 @@ pipelines:
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: PDF Service → Avelomi
@@ -645,8 +645,8 @@ pipelines:
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - *avelomi-prod-guard
                 - $SCP -r pdf-service $SERVER:$APP/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: Middleware → Avelomi
@@ -659,8 +659,8 @@ pipelines:
                 - *avelomi-prod-guard
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - $SCP -r middleware $SERVER:$APP/
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
-                - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: Frontend → Avelomi
