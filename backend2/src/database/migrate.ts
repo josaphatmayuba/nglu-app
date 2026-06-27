@@ -12,12 +12,10 @@ type JournalEntry = {
   breakpoints: boolean;
 };
 
-// Seuil d'auto-découverte : toute migration dont le numéro est >= à ce seuil est
-// considérée idempotente (CREATE TABLE IF NOT EXISTS / pattern SET+IF+PREPARE) et
-// rejouée au boot. Évite la liste codée en dur : une nouvelle migration >=0070
-// est donc appliquée automatiquement, même si le `when` du journal est en
-// désordre (drift connu 0080-0087) — plus aucun oubli possible.
-const OPERATIONAL_REPAIR_MIN_INDEX = 70;
+// Seuil d'auto-découverte : seules les migrations opérationnelles récentes sont
+// rejouées au boot. Rejouer tout depuis 0070 réexécutait aussi de grosses
+// migrations legacy/data-seed et gardait l'API hors ligne pendant le démarrage.
+const OPERATIONAL_REPAIR_MIN_INDEX = 175;
 
 // Numéro de migration extrait du tag (ex. "0088_hr_public_holidays" -> 88).
 function migrationIndex(tag: string): number {

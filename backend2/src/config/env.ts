@@ -8,6 +8,13 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
   jwtSecret: process.env.JWT_SECRET || "jwt_secret_key",
   refreshSecret: process.env.REFRESH_SECRET || "refresh_secret_key",
+  google: {
+    clientId:
+      process.env.GOOGLE_CLIENT_ID ||
+      process.env.VITE_GOOGLE_CLIENT_ID ||
+      process.env.VITE_APP_GOOGLE_CLIENT_ID ||
+      "",
+  },
   // Public-facing URL used to build signing links, email links, etc.
   // MUST be set explicitly per environment in docker-compose / .env.
   appUrl: process.env.APP_URL || "http://localhost:3000",

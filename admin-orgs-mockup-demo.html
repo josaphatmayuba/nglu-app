@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mockup Gestion des Organisations — FarmOS</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 248px;
+      background: #0E2418;
+      color: #ECF1EC;
+      padding: 1.5rem 1rem;
+      border-right: 1px solid #1F2A44;
+      overflow-y: auto;
+    }
+
+    .sidebar-title {
+      font-size: 17px;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      text-align: center;
+      color: #D7AA45;
+    }
+
+    .sidebar-subtitle {
+      font-size: 10px;
+      color: rgba(236, 241, 236, 0.55);
+      text-align: center;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: rgba(236, 241, 236, 0.55);
+      cursor: pointer;
+      font-size: 14px;
+      margin-bottom: 0.25rem;
+      transition: all 0.2s;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background: rgba(236, 241, 236, 0.1);
+      color: #ECF1EC;
+    }
+
+    .nav-item.active {
+      background: rgba(215, 170, 69, 0.16);
+      color: #D7AA45;
+    }
+
+    .nav-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(236, 241, 236, 0.42);
+      text-transform: uppercase;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-divider {
+      height: 1px;
+      background: #1F2A44;
+      margin: 0.75rem 0;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 1rem;
+      border-top: 1px solid #1F2A44;
+    }
+
+    .user-chip {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      border-top: 1px solid #1F2A44;
+      margin-top: 0.75rem;
+    }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: #A85A2A;
+      color: #ECF1EC;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .user-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #ECF1EC;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .user-role {
+      font-size: 11px;
+      color: rgba(236, 241, 236, 0.55);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .topbar {
+      background: #f8f9fa;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 70px;
+    }
+
+    .topbar-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .topbar-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-top: 0.25rem;
+    }
+
+    .screen-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      background: #ffffff;
+    }
+
+    /* Content */
+    .admin-orgs-header {
+      margin-bottom: 2rem;
+    }
+
+    .admin-orgs-header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem 0;
+      color: #1a1a1a;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: #666;
+      font-size: 0.95rem;
+    }
+
+    .alert {
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      border-radius: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .alert-error {
+      background: #fee;
+      color: #c00;
+      border-left: 4px solid #c00;
+    }
+
+    .alert-success {
+      background: #efe;
+      color: #060;
+      border-left: 4px solid #060;
+    }
+
+    .org-selector-section {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+
+    .org-selector-group {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: #1a1a1a;
+    }
+
+    .input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 0.375rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+    }
+
+    .input-lg {
+      padding: 0.875rem;
+      font-size: 1rem;
+    }
+
+    .input:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+
+    .btn {
+      padding: 0.75rem 1.25rem;
+      border: none;
+      border-radius: 0.375rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #0056b3;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #545b62;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: #007bff;
+      border: 1px solid #007bff;
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      background: rgba(0, 123, 255, 0.1);
+    }
+
+    .btn-lg {
+      padding: 0.875rem 1.5rem;
+      font-size: 1rem;
+    }
+
+    .btn-sm {
+      padding: 0.5rem 0.875rem;
+      font-size: 0.85rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-active {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .badge-suspended {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .active-org-card {
+      background: #f8f9fa;
+      border: 2px solid #007bff;
+      border-radius: 0.5rem;
+      margin-bottom: 2rem;
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 1rem 1.5rem;
+      background: #007bff;
+      color: white;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .card-body {
+      padding: 1.5rem;
+    }
+
+    .org-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .detail-item .label {
+      margin-bottom: 0.25rem;
+      color: #666;
+    }
+
+    .detail-item .value {
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+
+    .orgs-list-section {
+      margin-top: 2rem;
+    }
+
+    .orgs-list-section h2 {
+      margin-bottom: 1.5rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .orgs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .org-card {
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .org-card:hover {
+      border-color: #007bff;
+      box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+    }
+
+    .org-card-active {
+      border-color: #007bff;
+      background: #f0f7ff;
+    }
+
+    .org-card-header {
+      padding: 1rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .org-card-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+      flex: 1;
+    }
+
+    .org-card-body {
+      padding: 1.25rem;
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+    }
+
+    .org-stat {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: #666;
+      font-weight: 500;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-value {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .org-card-footer {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid #e0e0e0;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .org-card-footer .btn {
+      flex: 1;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 1.5rem;
+      border-bottom: 1px solid #e0e0e0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .modal-form {
+      padding: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group input {
+      width: 100%;
+    }
+
+    .hint {
+      display: block;
+      margin-top: 0.375rem;
+      font-size: 0.85rem;
+      color: #666;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 64px;
+        padding: 1rem 0.5rem;
+      }
+
+      .sidebar-title {
+        font-size: 12px;
+      }
+
+      .nav-item span {
+        display: none;
+      }
+
+      .screen-container {
+        padding: 1rem;
+      }
+
+      .admin-orgs-header h1 {
+        font-size: 1.35rem;
+      }
+
+      .org-selector-section {
+        flex-direction: column;
+      }
+
+      .btn-lg {
+        width: 100%;
+      }
+
+      .orgs-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <div class="sidebar-title">FarmOS Pro</div>
+        <div class="sidebar-subtitle">Élevage intelligent</div>
+      </div>
+      <button class="nav-item">📊 <span>Tableau de bord</span></button>
+      <button class="nav-item">🔍 <span>Identification</span></button>
+      <button class="nav-item">🐄 <span>Animaux</span></button>
+      <button class="nav-item">🏢 <span>Bâtiments</span></button>
+      <button class="nav-item">💊 <span>Santé</span></button>
+      <button class="nav-item">📅 <span>Calendrier</span></button>
+
+      <div class="nav-section-title">Gestion</div>
+      <button class="nav-item">👥 <span>Équipe</span></button>
+      <button class="nav-item">⚙️ <span>Paramètres</span></button>
+
+      <div class="nav-section-title">Admin</div>
+      <button class="nav-item active">🏢 <span>Organisations</span></button>
+
+      <div class="sidebar-footer">
+        <div class="user-chip">
+          <div class="user-avatar">JM</div>
+          <div class="user-info">
+            <div class="user-name">Josaphat M.</div>
+            <div class="user-role">Super Admin</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="topbar">
+        <div>
+          <div class="topbar-title">Gestion des entreprises</div>
+          <div class="topbar-subtitle">Créer, basculer et gérer vos organisations</div>
+        </div>
+      </div>
+
+      <div class="screen-container">
+        <!-- Messages d'alerte (exemple) -->
+        <div id="messages"></div>
+
+        <!-- Sélecteur d'org active -->
+        <div class="org-selector-section">
+          <div class="org-selector-group">
+            <label class="label">Contexte actif</label>
+            <select class="input input-lg" id="org-select" onchange="handleSwitchOrg()">
+              <option value="1">Ferme Principale</option>
+              <option value="2">Ferme Secondaire</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-lg" onclick="showCreateForm()">+ Créer une entreprise</button>
+        </div>
+
+        <!-- Info org active -->
+        <div class="active-org-card" id="active-org-card">
+          <div class="card-header">
+            <h2 id="org-name">Ferme Principale</h2>
+            <span class="badge badge-active">✓ Active</span>
+          </div>
+          <div class="card-body">
+            <div class="org-details">
+              <div class="detail-item">
+                <span class="label">Identifiant:</span>
+                <span class="value" id="org-slug">ferme-principale</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Utilisateurs:</span>
+                <span class="value" id="org-users">5</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Dernière activité:</span>
+                <span class="value" id="org-activity">2026-06-20</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Liste des orgs -->
+        <div class="orgs-list-section">
+          <h2>Toutes les entreprises (<span id="orgs-count">2</span>)</h2>
+          <div class="orgs-grid" id="orgs-grid">
+            <!-- Rempli par JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal création org -->
+  <div id="create-modal" class="modal-overlay" style="display: none;" onclick="if(event.target === this) hideCreateForm()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Créer une nouvelle entreprise</h2>
+        <button class="btn btn-ghost btn-sm" onclick="hideCreateForm()">✕</button>
+      </div>
+      <form class="modal-form" onsubmit="handleCreateOrg(event)">
+        <div class="form-group">
+          <label class="label">Nom de l'entreprise *</label>
+          <input type="text" class="input" id="form-name" placeholder="Ex: Ferme Bio de Matete" required autofocus>
+        </div>
+        <div class="form-group">
+          <label class="label">Identifiant (slug)</label>
+          <input type="text" class="input" id="form-slug" placeholder="Auto-généré si vide" oninput="updateSlugPreview()">
+          <small class="hint" id="slug-preview"></small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="hideCreateForm()">Annuler</button>
+          <button type="submit" class="btn btn-primary">Créer l'entreprise</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // État local simulé
+    let orgs = [
+      { id: 1, name: "Ferme Principale", slug: "ferme-principale", status: "active", usersCount: 5, lastActivity: "2026-06-20" },
+      { id: 2, name: "Ferme Secondaire", slug: "ferme-secondaire", status: "active", usersCount: 2, lastActivity: "2026-06-15" },
+    ];
+    let activeOrgId = 1;
+
+    function updateUI() {
+      const activeOrg = orgs.find(o => o.id === activeOrgId);
+      if (activeOrg) {
+        document.getElementById("org-name").textContent = activeOrg.name;
+        document.getElementById("org-slug").textContent = activeOrg.slug;
+        document.getElementById("org-users").textContent = activeOrg.usersCount;
+        document.getElementById("org-activity").textContent = activeOrg.lastActivity;
+        document.getElementById("org-select").value = activeOrgId;
+      }
+
+      // Mise à jour liste orgs
+      const grid = document.getElementById("orgs-grid");
+      grid.innerHTML = orgs.map(org => `
+        <div class="org-card ${org.id === activeOrgId ? "org-card-active" : ""}" onclick="switchOrg(${org.id})">
+          <div class="org-card-header">
+            <h3>${org.name}</h3>
+            <span class="badge badge-${org.status}">
+              ${org.status === "active" ? "✓ Active" : "⊘ Suspendue"}
+            </span>
+          </div>
+          <div class="org-card-body">
+            <div class="org-stat">
+              <span class="stat-label">Utilisateurs</span>
+              <span class="stat-value">${org.usersCount}</span>
+            </div>
+            <div class="org-stat">
+              <span class="stat-label">Dernière activité</span>
+              <span class="stat-value">${org.lastActivity}</span>
+            </div>
+          </div>
+          <div class="org-card-footer">
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); switchOrg(${org.id})">Sélectionner</button>
+            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); suspendOrg(${org.id})" ${org.id === activeOrgId ? "disabled" : ""}>
+              ${org.status === "active" ? "Suspendre" : "Réactiver"}
+            </button>
+          </div>
+        </div>
+      `).join("");
+
+      document.getElementById("orgs-count").textContent = orgs.length;
+    }
+
+    function showMessage(message, type = "success") {
+      const container = document.getElementById("messages");
+      const alert = document.createElement("div");
+      alert.className = `alert alert-${type}`;
+      alert.textContent = message;
+      container.innerHTML = "";
+      container.appendChild(alert);
+      if (type === "success") {
+        setTimeout(() => alert.remove(), 3000);
+      }
+    }
+
+    function handleSwitchOrg() {
+      const orgId = Number(document.getElementById("org-select").value);
+      switchOrg(orgId);
+    }
+
+    function switchOrg(orgId) {
+      activeOrgId = orgId;
+      const org = orgs.find(o => o.id === orgId);
+      if (org) {
+        showMessage(`Contexte basculé vers "${org.name}"`);
+      }
+      updateUI();
+    }
+
+    function suspendOrg(orgId) {
+      if (orgId === activeOrgId) {
+        showMessage("Impossible de suspendre l'org active", "error");
+        return;
+      }
+      const org = orgs.find(o => o.id === orgId);
+      if (org) {
+        org.status = org.status === "active" ? "suspended" : "active";
+      }
+      updateUI();
+    }
+
+    function showCreateForm() {
+      document.getElementById("create-modal").style.display = "flex";
+      document.getElementById("form-name").focus();
+    }
+
+    function hideCreateForm() {
+      document.getElementById("create-modal").style.display = "none";
+      document.getElementById("form-name").value = "";
+      document.getElementById("form-slug").value = "";
+      document.getElementById("slug-preview").textContent = "";
+    }
+
+    function updateSlugPreview() {
+      const name = document.getElementById("form-name").value;
+      const slug = document.getElementById("form-slug").value;
+      const final = slug || name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+      document.getElementById("slug-preview").textContent = final || "(auto)";
+    }
+
+    function handleCreateOrg(e) {
+      e.preventDefault();
+      const name = document.getElementById("form-name").value.trim();
+      const slug = document.getElementById("form-slug").value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || name.toLowerCase().replace(/\s+/g, "-");
+
+      if (!name) {
+        showMessage("Le nom de l'entreprise est requis", "error");
+        return;
+      }
+
+      if (orgs.some(o => o.slug === slug)) {
+        showMessage("Cet identifiant existe déjà", "error");
+        return;
+      }
+
+      const newOrg = {
+        id: Math.max(...orgs.map(o => o.id), 0) + 1,
+        name,
+        slug,
+        status: "active",
+        usersCount: 1,
+        lastActivity: new Date().toISOString().split("T")[0],
+      };
+
+      orgs.push(newOrg);
+      activeOrgId = newOrg.id;
+      hideCreateForm();
+      showMessage(`Entreprise "${newOrg.name}" créée avec succès !`);
+      updateUI();
+    }
+
+    // Init
+    updateUI();
+  </script>
+</body>
+</html>

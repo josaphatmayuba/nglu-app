@@ -120,15 +120,15 @@ DEALLOCATE PREPARE st;
 
 -- ============ 2) BACKFILL depuis le parent ============
 -- Historiques + docs perso -> org du user parent.
-UPDATE `designation_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organizationId` WHERE u.`organizationId` IS NOT NULL AND h.`organization_id` <> u.`organizationId`;
+UPDATE `designation_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organization_id` WHERE u.`organization_id` IS NOT NULL AND h.`organization_id` <> u.`organization_id`;
 --> statement-breakpoint
-UPDATE `salary_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organizationId` WHERE u.`organizationId` IS NOT NULL AND h.`organization_id` <> u.`organizationId`;
+UPDATE `salary_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organization_id` WHERE u.`organization_id` IS NOT NULL AND h.`organization_id` <> u.`organization_id`;
 --> statement-breakpoint
-UPDATE `award_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organizationId` WHERE u.`organizationId` IS NOT NULL AND h.`organization_id` <> u.`organizationId`;
+UPDATE `award_histories` h JOIN `users` u ON u.`id` = h.`userId` SET h.`organization_id` = u.`organization_id` WHERE u.`organization_id` IS NOT NULL AND h.`organization_id` <> u.`organization_id`;
 --> statement-breakpoint
-UPDATE `education` e JOIN `users` u ON u.`id` = e.`userId` SET e.`organization_id` = u.`organizationId` WHERE u.`organizationId` IS NOT NULL AND e.`organization_id` <> u.`organizationId`;
+UPDATE `education` e JOIN `users` u ON u.`id` = e.`userId` SET e.`organization_id` = u.`organization_id` WHERE u.`organization_id` IS NOT NULL AND e.`organization_id` <> u.`organization_id`;
 --> statement-breakpoint
-UPDATE `hr_personal_documents` d JOIN `users` u ON u.`id` = d.`userId` SET d.`organization_id` = u.`organizationId` WHERE u.`organizationId` IS NOT NULL AND d.`organization_id` <> u.`organizationId`;
+UPDATE `hr_personal_documents` d JOIN `users` u ON u.`id` = d.`userId` SET d.`organization_id` = u.`organization_id` WHERE u.`organization_id` IS NOT NULL AND d.`organization_id` <> u.`organization_id`;
 --> statement-breakpoint
 -- audit logs contrat -> org du contrat parent.
 UPDATE `real_estate_contract_audit_logs` a JOIN `real_estate_contracts` c ON c.`id` = a.`contract_id` SET a.`organization_id` = c.`organization_id` WHERE a.`organization_id` <> c.`organization_id`;

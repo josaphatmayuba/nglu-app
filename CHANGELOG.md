@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.0)
+- **Authentification Google (Sign in with Google)**. Backend2 : dépendance `google-auth-library`, endpoint(s) d'auth Google dans `auth.controller.ts`, vérification du token et provisioning/login dans `auth.service.ts`, variables d'environnement (`config/env.ts` + `.env.example` dev/prod/backend2). Front : bouton de connexion Google sur `avelomi-site` (`Auth.vue`) et `farmos-app` (`auth.jsx`). Ajustements `migrate.ts`. Correction de la migration `0180_hr_catalogs_org.sql` (backfill : `u.organizationId` → nom de colonne SQL réel `u.organization_id`). Documents de référence du chantier concurrentiel FarmOS versionnés (`FARMOS_COMPETITIVE_GAPS_ROADMAP.md`, `FARMOS_COMPETITIVE_TASK_BACKLOG.md`, `FARMOS_DESIGN_UX_TASK_BACKLOG.md`) + mockup `admin-orgs-mockup-demo.html`. **Note déploiement** : nouvelle dépendance npm backend → le déploiement prod doit synchroniser `package*.json` + rebuild. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app OK. [SCRUM]
+
 ### Added (3.116.21)
 - **FarmOS — Indicateurs de portée porcine (COMP-P2-007)**. Les mises bas enregistrent désormais, en plus des nés vivants : **mort-nés**, **momifiés** (porc), **poids moyen à la naissance**, **difficulté** et **sevrés / date de sevrage**. Migration 0184 (ADD COLUMN IF NOT EXISTS sur `farmos_reproduction_events`, idempotente, dans le journal Drizzle → auto au boot). Backend2 : `CreateReproductionEventDto` + `createReproductionEvent` étendus. Front : champ « Momifiés » ajouté au formulaire de mise bas (porc), et les champs mort-nés/poids/difficulté déjà saisis sont maintenant **persistés** (ils étaient ignorés). Le Livre de vêlage affiche nés vivants / mort-nés / momifiés. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
 

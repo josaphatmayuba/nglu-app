@@ -6,7 +6,7 @@
 // Token en memoire applicative (SCRUM-119) ; cookie refresh pose par le backend.
 // Vues pilotees par le hash : #/login, #/signup, #/accueil (espace).
 // Parcours inscription en 4 etapes : compte -> organisation -> plan -> confirmation.
-import { ref, reactive, computed } from 'vue';
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue';
 
 const props = defineProps({
   lang: { type: String, default: 'fr' },
@@ -15,17 +15,133 @@ const props = defineProps({
 const t = (fr, en) => (props.lang === 'en' ? en : fr);
 
 const API = '/api';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || import.meta.env.VITE_APP_GOOGLE_CLIENT_ID || '';
 let accessToken = null;
 const loading = ref(false);
+const googleLoading = ref(false);
 const error = ref('');
+const googleError = ref('');
 const me = ref(null);          // { firstName, email, org, slug }
 const success = ref(false);    // ecran bienvenue
 const inWorkspace = ref(false); // espace de travail
+const loginGoogleButton = ref(null);
+const signupGoogleButton = ref(null);
+let googleScriptPromise = null;
+
+function loadGoogleIdentity() {
+  if (!GOOGLE_CLIENT_ID) return Promise.reject(new Error(t('Connexion Google non configurée.', 'Google sign-in is not configured.')));
+  if (window.google?.accounts?.id) return Promise.resolve();
+  if (googleScriptPromise) return googleScriptPromise;
+  googleScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+  return googleScriptPromise;
+}
+
+function decodeGoogleCredential(credential) {
+  try {
+    const payload = credential.split('.')[1] || '';
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decodeURIComponent(Array.from(json).map(c => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join('')));
+  } catch {
+    return {};
+  }
+}
+
+async function submitGoogleLogin(credential) {
+  error.value = '';
+  googleError.value = '';
+  googleLoading.value = true;
+  try {
+    const res = await fetch(`${API}/auth/google/login`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ credential }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || t('Connexion Google impossible.', 'Google sign-in failed.'));
+    if (data.requireMfa) {
+      googleError.value = t('Authentification à deux facteurs requise — connectez-vous avec email et mot de passe.', 'Two-factor authentication required — sign in with email and password.');
+      return;
+    }
+    accessToken = data.token || null;
+    me.value = {
+      firstName: data.firstName || data.user?.firstName || data.name || data.email,
+      email: data.email || data.user?.email,
+      org: data.organization?.name,
+    };
+    enterWorkspace();
+  } catch (e) {
+    googleError.value = Array.isArray(e.message) ? e.message[0] : e.message;
+  } finally {
+    googleLoading.value = false;
+  }
+}
+
+function fillSignupFromGoogle(credential) {
+  error.value = '';
+  googleError.value = '';
+  const profile = decodeGoogleCredential(credential);
+  if (profile.given_name) reg.firstName = profile.given_name;
+  if (profile.family_name) reg.lastName = profile.family_name;
+  if (profile.email) reg.email = profile.email.trim().toLowerCase();
+}
+
+async function renderGoogleButton(target, mode) {
+  if (!GOOGLE_CLIENT_ID || !target) return;
+  try {
+    await loadGoogleIdentity();
+    target.innerHTML = '';
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: ({ credential }) => {
+        if (!credential) return;
+        if (mode === 'login') submitGoogleLogin(credential);
+        else fillSignupFromGoogle(credential);
+      },
+    });
+    window.google.accounts.id.renderButton(target, {
+      type: 'standard',
+      theme: 'outline',
+      size: 'large',
+      shape: 'rectangular',
+      text: mode === 'login' ? 'signin_with' : 'continue_with',
+      width: Math.min(target.clientWidth || 460, 460),
+      locale: props.lang === 'en' ? 'en' : 'fr',
+    });
+  } catch {
+    googleError.value = t('Connexion Google momentanément indisponible.', 'Google sign-in is temporarily unavailable.');
+  }
+}
+
+async function renderGoogleButtons() {
+  await nextTick();
+  if (props.view === 'login') await renderGoogleButton(loginGoogleButton.value, 'login');
+  if (props.view === 'signup' && step.value === 1) await renderGoogleButton(signupGoogleButton.value, 'signup');
+}
+
+function showGoogleConfigError() {
+  googleError.value = t('Connexion Google non configurée.', 'Google sign-in is not configured.');
+}
 
 // ───────────────────────── Connexion ─────────────────────────
 const login = reactive({ email: '', password: '' });
 async function submitLogin() {
   error.value = '';
+  googleError.value = '';
   if (!login.email || !login.password) { error.value = t('Email et mot de passe requis.', 'Email and password required.'); return; }
   loading.value = true;
   try {
@@ -116,6 +232,9 @@ function next() { if (validateStep(step.value)) step.value = Math.min(TOTAL, ste
 function prev() { step.value = Math.max(1, step.value - 1); }
 function setType(tp) { accountType.value = tp; }
 
+onMounted(renderGoogleButtons);
+watch(() => [props.view, step.value, props.lang], renderGoogleButtons);
+
 async function submitSignup() {
   error.value = '';
   if (!reg.acceptedTerms) { fieldErr.terms = t('Vous devez accepter les conditions.', 'You must accept the terms.'); return; }
@@ -198,8 +317,16 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
     <form v-if="view === 'login'" class="auth-card" @submit.prevent="submitLogin">
       <h1>{{ t('Connexion', 'Sign in') }}</h1>
       <p class="auth-sub">{{ t('Accédez à votre espace Avelomi.', 'Access your Avelomi workspace.') }}</p>
+      <div class="oauth-block">
+        <div v-if="GOOGLE_CLIENT_ID" ref="loginGoogleButton" class="google-render"></div>
+        <button v-else type="button" class="google-btn" @click="showGoogleConfigError">
+          <span class="google-mark">G</span>{{ t('Se connecter avec Google', 'Sign in with Google') }}
+        </button>
+        <div class="auth-divider"><span>{{ t('ou avec email', 'or with email') }}</span></div>
+      </div>
       <label>{{ t('Email', 'Email') }}<input v-model="login.email" type="email" autocomplete="email" :placeholder="t('vous@entreprise.com','you@company.com')" /></label>
       <label>{{ t('Mot de passe', 'Password') }}<input v-model="login.password" type="password" autocomplete="current-password" placeholder="••••••••" /></label>
+      <p v-if="googleError" class="auth-err">{{ googleError }}</p>
       <p v-if="error" class="auth-err">{{ error }}</p>
       <button class="auth-btn" :disabled="loading">{{ loading ? t('Connexion…','Signing in…') : t('Se connecter','Sign in') }}</button>
       <p class="auth-alt">{{ t('Pas encore de compte ?', 'No account yet?') }} <a href="#/signup" @click.prevent="go('#/signup')">{{ t('Commencer', 'Get started') }}</a></p>
@@ -226,6 +353,14 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 
       <!-- Etape 1 : compte -->
       <form v-if="step === 1" class="step-form" @submit.prevent="next">
+        <div class="oauth-block">
+          <div v-if="GOOGLE_CLIENT_ID" ref="signupGoogleButton" class="google-render"></div>
+          <button v-else type="button" class="google-btn" @click="showGoogleConfigError">
+            <span class="google-mark">G</span>{{ t('Continuer avec Google', 'Continue with Google') }}
+          </button>
+          <div class="auth-divider"><span>{{ t('ou renseignez vos informations', 'or enter your details') }}</span></div>
+        </div>
+        <p v-if="googleError" class="auth-err">{{ googleError }}</p>
         <div class="auth-row">
           <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
           <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
@@ -308,6 +443,16 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 .auth-card{width:min(540px,calc(100vw - 32px));box-sizing:border-box;background:#fff;border:1px solid #e7eee9;border-radius:22px;padding:42px 40px 36px;box-shadow:0 34px 70px -36px rgba(15,35,26,.38),0 1px 2px rgba(15,35,26,.05);display:flex;flex-direction:column;gap:18px}
 .auth-card h1{max-width:none;margin:0;text-align:center;font-size:30px;letter-spacing:0;font-weight:850;color:#0f1729;line-height:1.12}
 .auth-sub{color:#6b7a90;font-size:14.5px;margin-top:-8px}
+.oauth-block{display:flex;flex-direction:column;align-items:stretch;gap:14px}
+.google-render{display:flex;justify-content:center;min-height:44px}
+.google-render:empty{display:none}
+.google-btn{width:100%;min-height:50px;border:1.5px solid #dce3ee;border-radius:14px;background:#fff;color:#172033;font-family:inherit;font-size:15px;font-weight:800;letter-spacing:0;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:.16s;box-shadow:0 1px 2px rgba(15,35,26,.04)}
+.google-btn:hover{border-color:#c8d2df;background:#fbfcfd;transform:translateY(-1px)}
+.google-btn:active{transform:translateY(0)}
+.google-mark{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-weight:900;color:#4285f4;background:linear-gradient(135deg,#fff,#f8fafc);border:1px solid #e7ebf2;line-height:1}
+.auth-divider{display:flex;align-items:center;gap:12px;color:#94a0b4;font-size:12.5px;font-weight:750}
+.auth-divider:before,.auth-divider:after{content:"";height:1px;flex:1;background:#e7ebf2}
+.auth-divider span{white-space:nowrap}
 .auth-card label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:750;color:#2d3d58;letter-spacing:0}
 /* wrapper champ avec icone */
 .field{display:flex;align-items:center;gap:10px;border:1.5px solid #e2e8f0;border-radius:14px;padding:0 14px;background:#fbfcfd;transition:.16s}

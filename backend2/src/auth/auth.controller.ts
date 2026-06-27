@@ -36,6 +36,10 @@ class MfaLoginDto {
   useRecovery?: boolean;
 }
 
+class GoogleLoginDto {
+  @IsString() @IsNotEmpty() credential: string;
+}
+
 class MfaVerifyDto {
   @IsString() @IsNotEmpty() code: string;
 }
@@ -96,6 +100,27 @@ export class AuthController {
 
     res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
 
+    return { ...user, role, token };
+  }
+
+  @ApiOperation({ summary: "Login with Google identity token" })
+  @ApiOkResponse({ type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: "Google account is invalid or not linked to an Avelomi user" })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @Post("google/login")
+  @HttpCode(200)
+  async googleLogin(@Body() body: GoogleLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const ctx = {
+      ip: (req as unknown as { ip: string }).ip,
+      userAgent: (req.headers as Record<string, string>)["user-agent"],
+    };
+    const loginResult = await this.authService.loginWithGoogle(body.credential, ctx);
+    if ("requireMfa" in loginResult) {
+      return loginResult;
+    }
+
+    const { refreshToken, user, role, token } = loginResult;
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTS);
     return { ...user, role, token };
   }
 

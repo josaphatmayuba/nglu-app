@@ -2,7 +2,8 @@ import { randomBytes, randomUUID } from "crypto";
 import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { OAuth2Client } from "google-auth-library";
+import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -28,6 +29,7 @@ export class AuthService {
   // In-memory tracker — resets on restart, acceptable for single-instance deployment.
   // Use Redis (INCR + EXPIRE) if multi-instance is needed in the future.
   private readonly loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+  private readonly googleClient = new OAuth2Client();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
@@ -213,6 +215,87 @@ export class AuthService {
     await this.audit.log("auth.login.ok", `user:${user.id}`, { ...ctx, userId: user.id }, { role: role?.name });
 
     const { password: _, refreshToken: __, isLogin: ___, totpSecret: ____, ...safe } = user;
+    return { user: safe, role: role?.name ?? null, token: accessToken, refreshToken };
+  }
+
+  async loginWithGoogle(credential: string, ctx: AuditContext = {}) {
+    if (!env.google.clientId) {
+      throw new BadRequestException("Connexion Google non configurée.");
+    }
+
+    let email = "";
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: env.google.clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.email || !payload.email_verified) {
+        throw new UnauthorizedException("Email Google non vérifié.");
+      }
+      email = payload.email.trim().toLowerCase();
+    } catch (error) {
+      await this.audit.log("auth.google.fail", null, ctx, { reason: "invalid_token" });
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException("Connexion Google invalide.");
+    }
+
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        username: users.username,
+        roleId: users.roleId,
+        status: users.status,
+        isLogin: users.isLogin,
+        totpEnabled: users.totpEnabled,
+        totpSecret: users.totpSecret,
+        refreshToken: users.refreshToken,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(or(eq(users.username, email), eq(users.email, email)))
+      .limit(1);
+
+    if (!user) {
+      await this.audit.log("auth.google.fail", email, ctx, { reason: "user_not_found" });
+      throw new UnauthorizedException("Aucun compte Avelomi n'est associé à cet email Google.");
+    }
+
+    if (user.status !== "true") {
+      await this.audit.log("auth.google.fail", email, { ...ctx, userId: user.id }, { reason: "account_disabled" });
+      throw new UnauthorizedException("Ce compte est désactivé. Contactez un administrateur.");
+    }
+
+    if (user.totpEnabled) {
+      const mfaToken = this.jwtService.sign(
+        { sub: user.id, mfa: true },
+        { secret: env.jwtSecret + MFA_TOKEN_SECRET_SUFFIX, expiresIn: "5m", algorithm: "HS256" },
+      );
+      await this.audit.log("auth.google.mfa_required", `user:${user.id}`, { ...ctx, userId: user.id });
+      return { requireMfa: true, mfaToken } as { requireMfa: true; mfaToken: string };
+    }
+
+    const [role] = await this.db
+      .select({ id: roles.id, name: roles.name })
+      .from(roles)
+      .where(eq(roles.id, user.roleId))
+      .limit(1);
+
+    const familyId = randomUUID();
+    const { accessToken } = await this.issueAccessToken(user.id, role?.id, role?.name, user.organizationId, ctx, familyId);
+    const { token: refreshToken } = await this.issueRefreshToken(user.id, role?.name, familyId, ctx);
+
+    await this.db
+      .update(users)
+      .set({ isLogin: "true", updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(users.id, user.id));
+
+    await this.audit.log("auth.google.ok", `user:${user.id}`, { ...ctx, userId: user.id }, { role: role?.name });
+
+    const { refreshToken: _refreshToken, isLogin: _isLogin, totpSecret: _totpSecret, ...safe } = user;
     return { user: safe, role: role?.name ?? null, token: accessToken, refreshToken };
   }
 

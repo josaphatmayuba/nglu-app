@@ -156,7 +156,7 @@ export function LoginScreen({ lang = "fr" }) {
       padding: 24, fontFamily: "var(--font-sans, system-ui)",
     }}>
       <form onSubmit={submit} style={{
-        width: "100%", maxWidth: 380, background: "var(--paper, #FBF8F2)",
+        width: "min(380px, 100%)", boxSizing: "border-box", background: "var(--paper, #FBF8F2)",
         borderRadius: 14, padding: 28, boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
         display: "flex", flexDirection: "column", gap: 16,
       }}>
@@ -234,7 +234,7 @@ export function LoginScreen({ lang = "fr" }) {
 }
 
 const inputStyle = {
-  width: "100%", padding: "10px 12px", borderRadius: 6,
+  width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 6,
   border: "1px solid var(--border-2, #d8c8a8)", background: "var(--paper, #fff)",
   fontSize: 14, fontFamily: "inherit", outline: "none",
 };
