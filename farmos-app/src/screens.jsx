@@ -6369,7 +6369,10 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const farmStats = (fmId) => {
     const zids = new Set(zones.filter((z) => z.farmId === fmId).map((z) => z.id));
     const bs = rows.filter((b) => b.zoneId && zids.has(b.zoneId));
-    return { buildings: bs.length, animals: bs.reduce((s, b) => s + (b.occupancy ?? 0), 0) };
+    const animalsCount = bs.reduce((s, b) => s + (b.occupancy ?? 0), 0);
+    const capacity = bs.reduce((s, b) => s + (Number(b.capacity) || 0), 0);
+    const occupancy = capacity > 0 ? Math.round((animalsCount / capacity) * 100) : null;
+    return { buildings: bs.length, animals: animalsCount, capacity, occupancy };
   };
   // Grouper par zone pour la vue zones
   const noZone = filtered.filter((b) => !b.zoneId);
@@ -6431,6 +6434,44 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Tableau comparatif multi-fermes (COMP-P2-018) — vue d'ensemble quand
+          aucune ferme n'est sélectionnée et qu'il y en a plusieurs. */}
+      {farmId === null && farms.length > 1 && (
+        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-1)" }}>
+            <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 17 }}>{lang === "fr" ? "Comparaison des fermes" : "Farm comparison"}</h3>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--fg-3)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <th style={{ padding: "8px 16px" }}>{lang === "fr" ? "Ferme" : "Farm"}</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Bâtiments" : "Buildings"}</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Animaux" : "Animals"}</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Capacité" : "Capacity"}</th>
+                  <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Occupation" : "Occupancy"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {farms.map((f) => {
+                  const st = farmStats(f.id);
+                  const occColor = st.occupancy == null ? "var(--fg-3)" : st.occupancy > 100 ? "var(--oxblood-700)" : st.occupancy >= 85 ? "var(--autorite-700)" : "var(--forest-700)";
+                  return (
+                    <tr key={f.id} style={{ borderTop: "1px solid var(--border-1)", cursor: "pointer" }} onClick={() => { setFarmId(f.id); setSelectedId(null); }}>
+                      <td style={{ padding: "8px 16px", fontWeight: 600, color: "var(--ink-900)" }}>{f.name}{f.location ? <span style={{ color: "var(--fg-3)", fontWeight: 400 }}> · {f.location}</span> : null}</td>
+                      <td style={{ padding: "8px 16px", textAlign: "right" }} className="mono">{st.buildings}</td>
+                      <td style={{ padding: "8px 16px", textAlign: "right" }} className="mono">{st.animals}</td>
+                      <td style={{ padding: "8px 16px", textAlign: "right", color: "var(--fg-3)" }} className="mono">{st.capacity || "—"}</td>
+                      <td style={{ padding: "8px 16px", textAlign: "right", color: occColor }} className="mono">{st.occupancy != null ? `${st.occupancy}%` : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

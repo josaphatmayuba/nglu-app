@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.7)
+- **FarmOS — Comparaison des fermes (COMP-P2-018)**. Tableau comparatif multi-fermes dans l'écran Bâtiments, affiché quand « Toutes les fermes » est sélectionné et qu'il y a plusieurs fermes : par ferme — bâtiments, animaux, capacité, taux d'occupation (coloré : vert < 85 %, ambre 85-100 %, rouge > 100 %). Clic sur une ligne = filtre sur cette ferme. Réutilise la chaîne ferme→zone→bâtiment existante. Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.117.6)
 - **Auth Google — Client ID Avelomi configure**. Ajout de `avelomi-site/.env.production` avec `VITE_GOOGLE_CLIENT_ID` (Client OAuth Google projet `avelomi-500715`). Valeur PUBLIQUE (embarquee dans le bundle JS, injectee par Vite au build `vite build` mode production via le pipeline). Cote backend, `GOOGLE_CLIENT_ID` reste a renseigner dans le `.env` runtime des serveurs (non versionne). [SCRUM]
 
