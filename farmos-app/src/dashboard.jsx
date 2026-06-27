@@ -845,7 +845,7 @@ const UpcomingPanel = ({ lang, vaccines, onAll }) => (
     </div>
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {vaccines.map((v) => {
-        const sp = speciesById(v.species);
+        const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
         const dot = v.status === "overdue" ? "var(--rust-700)" : v.status === "today" ? "var(--wheat-500)" : "var(--ink-300)";
         return (
           <div key={v.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>

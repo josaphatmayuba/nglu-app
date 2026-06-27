@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.17)
+- **FarmOS — Dashboard : dernier accès `speciesById` non sécurisé**. La liste des vaccins du tableau de bord lisait `.accentBg` sur un `speciesById()` potentiellement `undefined`. Fallback espèce inconnue ajouté. Scan complet du front effectué : plus aucun accès direct `speciesById(...).accentBg/.glyph` non protégé (les usages restants passent par `speciesFilter` toujours valide ou un guard). **Vérifié** : build farmos-app OK. [SCRUM]
+
 ### Fixed (3.117.16)
 - **FarmOS — Prévention des crashs `accentBg` sur espèce non résolue (suite)**. Sécurisation des accès `speciesById(...)` restants qui lisaient directement `.accentBg`/`.glyph`/`.fr` sur un résultat potentiellement `undefined` : écran Santé (carte traitement), Calendrier (« À faire aujourd'hui » + « En retard »), Prévision (cartes feed forecast). Fallback espèce inconnue. Évite le même `TypeError` que sur l'écran Reproduction. **Vérifié** : build farmos-app OK. [SCRUM]
 
