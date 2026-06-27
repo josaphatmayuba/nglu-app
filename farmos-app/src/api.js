@@ -595,6 +595,7 @@ export function adaptAnimal(row) {
     barn: row.barn,
     buildingId: row.buildingId ?? row.building_id ?? null,
     boxId: row.boxId ?? row.box_id ?? null,
+    zoneId: row.zoneId ?? row.zone_id ?? null,
     status: row.status || "healthy",
     motherId: row.motherId ?? row.mother_id ?? null,
     fatherId: row.fatherId ?? row.father_id ?? null,

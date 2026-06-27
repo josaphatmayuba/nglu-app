@@ -6,6 +6,7 @@ import { api } from "./api";
 import { nextAnimalExternalId, nextStrawCode, nextInvoiceNumber } from "./id-gen";
 import { defaultCurrencyId, defaultSymbol } from "./currency";
 import { isSaleLockedAnimal, lockedAnimalMessage } from "./animal-lock";
+import { animalQty } from "./animal-category";
 import { AmountCurrencyInput } from "./amount-currency-input.jsx";
 
 // QuickEntryDrawer — slide-in panel from right with adaptive entry forms.
@@ -394,6 +395,39 @@ const animalLabel = (a) => {
   const base = a.name || id || `#${a.id}`;
   return id && a.name ? `${base} · ${id}` : base;
 };
+
+const animalOptionId = (a) => {
+  const id = toNumericId(a);
+  return id != null ? String(id) : "";
+};
+
+const animalHeadcount = (rows) => (rows || []).reduce((sum, a) => sum + animalQty(a), 0);
+
+const buildAnimalLocationResolver = (buildings = []) => {
+  const byId = new Map();
+  const byName = new Map();
+  (buildings || []).forEach((b) => {
+    if (b?.id != null) byId.set(Number(b.id), b);
+    if (b?.name) byName.set(String(b.name).trim().toLowerCase(), b);
+  });
+  return (animal) => {
+    const direct = animal?.zoneId ?? animal?.zone_id;
+    if (direct != null && direct !== "") return Number(direct);
+    const buildingId = animal?.buildingId ?? animal?.building_id;
+    if (buildingId != null && byId.has(Number(buildingId))) {
+      const zoneId = byId.get(Number(buildingId))?.zoneId ?? byId.get(Number(buildingId))?.zone_id;
+      if (zoneId != null && zoneId !== "") return Number(zoneId);
+    }
+    const barn = animal?.barn ? String(animal.barn).trim().toLowerCase() : "";
+    if (barn && byName.has(barn)) {
+      const zoneId = byName.get(barn)?.zoneId ?? byName.get(barn)?.zone_id;
+      if (zoneId != null && zoneId !== "") return Number(zoneId);
+    }
+    return null;
+  };
+};
+
+const appendNotes = (...parts) => parts.filter((p) => p != null && String(p).trim()).join("\n") || null;
 
 const QuickEntryDrawer = ({ open, onClose, defaultTab = "animal", lang, defaultSpecies, enabledSpecies, context, onSaved }) => {
   const [tab, setTab] = React.useState(defaultTab);
@@ -951,6 +985,10 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
     scope: context?.scope || "individual",
     // Pré-remplissage depuis « Programmer maintenant » (rappel de vaccin en retard).
     vaccine: context?.vaccine || "",
+    target: context?.target || "",
+    zone: context?.zoneId != null ? String(context.zoneId) : "",
+    lot: context?.lot || "",
+    selectedIds: Array.isArray(context?.animalIds) ? context.animalIds.map(String) : [],
     reason: context?.reason || "",
     n: context?.n != null ? String(context.n) : "",
   });
@@ -958,12 +996,22 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
   const [liveAnimals, setLiveAnimals] = React.useState(null);
   const [liveMeds, setLiveMeds] = React.useState(null);
   const [liveDiseases, setLiveDiseases] = React.useState(null);
+  const [liveZones, setLiveZones] = React.useState([]);
+  const [liveBuildings, setLiveBuildings] = React.useState([]);
   const loadAll = React.useCallback(() => {
-    Promise.all([api.listAnimals(), api.listMedicines(), api.listDiseases()])
-      .then(([a, m, d]) => {
+    Promise.all([
+      api.listAnimals(),
+      api.listMedicines(),
+      api.listDiseases(),
+      api.listZones().catch(() => []),
+      api.listBuildings().catch(() => []),
+    ])
+      .then(([a, m, d, z, b]) => {
         if (Array.isArray(a)) setLiveAnimals(a);
         if (Array.isArray(m)) setLiveMeds(m);
         if (Array.isArray(d)) setLiveDiseases(d);
+        if (Array.isArray(z)) setLiveZones(z);
+        if (Array.isArray(b)) setLiveBuildings(b);
       })
       .catch(() => {});
   }, []);
@@ -978,6 +1026,71 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
   const medsForSpecies = (liveMeds || []).filter((s) => s.kind === "med" && s.species?.includes(form.species));
   const speciesDef = speciesById(form.species) || availableSpecies[0] || SPECIES[0];
   const diseasesForSpecies = liveDiseases ? liveDiseases.filter((d) => d.species === form.species) : [];
+  const getAnimalZoneId = React.useMemo(() => buildAnimalLocationResolver(liveBuildings), [liveBuildings]);
+  const lotsForSpecies = React.useMemo(() => {
+    const byLot = new Map();
+    writableAnimalsForSpecies.forEach((a) => {
+      const lot = (a.lot || "").trim();
+      if (!lot) return;
+      byLot.set(lot, (byLot.get(lot) || 0) + animalQty(a));
+    });
+    return Array.from(byLot.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([lot, count]) => ({ value: lot, label: `${lot} · ${count.toLocaleString("fr-CA")} ${lang === "fr" ? "animaux" : "animals"}` }));
+  }, [writableAnimalsForSpecies, lang]);
+  const zonesForSpecies = React.useMemo(() => {
+    return (liveZones || []).map((z) => {
+      const count = animalHeadcount(writableAnimalsForSpecies.filter((a) => getAnimalZoneId(a) === Number(z.id)));
+      return { value: String(z.id), label: `${z.name} · ${count.toLocaleString("fr-CA")} ${lang === "fr" ? "animaux" : "animals"}`, raw: z, count };
+    }).filter((z) => z.count > 0);
+  }, [liveZones, writableAnimalsForSpecies, getAnimalZoneId, lang]);
+  const setSpecies = (species) => setForm((f) => ({
+    ...f,
+    species: species || availableSpecies[0]?.id || "cow",
+    animal: "",
+    lot: "",
+    zone: "",
+    selectedIds: [],
+  }));
+  const setScope = (scope) => setForm((f) => ({
+    ...f,
+    scope: scope || "individual",
+    animal: "",
+    lot: "",
+    zone: "",
+    selectedIds: [],
+  }));
+  const toggleSelectedAnimal = (id) => setForm((f) => {
+    const ids = Array.isArray(f.selectedIds) ? f.selectedIds : [];
+    return { ...f, selectedIds: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] };
+  });
+  const vaccinationTarget = React.useMemo(() => {
+    const scope = form.scope || "individual";
+    const selectedAnimal = writableAnimalsForSpecies.find((a) => animalOptionId(a) === String(form.animal));
+    const selectedZone = zonesForSpecies.find((z) => String(z.value) === String(form.zone));
+    const selectedIds = new Set((form.selectedIds || []).map(String));
+    let rows = [];
+    let label = "";
+    if (scope === "individual") {
+      rows = selectedAnimal ? [selectedAnimal] : [];
+      label = selectedAnimal ? animalLabel(selectedAnimal) : "";
+    } else if (scope === "lot") {
+      const lot = (form.lot || "").trim();
+      rows = lot ? writableAnimalsForSpecies.filter((a) => (a.lot || "").trim() === lot) : [];
+      label = lot ? `Lot: ${lot}` : "";
+    } else if (scope === "zone") {
+      rows = form.zone ? writableAnimalsForSpecies.filter((a) => getAnimalZoneId(a) === Number(form.zone)) : [];
+      label = selectedZone ? `Zone: ${selectedZone.raw?.name || selectedZone.label}` : "";
+    } else if (scope === "selection") {
+      rows = writableAnimalsForSpecies.filter((a) => selectedIds.has(animalOptionId(a)));
+      const names = rows.slice(0, 3).map(animalLabel).join(", ");
+      label = rows.length ? `${lang === "fr" ? "Sélection" : "Selection"}: ${names}${rows.length > 3 ? "..." : ""}` : "";
+    } else if (scope === "collective") {
+      rows = writableAnimalsForSpecies;
+      label = lang === "fr" ? `Tous les ${speciesDef.fr.toLowerCase()}` : `All ${speciesDef.en.toLowerCase()}`;
+    }
+    return { scope, rows, label, count: animalHeadcount(rows), rowCount: rows.length };
+  }, [form.scope, form.animal, form.lot, form.zone, form.selectedIds, writableAnimalsForSpecies, zonesForSpecies, getAnimalZoneId, speciesDef, lang]);
   const [saving, setSaving] = React.useState(false);
   const { scan, handleFile: handleScanFile, clear: clearScan } = useScanAttachment();
 
@@ -988,17 +1101,33 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
         onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Vaccin et date requis." : "Vaccine and date required." });
         return;
       }
+      if (!liveAnimals) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Les animaux ne sont pas chargés. Impossible de cibler la vaccination." : "Animals are not loaded. Vaccination cannot be targeted." });
+        return;
+      }
+      if (!vaccinationTarget.label || vaccinationTarget.count <= 0) {
+        onSaved && onSaved({ kind, severity: "error", message: lang === "fr" ? "Choisis une zone, un lot, un animal ou une sélection avant d'enregistrer le vaccin." : "Choose a zone, batch, animal or selection before saving the vaccine." });
+        return;
+      }
       setSaving(true);
       try {
+        const targetIds = vaccinationTarget.rows.map(toNumericId).filter((id) => id != null);
+        const targetNotes = appendNotes(
+          form.booster ? `Prochain rappel: ${form.booster}` : null,
+          `Mode cible: ${vaccinationTarget.scope}`,
+          `Animaux ciblés (${targetIds.length} ligne(s), ${vaccinationTarget.count} tête(s)): ${targetIds.join(", ")}`,
+          context?.n != null && Number(context.n) !== vaccinationTarget.count ? `Effectif du rappel précédent: ${context.n}` : null,
+        );
         await api.createVaccination({
           species: form.species,
           vaccine: form.vaccine,
           due_date: form.date,
-          animal_count: form.n ? Number(form.n) : null,
-          notes: form.booster ? `Prochain rappel: ${form.booster}` : null,
+          target: vaccinationTarget.label.slice(0, 240),
+          animal_count: vaccinationTarget.count,
+          notes: targetNotes,
         });
-        await submitScanDocument(scan, `${lang === "fr" ? "Scan vaccin" : "Vaccine scan"} — ${form.date}`, `${lang === "fr" ? "Espèce" : "Species"}: ${form.species} · ${form.vaccine}`);
-        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré` : `Vaccine ${form.vaccine} saved` });
+        await submitScanDocument(scan, `${lang === "fr" ? "Scan vaccin" : "Vaccine scan"} — ${form.date}`, `${lang === "fr" ? "Cible" : "Target"}: ${vaccinationTarget.label} · ${form.vaccine}`);
+        onSaved && onSaved({ kind, severity: "success", message: lang === "fr" ? `Vaccin ${form.vaccine} enregistré — ${vaccinationTarget.count} animaux` : `Vaccine ${form.vaccine} saved — ${vaccinationTarget.count} animals` });
         onClose();
       } catch (err) {
         onSaved && onSaved({ kind, severity: "error", message: (lang === "fr" ? "Échec : " : "Failed: ") + err.message });
@@ -1099,32 +1228,102 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
           <FormField label={lang === "fr" ? "Type d'application" : "Application type"}>
             <Autocomplete
               value={form.scope || "individual"}
-              onChange={(v) => set("scope", v || "individual")}
+              onChange={(v) => setScope(v || "individual")}
               allowClear={false}
               options={[
                 { value: "individual", label: lang === "fr" ? "Individuel" : "Individual" },
                 { value: "lot", label: lang === "fr" ? "Par lot" : "By batch" },
-                { value: "collective", label: lang === "fr" ? "Collectif" : "Collective" },
+                { value: "zone", label: lang === "fr" ? "Par zone" : "By zone" },
+                { value: "selection", label: lang === "fr" ? "Sélection" : "Selection" },
+                { value: "collective", label: lang === "fr" ? "Tous admissibles" : "All eligible" },
               ]}
             />
           </FormField>
           <FormField label={lang === "fr" ? "Espèce" : "Species"}>
             <Autocomplete
               value={form.species}
-              onChange={(v) => set("species", v || availableSpecies[0]?.id || "cow")}
+              onChange={(v) => setSpecies(v || availableSpecies[0]?.id || "cow")}
               allowClear={false}
               options={availableSpecies.map((s) => ({ value: s.id, label: lang === "fr" ? s.fr : s.en }))}
             />
           </FormField>
         </FormGrid>
-        <FormField label={lang === "fr" ? "Animal / Lot concerné" : "Animal / Batch concerned"}>
-          <Autocomplete
-            value={form.animal || ""}
-            onChange={(v) => set("animal", v)}
-            placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
-            options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
-          />
-        </FormField>
+        {kind === "vaccine" ? (
+          <>
+            {(form.scope || "individual") === "individual" && (
+              <FormField label={lang === "fr" ? "Animal / lot vacciné" : "Vaccinated animal / batch"}>
+                <Autocomplete
+                  value={form.animal || ""}
+                  onChange={(v) => set("animal", v)}
+                  placeholder={lang === "fr" ? "Rechercher un animal ou un lot…" : "Search an animal or batch…"}
+                  options={writableAnimalsForSpecies.map((a) => ({ value: animalOptionId(a), label: `${animalLabel(a)}${animalQty(a) > 1 ? ` · ${animalQty(a)} ${lang === "fr" ? "têtes" : "head"}` : ""}` }))}
+                />
+              </FormField>
+            )}
+            {form.scope === "lot" && (
+              <FormField label={lang === "fr" ? "Lot à vacciner" : "Batch to vaccinate"}>
+                <Autocomplete
+                  value={form.lot || ""}
+                  onChange={(v) => set("lot", v)}
+                  placeholder={lang === "fr" ? "Choisir un lot existant…" : "Choose an existing batch…"}
+                  options={lotsForSpecies}
+                />
+              </FormField>
+            )}
+            {form.scope === "zone" && (
+              <FormField label={lang === "fr" ? "Zone à vacciner" : "Zone to vaccinate"}>
+                <Autocomplete
+                  value={form.zone || ""}
+                  onChange={(v) => set("zone", v)}
+                  placeholder={lang === "fr" ? "Choisir une zone avec animaux…" : "Choose a zone with animals…"}
+                  options={zonesForSpecies.map(({ value, label }) => ({ value, label }))}
+                />
+              </FormField>
+            )}
+            {form.scope === "selection" && (
+              <div style={{ border: "1px solid var(--border-1)", borderRadius: 8, background: "var(--paper)", overflow: "hidden" }}>
+                <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-1)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-2)" }}>{lang === "fr" ? "Animaux à sélectionner" : "Animals to select"}</span>
+                  <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{vaccinationTarget.rowCount}/{writableAnimalsForSpecies.length}</span>
+                </div>
+                <div style={{ maxHeight: 190, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                  {writableAnimalsForSpecies.map((a) => {
+                    const id = animalOptionId(a);
+                    const checked = (form.selectedIds || []).includes(id);
+                    return (
+                      <label key={id || a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid var(--border-1)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleSelectedAnimal(id)} />
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{animalLabel(a)}</span>
+                        <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{animalQty(a)}</span>
+                      </label>
+                    );
+                  })}
+                  {writableAnimalsForSpecies.length === 0 && (
+                    <div style={{ padding: 10, fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun animal admissible pour cette espèce." : "No eligible animal for this species."}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <div style={{ padding: "10px 12px", border: "1px solid var(--border-1)", borderRadius: 8, background: "var(--bg-sunken)", display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--fg-2)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{lang === "fr" ? "Cible calculée" : "Calculated target"}</div>
+                <div style={{ fontSize: 12.5, color: vaccinationTarget.label ? "var(--ink-800)" : "var(--fg-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {vaccinationTarget.label || (lang === "fr" ? "Choisir une cible avant d'enregistrer" : "Choose a target before saving")}
+                </div>
+              </div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 800, color: "var(--forest-700)", flexShrink: 0 }}>{vaccinationTarget.count}</div>
+            </div>
+          </>
+        ) : (
+          <FormField label={lang === "fr" ? "Animal / Lot concerné" : "Animal / Batch concerned"}>
+            <Autocomplete
+              value={form.animal || ""}
+              onChange={(v) => set("animal", v)}
+              placeholder={lang === "fr" ? "Rechercher un animal…" : "Search an animal…"}
+              options={writableAnimalsForSpecies.map((a) => ({ value: a.id, label: animalLabel(a) }))}
+            />
+          </FormField>
+        )}
       </FormSection>
 
       {kind === "treatment" && (
@@ -1200,7 +1399,14 @@ const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, on
               <input className="input" type="date" value={form.date} onChange={(e) => set("date", e.target.value)}/>
             </FormField>
             <FormField label={lang === "fr" ? "Nombre d'animaux" : "Animal count"}>
-              <input className="input mono" type="number" placeholder="124" value={form.n || ""} onChange={(e) => set("n", e.target.value)}/>
+              <input
+                className="input mono"
+                type="number"
+                value={vaccinationTarget.count || ""}
+                readOnly
+                placeholder={lang === "fr" ? "Calculé depuis la cible" : "Calculated from target"}
+                style={{ background: "var(--bg-sunken)", color: "var(--ink-800)" }}
+              />
             </FormField>
             <FormField label={lang === "fr" ? "Prochain rappel" : "Next booster"}>
               <input className="input" type="date" value={form.booster || ""} onChange={(e) => set("booster", e.target.value)}/>
