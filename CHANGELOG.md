@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.5)
+- **FarmOS — Performance par lot / cohorte (COMP-P2-008)**. Nouvel export CSV « Performance par lot » dans l'écran Rapports : par lot — effectif vivant, décès, taux de mortalité %, revenus, coûts, marge. Combine la rentabilité par lot (`/profitability` → `byLot`) et les décès agrégés par lot (mortalité). Complète la vue « Rentabilité par animal / lot » et les stats de mortalité par cause existantes. Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Changed (3.117.4)
 - **FarmOS — Vétérinaire de garde réel (Santé)**. La carte « Vétérinaire de garde » de l'écran Santé n'affiche plus un contact codé en dur ; elle utilise le premier vétérinaire enregistré dans le staff FarmOS (`listFarmosStaff("vet")`), avec initiales, désignation, téléphone, et boutons Appeler/Contacter (tel:/mailto:) activés selon les coordonnées disponibles. Message « aucun vétérinaire enregistré » sinon. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

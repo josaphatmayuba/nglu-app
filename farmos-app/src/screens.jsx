@@ -3282,6 +3282,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
   const currencyMeta = useCurrencyCatalog();
   const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], repro: [], loading: true });
+  const [profByLot, setProfByLot] = React.useState([]);
   // Données restreintes à l'espèce sélectionnée (null = toutes espèces).
   const fAnimals = React.useMemo(() => (speciesFilter ? hcData.animals.filter((a) => a.species === speciesFilter) : hcData.animals), [hcData.animals, speciesFilter]);
   const fMortality = React.useMemo(() => (speciesFilter ? hcData.mortality.filter((m) => m.species === speciesFilter) : hcData.mortality), [hcData.mortality, speciesFilter]);
@@ -3290,6 +3291,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     let cancel = false;
     Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => []), api.listReproductionEvents().catch(() => [])])
       .then(([b, a, m, r]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], mortality: Array.isArray(m) ? m : [], repro: Array.isArray(r) ? r : [], loading: false }); });
+    api.getProfitability().then((p) => { if (!cancel && p && Array.isArray(p.byLot)) setProfByLot(p.byLot); }).catch(() => {});
     return () => { cancel = true; };
   }, []);
   // Mises bas (event_type birthing) adaptées, filtrées par espèce.
@@ -3356,10 +3358,31 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     ]);
     downloadReportCsv(`farmos-reproduction-${speciesFilter || "tous"}-${today}.csv`, [headers, ...rows]);
   };
+  // Performance par lot / cohorte (COMP-P2-008) : effectif, marge, mortalité.
+  const exportLotPerfCsv = () => {
+    // Morts par lot (somme des count des events de mortalité).
+    const deathsByLot = new Map();
+    hcData.mortality.forEach((m) => {
+      const k = (m.lot || "—").toString();
+      deathsByLot.set(k, (deathsByLot.get(k) || 0) + Number(m.count ?? 1));
+    });
+    const headers = lang === "fr"
+      ? ["Lot", "Effectif vivant", "Décès", "Taux mortalité %", "Revenus", "Coûts", "Marge"]
+      : ["Batch", "Live count", "Deaths", "Mortality rate %", "Revenue", "Cost", "Margin"];
+    const rows = profByLot.map((l) => {
+      const deaths = deathsByLot.get(String(l.lot)) || 0;
+      const base = Number(l.count || 0) + deaths;
+      const rate = base > 0 ? ((deaths / base) * 100).toFixed(1) : "0.0";
+      return [l.lot || "—", l.count ?? 0, deaths, rate,
+        Number(l.revenue || 0).toFixed(2), Number(l.cost || 0).toFixed(2), Number(l.profit || 0).toFixed(2)];
+    });
+    downloadReportCsv(`farmos-performance-lots-${today}.csv`, [headers, ...rows]);
+  };
   const csvExports = [
     { fr: "Inventaire animaux (CSV)", en: "Animal inventory (CSV)", descFr: `${fAnimals.length} animal(aux)`, descEn: `${fAnimals.length} animal(s)`, action: exportInventoryCsv, disabled: fAnimals.length === 0 },
     { fr: "Mortalité (CSV)", en: "Mortality (CSV)", descFr: `${fMortality.length} décès`, descEn: `${fMortality.length} death(s)`, action: exportMortalityCsv, disabled: fMortality.length === 0 },
     { fr: "Reproduction / portées (CSV)", en: "Reproduction / litters (CSV)", descFr: `${fCalvings.length} mise(s) bas`, descEn: `${fCalvings.length} calving(s)`, action: exportReproCsv, disabled: fCalvings.length === 0 },
+    { fr: "Performance par lot (CSV)", en: "Batch performance (CSV)", descFr: `${profByLot.length} lot(s) · marge & mortalité`, descEn: `${profByLot.length} batch(es) · margin & mortality`, action: exportLotPerfCsv, disabled: profByLot.length === 0 },
   ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
