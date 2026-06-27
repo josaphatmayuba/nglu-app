@@ -596,7 +596,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   </div>
                   <div style={{ fontSize: 12, color: "var(--ink-700)", marginTop: 6 }}>{v.target} · {v.n} {lang === "fr" ? "animaux" : "animals"}</div>
                   <div className="mono" style={{ fontSize: 11, color: "var(--rust-700)", marginTop: 4 }}>{lang === "fr" ? "Échéance " : "Due "}{v.due}</div>
-                  <button className="btn btn-sm btn-primary" style={{ marginTop: 8, width: "100%", justifyContent: "center" }} onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "health" }))}>{lang === "fr" ? "Programmer maintenant" : "Schedule now"}</button>
+                  <button className="btn btn-sm btn-primary" style={{ marginTop: 8, width: "100%", justifyContent: "center" }} onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: { tab: "health", kind: "vaccine", species: v.species, vaccine: v.vaccine, n: v.n } }))}>{lang === "fr" ? "Programmer maintenant" : "Schedule now"}</button>
                 </div>
               );
             })}
@@ -3296,6 +3296,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
   const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
   const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], repro: [], loading: true });
   const [profByLot, setProfByLot] = React.useState([]);
+  const [benchmarks, setBenchmarks] = React.useState(null);
   // Données restreintes à l'espèce sélectionnée (null = toutes espèces).
   const fAnimals = React.useMemo(() => (speciesFilter ? hcData.animals.filter((a) => a.species === speciesFilter) : hcData.animals), [hcData.animals, speciesFilter]);
   const fMortality = React.useMemo(() => (speciesFilter ? hcData.mortality.filter((m) => m.species === speciesFilter) : hcData.mortality), [hcData.mortality, speciesFilter]);
@@ -3305,6 +3306,7 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => []), api.listReproductionEvents().catch(() => [])])
       .then(([b, a, m, r]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], mortality: Array.isArray(m) ? m : [], repro: Array.isArray(r) ? r : [], loading: false }); });
     api.getProfitability().then((p) => { if (!cancel && p && Array.isArray(p.byLot)) setProfByLot(p.byLot); }).catch(() => {});
+    api.getBenchmarks().then((b) => { if (!cancel) setBenchmarks(b); }).catch(() => {});
     return () => { cancel = true; };
   }, []);
   // Mises bas (event_type birthing) adaptées, filtrées par espèce.
@@ -3451,6 +3453,52 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
           ))}
         </div>
       </div>
+      {/* Benchmark interne par lot (COMP-P2-016) — quartiles intra-organisation. */}
+      {benchmarks && benchmarks.sampleSize >= 2 && (() => {
+        const med = benchmarks.quartiles?.mortalityRate?.median;
+        const medMargin = benchmarks.quartiles?.marginPerHead?.median;
+        return (
+          <div>
+            <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>
+              {lang === "fr" ? "Benchmark interne · vos lots comparés entre eux" : "Internal benchmark · your lots compared"}
+              <span style={{ color: "var(--fg-3)" }}> · {benchmarks.sampleSize} {lang === "fr" ? "lots" : "lots"}</span>
+            </div>
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--fg-3)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      <th style={{ padding: "8px 16px" }}>{lang === "fr" ? "Lot" : "Lot"}</th>
+                      <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Mortalité %" : "Mortality %"}</th>
+                      <th style={{ padding: "8px 16px", textAlign: "right" }}>{lang === "fr" ? "Marge / tête" : "Margin / head"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {benchmarks.rows.map((r, i) => {
+                      // Mortalité : sous la médiane = bon (vert). Marge : au-dessus = bon.
+                      const mColor = r.mortalityRate == null || med == null ? "var(--fg-3)" : r.mortalityRate <= med ? "var(--forest-700)" : "var(--oxblood-700)";
+                      const gColor = r.marginPerHead == null || medMargin == null ? "var(--fg-3)" : r.marginPerHead >= medMargin ? "var(--forest-700)" : "var(--oxblood-700)";
+                      return (
+                        <tr key={i} style={{ borderTop: "1px solid var(--border-1)" }}>
+                          <td style={{ padding: "8px 16px", fontWeight: 600, color: "var(--ink-900)" }}>{r.lot}</td>
+                          <td style={{ padding: "8px 16px", textAlign: "right", color: mColor }} className="mono">{r.mortalityRate != null ? `${r.mortalityRate}%` : "—"}</td>
+                          <td style={{ padding: "8px 16px", textAlign: "right", color: gColor }} className="mono">{r.marginPerHead != null ? r.marginPerHead.toLocaleString(lang === "fr" ? "fr-CA" : "en-CA") : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ padding: "8px 16px", fontSize: 11, color: "var(--fg-3)", borderTop: "1px solid var(--border-1)" }}>
+                {lang === "fr"
+                  ? `Repère (médiane interne) — mortalité : ${med != null ? med + "%" : "—"} · marge/tête : ${medMargin != null ? medMargin : "—"}. Vert = meilleur que la médiane de vos lots.`
+                  : `Reference (internal median) — mortality: ${med != null ? med + "%" : "—"} · margin/head: ${medMargin != null ? medMargin : "—"}. Green = better than your lots' median.`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Exports CSV — données réelles exploitables (tableur), filtrées par espèce. */}
       <div>
         <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>

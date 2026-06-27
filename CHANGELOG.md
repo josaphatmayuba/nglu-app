@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.13)
+- **FarmOS — Benchmark interne par lot (COMP-P2-016, intra-organisation)**. Nouvelle section « Benchmark interne » dans l'écran Rapports : compare les **lots d'une même organisation entre eux** (taux de mortalité %, marge par tête) avec quartiles internes et repère sur la médiane (vert = meilleur que la médiane de vos lots). **Aucune donnée cross-organisation** — pas de risque de fuite inter-tenant. Logique de calcul extraite dans un module pur `farmos-benchmarks.ts` (quartiles par interpolation, métriques par lot, classement) **couvert par 8 tests unitaires**. Backend2 : `FarmosService.getBenchmarks` (agrège lots de l'org : effectif vivant, décès, revenus/coûts) + route `GET /farmos/benchmarks` (permission `readAll-farmos`). S'affiche seulement à partir de 2 lots. Suite backend au vert (59/59). **Vérifié** : `tsc --noEmit` + `jest` OK, build farmos-app OK. [SCRUM]
+
 ### Added (3.117.12)
 - **FarmOS — Performance grands troupeaux : liste animaux paginée (COMP-P1-014)**. La table des animaux ne rendait aucune limite de lignes (tout le cheptel d'un coup → lent au-delà de quelques milliers d'animaux). Affichage désormais plafonné à 200 lignes avec bouton « Afficher plus » (par tranches de 200), sur desktop et mobile ; le cap se réinitialise quand la liste filtrée change (recherche/filtre/tri). La recherche et le filtrage restent sur l'ensemble des données ; seul le rendu DOM est limité. Aucune dépendance ajoutée. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

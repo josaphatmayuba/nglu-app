@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { renderPdfViaService } from "../common/pdf-client";
+import { computeLotBenchmarks } from "./farmos-benchmarks";
 import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
@@ -3162,6 +3163,40 @@ export class FarmosService {
     );
 
     return { byAnimal, byLot, byBuilding, totals };
+  }
+
+  // Benchmarks INTRA-organisation (COMP-P2-016) : compare les lots de l'org
+  // entre eux (quartiles internes). Aucune donnee cross-org.
+  async getBenchmarks(orgId: number) {
+    const prof = await this.getProfitability(orgId);
+    // Effectif vivant par lot.
+    const animals = await this.db
+      .select({ lot: farmosAnimals.lot, count: farmosAnimals.count })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+    const liveByLot = new Map<string, number>();
+    for (const a of animals) {
+      const k = (a.lot || "—").toString();
+      liveByLot.set(k, (liveByLot.get(k) || 0) + (Number(a.count) || 1));
+    }
+    // Deces par lot.
+    const deaths = await this.db
+      .select({ lot: farmosMortalityEvents.lot, count: farmosMortalityEvents.count })
+      .from(farmosMortalityEvents)
+      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1)));
+    const deathsByLot = new Map<string, number>();
+    for (const d of deaths) {
+      const k = (d.lot || "—").toString();
+      deathsByLot.set(k, (deathsByLot.get(k) || 0) + (Number(d.count) || 1));
+    }
+    const lots = (prof.byLot || []).map((l: any) => ({
+      lot: l.lot,
+      liveCount: liveByLot.get(String(l.lot)) || 0,
+      deaths: deathsByLot.get(String(l.lot)) || 0,
+      revenue: Number(l.revenue) || 0,
+      cost: Number(l.cost) || 0,
+    }));
+    return computeLotBenchmarks(lots);
   }
 
   private async syncSaleToTransaction(saleId: number, input: CreateSaleDto, orgId: number): Promise<number | null> {

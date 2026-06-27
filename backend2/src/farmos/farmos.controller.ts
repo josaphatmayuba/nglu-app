@@ -794,6 +794,13 @@ export class FarmosController {
     return this.farmos.getProfitability(orgId);
   }
 
+  @ApiOperation({ summary: "Intra-org benchmarks: compare this org's lots (internal quartiles)." })
+  @Permissions("readAll-farmos")
+  @Get("benchmarks")
+  getBenchmarks(@CurrentOrg() orgId: number) {
+    return this.farmos.getBenchmarks(orgId);
+  }
+
   @ApiOperation({ summary: "List user-editable lookup values (breeds, vets, routes, …)." })
   @Permissions("readAll-farmos")
   @Get("lookups")
