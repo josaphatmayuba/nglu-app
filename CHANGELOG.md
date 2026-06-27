@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.116.9)
+- **Une modif du pipeline ne redéploie plus TOUTES les apps**. `bitbucket-pipelines.yml` figurait dans les `includePaths` de quasi tous les steps prod (BatiPro, HR, Compta, Chat, Marketing, Frontend, Domus… + Avelomi) → toute modification du fichier pipeline déclenchait le redéploiement de tous ces projets (constaté pipeline #813 : ~14 steps lancés pour un seul fichier changé). Retiré `"bitbucket-pipelines.yml"` des 29 conditions `includePaths`. Désormais chaque step ne se déclenche que sur les chemins de SON projet. **Effet assumé** : le provisionnement Avelomi (anchors clone/env/db-init dans le step `Backend2 → Avelomi`) ne part plus sur une modif pipeline seule — il faut toucher `backend2/**`/`docker-compose.prod.yml`/`.env.prod` ou lancer un run manuel. **Vérifié** : YAML valide, conditions bien formées. NON déployé. [SCRUM]
+
 ### Fixed (3.116.8)
 - **Le provisionnement Avelomi ne se déclenchait jamais** : le step `Backend2 → Avelomi` (qui porte les anchors clone/`.env.prod`/init `avelomi_db`) avait `includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"]`. Les PR de provisionnement ne touchant QUE `bitbucket-pipelines.yml`, la condition n'était jamais remplie → step skippé → repo non cloné, `.env.prod` vide, `avelomi_db` jamais créée (vérifié sur `3.128.45.29` après merge PR #44 : `GIT NON`, `.env.prod` 0 ligne, seul `nglu_prod_frontend` up). Ajout de `bitbucket-pipelines.yml` à la condition du step (comme déjà fait pour les steps front). Désormais toute modif du pipeline déclenche le provisionnement Avelomi. **Vérifié** : YAML valide. NON déployé. [SCRUM]
 

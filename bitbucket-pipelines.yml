@@ -277,7 +277,7 @@ pipelines:
           - step:
               name: BatiPro → dev
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -294,7 +294,7 @@ pipelines:
           - step:
               name: HR → dev
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -312,7 +312,7 @@ pipelines:
           - step:
               name: Comptabilite → dev
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
@@ -329,7 +329,7 @@ pipelines:
           - step:
               name: Migration Cockpit → dev
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -356,7 +356,7 @@ pipelines:
           - step:
               name: Chat → dev
               caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["chat-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
@@ -383,7 +383,7 @@ pipelines:
           - step:
               name: Avelomi-site → dev
               caches: [node-avelomi]
-              condition: { changesets: { includePaths: ["avelomi-site/**", "nginx/nginx.avelomi-dev.conf", "docker-compose.prod.yml", "frontend/Dockerfile.prod", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["avelomi-site/**", "nginx/nginx.avelomi-dev.conf", "docker-compose.prod.yml", "frontend/Dockerfile.prod"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
@@ -510,7 +510,7 @@ pipelines:
           - step:
               name: Frontend → prod
               caches: [node-frontend]
-              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 # npm audit informatif (|| true) : ne pas bloquer le build sur une vuln transitive
@@ -522,7 +522,7 @@ pipelines:
           - step:
               name: Domus → prod
               caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -532,7 +532,7 @@ pipelines:
           - step:
               name: Journal → prod
               caches: [node-journal]
-              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -542,7 +542,7 @@ pipelines:
           - step:
               name: Tickets → prod
               caches: [node-tickets]
-              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -552,7 +552,7 @@ pipelines:
           - step:
               name: FarmOS → prod
               caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -562,7 +562,7 @@ pipelines:
           - step:
               name: BatiPro → prod
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -572,7 +572,7 @@ pipelines:
           - step:
               name: HR → prod
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -582,7 +582,7 @@ pipelines:
           - step:
               name: Comptabilite → prod
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
@@ -592,7 +592,7 @@ pipelines:
           - step:
               name: Migration Cockpit → prod
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -602,7 +602,7 @@ pipelines:
           - step:
               name: Chat → prod
               caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
@@ -612,7 +612,7 @@ pipelines:
           - step:
               name: Marketing → prod
               caches: [node-marketing]
-              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
@@ -632,7 +632,7 @@ pipelines:
               # bitbucket-pipelines.yml inclus : ce step porte le provisionnement
               # Avelomi (clone repo + .env.prod + init avelomi_db). Sans ce chemin,
               # une PR ne touchant que le pipeline skippait le step -> rien provisionne.
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -680,7 +680,7 @@ pipelines:
           - step:
               name: Frontend → Avelomi
               caches: [node-frontend]
-              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["frontend/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 # Vite lit ces VITE_* au build (priorité sur .env.production qui code ongdngolu en dur).
@@ -695,7 +695,7 @@ pipelines:
           - step:
               name: Domus → Avelomi
               caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -707,7 +707,7 @@ pipelines:
           - step:
               name: Journal → Avelomi
               caches: [node-journal]
-              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -719,7 +719,7 @@ pipelines:
           - step:
               name: Tickets → Avelomi
               caches: [node-tickets]
-              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -731,7 +731,7 @@ pipelines:
           - step:
               name: FarmOS → Avelomi
               caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -743,7 +743,7 @@ pipelines:
           - step:
               name: BatiPro → Avelomi
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -755,7 +755,7 @@ pipelines:
           - step:
               name: HR → Avelomi
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -767,7 +767,7 @@ pipelines:
           - step:
               name: Comptabilite → Avelomi
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
@@ -779,7 +779,7 @@ pipelines:
           - step:
               name: Migration Cockpit → Avelomi
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -791,7 +791,7 @@ pipelines:
           - step:
               name: Chat → Avelomi
               caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
@@ -803,7 +803,7 @@ pipelines:
           - step:
               name: Avelomi-site → Avelomi
               caches: [node-avelomi]
-              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf", "bitbucket-pipelines.yml"] } }
+              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
