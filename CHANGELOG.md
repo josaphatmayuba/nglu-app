@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.6)
+- **Auth Google — Client ID Avelomi configure**. Ajout de `avelomi-site/.env.production` avec `VITE_GOOGLE_CLIENT_ID` (Client OAuth Google projet `avelomi-500715`). Valeur PUBLIQUE (embarquee dans le bundle JS, injectee par Vite au build `vite build` mode production via le pipeline). Cote backend, `GOOGLE_CLIENT_ID` reste a renseigner dans le `.env` runtime des serveurs (non versionne). [SCRUM]
+
 ### Added (3.117.5)
 - **FarmOS — Performance par lot / cohorte (COMP-P2-008)**. Nouvel export CSV « Performance par lot » dans l'écran Rapports : par lot — effectif vivant, décès, taux de mortalité %, revenus, coûts, marge. Combine la rentabilité par lot (`/profitability` → `byLot`) et les décès agrégés par lot (mortalité). Complète la vue « Rentabilité par animal / lot » et les stats de mortalité par cause existantes. Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 
