@@ -1836,6 +1836,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
       animal: m.name, animalId: m.kind === "feed" ? "Aliment" : "Médicament",
       species: null, title: lang === "fr" ? `Stock faible · ${m.name}` : `Low stock · ${m.name}`,
       subtitle: `${qty} ${m.unit || ""} restant · seuil ${min}`, date: "—", icon: "wheat",
+      targetRoute: m.kind === "feed" ? "feed" : "medicines",
     });
   });
   // Active treatments with future withdrawal
@@ -1856,7 +1857,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
         animalId: animal?.externalId || `#${animal?.id}`,
         species: animal?.species, title: lang === "fr" ? "Délai de retrait actif" : "Withdrawal active",
         subtitle: `${t.medicineName || disease?.nameFr || "Traitement"}${milkH ? ` · lait ${Math.round(milkH/24)} j` : ""}${meat ? ` · viande ${meat} j` : ""}${eggs ? ` · œufs ${eggs} j` : ""}`,
-        date: end, icon: "shield",
+        date: end, icon: "shield", targetRoute: "health",
       });
     }
   });
@@ -1877,7 +1878,7 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
         species: animal.species,
         title: lang === "fr" ? "Mise bas imminente" : "Imminent birthing",
         subtitle: `J${day}/${total} · ${e.expectedDueDate || "—"}`,
-        date: e.expectedDueDate || "—", icon: "calendar",
+        date: e.expectedDueDate || "—", icon: "calendar", targetRoute: "repro",
       });
     }
   });
@@ -1903,13 +1904,22 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
         g.overdue > 0 ? (lang === "fr" ? `${g.overdue} en retard (coût net)` : `${g.overdue} overdue (net cost)`) : null,
         barn,
       ].filter(Boolean).join(" · "),
-      date: "—", icon: "cart",
+      date: "—", icon: "cart", targetRoute: "sales-management",
     });
   });
   return out;
 }
 
-const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
+function alertTargetRoute(alert) {
+  if (alert?.targetRoute) return alert.targetRoute;
+  if (alert?.kind === "stock") return "stock";
+  if (alert?.kind === "withdrawal") return "health";
+  if (alert?.kind === "repro") return "repro";
+  if (alert?.kind === "slaughter") return "sales-management";
+  return "alerts";
+}
+
+const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter, onNav }) => {
   const [liveAlerts, setLiveAlerts] = React.useState(null);
   React.useEffect(() => {
     let cancel = false;
@@ -1990,7 +2000,15 @@ const AlertsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                 }}>
                   {a.severity}
                 </span>
-                <button className="btn btn-sm" style={isCritical ? { background: "rgba(255,255,255,0.15)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.2)" } : {}}>{lang === "fr" ? "Voir" : "View"}<Icon name="arrowRight" size={11} color={isCritical ? "#ECF1EC" : "var(--ink-700)"}/></button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  aria-label={`${lang === "fr" ? "Voir" : "View"} ${a.title}`}
+                  onClick={() => onNav && onNav(alertTargetRoute(a))}
+                  style={isCritical ? { background: "rgba(255,255,255,0.15)", color: "var(--parchment-50)", borderColor: "rgba(255,255,255,0.2)" } : {}}
+                >
+                  {lang === "fr" ? "Voir" : "View"}<Icon name="arrowRight" size={11} color={isCritical ? "#ECF1EC" : "var(--ink-700)"}/>
+                </button>
               </div>
             </div>
           );
@@ -2435,7 +2453,7 @@ function PosSaleModal({ lang, item, prices, currencyMeta, onClose, onSaved }) {
   );
 }
 
-const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
+const LegacyPosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const [animals, setAnimals] = React.useState([]);
   const [logs, setLogs] = React.useState([]);
   const [sales, setSales] = React.useState([]);
@@ -2650,6 +2668,553 @@ const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => 
       </section>
 
       {modalItem && <PosSaleModal lang={lang} item={modalItem} prices={prices} currencyMeta={currencyMeta} onClose={() => setModalItem(null)} onSaved={handleSaleSaved}/>}
+    </div>
+  );
+};
+
+// POS runtime helpers and register screen.
+const POS_PAYMENT_METHODS = [
+  { id: "cash", fr: "Cash", en: "Cash", icon: "wallet" },
+  { id: "mobile", fr: "Mobile money", en: "Mobile money", icon: "nfc" },
+  { id: "card", fr: "Carte", en: "Card", icon: "qr" },
+  { id: "bank", fr: "Banque", en: "Bank", icon: "coins" },
+];
+
+function makePosTicketCode() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${String(d.getFullYear()).slice(2)}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `POS-${stamp}-${Math.floor(100 + Math.random() * 900)}`;
+}
+
+function posProductIcon(item) {
+  if (item?.source === "animal") return "cart";
+  if (item?.productType === "eggs") return "egg";
+  if (item?.productType === "milk") return "droplet";
+  if (item?.productType === "wool") return "package";
+  if (item?.productType === "fish") return "drop2";
+  if (item?.productType === "meat") return "weight";
+  return "package";
+}
+
+function cartLineStockQty(line, quantity = line?.quantity) {
+  return Number(quantity || 0) * Number(line?.eggsPerPack || 1);
+}
+
+function cartLineTotal(line, quantity = line?.quantity) {
+  return Number(quantity || 0) * Number(line?.unitPrice || 0);
+}
+
+function cartLineRequiresInteger(line) {
+  return Number(line?.eggsPerPack || 1) > 1 || ["tete", "unite", "lot"].includes(normalizeSaleUnit(line?.unit));
+}
+
+const PosScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies, onNav }) => {
+  const [animals, setAnimals] = React.useState([]);
+  const [logs, setLogs] = React.useState([]);
+  const [sales, setSales] = React.useState([]);
+  const [prices, setPrices] = React.useState([]);
+  const [query, setQuery] = React.useState("");
+  const [category, setCategory] = React.useState("all");
+  const [cartLines, setCartLines] = React.useState([]);
+  const [heldTickets, setHeldTickets] = React.useState([]);
+  const [ticketCode, setTicketCode] = React.useState(() => makePosTicketCode());
+  const [customer, setCustomer] = React.useState("");
+  const [orderNote, setOrderNote] = React.useState("");
+  const [discount, setDiscount] = React.useState("");
+  const [paymentMethod, setPaymentMethod] = React.useState("cash");
+  const [received, setReceived] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [message, setMessage] = React.useState(null);
+  const [reloadKey, setReloadKey] = React.useState(0);
+  const [isNarrow, setIsNarrow] = React.useState(() => typeof window !== "undefined" ? window.innerWidth < 1120 : false);
+  const searchRef = React.useRef(null);
+  const refresh = useDataRefresh(["animals", "productionLogs", "sales", "priceList"]);
+  const currencyMeta = useCurrencyCatalog();
+
+  React.useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 1120);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  React.useEffect(() => {
+    let cancel = false;
+    Promise.all([api.listAnimals(), api.listProductionLogs(), api.listSales(), api.listPrices()])
+      .then(([a, p, s, pr]) => {
+        if (cancel) return;
+        setAnimals(Array.isArray(a) ? a : []);
+        setLogs(Array.isArray(p) ? p : []);
+        setSales(Array.isArray(s) ? s : []);
+        setPrices(Array.isArray(pr) ? pr : []);
+      })
+      .catch((e) => console.warn("POS load failed:", e.message));
+    return () => { cancel = true; };
+  }, [reloadKey, refresh]);
+
+  React.useEffect(() => {
+    const reload = () => setReloadKey((k) => k + 1);
+    window.addEventListener("farmos:sale-created", reload);
+    window.addEventListener("farmos:animal-created", reload);
+    window.addEventListener("farmos:production-created", reload);
+    return () => {
+      window.removeEventListener("farmos:sale-created", reload);
+      window.removeEventListener("farmos:animal-created", reload);
+      window.removeEventListener("farmos:production-created", reload);
+    };
+  }, []);
+
+  const allItems = buildSaleItems({ animals, logs, sales, prices, speciesFilter, lang });
+  const filteredItems = allItems
+    .filter((item) => {
+      if (category === "all") return true;
+      if (category === "animal") return item.source === "animal";
+      if (category === "production") return item.source !== "animal";
+      return item.productType === category;
+    })
+    .filter((item) => matchesSaleQuery(item, query));
+  const visibleItems = filteredItems.slice(0, 36);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todaySales = sales.filter((sale) => String(sale.saleDate || sale.sale_date || "").slice(0, 10) === todayIso);
+  const cartCurrencyIds = Array.from(new Set(cartLines.map((line) => String(line.currencyId || currencyMeta.defaultCurrencyId || "")).filter(Boolean)));
+  const activeCurrencyId = cartCurrencyIds[0] || (currencyMeta.defaultCurrencyId ? String(currencyMeta.defaultCurrencyId) : "");
+  const currencyMismatch = cartCurrencyIds.length > 1;
+  const money = (value, precision = 2) => formatMoney(value, activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, precision);
+  const subtotal = cartLines.reduce((sum, line) => sum + cartLineTotal(line), 0);
+  const discountAmount = Math.min(Math.max(0, Number(discount || 0)), subtotal);
+  const orderTotal = Math.max(0, subtotal - discountAmount);
+  const cashReceived = Number(received || 0);
+  const changeDue = paymentMethod === "cash" ? Math.max(0, cashReceived - orderTotal) : 0;
+  const cashReady = paymentMethod !== "cash" || cashReceived >= orderTotal;
+  const todayRevenue = todaySales
+    .filter((sale) => !activeCurrencyId || String(rowCurrencyId(sale) ?? currencyMeta.defaultCurrencyId ?? "") === String(activeCurrencyId))
+    .reduce((sum, sale) => sum + Number(sale.totalAmount ?? sale.total_amount ?? 0), 0);
+
+  const usedStockForItem = React.useCallback((itemId, excludeLineId = null) => (
+    cartLines
+      .filter((line) => line.itemId === itemId && line.lineId !== excludeLineId)
+      .reduce((sum, line) => sum + cartLineStockQty(line), 0)
+  ), [cartLines]);
+
+  const maxPacksForLine = React.useCallback((line) => {
+    const available = Number(line.available || 0);
+    const remaining = Math.max(0, available - usedStockForItem(line.itemId, line.lineId));
+    if (cartLineRequiresInteger(line)) return Math.floor(remaining / Number(line.eggsPerPack || 1));
+    return remaining / Number(line.eggsPerPack || 1);
+  }, [usedStockForItem]);
+
+  const categoryCards = [
+    { id: "all", label: lang === "fr" ? "Tout" : "All", icon: "grid", count: allItems.length, bg: "var(--forest-900)", fg: "var(--parchment-50)" },
+    { id: "eggs", label: lang === "fr" ? "Oeufs" : "Eggs", icon: "egg", count: allItems.filter((x) => x.productType === "eggs").length, bg: "var(--autorite-50)", fg: "var(--autorite-900)" },
+    { id: "milk", label: lang === "fr" ? "Lait" : "Milk", icon: "droplet", count: allItems.filter((x) => x.productType === "milk").length, bg: "var(--sky-50)", fg: "var(--sky-900)" },
+    { id: "meat", label: lang === "fr" ? "Viande" : "Meat", icon: "weight", count: allItems.filter((x) => x.productType === "meat").length, bg: "var(--rust-50)", fg: "var(--rust-900)" },
+    { id: "fish", label: lang === "fr" ? "Poisson" : "Fish", icon: "drop2", count: allItems.filter((x) => x.productType === "fish").length, bg: "var(--pertinence-50)", fg: "var(--pertinence-900)" },
+    { id: "animal", label: lang === "fr" ? "Animaux" : "Animals", icon: "cart", count: allItems.filter((x) => x.source === "animal").length, bg: "var(--solidite-50)", fg: "var(--solidite-900)" },
+  ];
+
+  const paymentLabel = (id) => {
+    const row = POS_PAYMENT_METHODS.find((method) => method.id === id);
+    return row ? (lang === "fr" ? row.fr : row.en) : id;
+  };
+
+  const goSalesManagement = () => {
+    if (onNav) onNav("sales-management");
+    else window.dispatchEvent(new CustomEvent("farmos:nav", { detail: "sales-management" }));
+  };
+
+  const newTicket = () => {
+    setCartLines([]);
+    setCustomer("");
+    setOrderNote("");
+    setDiscount("");
+    setReceived("");
+    setTicketCode(makePosTicketCode());
+    setMessage(null);
+  };
+
+  const addToCart = (item, packKey = "unit") => {
+    const packagings = packagingsFor(item, prices, lang);
+    const pack = packagings.find((p) => p.key === packKey) || packagings[0];
+    const price = Number(pack?.price);
+    if (!pack || !Number.isFinite(price)) {
+      setMessage({ type: "err", text: lang === "fr" ? "Prix manquant. Configure ce produit dans Gestion de vente." : "Missing price. Configure this product in Sales management." });
+      return;
+    }
+    const eggsPerPack = Number(pack.eggs || 1);
+    const existingKey = `${item.id}:${pack.key}:${price}:${pack.currencyId || item.currencyId || currencyMeta.defaultCurrencyId || ""}`;
+    const existing = cartLines.find((line) => line.mergeKey === existingKey);
+    const itemAvailable = Number(item.available || 0);
+    const remainingStock = Math.max(0, itemAvailable - usedStockForItem(item.id));
+    if (remainingStock < eggsPerPack - 0.000001) {
+      setMessage({ type: "err", text: lang === "fr" ? "Stock insuffisant pour ajouter cet article." : "Not enough stock to add this item." });
+      return;
+    }
+    if (existing) {
+      setCartLines((prev) => prev.map((line) => line.lineId === existing.lineId ? { ...line, quantity: Number(line.quantity || 0) + 1 } : line));
+    } else {
+      setCartLines((prev) => [{
+        lineId: `${item.id}-${pack.key}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        mergeKey: existingKey,
+        itemId: item.id,
+        item,
+        title: item.title,
+        subtitle: item.subtitle || item.speciesLabel || "",
+        source: item.source,
+        species: item.species,
+        productType: item.productType,
+        unit: item.unit,
+        available: itemAvailable,
+        packKey: pack.key,
+        packLabel: pack.label || item.unit || "",
+        eggsPerPack,
+        quantity: 1,
+        unitPrice: price,
+        currencyId: pack.currencyId || item.currencyId || currencyMeta.defaultCurrencyId || "",
+      }, ...prev]);
+    }
+    setMessage(null);
+  };
+
+  const updateLineQty = (lineId, nextValue) => {
+    setCartLines((prev) => prev.map((line) => {
+      if (line.lineId !== lineId) return line;
+      let next = Number(nextValue || 0);
+      if (!Number.isFinite(next)) next = 0;
+      if (cartLineRequiresInteger(line)) next = Math.floor(next);
+      const max = maxPacksForLine(line);
+      next = Math.max(0, Math.min(next, max));
+      return { ...line, quantity: next };
+    }).filter((line) => Number(line.quantity || 0) > 0));
+  };
+
+  const holdTicket = () => {
+    if (!cartLines.length) return;
+    setHeldTickets((prev) => [{ ticketCode, customer, orderNote, discount, cartLines, createdAt: new Date().toISOString() }, ...prev].slice(0, 6));
+    newTicket();
+  };
+
+  const resumeTicket = (ticket) => {
+    setTicketCode(ticket.ticketCode || makePosTicketCode());
+    setCustomer(ticket.customer || "");
+    setOrderNote(ticket.orderNote || "");
+    setDiscount(ticket.discount || "");
+    setCartLines(ticket.cartLines || []);
+    setHeldTickets((prev) => prev.filter((row) => row.ticketCode !== ticket.ticketCode));
+    setMessage(null);
+  };
+
+  const checkout = async () => {
+    if (!cartLines.length || saving) return;
+    if (currencyMismatch) {
+      setMessage({ type: "err", text: lang === "fr" ? "Le ticket melange plusieurs devises. Separe la vente avant d'encaisser." : "This ticket mixes currencies. Split the sale before checkout." });
+      return;
+    }
+    if (!cashReady) {
+      setMessage({ type: "err", text: lang === "fr" ? "Montant recu insuffisant." : "Received amount is too low." });
+      return;
+    }
+    const byItem = new Map();
+    cartLines.forEach((line) => byItem.set(line.itemId, (byItem.get(line.itemId) || 0) + cartLineStockQty(line)));
+    const invalidLine = cartLines.find((line) => Number(line.quantity || 0) <= 0 || (byItem.get(line.itemId) || 0) > Number(line.available || 0) + 0.000001);
+    if (invalidLine) {
+      setMessage({ type: "err", text: lang === "fr" ? "Une ligne depasse le stock disponible." : "One line exceeds available stock." });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      for (const line of cartLines) {
+        const lineSubtotal = cartLineTotal(line);
+        const lineDiscount = subtotal > 0 && discountAmount > 0 ? discountAmount * (lineSubtotal / subtotal) : 0;
+        const netTotal = Math.max(0, lineSubtotal - lineDiscount);
+        const stockQty = cartLineStockQty(line);
+        const effectiveUnitPrice = stockQty > 0 ? netTotal / stockQty : 0;
+        const packNote = Number(line.eggsPerPack || 1) > 1
+          ? `${line.quantity} x ${line.packLabel} (${formatSaleQuantity(stockQty)} ${line.unit || "unites"})`
+          : null;
+        await api.createSale({
+          sale_source: line.source,
+          animal_id: line.item.animalId || null,
+          species: line.species || null,
+          product_type: line.productType,
+          quantity: stockQty,
+          unit: line.unit || null,
+          unit_price: effectiveUnitPrice,
+          total_amount: netTotal,
+          currency_id: activeCurrencyId ? Number(activeCurrencyId) : null,
+          buyer: customer.trim() || null,
+          sale_date: todayIso,
+          notes: [
+            `Ticket ${ticketCode}`,
+            `Paiement ${paymentLabel(paymentMethod)}`,
+            discountAmount > 0 ? `Remise ticket ${money(discountAmount)}` : null,
+            packNote,
+            orderNote.trim() || null,
+          ].filter(Boolean).join(" | ") || null,
+        });
+      }
+      window.dispatchEvent(new CustomEvent("farmos:sale-created"));
+      window.dispatchEvent(new CustomEvent("farmos:animal-created"));
+      newTicket();
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setMessage({ type: "err", text: e.message || (lang === "fr" ? "Encaissement impossible." : "Checkout failed.") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderProductCard = (item) => {
+    const sp = speciesById(item.species);
+    const packs = packagingsFor(item, prices, lang);
+    const pricedPacks = packs.filter((pack) => pack.price != null && Number.isFinite(Number(pack.price)));
+    const primaryPack = pricedPacks[0] || packs[0];
+    const available = Number(item.available || 0);
+    const used = usedStockForItem(item.id);
+    const remaining = Math.max(0, available - used);
+    return (
+      <div key={item.id} style={{ border: "1px solid var(--border-1)", background: "var(--paper)", borderRadius: 8, padding: 12, minHeight: 176, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 8, background: sp?.accentBg || "var(--bg-sunken)", color: sp?.accent || "var(--ink-700)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {sp ? <AnimalGlyph kind={sp.glyph} size={21} color="currentColor"/> : <Icon name={posProductIcon(item)} size={20} color="currentColor"/>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "var(--ink-950)", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+            <div style={{ fontSize: 12, color: "var(--fg-3)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.subtitle || item.speciesLabel || ""}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span className="tag">{item.source === "animal" ? (lang === "fr" ? "Animal" : "Animal") : saleProductLabel(item.productType, lang)}</span>
+          <span className="tag">{formatSaleQuantity(remaining)} / {formatSaleQuantity(available)} {item.unit}</span>
+        </div>
+        <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="mono" style={{ fontSize: 12, color: "var(--ink-800)", fontWeight: 700 }}>
+            {primaryPack?.price != null
+              ? `${formatMoney(primaryPack.price, primaryPack.currencyId || item.currencyId || currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}${primaryPack.label ? ` / ${primaryPack.label}` : ""}`
+              : (lang === "fr" ? "Prix a configurer" : "Set price")}
+          </div>
+          {pricedPacks.length > 1 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(82px, 1fr))", gap: 6 }}>
+              {pricedPacks.map((pack) => (
+                <button key={pack.key} type="button" className="btn btn-sm" onClick={() => addToCart(item, pack.key)} disabled={remaining < Number(pack.eggs || 1)}>
+                  <Icon name="plus" size={11} color="currentColor"/>
+                  {pack.key === "unit" ? (lang === "fr" ? "Unite" : "Unit") : pack.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button type="button" className="btn btn-primary" onClick={() => addToCart(item, primaryPack?.key || "unit")} disabled={!pricedPacks.length || remaining <= 0} style={{ justifyContent: "center" }}>
+              <Icon name={pricedPacks.length ? "plus" : "settings"} size={13} color="currentColor"/>
+              {pricedPacks.length ? (lang === "fr" ? "Ajouter" : "Add") : (lang === "fr" ? "Prix" : "Price")}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 14, overflow: "auto", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline" style={{ marginBottom: 4 }}>{lang === "fr" ? "Point de vente" : "Point of sale"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: 0, color: "var(--ink-950)" }}>
+            {lang === "fr" ? <>Caisse POS FarmOS, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>ticket multi-lignes</span></> : <>FarmOS POS register, <span style={{ color: "var(--clay-700)", fontWeight: 700 }}>multi-line ticket</span></>}
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn" onClick={() => searchRef.current?.focus()}><Icon name="scanLine" size={14} color="currentColor"/>{lang === "fr" ? "Scanner" : "Scan"}</button>
+          <button className="btn" onClick={goSalesManagement}><Icon name="settings" size={14} color="currentColor"/>{lang === "fr" ? "Prix" : "Prices"}</button>
+          <button className="btn btn-primary" onClick={newTicket}><Icon name="plus" size={14} color="currentColor"/>{lang === "fr" ? "Nouveau ticket" : "New ticket"}</button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1fr) minmax(340px, 390px)", gap: 14, alignItems: "start" }}>
+        <main style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+            <div className="card" style={{ padding: 12 }}>
+              <div className="overline">{lang === "fr" ? "Ventes du jour" : "Today sales"}</div>
+              <div className="mono tnum" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink-950)", marginTop: 4 }}>{money(todayRevenue)}</div>
+            </div>
+            <div className="card" style={{ padding: 12 }}>
+              <div className="overline">{lang === "fr" ? "Tickets / lignes" : "Tickets / lines"}</div>
+              <div className="mono tnum" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink-950)", marginTop: 4 }}>{todaySales.length}</div>
+            </div>
+            <div className="card" style={{ padding: 12 }}>
+              <div className="overline">{lang === "fr" ? "Articles vendables" : "Sellable items"}</div>
+              <div className="mono tnum" style={{ fontSize: 22, fontWeight: 800, color: "var(--ink-950)", marginTop: 4 }}>{allItems.length}</div>
+            </div>
+          </div>
+
+          <section className="card" style={{ display: "flex", flexDirection: "column", gap: 14, padding: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isNarrow ? "1fr" : "minmax(260px, 1fr) auto", gap: 10, alignItems: "end" }}>
+              <label style={{ fontSize: 12, color: "var(--fg-2)", minWidth: 0 }}>
+                {lang === "fr" ? "Scanner ou rechercher" : "Scan or search"}
+                <input ref={searchRef} className="input" value={query} onChange={(e) => setQuery(e.target.value)}
+                  placeholder={lang === "fr" ? "Nom, lot, espece, oeufs, lait..." : "Name, batch, species, eggs, milk..."}
+                  autoComplete="off" style={{ width: "100%", marginTop: 4, fontSize: 16, height: 46 }}/>
+              </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: isNarrow ? "flex-start" : "flex-end" }}>
+                <button className="btn" onClick={() => setCategory("production")}><Icon name="package" size={13} color="currentColor"/>{lang === "fr" ? "Productions" : "Production"}</button>
+                <button className="btn" onClick={() => setCategory("animal")}><Icon name="cart" size={13} color="currentColor"/>{lang === "fr" ? "Animaux" : "Animals"}</button>
+                {query && <button className="btn" onClick={() => setQuery("")}><Icon name="x" size={13} color="currentColor"/>{lang === "fr" ? "Effacer" : "Clear"}</button>}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 8 }}>
+              {categoryCards.map((cat) => {
+                const active = category === cat.id;
+                return (
+                  <button key={cat.id} type="button" onClick={() => setCategory(cat.id)}
+                    style={{ minHeight: 74, border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-1)", background: active ? cat.bg : "var(--paper)", color: active ? cat.fg : "var(--ink-800)", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", alignItems: "flex-start", justifyContent: "space-between", cursor: "pointer", textAlign: "left" }}>
+                    <Icon name={cat.icon} size={18} color="currentColor"/>
+                    <span style={{ display: "flex", alignItems: "baseline", gap: 6, width: "100%", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800 }}>{cat.label}</span>
+                      <span className="mono" style={{ fontSize: 11, opacity: 0.8 }}>{cat.count}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <SpeciesPillBar lang={lang} value={speciesFilter} onChange={onSpeciesFilter} enabledSpecies={enabledSpecies} compact/>
+
+            {message && (
+              <div style={{ border: `1px solid ${message.type === "err" ? "var(--rust-100)" : "var(--solidite-100)"}`, background: message.type === "err" ? "var(--rust-50)" : "var(--solidite-50)", color: message.type === "err" ? "var(--rust-900)" : "var(--solidite-900)", borderRadius: 8, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, fontSize: 12 }}>
+                <span>{message.text}</span>
+                {message.type === "err" && <button className="btn btn-sm" onClick={goSalesManagement}>{lang === "fr" ? "Configurer" : "Configure"}</button>}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+              <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 18 }}>{lang === "fr" ? "Catalogue caisse" : "Register catalog"}</h3>
+              <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{filteredItems.length}</span>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 10 }}>
+              {filteredItems.length === 0 ? (
+                <EmptyState icon="cart" title={lang === "fr" ? "Aucun article disponible" : "No available item"} hint={lang === "fr" ? "Ajoute une production ou configure des prix dans Gestion de vente." : "Add production or configure prices in Sales management."}/>
+              ) : visibleItems.map(renderProductCard)}
+            </div>
+          </section>
+        </main>
+
+        <aside className="card" style={{ padding: 0, overflow: "hidden", position: isNarrow ? "static" : "sticky", top: 12 }}>
+          <div style={{ padding: 16, borderBottom: "1px solid var(--border-1)", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+            <div>
+              <div className="overline">{lang === "fr" ? "Addition" : "Ticket"}</div>
+              <h3 style={{ fontFamily: "var(--font-display)", fontSize: 20, fontWeight: 600, marginTop: 2 }}>{ticketCode}</h3>
+            </div>
+            <button className="btn btn-ghost" onClick={holdTicket} disabled={!cartLines.length} title={lang === "fr" ? "Mettre en attente" : "Hold ticket"} style={{ width: 36, height: 36, padding: 0, justifyContent: "center" }}>
+              <Icon name="clock" size={16} color="currentColor"/>
+            </button>
+          </div>
+
+          <div style={{ padding: "10px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, borderBottom: "1px solid var(--border-1)" }}>
+            <label style={{ fontSize: 11, color: "var(--fg-2)" }}>{lang === "fr" ? "Client" : "Customer"}
+              <input className="input" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder={lang === "fr" ? "Comptoir" : "Counter"} style={{ width: "100%", marginTop: 4, height: 36 }}/>
+            </label>
+            <label style={{ fontSize: 11, color: "var(--fg-2)" }}>{lang === "fr" ? "Remise" : "Discount"}
+              <input className="input" type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} placeholder="0" style={{ width: "100%", marginTop: 4, height: 36 }}/>
+            </label>
+          </div>
+
+          <div style={{ maxHeight: isNarrow ? "none" : 360, overflow: "auto" }}>
+            {cartLines.length === 0 ? (
+              <div style={{ padding: 18 }}>
+                <EmptyState icon="cart" title={lang === "fr" ? "Ticket vide" : "Empty ticket"} hint={lang === "fr" ? "Ajoute des articles du catalogue pour demarrer la vente." : "Add catalog items to start the sale."}/>
+              </div>
+            ) : cartLines.map((line) => {
+              const maxPacks = maxPacksForLine(line);
+              const stockQty = cartLineStockQty(line);
+              return (
+                <div key={line.lineId} style={{ padding: "12px 16px", borderBottom: "1px solid var(--border-1)", display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--ink-950)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.title}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 3 }}>{line.packLabel}{Number(line.eggsPerPack || 1) > 1 ? ` | ${formatSaleQuantity(stockQty)} ${line.unit}` : ""}</div>
+                    <div className="mono" style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 5 }}>{formatMoney(line.unitPrice, line.currencyId || activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}</div>
+                  </div>
+                  <button className="btn btn-sm btn-ghost" onClick={() => updateLineQty(line.lineId, 0)} style={{ color: "var(--oxblood-700)", width: 30, padding: 0, justifyContent: "center" }}>
+                    <Icon name="trash" size={13} color="currentColor"/>
+                  </button>
+                  <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "32px 72px 32px 1fr", gap: 6, alignItems: "center" }}>
+                    <button className="btn btn-sm" onClick={() => updateLineQty(line.lineId, Number(line.quantity || 0) - 1)} style={{ width: 32, padding: 0, justifyContent: "center" }}><Icon name="minus" size={12} color="currentColor"/></button>
+                    <input className="input" type="number" min="0" max={maxPacks} step={cartLineRequiresInteger(line) ? "1" : "0.01"} value={line.quantity} onChange={(e) => updateLineQty(line.lineId, e.target.value)} style={{ height: 32, textAlign: "center", padding: "0 6px" }}/>
+                    <button className="btn btn-sm" onClick={() => updateLineQty(line.lineId, Number(line.quantity || 0) + 1)} style={{ width: 32, padding: 0, justifyContent: "center" }}><Icon name="plus" size={12} color="currentColor"/></button>
+                    <div className="mono tnum" style={{ textAlign: "right", fontSize: 13, fontWeight: 800, color: "var(--ink-950)" }}>{formatMoney(cartLineTotal(line), line.currencyId || activeCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol, 2)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {heldTickets.length > 0 && (
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border-1)", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="overline">{lang === "fr" ? "En attente" : "On hold"}</div>
+              {heldTickets.map((ticket) => (
+                <button key={ticket.ticketCode} className="btn btn-sm" onClick={() => resumeTicket(ticket)} style={{ justifyContent: "space-between" }}>
+                  <span>{ticket.ticketCode}</span>
+                  <span className="mono">{ticket.cartLines.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+            <textarea className="input" value={orderNote} onChange={(e) => setOrderNote(e.target.value)} placeholder={lang === "fr" ? "Note ticket" : "Ticket note"} style={{ minHeight: 58, resize: "vertical" }}/>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "10px 0", borderTop: "1px solid var(--border-1)", borderBottom: "1px solid var(--border-1)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--fg-2)" }}>
+                <span>{lang === "fr" ? "Sous-total" : "Subtotal"}</span>
+                <span className="mono">{money(subtotal)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: discountAmount > 0 ? "var(--solidite-700)" : "var(--fg-3)" }}>
+                <span>{lang === "fr" ? "Remise" : "Discount"}</span>
+                <span className="mono">-{money(discountAmount)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: "var(--ink-950)" }}>Total</span>
+                <span className="mono tnum" style={{ fontSize: 24, fontWeight: 900, color: "var(--ink-950)" }}>{money(orderTotal)}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 7 }}>
+              {POS_PAYMENT_METHODS.map((method) => {
+                const active = paymentMethod === method.id;
+                return (
+                  <button key={method.id} className={`btn btn-sm ${active ? "btn-primary" : ""}`} onClick={() => setPaymentMethod(method.id)} style={{ justifyContent: "center" }}>
+                    <Icon name={method.icon} size={12} color="currentColor"/>
+                    {lang === "fr" ? method.fr : method.en}
+                  </button>
+                );
+              })}
+            </div>
+
+            {paymentMethod === "cash" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "end" }}>
+                <label style={{ fontSize: 11, color: "var(--fg-2)" }}>{lang === "fr" ? "Montant recu" : "Received"}
+                  <input className="input" type="number" min="0" value={received} onChange={(e) => setReceived(e.target.value)} style={{ width: "100%", marginTop: 4, height: 38 }}/>
+                </label>
+                <button className="btn" onClick={() => setReceived(String(orderTotal.toFixed(2)))}>{lang === "fr" ? "Exact" : "Exact"}</button>
+                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--fg-2)" }}>
+                  <span>{lang === "fr" ? "Rendu" : "Change"}</span>
+                  <span className="mono">{money(changeDue)}</span>
+                </div>
+              </div>
+            )}
+
+            {currencyMismatch && (
+              <div style={{ color: "var(--rust-700)", background: "var(--rust-50)", border: "1px solid var(--rust-100)", borderRadius: 8, padding: 9, fontSize: 12 }}>
+                {lang === "fr" ? "Plusieurs devises dans le ticket." : "Multiple currencies in this ticket."}
+              </div>
+            )}
+
+            <button className="btn btn-primary" onClick={checkout} disabled={saving || !cartLines.length || currencyMismatch || !cashReady} style={{ height: 48, justifyContent: "center", fontSize: 15, fontWeight: 900 }}>
+              <Icon name="wallet" size={16} color="currentColor"/>
+              {saving ? "..." : (lang === "fr" ? `Payer ${money(orderTotal)}` : `Pay ${money(orderTotal)}`)}
+            </button>
+          </div>
+        </aside>
+      </div>
     </div>
   );
 };

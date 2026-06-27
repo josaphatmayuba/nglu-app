@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.117.19)
+- **FarmOS — POS : vraie caisse multi-lignes**. Remplacement du flux de vente unitaire par une interface POS avec catalogue, catégories, ticket permanent, quantités, remise, mise en attente, modes de paiement et encaissement multi-lignes. **Vérifié** : `npm.cmd run build` OK. [SCRUM]
+
+### Security (3.117.18)
+- **FarmOS — Dossier vétérinaire PDF : durcissement du champ `signature` (injection HTML/attribut)**. Dans `vetExamPdf`, `exam.signature` était interpolé brut dans `<img src="...">`, sans passer par l'échappement utilisé pour tous les autres champs : une valeur forgée pouvait fermer l'attribut et injecter du HTML dans le PDF rendu (Puppeteer). Ajout d'un helper `safeImageSrc` qui n'accepte qu'un data-URI image (`png/jpeg/gif/webp`, `svg+xml` exclu car porteur potentiel de JS) ; sinon l'image est omise. **Vérifié** : `npx tsc --noEmit` OK. [SCRUM]
+
 ### Fixed (3.117.17)
 - **FarmOS — Dashboard : dernier accès `speciesById` non sécurisé**. La liste des vaccins du tableau de bord lisait `.accentBg` sur un `speciesById()` potentiellement `undefined`. Fallback espèce inconnue ajouté. Scan complet du front effectué : plus aucun accès direct `speciesById(...).accentBg/.glyph` non protégé (les usages restants passent par `speciesFilter` toujours valide ou un guard). **Vérifié** : build farmos-app OK. [SCRUM]
 
