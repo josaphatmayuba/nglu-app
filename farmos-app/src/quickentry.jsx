@@ -942,13 +942,17 @@ const ProductionForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved
 // ─── Health (treatment / vaccine) ────────────────────────────────────────
 const HealthForm = ({ lang, defaultSpecies, enabledSpecies, context, onSaved, onClose }) => {
   const availableSpecies = activeSpeciesList(enabledSpecies);
-  const [kind, setKind] = React.useState("treatment");
+  const [kind, setKind] = React.useState(context?.kind || "treatment");
   const [form, setForm] = React.useState({
     date: new Date().toISOString().slice(0, 10),
     species: normalizeDefaultSpecies(context?.species || defaultSpecies, enabledSpecies),
     animal: context?.animalId != null ? String(context.animalId) : (context?.animalExternalId || ""),
     // Pré-sélection du type d'application depuis le bouton d'origine (Individuel / Lot).
     scope: context?.scope || "individual",
+    // Pré-remplissage depuis « Programmer maintenant » (rappel de vaccin en retard).
+    vaccine: context?.vaccine || "",
+    reason: context?.reason || "",
+    n: context?.n != null ? String(context.n) : "",
   });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const [liveAnimals, setLiveAnimals] = React.useState(null);

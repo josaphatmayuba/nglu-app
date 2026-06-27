@@ -538,7 +538,7 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {dayVacc.slice(0, 2).map((v) => {
-                      const sp = speciesById(v.species);
+                      const sp = speciesById(v.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
                       return (
                         <div key={v.id} style={{
                           fontSize: 10.5, padding: "2px 5px", borderRadius: 4,
@@ -1228,7 +1228,7 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {gestations.map((g) => {
-            const sp = speciesById(g.species);
+            const sp = speciesById(g.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
             const pct = (g.day / g.total) * 100;
             const locked = isSaleLockedStatus(g.animalStatus);
             return (

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.14)
+- **FarmOS — « Programmer maintenant » pré-remplit le rappel de vaccin (Calendrier)**. Le bouton des cartes « En retard » ouvrait la saisie rapide vide ; il passe désormais un contexte (`kind: vaccine`, espèce, nom du vaccin, nombre d'animaux) au tiroir Quick Entry pour pré-sélectionner l'onglet **Vaccin** et pré-remplir le vaccin/l'espèce/le nombre. `HealthForm` lit `context.kind`/`vaccine`/`reason`/`n`. **Vérifié** : build farmos-app OK. [SCRUM]
+
 ### Added (3.117.13)
 - **FarmOS — Benchmark interne par lot (COMP-P2-016, intra-organisation)**. Nouvelle section « Benchmark interne » dans l'écran Rapports : compare les **lots d'une même organisation entre eux** (taux de mortalité %, marge par tête) avec quartiles internes et repère sur la médiane (vert = meilleur que la médiane de vos lots). **Aucune donnée cross-organisation** — pas de risque de fuite inter-tenant. Logique de calcul extraite dans un module pur `farmos-benchmarks.ts` (quartiles par interpolation, métriques par lot, classement) **couvert par 8 tests unitaires**. Backend2 : `FarmosService.getBenchmarks` (agrège lots de l'org : effectif vivant, décès, revenus/coûts) + route `GET /farmos/benchmarks` (permission `readAll-farmos`). S'affiche seulement à partir de 2 lots. Suite backend au vert (59/59). **Vérifié** : `tsc --noEmit` + `jest` OK, build farmos-app OK. [SCRUM]
 
