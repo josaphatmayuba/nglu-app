@@ -194,6 +194,18 @@ export class UpdateAnimalDto {
   @ApiPropertyOptional() @IsOptional() @IsString() last_event?: string | null;
 }
 
+export class ImportAnimalsDto {
+  @ApiProperty({ type: [CreateAnimalDto], description: "Lignes d'animaux à importer (issues d'un CSV mappé côté client)." })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateAnimalDto)
+  rows: CreateAnimalDto[];
+
+  @ApiPropertyOptional({ default: false, description: "Import test : valide et détecte les doublons sans rien écrire." })
+  @IsOptional()
+  dryRun?: boolean;
+}
+
 export class CreateMedicineDto {
   @ApiProperty({ example: "Mastijet Fort" })
   @IsString()

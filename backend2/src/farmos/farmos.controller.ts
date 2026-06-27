@@ -22,6 +22,7 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
   ConsumeMedicineDto,
   CreateAnimalDto,
+  ImportAnimalsDto,
   CreateFarmosStaffDto,
   CreateDiseaseDto,
   CreateExpenseDto,
@@ -158,6 +159,13 @@ export class FarmosController {
   @Post("animals")
   createAnimal(@Body() body: CreateAnimalDto, @CurrentOrg() orgId: number) {
     return this.farmos.createAnimal(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Import animals in bulk from a mapped CSV (COMP-P1-001)." })
+  @Permissions("create-farmos")
+  @Post("animals/import")
+  importAnimals(@Body() body: ImportAnimalsDto, @CurrentOrg() orgId: number) {
+    return this.farmos.importAnimals(body, orgId);
   }
 
   @ApiOperation({ summary: "Update a FarmOS animal" })

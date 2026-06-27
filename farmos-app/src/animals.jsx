@@ -4,7 +4,7 @@
 
 import React from "react";
 import { Icon, AnimalGlyph } from "./icons";
-import { speciesById, t } from "./data";
+import { speciesById, SPECIES, t } from "./data";
 import { useDataRefresh } from "./use-data-refresh";
 import { SpeciesPillBar, FarmScore } from "./shell";
 import { api, adaptAnimal } from "./api";
@@ -141,6 +141,182 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
+// ─── Import CSV (COMP-P1-001) ────────────────────────────────────────────────
+// Parse un CSV (séparateur ; — même format que l'export ci-dessus). Gère les
+// guillemets/échappements et le BOM. Retourne { headers, rows }.
+function parseCsv(text) {
+  const clean = text.replace(/^﻿/, "");
+  const records = [];
+  let field = "";
+  let row = [];
+  let inQuotes = false;
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (clean[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ";") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); records.push(row); field = ""; row = []; }
+    else if (c === "\r") { /* ignore, handled by \n */ }
+    else field += c;
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); records.push(row); }
+  const nonEmpty = records.filter((r) => r.some((v) => String(v).trim() !== ""));
+  if (nonEmpty.length === 0) return { headers: [], rows: [] };
+  return { headers: nonEmpty[0].map((h) => h.trim()), rows: nonEmpty.slice(1) };
+}
+
+// Résout un libellé d'espèce (code, fr/en, singulier/pluriel) vers l'id canonique.
+function resolveSpecies(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v) return "";
+  for (const s of SPECIES) {
+    const labels = [s.id, s.fr, s.en, s.frSing, s.enSing]
+      .filter(Boolean).map((x) => String(x).toLowerCase());
+    if (labels.includes(v)) return s.id;
+  }
+  return v; // laissé tel quel → le backend rejettera si invalide
+}
+
+// Mappe un nom d'en-tête CSV (fr/en, accents/casse) vers un champ animal backend.
+const IMPORT_HEADER_MAP = {
+  nom: "name", name: "name",
+  id: "external_id", "external id": "external_id", "id externe": "external_id", tag: "external_id",
+  espece: "species", "espèce": "species", species: "species",
+  race: "race", breed: "race",
+  sexe: "sex", sex: "sex",
+  "date de naissance": "date_of_birth", "date of birth": "date_of_birth", dob: "date_of_birth",
+  poids: "weight", weight: "weight",
+  statut: "status", status: "status",
+  lot: "lot", batch: "lot",
+  batiment: "barn", "bâtiment": "barn", barn: "barn",
+  "dernier evenement": "last_event", "dernier événement": "last_event", "last event": "last_event",
+  "valeur estimee": "estimated_value", "valeur estimée": "estimated_value", "estimated value": "estimated_value",
+  nombre: "count", count: "count", effectif: "count",
+  salle: "room", room: "room", type: "type",
+};
+
+function mapCsvToAnimals({ headers, rows }) {
+  const fields = headers.map((h) => IMPORT_HEADER_MAP[h.trim().toLowerCase()] || null);
+  return rows.map((cells) => {
+    const obj = {};
+    fields.forEach((f, i) => {
+      if (!f) return;
+      let val = String(cells[i] ?? "").trim();
+      if (val === "") return;
+      if (f === "species") val = resolveSpecies(val);
+      if (f === "weight" || f === "estimated_value" || f === "count") {
+        const num = Number(String(val).replace(/[^\d.,-]/g, "").replace(",", "."));
+        if (!Number.isNaN(num)) obj[f] = num;
+        return;
+      }
+      obj[f] = val;
+    });
+    return obj;
+  });
+}
+
+const IMPORT_TEMPLATE_HEADERS = ["Nom", "ID", "Espèce", "Race", "Sexe", "Date de naissance", "Poids", "Statut", "Lot", "Bâtiment", "Nombre"];
+
+function ImportAnimalsModal({ lang, onClose, onDone }) {
+  const fr = lang === "fr";
+  const [parsed, setParsed] = React.useState(null); // { headers, rows }
+  const [mapped, setMapped] = React.useState([]);
+  const [result, setResult] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [fileName, setFileName] = React.useState("");
+
+  const onFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name);
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const p = parseCsv(String(reader.result || ""));
+      setParsed(p);
+      setMapped(mapCsvToAnimals(p));
+    };
+    reader.readAsText(file);
+  };
+
+  const run = async (dryRun) => {
+    if (!mapped.length) return;
+    setBusy(true);
+    try {
+      const res = await api.importAnimals(mapped, dryRun);
+      setResult(res);
+      if (!dryRun && res.inserted > 0) onDone?.();
+    } catch (err) {
+      setResult({ error: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadTemplate = () => downloadCsv("farmos-import-template.csv", [IMPORT_TEMPLATE_HEADERS]);
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 12, width: "min(640px,100%)", maxHeight: "90vh", overflow: "auto", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{fr ? "Importer des animaux (CSV)" : "Import animals (CSV)"}</h3>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={14} color="var(--ink-700)"/></button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+            <Icon name="upload" size={13} color="var(--ink-700)"/>{fr ? "Choisir un fichier" : "Choose file"}
+            <input type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }}/>
+          </label>
+          <button className="btn btn-sm btn-ghost" onClick={downloadTemplate}>
+            <Icon name="download" size={13} color="var(--ink-700)"/>{fr ? "Modèle CSV" : "CSV template"}
+          </button>
+          {fileName && <span style={{ fontSize: 12, color: "var(--fg-3)", alignSelf: "center" }}>{fileName}</span>}
+        </div>
+
+        {mapped.length > 0 && (
+          <div style={{ fontSize: 12.5, marginBottom: 10 }}>
+            {fr ? `${mapped.length} ligne(s) détectée(s).` : `${mapped.length} row(s) detected.`}
+            {mapped.some((m) => !m.species) && (
+              <div style={{ color: "var(--oxblood-700)", marginTop: 4 }}>
+                {fr ? "⚠ Certaines lignes n'ont pas d'espèce reconnue — elles seront ignorées." : "⚠ Some rows have no recognized species — they will be skipped."}
+              </div>
+            )}
+          </div>
+        )}
+
+        {result && !result.error && (
+          <div style={{ fontSize: 13, background: "var(--bg-2)", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+            <div><b>{result.dryRun ? (fr ? "Test (rien enregistré)" : "Test (nothing saved)") : (fr ? "Import terminé" : "Import done")}</b></div>
+            <div>{fr ? "Total" : "Total"}: {result.total} · {fr ? "Importables" : "Importable"}/{fr ? "importés" : "imported"}: {result.inserted} · {fr ? "Doublons ignorés" : "Duplicates skipped"}: {result.duplicates} · {fr ? "Erreurs" : "Errors"}: {result.errors?.length || 0}</div>
+            {result.errors?.length > 0 && (
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, maxHeight: 160, overflow: "auto" }}>
+                {result.errors.map((er, i) => (
+                  <li key={i} style={{ color: "var(--oxblood-700)" }}>{fr ? "Ligne" : "Line"} {er.line} · {er.field}: {er.message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {result?.error && <div style={{ color: "var(--oxblood-700)", fontSize: 13, marginBottom: 10 }}>{result.error}</div>}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button className="btn btn-sm btn-ghost" disabled={busy || !mapped.length} onClick={() => run(true)}>
+            {fr ? "Tester (sans enregistrer)" : "Test (no save)"}
+          </button>
+          <button className="btn btn-sm btn-primary" disabled={busy || !mapped.length} onClick={() => run(false)}>
+            {busy ? "…" : (fr ? "Importer" : "Import")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const isMobile = useIsMobile();
   const [selectedId, setSelectedId] = React.useState(null);
@@ -150,6 +326,7 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
   const [query, setQuery] = React.useState("");
   const [dateRange, setDateRange] = React.useState(() => defaultDateRange("all"));
   const [showFilters, setShowFilters] = React.useState(false);
+  const [showImport, setShowImport] = React.useState(false);
   const [advancedFilters, setAdvancedFilters] = React.useState(() => ({ ...EMPTY_ADVANCED_FILTERS }));
 
   const [reloadKey, setReloadKey] = React.useState(0);
@@ -283,6 +460,9 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
           <button className="btn btn-sm" onClick={exportFiltered}>
             <Icon name="download" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Exporter" : "Export"}
           </button>
+          <button className="btn btn-sm" onClick={() => setShowImport(true)}>
+            <Icon name="upload" size={13} color="var(--ink-700)"/>{lang === "fr" ? "Importer" : "Import"}
+          </button>
           <button className="btn btn-sm btn-primary" onClick={() => window.dispatchEvent(new CustomEvent("farmos:openEntry", { detail: "animal" }))}><Icon name="plus" size={13} color="#ECF1EC"/>{lang === "fr" ? "Nouvel animal" : "New animal"}</button>
         </div>
 
@@ -311,6 +491,14 @@ const Animals = ({ lang, speciesFilter, onSpeciesFilter, density }) => {
               : `The form and fields adapt automatically by species (${speciesFilter ? speciesById(speciesFilter).en : "all species shown"}).`}
           </span>
         </div>
+
+        {showImport && (
+          <ImportAnimalsModal
+            lang={lang}
+            onClose={() => setShowImport(false)}
+            onDone={() => setReloadKey((k) => k + 1)}
+          />
+        )}
       </div>
 
       {/* Detail drawer (desktop split only) */}

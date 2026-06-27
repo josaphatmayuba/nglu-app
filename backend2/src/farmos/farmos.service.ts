@@ -11,6 +11,7 @@ import { WorkflowService } from "../workflow/workflow.service";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
   CreateAnimalDto,
+  ImportAnimalsDto,
   CreateDiseaseDto,
   CreateExpenseDto,
   CreateMedicineDto,
@@ -511,6 +512,93 @@ export class FarmosService {
     const id = Number(result.insertId);
     await this.publishFarmosUpdate("createAnimal", ["animals"], "created", id, orgId);
     return this.getAnimal(id, orgId);
+  }
+
+  // Import en masse depuis un CSV mappé côté client (COMP-P1-001).
+  // - validation ligne par ligne (espèce requise/valide)
+  // - détection des doublons par external_id : dans le fichier ET contre la DB
+  // - dryRun : valide et compte sans rien écrire (import test)
+  async importAnimals(input: ImportAnimalsDto, orgId: number) {
+    const rows = Array.isArray(input.rows) ? input.rows : [];
+    const validSpecies = new Set(FARMOS_SPECIES as unknown as string[]);
+
+    // external_id déjà présents en base pour cet org (animaux actifs).
+    const existing = await this.db
+      .select({ externalId: farmosAnimals.externalId })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)));
+    const existingExtIds = new Set(
+      existing.map((r) => (r.externalId ?? "").trim().toLowerCase()).filter((v) => v),
+    );
+
+    const errors: { line: number; field: string; message: string }[] = [];
+    const seenInFile = new Set<string>();
+    const toInsert: { line: number; values: any }[] = [];
+    let duplicates = 0;
+
+    rows.forEach((row, idx) => {
+      const line = idx + 1;
+      const species = (row.species ?? "").toString().trim();
+      if (!species) {
+        errors.push({ line, field: "species", message: "Espèce requise." });
+        return;
+      }
+      if (!validSpecies.has(species)) {
+        errors.push({ line, field: "species", message: `Espèce invalide : ${species}.` });
+        return;
+      }
+      const extId = (row.external_id ?? "").toString().trim();
+      const extKey = extId.toLowerCase();
+      if (extKey) {
+        if (existingExtIds.has(extKey) || seenInFile.has(extKey)) {
+          duplicates += 1;
+          return; // doublon ignoré (pas une erreur bloquante)
+        }
+        seenInFile.add(extKey);
+      }
+      toInsert.push({
+        line,
+        values: {
+          organizationId: orgId,
+          externalId: extId || null,
+          name: row.name ?? null,
+          species,
+          race: row.race ?? null,
+          sex: row.sex ?? null,
+          dateOfBirth: row.date_of_birth ?? null,
+          weight: row.weight != null ? String(row.weight) : null,
+          weightUnit: row.weight_unit ?? "kg",
+          count: row.count ?? null,
+          lot: row.lot ?? null,
+          barn: row.barn ?? null,
+          room: row.room ?? null,
+          type: row.type ?? null,
+          status: row.status ?? "healthy",
+          motherId: row.mother_id ?? null,
+          fatherId: row.father_id ?? null,
+          estimatedValue: row.estimated_value != null ? String(row.estimated_value) : null,
+          lastEvent: row.last_event ?? null,
+        },
+      });
+    });
+
+    if (input.dryRun) {
+      return { dryRun: true, total: rows.length, inserted: toInsert.length, duplicates, errors };
+    }
+
+    let inserted = 0;
+    for (const item of toInsert) {
+      try {
+        await this.db.insert(farmosAnimals).values(item.values);
+        inserted += 1;
+      } catch (e) {
+        errors.push({ line: item.line, field: "_row", message: "Insertion échouée." });
+      }
+    }
+    if (inserted > 0) {
+      await this.publishFarmosUpdate("importAnimals", ["animals"], "created", 0, orgId);
+    }
+    return { dryRun: false, total: rows.length, inserted, duplicates, errors };
   }
 
   async updateAnimal(id: number, input: UpdateAnimalDto, orgId: number) {
