@@ -225,7 +225,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       <div class="steps-bar"><span class="seg" v-for="i in TOTAL" :key="i" :class="{ done: i <= step }"></span></div>
 
       <!-- Etape 1 : compte -->
-      <form v-if="step === 1" @submit.prevent="next">
+      <form v-if="step === 1" class="step-form" @submit.prevent="next">
         <div class="auth-row">
           <label>{{ t('Prénom','First name') }}<span class="field" :class="{err:fieldErr.firstName}"><i class="fi">👤</i><input v-model="reg.firstName" type="text" :placeholder="t('Marie','Mary')" /></span><small v-if="fieldErr.firstName" class="fe">{{ fieldErr.firstName }}</small></label>
           <label>{{ t('Nom','Last name') }}<span class="field" :class="{err:fieldErr.lastName}"><input v-model="reg.lastName" type="text" :placeholder="t('Dupont','Smith')" /></span><small v-if="fieldErr.lastName" class="fe">{{ fieldErr.lastName }}</small></label>
@@ -235,12 +235,14 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
           <span v-if="reg.password" class="pwd-bar"><i :style="{ width: (pwdScore/4*100)+'%', background: pwdColor }"></i></span>
           <small v-if="fieldErr.password" class="fe">{{ fieldErr.password }}</small>
         </label>
-        <button class="auth-btn">{{ t('Continuer →','Continue →') }}</button>
-        <p class="auth-alt">{{ t('Déjà un compte ?', 'Already have an account?') }} <a href="#/login" @click.prevent="go('#/login')">{{ t('Se connecter', 'Sign in') }}</a></p>
+        <div class="form-actions">
+          <button class="auth-btn">{{ t('Continuer →','Continue →') }}</button>
+          <p class="auth-alt">{{ t('Déjà un compte ?', 'Already have an account?') }} <a href="#/login" @click.prevent="go('#/login')">{{ t('Se connecter', 'Sign in') }}</a></p>
+        </div>
       </form>
 
       <!-- Etape 2 : organisation -->
-      <form v-else-if="step === 2" @submit.prevent="next">
+      <form v-else-if="step === 2" class="step-form" @submit.prevent="next">
         <div class="type-toggle">
           <button type="button" class="type-btn" :class="{active:accountType==='org'}" @click="setType('org')"><div class="ico">🏢</div><div class="tit">{{ t('Une entreprise','A company') }}</div><div class="des">{{ t('Équipe, plusieurs utilisateurs','Team, multiple users') }}</div></button>
           <button type="button" class="type-btn" :class="{active:accountType==='solo'}" @click="setType('solo')"><div class="ico">👤</div><div class="tit">{{ t('Moi seul','Just me') }}</div><div class="des">{{ t('Usage individuel','Individual use') }}</div></button>
@@ -256,7 +258,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       </form>
 
       <!-- Etape 3 : plan -->
-      <form v-else-if="step === 3" @submit.prevent="next">
+      <form v-else-if="step === 3" class="step-form" @submit.prevent="next">
         <p class="auth-sub">{{ t('Choisissez votre formule. Modifiable à tout moment.','Pick your plan. Change anytime.') }}</p>
         <div class="plan-list">
           <label class="plan-opt" v-for="p in plans" :key="p.v" :class="{sel:reg.plan===p.v}">
@@ -272,7 +274,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       </form>
 
       <!-- Etape 4 : confirmation -->
-      <form v-else @submit.prevent="submitSignup">
+      <form v-else class="step-form" @submit.prevent="submitSignup">
         <label>{{ t('Téléphone (RDC par défaut)','Phone (DRC default)') }}<input v-model="reg.phone" type="tel" placeholder="+243 …" /><small class="hint">{{ t('Pour sécuriser votre compte (optionnel).','To secure your account (optional).') }}</small></label>
         <div class="recap">
           <div class="recap-t">{{ t('Récapitulatif','Summary') }}</div>
@@ -299,50 +301,53 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 </template>
 
 <style scoped>
-.auth-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:32px 18px;background:linear-gradient(180deg,#f4faf6,#eef5f0)}
-.auth-logo{display:inline-flex;align-items:center;gap:9px;font-weight:850;font-size:22px;letter-spacing:-.5px;color:#0e2418;text-decoration:none}
+.auth-wrap{width:100%;box-sizing:border-box;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:24px;padding:36px 18px 44px;background:linear-gradient(180deg,#f8fcfa 0%,#eef7f1 58%,#e9f2ed 100%)}
+.auth-logo{display:inline-flex;align-items:center;gap:9px;font-weight:850;font-size:22px;letter-spacing:0;color:#0e2418;text-decoration:none}
 .auth-logo .mark,.ws-brand .mark{width:30px;height:30px;display:inline-grid;place-items:center}
 .auth-logo .mark svg,.ws-brand .mark svg{width:30px;height:30px}
-.auth-card{width:min(452px,94vw);background:#fff;border:1px solid #eef1f4;border-radius:24px;padding:34px 32px;box-shadow:0 40px 80px -38px rgba(20,40,30,.45),0 2px 8px -4px rgba(20,40,30,.08);display:flex;flex-direction:column;gap:16px}
-.auth-card h1{font-size:26px;letter-spacing:-.8px;font-weight:850;color:#0f1729;line-height:1.15}
+.auth-card{width:min(540px,calc(100vw - 32px));box-sizing:border-box;background:#fff;border:1px solid #e7eee9;border-radius:22px;padding:42px 40px 36px;box-shadow:0 34px 70px -36px rgba(15,35,26,.38),0 1px 2px rgba(15,35,26,.05);display:flex;flex-direction:column;gap:18px}
+.auth-card h1{max-width:none;margin:0;text-align:center;font-size:30px;letter-spacing:0;font-weight:850;color:#0f1729;line-height:1.12}
 .auth-sub{color:#6b7a90;font-size:14.5px;margin-top:-8px}
-.auth-card label{display:flex;flex-direction:column;gap:7px;font-size:12.5px;font-weight:700;color:#3a4a63;letter-spacing:.01em}
+.auth-card label{display:flex;flex-direction:column;gap:7px;font-size:13px;font-weight:750;color:#2d3d58;letter-spacing:0}
 /* wrapper champ avec icone */
-.field{display:flex;align-items:center;gap:9px;border:1.5px solid #e2e8f0;border-radius:12px;padding:0 13px;background:#fbfcfd;transition:.16s}
+.field{display:flex;align-items:center;gap:10px;border:1.5px solid #e2e8f0;border-radius:14px;padding:0 14px;background:#fbfcfd;transition:.16s}
 .field:focus-within{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
 .field.err{border-color:#dc2626;background:#fff}
 .field .fi{font-size:15px;opacity:.6;flex-shrink:0;line-height:1}
-.field input{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:12px 0;font-size:15px;font-family:inherit;color:#0f1729}
+.field input{flex:1;min-width:0;border:none!important;outline:none;background:transparent;padding:15px 0;font-size:15.5px;font-family:inherit;color:#0f1729}
 /* champs hors wrapper (select, slug, tel des autres etapes) */
-.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 13px;font-size:15px;font-family:inherit;color:#0f1729;outline:none;transition:.16s;background:#fbfcfd}
+.auth-card input[type=text],.auth-card input[type=email],.auth-card input[type=password],.auth-card input[type=tel],.auth-card select{width:100%;min-width:0;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:14px;padding:15px 14px;font-size:15.5px;font-family:inherit;color:#0f1729;outline:none;transition:.16s;background:#fbfcfd}
 .field input{border-radius:0!important}
 .auth-card input:not(.field input):focus,.auth-card select:focus{border-color:#1fbf73;background:#fff;box-shadow:0 0 0 3.5px rgba(31,191,115,.13)}
 .auth-card input.err{border-color:#dc2626}
-.auth-row{display:flex;gap:12px}
+.step-form{display:flex;flex-direction:column;gap:14px;margin-top:2px}
+.auth-row{display:flex;gap:14px}
 .auth-row label{flex:1;min-width:0}
 /* en-tete des etapes */
-.steps-head{display:flex;justify-content:space-between;align-items:baseline;margin-top:-6px}
-.step-count{font-size:12px;font-weight:800;color:#1fbf73}
+.steps-head{display:flex;justify-content:space-between;align-items:center;margin-top:-2px}
+.step-count{font-size:12px;font-weight:850;color:#0e7a48;background:#ecfdf3;border:1px solid #d7f4e4;border-radius:999px;padding:3px 9px}
 .fe{color:#dc2626;font-size:12px;font-weight:600}
 .hint{color:#94a0b4;font-size:12px;font-weight:600}
 .pwd-bar{height:4px;border-radius:99px;background:#e7ebf2;overflow:hidden;margin-top:2px}
 .pwd-bar i{display:block;height:100%;border-radius:99px;transition:.3s}
 .auth-check{flex-direction:row!important;align-items:flex-start;gap:9px;font-weight:600;color:#3a4a63;font-size:13.5px}
 .auth-check input{width:17px;height:17px;flex-shrink:0;margin-top:2px}
-.auth-btn{margin-top:4px;border:none;border-radius:13px;padding:14px 18px;font-size:15.5px;font-weight:800;letter-spacing:-.2px;cursor:pointer;background:linear-gradient(135deg,#22c97b,#0e7a48);color:#fff;transition:.16s;text-decoration:none;text-align:center;display:block;box-shadow:0 10px 22px -10px rgba(14,122,72,.7)}
+.auth-btn{width:100%;min-height:52px;margin-top:0;border:none;border-radius:14px;padding:14px 18px;font-size:15.5px;font-weight:850;letter-spacing:0;cursor:pointer;background:linear-gradient(135deg,#22c97b,#0e7a48);color:#fff;transition:.16s;text-decoration:none;text-align:center;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 14px 26px -14px rgba(14,122,72,.78)}
 .auth-btn:hover{filter:brightness(1.04);transform:translateY(-1px)}
 .auth-btn:active{transform:translateY(0)}
 .auth-btn:disabled{opacity:.6;cursor:default}
 .auth-btn.ghost{background:#fff;color:#0e7a48;border:1.5px solid #1fbf73}
 .btn-row{display:flex;gap:10px}
-.btn-row .auth-btn{flex:1}
-.btn-row .auth-btn.ghost{flex:0 0 auto}
+.btn-row .auth-btn{flex:1;width:auto}
+.btn-row .auth-btn.ghost{flex:0 0 auto;min-width:116px}
 .auth-err{color:#dc2626;font-size:13.5px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:9px 12px}
-.auth-alt{text-align:center;font-size:14px;color:#6b7a90}
+.form-actions{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding-top:6px}
+.form-actions .auth-alt{margin:0}
+.auth-alt{text-align:center;font-size:14px;color:#6b7a90;line-height:1.35}
 .auth-alt a{color:#0e7a48;font-weight:800;text-decoration:none}
 /* steps */
-.steps-bar{display:flex;gap:6px}
-.steps-bar .seg{flex:1;height:4px;border-radius:99px;background:#e7ebf2;transition:.35s}
+.steps-bar{display:flex;gap:8px}
+.steps-bar .seg{flex:1;height:5px;border-radius:99px;background:#e7ebf2;transition:.35s}
 .steps-bar .seg.done{background:#1fbf73}
 .step-label{font-size:13px;color:#94a0b4;font-weight:600;margin-bottom:2px}
 /* type toggle */
@@ -384,23 +389,29 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
 /* workspace */
 .ws-app{display:flex;min-height:100vh;background:#f4faf6}
 .ws-side{width:244px;background:#fff;border-right:1px solid #e7ebf2;padding:20px 12px}
-.ws-brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;letter-spacing:-.3px;color:#0e2418;padding:0 6px}
-.ws-side-sub{font-size:11px;color:#94a0b4;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:0 6px;margin:2px 0 18px}
+.ws-brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:16px;letter-spacing:0;color:#0e2418;padding:0 6px}
+.ws-side-sub{font-size:11px;color:#94a0b4;font-weight:700;text-transform:uppercase;letter-spacing:0;padding:0 6px;margin:2px 0 18px}
 .ws-nav{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;color:#3a4a63;cursor:pointer;margin-bottom:2px;font-size:14px;font-weight:600;transition:.12s}
 .ws-nav:hover{background:#eef5f0;color:#0e2418}
 .ws-nav.active{background:#f0fbf5;color:#0e7a48}
 .ws-main{flex:1;padding:30px 34px}
 .ws-banner{display:flex;justify-content:space-between;align-items:center;gap:14px;background:#fffbeb;border:1px solid #fde68a;color:#b45309;border-radius:12px;padding:13px 16px;margin-bottom:24px;font-size:14px}
 .btn-mini{background:#1fbf73;color:#fff;text-decoration:none;font-weight:700;font-size:13px;padding:7px 13px;border-radius:9px;white-space:nowrap}
-.ws-title{font-size:26px;font-weight:850;letter-spacing:-.7px;color:#0f1729}
+.ws-title{font-size:26px;font-weight:850;letter-spacing:0;color:#0f1729}
 .ws-sub{color:#6b7a90;margin:4px 0 26px}
-.ws-main h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#94a0b4;margin-bottom:12px}
+.ws-main h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0;color:#94a0b4;margin-bottom:12px}
 .mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
 .mod-card{background:#fff;border:1px solid #e7ebf2;border-radius:14px;padding:20px 12px;text-align:center;cursor:pointer;transition:.18s;text-decoration:none;display:block}
 .mod-card:hover{border-color:#9fe3c2;transform:translateY(-3px);box-shadow:0 12px 24px -14px rgba(20,40,30,.3)}
 .mod-card .ico{font-size:28px;line-height:1}
 .mod-card .nm{font-weight:700;margin-top:7px;font-size:14px;color:#0f1729}
 @media (max-width:600px){
+  .auth-wrap{gap:16px;padding:24px 14px 32px}
+  .auth-card{width:100%;padding:30px 20px 26px;border-radius:18px;gap:16px}
+  .auth-card h1{font-size:26px}
+  .auth-row{flex-direction:column;gap:12px}
+  .btn-row{flex-direction:column-reverse}
+  .btn-row .auth-btn,.btn-row .auth-btn.ghost{width:100%;min-width:0}
   .ws-side{width:62px;padding:14px 6px}
   .ws-brand span:not(.mark),.ws-side-sub,.ws-nav span{display:none}
   .ws-nav{justify-content:center}
