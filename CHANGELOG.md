@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.15)
+- **FarmOS — Écran Reproduction plantait (`Cannot read properties of undefined (reading 'accentBg')`)**. Le Livre de vêlage (P2-001) charge tous les événements de reproduction, y compris ceux dont l'espèce n'est pas résolue ; `speciesById()` renvoyait alors `undefined` et la timeline des gestations lisait `.accentBg` dessus → crash de l'écran `/farmos/reproduction`. Fallback ajouté sur espèce inconnue (timeline gestations + pastilles du calendrier). **Vérifié** : build farmos-app OK. [SCRUM]
+
 ### Fixed (3.117.14)
 - **FarmOS — « Programmer maintenant » pré-remplit le rappel de vaccin (Calendrier)**. Le bouton des cartes « En retard » ouvrait la saisie rapide vide ; il passe désormais un contexte (`kind: vaccine`, espèce, nom du vaccin, nombre d'animaux) au tiroir Quick Entry pour pré-sélectionner l'onglet **Vaccin** et pré-remplir le vaccin/l'espèce/le nombre. `HealthForm` lit `context.kind`/`vaccine`/`reason`/`n`. **Vérifié** : build farmos-app OK. [SCRUM]
 
