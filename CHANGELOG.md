@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.2)
+- **Auth Google — route bloquée par le middleware (403)**. Le whitelist du middleware déclarait `/googlelogin/login` alors que la route backend réelle est `POST /auth/google/login` (préfixe contrôleur `auth`). Sans correspondance, le `POST /api/auth/google/login` du front tombait en **403**. Corrigé dans `middleware/src/whitelist.js`. **Note déploiement** : middleware hors CI → scp + rebuild manuel sur dev ET prod. [SCRUM]
+
 ### Added (3.117.1)
 - **FarmOS — Rapport reproduction / portées (COMP-P2-009)**. Nouvel export CSV « Reproduction / portées » dans l'écran Rapports : par mise bas — date, mère, espèce, partenaire, nés vivants, mort-nés, momifiés, sevrés — **filtré par espèce** (utilisable pour les rapports porcins, et toutes espèces). Exploite les indicateurs de portée ajoutés en P2-007. Complète les exports inventaire/mortalité existants (filtrables par espèce → déjà des rapports porcins). Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

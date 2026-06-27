@@ -20,7 +20,7 @@ module.exports = [
 
   // ── Login social (public) ──────────────────────
   { method: 'POST', prefix: '/customer/login',                auth: false },
-  { method: 'POST', prefix: '/googlelogin/login',             auth: false },
+  { method: 'POST', prefix: '/auth/google/login',             auth: false },
 
   // ── Server-Sent Events (JWT requis) ───────────
   { method: 'GET',  prefix: '/events/me',                      auth: true  },
