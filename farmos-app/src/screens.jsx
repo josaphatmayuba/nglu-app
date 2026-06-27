@@ -1168,6 +1168,15 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   });
   const heatChartMax = Math.max(1, ...heatChartData.map((x) => x.count));
 
+  // Livre de vêlage (COMP-P2-001) : mises bas réelles + à venir, par mère.
+  const calvingSpecies = allGestations.filter((g) => !speciesFilter || g.species === speciesFilter);
+  const calvingDone = calvingSpecies
+    .filter((g) => g.complete)
+    .sort((a, b) => String(b.start).localeCompare(String(a.start)));
+  const calvingUpcoming = calvingSpecies
+    .filter((g) => !g.complete && g.due && g.due !== "—")
+    .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
@@ -1267,6 +1276,49 @@ const ReproScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Livre de vêlage (COMP-P2-001) — naissances réelles + mises bas attendues */}
+      <div className="card">
+        <div className="bilang" style={{ marginBottom: 12 }}>
+          <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 20, letterSpacing: "-0.01em" }}>{lang === "fr" ? "Livre de vêlage" : "Calving book"}</h3>
+          <span className="sec">{lang === "fr" ? "naissances & mises bas attendues" : "births & expected calvings"}</span>
+        </div>
+        {calvingUpcoming.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div className="overline" style={{ marginBottom: 6, color: "var(--clay-700)" }}>{lang === "fr" ? "Attendues" : "Upcoming"}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {calvingUpcoming.map((g) => (
+                <div key={g.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-1)", fontSize: 13 }}>
+                  <span className="italic-serif" style={{ color: "var(--ink-950)" }}>{g.motherName || g.animal}</span>
+                  <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    {g.partner && <span style={{ fontSize: 11, color: "var(--fg-3)" }}>♂ {g.partner}</span>}
+                    <span className="mono" style={{ fontSize: 11.5, color: g.soon ? "var(--rust-700)" : "var(--ink-700)" }}>{g.due}{g.soon ? (lang === "fr" ? " · imminent" : " · imminent") : ""}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="overline" style={{ marginBottom: 6, color: "var(--fg-3)" }}>{lang === "fr" ? "Naissances enregistrées" : "Recorded births"}</div>
+        {calvingDone.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucune mise bas enregistrée sur la période." : "No recorded calving for the period."}</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {calvingDone.map((g) => (
+              <div key={g.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px dashed var(--border-1)", fontSize: 13 }}>
+                <span className="italic-serif" style={{ color: "var(--ink-950)" }}>{g.motherName || g.animal}</span>
+                <span style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                  {g.partner && <span style={{ fontSize: 11, color: "var(--fg-3)" }}>♂ {g.partner}</span>}
+                  <span className="tag" style={{ background: "var(--solidite-50)", color: "var(--solidite-900)", fontSize: 11 }}>
+                    {Number(g.offspring) > 0 ? `${g.offspring} ${lang === "fr" ? "petit(s)" : "young"}` : (lang === "fr" ? "mise bas ✓" : "calved ✓")}
+                  </span>
+                  <span className="mono" style={{ fontSize: 11.5, color: "var(--ink-700)" }}>{g.start}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

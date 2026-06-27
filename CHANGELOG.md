@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.18)
+- **FarmOS — Livre de vêlage (COMP-P2-001)**. Nouvelle section « Livre de vêlage » dans l'écran Reproduction : liste des **mises bas attendues** (mère, partenaire ♂, date prévue, marqueur imminent) et des **naissances enregistrées** (mère, partenaire, nombre de petits, date), filtrées par espèce/période. Réutilise les événements de reproduction existants (`farmos_reproduction_events` : eventType, expected_due_date, offspring_count, breeding_type, sire) — aucune modification DB/backend. Adaptateur `adaptReproEvent` enrichi (champs `eventType`, `outcome`, `motherName`, `partner`, ajout non cassant). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.116.17)
 - **FarmOS — Notes terrain géolocalisées (COMP-P1-009)**. Nouvel écran « Notes terrain » : saisie d'une observation + capture de la position GPS via le navigateur (`navigator.geolocation`, haute précision), zone et lot optionnels, liste chronologique avec auteur/date, lien vers OpenStreetMap pour chaque note géolocalisée. Table `farmos_field_notes` (migration 0183, dans le journal Drizzle → auto au boot) : note, latitude/longitude/accuracy, zone_id, lot, photo_url, created_by, soft delete. Backend2 : `CreateFieldNoteDto`, service list/create/delete (filtrage par organisation), routes `GET/POST /farmos/field-notes` + `DELETE /farmos/field-notes/:id`. Front : entrée de menu, i18n FR/EN. Complète la carte/zones/bâtiments existants (non modifiés). Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
 
