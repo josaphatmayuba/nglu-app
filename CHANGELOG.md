@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.117.10)
+- **FarmOS — Alertes stock dédupliquées + 3 paliers de sévérité**. L'écran Alertes n'affiche plus de doublon quand plusieurs lignes de stock portent le même libellé (ex. « Tylan 200 ») : les alertes « Stock faible » sont regroupées par nom de produit (quantités cumulées, seuil le plus contraignant). Sévérité passée de 2 à 3 paliers — `critical` (qty < seuil/2), `high` (qty < seuil×0,75), `medium` (qty < seuil) — l'onglet « Moyenne » se remplit désormais pour le stock. Données toujours pilotées par la DB (`quantity`/`minQuantity`), rien en dur. `farmos-app/src/screens.jsx` (`deriveAlerts`). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.117.9)
 - **FarmOS — Import CSV de pesées (COMP-P2-014)**. Bouton « Importer pesées » dans la liste des animaux : upload d'un CSV (ID/tag, date, poids, unité, notes), l'animal est résolu par `external_id`/tag (ou id interne), validation ligne par ligne (animal trouvé, date, poids > 0), modèle CSV, **import test** (dryRun), erreurs ligne par ligne. Le poids courant de l'animal est mis à jour avec la pesée la plus récente importée. Backend2 : `ImportWeighingsDto`, `FarmosService.importWeighings` (résolution external_id, dryRun), route `POST /farmos/weighings/import` (permission `create-farmos`). Réutilise la table `farmos_weighings` existante — aucune migration. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app OK. [SCRUM]
 

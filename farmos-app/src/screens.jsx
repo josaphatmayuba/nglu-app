@@ -1778,18 +1778,31 @@ function deriveAlerts(animals, medicines, treatments, repro, diseases, lang) {
   const activeAnimals = (animals || []).filter(isActiveLivestock);
   const aMap = new Map(activeAnimals.map((a) => [a.id, a]));
   const dMap = new Map(diseases.map((d) => [d.id, d]));
-  // Low stock
+  // Low stock — regroupé par produit (même nom) pour éviter les doublons quand
+  // plusieurs lignes de stock portent le même libellé.
+  const stockByName = new Map();
   medicines.forEach((m) => {
-    const qty = Number(m.quantity);
     const min = m.minQuantity != null ? Number(m.minQuantity) : null;
-    if (min != null && qty < min) {
-      out.push({
-        id: `low-${m.id}`, kind: "stock", severity: qty < min / 2 ? "critical" : "high",
-        animal: m.name, animalId: m.kind === "feed" ? "Aliment" : "Médicament",
-        species: null, title: lang === "fr" ? `Stock faible · ${m.name}` : `Low stock · ${m.name}`,
-        subtitle: `${qty} ${m.unit || ""} restant · seuil ${min}`, date: "—", icon: "wheat",
-      });
+    if (min == null) return;
+    const key = (m.name || "").trim().toLowerCase();
+    const g = stockByName.get(key);
+    if (g) {
+      g.qty += Number(m.quantity) || 0;
+      g.min = Math.max(g.min, min); // seuil le plus contraignant
+    } else {
+      stockByName.set(key, { ref: m, qty: Number(m.quantity) || 0, min });
     }
+  });
+  stockByName.forEach((g) => {
+    const { ref: m, qty, min } = g;
+    if (qty >= min) return;
+    const severity = qty < min / 2 ? "critical" : qty < min * 0.75 ? "high" : "medium";
+    out.push({
+      id: `low-${m.id}`, kind: "stock", severity,
+      animal: m.name, animalId: m.kind === "feed" ? "Aliment" : "Médicament",
+      species: null, title: lang === "fr" ? `Stock faible · ${m.name}` : `Low stock · ${m.name}`,
+      subtitle: `${qty} ${m.unit || ""} restant · seuil ${min}`, date: "—", icon: "wheat",
+    });
   });
   // Active treatments with future withdrawal
   const today = new Date().toISOString().slice(0, 10);
