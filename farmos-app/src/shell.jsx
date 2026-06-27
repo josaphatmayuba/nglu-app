@@ -29,6 +29,7 @@ const NAV = [
 ];
 
 const NAV_SECONDARY = [
+  { id: "tasks",     icon: "list",      labelKey: "tasks" },
   { id: "employees", icon: "users",     labelKey: "employees" },
   { id: "settings",  icon: "settings",  labelKey: "settings" },
 ];

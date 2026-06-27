@@ -4,7 +4,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -2422,6 +2422,99 @@ export class FarmosService {
     }).$returningId();
     await this.publishFarmosUpdate("createWorkLog", ["workLogs"], "created", res.id, orgId);
     return { id: res.id };
+  }
+
+  // ─── Tasks (taches equipe, COMP-P1-010) ──────────────────────────────────
+  async listTasks(orgId: number, opts: { status?: string | null; assignedUserId?: number | null } = {}) {
+    const conds = [eq(farmosTasks.organizationId, orgId), eq(farmosTasks.isActive, 1)];
+    if (opts.status) conds.push(eq(farmosTasks.status, opts.status));
+    if (opts.assignedUserId) conds.push(eq(farmosTasks.assignedUserId, opts.assignedUserId));
+    return this.db
+      .select({
+        id: farmosTasks.id,
+        title: farmosTasks.title,
+        description: farmosTasks.description,
+        status: farmosTasks.status,
+        priority: farmosTasks.priority,
+        assignedUserId: farmosTasks.assignedUserId,
+        dueDate: farmosTasks.dueDate,
+        animalId: farmosTasks.animalId,
+        lot: farmosTasks.lot,
+        buildingId: farmosTasks.buildingId,
+        zoneId: farmosTasks.zoneId,
+        photoUrl: farmosTasks.photoUrl,
+        doneAt: farmosTasks.doneAt,
+        createdAt: farmosTasks.createdAt,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(farmosTasks)
+      .leftJoin(users, eq(users.id, farmosTasks.assignedUserId))
+      .where(and(...conds))
+      .orderBy(desc(farmosTasks.id));
+  }
+
+  async createTask(input: any, orgId: number, currentUserId: number) {
+    const [res] = await this.db.insert(farmosTasks).values({
+      organizationId: orgId,
+      title: input.title,
+      description: input.description ?? null,
+      status: input.status ?? "todo",
+      priority: input.priority ?? "medium",
+      assignedUserId: input.assigned_user_id ?? null,
+      dueDate: input.due_date ?? null,
+      animalId: input.animal_id ?? null,
+      lot: input.lot ?? null,
+      buildingId: input.building_id ?? null,
+      zoneId: input.zone_id ?? null,
+      photoUrl: input.photo_url ?? null,
+      doneAt: input.status === "done" ? new Date() : null,
+      createdBy: currentUserId ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createTask", ["tasks"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  private async getTaskRow(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(farmosTasks)
+      .where(and(eq(farmosTasks.id, id), eq(farmosTasks.organizationId, orgId), eq(farmosTasks.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Tâche introuvable.");
+    return row;
+  }
+
+  async updateTask(id: number, input: any, orgId: number) {
+    const current = await this.getTaskRow(id, orgId);
+    const patch: Record<string, unknown> = {};
+    if (input.title !== undefined) patch.title = input.title;
+    if (input.description !== undefined) patch.description = input.description;
+    if (input.priority !== undefined) patch.priority = input.priority;
+    if (input.assigned_user_id !== undefined) patch.assignedUserId = input.assigned_user_id;
+    if (input.due_date !== undefined) patch.dueDate = input.due_date;
+    if (input.animal_id !== undefined) patch.animalId = input.animal_id;
+    if (input.lot !== undefined) patch.lot = input.lot;
+    if (input.building_id !== undefined) patch.buildingId = input.building_id;
+    if (input.zone_id !== undefined) patch.zoneId = input.zone_id;
+    if (input.photo_url !== undefined) patch.photoUrl = input.photo_url;
+    if (input.status !== undefined) {
+      patch.status = input.status;
+      // Trace l'achèvement : done_at posé au passage à "done", effacé sinon.
+      patch.doneAt = input.status === "done" ? (current.doneAt ?? new Date()) : null;
+    }
+    if (Object.keys(patch).length === 0) return { id };
+    await this.db.update(farmosTasks).set(patch).where(eq(farmosTasks.id, id));
+    await this.publishFarmosUpdate("updateTask", ["tasks"], "updated", id, orgId);
+    return { id };
+  }
+
+  async deleteTask(id: number, orgId: number) {
+    await this.getTaskRow(id, orgId);
+    await this.db.update(farmosTasks).set({ isActive: 0 }).where(eq(farmosTasks.id, id));
+    await this.publishFarmosUpdate("deleteTask", ["tasks"], "deleted", id, orgId);
+    return { message: "Tâche supprimée." };
   }
 
   async listMortalityEvents(orgId: number) {

@@ -338,6 +338,11 @@ export const api = {
   createZone: (body) => jsonFetch("/zones", { method: "POST", body: JSON.stringify(body) }),
   updateZone: (id, body) => jsonFetch(`/zones/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteZone: (id) => jsonFetch(`/zones/${id}`, { method: "DELETE" }),
+  // Tâches équipe (COMP-P1-010)
+  listTasks: (params = {}) => jsonFetch(`/tasks${buildQuery(params)}`),
+  createTask: (body) => jsonFetch("/tasks", { method: "POST", body: JSON.stringify(body) }),
+  updateTask: (id, body) => jsonFetch(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteTask: (id) => jsonFetch(`/tasks/${id}`, { method: "DELETE" }),
   // Bâtiments
   listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),

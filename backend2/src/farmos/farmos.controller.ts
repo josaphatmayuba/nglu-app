@@ -37,6 +37,8 @@ import {
   CreateFarmosDocumentDto,
   UpsertFarmosBuildingDto,
   CreateWorkLogDto,
+  CreateTaskDto,
+  UpdateTaskDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
@@ -862,6 +864,40 @@ export class FarmosController {
   @Post("work-logs")
   createWorkLog(@Body() body: CreateWorkLogDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
     return this.farmos.createWorkLog(body, orgId, userId);
+  }
+
+  // ─── Tasks (taches equipe, COMP-P1-010) ──────────────────────────────────
+
+  @ApiOperation({ summary: "List team tasks. Optional ?status, ?assigned_user_id." })
+  @Permissions("readAll-farmos")
+  @Get("tasks")
+  listTasks(
+    @CurrentOrg() orgId: number,
+    @Query("status") status?: string,
+    @Query("assigned_user_id") assignedUserId?: string,
+  ) {
+    return this.farmos.listTasks(orgId, { status: status || null, assignedUserId: assignedUserId ? Number(assignedUserId) : null });
+  }
+
+  @ApiOperation({ summary: "Create a team task." })
+  @Permissions("create-farmos")
+  @Post("tasks")
+  createTask(@Body() body: CreateTaskDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createTask(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Update a team task (status, assignee, fields)." })
+  @Permissions("update-farmos")
+  @Patch("tasks/:id")
+  updateTask(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateTaskDto, @CurrentOrg() orgId: number) {
+    return this.farmos.updateTask(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a team task." })
+  @Permissions("delete-farmos")
+  @Delete("tasks/:id")
+  deleteTask(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteTask(id, orgId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────

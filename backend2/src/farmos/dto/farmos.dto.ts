@@ -641,3 +641,38 @@ export class CreateProductionLogDto {
   @IsOptional() quality?: Record<string, unknown> | null;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
+
+export const FARMOS_TASK_STATUSES = ["todo", "in_progress", "done", "postponed"] as const;
+export const FARMOS_TASK_PRIORITIES = ["low", "medium", "high", "critical"] as const;
+
+export class CreateTaskDto {
+  @ApiProperty({ example: "Vacciner le lot A" }) @IsString() @IsNotEmpty() title: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;
+  @ApiPropertyOptional({ enum: FARMOS_TASK_STATUSES, default: "todo" })
+  @IsOptional() @IsString() @IsIn(FARMOS_TASK_STATUSES as unknown as string[]) status?: string;
+  @ApiPropertyOptional({ enum: FARMOS_TASK_PRIORITIES, default: "medium" })
+  @IsOptional() @IsString() @IsIn(FARMOS_TASK_PRIORITIES as unknown as string[]) priority?: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() assigned_user_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() due_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() zone_id?: number | null;
+  @ApiPropertyOptional({ description: "Photo (data URL ou URL)." }) @IsOptional() @IsString() photo_url?: string | null;
+}
+
+export class UpdateTaskDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() title?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;
+  @ApiPropertyOptional({ enum: FARMOS_TASK_STATUSES })
+  @IsOptional() @IsString() @IsIn(FARMOS_TASK_STATUSES as unknown as string[]) status?: string;
+  @ApiPropertyOptional({ enum: FARMOS_TASK_PRIORITIES })
+  @IsOptional() @IsString() @IsIn(FARMOS_TASK_PRIORITIES as unknown as string[]) priority?: string;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() assigned_user_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() due_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() building_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() zone_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() photo_url?: string | null;
+}

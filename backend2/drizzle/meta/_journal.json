@@ -1107,6 +1107,13 @@
                         "when":  1780581600000,
                         "tag":  "0181_org_plan",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  158,
+                        "version":  "5",
+                        "when":  1780585200000,
+                        "tag":  "0182_farmos_tasks",
+                        "breakpoints":  true
                     }
                 ]
 }

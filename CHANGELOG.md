@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.16)
+- **FarmOS — Tâches d'équipe (COMP-P1-010)**. Nouveau module de tâches assignées, distinct du journal de travail (`farmos_work_logs`). Table `farmos_tasks` (migration 0182, dans le journal Drizzle → auto-appliquée au boot) : titre, description, statut (todo/in_progress/done/postponed), priorité (low/medium/high/critical), assigné, échéance, liaison optionnelle animal/lot/bâtiment/zone, photo, `done_at`. Backend2 : DTOs `CreateTaskDto`/`UpdateTaskDto`, `FarmosService` list/create/update/delete (soft delete `is_active=0`, `done_at` posé/effacé selon le statut, filtrage par organisation), routes `GET/POST /farmos/tasks` + `PATCH/DELETE /farmos/tasks/:id` (permissions read/create/update/delete-farmos). Front farmos-app : écran **Tâches** (vue colonnes par statut, déplacement par boutons, filtre par assigné, retards mis en avant), modal de création (assignation à un membre du staff, priorité, échéance, lot), entrée de menu, i18n FR/EN. Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.116.15)
 - **FarmOS — Export CSV des rapports (COMP-P1-007)**. Nouveau bloc « Exports CSV · données réelles » dans l'écran Rapports : export **Inventaire animaux** (nom, ID, espèce, race, sexe, naissance, poids, statut, lot, bâtiment, effectif) et **Mortalité** (date, espèce, cause, lieu, nombre, perte estimée, notes), au format CSV exploitable en tableur (séparateur `;`, BOM UTF-8), **filtré par l'espèce sélectionnée**. Boutons désactivés si aucune donnée. Complète les rapports PDF/impression existants sans les modifier. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

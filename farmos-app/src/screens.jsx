@@ -3441,6 +3441,180 @@ function FarmosStaffModal({ lang, onClose, onSaved }) {
   );
 }
 
+// ─── TASKS (taches equipe, COMP-P1-010) ─────────────────────────────────
+const TASK_STATUSES = [
+  { id: "todo",        fr: "À faire",    en: "To do" },
+  { id: "in_progress", fr: "En cours",   en: "In progress" },
+  { id: "done",        fr: "Terminé",    en: "Done" },
+  { id: "postponed",   fr: "Reporté",    en: "Postponed" },
+];
+const TASK_PRIORITIES = [
+  { id: "low",      fr: "Basse",    en: "Low",      color: "var(--fg-3)" },
+  { id: "medium",   fr: "Moyenne",  en: "Medium",   color: "var(--clay-700)" },
+  { id: "high",     fr: "Haute",    en: "High",     color: "var(--oxblood-700)" },
+  { id: "critical", fr: "Critique", en: "Critical", color: "var(--rust-700)" },
+];
+
+const TasksScreen = ({ lang }) => {
+  const fr = lang === "fr";
+  const [tasks, setTasks] = React.useState([]);
+  const [staff, setStaff] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [assigneeFilter, setAssigneeFilter] = React.useState("");
+  const refresh = useDataRefresh(["tasks", "staff"]);
+
+  const reload = React.useCallback(() => {
+    setLoading(true);
+    Promise.all([api.listTasks(), api.listFarmosStaff().catch(() => [])])
+      .then(([t, s]) => { setTasks(Array.isArray(t) ? t : []); setStaff(Array.isArray(s) ? s : []); setErr(null); })
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { reload(); }, [reload, refresh]);
+
+  const fullName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(" ") || u?.email || (u?.id ? `#${u.id}` : "—");
+  const staffName = (id) => { const u = staff.find((s) => s.id === id); return u ? fullName(u) : null; };
+  const prio = (id) => TASK_PRIORITIES.find((p) => p.id === id) || TASK_PRIORITIES[1];
+  const today = new Date().toISOString().slice(0, 10);
+
+  const visible = tasks.filter((t) => !assigneeFilter || String(t.assignedUserId) === assigneeFilter);
+
+  const setStatus = async (task, status) => {
+    try { await api.updateTask(task.id, { status }); reload(); }
+    catch (e) { alert(e.message); }
+  };
+  const removeTask = async (task) => {
+    if (!window.confirm(fr ? "Supprimer cette tâche ?" : "Delete this task?")) return;
+    try { await api.deleteTask(task.id); reload(); }
+    catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="overline" style={{ marginBottom: 4 }}>{fr ? "Tâches · Tasks" : "Tasks · Tâches"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+            {fr ? "Tâches de l'équipe" : "Team tasks"}
+          </h1>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select className="input" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} style={{ minWidth: 160 }}>
+            <option value="">{fr ? "Tous les assignés" : "All assignees"}</option>
+            {staff.map((u) => <option key={u.id} value={String(u.id)}>{fullName(u)}</option>)}
+          </select>
+          <button className="btn btn-sm btn-primary" onClick={() => setAddOpen(true)}>
+            <Icon name="plus" size={13} color="#ECF1EC"/>{fr ? "Nouvelle tâche" : "New task"}
+          </button>
+        </div>
+      </div>
+
+      {err && <div style={{ color: "var(--oxblood-700)", fontSize: 13 }}>{err}</div>}
+      {loading && <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{fr ? "Chargement…" : "Loading…"}</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, alignItems: "start" }}>
+        {TASK_STATUSES.map((col) => {
+          const colTasks = visible.filter((t) => t.status === col.id);
+          return (
+            <div key={col.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="overline" style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>{fr ? col.fr : col.en}</span>
+                <span className="mono" style={{ color: "var(--fg-3)" }}>{colTasks.length}</span>
+              </div>
+              {colTasks.length === 0 && <div style={{ fontSize: 11.5, color: "var(--fg-3)", padding: "8px 0" }}>—</div>}
+              {colTasks.map((t) => {
+                const p = prio(t.priority);
+                const overdue = t.dueDate && t.dueDate < today && t.status !== "done";
+                return (
+                  <div key={t.id} className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6, borderLeft: `3px solid ${p.color}` }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--ink-950)" }}>{t.title}</div>
+                    {t.description && <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{t.description}</div>}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 11, color: "var(--ink-700)" }}>
+                      {t.assignedUserId && <span>👤 {staffName(t.assignedUserId) || `#${t.assignedUserId}`}</span>}
+                      {t.dueDate && <span style={{ color: overdue ? "var(--rust-700)" : "var(--fg-3)" }}>📅 {t.dueDate}{overdue ? (fr ? " (retard)" : " (overdue)") : ""}</span>}
+                      {t.lot && <span>🏷 {t.lot}</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 2 }}>
+                      {TASK_STATUSES.filter((s) => s.id !== t.status).map((s) => (
+                        <button key={s.id} className="btn btn-sm btn-ghost" style={{ fontSize: 10.5, padding: "2px 6px" }} onClick={() => setStatus(t, s.id)}>
+                          → {fr ? s.fr : s.en}
+                        </button>
+                      ))}
+                      <button className="btn btn-sm btn-ghost" style={{ fontSize: 10.5, padding: "2px 6px", color: "var(--oxblood-700)" }} onClick={() => removeTask(t)}>
+                        <Icon name="trash" size={11} color="var(--oxblood-700)"/>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {addOpen && <TaskCreateModal lang={lang} staff={staff} onClose={() => setAddOpen(false)} onSaved={() => { setAddOpen(false); reload(); }}/>}
+    </div>
+  );
+};
+
+function TaskCreateModal({ lang, staff, onClose, onSaved }) {
+  const fr = lang === "fr";
+  const [form, setForm] = React.useState({ title: "", description: "", priority: "medium", assigned_user_id: "", due_date: "", lot: "" });
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const fullName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(" ") || u?.email || `#${u?.id}`;
+
+  const submit = async () => {
+    if (!form.title.trim()) { setError(fr ? "Le titre est requis." : "Title is required."); return; }
+    setBusy(true); setError(null);
+    try {
+      await api.createTask({
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        priority: form.priority,
+        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
+        due_date: form.due_date || null,
+        lot: form.lot.trim() || null,
+      });
+      onSaved();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 12, width: "min(520px,100%)", maxHeight: "90vh", overflow: "auto", padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{fr ? "Nouvelle tâche" : "New task"}</h3>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={14} color="var(--ink-700)"/></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input className="input" placeholder={fr ? "Titre *" : "Title *"} value={form.title} onChange={(e) => set("title", e.target.value)}/>
+          <textarea className="input" placeholder={fr ? "Description" : "Description"} rows={3} value={form.description} onChange={(e) => set("description", e.target.value)}/>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <select className="input" value={form.priority} onChange={(e) => set("priority", e.target.value)}>
+              {TASK_PRIORITIES.map((p) => <option key={p.id} value={p.id}>{fr ? p.fr : p.en}</option>)}
+            </select>
+            <input className="input" type="date" value={form.due_date} onChange={(e) => set("due_date", e.target.value)}/>
+          </div>
+          <select className="input" value={form.assigned_user_id} onChange={(e) => set("assigned_user_id", e.target.value)}>
+            <option value="">{fr ? "Assigner à… (optionnel)" : "Assign to… (optional)"}</option>
+            {staff.map((u) => <option key={u.id} value={String(u.id)}>{fullName(u)}</option>)}
+          </select>
+          <input className="input" placeholder={fr ? "Lot (optionnel)" : "Batch (optional)"} value={form.lot} onChange={(e) => set("lot", e.target.value)}/>
+          {error && <div style={{ color: "var(--oxblood-700)", fontSize: 12.5 }}>{error}</div>}
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>{fr ? "Annuler" : "Cancel"}</button>
+          <button className="btn btn-sm btn-primary" disabled={busy} onClick={submit}>{busy ? "…" : (fr ? "Créer" : "Create")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const EmployeesScreen = ({ lang }) => {
   const [staff, setStaff] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -6802,4 +6976,4 @@ const ForecastScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }
   );
 };
 
-export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, EmployeesScreen, SettingsScreen, ForecastScreen };
+export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, EmployeesScreen, SettingsScreen, ForecastScreen };

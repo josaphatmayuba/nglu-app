@@ -2305,6 +2305,28 @@ export const farmosWorkLogs = mysqlTable("farmos_work_logs", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Taches assignees a l'equipe (COMP-P1-010) — distinct de farmosWorkLogs.
+export const farmosTasks = mysqlTable("farmos_tasks", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 20 }).default("todo").notNull(),
+  priority: varchar("priority", { length: 20 }).default("medium").notNull(),
+  assignedUserId: bigint("assigned_user_id", { mode: "number" }),
+  dueDate: date("due_date", { mode: "string" }),
+  animalId: bigint("animal_id", { mode: "number" }),
+  lot: varchar("lot", { length: 255 }),
+  buildingId: bigint("building_id", { mode: "number" }),
+  zoneId: bigint("zone_id", { mode: "number" }),
+  photoUrl: text("photo_url"),
+  doneAt: timestamp("done_at"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosVetExams = mysqlTable("farmos_vet_exams", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
