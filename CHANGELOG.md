@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.12)
+- **FarmOS — Performance grands troupeaux : liste animaux paginée (COMP-P1-014)**. La table des animaux ne rendait aucune limite de lignes (tout le cheptel d'un coup → lent au-delà de quelques milliers d'animaux). Affichage désormais plafonné à 200 lignes avec bouton « Afficher plus » (par tranches de 200), sur desktop et mobile ; le cap se réinitialise quand la liste filtrée change (recherche/filtre/tri). La recherche et le filtrage restent sur l'ensemble des données ; seul le rendu DOM est limité. Aucune dépendance ajoutée. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Fixed (3.117.11)
 - **Auth Google — `GOOGLE_CLIENT_ID` jamais transmis au backend**. Le service `backend2` du compose liste explicitement ses variables via `environment:` ; `GOOGLE_CLIENT_ID` n'y figurait pas, donc même renseigne dans `.env` il n'atteignait jamais le conteneur (`env.google.clientId` vide → endpoint Google en « non configure »). Ajout de `GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}` au backend2 dans `docker-compose.dev.yml` et `docker-compose.prod.yml`. La valeur runtime reste dans le `.env` serveur (non versionne). [SCRUM]
 

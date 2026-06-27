@@ -711,15 +711,27 @@ const AdvancedAnimalFilters = ({ lang, value, onChange, onReset, statusOptions, 
   );
 };
 
+const ANIMAL_PAGE_SIZE = 200; // COMP-P1-014 : cap d'affichage pour rester rapide sur gros troupeaux.
+
 const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
   const isMobile = useIsMobile();
   const rowH = density === "compact" ? 38 : 50;
+  // Pagination "afficher plus" : on ne rend qu'une tranche, on agrandit a la demande.
+  const [shown, setShown] = React.useState(ANIMAL_PAGE_SIZE);
+  // Reset du cap quand la liste filtree change de taille (recherche/filtre/tri).
+  React.useEffect(() => { setShown(ANIMAL_PAGE_SIZE); }, [animals.length]);
+  const visible = animals.slice(0, shown);
+  const hasMore = animals.length > shown;
+  const remaining = animals.length - shown;
+  const moreLabel = lang === "fr"
+    ? `Afficher plus (${Math.min(ANIMAL_PAGE_SIZE, remaining)} / ${remaining} restants)`
+    : `Show more (${Math.min(ANIMAL_PAGE_SIZE, remaining)} / ${remaining} left)`;
 
   // Mobile: stacked cards, no inner scroll, the page scrolls naturally.
   if (isMobile) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {animals.map((a) => {
+        {visible.map((a) => {
           const sp = speciesById(a.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
           const sel = selectedId === a.id;
           const locked = isSaleLockedAnimal(a);
@@ -760,6 +772,11 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
             </div>
           );
         })}
+        {hasMore && (
+          <button className="btn btn-sm" style={{ alignSelf: "center", marginTop: 4 }} onClick={() => setShown((n) => n + ANIMAL_PAGE_SIZE)}>
+            {moreLabel}
+          </button>
+        )}
       </div>
     );
   }
@@ -782,7 +799,7 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
         <span>{lang === "fr" ? "Dernier évent." : "Last event"}</span>
         <span style={{ textAlign: "right" }}>{lang === "fr" ? "Prod." : "Prod."}</span>
       </div>
-      {animals.map((a) => {
+      {visible.map((a) => {
         const sp = speciesById(a.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--ink-50)" };
         const sel = selectedId === a.id;
         const locked = isSaleLockedAnimal(a);
@@ -827,6 +844,11 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
           </div>
         );
       })}
+      {hasMore && (
+        <div style={{ padding: "12px 14px", textAlign: "center", borderTop: "1px solid var(--border-1)" }}>
+          <button className="btn btn-sm" onClick={() => setShown((n) => n + ANIMAL_PAGE_SIZE)}>{moreLabel}</button>
+        </div>
+      )}
       </div>
     </div>
   );
