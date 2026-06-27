@@ -3264,17 +3264,24 @@ function downloadReportCsv(filename, rows) {
 const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const currencyMeta = useCurrencyCatalog();
   const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
-  const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], loading: true });
+  const [hcData, setHcData] = React.useState({ buildings: [], animals: [], mortality: [], repro: [], loading: true });
   // Données restreintes à l'espèce sélectionnée (null = toutes espèces).
   const fAnimals = React.useMemo(() => (speciesFilter ? hcData.animals.filter((a) => a.species === speciesFilter) : hcData.animals), [hcData.animals, speciesFilter]);
   const fMortality = React.useMemo(() => (speciesFilter ? hcData.mortality.filter((m) => m.species === speciesFilter) : hcData.mortality), [hcData.mortality, speciesFilter]);
   const speciesLabel = speciesFilter ? (lang === "fr" ? speciesById(speciesFilter)?.fr : speciesById(speciesFilter)?.en) : null;
   React.useEffect(() => {
     let cancel = false;
-    Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => [])])
-      .then(([b, a, m]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], mortality: Array.isArray(m) ? m : [], loading: false }); });
+    Promise.all([api.listBuildings().catch(() => []), api.listAnimals().catch(() => []), api.listMortalityEvents().catch(() => []), api.listReproductionEvents().catch(() => [])])
+      .then(([b, a, m, r]) => { if (!cancel) setHcData({ buildings: Array.isArray(b) ? b : [], animals: Array.isArray(a) ? a : [], mortality: Array.isArray(m) ? m : [], repro: Array.isArray(r) ? r : [], loading: false }); });
     return () => { cancel = true; };
   }, []);
+  // Mises bas (event_type birthing) adaptées, filtrées par espèce.
+  const fCalvings = React.useMemo(() => {
+    const aMap = new Map(hcData.animals.map((a) => [a.id, a]));
+    return hcData.repro
+      .map((e) => adaptReproEvent(e, aMap))
+      .filter((g) => g.complete && (!speciesFilter || g.species === speciesFilter));
+  }, [hcData.repro, hcData.animals, speciesFilter]);
   const reports = [
     { fr: "Rapport sanitaire mensuel", en: "Monthly health report", icon: "pulse", color: "var(--health-500)", date: "26 mai 2026", size: "12 p." },
     { fr: "Production laitière · trimestre", en: "Milk production · quarter", icon: "droplet", color: "var(--pertinence-500)", date: "1ᵉʳ avril 2026", size: "18 p." },
@@ -3321,9 +3328,21 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     ]);
     downloadReportCsv(`farmos-mortalite-${speciesFilter || "tous"}-${today}.csv`, [headers, ...rows]);
   };
+  // Rapport reproduction / portées (COMP-P2-009) — utile surtout porc.
+  const exportReproCsv = () => {
+    const headers = lang === "fr"
+      ? ["Date", "Mère", "Espèce", "Partenaire", "Nés vivants", "Mort-nés", "Momifiés", "Sevrés"]
+      : ["Date", "Mother", "Species", "Partner", "Live born", "Stillborn", "Mummified", "Weaned"];
+    const rows = fCalvings.map((g) => [
+      g.start || "", g.motherName || g.animal || "", speciesName(g.species), g.partner || "",
+      g.offspring ?? "", g.stillborn ?? "", g.mummified ?? "", g.weaned ?? "",
+    ]);
+    downloadReportCsv(`farmos-reproduction-${speciesFilter || "tous"}-${today}.csv`, [headers, ...rows]);
+  };
   const csvExports = [
     { fr: "Inventaire animaux (CSV)", en: "Animal inventory (CSV)", descFr: `${fAnimals.length} animal(aux)`, descEn: `${fAnimals.length} animal(s)`, action: exportInventoryCsv, disabled: fAnimals.length === 0 },
     { fr: "Mortalité (CSV)", en: "Mortality (CSV)", descFr: `${fMortality.length} décès`, descEn: `${fMortality.length} death(s)`, action: exportMortalityCsv, disabled: fMortality.length === 0 },
+    { fr: "Reproduction / portées (CSV)", en: "Reproduction / litters (CSV)", descFr: `${fCalvings.length} mise(s) bas`, descEn: `${fCalvings.length} calving(s)`, action: exportReproCsv, disabled: fCalvings.length === 0 },
   ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>

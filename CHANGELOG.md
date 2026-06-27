@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.1)
+- **FarmOS — Rapport reproduction / portées (COMP-P2-009)**. Nouvel export CSV « Reproduction / portées » dans l'écran Rapports : par mise bas — date, mère, espèce, partenaire, nés vivants, mort-nés, momifiés, sevrés — **filtré par espèce** (utilisable pour les rapports porcins, et toutes espèces). Exploite les indicateurs de portée ajoutés en P2-007. Complète les exports inventaire/mortalité existants (filtrables par espèce → déjà des rapports porcins). Aucune modification DB/backend. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.117.0)
 - **Authentification Google (Sign in with Google)**. Backend2 : dépendance `google-auth-library`, endpoint(s) d'auth Google dans `auth.controller.ts`, vérification du token et provisioning/login dans `auth.service.ts`, variables d'environnement (`config/env.ts` + `.env.example` dev/prod/backend2). Front : bouton de connexion Google sur `avelomi-site` (`Auth.vue`) et `farmos-app` (`auth.jsx`). Ajustements `migrate.ts`. Correction de la migration `0180_hr_catalogs_org.sql` (backfill : `u.organizationId` → nom de colonne SQL réel `u.organization_id`). Documents de référence du chantier concurrentiel FarmOS versionnés (`FARMOS_COMPETITIVE_GAPS_ROADMAP.md`, `FARMOS_COMPETITIVE_TASK_BACKLOG.md`, `FARMOS_DESIGN_UX_TASK_BACKLOG.md`) + mockup `admin-orgs-mockup-demo.html`. **Note déploiement** : nouvelle dépendance npm backend → le déploiement prod doit synchroniser `package*.json` + rebuild. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app OK. [SCRUM]
 
