@@ -3179,6 +3179,22 @@ const printMortalityReport = (events, lang, moneyUnit = "", speciesLabel = null)
   w.document.write(html); w.document.close();
 };
 
+// Export CSV (COMP-P1-007) — même format que l'export animaux (séparateur ;, BOM).
+function reportCsvCell(value) {
+  const text = value == null ? "" : String(value);
+  return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+function downloadReportCsv(filename, rows) {
+  if (typeof document === "undefined") return;
+  const csv = rows.map((row) => row.map(reportCsvCell).join(";")).join("\r\n");
+  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }) => {
   const currencyMeta = useCurrencyCatalog();
   const moneyUnit = symbolFor(currencyMeta.defaultCurrencyId, currencyMeta.currencies, currencyMeta.fallbackSymbol);
@@ -3214,6 +3230,35 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
     { fr: "Prévision (6 mois)", en: "Forecast (6 months)", descFr: "Trésorerie et cheptel projetés sur 6 mois, avec fourchette et explication", descEn: "Cash flow and livestock projected over 6 months, with range and explanation", icon: "pulse", color: "var(--pertinence-500)", action: () => printForecastReport(lang, 6, speciesFilter) },
     { fr: "Mortalité (animaux décédés)", en: "Mortality (deceased animals)", descFr: "Décès enregistrés : date, espèce, cause présumée/confirmée, lieu, perte estimée, notes", descEn: "Recorded deaths: date, species, presumed/confirmed cause, location, estimated loss, notes", icon: "activity", color: "var(--oxblood-700)", needsData: true, action: () => printMortalityReport(fMortality, lang, moneyUnit, speciesLabel) },
   ];
+  // Exports CSV (COMP-P1-007) — données réelles, filtrées par l'espèce sélectionnée.
+  const today = new Date().toISOString().slice(0, 10);
+  const speciesName = (id) => { const s = speciesById(id); return s ? (lang === "fr" ? s.frSing || s.fr : s.enSing || s.en) : (id || ""); };
+  const exportInventoryCsv = () => {
+    const headers = lang === "fr"
+      ? ["Nom", "ID", "Espèce", "Race", "Sexe", "Date de naissance", "Poids", "Statut", "Lot", "Bâtiment", "Effectif"]
+      : ["Name", "ID", "Species", "Breed", "Sex", "Date of birth", "Weight", "Status", "Batch", "Barn", "Count"];
+    const rows = fAnimals.map((a) => [
+      a.name || "", a.externalId || a.id || "", speciesName(a.species), a.race || "", a.sex || "",
+      a.dateOfBirth || a.dob || "", a.weight != null ? `${a.weight} ${a.weightUnit || "kg"}` : "",
+      a.status || "", a.lot || "", a.barn || "", a.count ?? "",
+    ]);
+    downloadReportCsv(`farmos-inventaire-${speciesFilter || "tous"}-${today}.csv`, [headers, ...rows]);
+  };
+  const exportMortalityCsv = () => {
+    const headers = lang === "fr"
+      ? ["Date", "Espèce", "Cause", "Lieu", "Nombre", "Perte estimée", "Notes"]
+      : ["Date", "Species", "Cause", "Location", "Count", "Estimated loss", "Notes"];
+    const rows = fMortality.map((m) => [
+      (m.eventDate || m.date || "").slice(0, 10), speciesName(m.species),
+      m.cause || m.confirmedCause || m.presumedCause || "", m.location || m.barn || "",
+      m.count ?? 1, m.estimatedLoss ?? m.estimated_loss ?? "", m.notes || "",
+    ]);
+    downloadReportCsv(`farmos-mortalite-${speciesFilter || "tous"}-${today}.csv`, [headers, ...rows]);
+  };
+  const csvExports = [
+    { fr: "Inventaire animaux (CSV)", en: "Animal inventory (CSV)", descFr: `${fAnimals.length} animal(aux)`, descEn: `${fAnimals.length} animal(s)`, action: exportInventoryCsv, disabled: fAnimals.length === 0 },
+    { fr: "Mortalité (CSV)", en: "Mortality (CSV)", descFr: `${fMortality.length} décès`, descEn: `${fMortality.length} death(s)`, action: exportMortalityCsv, disabled: fMortality.length === 0 },
+  ];
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
       <div>
@@ -3244,6 +3289,27 @@ const ReportsScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies })
               {r.disabled ? <div style={{ fontSize: 10.5, color: "var(--oxblood-500)", marginTop: 6 }}>{r.disabledHint}</div> : null}
               <button className="btn btn-primary btn-sm" disabled={r.disabled || (r.needsData && hcData.loading)} title={r.disabled ? r.disabledHint : undefined} style={{ marginTop: r.disabled ? 6 : 12, justifyContent: "center" }} onClick={r.action}>
                 <Icon name={r.cta === "pdf" ? "download" : "report"} size={12} color="#FBF8F2"/>{r.cta === "pdf" ? "PDF" : (lang === "fr" ? "Imprimer" : "Print")}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Exports CSV — données réelles exploitables (tableur), filtrées par espèce. */}
+      <div>
+        <div className="overline" style={{ marginBottom: 8, color: "var(--clay-700)" }}>
+          {lang === "fr" ? "Exports CSV · données réelles" : "CSV exports · real data"}
+          {speciesLabel ? <span style={{ color: "var(--fg-3)" }}> · {speciesLabel}</span> : null}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "var(--cols-4)", gap: 12 }}>
+          {csvExports.map((r, i) => (
+            <div key={i} className="card" style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: "color-mix(in oklch, var(--forest-700) 12%, transparent)", color: "var(--forest-700)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                <Icon name="download" size={18} color="currentColor"/>
+              </div>
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--ink-950)", fontWeight: 500, lineHeight: 1.25 }}>{lang === "fr" ? r.fr : r.en}</div>
+              <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 6, flex: 1 }}>{lang === "fr" ? r.descFr : r.descEn}</div>
+              <button className="btn btn-sm" disabled={r.disabled || hcData.loading} style={{ marginTop: 12, justifyContent: "center" }} onClick={r.action}>
+                <Icon name="download" size={12} color="var(--ink-700)"/>CSV
               </button>
             </div>
           ))}

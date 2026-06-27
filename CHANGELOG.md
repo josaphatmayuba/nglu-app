@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.15)
+- **FarmOS — Export CSV des rapports (COMP-P1-007)**. Nouveau bloc « Exports CSV · données réelles » dans l'écran Rapports : export **Inventaire animaux** (nom, ID, espèce, race, sexe, naissance, poids, statut, lot, bâtiment, effectif) et **Mortalité** (date, espèce, cause, lieu, nombre, perte estimée, notes), au format CSV exploitable en tableur (séparateur `;`, BOM UTF-8), **filtré par l'espèce sélectionnée**. Boutons désactivés si aucune donnée. Complète les rapports PDF/impression existants sans les modifier. **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Added (3.116.14)
 - **FarmOS — Suppression des box (individuel + en lot)**. Le plan intérieur d'un bâtiment ne permettait pas de supprimer un box. Ajout côté `farmos-app` : dans le panneau d'un box, bouton « Supprimer ce box » (confirme et prévient si le box contient des têtes — elles sont retirées du box) ; dans la grille, mode « Sélectionner » avec cases à cocher et barre d'action « Supprimer (N) » pour la suppression en lot. Backend2 : nouvelle route `POST /farmos/boxes/delete-batch` (permission `delete-farmos`) + `FarmosService.deleteBoxes()` (soft delete `isActive=0`, filtre par organisation, désassignation des animaux du box). La suppression individuelle réutilise la route `DELETE /farmos/boxes/:id` déjà existante. Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
 
