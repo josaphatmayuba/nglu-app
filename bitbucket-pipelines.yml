@@ -80,6 +80,26 @@ definitions:
           echo "[deploy] .env.prod Avelomi genere (tous secrets openssl serveur).";
           echo "[deploy] DB_PASSWORD ecrit dans $p — cat ce fichier en SSH pour creer le user MySQL avelomi.";
         else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi'
+    # Clone le repo dans /opt/nglu-app si .git est absent (provision-avelomi.sh
+    # n'a jamais tourne : le dossier ne contient que des fichiers deposes par CI,
+    # pas de backend2/ ni scripts/ ni .git). On clone dans un dossier temp puis on
+    # initialise le depot SUR PLACE (git init + remote + fetch + checkout) pour ne
+    # PAS detruire les dist/ deja deposes : checkout -f ramene les sources versionnees
+    # par-dessus sans toucher aux fichiers non suivis (dist generes). Idempotent :
+    # si .git existe deja, on ne fait rien (le `git pull` du step suffit).
+    # Suppose SERVER/SSH exportes ; le repo est public (clone via https).
+    avelomi-prod-clone: &avelomi-prod-clone |
+      $SSH $SERVER 'set -e; A=/opt/nglu-app;
+        if [ ! -d "$A/.git" ]; then
+          echo "[deploy] .git absent — initialisation du depot sur place (dist preserves)";
+          sudo chown -R "$(id -un):$(id -un)" "$A";
+          cd "$A";
+          git init -q;
+          git remote add origin https://bitbucket.org/ngolu-ong-gestion/nglu-app.git 2>/dev/null || git remote set-url origin https://bitbucket.org/ngolu-ong-gestion/nglu-app.git;
+          git fetch -q --depth 1 origin master;
+          git checkout -f -B master origin/master;
+          echo "[deploy] depot initialise sur master ($(git rev-parse --short HEAD))";
+        else echo "[deploy] .git deja present — clone ignore"; fi'
     # Garde prod Avelomi : skip propre tant que la base n'est pas joignable.
     # .env.prod est desormais auto-rempli (DB_PASSWORD genere), mais la base
     # avelomi_db + le user 'avelomi' doivent exister cote MySQL. On verifie une
@@ -585,6 +605,7 @@ pipelines:
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
                 - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - *avelomi-prod-clone
                 - *avelomi-prod-env
                 - *avelomi-prod-guard
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"

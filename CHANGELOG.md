@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.6)
+- **Le pipeline clone le repo sur Avelomi si `.git` absent** (provisionnement auto, plus besoin de lancer `provision-avelomi.sh` à la main). Diagnostic serveur : `/opt/nglu-app` sur `3.128.45.29` ne contenait que des fichiers déposés par CI (`docker-compose.prod.yml`, `frontend/Dockerfile.prod`, `*-app/dist`) mais **pas le dépôt Git** (ni `.git`, ni `backend2/`, ni `scripts/`) — d'où le `git pull` ignoré et le backend jamais démarré. Nouvel anchor `&avelomi-prod-clone` (step `Backend2 → Avelomi`, avant `&avelomi-prod-env`) : si `/opt/nglu-app/.git` absent, initialise le dépôt **sur place** (`git init` + remote + `fetch --depth 1` + `checkout -f origin/master`) en **préservant les `dist/` déjà déposés** (checkout des sources versionnées par-dessus, sans toucher aux fichiers non suivis). Idempotent (si `.git` présent → ignoré). Au prochain merge master, Avelomi se provisionne seul (reste à créer `avelomi_db` côté MySQL admin). **Vérifié** : YAML valide. NON déployé. [SCRUM]
+
 ### Fixed (3.116.5)
 - **Deploy master `frontend → Avelomi` plantait (`tar: docker-compose.prod.yml: No such file`) au lieu de skipper**. Le merge `develop`→`master` (PR #43) a relancé le déploiement prod Avelomi ; le step front a échoué car `/opt/nglu-app` sur `3.128.45.29` n'a pas le repo cloné (provisionnement partiel). La garde de `scripts/ci/deploy-prod-static-app.sh` testait `test -f .env.prod`, mais le `.env.prod` Avelomi **existe vide** → la garde passait à tort et le script continuait jusqu'au `tar`/`scp` sur fichiers absents. Garde renforcée : skip propre (exit 0) tant que `.env.prod` est **non vide** (`test -s`) **ET** que `docker-compose.prod.yml` + `frontend/Dockerfile.prod` existent côté serveur (repo cloné). Plus d'échec rouge trompeur sur master tant que `provision-avelomi.sh` n'a pas tourné. ongdngolu (déjà provisionné) non affecté. **Vérifié** : `sh -n` OK. NON déployé. [SCRUM]
 
