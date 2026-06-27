@@ -410,34 +410,42 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         if (cancel) return;
         const aMap = new Map((animals || []).map((a) => [a.id, a]));
         const today = new Date().toISOString().slice(0, 10);
+        // Statut dérivé de l'échéance : retard (passée), aujourd'hui, à venir.
+        const dueStatus = (due, fallback) => {
+          if (!due) return fallback || "scheduled";
+          if (due < today) return "overdue";
+          if (due === today) return "today";
+          return fallback || "scheduled";
+        };
         const events = [];
         (vaccs || []).forEach((v) => {
+          const due = String(v.dueDate).slice(0, 10);
           events.push({
-            id: `v-${v.id}`, species: v.species,
+            id: `v-${v.id}`, species: v.species, kind: "vaccine",
             vaccine: v.vaccine, target: v.target, n: v.animalCount,
-            due: String(v.dueDate).slice(0, 10), status: v.status || "scheduled",
+            due, status: v.status === "done" ? "done" : dueStatus(due, v.status),
           });
         });
         (trs || []).forEach((t) => {
-          if (t.endDate && t.endDate >= today) {
+          if (t.endDate) {
             const a = aMap.get(t.animalId);
             events.push({
-              id: `tr-end-${t.id}`, species: a?.species || "cow",
-              vaccine: (lang === "fr" ? "Fin traitement · " : "Treatment end · ") + (t.medicineName || ""),
+              id: `tr-end-${t.id}`, species: a?.species || "cow", kind: "withdrawal",
+              vaccine: (lang === "fr" ? "Fin retrait · " : "Withdrawal end · ") + (t.medicineName || ""),
               target: a?.name || a?.externalId || "—", n: 1,
-              due: t.endDate, status: "scheduled",
+              due: t.endDate, status: dueStatus(t.endDate),
             });
           }
         });
         (repro || []).forEach((e) => {
           const due = e.expectedDueDate;
-          if (due && due >= today) {
+          if (due) {
             const a = aMap.get(e.animalId);
             events.push({
-              id: `repro-${e.id}`, species: a?.species || "cow",
+              id: `repro-${e.id}`, species: a?.species || "cow", kind: "repro",
               vaccine: (lang === "fr" ? "Mise bas attendue · " : "Birthing due · ") + (a?.name || a?.externalId || "—"),
               target: a?.name || "—", n: 1,
-              due, status: "scheduled",
+              due, status: dueStatus(due),
             });
           }
         });
@@ -533,10 +541,34 @@ const CalendarScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           </div>
         </div>
 
-        {/* Side: legend + overdue */}
+        {/* Side: today + overdue + legend */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {(() => {
+            const todayEvents = allEvents.filter(v => v.status === "today");
+            if (todayEvents.length === 0) return null;
+            return (
+              <div className="card">
+                <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "À faire aujourd'hui" : "Due today"}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {todayEvents.map((v) => {
+                    const sp = speciesById(v.species);
+                    return (
+                      <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px dashed var(--border-1)" }}>
+                        <AnimalGlyph kind={sp.glyph} size={12} color="var(--ink-500)"/>
+                        <span style={{ flex: 1, fontSize: 12.5, color: "var(--ink-800)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.vaccine}</span>
+                        <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{v.target}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           <div className="card">
-            <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "Vaccins en retard" : "Overdue vaccines"}</div>
+            <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "En retard" : "Overdue"}</div>
+            {allEvents.filter(v => v.status === "overdue").length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--fg-3)" }}>{lang === "fr" ? "Aucun rappel en retard." : "No overdue reminders."}</div>
+            )}
             {allEvents.filter(v => v.status === "overdue").map((v) => {
               const sp = speciesById(v.species);
               return (
@@ -4659,6 +4691,8 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const [selBoxId, setSelBoxId] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [genOpen, setGenOpen] = React.useState(false); // modal "Générer les box"
+  const [selectMode, setSelectMode] = React.useState(false); // mode suppression en lot
+  const [checked, setChecked] = React.useState(() => new Set()); // ids de box cochés
 
   const reload = React.useCallback(() => {
     if (!building) return;

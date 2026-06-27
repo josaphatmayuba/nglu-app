@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Improved (3.116.13)
+- **FarmOS — Calendrier & rappels : retards toutes sources + tâches du jour (COMP-P1-005)**. L'écran Calendrier ne marquait « en retard » que les vaccins ; les échéances passées de fin de retrait médicament et de mise bas attendue étaient ignorées. Le statut de chaque rappel est désormais dérivé de l'échéance (retard / aujourd'hui / à venir) sur les 3 sources (vaccins, fin de retrait, repro). Panneau latéral généralisé : nouveau bloc « À faire aujourd'hui » + bloc « En retard » couvrant toutes les sources (avec message « aucun retard » quand vide). Aucune suppression de l'existant (grille mensuelle, vaccins obligatoires conservés). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
+
 ### Fixed (3.116.12)
 - **Le clone du repo sur Avelomi échouait (repo Bitbucket privé)**. Diagnostic serveur : `/opt/nglu-app/.git` existait mais vide (`master does not have any commits yet`), pas de `backend2/src` ni `nginx.avelomi.conf`. Cause : `&avelomi-prod-clone` faisait un `git fetch` HTTPS **anonyme**, or le repo est privé → `could not read Username for 'https://bitbucket.org'`. Corrigé : l'anchor passe désormais le token OAuth du runner CI (`$REPOSITORY_OAUTH_ACCESS_TOKEN`) dans l'URL de fetch (`https://x-token-auth:<tok>@…`), transmis au SSH via l'environnement ; après checkout, le remote est remis en URL **sans token** (aucun secret persisté sur le serveur). Re-jouable (si un commit master + `backend2/src` sont déjà là, fetch ignoré). **Vérifié** : YAML valide. NON déployé. [SCRUM]
 
