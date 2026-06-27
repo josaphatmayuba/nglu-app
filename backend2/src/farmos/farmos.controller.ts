@@ -654,6 +654,12 @@ export class FarmosController {
   }
 
   @Permissions("delete-farmos")
+  @Post("boxes/delete-batch")
+  deleteBoxes(@Body() body: any, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteBoxes(body?.ids, orgId);
+  }
+
+  @Permissions("delete-farmos")
   @Delete("boxes/:id")
   deleteBox(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteBox(id, orgId);

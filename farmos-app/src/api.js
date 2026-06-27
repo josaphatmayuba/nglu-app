@@ -349,6 +349,7 @@ export const api = {
   generateBoxes: (body) => jsonFetch("/boxes/generate", { method: "POST", body: JSON.stringify(body) }),
   updateBox: (id, body) => jsonFetch(`/boxes/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteBox: (id) => jsonFetch(`/boxes/${id}`, { method: "DELETE" }),
+  deleteBoxes: (ids) => jsonFetch("/boxes/delete-batch", { method: "POST", body: JSON.stringify({ ids }) }),
   assignAnimalsToBox: (body) => jsonFetch("/boxes/assign", { method: "POST", body: JSON.stringify(body) }),
   // Éléments de terrain (décor du plan)
   listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),

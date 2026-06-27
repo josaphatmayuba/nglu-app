@@ -4769,6 +4769,40 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
     setBusy(false);
   };
 
+  // Suppression d'un box (individuel). Désassigne ses animaux côté backend (soft delete).
+  const deleteOne = async (box) => {
+    const n = headsIn(box.id);
+    const warn = n > 0
+      ? L(`Le box ${box.name} contient ${n} tête(s) : elles seront retirées du box. Supprimer ?`, `Box ${box.name} holds ${n} head(s): they will be removed from the box. Delete?`)
+      : L(`Supprimer le box ${box.name} ?`, `Delete box ${box.name}?`);
+    if (!window.confirm(warn)) return;
+    setBusy(true);
+    try {
+      await api.deleteBox(box.id);
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "deleteBox", tables: ["boxes", "animals"] } }));
+      setSelBoxId(null);
+      reload();
+    } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  // Suppression en lot des box cochés.
+  const deleteChecked = async () => {
+    const ids = [...checked];
+    if (ids.length === 0) return;
+    if (!window.confirm(L(`Supprimer ${ids.length} box ? Les animaux concernés seront retirés de leur box.`, `Delete ${ids.length} boxes? Affected animals will be removed from their box.`))) return;
+    setBusy(true);
+    try {
+      await api.deleteBoxes(ids);
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "deleteBoxes", tables: ["boxes", "animals"] } }));
+      setChecked(new Set());
+      setSelectMode(false);
+      reload();
+    } catch (e) { window.alert(String(e.message || e)); }
+    setBusy(false);
+  };
+  const toggleCheck = (id) => setChecked((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+
   // Animaux du bâtiment non encore placés dans un box (candidats à l'ajout).
   const candidates = bldgAnimals.filter((a) => a.boxId == null);
   const lotsAvailable = [...new Set(candidates.map((a) => a.lot).filter(Boolean))];
@@ -4796,6 +4830,14 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
               {L("Plan intérieur · Affectation des box", "Interior plan · Box assignment")}
             </div>
           </div>
+          {hasBoxes && !selBox && (
+            <button className="btn btn-sm btn-ghost" disabled={busy}
+              onClick={() => { setSelectMode((v) => !v); setChecked(new Set()); }}
+              style={{ marginRight: 6 }}>
+              <Icon name={selectMode ? "x" : "trash"} size={12} color={selectMode ? "var(--ink-600)" : "var(--oxblood-700)"}/>
+              {selectMode ? L("Annuler", "Cancel") : L("Sélectionner", "Select")}
+            </button>
+          )}
           {hasBoxes && <button className="btn btn-sm" disabled={busy} onClick={onGenerate} style={{ marginRight: 6 }}>
             <Icon name="plus" size={12} color="var(--ink-700)"/>{L("Box", "Box")}
           </button>}
@@ -4841,17 +4883,27 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                 const pct = cap != null ? Math.min(100, Math.round((heads / cap) * 100)) : (heads > 0 ? 100 : 0);
                 const barColor = over ? "#B84040" : (full ? "#C89020" : "#5A9A58");
                 const isEmpty = status === "empty";
+                const isChecked = checked.has(box.id);
                 return (
-                  <button key={box.id} type="button" onClick={() => setSelBoxId(box.id)}
+                  <button key={box.id} type="button"
+                    onClick={() => selectMode ? toggleCheck(box.id) : setSelBoxId(box.id)}
                     style={{
+                      position: "relative",
                       textAlign: "left", cursor: "pointer", borderRadius: 12, padding: "10px 11px",
                       minHeight: 74, display: "flex", flexDirection: "column", justifyContent: "space-between",
                       background: isEmpty ? "var(--surface-1, #F6F3EC)" : INTERIOR_CARD_BG[status],
-                      border: `1.5px ${isEmpty ? "dashed" : "solid"} ${over ? "#B84040" : INTERIOR_BOX_STROKE[status]}`,
+                      border: `1.5px ${isEmpty ? "dashed" : "solid"} ${selectMode && isChecked ? "var(--oxblood-700)" : (over ? "#B84040" : INTERIOR_BOX_STROKE[status])}`,
+                      boxShadow: selectMode && isChecked ? "0 0 0 2px var(--oxblood-700) inset" : "none",
                       transition: "transform .12s, box-shadow .12s", font: "inherit",
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,.08)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = selectMode && isChecked ? "0 0 0 2px var(--oxblood-700) inset" : "none"; }}>
+                    {selectMode && (
+                      <span style={{ position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: isChecked ? "var(--oxblood-700)" : "var(--paper)", border: `1.5px solid ${isChecked ? "var(--oxblood-700)" : "var(--border-2)"}` }}>
+                        {isChecked && <Icon name="check" size={12} color="#fff"/>}
+                      </span>
+                    )}
                     <div style={{ display: "flex", alignItems: "center", gap: 5, fontWeight: 700, fontSize: 14, color: isEmpty ? "var(--fg-2)" : "var(--ink-950)" }}>
                       {!isEmpty && <span style={{ width: 8, height: 8, borderRadius: "50%", background: INTERIOR_BOX_STROKE[status], flexShrink: 0 }}/>}
                       Box {box.name}
@@ -4894,6 +4946,10 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                       <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
                         {cap != null ? `${heads}/${cap}` : heads} {L("têtes", "heads")}{over ? ` · ${L("dépassé", "over")}` : (full ? ` · ${L("plein", "full")}` : "")}
                       </span>
+                      <button type="button" title={L("Supprimer ce box", "Delete this box")} disabled={busy} onClick={() => deleteOne(selBox)}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--oxblood-300)", background: "var(--oxblood-50)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                        <Icon name="trash" size={15} color="var(--oxblood-700)"/>
+                      </button>
                     </div>
                     {cap != null && (
                       <div style={{ height: 6, borderRadius: 4, background: "var(--border-1)", overflow: "hidden" }}>
@@ -4959,9 +5015,21 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
 
         {/* Footer */}
         <div style={{ display: "flex", gap: 8, padding: "10px 18px", borderTop: "1px solid var(--border-1)" }}>
-          <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
-            {L("Fermer", "Close")}
-          </button>
+          {selectMode && !selBox ? (
+            <>
+              <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => { setSelectMode(false); setChecked(new Set()); }} style={{ flex: 1 }}>
+                {L("Annuler", "Cancel")}
+              </button>
+              <button className="btn btn-sm" disabled={busy || checked.size === 0} onClick={deleteChecked}
+                style={{ flex: 1, background: "var(--oxblood-700)", borderColor: "var(--oxblood-700)", color: "#fff" }}>
+                <Icon name="trash" size={12} color="#fff"/>{L(`Supprimer (${checked.size})`, `Delete (${checked.size})`)}
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-sm btn-ghost" onClick={onClose} style={{ flex: 1 }}>
+              {L("Fermer", "Close")}
+            </button>
+          )}
         </div>
       </div>
 

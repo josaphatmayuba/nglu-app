@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.116.14)
+- **FarmOS — Suppression des box (individuel + en lot)**. Le plan intérieur d'un bâtiment ne permettait pas de supprimer un box. Ajout côté `farmos-app` : dans le panneau d'un box, bouton « Supprimer ce box » (confirme et prévient si le box contient des têtes — elles sont retirées du box) ; dans la grille, mode « Sélectionner » avec cases à cocher et barre d'action « Supprimer (N) » pour la suppression en lot. Backend2 : nouvelle route `POST /farmos/boxes/delete-batch` (permission `delete-farmos`) + `FarmosService.deleteBoxes()` (soft delete `isActive=0`, filtre par organisation, désassignation des animaux du box). La suppression individuelle réutilise la route `DELETE /farmos/boxes/:id` déjà existante. Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, build farmos-app (vite) OK. [SCRUM]
+
 ### Improved (3.116.13)
 - **FarmOS — Calendrier & rappels : retards toutes sources + tâches du jour (COMP-P1-005)**. L'écran Calendrier ne marquait « en retard » que les vaccins ; les échéances passées de fin de retrait médicament et de mise bas attendue étaient ignorées. Le statut de chaque rappel est désormais dérivé de l'échéance (retard / aujourd'hui / à venir) sur les 3 sources (vaccins, fin de retrait, repro). Panneau latéral généralisé : nouveau bloc « À faire aujourd'hui » + bloc « En retard » couvrant toutes les sources (avec message « aucun retard » quand vide). Aucune suppression de l'existant (grille mensuelle, vaccins obligatoires conservés). **Vérifié** : build farmos-app (vite) OK. [SCRUM]
 

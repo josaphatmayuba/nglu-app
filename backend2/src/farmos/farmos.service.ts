@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { renderPdfViaService } from "../common/pdf-client";
-import { and, desc, eq, gte, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
@@ -2158,6 +2158,23 @@ export class FarmosService {
     await this.db.update(farmosBoxes).set({ isActive: 0 }).where(eq(farmosBoxes.id, id));
     await this.publishFarmosUpdate("deleteBox", ["boxes", "animals"], "deleted", id, orgId);
     return { message: "Box supprimé." };
+  }
+
+  // Suppression en lot (soft delete) : on désassigne les animaux puis on désactive les box.
+  async deleteBoxes(ids: any, orgId: number) {
+    const list = Array.isArray(ids) ? [...new Set(ids.map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0))] : [];
+    if (list.length === 0) throw new BadRequestException("ids requis.");
+    // Ne supprimer que les box appartenant à l'org (évite la fuite inter-org).
+    const owned = await this.db
+      .select({ id: farmosBoxes.id })
+      .from(farmosBoxes)
+      .where(and(inArray(farmosBoxes.id, list), eq(farmosBoxes.organizationId, orgId), eq(farmosBoxes.isActive, 1)));
+    const ownedIds = owned.map((b) => b.id);
+    if (ownedIds.length === 0) return { deleted: 0 };
+    await this.db.update(farmosAnimals).set({ boxId: null }).where(inArray(farmosAnimals.boxId, ownedIds));
+    await this.db.update(farmosBoxes).set({ isActive: 0 }).where(inArray(farmosBoxes.id, ownedIds));
+    await this.publishFarmosUpdate("deleteBoxes", ["boxes", "animals"], "deleted", 0, orgId);
+    return { deleted: ownedIds.length };
   }
 
   // Capacité dispo d'un box, en excluant éventuellement des animaux déjà comptés (réassignation).
