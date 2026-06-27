@@ -629,7 +629,10 @@ pipelines:
           - step:
               name: Backend2 → Avelomi
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              # bitbucket-pipelines.yml inclus : ce step porte le provisionnement
+              # Avelomi (clone repo + .env.prod + init avelomi_db). Sans ce chemin,
+              # une PR ne touchant que le pipeline skippait le step -> rien provisionne.
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "bitbucket-pipelines.yml"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
