@@ -88,26 +88,35 @@ definitions:
       else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi
       ENVGEN
       fi
-    # Clone le repo dans /opt/nglu-app si .git est absent (provision-avelomi.sh
-    # n'a jamais tourne : le dossier ne contient que des fichiers deposes par CI,
-    # pas de backend2/ ni scripts/ ni .git). On clone dans un dossier temp puis on
-    # initialise le depot SUR PLACE (git init + remote + fetch + checkout) pour ne
-    # PAS detruire les dist/ deja deposes : checkout -f ramene les sources versionnees
-    # par-dessus sans toucher aux fichiers non suivis (dist generes). Idempotent :
-    # si .git existe deja, on ne fait rien (le `git pull` du step suffit).
-    # Suppose SERVER/SSH exportes ; le repo est public (clone via https).
+    # Initialise le depot dans /opt/nglu-app si pas deja sur un commit valide.
+    # Le repo Bitbucket est PRIVE -> le clone HTTPS anonyme echoue ("could not
+    # read Username"). On passe donc le token OAuth du runner CI
+    # ($REPOSITORY_OAUTH_ACCESS_TOKEN, dispo cote pipeline) dans l'URL de fetch,
+    # transmis au SSH via l'environnement. Init SUR PLACE (git init + fetch +
+    # checkout -f) pour ne PAS detruire les dist/ deja deposes. Le remote est
+    # ensuite remis en URL SANS token (pas de secret persiste sur le serveur).
+    # Re-jouable : si un commit master est deja checkout, on ne refait rien.
+    # Suppose SERVER/SSH exportes et REPOSITORY_OAUTH_ACCESS_TOKEN present.
     avelomi-prod-clone: &avelomi-prod-clone |
-      $SSH $SERVER 'set -e; A=/opt/nglu-app;
-        if [ ! -d "$A/.git" ]; then
-          echo "[deploy] .git absent — initialisation du depot sur place (dist preserves)";
-          sudo chown -R "$(id -un):$(id -un)" "$A";
-          cd "$A";
-          git init -q;
-          git remote add origin https://bitbucket.org/ngolu-ong-gestion/nglu-app.git 2>/dev/null || git remote set-url origin https://bitbucket.org/ngolu-ong-gestion/nglu-app.git;
-          git fetch -q --depth 1 origin master;
-          git checkout -f -B master origin/master;
-          echo "[deploy] depot initialise sur master ($(git rev-parse --short HEAD))";
-        else echo "[deploy] .git deja present — clone ignore"; fi'
+      $SSH $SERVER "TOK='${REPOSITORY_OAUTH_ACCESS_TOKEN:-}' bash -s" <<'CLONE'
+      set -e
+      A=/opt/nglu-app
+      sudo chown -R "$(id -un):$(id -un)" "$A"
+      cd "$A"
+      if git rev-parse --verify -q HEAD >/dev/null 2>&1 && [ -d backend2/src ]; then
+        echo "[deploy] depot deja initialise ($(git rev-parse --short HEAD)) — fetch ignore"; exit 0
+      fi
+      [ -d .git ] || git init -q
+      if [ -z "$TOK" ]; then
+        echo "[deploy] REPOSITORY_OAUTH_ACCESS_TOKEN absent — impossible de cloner le repo prive. Step env/boot sauteront."; exit 0
+      fi
+      AUTH_URL="https://x-token-auth:$TOK@bitbucket.org/ngolu-ong-gestion/nglu-app.git"
+      git fetch -q --depth 1 "$AUTH_URL" master
+      git checkout -f -B master FETCH_HEAD
+      git remote remove origin 2>/dev/null || true
+      git remote add origin https://bitbucket.org/ngolu-ong-gestion/nglu-app.git
+      echo "[deploy] depot initialise sur master ($(git rev-parse --short HEAD))"
+      CLONE
     # Garde prod Avelomi : skip propre tant que .env.prod n'est pas rempli (sans
     # lui, le backend2 n'a pas de config DB). La base avelomi_db + user 'avelomi'
     # existent deja sur 35.169.124.49 (firewall 9306 ouvert a Avelomi, connexion

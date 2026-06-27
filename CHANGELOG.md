@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.116.12)
+- **Le clone du repo sur Avelomi échouait (repo Bitbucket privé)**. Diagnostic serveur : `/opt/nglu-app/.git` existait mais vide (`master does not have any commits yet`), pas de `backend2/src` ni `nginx.avelomi.conf`. Cause : `&avelomi-prod-clone` faisait un `git fetch` HTTPS **anonyme**, or le repo est privé → `could not read Username for 'https://bitbucket.org'`. Corrigé : l'anchor passe désormais le token OAuth du runner CI (`$REPOSITORY_OAUTH_ACCESS_TOKEN`) dans l'URL de fetch (`https://x-token-auth:<tok>@…`), transmis au SSH via l'environnement ; après checkout, le remote est remis en URL **sans token** (aucun secret persisté sur le serveur). Re-jouable (si un commit master + `backend2/src` sont déjà là, fetch ignoré). **Vérifié** : YAML valide. NON déployé. [SCRUM]
+
 ### Added (3.116.11)
 - **FarmOS — Import CSV d'animaux (COMP-P1-001)**. Nouveau bouton « Importer » dans la liste des animaux (`farmos-app`) : choix d'un fichier CSV (séparateur `;`, même format que l'export existant), parsing client (gère BOM/guillemets), mapping automatique des en-têtes fr/en → champs animal, résolution d'espèce (code/fr/en/singulier/pluriel), modèle CSV téléchargeable, **import test** (« Tester sans enregistrer »), aperçu des erreurs ligne par ligne et des doublons ignorés. Backend2 : DTO `ImportAnimalsDto`, `FarmosService.importAnimals()` (validation espèce ligne par ligne, détection des doublons par `external_id` dans le fichier ET en base, mode `dryRun`, insertion réutilisant `createAnimal`), route `POST /farmos/animals/import` (permission `create-farmos`). Conserve espèce/sexe/date de naissance/identifiant/lot/statut + effectif (`count`). Whitelist middleware déjà couverte par `prefix:/farmos`. **Vérifié** : `tsc --noEmit` backend OK, transform JSX OK. [SCRUM]
 
