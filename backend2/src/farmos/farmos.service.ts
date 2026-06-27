@@ -4,7 +4,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -2515,6 +2515,56 @@ export class FarmosService {
     await this.db.update(farmosTasks).set({ isActive: 0 }).where(eq(farmosTasks.id, id));
     await this.publishFarmosUpdate("deleteTask", ["tasks"], "deleted", id, orgId);
     return { message: "Tâche supprimée." };
+  }
+
+  // ─── Field notes (notes terrain GPS, COMP-P1-009) ─────────────────────────
+  async listFieldNotes(orgId: number) {
+    return this.db
+      .select({
+        id: farmosFieldNotes.id,
+        note: farmosFieldNotes.note,
+        latitude: farmosFieldNotes.latitude,
+        longitude: farmosFieldNotes.longitude,
+        accuracy: farmosFieldNotes.accuracy,
+        zoneId: farmosFieldNotes.zoneId,
+        lot: farmosFieldNotes.lot,
+        photoUrl: farmosFieldNotes.photoUrl,
+        createdAt: farmosFieldNotes.createdAt,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(farmosFieldNotes)
+      .leftJoin(users, eq(users.id, farmosFieldNotes.createdBy))
+      .where(and(eq(farmosFieldNotes.organizationId, orgId), eq(farmosFieldNotes.isActive, 1)))
+      .orderBy(desc(farmosFieldNotes.id));
+  }
+
+  async createFieldNote(input: any, orgId: number, currentUserId: number) {
+    const [res] = await this.db.insert(farmosFieldNotes).values({
+      organizationId: orgId,
+      note: input.note,
+      latitude: input.latitude != null ? String(input.latitude) : null,
+      longitude: input.longitude != null ? String(input.longitude) : null,
+      accuracy: input.accuracy != null ? String(input.accuracy) : null,
+      zoneId: input.zone_id ?? null,
+      lot: input.lot ?? null,
+      photoUrl: input.photo_url ?? null,
+      createdBy: currentUserId ?? null,
+    }).$returningId();
+    await this.publishFarmosUpdate("createFieldNote", ["fieldNotes"], "created", res.id, orgId);
+    return { id: res.id };
+  }
+
+  async deleteFieldNote(id: number, orgId: number) {
+    const [row] = await this.db
+      .select({ id: farmosFieldNotes.id })
+      .from(farmosFieldNotes)
+      .where(and(eq(farmosFieldNotes.id, id), eq(farmosFieldNotes.organizationId, orgId), eq(farmosFieldNotes.isActive, 1)))
+      .limit(1);
+    if (!row) throw new NotFoundException("Note introuvable.");
+    await this.db.update(farmosFieldNotes).set({ isActive: 0 }).where(eq(farmosFieldNotes.id, id));
+    await this.publishFarmosUpdate("deleteFieldNote", ["fieldNotes"], "deleted", id, orgId);
+    return { message: "Note supprimée." };
   }
 
   async listMortalityEvents(orgId: number) {

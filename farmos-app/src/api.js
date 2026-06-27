@@ -343,6 +343,10 @@ export const api = {
   createTask: (body) => jsonFetch("/tasks", { method: "POST", body: JSON.stringify(body) }),
   updateTask: (id, body) => jsonFetch(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteTask: (id) => jsonFetch(`/tasks/${id}`, { method: "DELETE" }),
+  // Notes terrain GPS (COMP-P1-009)
+  listFieldNotes: () => jsonFetch("/field-notes"),
+  createFieldNote: (body) => jsonFetch("/field-notes", { method: "POST", body: JSON.stringify(body) }),
+  deleteFieldNote: (id) => jsonFetch(`/field-notes/${id}`, { method: "DELETE" }),
   // Bâtiments
   listBuildings: (species, zoneId) => jsonFetch(`/buildings${buildQuery({ species, zone_id: zoneId })}`),
   createBuilding: (body) => jsonFetch("/buildings", { method: "POST", body: JSON.stringify(body) }),

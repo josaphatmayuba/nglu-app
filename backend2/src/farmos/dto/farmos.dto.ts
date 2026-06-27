@@ -661,6 +661,16 @@ export class CreateTaskDto {
   @ApiPropertyOptional({ description: "Photo (data URL ou URL)." }) @IsOptional() @IsString() photo_url?: string | null;
 }
 
+export class CreateFieldNoteDto {
+  @ApiProperty({ example: "Clôture endommagée au nord du paddock 3" }) @IsString() @IsNotEmpty() note: string;
+  @ApiPropertyOptional({ example: -4.325 }) @IsOptional() @Type(() => Number) @IsNumber() latitude?: number | null;
+  @ApiPropertyOptional({ example: 15.322 }) @IsOptional() @Type(() => Number) @IsNumber() longitude?: number | null;
+  @ApiPropertyOptional({ example: 12.5, description: "Précision GPS en mètres." }) @IsOptional() @Type(() => Number) @IsNumber() accuracy?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() zone_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() lot?: string | null;
+  @ApiPropertyOptional({ description: "Photo (data URL ou URL)." }) @IsOptional() @IsString() photo_url?: string | null;
+}
+
 export class UpdateTaskDto {
   @ApiPropertyOptional() @IsOptional() @IsString() title?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string | null;

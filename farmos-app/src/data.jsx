@@ -27,6 +27,7 @@ const I18N = {
     forecast: "Prévisionnel",
     reports: "Rapports",
     tasks: "Tâches",
+    fieldNotes: "Notes terrain",
     employees: "Employés",
     settings: "Paramètres",
     // Generic
@@ -110,6 +111,7 @@ const I18N = {
     forecast: "Forecast",
     reports: "Reports",
     tasks: "Tasks",
+    fieldNotes: "Field notes",
     employees: "Employees",
     settings: "Settings",
     search: "Search",

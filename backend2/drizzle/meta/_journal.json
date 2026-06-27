@@ -1114,6 +1114,13 @@
                         "when":  1780585200000,
                         "tag":  "0182_farmos_tasks",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  159,
+                        "version":  "5",
+                        "when":  1780588800000,
+                        "tag":  "0183_farmos_field_notes",
+                        "breakpoints":  true
                     }
                 ]
 }

@@ -2327,6 +2327,23 @@ export const farmosTasks = mysqlTable("farmos_tasks", {
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Notes terrain geolocalisees (COMP-P1-009).
+export const farmosFieldNotes = mysqlTable("farmos_field_notes", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  note: text("note").notNull(),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  accuracy: decimal("accuracy", { precision: 8, scale: 2 }),
+  zoneId: bigint("zone_id", { mode: "number" }),
+  lot: varchar("lot", { length: 255 }),
+  photoUrl: text("photo_url"),
+  createdBy: bigint("created_by", { mode: "number" }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const farmosVetExams = mysqlTable("farmos_vet_exams", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

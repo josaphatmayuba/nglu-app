@@ -3615,6 +3615,129 @@ function TaskCreateModal({ lang, staff, onClose, onSaved }) {
   );
 }
 
+// ─── FIELD NOTES (notes terrain GPS, COMP-P1-009) ────────────────────────
+const FieldNotesScreen = ({ lang }) => {
+  const fr = lang === "fr";
+  const [notes, setNotes] = React.useState([]);
+  const [zones, setZones] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState(null);
+  const [form, setForm] = React.useState({ note: "", lot: "", zone_id: "" });
+  const [coords, setCoords] = React.useState(null); // { latitude, longitude, accuracy }
+  const [geoState, setGeoState] = React.useState("idle"); // idle | locating | ok | error
+  const [busy, setBusy] = React.useState(false);
+  const refresh = useDataRefresh(["fieldNotes", "zones"]);
+
+  const reload = React.useCallback(() => {
+    setLoading(true);
+    Promise.all([api.listFieldNotes(), api.listZones().catch(() => [])])
+      .then(([n, z]) => { setNotes(Array.isArray(n) ? n : []); setZones(Array.isArray(z) ? z : []); setErr(null); })
+      .catch((e) => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { reload(); }, [reload, refresh]);
+
+  const captureGps = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) { setGeoState("error"); return; }
+    setGeoState("locating");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy }); setGeoState("ok"); },
+      () => setGeoState("error"),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+    );
+  };
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const fullName = (n) => [n.firstName, n.lastName].filter(Boolean).join(" ") || "—";
+  const zoneName = (id) => { const z = zones.find((z) => z.id === id); return z ? z.name : null; };
+
+  const submit = async () => {
+    if (!form.note.trim()) { setErr(fr ? "La note est requise." : "Note is required."); return; }
+    setBusy(true); setErr(null);
+    try {
+      await api.createFieldNote({
+        note: form.note.trim(),
+        lot: form.lot.trim() || null,
+        zone_id: form.zone_id ? Number(form.zone_id) : null,
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+        accuracy: coords?.accuracy ?? null,
+      });
+      setForm({ note: "", lot: "", zone_id: "" }); setCoords(null); setGeoState("idle");
+      reload();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const removeNote = async (n) => {
+    if (!window.confirm(fr ? "Supprimer cette note ?" : "Delete this note?")) return;
+    try { await api.deleteFieldNote(n.id); reload(); } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 16, overflow: "auto", height: "100%" }}>
+      <div>
+        <div className="overline" style={{ marginBottom: 4 }}>{fr ? "Notes terrain · Field notes" : "Field notes · Notes terrain"}</div>
+        <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 500, fontSize: 28, letterSpacing: "-0.015em", color: "var(--ink-950)" }}>
+          {fr ? "Notes terrain géolocalisées" : "Geolocated field notes"}
+        </h1>
+      </div>
+
+      {/* Saisie */}
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <textarea className="input" placeholder={fr ? "Observation terrain…" : "Field observation…"} rows={2} value={form.note} onChange={(e) => set("note", e.target.value)}/>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <select className="input" value={form.zone_id} onChange={(e) => set("zone_id", e.target.value)}>
+            <option value="">{fr ? "Zone (optionnel)" : "Zone (optional)"}</option>
+            {zones.map((z) => <option key={z.id} value={String(z.id)}>{z.name}</option>)}
+          </select>
+          <input className="input" placeholder={fr ? "Lot (optionnel)" : "Batch (optional)"} value={form.lot} onChange={(e) => set("lot", e.target.value)}/>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-sm" onClick={captureGps} disabled={geoState === "locating"}>
+            <Icon name="location" size={13} color="var(--ink-700)"/>{geoState === "locating" ? (fr ? "Localisation…" : "Locating…") : (fr ? "Capter ma position" : "Capture my location")}
+          </button>
+          {geoState === "ok" && coords && (
+            <span style={{ fontSize: 12, color: "var(--forest-700)" }}>
+              {coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)} (±{Math.round(coords.accuracy)} m)
+            </span>
+          )}
+          {geoState === "error" && <span style={{ fontSize: 12, color: "var(--oxblood-700)" }}>{fr ? "GPS indisponible" : "GPS unavailable"}</span>}
+          <button className="btn btn-sm btn-primary" style={{ marginLeft: "auto" }} disabled={busy} onClick={submit}>
+            {busy ? "…" : (fr ? "Enregistrer" : "Save")}
+          </button>
+        </div>
+      </div>
+
+      {err && <div style={{ color: "var(--oxblood-700)", fontSize: 13 }}>{err}</div>}
+      {loading && <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{fr ? "Chargement…" : "Loading…"}</div>}
+
+      {/* Liste */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {!loading && notes.length === 0 && <div style={{ fontSize: 13, color: "var(--fg-3)" }}>{fr ? "Aucune note terrain." : "No field notes yet."}</div>}
+        {notes.map((n) => {
+          const hasGps = n.latitude != null && n.longitude != null;
+          const mapUrl = hasGps ? `https://www.openstreetmap.org/?mlat=${n.latitude}&mlon=${n.longitude}#map=17/${n.latitude}/${n.longitude}` : null;
+          return (
+            <div key={n.id} className="card" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 13.5, color: "var(--ink-950)" }}>{n.note}</div>
+                <button className="btn btn-sm btn-ghost" style={{ flexShrink: 0 }} onClick={() => removeNote(n)}><Icon name="trash" size={12} color="var(--oxblood-700)"/></button>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 11.5, color: "var(--fg-3)" }}>
+                <span>{(n.createdAt || "").toString().slice(0, 16).replace("T", " ")}</span>
+                {fullName(n) !== "—" && <span>👤 {fullName(n)}</span>}
+                {zoneName(n.zoneId) && <span>📍 {zoneName(n.zoneId)}</span>}
+                {n.lot && <span>🏷 {n.lot}</span>}
+                {hasGps && <a href={mapUrl} target="_blank" rel="noreferrer" style={{ color: "var(--forest-700)" }}>🗺 {Number(n.latitude).toFixed(5)}, {Number(n.longitude).toFixed(5)}</a>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const EmployeesScreen = ({ lang }) => {
   const [staff, setStaff] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -6976,4 +7099,4 @@ const ForecastScreen = ({ lang, speciesFilter, onSpeciesFilter, enabledSpecies }
   );
 };
 
-export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, EmployeesScreen, SettingsScreen, ForecastScreen };
+export { HealthScreen, BuildingsScreen, CalendarScreen, StockScreen, ReproScreen, ProductionScreen, AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, FieldNotesScreen, EmployeesScreen, SettingsScreen, ForecastScreen };

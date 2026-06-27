@@ -39,6 +39,7 @@ import {
   CreateWorkLogDto,
   CreateTaskDto,
   UpdateTaskDto,
+  CreateFieldNoteDto,
   CreateProductionLogDto,
   CreateReproductionEventDto,
   CreateSaleDto,
@@ -898,6 +899,29 @@ export class FarmosController {
   @Delete("tasks/:id")
   deleteTask(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
     return this.farmos.deleteTask(id, orgId);
+  }
+
+  // ─── Field notes (notes terrain GPS, COMP-P1-009) ─────────────────────────
+
+  @ApiOperation({ summary: "List geolocated field notes." })
+  @Permissions("readAll-farmos")
+  @Get("field-notes")
+  listFieldNotes(@CurrentOrg() orgId: number) {
+    return this.farmos.listFieldNotes(orgId);
+  }
+
+  @ApiOperation({ summary: "Create a geolocated field note." })
+  @Permissions("create-farmos")
+  @Post("field-notes")
+  createFieldNote(@Body() body: CreateFieldNoteDto, @CurrentOrg() orgId: number, @CurrentUserId() userId: number) {
+    return this.farmos.createFieldNote(body, orgId, userId);
+  }
+
+  @ApiOperation({ summary: "Soft-delete a field note." })
+  @Permissions("delete-farmos")
+  @Delete("field-notes/:id")
+  deleteFieldNote(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.deleteFieldNote(id, orgId);
   }
 
   // ─── Semen straws (banque IA) ────────────────────────────────────────────
