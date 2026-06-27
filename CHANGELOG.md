@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.116.10)
+- **Base `avelomi_db` créée + pipeline aligné sur le mot de passe réel**. La base `avelomi_db` + l'user `avelomi`@`%` ont été créés sur le MySQL prod (`35.169.124.49`, via `docker exec nglu_mysql` root — pattern documenté dans `MIGRATION-PROD-DOMUS.md`) ; connexion `avelomi`→`avelomi_db` **validée depuis Avelomi** (firewall 9306 ouvert, `connect_ok`). Pipeline simplifié en conséquence : `&avelomi-prod-env` ne génère plus de `DB_PASSWORD` aléatoire — il lit la variable Bitbucket **sécurisée** `AVELOMI_DB_PASSWORD` (le mdp de l'user `avelomi`), JWT/REFRESH toujours via openssl serveur. Anchor `&avelomi-prod-db-init` **supprimé** (base déjà créée). `&avelomi-prod-guard` simplifiée : skip si `.env.prod` absent/vide (la connexion DB est déjà prouvée ; le backend2 retente au boot via `DB_WAIT_RETRIES`). **Action requise** : définir la variable Bitbucket sécurisée `AVELOMI_DB_PASSWORD`, puis déclencher le step Avelomi (toucher `backend2/**` ou run manuel). **Vérifié** : YAML valide, plus de référence db-init. NON déployé. [SCRUM]
+
 ### Changed (3.116.9)
 - **Une modif du pipeline ne redéploie plus TOUTES les apps**. `bitbucket-pipelines.yml` figurait dans les `includePaths` de quasi tous les steps prod (BatiPro, HR, Compta, Chat, Marketing, Frontend, Domus… + Avelomi) → toute modification du fichier pipeline déclenchait le redéploiement de tous ces projets (constaté pipeline #813 : ~14 steps lancés pour un seul fichier changé). Retiré `"bitbucket-pipelines.yml"` des 29 conditions `includePaths`. Désormais chaque step ne se déclenche que sur les chemins de SON projet. **Effet assumé** : le provisionnement Avelomi (anchors clone/env/db-init dans le step `Backend2 → Avelomi`) ne part plus sur une modif pipeline seule — il faut toucher `backend2/**`/`docker-compose.prod.yml`/`.env.prod` ou lancer un run manuel. **Vérifié** : YAML valide, conditions bien formées. NON déployé. [SCRUM]
 

@@ -69,17 +69,25 @@ definitions:
     # (CREATE USER 'avelomi'@'%' IDENTIFIED BY '<contenu du fichier>'), puis
     # CREATE DATABASE avelomi_db + GRANT, sur 35.169.124.49. La base + le user
     # restent a creer a la main (compte admin MySQL requis). Suppose SERVER/SSH.
+    # Genere le .env.prod Avelomi si absent/vide. DB_PASSWORD = variable Bitbucket
+    # SECURISEE AVELOMI_DB_PASSWORD (le mdp de l'user MySQL 'avelomi' deja cree sur
+    # 35.169.124.49) — jamais en clair dans le repo. JWT/REFRESH generes openssl
+    # sur le serveur. Suppose SERVER/SSH exportes et AVELOMI_DB_PASSWORD transmis.
     avelomi-prod-env: &avelomi-prod-env |
-      $SSH $SERVER 'set -e; f=/opt/nglu-app/.env.prod; p=/opt/nglu-app/.avelomi_db_password.txt;
-        if [ ! -s "$f" ]; then
-          dbpw=$(openssl rand -base64 24 | tr -d "/+=" | cut -c1-28);
-          printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=%s\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=30\nDB_WAIT_DELAY_MS=2000\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
-            "$dbpw" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
-          chmod 600 "$f";
-          printf "%s\n" "$dbpw" > "$p"; chmod 600 "$p";
-          echo "[deploy] .env.prod Avelomi genere (tous secrets openssl serveur).";
-          echo "[deploy] DB_PASSWORD ecrit dans $p — cat ce fichier en SSH pour creer le user MySQL avelomi.";
-        else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi'
+      if [ -z "${AVELOMI_DB_PASSWORD:-}" ]; then
+        echo "[deploy] AVELOMI_DB_PASSWORD non defini (variable Bitbucket securisee) — .env.prod non genere."
+      else
+        $SSH $SERVER "DBPW='$AVELOMI_DB_PASSWORD' bash -s" <<'ENVGEN'
+      set -e
+      f=/opt/nglu-app/.env.prod
+      if [ ! -s "$f" ]; then
+        printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=%s\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=40\nDB_WAIT_DELAY_MS=1500\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
+          "$DBPW" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f"
+        chmod 600 "$f"
+        echo "[deploy] .env.prod Avelomi genere (DB_PASSWORD=variable Bitbucket, JWT/REFRESH openssl serveur)."
+      else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi
+      ENVGEN
+      fi
     # Clone le repo dans /opt/nglu-app si .git est absent (provision-avelomi.sh
     # n'a jamais tourne : le dossier ne contient que des fichiers deposes par CI,
     # pas de backend2/ ni scripts/ ni .git). On clone dans un dossier temp puis on
@@ -100,46 +108,15 @@ definitions:
           git checkout -f -B master origin/master;
           echo "[deploy] depot initialise sur master ($(git rev-parse --short HEAD))";
         else echo "[deploy] .git deja present — clone ignore"; fi'
-    # Cree la base avelomi_db + l'utilisateur MySQL 'avelomi' sur le serveur DB
-    # distant (35.169.124.49:9306), DEPUIS le serveur Avelomi (seul a joindre la
-    # DB ; le runner CI n'a pas la route reseau). Utilise un compte ADMIN MySQL
-    # fourni en variables Bitbucket SECURISEES AVELOMI_DB_ADMIN_USER /
-    # AVELOMI_DB_ADMIN_PASS (jamais en clair dans le repo). Le mot de passe de
-    # l'user 'avelomi' est lu depuis /opt/nglu-app/.avelomi_db_password.txt
-    # (genere par &avelomi-prod-env). Client mysql = conteneur jetable mysql:8.0.
-    # Idempotent (CREATE ... IF NOT EXISTS + ALTER USER pour aligner le mdp).
-    # Skip propre si l'admin n'est pas configure. Suppose SERVER/SSH exportes et
-    # AVELOMI_DB_ADMIN_USER/PASS transmis au $SSH via l'environnement du step.
-    avelomi-prod-db-init: &avelomi-prod-db-init |
-      if [ -z "${AVELOMI_DB_ADMIN_USER:-}" ] || [ -z "${AVELOMI_DB_ADMIN_PASS:-}" ]; then
-        echo "[deploy] AVELOMI_DB_ADMIN_USER/PASS non definis — init DB ignore (cree avelomi_db a la main)."
-      else
-        $SSH $SERVER "AU='$AVELOMI_DB_ADMIN_USER' AP='$AVELOMI_DB_ADMIN_PASS' bash -s" <<'DBINIT'
-      set -e
-      P=/opt/nglu-app/.avelomi_db_password.txt
-      [ -s "$P" ] || { echo "[deploy] .avelomi_db_password.txt absent — lance d'abord le step env."; exit 0; }
-      DBPW="$(cat "$P")"
-      SQL="CREATE DATABASE IF NOT EXISTS avelomi_db CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-      CREATE USER IF NOT EXISTS 'avelomi'@'%' IDENTIFIED BY '$DBPW';
-      ALTER USER 'avelomi'@'%' IDENTIFIED BY '$DBPW';
-      GRANT ALL PRIVILEGES ON avelomi_db.* TO 'avelomi'@'%';
-      FLUSH PRIVILEGES;"
-      echo "$SQL" | sudo docker run --rm -i mysql:8.0 mysql -h 35.169.124.49 -P 9306 -u "$AU" -p"$AP"
-      echo "[deploy] avelomi_db + user 'avelomi' crees/alignes (idempotent)."
-      DBINIT
-      fi
-    # Garde prod Avelomi : skip propre tant que la base n'est pas joignable.
-    # .env.prod est desormais auto-rempli (DB_PASSWORD genere), mais la base
-    # avelomi_db + le user 'avelomi' doivent exister cote MySQL. On verifie une
-    # connexion DB reelle ; si elle echoue, on SKIP (le backend crasherait sinon).
+    # Garde prod Avelomi : skip propre tant que .env.prod n'est pas rempli (sans
+    # lui, le backend2 n'a pas de config DB). La base avelomi_db + user 'avelomi'
+    # existent deja sur 35.169.124.49 (firewall 9306 ouvert a Avelomi, connexion
+    # validee) ; le backend2 retente la connexion au boot (DB_WAIT_RETRIES).
     avelomi-prod-guard: &avelomi-prod-guard |
-      if ! $SSH $SERVER 'set -e; test -s /opt/nglu-app/.env.prod;
-        pw="$(cat /opt/nglu-app/.avelomi_db_password.txt 2>/dev/null)";
-        [ -n "$pw" ] || exit 1;
-        sudo docker run --rm mysql:8.0 mysql -h 35.169.124.49 -P 9306 -u avelomi -p"$pw" -e "USE avelomi_db; SELECT 1;" >/dev/null 2>&1'; then
-        echo "[deploy] Avelomi prod pas pret : .env.prod vide, ou avelomi_db/user injoignable."
-        echo "[deploy] Verifie le firewall DB (port 9306 ouvert a 3.128.45.29) et que le step"
-        echo "[deploy] db-init a cree avelomi_db (AVELOMI_DB_ADMIN_USER/PASS definis ?). Step ignore."
+      if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod'; then
+        echo "[deploy] Avelomi prod pas pret : .env.prod absent/vide."
+        echo "[deploy] Definis la variable Bitbucket AVELOMI_DB_PASSWORD (mdp user 'avelomi'),"
+        echo "[deploy] puis relance. Step ignore."
         exit 0
       fi
   caches:
@@ -641,7 +618,6 @@ pipelines:
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
                 - *avelomi-prod-clone
                 - *avelomi-prod-env
-                - *avelomi-prod-db-init
                 - *avelomi-prod-guard
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
