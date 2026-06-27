@@ -61,27 +61,34 @@ definitions:
         chmod 600 "$f"; echo "[deploy] .env.dev genere (secrets openssl serveur)";
       else echo "[deploy] .env.dev deja present — inchange"; fi'
     # Genere le .env.prod Avelomi sur le serveur s'il est ABSENT ou VIDE.
-    # Meme principe que avelomi-dev-env : secrets JWT/REFRESH generes par openssl
-    # SUR LE SERVEUR (jamais en CI, jamais dans le transcript). DB_PASSWORD reste
-    # un placeholder __A_REMPLIR__ : il doit etre aligne a la main avec le mot de
-    # passe de l'utilisateur MySQL 'avelomi' (cree avec la base avelomi_db sur
-    # 35.169.124.49). Tant que DB_PASSWORD vaut __A_REMPLIR__, avelomi-prod-guard
-    # SKIP le boot (backend ne demarrerait pas). Suppose SERVER/SSH exportes.
+    # Meme principe que avelomi-dev-env : TOUS les secrets (DB_PASSWORD inclus)
+    # generes par openssl SUR LE SERVEUR (jamais en CI ni dans le transcript).
+    # Le DB_PASSWORD genere est aussi ecrit en clair dans un fichier dedie
+    # /opt/nglu-app/.avelomi_db_password.txt (chmod 600) : le proprietaire le lit
+    # en SSH pour creer l'utilisateur MySQL 'avelomi' avec CE mot de passe
+    # (CREATE USER 'avelomi'@'%' IDENTIFIED BY '<contenu du fichier>'), puis
+    # CREATE DATABASE avelomi_db + GRANT, sur 35.169.124.49. La base + le user
+    # restent a creer a la main (compte admin MySQL requis). Suppose SERVER/SSH.
     avelomi-prod-env: &avelomi-prod-env |
-      $SSH $SERVER 'set -e; f=/opt/nglu-app/.env.prod;
+      $SSH $SERVER 'set -e; f=/opt/nglu-app/.env.prod; p=/opt/nglu-app/.avelomi_db_password.txt;
         if [ ! -s "$f" ]; then
-          printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=__A_REMPLIR__\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=30\nDB_WAIT_DELAY_MS=2000\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
-            "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
-          chmod 600 "$f"; echo "[deploy] .env.prod Avelomi genere (secrets openssl serveur ; DB_PASSWORD=__A_REMPLIR__ a aligner)";
+          dbpw=$(openssl rand -base64 24 | tr -d "/+=" | cut -c1-28);
+          printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=%s\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=30\nDB_WAIT_DELAY_MS=2000\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
+            "$dbpw" "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "$f";
+          chmod 600 "$f";
+          printf "%s\n" "$dbpw" > "$p"; chmod 600 "$p";
+          echo "[deploy] .env.prod Avelomi genere (tous secrets openssl serveur).";
+          echo "[deploy] DB_PASSWORD ecrit dans $p — cat ce fichier en SSH pour creer le user MySQL avelomi.";
         else echo "[deploy] .env.prod Avelomi deja rempli — inchange"; fi'
-    # Garde prod Avelomi : skip propre tant que la config DB n'est pas prete.
-    # On exige .env.prod NON vide ET DB_PASSWORD different du placeholder, sinon
-    # le backend2 crasherait au boot (auth DB). Suppose SERVER/SSH exportes.
+    # Garde prod Avelomi : skip propre tant que la base n'est pas joignable.
+    # .env.prod est desormais auto-rempli (DB_PASSWORD genere), mais la base
+    # avelomi_db + le user 'avelomi' doivent exister cote MySQL. On verifie une
+    # connexion DB reelle ; si elle echoue, on SKIP (le backend crasherait sinon).
     avelomi-prod-guard: &avelomi-prod-guard |
-      if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod && ! grep -q "^DB_PASSWORD=__A_REMPLIR__$" /opt/nglu-app/.env.prod'; then
-        echo "[deploy] Avelomi prod pas pret : .env.prod vide ou DB_PASSWORD=__A_REMPLIR__."
-        echo "[deploy] Cree avelomi_db + user 'avelomi' sur 35.169.124.49, mets son mot de passe"
-        echo "[deploy] dans DB_PASSWORD de /opt/nglu-app/.env.prod, puis re-merge master. Step ignore."
+      if ! $SSH $SERVER 'test -s /opt/nglu-app/.env.prod'; then
+        echo "[deploy] Avelomi prod pas pret : .env.prod absent/vide."
+        echo "[deploy] Cree avelomi_db + user 'avelomi' (mdp = cat /opt/nglu-app/.avelomi_db_password.txt)"
+        echo "[deploy] sur 35.169.124.49, puis re-merge master. Step ignore."
         exit 0
       fi
   caches:
