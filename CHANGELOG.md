@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.3)
+- **FarmOS — Tests des workflows critiques (COMP-P0-005)**. Tests unitaires Jest sur `FarmosService` couvrant les workflows métier sensibles : import CSV d'animaux (`importAnimals` — espèce requise/valide, détection des doublons par `external_id` en base ET dans le fichier insensible à la casse, mode `dryRun` sans écriture) et tâches d'équipe (`createTask`/`updateTask`/`deleteTask` — `done_at` posé/effacé selon le statut, soft delete `is_active=0`, erreur sur tâche inexistante). DB Drizzle mockée (pas de base réelle). 12 tests ajoutés ; suite backend complète au vert (51/51). **Vérifié** : `jest` OK. [SCRUM]
+
 ### Fixed (3.117.2)
 - **Auth Google — route bloquée par le middleware (403)**. Le whitelist du middleware déclarait `/googlelogin/login` alors que la route backend réelle est `POST /auth/google/login` (préfixe contrôleur `auth`). Sans correspondance, le `POST /api/auth/google/login` du front tombait en **403**. Corrigé dans `middleware/src/whitelist.js`. **Note déploiement** : middleware hors CI → scp + rebuild manuel sur dev ET prod. [SCRUM]
 
