@@ -119,8 +119,7 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
     const ouvriers = Math.max(1, Math.ceil(Math.min(truiesActives || 1, parc) / 70));
     const charges = ouvriers * 12 * h.salaireMensuelOuvrier + amort;
     const margeBrute = vendus * marge;
-    let benef = margeBrute - charges;
-    if (y === 2026) benef = Math.min(benef, margeBrute - charges); // demarrage
+    const benef = margeBrute - charges;
     const benefUSD = benef / h.tauxUSD;
     const prime = benefUSD > h.seuilPrimeUSD ? benef * (h.tauxPrimePct / 100) : 0;
     const benefApres = benef - prime;
@@ -159,7 +158,7 @@ function buildCohortes(animals, speciesFilter) {
       const key = `${dob.getFullYear()}-${dob.getMonth()}`;
       if (!groups.has(key)) groups.set(key, { naissanceMoisAbs: moisAbs(dob), n: 0 });
       groups.get(key).n++;
-    } else if (sex === "M" || sex === "MALE" || sex === "MALE") {
+    } else if (sex === "M" || sex === "MALE" || sex === "MALE" || sex === "MÂLE") {
       males++;
     }
   }
@@ -214,7 +213,12 @@ function calibrate(real, h, animals, speciesFilter) {
     const totQty = salesF.reduce((s, r) => s + (num(r.quantity) || 1), 0);
     if (totAmount > 0 && totQty > 0) {
       const parTete = totAmount / totQty;
-      if (parTete > 0) { out.prixEntierParKg = Math.round(parTete / h.poidsVenteKg); notes.push(`Prix vente reel ~${Math.round(parTete).toLocaleString()} CDF/tete`); }
+      if (parTete > 0) {
+        // Bascule en mode "entier" pour que le prix reel/tete soit reellement utilise
+        out.prixEntierParKg = Math.round(parTete / h.poidsVenteKg);
+        out.modeVente = "entier";
+        notes.push(`Prix vente reel ~${Math.round(parTete).toLocaleString()} CDF/tete → mode porc entier`);
+      }
     }
   }
 
@@ -233,18 +237,54 @@ function calibrate(real, h, animals, speciesFilter) {
     out.surviePct = survie; notes.push(`Survie reelle ~${survie}%`);
   }
 
-  // Couts reels par categorie
+  // Couts reels par categorie → injectes dans les hypotheses (pas juste affiches)
   const exp = real.expenses || [];
   const byCat = {};
   for (const e of exp) { const c = (e.category || "autre").toLowerCase(); byCat[c] = (byCat[c] || 0) + num(e.amount); }
-  if (byCat.feed) notes.push(`Aliment enregistre: ${Math.round(byCat.feed).toLocaleString()} CDF`);
-  if (byCat.salaire || byCat.salary || byCat.payroll) {
-    const sal = byCat.salaire || byCat.salary || byCat.payroll;
-    notes.push(`Salaires enregistres: ${Math.round(sal).toLocaleString()} CDF`);
+
+  // Base de repartition : nb de porcs vendus enregistres (sinon les nes vivants)
+  const porcsVendus = salesF.reduce((s, r) => s + (num(r.quantity) || 1), 0);
+  const base = porcsVendus > 0 ? porcsVendus : totNes;
+
+  const get = (...keys) => { for (const k of keys) if (byCat[k]) return byCat[k]; return 0; };
+  const feed = get("feed", "aliment", "alimentation");
+  const veto = get("veterinary", "veterinaire", "veto", "sante");
+  const sal = get("salaire", "salary", "payroll", "salaires");
+
+  if (feed > 0 && base > 0) {
+    out.alimentEngraissementParPorc = Math.round(feed / base);
+    notes.push(`Aliment reel ~${out.alimentEngraissementParPorc.toLocaleString()} CDF/porc (${Math.round(feed).toLocaleString()} CDF / ${base} porcs)`);
+  } else if (feed > 0) {
+    notes.push(`Aliment enregistre: ${Math.round(feed).toLocaleString()} CDF (pas de base de repartition)`);
   }
-  if (byCat.veterinary || byCat.veterinaire) notes.push(`Veto enregistre: ${Math.round(byCat.veterinary || byCat.veterinaire).toLocaleString()} CDF`);
+  if (veto > 0 && base > 0) {
+    out.vetoParPorc = Math.round(veto / base);
+    notes.push(`Veto reel ~${out.vetoParPorc.toLocaleString()} CDF/porc`);
+  } else if (veto > 0) {
+    notes.push(`Veto enregistre: ${Math.round(veto).toLocaleString()} CDF`);
+  }
+  if (sal > 0) {
+    // Salaires enregistres = total sur la periode ; on estime un mensuel/ouvrier
+    const moisCouverts = monthsSpan(exp);
+    if (moisCouverts > 0) {
+      out.salaireMensuelOuvrier = Math.round(sal / moisCouverts);
+      notes.push(`Salaires reels ~${out.salaireMensuelOuvrier.toLocaleString()} CDF/mois (${Math.round(sal).toLocaleString()} CDF / ${moisCouverts} mois)`);
+    } else {
+      notes.push(`Salaires enregistres: ${Math.round(sal).toLocaleString()} CDF`);
+    }
+  }
 
   return { hypotheses: out, notes };
+}
+
+// Nombre de mois couverts par une liste de depenses (min→max des dates)
+function monthsSpan(items) {
+  const dates = (items || [])
+    .map((e) => new Date(e.expense_date || e.created_at))
+    .filter((d) => !isNaN(d));
+  if (!dates.length) return 0;
+  const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
+  return Math.max(1, (max.getFullYear() - min.getFullYear()) * 12 + (max.getMonth() - min.getMonth()) + 1);
 }
 
 // Analyse de progression : ventilation par annee des donnees reelles
