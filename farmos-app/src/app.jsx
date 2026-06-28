@@ -14,6 +14,7 @@ import {
   AlertsScreen, PosScreen, SalesManagementScreen, FinancesScreen, ReportsScreen, TasksScreen, FieldNotesScreen, EmployeesScreen, SettingsScreen, ForecastScreen,
 } from "./screens";
 import { SemenBankScreen } from "./semen-bank";
+import { SimulatorScreen } from "./simulator";
 import { PwaUpdateBanner, PwaInstallBanner } from "./pwa";
 import { LoginScreen, useAuthToken } from "./auth";
 import { TweaksPanel, TweakSection, TweakRadio, TweakSelect, TweakToggle } from "./tweaks";
@@ -185,6 +186,7 @@ function App() {
     "sales-management": { title: t(lang, "salesManagement"), subtitle: lang === "fr" ? "Produits vendables et prix POS" : "Sellable products and POS prices", breadcrumb: lang === "fr" ? "FERME · GESTION DE VENTE" : "FARM · SALES MANAGEMENT" },
     finances:   { title: t(lang, "finances"),   subtitle: lang === "fr" ? "Revenus, dépenses, profits" : "Revenue, expenses, profits", breadcrumb: lang === "fr" ? "FERME · FINANCES" : "FARM · FINANCES" },
     forecast:   { title: t(lang, "forecast"),   subtitle: lang === "fr" ? "Ventes élevage & production projetées" : "Projected livestock sales & production", breadcrumb: lang === "fr" ? "FERME · PRÉVISIONNEL" : "FARM · FORECAST" },
+    simulator:  { title: t(lang, "simulator"),  subtitle: lang === "fr" ? "Simulation business & projection cheptel" : "Business simulation & herd projection", breadcrumb: lang === "fr" ? "FERME · SIMULATEUR" : "FARM · SIMULATOR" },
     reports:    { title: t(lang, "reports"),    subtitle: lang === "fr" ? "Rapports & exports" : "Reports & exports",          breadcrumb: lang === "fr" ? "FERME · RAPPORTS" : "FARM · REPORTS" },
     tasks:      { title: t(lang, "tasks"),      subtitle: lang === "fr" ? "Tâches assignées à l'équipe" : "Tasks assigned to the team", breadcrumb: lang === "fr" ? "FERME · TÂCHES" : "FARM · TASKS" },
     "field-notes": { title: t(lang, "fieldNotes"), subtitle: lang === "fr" ? "Observations terrain géolocalisées" : "Geolocated field observations", breadcrumb: lang === "fr" ? "FERME · NOTES TERRAIN" : "FARM · FIELD NOTES" },
@@ -213,6 +215,7 @@ function App() {
       case "sales-management": return <SalesManagementScreen {...props}/>;
       case "finances":   return <FinancesScreen {...props}/>;
       case "forecast":   return <ForecastScreen {...props}/>;
+      case "simulator":  return <SimulatorScreen {...props}/>;
       case "reports":    return <ReportsScreen {...props}/>;
       case "tasks":      return <TasksScreen {...props}/>;
       case "field-notes": return <FieldNotesScreen {...props}/>;

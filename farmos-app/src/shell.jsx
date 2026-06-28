@@ -25,6 +25,7 @@ const NAV = [
   { id: "sales-management", icon: "settings", labelKey: "salesManagement" },
   { id: "finances",  icon: "coins",     labelKey: "finances" },
   { id: "forecast",  icon: "activity",  labelKey: "forecast" },
+  { id: "simulator", icon: "chart",     labelKey: "simulator" },
   { id: "reports",   icon: "report",    labelKey: "reports" },
 ];
 
@@ -50,7 +51,7 @@ const FARMOS_MODES = {
   },
   manager: {
     fr: "Gestionnaire", en: "Manager", icon: "coins",
-    nav: ["dashboard", "animals", "buildings", "production", "pos", "sales-management", "finances", "reports", "alerts"],
+    nav: ["dashboard", "animals", "buildings", "production", "pos", "sales-management", "finances", "forecast", "simulator", "reports", "alerts"],
   },
 };
 const FARMOS_MODE_ORDER = ["all", "breeder", "vet", "manager"];
