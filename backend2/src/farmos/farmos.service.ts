@@ -86,6 +86,16 @@ export class FarmosService {
   }
 
   async getDashboardSnapshot(orgId: number) {
+    // Resilience: une sous-requete qui echoue (ex. table manquante / drift Drizzle)
+    // ne doit PAS faire tomber tout le tableau de bord. On isole chaque source.
+    const emptyFinance = { months: [], revenue: [], expense: [], byCategory: [] };
+    const safe = async <T>(p: Promise<T>, fallback: T): Promise<T> => {
+      try {
+        return await p;
+      } catch {
+        return fallback;
+      }
+    };
     const [
       animals,
       medicines,
@@ -99,17 +109,17 @@ export class FarmosService {
       productionLogs,
       mortalityEvents,
     ] = await Promise.all([
-      this.listAnimals(orgId),
-      this.listMedicines(orgId),
-      this.listSales(orgId),
-      this.listExpenses(orgId),
-      this.listTreatments(orgId),
-      this.listReproductionEvents(orgId),
-      this.listVaccinations(orgId),
-      this.listAiInsights(orgId),
-      this.getFinanceSummary(orgId),
-      this.listProductionLogs(orgId),
-      this.listMortalityEvents(orgId),
+      safe(this.listAnimals(orgId), [] as any[]),
+      safe(this.listMedicines(orgId), [] as any[]),
+      safe(this.listSales(orgId), [] as any[]),
+      safe(this.listExpenses(orgId), [] as any[]),
+      safe(this.listTreatments(orgId), [] as any[]),
+      safe(this.listReproductionEvents(orgId), [] as any[]),
+      safe(this.listVaccinations(orgId), [] as any[]),
+      safe(this.listAiInsights(orgId), [] as any[]),
+      safe(this.getFinanceSummary(orgId), emptyFinance),
+      safe(this.listProductionLogs(orgId), [] as any[]),
+      safe(this.listMortalityEvents(orgId), [] as any[]),
     ]);
     const withdrawalAlerts = this.computeWithdrawalAlerts(treatments, animals);
     return {
@@ -2306,6 +2316,14 @@ export class FarmosService {
     return String(v ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c] as string));
   }
 
+  // Une signature est une image embarquee (data-URI). On n'accepte QUE ce format
+  // pour eviter une injection HTML/attribut via le champ signature dans le PDF.
+  private safeImageSrc(v: any): string | null {
+    const s = String(v ?? "").trim();
+    // svg+xml exclu volontairement (peut porter du JS). Une signature = PNG/JPEG/etc.
+    return /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(s) ? s : null;
+  }
+
   // Rapport PDF d'un dossier vétérinaire (examen + ordonnance + signature).
   async vetExamPdf(id: number, orgId: number): Promise<{ buffer: Buffer; reference: string }> {
     const exam: any = await this.getVetExam(id, orgId);
@@ -2348,7 +2366,7 @@ export class FarmosService {
       <div class="sign">
         <div><div class="k">Signé par</div><div class="v">${this.esc(exam.signedBy || exam.vet || "—")}</div>
           <div style="font-size:10px;color:#7a8a74">${exam.signedAt ? this.esc(String(exam.signedAt).slice(0, 10)) : "Non signé"}</div></div>
-        ${exam.signature ? `<img class="sig" src="${exam.signature}" alt="signature"/>` : ""}
+        ${this.safeImageSrc(exam.signature) ? `<img class="sig" src="${this.safeImageSrc(exam.signature)}" alt="signature"/>` : ""}
       </div>
     </body></html>`;
     const buffer = await this.htmlToPdf(html);
