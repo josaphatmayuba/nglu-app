@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.117.21)
+- **FarmOS — Couverture de tests élargie (P0-005)**. Tests unitaires Jest ajoutés sur deux workflows critiques : import CSV de pesées (`importWeighings` — résolution de l'animal par external_id insensible à la casse ou id interne, erreurs animal introuvable / poids invalide, dryRun sans écriture, MAJ du poids courant avec la pesée la plus récente) et rapports custom sauvegardés (`createSavedReport`/`deleteSavedReport` — persistance config + créateur, soft delete, 404 si absent). 10 tests ajoutés ; suite backend au vert (69/69, 9 suites). **Vérifié** : `jest` OK. [SCRUM]
+
 ### Fixed (3.117.20)
 - **FarmOS — Tableau de bord « Par espèce » à 0 alors que les pilules affichaient les effectifs**. Le snapshot `GET /dashboard` faisait un `Promise.all` de 11 sources ; une seule en échec (table manquante / drift Drizzle) rejetait tout le snapshot → `ready` jamais vrai → grille « Par espèce » et Production à 0, tandis que les pilules (appel `/animals` indépendant) restaient correctes. Backend rendu résilient (fallback par source), front normalise chaque tableau sans bloquer sur l'intégralité. **Vérifié** : `npx tsc --noEmit` backend OK. [SCRUM]
 
