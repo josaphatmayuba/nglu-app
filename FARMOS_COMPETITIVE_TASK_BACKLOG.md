@@ -91,7 +91,9 @@ Criteres d'acceptation:
 - Decision documentee: garder, modifier ou renommer.
 - Aucune campagne publique lancee sans decision.
 
-Statut: a faire.
+Livrable: `FARMOS_NAME_RISK_MEMO.md` (risque, checklist verif marque/domaine, 3 alternatives, reco). Decision a prendre par le proprietaire.
+
+Statut: memo pret (28 juin 2026) — DECISION a prendre (garder/renommer).
 
 ### COMP-P0-003 - Construire une matrice concurrentielle maintenue
 
@@ -1119,7 +1121,9 @@ Criteres d'acceptation:
 - Le prix est justifie par le temps gagne et les rapports.
 - Les limites par pack sont claires.
 
-Statut: a faire.
+Livrable: `FARMOS_COMPETITIVE_PRICING_PROPOSAL.md` (3 packs + options, montants a valider par le proprietaire).
+
+Statut: proposition prete (28 juin 2026) — montants A VALIDER par le proprietaire.
 
 ### COMP-P2-022 - Partenariats terrain
 
