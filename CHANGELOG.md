@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.118.0)
+- **FarmOS — Nouveau menu « Simulateur »** (`farmos-app/src/simulator.jsx`). Simulation business / projection du cheptel sur 2026-2030, équivalent du modèle Excel construit avec le client. Modèle PAR COHORTE (âge réel des truies : saillie 8 mois, 2,3 portées/an, mises bas par âge), 2 stratégies (P1 garder toutes les femelles / P2 plafond truies), valorisation par découpe (viande/pieds/tête/abats) ou porc entier vif, compte de résultat CA − dépenses = bénéfice (CDF + USD, taux 2270 BCC), prime travailleurs (5% si bénéfice > seuil 50000 USD, ajustable), hypothèses ajustables, graphique ventes/bénéfice. Cheptel de départ pré-rempli depuis les données réelles (`api.listAnimals`). Bouton **« Importer mes données réelles »** : calibre la simulation sur les dépenses/ventes/repro/mortalité enregistrées (prix réel, taille de portée, survie) et affiche l'analyse de progression année par année. Calcul 100% frontend (pas de migration DB, marche offline). Greffes : `shell.jsx` (nav + mode manager), `app.jsx` (route + titre), `data.jsx` (i18n fr/en). **Vérifié** : `vite build --mode development` OK. [SCRUM]
+
 ### Added (3.117.21)
 - **FarmOS — Couverture de tests élargie (P0-005)**. Tests unitaires Jest ajoutés sur deux workflows critiques : import CSV de pesées (`importWeighings` — résolution de l'animal par external_id insensible à la casse ou id interne, erreurs animal introuvable / poids invalide, dryRun sans écriture, MAJ du poids courant avec la pesée la plus récente) et rapports custom sauvegardés (`createSavedReport`/`deleteSavedReport` — persistance config + créateur, soft delete, 404 si absent). 10 tests ajoutés ; suite backend au vert (69/69, 9 suites). **Vérifié** : `jest` OK. [SCRUM]
 
