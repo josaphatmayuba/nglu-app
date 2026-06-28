@@ -2,6 +2,7 @@
 import React from "react";
 import { api } from "./api";
 import { MaterialLineChart } from "./material-charts.jsx";
+import { defaultCurrencyId, symbolFor, currencyOptions } from "./currency";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SIMULATEUR D'ELEVAGE — projection cheptel 5 ans, strategies P1/P2,
@@ -23,7 +24,10 @@ const DEFAULTS = {
   ageVenteMois: 7,
   poidsVenteKg: 95,
   plafondTruiesP2: 150,
-  tauxUSD: 2270,           // BCC juin 2026
+  anneeDebut: 2026,
+  horizonAns: 5,
+  granularite: "annee",   // "annee" | "trimestre"
+  tauxUSD: 2270,           // 1 USD = X CDF (BCC juin 2026), pour le seuil de prime
   // couts (CDF)
   alimentEngraissementParPorc: 342000,
   alimentTruieParAn: 1320000,
@@ -63,19 +67,26 @@ function coutParPorc(h) {
   return h.alimentEngraissementParPorc + quotePartMere + h.vetoParPorc + h.diversParPorc;
 }
 
+// Noms de mois (debut de trimestre) pour l'affichage trimestriel
+const MOIS_T = { 0: "janv", 3: "avr", 6: "juil", 9: "oct" };
+const MOIS_T_FIN = { 0: "mars", 3: "juin", 6: "sept", 9: "déc" };
+
 // ─── MOTEUR PAR COHORTE (mois par mois) ──────────────────────────────────
-// cohortesInit: [{ naissanceMoisAbs, n }]  (mois 0 = janvier 2026)
+// cohortesInit: [{ naissanceMoisAbs, n }]  (mois 0 = janvier de anneeDebut)
+// Accumule en buckets mensuels puis agrege par periode (annee OU trimestre).
 function simulate(strategy, h, cohortesInit, malesActuels) {
-  const HORIZON = (2030 - 2026) * 12 + 11; // dec 2030
-  const annee = (mab) => 2026 + Math.floor(mab / 12);
-  const res = {};
-  for (const y of YEARS) res[y] = { mb: 0, nes: 0, vendus: 0, truies: 0 };
+  const debut = h.anneeDebut || 2026;
+  const nbAns = Math.max(1, Math.min(30, h.horizonAns || 5));
+  const HORIZON = nbAns * 12 - 1; // dernier mois inclus (mois 0 = janv debut)
+  // buckets mensuels
+  const moisData = [];
+  for (let m = 0; m <= HORIZON; m++) moisData.push({ mb: 0, nes: 0, vendus: 0, truies: 0 });
+  const add = (mab, key, val) => { if (mab >= 0 && mab <= HORIZON) moisData[mab][key] += val; };
 
   const file = cohortesInit.map((c) => ({ ...c }));
   let parc = cohortesInit.reduce((s, c) => s + c.n, 0);
-  res[2026].vendus += malesActuels;
+  add(0, "vendus", malesActuels); // males adultes existants vendus au depart
 
-  const vend = vendablesParTruieAn(h);
   const inter = h.porteesParAn > 0 ? 12 / h.porteesParAn : 5.2;
 
   for (let i = 0; i < file.length; i++) {
@@ -83,15 +94,14 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
     let mb = c.naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
     while (mb <= HORIZON) {
       if (mb >= 0) {
-        const y = annee(mb);
-        res[y].mb += c.n;
-        res[y].truies += c.n;
+        add(mb, "mb", c.n);
+        add(mb, "truies", c.n);
         const nesViv = c.n * h.nesParPortee * (h.surviePct / 100);
-        res[y].nes += nesViv;
+        add(mb, "nes", nesViv);
         const femelles = nesViv * (1 - h.partMalesPct / 100);
         const males = nesViv * (h.partMalesPct / 100);
         const venteMois = mb + h.ageVenteMois;
-        if (venteMois <= HORIZON && venteMois >= 0) res[annee(venteMois)].vendus += males;
+        add(venteMois, "vendus", males);
         if (strategy === "P1") {
           file.push({ naissanceMoisAbs: mb, n: femelles });
           parc += femelles;
@@ -100,24 +110,47 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
           const gardees = Math.min(femelles, manque);
           const aVendre = femelles - gardees;
           if (gardees > 0) { file.push({ naissanceMoisAbs: mb, n: gardees }); parc += gardees; }
-          if (aVendre > 0 && venteMois <= HORIZON) res[annee(venteMois)].vendus += aVendre;
+          if (aVendre > 0) add(venteMois, "vendus", aVendre);
         }
       }
       mb = Math.round(mb + inter);
     }
   }
 
-  // Volet financier par an
+  // Agregation par periode (annee ou trimestre)
+  const granu = h.granularite === "trimestre" ? "trimestre" : "annee";
+  const moisParPeriode = granu === "trimestre" ? 3 : 12;
+  const periodes = [];
+  for (let p0 = 0; p0 <= HORIZON; p0 += moisParPeriode) {
+    const agg = { mb: 0, nes: 0, vendus: 0, truies: 0 };
+    for (let m = p0; m < p0 + moisParPeriode && m <= HORIZON; m++)
+      for (const k in agg) agg[k] += moisData[m][k];
+    const anneeP = debut + Math.floor(p0 / 12);
+    const moisDansAnnee = p0 % 12;
+    const t = Math.floor(moisDansAnnee / 3) + 1;
+    const label = granu === "trimestre"
+      ? `T${t} ${anneeP} (${MOIS_T[moisDansAnnee]}–${MOIS_T_FIN[moisDansAnnee]})`
+      : String(anneeP);
+    // label court pour le graphe (axe X) : "T1 27 (avr)"
+    const labelCourt = granu === "trimestre"
+      ? `T${t} ${String(anneeP).slice(2)} (${MOIS_T[moisDansAnnee]})`
+      : String(anneeP);
+    periodes.push({ label, labelCourt, annee: anneeP, agg, moisParPeriode: Math.min(moisParPeriode, HORIZON - p0 + 1) });
+  }
+
+  // Volet financier par periode
   const rev = revenuParPorc(h);
   const marge = rev - coutParPorc(h);
-  const amort = h.capex / 10;
+  const amortAn = h.capex / 10;
   const out = [];
-  for (const y of YEARS) {
-    const vendus = Math.round(res[y].vendus);
+  for (const per of periodes) {
+    const vendus = Math.round(per.agg.vendus);
     const ca = vendus * rev;
-    const truiesActives = Math.round(res[y].truies);
+    const truiesActives = Math.round(per.agg.truies);
     const ouvriers = Math.max(1, Math.ceil(Math.min(truiesActives || 1, parc) / 70));
-    const charges = ouvriers * 12 * h.salaireMensuelOuvrier + amort;
+    // charges au prorata du nombre de mois de la periode
+    const partAn = per.moisParPeriode / 12;
+    const charges = ouvriers * 12 * h.salaireMensuelOuvrier * partAn + amortAn * partAn;
     const margeBrute = vendus * marge;
     const benef = margeBrute - charges;
     const benefUSD = benef / h.tauxUSD;
@@ -125,8 +158,10 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
     const benefApres = benef - prime;
     const depenses = ca - benefApres;
     out.push({
-      annee: y,
-      mb: Math.round(res[y].mb),
+      label: per.label,
+      labelCourt: per.labelCourt,
+      annee: per.annee,
+      mb: Math.round(per.agg.mb),
       vendus,
       ca,
       depenses,
@@ -139,9 +174,9 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
 }
 
 // Repartit le cheptel reel en cohortes d'age (par date de naissance)
-function buildCohortes(animals, speciesFilter) {
-  const now = new Date();
-  const moisAbs = (d) => (d.getFullYear() - 2026) * 12 + d.getMonth();
+function buildCohortes(animals, speciesFilter, anneeDebut) {
+  const debut = anneeDebut || 2026;
+  const moisAbs = (d) => (d.getFullYear() - debut) * 12 + d.getMonth();
   let females = 0, males = 0;
   const cohortes = [];
   const groups = new Map();
@@ -179,6 +214,17 @@ const fmtUSD = (n) => {
   if (a >= 1e3) return (n / 1e3).toFixed(0) + " k$";
   return Math.round(n) + " $";
 };
+
+// Montant compact (k/M/Md) suivi du symbole de la devise systeme choisie.
+// La devise n'est PAS codee ici : le symbole vient de currency.js (donnees).
+function fmtMontant(v, symbole) {
+  const u = symbole ? " " + symbole : "";
+  const a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(2) + " Md" + u;
+  if (a >= 1e6) return (v / 1e6).toFixed(0) + " M" + u;
+  if (a >= 1e3) return (v / 1e3).toFixed(0) + " k" + u;
+  return Math.round(v) + u;
+}
 
 // ─── CALIBRATION SUR DONNEES REELLES ─────────────────────────────────────
 // Lit les vraies tables (depenses, ventes, repro, mortalite) et derive des
@@ -320,6 +366,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [calibNotes, setCalibNotes] = React.useState(null);
   const [prog, setProg] = React.useState(null);
   const [importing, setImporting] = React.useState(false);
+  const [currencies, setCurrencies] = React.useState([]);
+  const [currencyId, setCurrencyId] = React.useState(null);
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
 
   const importReal = async () => {
@@ -346,13 +394,35 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     return () => { alive = false; };
   }, []);
 
+  // Devises : on REUTILISE les devises deja permises (currency.js) et la devise
+  // par defaut du systeme. On n'ajoute aucune devise nous-memes.
+  React.useEffect(() => {
+    let alive = true;
+    Promise.allSettled([api.listCurrencies(), api.getAppSetting()]).then(([curR, setR]) => {
+      if (!alive) return;
+      const curRaw = curR.status === "fulfilled" ? curR.value : null;
+      const list = curRaw?.getAllCurrency || (Array.isArray(curRaw) ? curRaw : []);
+      const setting = setR.status === "fulfilled" ? setR.value : null;
+      setCurrencies(list);
+      setCurrencyId(defaultCurrencyId(setting, list));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const symbole = symbolFor(currencyId, currencies, "CDF");
+  const fmtM = (v) => fmtMontant(v, symbole);
+  const curOptions = currencyOptions(currencies);
+
   const { cohortes, females, males } = React.useMemo(
-    () => buildCohortes(animals, speciesFilter), [animals, speciesFilter]);
+    () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
 
   const rows = React.useMemo(
     () => simulate(strategy, h, cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }], Math.max(0, males - 3)),
     [strategy, h, cohortes, males]);
 
+  const debutP = h.anneeDebut || 2026;
+  const finP = debutP + Math.max(1, h.horizonAns || 5) - 1;
+  const periodeRange = `${debutP}-${finP}`;
   const rev = revenuParPorc(h);
   const cout = coutParPorc(h);
   const marge = rev - cout;
@@ -411,8 +481,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
                   <tr key={p.annee} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{p.annee}</td>
                     <td style={td}>{p.ventes}</td>
-                    <td style={td}>{fmt(p.ca)}</td>
-                    <td style={td}>{fmt(p.depenses)}</td>
+                    <td style={td}>{fmtM(p.ca)}</td>
+                    <td style={td}>{fmtM(p.depenses)}</td>
                     <td style={td}>{p.naissances}</td>
                     <td style={td}>{p.morts}</td>
                   </tr>
@@ -448,6 +518,35 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           </div>
         </div>
         {strategy === "P2" && <NumInput label={L("Plafond truies (P2)", "Sow cap (P2)")} value={h.plafondTruiesP2} onChange={set("plafondTruiesP2")} />}
+        {curOptions.length > 0 && (
+          <div>
+            <div style={upper}>{L("Devise", "Currency")}</div>
+            <select className="input" value={currencyId ?? ""}
+              onChange={(e) => setCurrencyId(e.target.value ? Number(e.target.value) : null)}
+              style={{ minWidth: 110 }}>
+              {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Periode : annee de depart, horizon, granularite */}
+      <div className="card" style={{ ...card, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <NumInput label={L("Annee de depart", "Start year")} value={h.anneeDebut} onChange={set("anneeDebut")} />
+        <NumInput label={L("Horizon", "Horizon")} value={h.horizonAns} onChange={set("horizonAns")} suffix={L("ans", "yrs")} />
+        <div>
+          <div style={upper}>{L("Granularite", "Granularity")}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["annee", L("Par annee", "Yearly")], ["trimestre", L("Par trimestre", "Quarterly")]].map(([k, lbl]) => (
+              <button key={k} className={"btn " + (h.granularite === k ? "btn-primary" : "")}
+                onClick={() => set("granularite")(k)}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", maxWidth: 240 }}>
+          {L(`Projection ${h.anneeDebut} → ${h.anneeDebut + Math.max(1, h.horizonAns) - 1}`,
+             `Projection ${h.anneeDebut} → ${h.anneeDebut + Math.max(1, h.horizonAns) - 1}`)}
+        </div>
       </div>
 
       {/* Hypotheses ajustables */}
@@ -469,60 +568,58 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       <div className="card" style={card}>
         <div style={upper}>{L("Revenu par porc", "Revenue per pig")}</div>
         <div style={{ fontSize: 13 }}>
-          {L("Revenu", "Revenue")}: <b>{fmt(rev)} CDF</b> ({fmtUSD(rev / h.tauxUSD)}) ·
-          {" "}{L("Cout", "Cost")}: {fmt(cout)} CDF ·
-          {" "}{L("Marge", "Margin")}: <b>{fmt(marge)} CDF</b> ({rev > 0 ? Math.round(marge / rev * 100) : 0}%)
+          {L("Revenu", "Revenue")}: <b>{fmtM(rev)}</b> ·
+          {" "}{L("Cout", "Cost")}: {fmtM(cout)} ·
+          {" "}{L("Marge", "Margin")}: <b>{fmtM(marge)}</b> ({rev > 0 ? Math.round(marge / rev * 100) : 0}%)
         </div>
       </div>
 
       {/* Tableau projection */}
       <div className="card" style={card}>
-        <div style={upper}>{L("Projection 2026-2030", "Projection 2026-2030")} — {strategy}</div>
+        <div style={upper}>{L("Projection", "Projection")} {periodeRange} — {strategy}{h.granularite === "trimestre" ? ` · ${L("trimestres", "quarters")}` : ""}</div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                <th style={{ ...th, textAlign: "left" }}>{L("Annee", "Year")}</th>
+                <th style={{ ...th, textAlign: "left" }}>{h.granularite === "trimestre" ? L("Trimestre", "Quarter") : L("Annee", "Year")}</th>
                 <th style={th}>{L("Mises bas", "Farrowings")}</th>
                 <th style={th}>{L("Vendus", "Sold")}</th>
-                <th style={th}>CA (CDF)</th>
+                <th style={th}>CA ({symbole})</th>
                 <th style={th}>{L("Depenses", "Expenses")}</th>
                 <th style={th}>{L("Benefice", "Profit")}</th>
-                <th style={th}>{L("Benefice", "Profit")} USD</th>
                 <th style={th}>{L("Prime", "Bonus")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.annee} style={{ borderBottom: "1px solid var(--border-subtle, var(--border))" }}>
-                  <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{r.annee}</td>
+                <tr key={r.label} style={{ borderBottom: "1px solid var(--border-subtle, var(--border))" }}>
+                  <td style={{ ...td, textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{r.label}</td>
                   <td style={td}>{r.mb}</td>
                   <td style={td}>{r.vendus.toLocaleString()}</td>
-                  <td style={td}>{fmt(r.ca)}</td>
-                  <td style={td}>{fmt(r.depenses)}</td>
-                  <td style={{ ...td, fontWeight: 600, color: r.benef >= 0 ? "var(--forest-700, green)" : "crimson" }}>{fmt(r.benef)}</td>
-                  <td style={td}>{fmtUSD(r.benefUSD)}</td>
-                  <td style={td}>{r.prime > 0 ? fmt(r.prime) : "—"}</td>
+                  <td style={td}>{fmtM(r.ca)}</td>
+                  <td style={td}>{fmtM(r.depenses)}</td>
+                  <td style={{ ...td, fontWeight: 600, color: r.benef >= 0 ? "var(--forest-700, green)" : "crimson" }}>{fmtM(r.benef)}</td>
+                  <td style={td}>{r.prime > 0 ? fmtM(r.prime) : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
         <div style={{ marginTop: 10, fontSize: 12, color: "var(--fg-3)" }}>
-          {L("CA − Depenses = Benefice. Benefice net cumule 2026-2030 :", "Revenue − Expenses = Profit. Cumulative net profit 2026-2030:")}{" "}
-          <b>{fmt(cumulBenef)} CDF</b> ({fmtUSD(cumulBenef / h.tauxUSD)})
+          {L(`CA − Depenses = Benefice. Benefice net cumule ${periodeRange} :`, `Revenue − Expenses = Profit. Cumulative net profit ${periodeRange}:`)}{" "}
+          <b>{fmtM(cumulBenef)}</b>
         </div>
       </div>
 
       {/* Graphique ventes + benefice */}
       <div className="card" style={card}>
-        <div style={upper}>{L("Ventes & benefice par an", "Sales & profit per year")}</div>
+        <div style={upper}>{L("Ventes & benefice par", "Sales & profit per")} {h.granularite === "trimestre" ? L("trimestre", "quarter") : L("an", "year")}</div>
         <MaterialLineChart
           type="line"
-          labels={rows.map((r) => String(r.annee))}
+          labels={rows.map((r) => r.labelCourt)}
           series={[
             { name: L("Porcs vendus", "Pigs sold"), data: rows.map((r) => r.vendus) },
-            { name: L("Benefice (M CDF)", "Profit (M CDF)"), data: rows.map((r) => Math.round(r.benef / 1e6)) },
+            { name: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`), data: rows.map((r) => Math.round(r.benef / 1e6)) },
           ]}
           height={260}
         />

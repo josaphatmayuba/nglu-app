@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.119.0)
+- **FarmOS — Simulateur : période ajustable, vue trimestrielle et devise au choix**. (1) **Années ajustables** : champs « année de départ » + « horizon (nb d'années) » — la projection, le tableau et le graphique s'adaptent (plus de 2026-2030 figé). (2) **Granularité par trimestre** : bouton Par année / Par trimestre ; en trimestriel chaque ligne affiche les mois (ex. « T1 2027 (janv–mars) ») et l'axe du graphique un label court (« T1 27 (janv) ») ; les charges (salaires/amortissement) sont mises au prorata des mois de la période. (3) **Devise au choix** : sélecteur alimenté par les devises **déjà permises** dans les données (`api.listCurrencies` + `currency.js`), pré-sélectionné sur la devise par défaut du système (`getAppSetting`) — aucune devise ni taux codés en dur ; tous les montants (CA, dépenses, bénéfice, prime, revenu/porc) s'affichent avec le symbole choisi. **Vérifié** : `vite build --mode development` OK. [SCRUM]
+
 ### Fixed (3.118.1)
 - **FarmOS — Simulateur : QA + calibration réelle effective (v2)**. (1) L'import de données réelles ne modifiait pas les finances : le prix réel calibré était écrit dans `prixEntierParKg` mais le mode de vente restait « découpe » → désormais l'import bascule en mode « porc entier » pour que le prix réel/tête soit réellement appliqué. (2) Les coûts réels (aliment/vétérinaire/salaires) n'étaient qu'affichés : ils sont maintenant **injectés dans les hypothèses** — aliment et véto ramenés au coût/porc (réparti sur les porcs vendus enregistrés, sinon les nés vivants), salaires ramenés au mensuel/ouvrier (étalés sur le nombre de mois couverts par les dépenses). (3) Code mort retiré (`benef` recalculé à l'identique pour 2026) ; ajout du cas sexe `MÂLE`. **Vérifié** : `vite build --mode development` OK. [SCRUM]
 
