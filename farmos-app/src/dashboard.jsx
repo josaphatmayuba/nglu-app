@@ -131,8 +131,15 @@ function useDashboardData() {
           productionLogs = [],
           mortalityEvents = [],
         } = snapshot || {};
-        const okArr = [animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, mortalityEvents].every((x) => Array.isArray(x));
-        if (okArr) setData({ animals, medicines, sales, expenses, treatments, repro, vaccinations, aiInsights, productionLogs, mortalityEvents, finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true });
+        // Le snapshot est rendu resilient cote backend (chaque source a un fallback []).
+        // On normalise ici par securite: une source absente devient [] sans bloquer le reste.
+        const arr = (x) => (Array.isArray(x) ? x : []);
+        setData({
+          animals: arr(animals), medicines: arr(medicines), sales: arr(sales), expenses: arr(expenses),
+          treatments: arr(treatments), repro: arr(repro), vaccinations: arr(vaccinations), aiInsights: arr(aiInsights),
+          productionLogs: arr(productionLogs), mortalityEvents: arr(mortalityEvents),
+          finance: finance || { months: [], revenue: [], expense: [], byCategory: [] }, ready: true,
+        });
       })
       .catch(() => {});
     return () => { cancel = true; };
