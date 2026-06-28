@@ -64,7 +64,9 @@ Criteres d'acceptation:
 - Les 3 premiers segments clients sont nommes.
 - Le document de vente peut expliquer pourquoi choisir FarmOS Pro plutot que Herdwatch, Farmbrite ou AgriWebb.
 
-Statut: a faire.
+Livrable: `FARMOS_COMPETITIVE_POSITIONING.md` (phrase + niche + 3 segments + comparaisons + concurrents non vises).
+
+Statut: fait (28 juin 2026).
 
 ### COMP-P0-002 - Verifier le risque de nom FarmOS
 
