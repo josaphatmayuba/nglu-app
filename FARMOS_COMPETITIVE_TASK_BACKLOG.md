@@ -115,7 +115,9 @@ Criteres d'acceptation:
 - Minimum 25 criteres compares.
 - Les gaps FarmOS Pro deviennent des taches.
 
-Statut: a faire.
+Livrable: `FARMOS_COMPETITIVE_MATRIX.md` (12 concurrents x 28 criteres + colonne reponse FarmOS Pro, revue trimestrielle).
+
+Statut: fait (28 juin 2026) — a revoir le 28 septembre 2026.
 
 ## Sprint 1 - Battre Excel et les apps simples
 
