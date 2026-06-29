@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.122.7)
+- **FarmOS — Simulateur : le sélecteur de devise ne sélectionnait rien**. Les `<option>` utilisaient `value={o.value}` alors que `currencyOptions()` renvoie des objets `{ id, label }` (pas de champ `value`) : `value` valait donc `undefined` → toutes les options rendues avec `value=""` → choisir une devise renvoyait `""` et remettait la sélection à « aucune ». Correction : `value={o.id}` / `key={o.id}`. Vérifié par simulation du flux (choix → `saisieCurrencyId` correct → symbole résolu). **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Added (3.122.6)
 - **FarmOS — Animaux : effectif d'un lot visible**. Le nombre d'animaux d'un lot (champ `count` déjà saisi au formulaire/import « Nombre ») n'était affiché nulle part. Il apparaît désormais à **deux endroits** : un badge « N animaux » à côté du tag du lot dans l'en-tête de la fiche, et un compteur sur chaque ligne de la liste des animaux. N'apparaît que pour `count > 1` (un animal individuel n'est pas pollué). Aucune migration DB (réutilise le champ existant). **Vérifié** : modifs réutilisent les patterns du fichier. [SCRUM]
 

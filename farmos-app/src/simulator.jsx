@@ -512,7 +512,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
             <select className="input" value={saisieCurrencyId ?? ""} style={{ height: 32, minWidth: 150 }}
               onChange={(e) => setSaisieCurrencyId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">{L("— Choisir —", "— Choose —")}</option>
-              {curOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </label>
           <div style={{ fontSize: 11, color: "var(--fg-3)", flex: 1, minWidth: 220 }}>
