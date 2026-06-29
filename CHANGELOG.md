@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.124.4)
+- **FarmOS — Simulateur : rapport par zone + reproducteurs gardés par période**. Le rapport imprimable affiche désormais la zone sélectionnée dans l'en-tête et la synthèse (`Toutes les zones`, zone précise ou `Non renseignée`). Ajout d'un tableau « Reproducteurs gardés » dans le rapport, avec les stocks de fin de période : femelles gardées pour la reproduction, mâles reproducteurs gardés et total reproducteurs. Le moteur expose ces stocks par période depuis la simulation P1/P2 pour que le rapport reflète le cheptel reproducteur réellement conservé. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Added (3.124.3)
 - **FarmOS — Simulateur : vue par zone + mises bas réelles dans la projection**. Ajout d'un filtre « Vue par zone » (détection par `zone_id`, puis salle, bâtiment, lot) qui recalcule la projection P1/P2 et affiche une comparaison par zone (porcs départ, femelles, mâles/verrats, vendus, CA, bénéfice, cheptel fin période). Le moteur charge aussi les événements de reproduction : les mises bas réelles avec `offspring_count` ajoutent les porcelets manquants comme cohortes si les animaux correspondants ne sont pas déjà saisis, et recalent la prochaine mise bas de la mère depuis sa dernière mise bas enregistrée. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 

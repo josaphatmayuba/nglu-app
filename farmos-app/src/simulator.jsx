@@ -205,6 +205,8 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
   const malesExistants = cohortesMalesVente.reduce((s, c) => s + c.n, 0);
   const femellesInitiales = cohortesInit.reduce((s, c) => s + c.n, 0);
   let femellesGardees = femellesInitiales;
+  const femellesReproParMois = Array.from({ length: HORIZON + 1 }, () => Math.round(femellesGardees));
+  const malesReproGardes = Math.max(0, Math.round(Number(verratsInit) || 0));
   // cheptel vivant au depart = reproductrices + males a vendre + verrats (geniteurs)
   const parcInit = femellesInitiales + malesExistants + (Number(verratsInit) || 0) + (Number(malesActuels) || 0);
   // males existants destines a la vente : vendus a l'age de vente (lot date), PAS tous au mois 0
@@ -269,6 +271,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
         if (aVendre > 0) { add(venteMois, "vendus", aVendre); add(venteMois, "vendusF", aVendre); }
       }
     }
+    femellesReproParMois[m] = Math.round(Math.max(0, femellesGardees));
   }
 
   // Agregation par periode (annee ou trimestre), ALIGNEE sur le calendrier civil.
@@ -296,6 +299,10 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
       vivants += moisData[m].nes - moisData[m].vendus;
       nbMois++;
     }
+    const stockMois = Math.min(Math.max(p0, finP - 1), HORIZON);
+    agg.femellesRepro = femellesReproParMois[stockMois] ?? Math.round(femellesInitiales);
+    agg.malesRepro = malesReproGardes;
+    agg.totalRepro = agg.femellesRepro + agg.malesRepro;
     agg.vivants = Math.round(Math.max(0, vivants));
     const t = Math.floor(moisCiv / 3); // index trimestre civil 0-3
     const label = granu === "trimestre"
@@ -335,6 +342,9 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
       vendus,
       vendusM: Math.round(per.agg.vendusM),
       vendusF: Math.round(per.agg.vendusF),
+      femellesRepro: Math.round(per.agg.femellesRepro),
+      malesRepro: Math.round(per.agg.malesRepro),
+      totalRepro: Math.round(per.agg.totalRepro),
       truies: truiesActives,
       morts: Math.round(per.agg.morts),
       naissances: Math.round(per.agg.nes),
@@ -665,7 +675,7 @@ const NumInput = ({ label, value, onChange, suffix }) => (
 // Vue rapport imprimable : mise en page document (titre, synthese, hypotheses,
 // tableau de projection, graphe, prix). Cachee a l'ecran (#sim-report-print
 // display:none), rendue visible uniquement par @media print.
-function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode, fmtM, rev, cout, marge, cumulBenef, debutP, finP, granu }) {
+function ReportView({ L, rows, h, strategy, zoneDisplayLabel, females, males, cohortes, saisieCode, fmtM, rev, cout, marge, cumulBenef, debutP, finP, granu }) {
   const dev = saisieCode || "";
   const today = new Date().toLocaleDateString(L("fr-CA", "en-CA"));
   const totVendus = rows.reduce((s, r) => s + r.vendus, 0);
@@ -684,6 +694,7 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
           <div style={{ fontSize: 20, fontWeight: 800 }}>{L("Rapport de simulation — Élevage", "Simulation report — Livestock")}</div>
           <div style={{ fontSize: 12, color: "#555" }}>
             {L("Projection", "Projection")} {debutP}–{finP} · {L("Stratégie", "Strategy")} {strategy}
+            {zoneDisplayLabel ? ` · ${L("Zone", "Zone")} ${zoneDisplayLabel}` : ""}
             {dev ? ` · ${L("Devise", "Currency")} ${dev}` : ""}
           </div>
         </div>
@@ -695,6 +706,7 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
         <div style={h2}>{L("Synthèse", "Summary")}</div>
         <div style={dl}>
           {item(L("Cheptel de départ", "Starting herd"), `${females} ♀ · ${males} ♂ · ${cohortes.length} ${L("cohorte(s)", "cohort(s)")}`)}
+          {item(L("Zone", "Zone"), zoneDisplayLabel || L("Toutes les zones", "All zones"))}
           {item(L("Porcs vendus (total)", "Pigs sold (total)"), totVendus.toLocaleString())}
           {item(L("Chiffre d'affaires (total)", "Revenue (total)"), fmtM(totCA))}
           {item(L("Dépenses (total)", "Expenses (total)"), fmtM(totDep))}
@@ -726,6 +738,29 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
           {item(L("Salaire / ouvrier / mois", "Salary / worker / mo"), fmtM(h.salaireMensuelOuvrier))}
           {item(L("Investissement (capex) — amorti sur 10 ans", "Investment (capex) — amortized over 10 yrs"), fmtM(h.capex))}
         </div>
+      </div>
+
+      {/* Reproducteurs gardes */}
+      <div className="rep-block">
+        <div style={h2}>{L("Reproducteurs gardés", "Breeders kept")} {granu === "trimestre" ? L("(fin de trimestre)", "(quarter end)") : L("(fin d'année)", "(year end)")}</div>
+        <table>
+          <thead><tr>
+            <th style={{ textAlign: "left" }}>{L("Période", "Period")}</th>
+            <th style={rt}>{L("Femelles gardées repro", "Females kept for breeding")}</th>
+            <th style={rt}>{L("Mâles gardés repro", "Males kept for breeding")}</th>
+            <th style={rt}>{L("Total reproducteurs", "Total breeders")}</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ textAlign: "left" }}>{r.label}</td>
+                <td style={rt}>{(r.femellesRepro || 0).toLocaleString()}</td>
+                <td style={rt}>{(r.malesRepro || 0).toLocaleString()}</td>
+                <td style={{ ...rt, fontWeight: 700 }}>{(r.totalRepro || 0).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Tableau de projection */}
@@ -993,6 +1028,7 @@ const SimulatorScreen = ({ lang }) => {
       {/* Vue RAPPORT : invisible a l'ecran, seule chose imprimee (mise en page document) */}
       <ReportView
         L={L} rows={rows} h={h} strategy={strategy}
+        zoneDisplayLabel={selectedZoneLabel}
         females={females} males={males} cohortes={cohortes}
         saisieCode={saisieCode} fmtM={fmtM}
         rev={rev} cout={cout} marge={marge} cumulBenef={cumulBenef}
