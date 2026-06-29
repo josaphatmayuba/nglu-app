@@ -249,6 +249,9 @@ async function jsonMutate(kind, path, init = {}) {
 export const api = {
   getAppSetting: () => globalJsonFetch("/setting"),
   listCurrencies: () => globalJsonFetch("/currency?query=all"),
+  // Taux de change reels saisis en compta (module ledger). Best-effort : peut
+  // renvoyer 403 si l'utilisateur n'a pas la permission compta (gere par l'appelant).
+  listLedgerExchanges: (limit = 200) => globalJsonFetch(`/ledger/exchanges?limit=${limit}`),
   // Référentiel central fournisseurs (route racine /api/supplier, filtré domaine ferme)
   listSuppliers: () => globalJsonFetch("/supplier?query=all&type=farm"),
   // Prévisionnel (module forecast backend2, route racine /api/forecast) — scope "farmos".

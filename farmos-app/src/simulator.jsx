@@ -2,7 +2,7 @@
 import React from "react";
 import { api } from "./api";
 import { MaterialLineChart } from "./material-charts.jsx";
-import { defaultCurrencyId, symbolFor, currencyOptions } from "./currency";
+import { defaultCurrencyId, symbolFor, currencyOptions, currencyIdOf } from "./currency";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SIMULATEUR D'ELEVAGE — projection cheptel 5 ans, strategies P1/P2,
@@ -215,6 +215,49 @@ const fmtUSD = (n) => {
   return Math.round(n) + " $";
 };
 
+// Code ISO d'une devise (USD, CDF, EUR…) a partir de son id, via la liste systeme.
+function codeOf(id, currencies) {
+  if (id == null) return null;
+  const c = (currencies || []).find((x) => Number(currencyIdOf(x)) === Number(id));
+  return c ? String(c.currencyCode || c.currency_code || "").trim().toUpperCase() : null;
+}
+
+// Taux web INDICATIF (1 from = X to). Source publique sans cle ; null si indispo.
+async function fetchTauxWeb(from, to) {
+  const res = await fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=1`);
+  if (!res.ok) return null;
+  const j = await res.json();
+  const r = Number(j?.result || j?.info?.rate);
+  return r > 0 ? r : null;
+}
+
+// Resout le taux base->affichage avec priorite : compta (DB) > web > manuel.
+// Retourne { taux, source } ; taux=null si rien (on n'invente pas de chiffre).
+function resolveTaux(baseId, dispId, exchanges, tauxWeb, tauxManuel) {
+  if (baseId == null || dispId == null || Number(baseId) === Number(dispId))
+    return { taux: 1, source: "identique" };
+  // 1) Taux compta le plus recent entre les deux devises (sens direct ou inverse)
+  const tries = (exchanges || []).filter((e) => {
+    const f = Number(e.fromCurrencyId), t = Number(e.toCurrencyId);
+    return (f === Number(baseId) && t === Number(dispId)) || (f === Number(dispId) && t === Number(baseId));
+  });
+  if (tries.length) {
+    // deja trie par date desc cote backend ; on prend le 1er
+    const e = tries[0];
+    const r = Number(e.rate);
+    if (r > 0) {
+      const direct = Number(e.fromCurrencyId) === Number(baseId);
+      return { taux: direct ? r : 1 / r, source: "compta" };
+    }
+  }
+  // 2) Taux web indicatif
+  if (tauxWeb > 0) return { taux: tauxWeb, source: "web" };
+  // 3) Saisie manuelle
+  const m = Number(tauxManuel);
+  if (m > 0) return { taux: m, source: "manuel" };
+  return { taux: null, source: "aucun" };
+}
+
 // Montant compact (k/M/Md) suivi du symbole de la devise systeme choisie.
 // La devise n'est PAS codee ici : le symbole vient de currency.js (donnees).
 function fmtMontant(v, symbole) {
@@ -367,7 +410,12 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [prog, setProg] = React.useState(null);
   const [importing, setImporting] = React.useState(false);
   const [currencies, setCurrencies] = React.useState([]);
-  const [currencyId, setCurrencyId] = React.useState(null);
+  const [currencyId, setCurrencyId] = React.useState(null);   // devise d'AFFICHAGE
+  const [baseCurrencyId, setBaseCurrencyId] = React.useState(null); // devise des donnees (systeme)
+  const [exchanges, setExchanges] = React.useState([]);       // taux compta /ledger/exchanges
+  const [exchOk, setExchOk] = React.useState(null);           // null=pas tente, true/false
+  const [tauxManuel, setTauxManuel] = React.useState("");     // repli si pas de taux DB
+  const [tauxWeb, setTauxWeb] = React.useState(null);         // indicatif en ligne (peut rester null hors-ligne)
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
 
   const importReal = async () => {
@@ -403,15 +451,46 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       const curRaw = curR.status === "fulfilled" ? curR.value : null;
       const list = curRaw?.getAllCurrency || (Array.isArray(curRaw) ? curRaw : []);
       const setting = setR.status === "fulfilled" ? setR.value : null;
+      const def = defaultCurrencyId(setting, list);
       setCurrencies(list);
-      setCurrencyId(defaultCurrencyId(setting, list));
+      setCurrencyId(def);
+      setBaseCurrencyId(def); // les montants du modele sont dans la devise systeme
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
+  // Taux de change reels (compta) — best-effort : 403 si pas de droit compta -> repli manuel.
+  React.useEffect(() => {
+    let alive = true;
+    api.listLedgerExchanges(200).then((res) => {
+      if (!alive) return;
+      const list = res?.getAllExchange || res?.data || (Array.isArray(res) ? res : []);
+      setExchanges(list);
+      setExchOk(true);
+    }).catch(() => { if (alive) { setExchanges([]); setExchOk(false); } });
+    return () => { alive = false; };
+  }, []);
+
+  // Taux web INDICATIF (sans cle, source publique). Ne s'affiche pas hors-ligne / si echec.
+  React.useEffect(() => {
+    let alive = true;
+    setTauxWeb(null);
+    const from = codeOf(baseCurrencyId, currencies);
+    const to = codeOf(currencyId, currencies);
+    if (!from || !to || from === to) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    fetchTauxWeb(from, to).then((r) => { if (alive && r > 0) setTauxWeb(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [baseCurrencyId, currencyId, currencies]);
+
   const symbole = symbolFor(currencyId, currencies, "CDF");
-  const fmtM = (v) => fmtMontant(v, symbole);
   const curOptions = currencyOptions(currencies);
+
+  // Resout le taux base->affichage : 1) taux compta (le + recent) 2) taux web 3) saisie manuelle.
+  const tauxResolu = React.useMemo(
+    () => resolveTaux(baseCurrencyId, currencyId, exchanges, tauxWeb, tauxManuel),
+    [baseCurrencyId, currencyId, exchanges, tauxWeb, tauxManuel]);
+  const fmtM = (v) => fmtMontant(v * (tauxResolu.taux || 1), symbole);
 
   const { cohortes, females, males } = React.useMemo(
     () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
@@ -526,6 +605,57 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
               style={{ minWidth: 110 }}>
               {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
+          </div>
+        )}
+
+        {/* Taux de conversion (uniquement si la devise d'affichage != devise des donnees) */}
+        {baseCurrencyId != null && currencyId != null && Number(baseCurrencyId) !== Number(currencyId) && (
+          <div style={{ flexBasis: "100%", fontSize: 12, paddingTop: 4 }}>
+            <div style={upper}>
+              {L("Taux de conversion", "Conversion rate")} ({codeOf(baseCurrencyId, currencies)} → {codeOf(currencyId, currencies)})
+            </div>
+            {/* Source utilisee */}
+            <div style={{ marginBottom: 6 }}>
+              {tauxResolu.taux ? (
+                <span>
+                  1 {codeOf(baseCurrencyId, currencies)} = <b>{tauxResolu.taux.toFixed(4)}</b> {codeOf(currencyId, currencies)}{" "}
+                  <span style={{ color: "var(--fg-3)" }}>
+                    ({tauxResolu.source === "compta" ? L("taux compta", "accounting rate")
+                      : tauxResolu.source === "web" ? L("taux web indicatif", "indicative web rate")
+                      : L("taux saisi", "manual rate")})
+                  </span>
+                </span>
+              ) : (
+                <span style={{ color: "crimson" }}>
+                  {L("Aucun taux disponible — saisissez-le ci-dessous pour convertir.",
+                     "No rate available — enter one below to convert.")}
+                </span>
+              )}
+              {exchOk === false && (
+                <span style={{ color: "var(--fg-3)" }}> · {L("(taux compta non accessibles)", "(accounting rates not accessible)")}</span>
+              )}
+            </div>
+            {/* Saisie manuelle + indicatif web */}
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ color: "var(--fg-3)" }}>{L("Taux manuel", "Manual rate")}</span>
+                <input className="input" type="number" value={tauxManuel}
+                  onChange={(e) => setTauxManuel(e.target.value)} placeholder="—" style={{ width: 120 }} />
+              </label>
+              {tauxWeb > 0 && (
+                <span style={{ color: "var(--fg-3)" }}>
+                  {L("En ligne aujourd'hui", "Online today")}: <b>{tauxWeb.toFixed(4)}</b>{" "}
+                  <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }}
+                    onClick={() => setTauxManuel(String(tauxWeb))}>
+                    {L("Réajuster avec ce taux", "Use this rate")}
+                  </button>
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
+              {L("Conversion = taux de votre compta en priorité (cohérent et hors-ligne). Le taux web n'est qu'indicatif et n'apparaît qu'en ligne.",
+                 "Conversion uses your accounting rate first (consistent, offline). The web rate is indicative only and shows only when online.")}
+            </div>
           </div>
         )}
       </div>
