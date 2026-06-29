@@ -87,6 +87,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
 
   const file = cohortesInit.map((c) => ({ ...c }));
   let parc = cohortesInit.reduce((s, c) => s + c.n, 0);
+  const parcInit = parc + malesActuels; // cheptel vivant au depart (reproducteurs + males a vendre)
   add(0, "vendus", malesActuels); // males adultes existants vendus au depart
   add(0, "vendusM", malesActuels);
 
@@ -127,10 +128,15 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   const granu = h.granularite === "trimestre" ? "trimestre" : "annee";
   const moisParPeriode = granu === "trimestre" ? 3 : 12;
   const periodes = [];
+  let vivants = parcInit; // stock d'animaux vivants, cumule mois par mois
   for (let p0 = 0; p0 <= HORIZON; p0 += moisParPeriode) {
     const agg = { mb: 0, nes: 0, vendus: 0, truies: 0, morts: 0, vendusM: 0, vendusF: 0 };
-    for (let m = p0; m < p0 + moisParPeriode && m <= HORIZON; m++)
+    for (let m = p0; m < p0 + moisParPeriode && m <= HORIZON; m++) {
       for (const k in agg) agg[k] += moisData[m][k];
+      // total vivant = entrees (nes vivants) - sorties (vendus) ; morts deja exclus des nes
+      vivants += moisData[m].nes - moisData[m].vendus;
+    }
+    agg.vivants = Math.round(Math.max(0, vivants));
     const anneeP = debut + Math.floor(p0 / 12);
     const moisDansAnnee = p0 % 12;
     const t = Math.floor(moisDansAnnee / 3) + 1;
@@ -173,6 +179,8 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
       vendusF: Math.round(per.agg.vendusF),
       truies: truiesActives,
       morts: Math.round(per.agg.morts),
+      naissances: Math.round(per.agg.nes),
+      vivants: per.agg.vivants,
       ca,
       depenses,
       benef: benefApres,
@@ -998,10 +1006,12 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
           {[
+            { t: L("Naissances (vivantes)", "Births (alive)"), p1: rowsP1.map((r) => r.naissances), p2: rowsP2.map((r) => r.naissances) },
+            { t: L("Total animaux (cheptel vivant)", "Total animals (live herd)"), p1: rowsP1.map((r) => r.vivants), p2: rowsP2.map((r) => r.vivants) },
             { t: L("Porcs vendus", "Pigs sold"), p1: rowsP1.map((r) => r.vendus), p2: rowsP2.map((r) => r.vendus) },
             { t: L("Mâles vendus", "Males sold"), p1: rowsP1.map((r) => r.vendusM), p2: rowsP2.map((r) => r.vendusM) },
             { t: L("Femelles vendues", "Females sold"), p1: rowsP1.map((r) => r.vendusF), p2: rowsP2.map((r) => r.vendusF) },
-            { t: L("Truies actives (cheptel)", "Active sows (herd)"), p1: rowsP1.map((r) => r.truies), p2: rowsP2.map((r) => r.truies) },
+            { t: L("Truies actives (reproductrices)", "Active sows (breeders)"), p1: rowsP1.map((r) => r.truies), p2: rowsP2.map((r) => r.truies) },
             { t: L("Mortalité (à la naissance)", "Mortality (at birth)"), p1: rowsP1.map((r) => r.morts), p2: rowsP2.map((r) => r.morts) },
             { t: L(`Bénéfice (M ${symbole})`, `Profit (M ${symbole})`), p1: rowsP1.map((r) => Math.round(r.benef / 1e4) / 100), p2: rowsP2.map((r) => Math.round(r.benef / 1e4) / 100) },
           ].map((g) => (

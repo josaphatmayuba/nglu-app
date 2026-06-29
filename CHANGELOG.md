@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.13)
+- **FarmOS — Simulateur : comparaison P1/P2 ajoute Naissances et Total animaux**. Deux graphes de plus dans la section P1 vs P2 : « Naissances (vivantes) » (champ `nes` désormais exposé en `naissances`) et « Total animaux (cheptel vivant) » = stock vivant cumulé par période (`vivants` : cheptel initial + nés vivants − vendus, morts déjà exclus). Le « Truies actives » est renommé « Truies actives (reproductrices) » pour le distinguer du total. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Added (3.122.12)
 - **FarmOS — Simulateur : nouveau graphe de comparaison P1 vs P2**. Section dédiée (sans toucher au graphe « Ventes & bénéfice » existant) qui lance les deux stratégies en parallèle (`rowsP1`/`rowsP2`) et superpose P1 (ligne pleine) vs P2 (pointillés) sur 6 mini-graphes : porcs vendus, mâles vendus, femelles vendues, truies actives (cheptel), mortalité (à la naissance), bénéfice. Le moteur `simulate()` expose désormais par période `vendusM`, `vendusF`, `truies`, `morts` (mortalité = `nésTotal − nésVivants` selon le % de survie). Ajout d'une prop `dashArray` rétrocompatible à `MaterialLineChart`. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 
