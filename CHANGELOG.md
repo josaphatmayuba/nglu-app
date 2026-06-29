@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.11)
+- **FarmOS — Simulateur : libellés de coûts précisent la période**. Les champs « / porc » et « / mois » n'indiquaient pas l'unité de temps, ce qui prêtait à confusion (par jour ? mois ? an ?). Précisé d'après l'usage réel dans le calcul (`coutParPorc`) : Aliment / véto / divers « / porc (vie entière) » = montant total pour élever un porc jusqu'à la vente ; « Aliment / truie / an » ; « Salaire / ouvrier / mois » ; « Investissement (capex) — amorti sur 10 ans » (le montant n'est pas compté d'un coup mais étalé via `amortAn = capex / 10`). Ajout d'une note explicative sous le titre. Libellés alignés entre le formulaire et le rapport imprimé. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Changed (3.122.10)
 - **FarmOS — Simulateur : « Imprimer le rapport » génère un vrai rapport, pas l'écran**. L'impression précédente reproduisait l'écran (champs de saisie, boutons, sélecteurs) — illisible comme document. Ajout d'un composant `ReportView` masqué à l'écran (`#sim-report-print` en `display:none`) et rendu **uniquement** à l'impression via `@media print` (qui masque toute l'app) : en-tête (titre, projection, stratégie, devise, date), synthèse (cheptel, totaux ventes/CA/dépenses/bénéfice cumulé, marge/porc), hypothèses + coûts en texte, tableau de projection an/trimestre avec total, le graphe colorié, et le détail des prix (découpe + porc vif). Mise en page document (bordures de tableau, `@page` marges, `break-inside: avoid`). **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

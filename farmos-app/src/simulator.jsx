@@ -454,12 +454,12 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
         </div>
         <div style={h2}>{L("Coûts", "Costs")} {dev ? `(${dev})` : ""}</div>
         <div style={dl}>
-          {item(L("Aliment / porc", "Feed / pig"), fmtM(h.alimentEngraissementParPorc))}
-          {item(L("Aliment truie / an", "Sow feed / yr"), fmtM(h.alimentTruieParAn))}
-          {item(L("Santé (véto) / porc", "Health (vet) / pig"), fmtM(h.vetoParPorc))}
-          {item(L("Divers / porc", "Misc / pig"), fmtM(h.diversParPorc))}
-          {item(L("Salaire / mois", "Salary / mo"), fmtM(h.salaireMensuelOuvrier))}
-          {item(L("Investissement (capex)", "Investment (capex)"), fmtM(h.capex))}
+          {item(L("Aliment / porc (vie entière)", "Feed / pig (whole life)"), fmtM(h.alimentEngraissementParPorc))}
+          {item(L("Aliment / truie / an", "Feed / sow / yr"), fmtM(h.alimentTruieParAn))}
+          {item(L("Santé (véto) / porc (vie entière)", "Health (vet) / pig (whole life)"), fmtM(h.vetoParPorc))}
+          {item(L("Divers / porc (vie entière)", "Misc / pig (whole life)"), fmtM(h.diversParPorc))}
+          {item(L("Salaire / ouvrier / mois", "Salary / worker / mo"), fmtM(h.salaireMensuelOuvrier))}
+          {item(L("Investissement (capex) — amorti sur 10 ans", "Investment (capex) — amortized over 10 yrs"), fmtM(h.capex))}
         </div>
       </div>
 
@@ -823,16 +823,16 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       <div className="card" style={card}>
         <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {L("Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.",
-             "The \"Import my real data\" button fills these from your expenses.")}
+          {L("Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses. « / porc » = montant total pour élever un porc jusqu'à la vente (toute sa vie), pas par jour ni par mois.",
+             "The \"Import my real data\" button fills these from your expenses. \"/ pig\" = total amount to raise one pig until sale (its whole life), not per day or per month.")}
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <NumInput label={L("Aliment / porc", "Feed / pig")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={saisieCode} />
-          <NumInput label={L("Aliment truie / an", "Sow feed / yr")} value={h.alimentTruieParAn} onChange={set("alimentTruieParAn")} suffix={saisieCode} />
-          <NumInput label={L("Santé (véto) / porc", "Health (vet) / pig")} value={h.vetoParPorc} onChange={set("vetoParPorc")} suffix={saisieCode} />
-          <NumInput label={L("Divers / porc", "Misc / pig")} value={h.diversParPorc} onChange={set("diversParPorc")} suffix={saisieCode} />
-          <NumInput label={L("Salaire / mois", "Salary / mo")} value={h.salaireMensuelOuvrier} onChange={set("salaireMensuelOuvrier")} suffix={saisieCode} />
-          <NumInput label={L("Investissement (capex)", "Investment (capex)")} value={h.capex} onChange={set("capex")} suffix={saisieCode} />
+          <NumInput label={L("Aliment / porc (vie entière)", "Feed / pig (whole life)")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Aliment / truie / an", "Feed / sow / yr")} value={h.alimentTruieParAn} onChange={set("alimentTruieParAn")} suffix={saisieCode} />
+          <NumInput label={L("Santé (véto) / porc (vie entière)", "Health (vet) / pig (whole life)")} value={h.vetoParPorc} onChange={set("vetoParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Divers / porc (vie entière)", "Misc / pig (whole life)")} value={h.diversParPorc} onChange={set("diversParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Salaire / ouvrier / mois", "Salary / worker / mo")} value={h.salaireMensuelOuvrier} onChange={set("salaireMensuelOuvrier")} suffix={saisieCode} />
+          <NumInput label={L("Investissement (capex) — amorti sur 10 ans", "Investment (capex) — amortized over 10 yrs")} value={h.capex} onChange={set("capex")} suffix={saisieCode} />
         </div>
       </div>
 
