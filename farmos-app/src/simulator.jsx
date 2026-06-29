@@ -215,6 +215,31 @@ const fmtUSD = (n) => {
   return Math.round(n) + " $";
 };
 
+// Importe les prix reels (api.listPrices) dans la decoupe + prix vif.
+// Matche productType (texte libre) sur le nom de chaque morceau / mot-cle "vif".
+function appliquerPrixReels(h, prixRows) {
+  const out = { ...h, decoupe: h.decoupe.map((d) => ({ ...d })) };
+  const notes = [];
+  const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(DIACRITICS, "");
+  const rows = (prixRows || []).map((r) => ({
+    type: norm(r.productType || r.product_type),
+    prix: Number(r.unitPrice || r.unit_price) || 0,
+    src: norm(r.saleSource || r.sale_source),
+  })).filter((r) => r.prix > 0);
+  // Prix porc vif/entier
+  const vif = rows.find((r) => /vif|entier|live|whole|sur pied/.test(r.type));
+  if (vif) { out.prixEntierParKg = Math.round(vif.prix); notes.push(`Prix vif importé: ${vif.prix.toLocaleString()}/kg`); }
+  // Chaque morceau de la decoupe
+  for (const d of out.decoupe) {
+    const nd = norm(d.nom);
+    const motcle = nd.split(/[ /(]/)[0]; // 1er mot (viande, pieds, tete, sternum, abats, gras)
+    const match = rows.find((r) => r.type.includes(motcle) || motcle.includes(r.type));
+    if (match) { d.prix = Math.round(match.prix); notes.push(`${d.nom}: ${match.prix.toLocaleString()}/kg`); }
+  }
+  return { hypotheses: out, notes };
+}
+
 // Code ISO d'une devise (USD, CDF, EUR…) a partir de son id, via la liste systeme.
 function codeOf(id, currencies) {
   if (id == null) return null;
@@ -416,7 +441,29 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [exchOk, setExchOk] = React.useState(null);           // null=pas tente, true/false
   const [tauxManuel, setTauxManuel] = React.useState("");     // repli si pas de taux DB
   const [tauxWeb, setTauxWeb] = React.useState(null);         // indicatif en ligne (peut rester null hors-ligne)
+  const [prixNotes, setPrixNotes] = React.useState(null);     // resultat import prix
+  const [importingPrix, setImportingPrix] = React.useState(false);
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
+
+  // Edition d'un morceau de la decoupe (kg ou prix)
+  const setDecoupe = (i, champ) => (v) => setH((s) => {
+    const decoupe = s.decoupe.map((d, j) => (j === i ? { ...d, [champ]: Number(v) } : d));
+    return { ...s, decoupe };
+  });
+
+  // Import des prix reels depuis la liste de prix FarmOS (best-effort)
+  const importerPrix = async () => {
+    setImportingPrix(true);
+    try {
+      const res = await api.listPrices();
+      const rows = res?.getAllPrice || res?.data || (Array.isArray(res) ? res : []);
+      const { hypotheses, notes } = appliquerPrixReels(h, rows);
+      setH(hypotheses);
+      setPrixNotes(notes.length ? notes : [L("Aucun prix correspondant trouvé dans la liste de prix.", "No matching price found in the price list.")]);
+    } catch (e) {
+      setPrixNotes([L("Impossible de charger la liste de prix.", "Could not load price list.") + " " + (e.message || "")]);
+    } finally { setImportingPrix(false); }
+  };
 
   const importReal = async () => {
     setImporting(true);
@@ -694,10 +741,71 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         </div>
       </div>
 
-      {/* Revenu par porc */}
+      {/* Detail des prix : decoupe (par morceau) + porc vif — editable + importable */}
       <div className="card" style={card}>
-        <div style={upper}>{L("Revenu par porc", "Revenue per pig")}</div>
-        <div style={{ fontSize: 13 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={upper}>{L("Détail des prix (modifiable)", "Price details (editable)")}</div>
+          <button className="btn" onClick={importerPrix} disabled={importingPrix} style={{ fontSize: 12 }}>
+            {importingPrix ? L("Import…", "Importing…") : L("📥 Importer mes prix", "📥 Import my prices")}
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
+          {L(`Prix saisis en ${codeOf(baseCurrencyId, currencies) || "devise des données"} (devise des données). Le mode de vente actif détermine le revenu utilisé.`,
+             `Prices in ${codeOf(baseCurrencyId, currencies) || "data currency"} (data currency). The active sale mode sets the revenue used.`)}
+        </div>
+
+        {/* Tableau decoupe */}
+        <div style={{ overflowX: "auto", marginBottom: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 460 }}>
+            <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <th style={{ ...th, textAlign: "left" }}>{L("Morceau (découpe)", "Cut")}</th>
+              <th style={th}>{L("Poids (kg)", "Weight (kg)")}</th>
+              <th style={th}>{L("Prix / kg", "Price / kg")}</th>
+              <th style={th}>{L("Sous-total", "Subtotal")}</th>
+            </tr></thead>
+            <tbody>
+              {h.decoupe.map((d, i) => (
+                <tr key={i} style={{ borderBottom: "1px solid var(--border-subtle, var(--border))" }}>
+                  <td style={{ ...td, textAlign: "left" }}>{d.nom}</td>
+                  <td style={td}>
+                    <input className="input" type="number" value={d.kg}
+                      onChange={(e) => setDecoupe(i, "kg")(e.target.value)} style={{ width: 80, textAlign: "right" }} />
+                  </td>
+                  <td style={td}>
+                    <input className="input" type="number" value={d.prix}
+                      onChange={(e) => setDecoupe(i, "prix")(e.target.value)} style={{ width: 100, textAlign: "right" }} />
+                  </td>
+                  <td style={td}>{fmtM(d.kg * d.prix)}</td>
+                </tr>
+              ))}
+              <tr>
+                <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{L("Total découpe", "Cuts total")}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{h.decoupe.reduce((s, d) => s + Number(d.kg || 0), 0)}</td>
+                <td style={td}></td>
+                <td style={{ ...td, fontWeight: 600 }}>{fmtM(h.decoupe.reduce((s, d) => s + d.kg * d.prix, 0))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Prix porc vif */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+          <NumInput label={L("Prix porc vif / kg", "Live pig price / kg")} value={h.prixEntierParKg} onChange={set("prixEntierParKg")} />
+          <span style={{ fontSize: 12, color: "var(--fg-3)" }}>
+            {L("Poids vente", "Sale weight")}: {h.poidsVenteKg} kg → {L("porc vif", "live pig")}: <b>{fmtM(h.prixEntierParKg * h.poidsVenteKg)}</b>
+          </span>
+        </div>
+
+        {prixNotes && (
+          <div style={{ padding: 10, background: "var(--forest-50, #eef7ee)", borderRadius: 8, fontSize: 12, marginBottom: 10 }}>
+            <b>{L("Prix importés :", "Imported prices:")}</b>
+            <ul style={{ margin: "6px 0 0 18px" }}>{prixNotes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+          </div>
+        )}
+
+        {/* Synthese revenu/cout/marge selon le mode actif */}
+        <div style={{ fontSize: 13, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+          {L("Mode actif", "Active mode")}: <b>{h.modeVente === "entier" ? L("porc vif", "live pig") : L("découpe", "cuts")}</b> ·{" "}
           {L("Revenu", "Revenue")}: <b>{fmtM(rev)}</b> ·
           {" "}{L("Cout", "Cost")}: {fmtM(cout)} ·
           {" "}{L("Marge", "Margin")}: <b>{fmtM(marge)}</b> ({rev > 0 ? Math.round(marge / rev * 100) : 0}%)
