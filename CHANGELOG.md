@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.8)
+- **FarmOS — Animaux : effectif du lot déplacé dans « Filiation & valeur »**. Le badge « N animaux » de l'en-tête de fiche chevauchait le titre et les boutons d'action. Il est retiré du hero et présenté comme une carte dédiée « Effectif du lot » dans la section **Filiation & valeur** de l'onglet Détails, à côté de Valeur estimée. Le compteur sur les lignes de la liste est conservé. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Fixed (3.122.7)
 - **FarmOS — Simulateur : le sélecteur de devise ne sélectionnait rien**. Les `<option>` utilisaient `value={o.value}` alors que `currencyOptions()` renvoie des objets `{ id, label }` (pas de champ `value`) : `value` valait donc `undefined` → toutes les options rendues avec `value=""` → choisir une devise renvoyait `""` et remettait la sélection à « aucune ». Correction : `value={o.id}` / `key={o.id}`. Vérifié par simulation du flux (choix → `saisieCurrencyId` correct → symbole résolu). **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

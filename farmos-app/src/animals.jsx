@@ -1093,16 +1093,6 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               {lang === "fr" ? sp.frSing : sp.enSing}
             </span>
             <span className="tag">{animal.lot}</span>
-            {(() => {
-              const n = Math.floor(Number(animal.count ?? 0)) || 0;
-              if (n <= 1) return null;
-              return (
-                <span className="tag" title={lang === "fr" ? "Nombre d'animaux dans le lot" : "Animals in batch"}>
-                  <Icon name="layers" size={10} color="currentColor"/>
-                  {n.toLocaleString(lang === "fr" ? "fr-FR" : "en-US")} {lang === "fr" ? "animaux" : "animals"}
-                </span>
-              );
-            })()}
           </div>
           <div style={{ display: "flex", gap: 4 }}>
             {!readOnly && (
@@ -1228,11 +1218,12 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
         )}
         {!editing && tab === "details" && (
           <>
-            {(animal.motherId || animal.fatherId || animal.estimatedValue != null) && (
+            {(animal.motherId || animal.fatherId || animal.estimatedValue != null || (Math.floor(Number(animal.count ?? 0)) || 0) > 1) && (
               <div>
                 <div className="overline" style={{ marginBottom: 10 }}>{lang === "fr" ? "Filiation & valeur" : "Lineage & value"}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "var(--cols-2)", gap: 12 }}>
                   {[
+                    { fr: "Effectif du lot", en: "Batch size", icon: "layers", val: (Math.floor(Number(animal.count ?? 0)) || 0) > 1 ? `${(Math.floor(Number(animal.count)) || 0).toLocaleString(lang === "fr" ? "fr-FR" : "en-US")} ${lang === "fr" ? "animaux" : "animals"}` : null, mono: true },
                     { fr: "Mère", en: "Mother", icon: "fingerprint", val: animal.motherId },
                     { fr: "Père", en: "Father", icon: "fingerprint", val: animal.fatherId },
                     { fr: "Valeur estimée", en: "Estimated value", icon: "coins", val: animal.estimatedValue != null ? `${Number(animal.estimatedValue).toLocaleString("fr-CA")} $` : null, mono: true },
