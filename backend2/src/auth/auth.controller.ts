@@ -146,14 +146,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post("logout")
   @HttpCode(200)
-  async logout(@Body("id") id: number, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const userId = (req as unknown as { user: { sub: number } }).user.sub;
     const ctx = {
-      userId: id,
+      userId,
       ip: (req as unknown as { ip: string }).ip,
       userAgent: (req.headers as Record<string, string>)["user-agent"],
     };
     res.clearCookie("refreshToken", { path: "/" });
-    return this.authService.logout(id, ctx);
+    return this.authService.logout(userId, ctx);
   }
 
   @ApiOperation({ summary: "Refresh access token using httpOnly cookie (rotates the refresh token)" })

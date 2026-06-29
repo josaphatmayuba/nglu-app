@@ -27,7 +27,8 @@ module.exports = [
 
   // ── Health & config (public) ───────────────────
   { method: 'GET',  prefix: '/health',                        auth: false },
-  { method: 'GET',  prefix: '/setting',                       auth: false },
+  { method: 'GET',  prefix: '/setting/public',                auth: false },
+  { method: 'GET',  prefix: '/setting',                       auth: true  },
   { method: 'POST', prefix: '/setting',                       auth: true  },
   { method: 'PUT',  prefix: '/setting',                       auth: true  },
 

@@ -62,16 +62,20 @@ export class DiscussionController {
 
   // Participants
   @Get(":discussionId/participants")
-  getParticipants(@Param("discussionId", ParseIntPipe) discussionId: number) {
-    return this.svc.getParticipants(discussionId);
+  getParticipants(
+    @Param("discussionId", ParseIntPipe) discussionId: number,
+    @CurrentUserId() userId: number,
+  ) {
+    return this.svc.getParticipants(discussionId, userId);
   }
 
   @Post(":discussionId/participants")
   addParticipant(
     @Param("discussionId", ParseIntPipe) discussionId: number,
     @Body() body: { userId: number },
+    @CurrentUserId() userId: number,
   ) {
-    return this.svc.addParticipant(discussionId, body.userId);
+    return this.svc.addParticipant(discussionId, body.userId, userId);
   }
 
   // Unread badge par entité

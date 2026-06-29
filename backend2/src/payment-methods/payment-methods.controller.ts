@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query } from "@nestjs/common";
-import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import {
   CreatePaymentMethodDto,
   PaymentMethodQueryDto,
@@ -7,9 +7,12 @@ import {
   UpdatePaymentMethodStatusDto,
 } from "./dto/payment-method.dto";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PaymentMethodsService } from "./payment-methods.service";
 
 @ApiTags("payment-method")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("payment-method")
 export class PaymentMethodsController {
   constructor(private readonly paymentMethodsService: PaymentMethodsService) {}

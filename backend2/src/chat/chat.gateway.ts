@@ -1,64 +1,96 @@
 import {
-  WebSocketGateway, WebSocketServer, SubscribeMessage,
-  MessageBody, ConnectedSocket, OnGatewayConnection, OnGatewayDisconnect,
+  ConnectedSocket,
+  MessageBody,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
+import { WsAuthService } from "../auth/ws-auth.service";
+import { env } from "../config/env";
 import { ChatService } from "./chat.service";
 
-@WebSocketGateway({ namespace: "/chat", cors: { origin: "*" } })
+const socketCorsOrigins = [
+  ...String(env.corsOrigin).split(",").map((origin) => origin.trim()).filter(Boolean),
+  "capacitor://localhost",
+  "https://localhost",
+  "http://localhost",
+];
+
+@WebSocketGateway({ namespace: "/chat", cors: { origin: socketCorsOrigins, credentials: true } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
-  private userSockets = new Map<number, string>(); // userId → socketId
+  private userSockets = new Map<number, string>();
 
-  constructor(private readonly svc: ChatService) {}
+  constructor(
+    private readonly svc: ChatService,
+    private readonly wsAuth: WsAuthService,
+  ) {}
 
-  handleConnection(client: Socket) {}
+  async handleConnection(client: Socket) {
+    try {
+      const auth = await this.wsAuth.authenticate(client);
+      client.data.userId = auth.userId;
+      client.data.organizationId = auth.organizationId;
+      client.data.roleId = auth.roleId;
+    } catch {
+      client.emit("unauthorized", { message: "Authentification requise." });
+      client.disconnect(true);
+    }
+  }
+
   handleDisconnect(client: Socket) {
-    for (const [uid, sid] of this.userSockets) {
-      if (sid === client.id) { this.userSockets.delete(uid); break; }
+    for (const [userId, socketId] of this.userSockets) {
+      if (socketId === client.id) {
+        this.userSockets.delete(userId);
+        break;
+      }
     }
   }
 
-  // Enregistrer l'utilisateur et rejoindre ses channels
   @SubscribeMessage("register")
-  async handleRegister(@MessageBody() data: { userId: number }, @ConnectedSocket() client: Socket) {
-    this.userSockets.set(data.userId, client.id);
-    const channels = await this.svc.getChannels(data.userId);
-    for (const ch of channels) {
-      const disc = await this.svc.getOrCreateChannelDiscussion(ch.id, data.userId);
-      client.join(`disc:${disc.id}`);
+  async handleRegister(@ConnectedSocket() client: Socket) {
+    const userId = this.authenticatedUserId(client);
+    this.userSockets.set(userId, client.id);
+
+    const channels = await this.svc.getChannels(userId);
+    for (const channel of channels) {
+      const discussion = await this.svc.getOrCreateChannelDiscussion(channel.id, userId);
+      client.join(`disc:${discussion.id}`);
     }
-    client.emit("registered", { userId: data.userId });
+    client.emit("registered", { userId });
   }
 
-  // Rejoindre une room de discussion spécifique
   @SubscribeMessage("joinRoom")
-  handleJoin(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
+  async handleJoin(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
+    const userId = this.authenticatedUserId(client);
+    await this.svc.assertDiscussionAccess(data.discussionId, userId);
     client.join(`disc:${data.discussionId}`);
     client.emit("joined", { discussionId: data.discussionId });
   }
 
   @SubscribeMessage("leaveRoom")
   handleLeave(@MessageBody() data: { discussionId: number }, @ConnectedSocket() client: Socket) {
+    this.authenticatedUserId(client);
     client.leave(`disc:${data.discussionId}`);
   }
 
-  // Envoyer un message
   @SubscribeMessage("sendMessage")
   async handleMessage(
-    @MessageBody() data: { discussionId: number; userId: number; content: string; mentions?: number[] },
+    @MessageBody() data: { discussionId: number; content: string; mentions?: number[] },
     @ConnectedSocket() client: Socket,
   ) {
-    const msg = await this.svc.sendMessage(data.discussionId, data.userId, data.content, data.mentions ?? []);
+    const userId = this.authenticatedUserId(client);
+    const msg = await this.svc.sendMessage(data.discussionId, userId, data.content, data.mentions ?? []);
 
-    // Diffuser dans la room
     this.server.to(`disc:${data.discussionId}`).emit("newMessage", { ...msg, discussionId: data.discussionId });
 
-    // Notification aux mentionnés hors room
-    for (const uid of (data.mentions ?? [])) {
-      const sid = this.userSockets.get(uid);
-      if (sid) {
-        this.server.to(sid).emit("notification", {
+    for (const mentionedUserId of (data.mentions ?? [])) {
+      const socketId = this.userSockets.get(mentionedUserId);
+      if (socketId) {
+        this.server.to(socketId).emit("notification", {
           type: "mention",
           discussionId: data.discussionId,
           from: `${msg.firstName} ${msg.lastName}`,
@@ -70,16 +102,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return msg;
   }
 
-  // Indicateur de frappe
   @SubscribeMessage("typing")
   handleTyping(
-    @MessageBody() data: { discussionId: number; userId: number; firstName: string },
+    @MessageBody() data: { discussionId: number; firstName: string },
     @ConnectedSocket() client: Socket,
   ) {
+    const userId = this.authenticatedUserId(client);
     client.to(`disc:${data.discussionId}`).emit("userTyping", {
-      userId: data.userId,
+      userId,
       firstName: data.firstName,
       discussionId: data.discussionId,
     });
+  }
+
+  private authenticatedUserId(client: Socket) {
+    const userId = Number(client.data.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      client.emit("unauthorized", { message: "Authentification requise." });
+      client.disconnect(true);
+      throw new Error("Unauthenticated socket");
+    }
+    return userId;
   }
 }

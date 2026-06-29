@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.9)
+- **Backend security hardening**. Protected tenant settings, removed the public org 1 settings fallback, added a minimal `/setting/public` response, hardened logout and legacy Google login, fixed public onboarding/CORS edge cases, added defense-in-depth JWT guards on mutable controllers, restored `DELETE /transaction-type/:id`, and authenticated chat/discussion WebSockets with server-side access checks. **Verified**: `npm run typecheck` backend2 OK; `npm run build` backend2 OK; `npm run build:dev` frontend OK with existing Vite warnings. [SECURITY]
+
 ### Fixed (3.124.8)
 - **FarmOS — Simulateur : poids vente synchronisé avec le total découpe**. Changer « Poids vente » redimensionne maintenant les kg des morceaux de découpe proportionnellement, afin que « Total découpe » reste égal au poids de vente saisi. Modifier manuellement les kg d'un morceau remet aussi « Poids vente » au total réel des morceaux. Le revenu en mode découpe se recalcule donc correctement quand l'utilisateur passe par exemple de 95 kg à 70 kg. **Vérifié** : `npm.cmd run build` farmos-app OK ; test UI local `Poids vente = 70` → `Total découpe = 70` et revenu découpe recalculé. [SCRUM]
 

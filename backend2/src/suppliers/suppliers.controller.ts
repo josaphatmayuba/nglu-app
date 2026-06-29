@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query } from "@nestjs/common";
-import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import {
   CreateSupplierDto,
   SupplierQueryDto,
@@ -7,9 +7,12 @@ import {
   UpdateSupplierStatusDto,
 } from "./dto/supplier.dto";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { SuppliersService } from "./suppliers.service";
 
 @ApiTags("supplier")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("supplier")
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { Database } from "../database/types";
@@ -43,7 +43,7 @@ export class DiscussionService {
 
   // ── Messages ────────────────────────────────────────────────────────────────
   async getMessages(discussionId: number, userId: number, limit = 50, beforeId?: number) {
-    await this.ensureParticipant(discussionId, userId);
+    await this.assertParticipant(discussionId, userId);
 
     const cursor = beforeId ? sql`AND m.id < ${beforeId}` : sql``;
     const rows = await this.rows(sql`
@@ -68,7 +68,7 @@ export class DiscussionService {
     attachmentUrl?: string,
     attachmentName?: string,
   ) {
-    await this.ensureParticipant(discussionId, userId);
+    await this.assertParticipant(discussionId, userId);
 
     const messageId = await this.insert(sql`
       INSERT INTO journal_messages (discussion_id, sender_id, content, mentions, attachment_url, attachment_name)
@@ -100,6 +100,8 @@ export class DiscussionService {
   }
 
   async markAllRead(discussionId: number, userId: number) {
+    await this.assertParticipant(discussionId, userId);
+
     await this.db.execute(sql`
       INSERT IGNORE INTO journal_message_reads (message_id, user_id)
       SELECT id, ${userId} FROM journal_messages WHERE discussion_id = ${discussionId} AND status = 1
@@ -107,7 +109,9 @@ export class DiscussionService {
   }
 
   // ── Participants ────────────────────────────────────────────────────────────
-  async getParticipants(discussionId: number) {
+  async getParticipants(discussionId: number, requesterId?: number) {
+    if (requesterId) await this.assertParticipant(discussionId, requesterId);
+
     return this.rows(sql`
       SELECT p.user_id, p.joined_at, u.firstName, u.lastName, u.email
       FROM journal_discussion_participants p
@@ -116,7 +120,8 @@ export class DiscussionService {
     `);
   }
 
-  async addParticipant(discussionId: number, userId: number) {
+  async addParticipant(discussionId: number, userId: number, requesterId?: number) {
+    if (requesterId) await this.assertParticipant(discussionId, requesterId);
     await this.ensureParticipant(discussionId, userId);
     return { discussionId, userId };
   }
@@ -142,5 +147,18 @@ export class DiscussionService {
     await this.db.execute(sql`
       INSERT IGNORE INTO journal_discussion_participants (discussion_id, user_id) VALUES (${discussionId}, ${userId})
     `);
+  }
+
+  async assertParticipant(discussionId: number, userId: number) {
+    const row = await this.row(sql`
+      SELECT d.id
+      FROM journal_discussions d
+      LEFT JOIN journal_discussion_participants p ON p.discussion_id = d.id AND p.user_id = ${userId}
+      WHERE d.id = ${discussionId}
+        AND d.status = 1
+        AND (d.created_by = ${userId} OR p.user_id IS NOT NULL)
+      LIMIT 1
+    `);
+    if (!row) throw new ForbiddenException("Discussion access denied.");
   }
 }

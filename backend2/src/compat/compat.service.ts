@@ -1,4 +1,5 @@
-import { Inject, Injectable, NotFoundException, Logger } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import { OAuth2Client } from "google-auth-library";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
@@ -21,6 +22,7 @@ import type { Database } from "../database/types";
 @Injectable()
 export class CompatService {
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
+  private readonly googleClient = new OAuth2Client();
 
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
@@ -28,9 +30,8 @@ export class CompatService {
   ) {}
 
   async googleLogin(body: Record<string, any>) {
-    const profile = this.decodeGoogleCredential(body.credential);
-    const googleId = profile.sub || body.googleId;
-    if (!googleId) throw new NotFoundException("Google profile not found.");
+    const profile = await this.verifyGoogleCredential(body.credential);
+    const googleId = profile.sub;
 
     const existing = await this.db.select().from(customers).where(eq(customers.googleId, googleId)).limit(1);
     const customer = existing[0] ?? (await this.createGoogleCustomer(profile, googleId));
@@ -205,9 +206,23 @@ export class CompatService {
     return customer;
   }
 
-  private decodeGoogleCredential(credential?: string) {
-    if (!credential || !credential.includes(".")) return {};
-    const payload = credential.split(".")[1];
-    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  private async verifyGoogleCredential(credential?: string) {
+    if (!credential) throw new UnauthorizedException("Connexion Google invalide.");
+    if (!env.google.clientId) throw new BadRequestException("Connexion Google non configuree.");
+
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: credential,
+        audience: env.google.clientId,
+      });
+      const payload = ticket.getPayload();
+      if (!payload?.sub || (payload.email && !payload.email_verified)) {
+        throw new UnauthorizedException("Connexion Google invalide.");
+      }
+      return payload;
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException("Connexion Google invalide.");
+    }
   }
 }

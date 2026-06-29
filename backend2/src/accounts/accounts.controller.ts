@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query } from "@nestjs/common";
-import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
   AccountQueryDto,
   CreateSubAccountDto,
@@ -10,6 +11,8 @@ import {
 import { AccountsService } from "./accounts.service";
 
 @ApiTags("account")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller()
 export class AccountsController {
   constructor(private readonly accountsService: AccountsService) {}

@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query } from "@nestjs/common";
-import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import {
   CreateDiscountDto,
   DiscountQueryDto,
@@ -9,6 +10,8 @@ import {
 import { DiscountsService } from "./discounts.service";
 
 @ApiTags("discount")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("discount")
 export class DiscountsController {
   constructor(private readonly discountsService: DiscountsService) {}

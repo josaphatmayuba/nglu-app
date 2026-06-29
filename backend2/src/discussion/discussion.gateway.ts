@@ -1,56 +1,73 @@
 import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-  MessageBody,
   ConnectedSocket,
+  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer,
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
+import { WsAuthService } from "../auth/ws-auth.service";
+import { env } from "../config/env";
 import { DiscussionService } from "./discussion.service";
 
-@WebSocketGateway({ namespace: "/discussion", cors: { origin: "*" } })
+const socketCorsOrigins = [
+  ...String(env.corsOrigin).split(",").map((origin) => origin.trim()).filter(Boolean),
+  "capacitor://localhost",
+  "https://localhost",
+  "http://localhost",
+];
+
+@WebSocketGateway({ namespace: "/discussion", cors: { origin: socketCorsOrigins, credentials: true } })
 export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
 
-  constructor(private readonly svc: DiscussionService) {}
+  constructor(
+    private readonly svc: DiscussionService,
+    private readonly wsAuth: WsAuthService,
+  ) {}
 
-  handleConnection(client: Socket) {
-    // Le client rejoindra les rooms via joinDiscussion
+  async handleConnection(client: Socket) {
+    try {
+      const auth = await this.wsAuth.authenticate(client);
+      client.data.userId = auth.userId;
+      client.data.organizationId = auth.organizationId;
+      client.data.roleId = auth.roleId;
+    } catch {
+      client.emit("unauthorized", { message: "Authentification requise." });
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
     client.rooms.forEach((room) => client.leave(room));
   }
 
-  // Rejoindre une room de discussion
   @SubscribeMessage("joinDiscussion")
   async handleJoin(
-    @MessageBody() data: { discussionId: number; userId: number },
+    @MessageBody() data: { discussionId: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const room = `discussion:${data.discussionId}`;
-    client.join(room);
-    await this.svc.markAllRead(data.discussionId, data.userId);
+    const userId = this.authenticatedUserId(client);
+    await this.svc.markAllRead(data.discussionId, userId);
+    client.join(`discussion:${data.discussionId}`);
     client.emit("joined", { discussionId: data.discussionId });
   }
 
-  // Quitter une room
   @SubscribeMessage("leaveDiscussion")
   handleLeave(
     @MessageBody() data: { discussionId: number },
     @ConnectedSocket() client: Socket,
   ) {
+    this.authenticatedUserId(client);
     client.leave(`discussion:${data.discussionId}`);
   }
 
-  // Envoyer un message via WebSocket
   @SubscribeMessage("sendMessage")
   async handleMessage(
     @MessageBody() data: {
       discussionId: number;
-      userId: number;
       content: string;
       mentions?: number[];
       attachmentUrl?: string;
@@ -58,23 +75,22 @@ export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconne
     },
     @ConnectedSocket() client: Socket,
   ) {
+    const userId = this.authenticatedUserId(client);
     const msg = await this.svc.sendMessage(
       data.discussionId,
-      data.userId,
+      userId,
       data.content,
       data.mentions,
       data.attachmentUrl,
       data.attachmentName,
     );
 
-    // Diffuser à tous dans la room (incluant expéditeur)
     this.server.to(`discussion:${data.discussionId}`).emit("newMessage", msg);
 
-    // Notifier les participants hors room (badge unread)
-    const participants = await this.svc.getParticipants(data.discussionId);
-    for (const p of participants) {
-      if (p.user_id !== data.userId) {
-        this.server.emit(`notification:${p.user_id}`, {
+    const participants = await this.svc.getParticipants(data.discussionId, userId);
+    for (const participant of participants) {
+      if (participant.user_id !== userId) {
+        this.server.emit(`notification:${participant.user_id}`, {
           type: "new_message",
           discussionId: data.discussionId,
           preview: data.content.slice(0, 60),
@@ -87,15 +103,25 @@ export class DiscussionGateway implements OnGatewayConnection, OnGatewayDisconne
     return msg;
   }
 
-  // Indicateur "en train d'écrire"
   @SubscribeMessage("typing")
   handleTyping(
-    @MessageBody() data: { discussionId: number; userId: number; firstName: string },
+    @MessageBody() data: { discussionId: number; firstName: string },
     @ConnectedSocket() client: Socket,
   ) {
+    const userId = this.authenticatedUserId(client);
     client.to(`discussion:${data.discussionId}`).emit("userTyping", {
-      userId: data.userId,
+      userId,
       firstName: data.firstName,
     });
+  }
+
+  private authenticatedUserId(client: Socket) {
+    const userId = Number(client.data.userId);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      client.emit("unauthorized", { message: "Authentification requise." });
+      client.disconnect(true);
+      throw new Error("Unauthenticated socket");
+    }
+    return userId;
   }
 }

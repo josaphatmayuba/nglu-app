@@ -56,6 +56,10 @@ app.use((req, res, next) => {
   const method = req.method;
   const path = req.path;
 
+  if (method === 'OPTIONS') {
+    return next();
+  }
+
   // Chercher une route autorisée dans la whitelist
   const allowed = whitelist.find((route) => {
     const methodOk = route.method === '*' || route.method === method;

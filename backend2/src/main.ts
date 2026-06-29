@@ -61,7 +61,7 @@ async function bootstrap() {
       if (!origin) return cb(null, true);
       if (corsOrigins.includes(origin)) return cb(null, true);
       if (NATIVE_ORIGINS.includes(origin)) return cb(null, true);
-      cb(new Error(`CORS denied: ${origin}`));
+      cb(null, false);
     },
     credentials: true,
   });

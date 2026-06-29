@@ -1,4 +1,4 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { sql, type SQL } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
 import type { Database } from "../database/types";
@@ -86,6 +86,8 @@ export class ChatService {
 
   // ── Discussion d'un channel ─────────────────────────────────────────────────
   async getOrCreateChannelDiscussion(channelId: number, userId: number) {
+    await this.assertChannelAccess(channelId, userId);
+
     const disc = await this.row(sql`
       SELECT id FROM journal_discussions WHERE channel_id = ${channelId} AND discussion_type = 'channel' AND status = 1 LIMIT 1
     `);
@@ -125,6 +127,8 @@ export class ChatService {
 
   // ── Messages d'une discussion (channel ou sujet) ────────────────────────────
   async getMessages(discussionId: number, userId: number, limit = 60, beforeId?: number) {
+    await this.assertDiscussionAccess(discussionId, userId);
+
     const cursor = beforeId ? sql`AND m.id < ${beforeId}` : sql``;
     const rows = await this.rows(sql`
       SELECT m.id, m.sender_id, m.content, m.mentions, m.attachment_url,
@@ -148,6 +152,8 @@ export class ChatService {
   }
 
   async sendMessage(discussionId: number, userId: number, content: string, mentions: number[] = []) {
+    await this.assertDiscussionAccess(discussionId, userId);
+
     const safeContent = sanitizeMessageContent(content);
     const messageId = await this.insert(sql`
       INSERT INTO journal_messages (discussion_id, sender_id, content, mentions)
@@ -177,5 +183,38 @@ export class ChatService {
     return this.rows(sql`
       SELECT id, firstName, lastName, email FROM user WHERE status = 1 ORDER BY firstName LIMIT 200
     `);
+  }
+
+  private async assertChannelAccess(channelId: number, userId: number) {
+    const row = await this.row(sql`
+      SELECT c.id
+      FROM chat_channels c
+      LEFT JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = ${userId}
+      WHERE c.id = ${channelId}
+        AND c.status = 1
+        AND (c.is_default = 1 OR m.user_id IS NOT NULL)
+      LIMIT 1
+    `);
+    if (!row) throw new ForbiddenException("Channel access denied.");
+  }
+
+  async assertDiscussionAccess(discussionId: number, userId: number) {
+    const row = await this.row(sql`
+      SELECT d.id
+      FROM journal_discussions d
+      LEFT JOIN chat_channels c ON c.id = d.channel_id
+      LEFT JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = ${userId}
+      LEFT JOIN journal_discussion_participants p ON p.discussion_id = d.id AND p.user_id = ${userId}
+      WHERE d.id = ${discussionId}
+        AND d.status = 1
+        AND (
+          d.created_by = ${userId}
+          OR p.user_id IS NOT NULL
+          OR c.is_default = 1
+          OR cm.user_id IS NOT NULL
+        )
+      LIMIT 1
+    `);
+    if (!row) throw new ForbiddenException("Discussion access denied.");
   }
 }

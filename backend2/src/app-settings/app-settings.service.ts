@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { desc, eq, sql } from "drizzle-orm";
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { basename, join } from "path";
+import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import { appSettings, currencies } from "../database/schema";
 import type { Database } from "../database/types";
@@ -12,6 +13,15 @@ export class AppSettingsService {
   private readonly uploadDir = join(process.cwd(), "storage", "app", "uploads");
 
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+
+  findPublic() {
+    return {
+      companyName: process.env.PUBLIC_APP_NAME || "NgoluApp",
+      tagLine: process.env.PUBLIC_APP_TAGLINE || null,
+      website: process.env.PUBLIC_APP_WEBSITE || env.appUrl,
+      logo: process.env.PUBLIC_APP_LOGO || null,
+    };
+  }
 
   async findOne(orgId = 1) {
     const rows = await this.db

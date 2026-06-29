@@ -14,11 +14,20 @@ const APP_SETTING_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
 export class AppSettingsController {
   constructor(private readonly appSettingsService: AppSettingsService) {}
 
-  @ApiOperation({ summary: "Get app settings (public)" })
+  @ApiOperation({ summary: "Get public platform settings" })
+  @ApiOkResponse({ description: "Public platform setting" })
+  @Get("public")
+  findPublic() {
+    return this.appSettingsService.findPublic();
+  }
+
+  @ApiOperation({ summary: "Get app settings" })
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ description: "App setting with currency" })
   @Get()
-  findOne() {
-    return this.appSettingsService.findOne();
+  findOne(@CurrentOrg() orgId: number) {
+    return this.appSettingsService.findOne(orgId);
   }
 
   @ApiOperation({ summary: "Update app settings" })
