@@ -436,6 +436,15 @@ const NumInput = ({ label, value, onChange, suffix }) => (
   </label>
 );
 
+// NumInput affichant/saisissant dans une devise de saisie, mais lisant/ecrivant
+// une valeur stockee dans une autre devise (devise des donnees). toDisp/fromDisp
+// font la conversion ; suffix = code de la devise de saisie.
+const NumInputCur = ({ label, valueBase, onChangeBase, suffix, toDisp, fromDisp }) => (
+  <NumInput label={label} suffix={suffix}
+    value={Math.round(toDisp(valueBase))}
+    onChange={(v) => onChangeBase(Math.round(fromDisp(v)))} />
+);
+
 const SimulatorScreen = ({ lang, speciesFilter }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [h, setH] = React.useState(DEFAULTS);
@@ -455,6 +464,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [tauxWeb, setTauxWeb] = React.useState(null);         // indicatif en ligne (peut rester null hors-ligne)
   const [prixNotes, setPrixNotes] = React.useState(null);     // resultat import prix
   const [importingPrix, setImportingPrix] = React.useState(false);
+  const [saisieCurrencyId, setSaisieCurrencyId] = React.useState(null); // devise de SAISIE couts/prix (null = devise des donnees)
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
 
   // Edition d'un morceau de la decoupe (kg ou prix)
@@ -554,6 +564,21 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     [baseCurrencyId, afficheId, exchanges, tauxWeb, tauxManuel]);
   const fmtM = (v) => fmtMontant(v * (tauxResolu.taux || 1), symbole);
   const devData = codeOf(baseCurrencyId, currencies) || ""; // code devise des donnees (suffixe inputs couts)
+
+  // Devise de SAISIE des couts/prix : devise des donnees par defaut, sinon au choix.
+  // Les valeurs restent STOCKEES en devise des donnees (moteur inchange) ; on convertit
+  // a l'affichage (base->saisie) et a la saisie (saisie->base).
+  const saisieId = saisieCurrencyId ?? baseCurrencyId;
+  const saisieCode = codeOf(saisieId, currencies) || devData;
+  const tauxSaisieResolu = React.useMemo(
+    () => resolveTaux(baseCurrencyId, saisieId, exchanges, tauxWeb, tauxManuel),
+    [baseCurrencyId, saisieId, exchanges, tauxWeb, tauxManuel]);
+  const tauxBaseToSaisie = tauxSaisieResolu.taux || 1;
+  // true si on a choisi une devise de saisie differente mais sans taux fiable disponible
+  const saisieSansTaux = Number(saisieId) !== Number(baseCurrencyId) && !tauxSaisieResolu.taux;
+  // Helper : enveloppe NumInput pour saisir en devise de saisie, stocker en devise des donnees.
+  const toSaisie = (vBase) => (Number(vBase) || 0) * tauxBaseToSaisie;
+  const fromSaisie = (vSaisie) => tauxBaseToSaisie ? (Number(vSaisie) || 0) / tauxBaseToSaisie : (Number(vSaisie) || 0);
 
   // Seuil de prime converti dans la devise des donnees (devise du seuil au choix, aucune fixee).
   const seuilDeviseId = h.seuilPrimeDeviseId ?? baseCurrencyId;
@@ -788,18 +813,34 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
       {/* Couts : editables, et remplis par "Importer mes donnees reelles" (calibrate) */}
       <div className="card" style={card}>
-        <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
-        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {L(`En ${devData}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.`,
-             `In ${devData}. The "Import my real data" button fills these from your expenses.`)}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-3)" }}>
+            {L("Devise de saisie", "Input currency")}
+            <select className="input" value={saisieCurrencyId ?? ""} style={{ height: 30, fontSize: 12 }}
+              onChange={(e) => setSaisieCurrencyId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">{devData || L("devise données", "data cur.")}</option>
+              {curOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
         </div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
+          {L(`Saisie en ${saisieCode}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses (en ${devData}).`,
+             `Input in ${saisieCode}. The "Import my real data" button fills these from your expenses (in ${devData}).`)}
+        </div>
+        {saisieSansTaux && (
+          <div style={{ fontSize: 11, color: "var(--danger, #b45309)", marginBottom: 10 }}>
+            {L(`Aucun taux ${devData}→${saisieCode} disponible : les montants sont traités 1:1 (non convertis). Ajoutez un taux en comptabilité pour une conversion fiable.`,
+               `No ${devData}→${saisieCode} rate available: amounts are treated 1:1 (not converted). Add a rate in accounting for a reliable conversion.`)}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <NumInput label={L("Aliment / porc", "Feed / pig")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={devData} />
-          <NumInput label={L("Aliment truie / an", "Sow feed / yr")} value={h.alimentTruieParAn} onChange={set("alimentTruieParAn")} suffix={devData} />
-          <NumInput label={L("Santé (véto) / porc", "Health (vet) / pig")} value={h.vetoParPorc} onChange={set("vetoParPorc")} suffix={devData} />
-          <NumInput label={L("Divers / porc", "Misc / pig")} value={h.diversParPorc} onChange={set("diversParPorc")} suffix={devData} />
-          <NumInput label={L("Salaire / mois", "Salary / mo")} value={h.salaireMensuelOuvrier} onChange={set("salaireMensuelOuvrier")} suffix={devData} />
-          <NumInput label={L("Investissement (capex)", "Investment (capex)")} value={h.capex} onChange={set("capex")} suffix={devData} />
+          <NumInputCur label={L("Aliment / porc", "Feed / pig")} valueBase={h.alimentEngraissementParPorc} onChangeBase={set("alimentEngraissementParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInputCur label={L("Aliment truie / an", "Sow feed / yr")} valueBase={h.alimentTruieParAn} onChangeBase={set("alimentTruieParAn")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInputCur label={L("Santé (véto) / porc", "Health (vet) / pig")} valueBase={h.vetoParPorc} onChangeBase={set("vetoParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInputCur label={L("Divers / porc", "Misc / pig")} valueBase={h.diversParPorc} onChangeBase={set("diversParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInputCur label={L("Salaire / mois", "Salary / mo")} valueBase={h.salaireMensuelOuvrier} onChangeBase={set("salaireMensuelOuvrier")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInputCur label={L("Investissement (capex)", "Investment (capex)")} valueBase={h.capex} onChangeBase={set("capex")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
         </div>
       </div>
 
@@ -812,8 +853,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           </button>
         </div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {L(`Prix saisis en ${codeOf(baseCurrencyId, currencies) || "devise des données"} (devise des données). Le mode de vente actif détermine le revenu utilisé.`,
-             `Prices in ${codeOf(baseCurrencyId, currencies) || "data currency"} (data currency). The active sale mode sets the revenue used.`)}
+          {L(`Prix saisis en ${saisieCode} (devise de saisie choisie ci-dessus). Le mode de vente actif détermine le revenu utilisé.`,
+             `Prices in ${saisieCode} (input currency chosen above). The active sale mode sets the revenue used.`)}
         </div>
 
         {/* Tableau decoupe */}
@@ -822,7 +863,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
             <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
               <th style={{ ...th, textAlign: "left" }}>{L("Morceau (découpe)", "Cut")}</th>
               <th style={th}>{L("Poids (kg)", "Weight (kg)")}</th>
-              <th style={th}>{L("Prix / kg", "Price / kg")}</th>
+              <th style={th}>{L("Prix / kg", "Price / kg")} ({saisieCode})</th>
               <th style={th}>{L("Sous-total", "Subtotal")}</th>
             </tr></thead>
             <tbody>
@@ -834,8 +875,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
                       onChange={(e) => setDecoupe(i, "kg")(e.target.value)} style={{ width: 80, textAlign: "right" }} />
                   </td>
                   <td style={td}>
-                    <input className="input" type="number" value={d.prix}
-                      onChange={(e) => setDecoupe(i, "prix")(e.target.value)} style={{ width: 100, textAlign: "right" }} />
+                    <input className="input" type="number" value={Math.round(toSaisie(d.prix))}
+                      onChange={(e) => setDecoupe(i, "prix")(Math.round(fromSaisie(e.target.value)))} style={{ width: 100, textAlign: "right" }} />
                   </td>
                   <td style={td}>{fmtM(d.kg * d.prix)}</td>
                 </tr>
@@ -852,7 +893,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
         {/* Prix porc vif */}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-          <NumInput label={L("Prix porc vif / kg", "Live pig price / kg")} value={h.prixEntierParKg} onChange={set("prixEntierParKg")} />
+          <NumInputCur label={L("Prix porc vif / kg", "Live pig price / kg")} valueBase={h.prixEntierParKg} onChangeBase={set("prixEntierParKg")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
           <span style={{ fontSize: 12, color: "var(--fg-3)" }}>
             {L("Poids vente", "Sale weight")}: {h.poidsVenteKg} kg → {L("porc vif", "live pig")}: <b>{fmtM(h.prixEntierParKg * h.poidsVenteKg)}</b>
           </span>

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.1)
+- **FarmOS — Simulateur : devise de saisie au choix pour les coûts et les prix**. Les cartes « Coûts » et « Détail des prix » n'imposent plus la devise des données système (USD chez certains comptes) : un sélecteur **« Devise de saisie »** sur la carte Coûts permet de saisir coûts/prix dans n'importe quelle devise permise (CDF, EUR…). Les valeurs restent **stockées en devise des données** (moteur de simulation inchangé) ; la conversion saisie↔stockage utilise le taux résolu (compta > web > manuel). Si aucun taux n'existe pour la devise choisie, un avertissement indique que les montants sont traités 1:1 (non convertis). Suffixes et libellés des champs reflètent la devise de saisie active. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Added (3.122.0)
 - **FarmOS — Simulateur : montants lisibles, conversion au choix, CA au graphe, seuil prime multi-devise, coûts éditables/importables**.
   - **Montants lisibles** : le formatage compact garde des chiffres significatifs (ex. `1 256 000 → 1,26 M` au lieu de `1 M`), séparateurs `fr-FR`. Correction centralisée (`fmtMontant` + `fmt`/`fmtUSD` + données du graphique) → s'applique partout (tableaux, synthèse, détail prix, graphique).
