@@ -766,6 +766,12 @@ const AnimalTable = ({ lang, animals, selectedId, onSelect, density }) => {
                     <span>{statusLbl}</span>
                   </span>
                   {a.lot && <span>· {a.lot}</span>}
+                  {(Math.floor(Number(a.count ?? 0)) || 0) > 1 && (
+                    <span className="mono tnum" title={lang === "fr" ? "Nombre d'animaux dans le lot" : "Animals in batch"} style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      <Icon name="layers" size={10} color="var(--fg-3)"/>
+                      {(Math.floor(Number(a.count)) || 0).toLocaleString(lang === "fr" ? "fr-FR" : "en-US")}
+                    </span>
+                  )}
                 </div>
               </div>
               <Icon name="chevRight" size={14} color="var(--fg-3)"/>
@@ -1087,6 +1093,16 @@ const AnimalDetail = ({ lang, animal, onClose, embedded = false }) => {
               {lang === "fr" ? sp.frSing : sp.enSing}
             </span>
             <span className="tag">{animal.lot}</span>
+            {(() => {
+              const n = Math.floor(Number(animal.count ?? 0)) || 0;
+              if (n <= 1) return null;
+              return (
+                <span className="tag" title={lang === "fr" ? "Nombre d'animaux dans le lot" : "Animals in batch"}>
+                  <Icon name="layers" size={10} color="currentColor"/>
+                  {n.toLocaleString(lang === "fr" ? "fr-FR" : "en-US")} {lang === "fr" ? "animaux" : "animals"}
+                </span>
+              );
+            })()}
           </div>
           <div style={{ display: "flex", gap: 4 }}>
             {!readOnly && (

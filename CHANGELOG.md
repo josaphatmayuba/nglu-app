@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.6)
+- **FarmOS — Animaux : effectif d'un lot visible**. Le nombre d'animaux d'un lot (champ `count` déjà saisi au formulaire/import « Nombre ») n'était affiché nulle part. Il apparaît désormais à **deux endroits** : un badge « N animaux » à côté du tag du lot dans l'en-tête de la fiche, et un compteur sur chaque ligne de la liste des animaux. N'apparaît que pour `count > 1` (un animal individuel n'est pas pollué). Aucune migration DB (réutilise le champ existant). **Vérifié** : modifs réutilisent les patterns du fichier. [SCRUM]
+
 ### Changed (3.122.5)
 - **FarmOS — Simulateur : sélecteur de devise unique, en haut de la page**. Le choix de devise quittait la carte « Coûts » (où il était peu visible et dupliquait l'info) pour une **carte dédiée en haut** de la page, comme réglage global. Tant qu'aucune devise n'est choisie, cette carte est mise en évidence (bordure d'alerte) et invite à choisir ; une fois choisie, elle rappelle la devise active. Les sélecteurs/textes redondants sur les cartes Coûts et Prix sont retirés. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 
