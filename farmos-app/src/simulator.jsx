@@ -65,6 +65,22 @@ function revenuParPorc(h) {
   return h.decoupe.reduce((s, p) => s + p.kg * p.prix, 0);
 }
 
+const roundKg = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const totalDecoupeKg = (decoupe = []) => roundKg(decoupe.reduce((s, d) => s + Number(d.kg || 0), 0));
+
+function scaleDecoupeToWeight(decoupe = [], poidsVenteKg) {
+  const target = roundKg(Math.max(0, Number(poidsVenteKg) || 0));
+  const source = totalDecoupeKg(decoupe);
+  if (!decoupe.length || source <= 0 || target <= 0) return decoupe;
+  const scaled = decoupe.map((d) => ({ ...d, kg: roundKg(Number(d.kg || 0) * target / source) }));
+  const diff = roundKg(target - totalDecoupeKg(scaled));
+  if (diff !== 0) {
+    const adjustIndex = scaled.reduce((best, d, i) => Number(d.kg || 0) > Number(scaled[best]?.kg || 0) ? i : best, 0);
+    scaled[adjustIndex] = { ...scaled[adjustIndex], kg: roundKg(Math.max(0, Number(scaled[adjustIndex].kg || 0) + diff)) };
+  }
+  return scaled;
+}
+
 function vendablesParTruieAn(h) {
   return h.nesParPortee * h.porteesParAn * (h.surviePct / 100);
 }
@@ -871,7 +887,7 @@ function ReportView({ L, rows, h, strategy, zoneDisplayLabel, females, males, co
             ))}
             <tr style={{ fontWeight: 700 }}>
               <td style={{ textAlign: "left" }}>{L("Total découpe", "Cuts total")}</td>
-              <td style={rt}>{(h.decoupe || []).reduce((s, d) => s + Number(d.kg || 0), 0)}</td>
+              <td style={rt}>{totalDecoupeKg(h.decoupe || [])}</td>
               <td></td>
               <td style={rt}>{fmtM((h.decoupe || []).reduce((s, d) => s + d.kg * d.prix, 0))}</td>
             </tr>
@@ -903,11 +919,15 @@ const SimulatorScreen = ({ lang }) => {
   const [saisieCurrencyId, setSaisieCurrencyId] = React.useState(null); // devise choisie (null = aucune, a choisir)
   const [zoneFilter, setZoneFilter] = React.useState(ZONE_ALL);
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
+  const setPoidsVente = (v) => setH((s) => {
+    const poidsVenteKg = Number(v) || 0;
+    return { ...s, poidsVenteKg, decoupe: scaleDecoupeToWeight(s.decoupe, poidsVenteKg) };
+  });
 
   // Edition d'un morceau de la decoupe (kg ou prix)
   const setDecoupe = (i, champ) => (v) => setH((s) => {
     const decoupe = s.decoupe.map((d, j) => (j === i ? { ...d, [champ]: Number(v) } : d));
-    return { ...s, decoupe };
+    return champ === "kg" ? { ...s, decoupe, poidsVenteKg: totalDecoupeKg(decoupe) } : { ...s, decoupe };
   });
 
   // Import des prix reels depuis la liste de prix FarmOS (best-effort)
@@ -1280,7 +1300,7 @@ const SimulatorScreen = ({ lang }) => {
           <NumInput label={L("Portees / an", "Litters / yr")} value={h.porteesParAn} onChange={set("porteesParAn")} />
           <NumInput label={L("Survie", "Survival")} value={h.surviePct} onChange={set("surviePct")} suffix="%" />
           <NumInput label={L("Age saillie", "Breed age")} value={h.ageSaillieMois} onChange={set("ageSaillieMois")} suffix={L("mois", "mo")} />
-          <NumInput label={L("Poids vente", "Sale weight")} value={h.poidsVenteKg} onChange={set("poidsVenteKg")} suffix="kg" />
+          <NumInput label={L("Poids vente", "Sale weight")} value={h.poidsVenteKg} onChange={setPoidsVente} suffix="kg" />
           <NumInput label={L("Seuil prime", "Bonus threshold")} value={h.seuilPrime} onChange={set("seuilPrime")} suffix={saisieCode} />
           <NumInput label={L("Taux prime", "Bonus rate")} value={h.tauxPrimePct} onChange={set("tauxPrimePct")} suffix="%" />
         </div>
@@ -1345,7 +1365,7 @@ const SimulatorScreen = ({ lang }) => {
               ))}
               <tr>
                 <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{L("Total découpe", "Cuts total")}</td>
-                <td style={{ ...td, fontWeight: 600 }}>{h.decoupe.reduce((s, d) => s + Number(d.kg || 0), 0)}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{totalDecoupeKg(h.decoupe)}</td>
                 <td style={td}></td>
                 <td style={{ ...td, fontWeight: 600 }}>{fmtM(h.decoupe.reduce((s, d) => s + d.kg * d.prix, 0))}</td>
               </tr>

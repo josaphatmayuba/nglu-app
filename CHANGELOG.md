@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.8)
+- **FarmOS — Simulateur : poids vente synchronisé avec le total découpe**. Changer « Poids vente » redimensionne maintenant les kg des morceaux de découpe proportionnellement, afin que « Total découpe » reste égal au poids de vente saisi. Modifier manuellement les kg d'un morceau remet aussi « Poids vente » au total réel des morceaux. Le revenu en mode découpe se recalcule donc correctement quand l'utilisateur passe par exemple de 95 kg à 70 kg. **Vérifié** : `npm.cmd run build` farmos-app OK ; test UI local `Poids vente = 70` → `Total découpe = 70` et revenu découpe recalculé. [SCRUM]
+
 ### Added (3.124.7)
 - **FarmOS — Simulateur : tableau des naissances par période dans le rapport**. Ajout d'un tableau imprimable « Naissances par période » entre les reproducteurs gardés et la projection : période, mises bas, nés vivants, mortalité à la naissance, avec ligne Total. Le tableau réutilise les champs déjà calculés par le moteur (`mb`, `naissances`, `morts`) et bénéficie de la pagination multi-page du rapport. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 
