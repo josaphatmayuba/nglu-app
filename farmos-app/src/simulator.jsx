@@ -27,7 +27,6 @@ const DEFAULTS = {
   anneeDebut: 2026,
   horizonAns: 5,
   granularite: "annee",   // "annee" | "trimestre"
-  tauxUSD: 2270,           // 1 USD = X CDF (BCC juin 2026), pour le seuil de prime
   // couts (CDF)
   alimentEngraissementParPorc: 342000,
   alimentTruieParAn: 1320000,
@@ -35,8 +34,9 @@ const DEFAULTS = {
   diversParPorc: 40000,
   salaireMensuelOuvrier: 559000,
   capex: 206000000,
-  // prime travailleurs
-  seuilPrimeUSD: 50000,
+  // prime travailleurs : seuil exprime dans une devise au choix (aucune fixee)
+  seuilPrime: 50000,
+  seuilPrimeDeviseId: null, // null = devise des donnees ; sinon une devise permise
   tauxPrimePct: 5,
   // decoupe d'un porc (poids kg, prix CDF/kg)
   decoupe: [
@@ -74,7 +74,7 @@ const MOIS_T_FIN = { 0: "mars", 3: "juin", 6: "sept", 9: "déc" };
 // ─── MOTEUR PAR COHORTE (mois par mois) ──────────────────────────────────
 // cohortesInit: [{ naissanceMoisAbs, n }]  (mois 0 = janvier de anneeDebut)
 // Accumule en buckets mensuels puis agrege par periode (annee OU trimestre).
-function simulate(strategy, h, cohortesInit, malesActuels) {
+function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   const debut = h.anneeDebut || 2026;
   const nbAns = Math.max(1, Math.min(30, h.horizonAns || 5));
   const HORIZON = nbAns * 12 - 1; // dernier mois inclus (mois 0 = janv debut)
@@ -153,8 +153,8 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
     const charges = ouvriers * 12 * h.salaireMensuelOuvrier * partAn + amortAn * partAn;
     const margeBrute = vendus * marge;
     const benef = margeBrute - charges;
-    const benefUSD = benef / h.tauxUSD;
-    const prime = benefUSD > h.seuilPrimeUSD ? benef * (h.tauxPrimePct / 100) : 0;
+    // seuil de prime exprime en devise des donnees (seuilEnBase) ; aucune devise fixee
+    const prime = benef > seuilEnBase ? benef * (h.tauxPrimePct / 100) : 0;
     const benefApres = benef - prime;
     const depenses = ca - benefApres;
     out.push({
@@ -166,7 +166,6 @@ function simulate(strategy, h, cohortesInit, malesActuels) {
       ca,
       depenses,
       benef: benefApres,
-      benefUSD: benefApres / h.tauxUSD,
       prime,
     });
   }
@@ -201,18 +200,24 @@ function buildCohortes(animals, speciesFilter, anneeDebut) {
   return { cohortes, females, males };
 }
 
+// 2-3 chiffres significatifs apres le seuil (ex: 1 256 000 -> 1,26 M)
+const sigNum = (n, div) => {
+  const x = n / div;
+  const dec = Math.abs(x) >= 100 ? 0 : Math.abs(x) >= 10 ? 1 : 2;
+  return x.toLocaleString("fr-FR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+};
 const fmt = (n) => {
   const a = Math.abs(n);
-  if (a >= 1e9) return (n / 1e9).toFixed(2) + " Md";
-  if (a >= 1e6) return (n / 1e6).toFixed(0) + " M";
-  if (a >= 1e3) return (n / 1e3).toFixed(0) + " k";
-  return Math.round(n).toString();
+  if (a >= 1e9) return sigNum(n, 1e9) + " Md";
+  if (a >= 1e6) return sigNum(n, 1e6) + " M";
+  if (a >= 1e3) return sigNum(n, 1e3) + " k";
+  return Math.round(n).toLocaleString("fr-FR");
 };
 const fmtUSD = (n) => {
   const a = Math.abs(n);
-  if (a >= 1e6) return (n / 1e6).toFixed(2) + " M$";
-  if (a >= 1e3) return (n / 1e3).toFixed(0) + " k$";
-  return Math.round(n) + " $";
+  if (a >= 1e6) return sigNum(n, 1e6) + " M$";
+  if (a >= 1e3) return sigNum(n, 1e3) + " k$";
+  return Math.round(n).toLocaleString("fr-FR") + " $";
 };
 
 // Importe les prix reels (api.listPrices) dans la decoupe + prix vif.
@@ -288,10 +293,16 @@ function resolveTaux(baseId, dispId, exchanges, tauxWeb, tauxManuel) {
 function fmtMontant(v, symbole) {
   const u = symbole ? " " + symbole : "";
   const a = Math.abs(v);
-  if (a >= 1e9) return (v / 1e9).toFixed(2) + " Md" + u;
-  if (a >= 1e6) return (v / 1e6).toFixed(0) + " M" + u;
-  if (a >= 1e3) return (v / 1e3).toFixed(0) + " k" + u;
-  return Math.round(v) + u;
+  // garder des chiffres significatifs apres le seuil (ex: 1 256 000 -> 1,26 M)
+  const sig = (div) => {
+    const n = v / div;
+    const dec = Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 10 ? 1 : 2;
+    return n.toLocaleString("fr-FR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  };
+  if (a >= 1e9) return sig(1e9) + " Md" + u;
+  if (a >= 1e6) return sig(1e6) + " M" + u;
+  if (a >= 1e3) return sig(1e3) + " k" + u;
+  return Math.round(v).toLocaleString("fr-FR") + u;
 }
 
 // ─── CALIBRATION SUR DONNEES REELLES ─────────────────────────────────────
@@ -436,6 +447,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [importing, setImporting] = React.useState(false);
   const [currencies, setCurrencies] = React.useState([]);
   const [currencyId, setCurrencyId] = React.useState(null);   // devise d'AFFICHAGE
+  const [convertir, setConvertir] = React.useState(false);    // conversion = choix explicite (pas auto)
   const [baseCurrencyId, setBaseCurrencyId] = React.useState(null); // devise des donnees (systeme)
   const [exchanges, setExchanges] = React.useState([]);       // taux compta /ledger/exchanges
   const [exchOk, setExchOk] = React.useState(null);           // null=pas tente, true/false
@@ -500,8 +512,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       const setting = setR.status === "fulfilled" ? setR.value : null;
       const def = defaultCurrencyId(setting, list);
       setCurrencies(list);
-      setCurrencyId(def);
       setBaseCurrencyId(def); // les montants du modele sont dans la devise systeme
+      // devise d'AFFICHAGE non pre-selectionnee : l'utilisateur choisit (sinon = devise des donnees)
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -530,21 +542,34 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     return () => { alive = false; };
   }, [baseCurrencyId, currencyId, currencies]);
 
-  const symbole = symbolFor(currencyId, currencies, "CDF");
+  // Devise d'affichage effective : seulement si on a coche "convertir" ET choisi une devise.
+  // Sinon on reste dans la devise des donnees (aucune conversion automatique).
+  const afficheId = (convertir && currencyId != null) ? currencyId : baseCurrencyId;
+  const symbole = symbolFor(afficheId, currencies, "");
   const curOptions = currencyOptions(currencies);
 
   // Resout le taux base->affichage : 1) taux compta (le + recent) 2) taux web 3) saisie manuelle.
   const tauxResolu = React.useMemo(
-    () => resolveTaux(baseCurrencyId, currencyId, exchanges, tauxWeb, tauxManuel),
-    [baseCurrencyId, currencyId, exchanges, tauxWeb, tauxManuel]);
+    () => resolveTaux(baseCurrencyId, afficheId, exchanges, tauxWeb, tauxManuel),
+    [baseCurrencyId, afficheId, exchanges, tauxWeb, tauxManuel]);
   const fmtM = (v) => fmtMontant(v * (tauxResolu.taux || 1), symbole);
+  const devData = codeOf(baseCurrencyId, currencies) || ""; // code devise des donnees (suffixe inputs couts)
+
+  // Seuil de prime converti dans la devise des donnees (devise du seuil au choix, aucune fixee).
+  const seuilDeviseId = h.seuilPrimeDeviseId ?? baseCurrencyId;
+  const seuilEnBase = React.useMemo(() => {
+    const v = Number(h.seuilPrime) || 0;
+    if (seuilDeviseId == null || Number(seuilDeviseId) === Number(baseCurrencyId)) return v;
+    const t = resolveTaux(seuilDeviseId, baseCurrencyId, exchanges, tauxWeb, tauxManuel);
+    return t.taux ? v * t.taux : v; // pas de taux -> on garde la valeur telle quelle
+  }, [h.seuilPrime, seuilDeviseId, baseCurrencyId, exchanges, tauxWeb, tauxManuel]);
 
   const { cohortes, females, males } = React.useMemo(
     () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
 
   const rows = React.useMemo(
-    () => simulate(strategy, h, cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }], Math.max(0, males - 3)),
-    [strategy, h, cohortes, males]);
+    () => simulate(strategy, h, cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }], Math.max(0, males - 3), seuilEnBase),
+    [strategy, h, cohortes, males, seuilEnBase]);
 
   const debutP = h.anneeDebut || 2026;
   const finP = debutP + Math.max(1, h.horizonAns || 5) - 1;
@@ -647,16 +672,25 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         {curOptions.length > 0 && (
           <div>
             <div style={upper}>{L("Devise", "Currency")}</div>
-            <select className="input" value={currencyId ?? ""}
-              onChange={(e) => setCurrencyId(e.target.value ? Number(e.target.value) : null)}
-              style={{ minWidth: 110 }}>
-              {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-            </select>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6 }}>
+              <input type="checkbox" checked={convertir}
+                onChange={(e) => setConvertir(e.target.checked)} />
+              {L("Convertir les montants", "Convert amounts")}
+              {baseCurrencyId != null && <span style={{ color: "var(--fg-3)" }}> ({L("donnees en", "data in")} {codeOf(baseCurrencyId, currencies)})</span>}
+            </label>
+            {convertir && (
+              <select className="input" value={currencyId ?? ""}
+                onChange={(e) => setCurrencyId(e.target.value ? Number(e.target.value) : null)}
+                style={{ minWidth: 150 }}>
+                <option value="">{L("— Choisir la devise —", "— Choose currency —")}</option>
+                {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            )}
           </div>
         )}
 
-        {/* Taux de conversion (uniquement si la devise d'affichage != devise des donnees) */}
-        {baseCurrencyId != null && currencyId != null && Number(baseCurrencyId) !== Number(currencyId) && (
+        {/* Taux de conversion (uniquement si conversion activee + devise differente choisie) */}
+        {convertir && baseCurrencyId != null && currencyId != null && Number(baseCurrencyId) !== Number(currencyId) && (
           <div style={{ flexBasis: "100%", fontSize: 12, paddingTop: 4 }}>
             <div style={upper}>
               {L("Taux de conversion", "Conversion rate")} ({codeOf(baseCurrencyId, currencies)} → {codeOf(currencyId, currencies)})
@@ -735,9 +769,37 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           <NumInput label={L("Survie", "Survival")} value={h.surviePct} onChange={set("surviePct")} suffix="%" />
           <NumInput label={L("Age saillie", "Breed age")} value={h.ageSaillieMois} onChange={set("ageSaillieMois")} suffix={L("mois", "mo")} />
           <NumInput label={L("Poids vente", "Sale weight")} value={h.poidsVenteKg} onChange={set("poidsVenteKg")} suffix="kg" />
-          <NumInput label={L("Taux USD", "USD rate")} value={h.tauxUSD} onChange={set("tauxUSD")} suffix="CDF" />
-          <NumInput label={L("Seuil prime", "Bonus threshold")} value={h.seuilPrimeUSD} onChange={set("seuilPrimeUSD")} suffix="$" />
+          <div>
+            <div style={upper}>{L("Seuil prime", "Bonus threshold")}</div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input className="input" type="number" value={h.seuilPrime}
+                onChange={(e) => set("seuilPrime")(Number(e.target.value))} style={{ width: 110 }} />
+              <select className="input" value={h.seuilPrimeDeviseId ?? ""}
+                onChange={(e) => set("seuilPrimeDeviseId")(e.target.value ? Number(e.target.value) : null)}
+                style={{ minWidth: 90 }}>
+                <option value="">{codeOf(baseCurrencyId, currencies) || L("devise donnees", "data cur.")}</option>
+                {curOptions.map((o) => <option key={o.id} value={o.id}>{codeOf(o.id, currencies) || o.label}</option>)}
+              </select>
+            </div>
+          </div>
           <NumInput label={L("Taux prime", "Bonus rate")} value={h.tauxPrimePct} onChange={set("tauxPrimePct")} suffix="%" />
+        </div>
+      </div>
+
+      {/* Couts : editables, et remplis par "Importer mes donnees reelles" (calibrate) */}
+      <div className="card" style={card}>
+        <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
+          {L(`En ${devData}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.`,
+             `In ${devData}. The "Import my real data" button fills these from your expenses.`)}
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <NumInput label={L("Aliment / porc", "Feed / pig")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={devData} />
+          <NumInput label={L("Aliment truie / an", "Sow feed / yr")} value={h.alimentTruieParAn} onChange={set("alimentTruieParAn")} suffix={devData} />
+          <NumInput label={L("Santé (véto) / porc", "Health (vet) / pig")} value={h.vetoParPorc} onChange={set("vetoParPorc")} suffix={devData} />
+          <NumInput label={L("Divers / porc", "Misc / pig")} value={h.diversParPorc} onChange={set("diversParPorc")} suffix={devData} />
+          <NumInput label={L("Salaire / mois", "Salary / mo")} value={h.salaireMensuelOuvrier} onChange={set("salaireMensuelOuvrier")} suffix={devData} />
+          <NumInput label={L("Investissement (capex)", "Investment (capex)")} value={h.capex} onChange={set("capex")} suffix={devData} />
         </div>
       </div>
 
@@ -857,7 +919,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           labels={rows.map((r) => r.labelCourt)}
           series={[
             { name: L("Porcs vendus", "Pigs sold"), data: rows.map((r) => r.vendus) },
-            { name: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`), data: rows.map((r) => Math.round(r.benef / 1e6)) },
+            { name: L(`Chiffre d'affaires (M ${symbole})`, `Revenue (M ${symbole})`), data: rows.map((r) => Math.round((r.ca * (tauxResolu.taux || 1)) / 1e4) / 100) },
+            { name: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`), data: rows.map((r) => Math.round((r.benef * (tauxResolu.taux || 1)) / 1e4) / 100) },
           ]}
           height={260}
         />

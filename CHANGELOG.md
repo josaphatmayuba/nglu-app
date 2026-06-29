@@ -10,6 +10,15 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.0)
+- **FarmOS — Simulateur : montants lisibles, conversion au choix, CA au graphe, seuil prime multi-devise, coûts éditables/importables**.
+  - **Montants lisibles** : le formatage compact garde des chiffres significatifs (ex. `1 256 000 → 1,26 M` au lieu de `1 M`), séparateurs `fr-FR`. Correction centralisée (`fmtMontant` + `fmt`/`fmtUSD` + données du graphique) → s'applique partout (tableaux, synthèse, détail prix, graphique).
+  - **Conversion = choix explicite** : nouvelle case « Convertir les montants » (décochée par défaut). Tant qu'elle n'est pas cochée, tout reste dans la devise des données (aucune conversion automatique) ; le sélecteur de devise et le bloc taux n'apparaissent qu'ensuite. La devise d'affichage n'est plus pré-sélectionnée.
+  - **Chiffre d'affaires au graphique** : 3e série (CA en M, convertie) en plus de Porcs vendus et Bénéfice ; bénéfice/CA du graphe respectent désormais le taux de conversion.
+  - **Seuil de prime multi-devise** : suppression du taux USD et du seuil `$` codés en dur ; le seuil s'exprime dans une **devise au choix** (parmi les devises permises, défaut = devise des données) et est converti vers la devise des données via les vrais taux (compta/web/manuel).
+  - **Coûts éditables + importables** : nouvelle carte « Coûts (modifiable) » avec un input par coût (aliment/porc, aliment truie/an, **santé (véto)/porc**, divers/porc, salaire/mois, capex), suffixés par le code de la devise des données. Le bouton « Importer mes données réelles » remplit déjà ces champs depuis les dépenses (catégories feed/véto/salaire).
+  - **Vérifié** : `vite build --mode development` OK. [SCRUM]
+
 ### Added (3.121.1)
 - **HR — Organigramme : création de département**. La page « Postes & départements » permet désormais de créer un **département** (et plus seulement un poste). Nouveau bouton **« Nouveau departement »** dans la carte Départements ouvrant un modal (champ Nom), qui appelle le CRUD générique `POST /department` (déjà whitelisté côté middleware). Le bouton est désactivé sans droit de mutation. **Vérifié** : `vite build` hr-app OK. [SCRUM]
 
