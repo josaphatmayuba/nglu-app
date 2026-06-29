@@ -23,6 +23,7 @@ const DEFAULTS = {
   partMalesPct: 50,
   ageSaillieMois: 8,
   gestationMois: 4,        // gestation + detection
+  ageReformeMois: 44,      // fin de carriere reproductive : la truie est reformee (vendue) au-dela
   ageVenteMois: 7,
   poidsVenteKg: 95,
   plafondTruiesP2: 150,
@@ -93,10 +94,12 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
 
   const inter = h.porteesParAn > 0 ? 12 / h.porteesParAn : 5.2;
 
+  const reforme = Math.max(h.ageSaillieMois + h.gestationMois + 1, h.ageReformeMois || 44);
   for (let i = 0; i < file.length; i++) {
     const c = file[i];
     let mb = c.naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
-    while (mb <= HORIZON) {
+    // la truie ne se reproduit que jusqu'a l'age de reforme (fin de carriere)
+    while (mb <= HORIZON && (mb - c.naissanceMoisAbs) <= reforme) {
       if (mb >= 0) {
         add(mb, "mb", c.n);
         add(mb, "truies", c.n);
@@ -121,6 +124,13 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
         }
       }
       mb = Math.round(mb + inter);
+    }
+    // Reforme : en fin de carriere, la truie est vendue (sortie du cheptel reproducteur)
+    const moisReforme = c.naissanceMoisAbs + reforme;
+    if (moisReforme >= 0 && moisReforme <= HORIZON) {
+      add(moisReforme, "vendus", c.n);
+      add(moisReforme, "vendusF", c.n); // truies de reforme = femelles vendues
+      parc = Math.max(0, parc - c.n);
     }
   }
 
@@ -1003,6 +1013,10 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 12 }}>
           {L("P1 = garder toutes les femelles (cheptel maximal). P2 = plafonner les truies et vendre l'excédent. Un graphe par indicateur ; ligne pleine = P1, pointillés = P2.",
              "P1 = keep all females (max herd). P2 = cap sows and sell the surplus. One chart per metric; solid line = P1, dashed = P2.")}
+        </div>
+        <div style={{ fontSize: 11, color: "var(--warning, #b45309)", background: "var(--warning-bg, #fffbeb)", border: "1px solid var(--warning, #f0c36d)", borderRadius: 8, padding: "8px 10px", marginBottom: 12 }}>
+          ⚠️ {L("P1 est un potentiel théorique SANS limite physique : sans capacité de bâtiment ni achat de places, le cheptel croît de façon exponentielle (chaque femelle née devient reproductrice). À lire comme un plafond maximal, pas comme une prévision réaliste — la production réelle sera bornée par votre capacité. P2 reflète une conduite réaliste (truies plafonnées, excédent vendu).",
+                "P1 is a theoretical potential with NO physical limit: without barn capacity or buying slots, the herd grows exponentially (every female born becomes a breeder). Read it as a maximum ceiling, not a realistic forecast — real output is capped by your capacity. P2 reflects a realistic operation (capped sows, surplus sold).")}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
           {[

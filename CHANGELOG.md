@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.14)
+- **FarmOS — Simulateur : vérification des calculs P1/P2 + âge de réforme des truies + avertissement P1**. Vérification chiffrée du moteur (script de test hors app) : P2 est réaliste et borné (truies plafonnées, ventes M/F équilibrées) ; P1 est mathématiquement exact mais **exponentiel** (≈170 000 truies en 2030) car chaque femelle née devient reproductrice sans limite physique. Ajout d'un paramètre `ageReformeMois` (défaut 44) : une truie ne se reproduit que jusqu'à la fin de carrière puis est **réformée = vendue** (compte en `vendusF`/`vendus`, sort du `parc`) — améliore le réalisme sans changer la nature de P1. Décision métier : **P1 reste non borné** (potentiel théorique) ; ajout d'un **avertissement visible** sur la section indiquant que P1 est un plafond maximal, pas une prévision, et que la production réelle est limitée par la capacité. **Vérifié** : `vite build` farmos-app OK + simulation numérique des 8 indicateurs. [SCRUM]
+
 ### Added (3.122.13)
 - **FarmOS — Simulateur : comparaison P1/P2 ajoute Naissances et Total animaux**. Deux graphes de plus dans la section P1 vs P2 : « Naissances (vivantes) » (champ `nes` désormais exposé en `naissances`) et « Total animaux (cheptel vivant) » = stock vivant cumulé par période (`vivants` : cheptel initial + nés vivants − vendus, morts déjà exclus). Le « Truies actives » est renommé « Truies actives (reproductrices) » pour le distinguer du total. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 
