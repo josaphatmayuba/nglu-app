@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.15)
+- **FarmOS — Simulateur : colonne « Total animaux » + « Mises bas » dans le tableau de projection (écran ET rapport imprimé)**. Le tableau de projection à l'écran affiche désormais une colonne « Total animaux » (cheptel vivant `r.vivants`) après « Mises bas ». Le tableau du **rapport de simulation** (ReportView) reçoit les colonnes « Mises bas » et « Total animaux ». La ligne Total affiche « — » pour ces deux colonnes (stocks, non cumulables). `minWidth` du tableau écran ajusté à 720. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Changed (3.122.14)
 - **FarmOS — Simulateur : vérification des calculs P1/P2 + âge de réforme des truies + avertissement P1**. Vérification chiffrée du moteur (script de test hors app) : P2 est réaliste et borné (truies plafonnées, ventes M/F équilibrées) ; P1 est mathématiquement exact mais **exponentiel** (≈170 000 truies en 2030) car chaque femelle née devient reproductrice sans limite physique. Ajout d'un paramètre `ageReformeMois` (défaut 44) : une truie ne se reproduit que jusqu'à la fin de carrière puis est **réformée = vendue** (compte en `vendusF`/`vendus`, sort du `parc`) — améliore le réalisme sans changer la nature de P1. Décision métier : **P1 reste non borné** (potentiel théorique) ; ajout d'un **avertissement visible** sur la section indiquant que P1 est un plafond maximal, pas une prévision, et que la production réelle est limitée par la capacité. **Vérifié** : `vite build` farmos-app OK + simulation numérique des 8 indicateurs. [SCRUM]
 

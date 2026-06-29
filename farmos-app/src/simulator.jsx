@@ -495,6 +495,8 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
         <table>
           <thead><tr>
             <th style={{ textAlign: "left" }}>{L("Période", "Period")}</th>
+            <th style={rt}>{L("Mises bas", "Farrowings")}</th>
+            <th style={rt}>{L("Total animaux", "Total animals")}</th>
             <th style={rt}>{L("Porcs vendus", "Pigs sold")}</th>
             <th style={rt}>{L("Chiffre d'affaires", "Revenue")}</th>
             <th style={rt}>{L("Dépenses", "Expenses")}</th>
@@ -504,6 +506,8 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
             {rows.map((r, i) => (
               <tr key={i}>
                 <td style={{ textAlign: "left" }}>{r.label}</td>
+                <td style={rt}>{r.mb.toLocaleString()}</td>
+                <td style={rt}>{r.vivants.toLocaleString()}</td>
                 <td style={rt}>{r.vendus.toLocaleString()}</td>
                 <td style={rt}>{fmtM(r.ca)}</td>
                 <td style={rt}>{fmtM(r.depenses)}</td>
@@ -512,6 +516,8 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
             ))}
             <tr style={{ fontWeight: 700, background: "#f0f0f0" }}>
               <td style={{ textAlign: "left" }}>{L("Total", "Total")}</td>
+              <td style={rt}>—</td>
+              <td style={rt}>—</td>
               <td style={rt}>{totVendus.toLocaleString()}</td>
               <td style={rt}>{fmtM(totCA)}</td>
               <td style={rt}>{fmtM(totDep)}</td>
@@ -946,11 +952,12 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       <div className="card" style={card}>
         <div style={upper}>{L("Projection", "Projection")} {periodeRange} — {strategy}{h.granularite === "trimestre" ? ` · ${L("trimestres", "quarters")}` : ""}</div>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
                 <th style={{ ...th, textAlign: "left" }}>{h.granularite === "trimestre" ? L("Trimestre", "Quarter") : L("Annee", "Year")}</th>
                 <th style={th}>{L("Mises bas", "Farrowings")}</th>
+                <th style={th}>{L("Total animaux", "Total animals")}</th>
                 <th style={th}>{L("Vendus", "Sold")}</th>
                 <th style={th}>CA ({symbole})</th>
                 <th style={th}>{L("Depenses", "Expenses")}</th>
@@ -963,6 +970,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
                 <tr key={r.label} style={{ borderBottom: "1px solid var(--border-subtle, var(--border))" }}>
                   <td style={{ ...td, textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{r.label}</td>
                   <td style={td}>{r.mb}</td>
+                  <td style={td}>{r.vivants.toLocaleString()}</td>
                   <td style={td}>{r.vendus.toLocaleString()}</td>
                   <td style={td}>{fmtM(r.ca)}</td>
                   <td style={td}>{fmtM(r.depenses)}</td>
