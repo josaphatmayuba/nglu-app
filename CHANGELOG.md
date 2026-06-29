@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.123.0)
+- **FarmOS — Simulateur : cheptel de départ enfin exact (lots `count` + mâles datés + verrats)**. Diagnostic sur la BD **prod** (species=`pig`, 149 porcs = 88 ♀ / 61 ♂) : `buildCohortes` comptait **1 par enregistrement** alors qu'un animal peut être un **lot** (champ `count`). Conséquence : les 2 lignes « Engraissement » (= **28** porcs) comptaient pour 2, les 2 lignes « Porcelet » (= **26**) pour 2 → ~54 mâles invisibles. De plus tous les mâles étaient « vendus au mois 0 » (porcelets de juin inclus) et les **verrats** (géniteurs) étaient confondus avec les mâles vendables. Corrections : (1) `buildCohortes` **somme `count`** partout ; (2) les mâles non-reproducteurs (Engraissement/Porcelet) deviennent des **cohortes datées vendues à l'âge de vente** (`dob + ageVenteMois`), plus au mois 0 ; (3) les **Verrats** (`type` verrat/reproducteur) sont comptés au cheptel mais **jamais vendus**. `simulate()` reçoit `cohortesMalesVente` + `verratsInit`. Bandeau « Cheptel détecté » enrichi (Total · Femelles · Mâles · dont verrats · nb cohortes repro / lots mâles). Reconstitué : 88 ♀ repro + 54 ♂ à vendre + 7 verrats = **149**. **Vérifié** : `vite build` farmos-app OK + recomptage numérique = 149. [SCRUM]
+
 ### Added (3.122.15)
 - **FarmOS — Simulateur : colonne « Total animaux » + « Mises bas » dans le tableau de projection (écran ET rapport imprimé)**. Le tableau de projection à l'écran affiche désormais une colonne « Total animaux » (cheptel vivant `r.vivants`) après « Mises bas ». Le tableau du **rapport de simulation** (ReportView) reçoit les colonnes « Mises bas » et « Total animaux ». La ligne Total affiche « — » pour ces deux colonnes (stocks, non cumulables). `minWidth` du tableau écran ajusté à 720. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

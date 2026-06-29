@@ -77,7 +77,7 @@ const MOIS_T_FIN = { 0: "mars", 3: "juin", 6: "sept", 9: "déc" };
 // ─── MOTEUR PAR COHORTE (mois par mois) ──────────────────────────────────
 // cohortesInit: [{ naissanceMoisAbs, n }]  (mois 0 = janvier de anneeDebut)
 // Accumule en buckets mensuels puis agrege par periode (annee OU trimestre).
-function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
+function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, cohortesMalesVente = [], verratsInit = 0) {
   const debut = h.anneeDebut || 2026;
   const nbAns = Math.max(1, Math.min(30, h.horizonAns || 5));
   const HORIZON = nbAns * 12 - 1; // dernier mois inclus (mois 0 = janv debut)
@@ -87,10 +87,17 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   const add = (mab, key, val) => { if (mab >= 0 && mab <= HORIZON) moisData[mab][key] += val; };
 
   const file = cohortesInit.map((c) => ({ ...c }));
+  const malesExistants = cohortesMalesVente.reduce((s, c) => s + c.n, 0);
   let parc = cohortesInit.reduce((s, c) => s + c.n, 0);
-  const parcInit = parc + malesActuels; // cheptel vivant au depart (reproducteurs + males a vendre)
-  add(0, "vendus", malesActuels); // males adultes existants vendus au depart
-  add(0, "vendusM", malesActuels);
+  // cheptel vivant au depart = reproductrices + males a vendre + verrats (geniteurs)
+  const parcInit = parc + malesExistants + (Number(verratsInit) || 0) + (Number(malesActuels) || 0);
+  // males existants destines a la vente : vendus a l'age de vente (lot date), PAS tous au mois 0
+  for (const c of cohortesMalesVente) {
+    const venteMois = Math.max(0, c.naissanceMoisAbs + h.ageVenteMois);
+    add(venteMois, "vendus", c.n);
+    add(venteMois, "vendusM", c.n);
+  }
+  if (malesActuels) { add(0, "vendus", malesActuels); add(0, "vendusM", malesActuels); }
 
   const inter = h.porteesParAn > 0 ? 12 / h.porteesParAn : 5.2;
 
@@ -200,32 +207,52 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   return out;
 }
 
-// Repartit le cheptel reel en cohortes d'age (par date de naissance)
+// Repartit le cheptel reel en cohortes d'age (par date de naissance).
+// IMPORTANT : un enregistrement animal peut etre un LOT (champ `count`) -> on
+// somme `count` (1 par defaut), jamais 1 par ligne, sinon un lot de 28 porcs
+// d'engraissement ne compterait que pour 1.
+// On separe :
+//  - femelles reproductrices (Truie/Cochette) -> cohortes de repro (saillie selon l'age)
+//  - males reproducteurs (Verrat) -> comptes au cheptel mais JAMAIS vendus
+//  - autres males (Engraissement/Porcelet...) -> cohortes a vendre a l'age de vente
 function buildCohortes(animals, speciesFilter, anneeDebut) {
   const debut = anneeDebut || 2026;
   const moisAbs = (d) => (d.getFullYear() - debut) * 12 + d.getMonth();
-  let females = 0, males = 0;
-  const cohortes = [];
-  const groups = new Map();
+  let females = 0, males = 0, verrats = 0;
+  const cohortes = [];        // femelles reproductrices, par mois de naissance
+  const cohortesMales = [];   // males a vendre (engraissement/porcelets), par mois de naissance
+  const groupsF = new Map();
+  const groupsM = new Map();
+  const REPRO_MALE = /verrat|reproduct|breed|boar|geniteur|géniteur/i;
   for (const a of animals || []) {
     if (speciesFilter && a.species !== speciesFilter) continue;
     if (a.is_active === 0 || a.isActive === 0) continue;
-    if ((a.status || "").toLowerCase() === "deceased") continue;
+    const st = (a.status || "").toLowerCase();
+    if (st === "deceased" || st === "sold") continue;
     const sex = (a.sex || "").toUpperCase();
     if (!a.date_of_birth && !a.dateOfBirth) continue;
     const dob = new Date(a.date_of_birth || a.dateOfBirth);
     if (isNaN(dob)) continue;
+    const n = Math.max(1, Number(a.count) || 1); // effectif du lot
+    const type = a.type || a.category || "";
+    const key = `${dob.getFullYear()}-${dob.getMonth()}`;
     if (sex === "F" || sex === "FEMALE" || sex === "FEMELLE") {
-      females++;
-      const key = `${dob.getFullYear()}-${dob.getMonth()}`;
-      if (!groups.has(key)) groups.set(key, { naissanceMoisAbs: moisAbs(dob), n: 0 });
-      groups.get(key).n++;
-    } else if (sex === "M" || sex === "MALE" || sex === "MALE" || sex === "MÂLE") {
-      males++;
+      females += n;
+      if (!groupsF.has(key)) groupsF.set(key, { naissanceMoisAbs: moisAbs(dob), n: 0 });
+      groupsF.get(key).n += n;
+    } else if (sex === "M" || sex === "MALE" || sex === "MÂLE") {
+      males += n;
+      if (REPRO_MALE.test(type)) {
+        verrats += n; // reproducteur : compte au cheptel, pas a vendre
+      } else {
+        if (!groupsM.has(key)) groupsM.set(key, { naissanceMoisAbs: moisAbs(dob), n: 0 });
+        groupsM.get(key).n += n;
+      }
     }
   }
-  for (const g of groups.values()) cohortes.push(g);
-  return { cohortes, females, males };
+  for (const g of groupsF.values()) cohortes.push(g);
+  for (const g of groupsM.values()) cohortesMales.push(g);
+  return { cohortes, cohortesMales, females, males, verrats };
 }
 
 // 2-3 chiffres significatifs apres le seuil (ex: 1 256 000 -> 1,26 M)
@@ -664,17 +691,19 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   // Seuil de prime : exprime dans la devise choisie (aucune conversion).
   const seuilEnBase = Number(h.seuilPrime) || 0;
 
-  const { cohortes, females, males } = React.useMemo(
+  const { cohortes, cohortesMales, females, males, verrats } = React.useMemo(
     () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
 
   const cohortesUse = cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }];
-  const malesVendables = Math.max(0, males - 3);
+  // males a vendre = lots non-reproducteurs (engraissement/porcelets) vendus a l'age de vente
+  const cohortesMalesUse = cohortesMales.length ? cohortesMales
+    : (cohortes.length ? [] : [{ naissanceMoisAbs: -1, n: 14 }]); // fallback demo
   const rowsP1 = React.useMemo(
-    () => simulate("P1", h, cohortesUse, malesVendables, seuilEnBase),
-    [h, cohortes, males, seuilEnBase]);
+    () => simulate("P1", h, cohortesUse, 0, seuilEnBase, cohortesMalesUse, verrats),
+    [h, cohortes, cohortesMales, verrats, seuilEnBase]);
   const rowsP2 = React.useMemo(
-    () => simulate("P2", h, cohortesUse, malesVendables, seuilEnBase),
-    [h, cohortes, males, seuilEnBase]);
+    () => simulate("P2", h, cohortesUse, 0, seuilEnBase, cohortesMalesUse, verrats),
+    [h, cohortes, cohortesMales, verrats, seuilEnBase]);
   const rows = strategy === "P1" ? rowsP1 : rowsP2;
 
   const debutP = h.anneeDebut || 2026;
@@ -744,8 +773,11 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         <div style={upper}>{L("Cheptel de depart (detecte)", "Starting herd (detected)")}</div>
         {loading ? <div>{L("Chargement…", "Loading…")}</div> : (
           <div style={{ fontSize: 13 }}>
-            {L("Femelles", "Females")}: <b>{females}</b> · {L("Males", "Males")}: <b>{males}</b>
-            {" · "}{cohortes.length} {L("cohorte(s) d'age", "age cohort(s)")}
+            {L("Total", "Total")}: <b>{females + males}</b>
+            {" · "}{L("Femelles", "Females")}: <b>{females}</b> · {L("Males", "Males")}: <b>{males}</b>
+            {verrats ? <> {" · "}{L("dont verrats (geniteurs, non vendus)", "incl. boars (breeders, not sold)")}: <b>{verrats}</b></> : null}
+            {" · "}{cohortes.length} {L("cohorte(s) repro", "breeding cohort(s)")}
+            {cohortesMales.length ? <> {" + "}{cohortesMales.length} {L("lot(s) males a vendre", "male lot(s) to sell")}</> : null}
             {speciesFilter ? ` · ${speciesFilter}` : ` · ${L("toutes especes", "all species")}`}
           </div>
         )}
