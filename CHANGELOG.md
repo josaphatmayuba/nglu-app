@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.1)
+- **FarmOS — Simulateur : P2 et réformes appliqués dans l'ordre chronologique**. Le moteur modifiait l'ancien `parc` pendant le parcours des cohortes, ce qui pouvait fausser le plafond P2 et le calcul des ouvriers quand réformes et nouvelles femelles se croisaient. Remplacement par une planification mensuelle (`misesBasParMois`, `reformesParMois`, `femellesGardees`) : les réformes sont appliquées au mois concerné avant la décision garder/vendre des femelles. Le calcul des ouvriers n'utilise plus l'ancien `parc` supprimé. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Added (3.124.0)
 - **FarmOS — Simulateur : mois de départ (plus seulement l'année)**. On est fin juin 2026 mais la projection démarrait toujours en **janvier** → les 2 premiers trimestres (T1/T2 2026) étaient déjà passés et faussaient tout (CA=0, dépenses fantômes, bénéfice −6,83 M CDF). Ajout d'un paramètre `moisDebut` (1-12, **défaut = mois courant**) : `mois 0` du moteur = (`anneeDebut`, `moisDebut`). Le découpage en périodes est **aligné sur le calendrier civil** (la 1re période peut être partielle, ex. démarrage juin → T2 2026 = juin seul, puis trimestres pleins juil-sept, oct-déc…). `buildCohortes` calcule `naissanceMoisAbs` relatif au mois de départ (négatif si l'animal est né avant). Sélecteur « Mois de départ » ajouté à côté de « Année de départ » ; le libellé « Projection … → … » reflète les vrais labels de période. **Vérifié** : `vite build` farmos-app OK + simulation des périodes (démarrage juin 2026 → plus de T1/T2 vides, fin T2 2031). [SCRUM]
 

@@ -87,11 +87,11 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
   for (let m = 0; m <= HORIZON; m++) moisData.push({ mb: 0, nes: 0, vendus: 0, truies: 0, morts: 0, vendusM: 0, vendusF: 0 });
   const add = (mab, key, val) => { if (mab >= 0 && mab <= HORIZON) moisData[mab][key] += val; };
 
-  const file = cohortesInit.map((c) => ({ ...c }));
   const malesExistants = cohortesMalesVente.reduce((s, c) => s + c.n, 0);
-  let parc = cohortesInit.reduce((s, c) => s + c.n, 0);
+  const femellesInitiales = cohortesInit.reduce((s, c) => s + c.n, 0);
+  let femellesGardees = femellesInitiales;
   // cheptel vivant au depart = reproductrices + males a vendre + verrats (geniteurs)
-  const parcInit = parc + malesExistants + (Number(verratsInit) || 0) + (Number(malesActuels) || 0);
+  const parcInit = femellesInitiales + malesExistants + (Number(verratsInit) || 0) + (Number(malesActuels) || 0);
   // males existants destines a la vente : vendus a l'age de vente (lot date), PAS tous au mois 0
   for (const c of cohortesMalesVente) {
     const venteMois = Math.max(0, c.naissanceMoisAbs + h.ageVenteMois);
@@ -100,45 +100,57 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
   }
   if (malesActuels) { add(0, "vendus", malesActuels); add(0, "vendusM", malesActuels); }
 
-  const inter = h.porteesParAn > 0 ? 12 / h.porteesParAn : 5.2;
-
+  const inter = h.porteesParAn > 0 ? Math.max(1, Math.round(12 / h.porteesParAn)) : 5;
   const reforme = Math.max(h.ageSaillieMois + h.gestationMois + 1, h.ageReformeMois || 44);
-  for (let i = 0; i < file.length; i++) {
-    const c = file[i];
-    let mb = c.naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
+  const misesBasParMois = Array.from({ length: HORIZON + 1 }, () => []);
+  const reformesParMois = Array.from({ length: HORIZON + 1 }, () => 0);
+
+  const planifierCohorte = (naissanceMoisAbs, n) => {
+    if (!n || n <= 0) return;
+    let mb = naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
     // la truie ne se reproduit que jusqu'a l'age de reforme (fin de carriere)
-    while (mb <= HORIZON && (mb - c.naissanceMoisAbs) <= reforme) {
-      if (mb >= 0) {
-        add(mb, "mb", c.n);
-        add(mb, "truies", c.n);
-        const nesTotal = c.n * h.nesParPortee;
-        const nesViv = nesTotal * (h.surviePct / 100);
-        add(mb, "nes", nesViv);
-        add(mb, "morts", nesTotal - nesViv); // morts a la naissance (1 - survie)
-        const femelles = nesViv * (1 - h.partMalesPct / 100);
-        const males = nesViv * (h.partMalesPct / 100);
-        const venteMois = mb + h.ageVenteMois;
-        add(venteMois, "vendus", males);
-        add(venteMois, "vendusM", males);
-        if (strategy === "P1") {
-          file.push({ naissanceMoisAbs: mb, n: femelles });
-          parc += femelles;
-        } else {
-          const manque = Math.max(0, h.plafondTruiesP2 - parc);
-          const gardees = Math.min(femelles, manque);
-          const aVendre = femelles - gardees;
-          if (gardees > 0) { file.push({ naissanceMoisAbs: mb, n: gardees }); parc += gardees; }
-          if (aVendre > 0) { add(venteMois, "vendus", aVendre); add(venteMois, "vendusF", aVendre); }
-        }
-      }
-      mb = Math.round(mb + inter);
+    while (mb <= HORIZON && (mb - naissanceMoisAbs) <= reforme) {
+      if (mb >= 0) misesBasParMois[mb].push({ naissanceMoisAbs, n });
+      mb += inter;
     }
     // Reforme : en fin de carriere, la truie est vendue (sortie du cheptel reproducteur)
-    const moisReforme = c.naissanceMoisAbs + reforme;
+    const moisReforme = naissanceMoisAbs + reforme;
     if (moisReforme >= 0 && moisReforme <= HORIZON) {
-      add(moisReforme, "vendus", c.n);
-      add(moisReforme, "vendusF", c.n); // truies de reforme = femelles vendues
-      parc = Math.max(0, parc - c.n);
+      add(moisReforme, "vendus", n);
+      add(moisReforme, "vendusF", n); // truies de reforme = femelles vendues
+      reformesParMois[moisReforme] += n;
+    }
+  };
+
+  for (const c of cohortesInit) planifierCohorte(c.naissanceMoisAbs, c.n);
+
+  for (let m = 0; m <= HORIZON; m++) {
+    if (reformesParMois[m] > 0) femellesGardees = Math.max(0, femellesGardees - reformesParMois[m]);
+    for (const c of misesBasParMois[m]) {
+      add(m, "mb", c.n);
+      add(m, "truies", c.n);
+      const nesTotal = c.n * h.nesParPortee;
+      const nesViv = nesTotal * (h.surviePct / 100);
+      add(m, "nes", nesViv);
+      add(m, "morts", nesTotal - nesViv); // morts a la naissance (1 - survie)
+      const femelles = nesViv * (1 - h.partMalesPct / 100);
+      const males = nesViv * (h.partMalesPct / 100);
+      const venteMois = m + h.ageVenteMois;
+      add(venteMois, "vendus", males);
+      add(venteMois, "vendusM", males);
+      if (strategy === "P1") {
+        femellesGardees += femelles;
+        planifierCohorte(m, femelles);
+      } else {
+        const manque = Math.max(0, h.plafondTruiesP2 - femellesGardees);
+        const gardees = Math.min(femelles, manque);
+        const aVendre = femelles - gardees;
+        if (gardees > 0) {
+          femellesGardees += gardees;
+          planifierCohorte(m, gardees);
+        }
+        if (aVendre > 0) { add(venteMois, "vendus", aVendre); add(venteMois, "vendusF", aVendre); }
+      }
     }
   }
 
@@ -188,7 +200,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
     const vendus = Math.round(per.agg.vendus);
     const ca = vendus * rev;
     const truiesActives = Math.round(per.agg.truies);
-    const ouvriers = Math.max(1, Math.ceil(Math.min(truiesActives || 1, parc) / 70));
+    const ouvriers = Math.max(1, Math.ceil((truiesActives || 1) / 70));
     // charges au prorata du nombre de mois de la periode
     const partAn = per.moisParPeriode / 12;
     const charges = ouvriers * 12 * h.salaireMensuelOuvrier * partAn + amortAn * partAn;
