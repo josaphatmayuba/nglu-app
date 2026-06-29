@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.11)
+- **Domus - generation de lien locataire sans reouverture de modale**. La creation d'un lien d'inscription ne declenche plus le reload complet de l'ecran Locataires pendant que la modale est ouverte. La modale reste sur l'etat `Lien genere`, puis la liste est rafraichie seulement a la fermeture, ce qui evite le retour automatique au formulaire vide apres clic sur `Generer le lien`. **Verifie** : reproduction prod avec compte demo, dossier test supprime ; test local mock API OK ; `npm.cmd run build` domus-app OK. [SCRUM]
+
 ### Fixed (3.124.10)
 - **Domus - profil utilisateur non hardcode dans la sidebar**. Remplacement de `AK` / `A. Kalala` par le profil authentifie: nom affiche depuis le login ou le refresh cookie, initiales derivees automatiquement, role traduit et fallback propre sur l'email/utilisateur. Le backend renvoie aussi `firstName` / `lastName` sur login classique et MFA pour eviter un affichage incomplet apres connexion. **Verifie** : `npm.cmd run build` domus-app OK ; `npm.cmd run typecheck` backend2 OK. [SCRUM]
 

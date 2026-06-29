@@ -177,6 +177,7 @@ export function Locataires() {
   const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(null);
   const [linkModal, setLinkModal] = useState(null);
+  const [refreshOnLinkClose, setRefreshOnLinkClose] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
 
@@ -250,6 +251,17 @@ export function Locataires() {
     await api.validateOnboarding(record.id);
     await reload();
   };
+  const openLinkModal = () => {
+    setRefreshOnLinkClose(false);
+    setLinkModal({ phone: "", firstName: "", lastName: "", email: "" });
+  };
+  const closeLinkModal = () => {
+    setLinkModal(null);
+    if (refreshOnLinkClose) {
+      setRefreshOnLinkClose(false);
+      reload();
+    }
+  };
   const handleDeleteTenant = async (tenant) => {
     const hasActiveLease = leases.some((l) => String(l.tenantId) === String(tenant.id) && l.status === "active");
     if (hasActiveLease) {
@@ -280,7 +292,7 @@ export function Locataires() {
             <Search size={16} />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, telephone, unite..." />
           </label>
-          <button className="immo-btn" onClick={() => setLinkModal({ phone: "", firstName: "", lastName: "", email: "" })}>
+          <button className="immo-btn" onClick={openLinkModal}>
             <UserRound size={16} /> Lien d'inscription
           </button>
           <button className="immo-btn primary" onClick={() => setModal({ ...emptyTenant })}>
@@ -405,8 +417,8 @@ export function Locataires() {
       {linkModal && (
         <OnboardingLinkModal
           value={linkModal}
-          onClose={() => setLinkModal(null)}
-          onGenerated={reload}
+          onClose={closeLinkModal}
+          onGenerated={() => setRefreshOnLinkClose(true)}
         />
       )}
     </>
