@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.10)
+- **Domus - profil utilisateur non hardcode dans la sidebar**. Remplacement de `AK` / `A. Kalala` par le profil authentifie: nom affiche depuis le login ou le refresh cookie, initiales derivees automatiquement, role traduit et fallback propre sur l'email/utilisateur. Le backend renvoie aussi `firstName` / `lastName` sur login classique et MFA pour eviter un affichage incomplet apres connexion. **Verifie** : `npm.cmd run build` domus-app OK ; `npm.cmd run typecheck` backend2 OK. [SCRUM]
+
 ### Security (3.124.9)
 - **Backend security hardening**. Protected tenant settings, removed the public org 1 settings fallback, added a minimal `/setting/public` response, hardened logout and legacy Google login, fixed public onboarding/CORS edge cases, added defense-in-depth JWT guards on mutable controllers, restored `DELETE /transaction-type/:id`, and authenticated chat/discussion WebSockets with server-side access checks. **Verified**: `npm run typecheck` backend2 OK; `npm run build` backend2 OK; `npm run build:dev` frontend OK with existing Vite warnings. [SECURITY]
 

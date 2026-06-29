@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
   UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp,
 } from "lucide-react";
-import { LoginScreen, useAuthToken, clearToken } from "./auth.jsx";
+import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
 import { outboxCount } from "./outbox.js";
 import { t, useLang } from "./i18n.js";
@@ -103,6 +103,7 @@ export default function App() {
   const device = useDeviceMode();
   const realtimeOnline = useRealtimeStatus();
   const [lang, setLang] = useLang();
+  const authUser = useAuthUser();
 
   // Connexion temps réel maintenue tant qu'une session est ouverte.
   useEffect(() => {
@@ -146,10 +147,12 @@ export default function App() {
           </div>
         ))}
         <div className="sidebar-user">
-          <div className="avatar">AK</div>
-          <div style={{ fontSize: 12, lineHeight: 1.2 }}>
-            <div style={{ fontWeight: 500 }}>A. Kalala</div>
-            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>{t("Gestionnaire")}</div>
+          <div className="avatar">{authUser.initials}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.2, minWidth: 0, flex: "1 1 auto" }}>
+            <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {authUser.displayName}
+            </div>
+            <div style={{ color: "var(--ink-400)", fontSize: 11 }}>{t(authUser.roleLabel)}</div>
           </div>
           <button className="lang-toggle" style={{ marginLeft: "auto" }} title="Langue / Language"
             onClick={() => setLang(lang === "fr" ? "en" : "fr")}>
@@ -177,7 +180,7 @@ export default function App() {
             <span className="mh-title">{t(TITLES[view])}</span>
           </div>
           <RealtimePill online={realtimeOnline} compact />
-          <div className="avatar">AK</div>
+          <div className="avatar">{authUser.initials}</div>
         </div>
 
         <div className="content">{ScreenEl}</div>

@@ -144,6 +144,8 @@ export class AuthService {
         id: users.id,
         organizationId: users.organizationId,
         username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
         password: users.password,
         roleId: users.roleId,
         status: users.status,
@@ -407,6 +409,9 @@ export class AuthService {
       .select({
         id: users.id,
         organizationId: users.organizationId,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
         roleId: users.roleId,
         status: users.status,
         password: users.password,
