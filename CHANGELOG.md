@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.6)
+- **FarmOS — Simulateur : pagination rapport réellement multi-page via portal**. Le rapport imprimable est maintenant rendu directement sous `body` avec `createPortal`, au lieu de rester dans le conteneur scrollable `#simulator-report`. Chrome peut donc calculer la hauteur complète du document et générer les pages suivantes : les tableaux Reproducteurs gardés, Projection et Détail des prix restent présents même si le rapport dépasse une page. **Vérifié** : `npm.cmd run build` farmos-app OK ; test Chrome/Playwright local avec PDF = 2 pages et 3 tableaux présents ; test dev actuel avant correction confirmé à 1 page car le rapport était encore enfant de `#simulator-report`. [SCRUM]
+
 ### Fixed (3.124.5)
 - **FarmOS — Simulateur : le rapport imprimé conserve tous les tableaux sur plusieurs pages**. Correction de la feuille `@media print` du simulateur : le rapport n'est plus rendu en position absolue dans un conteneur scrollable, les blocs et tables peuvent paginer naturellement, et les en-têtes de tableau sont répétés quand une table continue sur une page suivante. Le rapport garde donc les sections Reproducteurs gardés, Projection, graphe et Détail des prix même si le document dépasse une page. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 

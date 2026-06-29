@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api";
 import { MaterialLineChart } from "./material-charts.jsx";
 import { symbolFor, currencyOptions, currencyIdOf } from "./currency";
@@ -1006,19 +1007,24 @@ const SimulatorScreen = ({ lang }) => {
   const upper = { fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8, color: "var(--fg-3)" };
   const th = { textAlign: "right", padding: "6px 8px", fontSize: 11, color: "var(--fg-3)", whiteSpace: "nowrap" };
   const td = { textAlign: "right", padding: "6px 8px", fontSize: 13, whiteSpace: "nowrap" };
+  const reportView = (
+    <ReportView
+      L={L} rows={rows} h={h} strategy={strategy}
+      zoneDisplayLabel={selectedZoneLabel}
+      females={females} males={males} cohortes={cohortes}
+      saisieCode={saisieCode} fmtM={fmtM}
+      rev={rev} cout={cout} marge={marge} cumulBenef={cumulBenef}
+      debutP={debutP} finP={finP} granu={h.granularite}
+    />
+  );
 
   return (
     <div id="simulator-report" style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
       <style>{`
         #sim-report-print { display: none; }
         @media print {
-          html, body, #root { height: auto !important; overflow: visible !important; }
-          body * { visibility: hidden !important; }
-          #simulator-report {
-            height: auto !important; overflow: visible !important; max-width: none !important; padding: 0 !important;
-          }
-          #simulator-report > :not(#sim-report-print):not(style) { display: none !important; }
-          #sim-report-print, #sim-report-print * { visibility: visible !important; }
+          html, body { height: auto !important; overflow: visible !important; }
+          body > :not(#sim-report-print) { display: none !important; }
           #sim-report-print {
             display: block !important; position: static !important;
             width: auto; padding: 0; color: #111; font-size: 12px;
@@ -1033,15 +1039,8 @@ const SimulatorScreen = ({ lang }) => {
         }
       `}</style>
 
-      {/* Vue RAPPORT : invisible a l'ecran, seule chose imprimee (mise en page document) */}
-      <ReportView
-        L={L} rows={rows} h={h} strategy={strategy}
-        zoneDisplayLabel={selectedZoneLabel}
-        females={females} males={males} cohortes={cohortes}
-        saisieCode={saisieCode} fmtM={fmtM}
-        rev={rev} cout={cout} marge={marge} cumulBenef={cumulBenef}
-        debutP={debutP} finP={finP} granu={h.granularite}
-      />
+      {/* Vue RAPPORT : invisible a l'ecran, imprimee depuis body pour permettre la pagination multi-pages. */}
+      {typeof document !== "undefined" ? createPortal(reportView, document.body) : reportView}
       {/* Devise : reglage global, en haut. Aucune devise imposee tant que non choisie. */}
       <div className="card" style={{ ...card, ...(saisieChoisie ? {} : { borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }) }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
