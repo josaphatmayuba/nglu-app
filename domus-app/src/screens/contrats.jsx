@@ -517,7 +517,7 @@ export function Contrats() {
             ))}
           </div>
           <p className="muted" style={{ fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER], etc.
+            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE], etc.
           </p>
         </aside>
       </div>
@@ -629,9 +629,14 @@ const CONTRACT_PLACEHOLDER_GROUPS = [
   {
     label: "Montants",
     items: [
+      "MONTANT DU LOYER AVEC DEVISE",
       "MONTANT DU LOYER",
+      "MONTANT GARANTIE AVEC DEVISE",
       "MONTANT GARANTIE",
       "NUMÉRO DE MOIS DE GARANTIE",
+      "DEVISE",
+      "SYMBOLE DE DEVISE",
+      "CODE DE DEVISE",
     ],
   },
 ];
@@ -674,7 +679,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
             <span className="domus-modal-title-icon"><FilePen size={20} /></span>
             <div>
               <h2>{form.id ? "Modifier le modèle" : "Nouveau modèle"}</h2>
-              <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER])</p>
+              <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER AVEC DEVISE])</p>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
@@ -729,7 +734,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
               className="domus-template-body"
               value={form.body}
               onChange={(e) => set({ body: e.target.value })}
-              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
+              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER AVEC DEVISE]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
             />
           )}
           <label className="domus-template-active">

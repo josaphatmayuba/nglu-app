@@ -6,6 +6,7 @@ import { DRIZZLE } from "../database/database.constants";
 import {
   appSettings,
   customers,
+  currencies,
   realEstateContractAuditLogs,
   realEstateContracts,
   realEstateLeases,
@@ -30,6 +31,10 @@ type LeaseDetails = {
   startDate: Date | string | null;
   endDate: Date | string | null;
   rentAmount: string | null;
+  currencyId: number | null;
+  currencyCode: string | null;
+  currencyName: string | null;
+  currencySymbol: string | null;
   securityDeposit: string | null;
   billingCycle: string | null;
   terms: string | null;
@@ -131,6 +136,7 @@ export class ContractsService {
     const numberOfMonths = rawMonths > 0 ? String(rawMonths) : "";
     const rentAmount = this.formatMoney(lease.rentAmount);
     const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const currency = this.currencyLabel(lease);
     const guaranteeMonths = this.guaranteeMonthsRaw(lease.rentAmount, lease.securityDeposit);
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ");
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
@@ -157,8 +163,13 @@ export class ContractsService {
       "DATE DE FIN DE BAIL": endDate,
       "DATE DE FIN DE BAIL JJ/MM/AAAA": endDate,
       "MONTANT DU LOYER": rentAmount,
+      "MONTANT DU LOYER AVEC DEVISE": this.formatMoneyWithCurrency(lease.rentAmount, lease),
       "MONTANT GARANTIE": securityDeposit,
+      "MONTANT GARANTIE AVEC DEVISE": this.formatMoneyWithCurrency(lease.securityDeposit, lease),
       "NUMÉRO DE MOIS DE GARANTIE": guaranteeMonths,
+      "DEVISE": currency,
+      "SYMBOLE DE DEVISE": lease.currencySymbol ?? "",
+      "CODE DE DEVISE": lease.currencyCode ?? "",
       "VILLE": lease.propertyCity ?? "",
       "DATE DE SIGNATURE DE BAIL": today,
       "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA": today,
@@ -485,6 +496,10 @@ export class ContractsService {
         startDate: realEstateLeases.startDate,
         endDate: realEstateLeases.endDate,
         rentAmount: realEstateLeases.rentAmount,
+        currencyId: realEstateLeases.currencyId,
+        currencyCode: currencies.currencyCode,
+        currencyName: currencies.currencyName,
+        currencySymbol: currencies.currencySymbol,
         securityDeposit: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         terms: realEstateLeases.terms,
@@ -505,6 +520,7 @@ export class ContractsService {
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(eq(realEstateLeases.id, leaseId))
       .limit(1);
 
@@ -525,6 +541,7 @@ export class ContractsService {
     const duration = this.durationInMonths(lease.startDate, lease.endDate);
     const rentAmount = this.formatMoney(lease.rentAmount);
     const securityDeposit = this.formatMoney(lease.securityDeposit);
+    const currency = this.currencyLabel(lease) || "USD";
     const guaranteeMonths = this.guaranteeMonths(lease.rentAmount, lease.securityDeposit);
     const city = lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
@@ -608,13 +625,13 @@ export class ContractsService {
   ${art("4", "Loyer et Garantie Locative", `
     <p style="margin:0 0 10px;">
       <strong>4.1. Loyer&nbsp;:</strong> Le loyer mensuel est fixé à
-      <strong style="color:#1a237e;">${rentAmount} USD</strong>.
+      <strong style="color:#1a237e;">${rentAmount} ${e(currency)}</strong>.
       Conformément à la réglementation en RDC, le paiement s&rsquo;effectue en Francs Congolais (CDF)
       au taux officiel de la Banque Centrale du Congo, sauf accord écrit contraire des parties.
     </p>
     <p style="margin:0;">
       <strong>4.2. Garantie Locative&nbsp;:</strong> Le Preneur verse ce jour une garantie de
-      <strong style="color:#1a237e;">${securityDeposit} USD</strong> correspondant à ${guaranteeMonths}.
+      <strong style="color:#1a237e;">${securityDeposit} ${e(currency)}</strong> correspondant à ${guaranteeMonths}.
       Cette somme est restituée en fin de bail après déduction des éventuels arriérés, charges impayées
       ou réparations locatives. La garantie ne peut pas excéder <strong>trois (3) mois</strong> de loyer
       pour un usage résidentiel.
@@ -721,6 +738,18 @@ export class ContractsService {
     return Number.isFinite(amount)
       ? amount.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : "0,00";
+  }
+
+  private formatMoneyWithCurrency(value: string | number | null | undefined, lease: LeaseDetails) {
+    const amount = this.formatMoney(value);
+    const currency = this.currencyLabel(lease);
+    return currency ? `${amount} ${currency}` : amount;
+  }
+
+  private currencyLabel(lease: Pick<LeaseDetails, "currencySymbol" | "currencyCode">) {
+    const symbol = String(lease.currencySymbol ?? "").trim();
+    const code = String(lease.currencyCode ?? "").trim();
+    return symbol || code;
   }
 
   private durationInMonths(start: Date | string | null | undefined, end: Date | string | null | undefined) {

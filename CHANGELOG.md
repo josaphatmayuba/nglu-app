@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.13)
+- **Domus - devise disponible dans les placeholders de contrat**. Le service de contrats joint désormais la devise du bail et expose `[DEVISE]`, `[SYMBOLE DE DEVISE]`, `[CODE DE DEVISE]`, `[MONTANT DU LOYER AVEC DEVISE]` et `[MONTANT GARANTIE AVEC DEVISE]`. Les modèles seedés qui avaient `$ (USD)` codé en dur sont migrés vers ces placeholders pour respecter la devise réelle du bail. **Vérifié** : `npm.cmd run typecheck` backend2 OK ; `npm.cmd run build` domus-app OK. [SCRUM]
+
 ### Added (3.124.12)
 - **Domus - placeholders de contrats insérables depuis la modale modèle**. Ajout d'une palette de placeholders groupés (bailleur, preneur, logement, dates, montants) dans la modale d'édition des modèles de contrat : un clic insère le placeholder exact au curseur dans le contenu. Les exemples visibles utilisent désormais les noms réellement pris en charge par le backend (`[MONTANT DU LOYER]`, `[NOM COMPLET DU PRENEUR]`, etc.) au lieu des anciens raccourcis non reconnus. **Vérifié** : `npm.cmd run build` domus-app OK. [SCRUM]
 
