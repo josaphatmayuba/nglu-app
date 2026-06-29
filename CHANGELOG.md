@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.4)
+- **FarmOS — Simulateur : aucune devise présélectionnée, une seule devise au choix de l'utilisateur**. Au démarrage, **aucune devise n'est affichée** (ni USD ni CDF) : les champs coûts/prix n'ont pas de suffixe et un bandeau invite à choisir sa devise. L'utilisateur sélectionne **sa** devise (menu « Devise » sur la carte Coûts) ; tous les montants (saisie ET résultats : tableau, graphe, synthèse) s'étiquettent alors dans cette devise. Choisir une devise **n'effectue aucune conversion** — les chiffres de départ indicatifs restent identiques, simplement étiquetés. Suppression de tout le mécanisme de conversion d'affichage devenu inutile (case « Convertir », sélecteur de devise d'affichage séparé, taux compta/web/manuel, devise du seuil de prime) et du code mort associé (`fetchTauxWeb`, `resolveTaux`, états de taux, lecture du setting système). Plus aucune devise n'est dérivée du paramètre système. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Changed (3.122.3)
 - **FarmOS — Simulateur : aucune devise codée en dur + valeurs de départ restaurées**. Suppression de tout libellé de devise figé dans le code : fonction de format `fmtUSD` (« M$ / k$ / $ ») morte supprimée, et les notes d'import de données réelles n'affichent plus « CDF » mais le **code de la devise des données** du compte (USD, CDF, EUR… selon le paramètre). Les montants par défaut indicatifs (aliment, véto, prix de découpe, porc vif…) sont **restaurés** comme point de départ, mais désormais **agnostiques de devise** : ils sont interprétés dans la devise des données du compte, et l'éleveur les ajuste ou les importe dans sa devise via le sélecteur de devise de saisie. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

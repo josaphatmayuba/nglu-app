@@ -2,7 +2,7 @@
 import React from "react";
 import { api } from "./api";
 import { MaterialLineChart } from "./material-charts.jsx";
-import { defaultCurrencyId, symbolFor, currencyOptions, currencyIdOf } from "./currency";
+import { symbolFor, currencyOptions, currencyIdOf } from "./currency";
 
 // ─────────────────────────────────────────────────────────────────────────
 // SIMULATEUR D'ELEVAGE — projection cheptel 5 ans, strategies P1/P2,
@@ -37,9 +37,8 @@ const DEFAULTS = {
   diversParPorc: 40000,
   salaireMensuelOuvrier: 559000,
   capex: 206000000,
-  // prime travailleurs : seuil exprime dans une devise au choix (aucune fixee)
+  // prime travailleurs : seuil exprime dans la devise choisie
   seuilPrime: 50000,
-  seuilPrimeDeviseId: null, // null = devise des donnees ; sinon une devise permise
   tauxPrimePct: 5,
   // decoupe d'un porc (poids kg, prix/kg dans la devise des donnees)
   decoupe: [
@@ -249,42 +248,6 @@ function codeOf(id, currencies) {
   return c ? String(c.currencyCode || c.currency_code || "").trim().toUpperCase() : null;
 }
 
-// Taux web INDICATIF (1 from = X to). Source publique sans cle ; null si indispo.
-async function fetchTauxWeb(from, to) {
-  const res = await fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=1`);
-  if (!res.ok) return null;
-  const j = await res.json();
-  const r = Number(j?.result || j?.info?.rate);
-  return r > 0 ? r : null;
-}
-
-// Resout le taux base->affichage avec priorite : compta (DB) > web > manuel.
-// Retourne { taux, source } ; taux=null si rien (on n'invente pas de chiffre).
-function resolveTaux(baseId, dispId, exchanges, tauxWeb, tauxManuel) {
-  if (baseId == null || dispId == null || Number(baseId) === Number(dispId))
-    return { taux: 1, source: "identique" };
-  // 1) Taux compta le plus recent entre les deux devises (sens direct ou inverse)
-  const tries = (exchanges || []).filter((e) => {
-    const f = Number(e.fromCurrencyId), t = Number(e.toCurrencyId);
-    return (f === Number(baseId) && t === Number(dispId)) || (f === Number(dispId) && t === Number(baseId));
-  });
-  if (tries.length) {
-    // deja trie par date desc cote backend ; on prend le 1er
-    const e = tries[0];
-    const r = Number(e.rate);
-    if (r > 0) {
-      const direct = Number(e.fromCurrencyId) === Number(baseId);
-      return { taux: direct ? r : 1 / r, source: "compta" };
-    }
-  }
-  // 2) Taux web indicatif
-  if (tauxWeb > 0) return { taux: tauxWeb, source: "web" };
-  // 3) Saisie manuelle
-  const m = Number(tauxManuel);
-  if (m > 0) return { taux: m, source: "manuel" };
-  return { taux: null, source: "aucun" };
-}
-
 // Montant compact (k/M/Md) suivi du symbole de la devise systeme choisie.
 // La devise n'est PAS codee ici : le symbole vient de currency.js (donnees).
 function fmtMontant(v, symbole) {
@@ -434,15 +397,6 @@ const NumInput = ({ label, value, onChange, suffix }) => (
   </label>
 );
 
-// NumInput affichant/saisissant dans une devise de saisie, mais lisant/ecrivant
-// une valeur stockee dans une autre devise (devise des donnees). toDisp/fromDisp
-// font la conversion ; suffix = code de la devise de saisie.
-const NumInputCur = ({ label, valueBase, onChangeBase, suffix, toDisp, fromDisp }) => (
-  <NumInput label={label} suffix={suffix}
-    value={Math.round(toDisp(valueBase))}
-    onChange={(v) => onChangeBase(Math.round(fromDisp(v)))} />
-);
-
 const SimulatorScreen = ({ lang, speciesFilter }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [h, setH] = React.useState(DEFAULTS);
@@ -453,16 +407,9 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const [prog, setProg] = React.useState(null);
   const [importing, setImporting] = React.useState(false);
   const [currencies, setCurrencies] = React.useState([]);
-  const [currencyId, setCurrencyId] = React.useState(null);   // devise d'AFFICHAGE
-  const [convertir, setConvertir] = React.useState(false);    // conversion = choix explicite (pas auto)
-  const [baseCurrencyId, setBaseCurrencyId] = React.useState(null); // devise des donnees (systeme)
-  const [exchanges, setExchanges] = React.useState([]);       // taux compta /ledger/exchanges
-  const [exchOk, setExchOk] = React.useState(null);           // null=pas tente, true/false
-  const [tauxManuel, setTauxManuel] = React.useState("");     // repli si pas de taux DB
-  const [tauxWeb, setTauxWeb] = React.useState(null);         // indicatif en ligne (peut rester null hors-ligne)
   const [prixNotes, setPrixNotes] = React.useState(null);     // resultat import prix
   const [importingPrix, setImportingPrix] = React.useState(false);
-  const [saisieCurrencyId, setSaisieCurrencyId] = React.useState(null); // devise de SAISIE couts/prix (null = devise des donnees)
+  const [saisieCurrencyId, setSaisieCurrencyId] = React.useState(null); // devise choisie (null = aucune, a choisir)
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
 
   // Edition d'un morceau de la decoupe (kg ou prix)
@@ -509,89 +456,31 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     return () => { alive = false; };
   }, []);
 
-  // Devises : on REUTILISE les devises deja permises (currency.js) et la devise
-  // par defaut du systeme. On n'ajoute aucune devise nous-memes.
+  // Devises : on REUTILISE les devises deja permises (currency.js). Aucune n'est
+  // pre-selectionnee : l'utilisateur choisit la sienne (pas de devise systeme imposee).
   React.useEffect(() => {
     let alive = true;
-    Promise.allSettled([api.listCurrencies(), api.getAppSetting()]).then(([curR, setR]) => {
+    api.listCurrencies().then((curRaw) => {
       if (!alive) return;
-      const curRaw = curR.status === "fulfilled" ? curR.value : null;
       const list = curRaw?.getAllCurrency || (Array.isArray(curRaw) ? curRaw : []);
-      const setting = setR.status === "fulfilled" ? setR.value : null;
-      const def = defaultCurrencyId(setting, list);
       setCurrencies(list);
-      setBaseCurrencyId(def); // les montants du modele sont dans la devise systeme
-      // devise d'AFFICHAGE non pre-selectionnee : l'utilisateur choisit (sinon = devise des donnees)
     }).catch(() => {});
     return () => { alive = false; };
   }, []);
 
-  // Taux de change reels (compta) — best-effort : 403 si pas de droit compta -> repli manuel.
-  React.useEffect(() => {
-    let alive = true;
-    api.listLedgerExchanges(200).then((res) => {
-      if (!alive) return;
-      const list = res?.getAllExchange || res?.data || (Array.isArray(res) ? res : []);
-      setExchanges(list);
-      setExchOk(true);
-    }).catch(() => { if (alive) { setExchanges([]); setExchOk(false); } });
-    return () => { alive = false; };
-  }, []);
-
-  // Taux web INDICATIF (sans cle, source publique). Ne s'affiche pas hors-ligne / si echec.
-  React.useEffect(() => {
-    let alive = true;
-    setTauxWeb(null);
-    const from = codeOf(baseCurrencyId, currencies);
-    const to = codeOf(currencyId, currencies);
-    if (!from || !to || from === to) return;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
-    fetchTauxWeb(from, to).then((r) => { if (alive && r > 0) setTauxWeb(r); }).catch(() => {});
-    return () => { alive = false; };
-  }, [baseCurrencyId, currencyId, currencies]);
-
-  // Devise d'affichage effective : seulement si on a coche "convertir" ET choisi une devise.
-  // Sinon on reste dans la devise des donnees (aucune conversion automatique).
-  const afficheId = (convertir && currencyId != null) ? currencyId : baseCurrencyId;
-  const symbole = symbolFor(afficheId, currencies, "");
   const curOptions = currencyOptions(currencies);
 
-  // Resout le taux base->affichage : 1) taux compta (le + recent) 2) taux web 3) saisie manuelle.
-  const tauxResolu = React.useMemo(
-    () => resolveTaux(baseCurrencyId, afficheId, exchanges, tauxWeb, tauxManuel),
-    [baseCurrencyId, afficheId, exchanges, tauxWeb, tauxManuel]);
-  const fmtM = (v) => fmtMontant(v * (tauxResolu.taux || 1), symbole);
-  const devData = codeOf(baseCurrencyId, currencies) || ""; // code devise des donnees (suffixe inputs couts)
+  // UNE seule devise, au CHOIX de l'utilisateur, AUCUNE par defaut. Tant qu'aucune
+  // n'est choisie, on n'affiche aucun code/symbole de devise (ni USD ni CDF).
+  // Choisir une devise ne convertit PAS les nombres : ca les etiquette seulement.
+  const saisieChoisie = saisieCurrencyId != null;
+  const saisieCode = saisieChoisie ? (codeOf(saisieCurrencyId, currencies) || "") : "";
+  const symbole = saisieChoisie ? symbolFor(saisieCurrencyId, currencies, "") : "";
+  const fmtM = (v) => fmtMontant(v, symbole); // pas de conversion : meme devise partout
+  const devData = saisieCode; // suffixe inputs = devise choisie (vide si non choisie)
 
-  // Devise de SAISIE des couts/prix : devise des donnees par defaut, sinon au choix.
-  // Les valeurs restent STOCKEES en devise des donnees (moteur inchange) ; on convertit
-  // a l'affichage (base->saisie) et a la saisie (saisie->base).
-  const saisieId = saisieCurrencyId ?? baseCurrencyId;
-  const saisieCode = codeOf(saisieId, currencies) || devData;
-  const tauxSaisieResolu = React.useMemo(
-    () => resolveTaux(baseCurrencyId, saisieId, exchanges, tauxWeb, tauxManuel),
-    [baseCurrencyId, saisieId, exchanges, tauxWeb, tauxManuel]);
-  const tauxBaseToSaisie = tauxSaisieResolu.taux || 1;
-  // true si on a choisi une devise de saisie differente mais sans taux fiable disponible
-  const saisieSansTaux = Number(saisieId) !== Number(baseCurrencyId) && !tauxSaisieResolu.taux;
-  // Helper : enveloppe NumInput pour saisir en devise de saisie, stocker en devise des donnees.
-  const toSaisie = (vBase) => (Number(vBase) || 0) * tauxBaseToSaisie;
-  const fromSaisie = (vSaisie) => tauxBaseToSaisie ? (Number(vSaisie) || 0) / tauxBaseToSaisie : (Number(vSaisie) || 0);
-
-  // Aucun montant saisi (couts ET prix a 0) : la projection financiere n'a pas de sens.
-  const aucunCout = !(Number(h.alimentEngraissementParPorc) || Number(h.alimentTruieParAn) ||
-    Number(h.vetoParPorc) || Number(h.diversParPorc) || Number(h.salaireMensuelOuvrier) || Number(h.capex));
-  const aucunPrix = !(Number(h.prixEntierParKg) || h.decoupe.some((d) => Number(d.prix)));
-  const donneesFinIncompletes = aucunCout || aucunPrix;
-
-  // Seuil de prime converti dans la devise des donnees (devise du seuil au choix, aucune fixee).
-  const seuilDeviseId = h.seuilPrimeDeviseId ?? baseCurrencyId;
-  const seuilEnBase = React.useMemo(() => {
-    const v = Number(h.seuilPrime) || 0;
-    if (seuilDeviseId == null || Number(seuilDeviseId) === Number(baseCurrencyId)) return v;
-    const t = resolveTaux(seuilDeviseId, baseCurrencyId, exchanges, tauxWeb, tauxManuel);
-    return t.taux ? v * t.taux : v; // pas de taux -> on garde la valeur telle quelle
-  }, [h.seuilPrime, seuilDeviseId, baseCurrencyId, exchanges, tauxWeb, tauxManuel]);
+  // Seuil de prime : exprime dans la devise choisie (aucune conversion).
+  const seuilEnBase = Number(h.seuilPrime) || 0;
 
   const { cohortes, females, males } = React.useMemo(
     () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
@@ -615,12 +504,12 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
   return (
     <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
-      {donneesFinIncompletes && (
+      {!saisieChoisie && (
         <div className="card" style={{ ...card, borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }}>
           <div style={{ fontSize: 13 }}>
-            <b>{L("Renseignez vos coûts et prix", "Enter your costs and prices")}</b><br />
-            {L(`Le simulateur n'impose aucun montant : choisissez votre devise de saisie ci-dessous puis renseignez ${aucunCout ? L("vos coûts", "your costs") : ""}${aucunCout && aucunPrix ? L(" et ", " and ") : ""}${aucunPrix ? L("vos prix de vente", "your sale prices") : ""}, ou cliquez « Importer mes données réelles » / « Importer mes prix ». La projection financière reste partielle tant que ces valeurs sont à 0.`,
-               `The simulator imposes no amount: choose your input currency below, then enter ${aucunCout ? "your costs" : ""}${aucunCout && aucunPrix ? " and " : ""}${aucunPrix ? "your sale prices" : ""}, or click "Import my real data" / "Import my prices". The financial projection stays partial while these values are 0.`)}
+            <b>{L("Choisissez votre devise pour commencer", "Choose your currency to start")}</b><br />
+            {L("Aucune devise n'est imposée. Sélectionnez la vôtre dans la carte « Coûts » ci-dessous : les montants affichés sont alors exprimés dans cette devise. Les chiffres de départ sont indicatifs — ajustez-les ou importez vos données réelles.",
+               "No currency is imposed. Pick yours in the \"Costs\" card below: displayed amounts are then expressed in that currency. Starting figures are indicative — adjust them or import your real data.")}
           </div>
         </div>
       )}
@@ -707,76 +596,6 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           </div>
         </div>
         {strategy === "P2" && <NumInput label={L("Plafond truies (P2)", "Sow cap (P2)")} value={h.plafondTruiesP2} onChange={set("plafondTruiesP2")} />}
-        {curOptions.length > 0 && (
-          <div>
-            <div style={upper}>{L("Devise", "Currency")}</div>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 6 }}>
-              <input type="checkbox" checked={convertir}
-                onChange={(e) => setConvertir(e.target.checked)} />
-              {L("Convertir les montants", "Convert amounts")}
-              {baseCurrencyId != null && <span style={{ color: "var(--fg-3)" }}> ({L("donnees en", "data in")} {codeOf(baseCurrencyId, currencies)})</span>}
-            </label>
-            {convertir && (
-              <select className="input" value={currencyId ?? ""}
-                onChange={(e) => setCurrencyId(e.target.value ? Number(e.target.value) : null)}
-                style={{ minWidth: 150 }}>
-                <option value="">{L("— Choisir la devise —", "— Choose currency —")}</option>
-                {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-              </select>
-            )}
-          </div>
-        )}
-
-        {/* Taux de conversion (uniquement si conversion activee + devise differente choisie) */}
-        {convertir && baseCurrencyId != null && currencyId != null && Number(baseCurrencyId) !== Number(currencyId) && (
-          <div style={{ flexBasis: "100%", fontSize: 12, paddingTop: 4 }}>
-            <div style={upper}>
-              {L("Taux de conversion", "Conversion rate")} ({codeOf(baseCurrencyId, currencies)} → {codeOf(currencyId, currencies)})
-            </div>
-            {/* Source utilisee */}
-            <div style={{ marginBottom: 6 }}>
-              {tauxResolu.taux ? (
-                <span>
-                  1 {codeOf(baseCurrencyId, currencies)} = <b>{tauxResolu.taux.toFixed(4)}</b> {codeOf(currencyId, currencies)}{" "}
-                  <span style={{ color: "var(--fg-3)" }}>
-                    ({tauxResolu.source === "compta" ? L("taux compta", "accounting rate")
-                      : tauxResolu.source === "web" ? L("taux web indicatif", "indicative web rate")
-                      : L("taux saisi", "manual rate")})
-                  </span>
-                </span>
-              ) : (
-                <span style={{ color: "crimson" }}>
-                  {L("Aucun taux disponible — saisissez-le ci-dessous pour convertir.",
-                     "No rate available — enter one below to convert.")}
-                </span>
-              )}
-              {exchOk === false && (
-                <span style={{ color: "var(--fg-3)" }}> · {L("(taux compta non accessibles)", "(accounting rates not accessible)")}</span>
-              )}
-            </div>
-            {/* Saisie manuelle + indicatif web */}
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ color: "var(--fg-3)" }}>{L("Taux manuel", "Manual rate")}</span>
-                <input className="input" type="number" value={tauxManuel}
-                  onChange={(e) => setTauxManuel(e.target.value)} placeholder="—" style={{ width: 120 }} />
-              </label>
-              {tauxWeb > 0 && (
-                <span style={{ color: "var(--fg-3)" }}>
-                  {L("En ligne aujourd'hui", "Online today")}: <b>{tauxWeb.toFixed(4)}</b>{" "}
-                  <button className="btn" style={{ padding: "2px 8px", fontSize: 11 }}
-                    onClick={() => setTauxManuel(String(tauxWeb))}>
-                    {L("Réajuster avec ce taux", "Use this rate")}
-                  </button>
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 4 }}>
-              {L("Conversion = taux de votre compta en priorité (cohérent et hors-ligne). Le taux web n'est qu'indicatif et n'apparaît qu'en ligne.",
-                 "Conversion uses your accounting rate first (consistent, offline). The web rate is indicative only and shows only when online.")}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Periode : annee de depart, horizon, granularite */}
@@ -807,19 +626,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           <NumInput label={L("Survie", "Survival")} value={h.surviePct} onChange={set("surviePct")} suffix="%" />
           <NumInput label={L("Age saillie", "Breed age")} value={h.ageSaillieMois} onChange={set("ageSaillieMois")} suffix={L("mois", "mo")} />
           <NumInput label={L("Poids vente", "Sale weight")} value={h.poidsVenteKg} onChange={set("poidsVenteKg")} suffix="kg" />
-          <div>
-            <div style={upper}>{L("Seuil prime", "Bonus threshold")}</div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input className="input" type="number" value={h.seuilPrime}
-                onChange={(e) => set("seuilPrime")(Number(e.target.value))} style={{ width: 110 }} />
-              <select className="input" value={h.seuilPrimeDeviseId ?? ""}
-                onChange={(e) => set("seuilPrimeDeviseId")(e.target.value ? Number(e.target.value) : null)}
-                style={{ minWidth: 90 }}>
-                <option value="">{codeOf(baseCurrencyId, currencies) || L("devise donnees", "data cur.")}</option>
-                {curOptions.map((o) => <option key={o.id} value={o.id}>{codeOf(o.id, currencies) || o.label}</option>)}
-              </select>
-            </div>
-          </div>
+          <NumInput label={L("Seuil prime", "Bonus threshold")} value={h.seuilPrime} onChange={set("seuilPrime")} suffix={saisieCode} />
           <NumInput label={L("Taux prime", "Bonus rate")} value={h.tauxPrimePct} onChange={set("tauxPrimePct")} suffix="%" />
         </div>
       </div>
@@ -829,31 +636,28 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-3)" }}>
-            {L("Devise de saisie", "Input currency")}
+            {L("Devise", "Currency")}
             <select className="input" value={saisieCurrencyId ?? ""} style={{ height: 30, fontSize: 12 }}
               onChange={(e) => setSaisieCurrencyId(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">{devData || L("devise données", "data cur.")}</option>
+              <option value="">{L("— Choisir —", "— Choose —")}</option>
               {curOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </label>
         </div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {L(`Saisie en ${saisieCode}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses (en ${devData}).`,
-             `Input in ${saisieCode}. The "Import my real data" button fills these from your expenses (in ${devData}).`)}
+          {saisieChoisie
+            ? L(`Montants en ${saisieCode}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.`,
+                `Amounts in ${saisieCode}. The "Import my real data" button fills these from your expenses.`)
+            : L("Choisissez d'abord votre devise. Les montants sont indicatifs : ajustez-les à votre réalité ou importez vos données.",
+                "Choose your currency first. Amounts are indicative: adjust them to your reality or import your data.")}
         </div>
-        {saisieSansTaux && (
-          <div style={{ fontSize: 11, color: "var(--danger, #b45309)", marginBottom: 10 }}>
-            {L(`Aucun taux ${devData}→${saisieCode} disponible : les montants sont traités 1:1 (non convertis). Ajoutez un taux en comptabilité pour une conversion fiable.`,
-               `No ${devData}→${saisieCode} rate available: amounts are treated 1:1 (not converted). Add a rate in accounting for a reliable conversion.`)}
-          </div>
-        )}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <NumInputCur label={L("Aliment / porc", "Feed / pig")} valueBase={h.alimentEngraissementParPorc} onChangeBase={set("alimentEngraissementParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
-          <NumInputCur label={L("Aliment truie / an", "Sow feed / yr")} valueBase={h.alimentTruieParAn} onChangeBase={set("alimentTruieParAn")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
-          <NumInputCur label={L("Santé (véto) / porc", "Health (vet) / pig")} valueBase={h.vetoParPorc} onChangeBase={set("vetoParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
-          <NumInputCur label={L("Divers / porc", "Misc / pig")} valueBase={h.diversParPorc} onChangeBase={set("diversParPorc")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
-          <NumInputCur label={L("Salaire / mois", "Salary / mo")} valueBase={h.salaireMensuelOuvrier} onChangeBase={set("salaireMensuelOuvrier")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
-          <NumInputCur label={L("Investissement (capex)", "Investment (capex)")} valueBase={h.capex} onChangeBase={set("capex")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInput label={L("Aliment / porc", "Feed / pig")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Aliment truie / an", "Sow feed / yr")} value={h.alimentTruieParAn} onChange={set("alimentTruieParAn")} suffix={saisieCode} />
+          <NumInput label={L("Santé (véto) / porc", "Health (vet) / pig")} value={h.vetoParPorc} onChange={set("vetoParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Divers / porc", "Misc / pig")} value={h.diversParPorc} onChange={set("diversParPorc")} suffix={saisieCode} />
+          <NumInput label={L("Salaire / mois", "Salary / mo")} value={h.salaireMensuelOuvrier} onChange={set("salaireMensuelOuvrier")} suffix={saisieCode} />
+          <NumInput label={L("Investissement (capex)", "Investment (capex)")} value={h.capex} onChange={set("capex")} suffix={saisieCode} />
         </div>
       </div>
 
@@ -866,8 +670,11 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           </button>
         </div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {L(`Prix saisis en ${saisieCode} (devise de saisie choisie ci-dessus). Le mode de vente actif détermine le revenu utilisé.`,
-             `Prices in ${saisieCode} (input currency chosen above). The active sale mode sets the revenue used.`)}
+          {saisieChoisie
+            ? L(`Prix en ${saisieCode} (devise choisie dans la carte Coûts). Le mode de vente actif détermine le revenu utilisé.`,
+                `Prices in ${saisieCode} (currency chosen in the Costs card). The active sale mode sets the revenue used.`)
+            : L("Choisissez votre devise dans la carte Coûts ci-dessus. Le mode de vente actif détermine le revenu utilisé.",
+                "Choose your currency in the Costs card above. The active sale mode sets the revenue used.")}
         </div>
 
         {/* Tableau decoupe */}
@@ -876,7 +683,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
             <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
               <th style={{ ...th, textAlign: "left" }}>{L("Morceau (découpe)", "Cut")}</th>
               <th style={th}>{L("Poids (kg)", "Weight (kg)")}</th>
-              <th style={th}>{L("Prix / kg", "Price / kg")} ({saisieCode})</th>
+              <th style={th}>{L("Prix / kg", "Price / kg")}{saisieCode ? ` (${saisieCode})` : ""}</th>
               <th style={th}>{L("Sous-total", "Subtotal")}</th>
             </tr></thead>
             <tbody>
@@ -888,8 +695,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
                       onChange={(e) => setDecoupe(i, "kg")(e.target.value)} style={{ width: 80, textAlign: "right" }} />
                   </td>
                   <td style={td}>
-                    <input className="input" type="number" value={Math.round(toSaisie(d.prix))}
-                      onChange={(e) => setDecoupe(i, "prix")(Math.round(fromSaisie(e.target.value)))} style={{ width: 100, textAlign: "right" }} />
+                    <input className="input" type="number" value={d.prix}
+                      onChange={(e) => setDecoupe(i, "prix")(e.target.value)} style={{ width: 100, textAlign: "right" }} />
                   </td>
                   <td style={td}>{fmtM(d.kg * d.prix)}</td>
                 </tr>
@@ -906,7 +713,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
         {/* Prix porc vif */}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
-          <NumInputCur label={L("Prix porc vif / kg", "Live pig price / kg")} valueBase={h.prixEntierParKg} onChangeBase={set("prixEntierParKg")} suffix={saisieCode} toDisp={toSaisie} fromDisp={fromSaisie} />
+          <NumInput label={L("Prix porc vif / kg", "Live pig price / kg")} value={h.prixEntierParKg} onChange={set("prixEntierParKg")} suffix={saisieCode} />
           <span style={{ fontSize: 12, color: "var(--fg-3)" }}>
             {L("Poids vente", "Sale weight")}: {h.poidsVenteKg} kg → {L("porc vif", "live pig")}: <b>{fmtM(h.prixEntierParKg * h.poidsVenteKg)}</b>
           </span>
@@ -973,8 +780,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           labels={rows.map((r) => r.labelCourt)}
           series={[
             { name: L("Porcs vendus", "Pigs sold"), data: rows.map((r) => r.vendus) },
-            { name: L(`Chiffre d'affaires (M ${symbole})`, `Revenue (M ${symbole})`), data: rows.map((r) => Math.round((r.ca * (tauxResolu.taux || 1)) / 1e4) / 100) },
-            { name: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`), data: rows.map((r) => Math.round((r.benef * (tauxResolu.taux || 1)) / 1e4) / 100) },
+            { name: L(`Chiffre d'affaires (M ${symbole})`, `Revenue (M ${symbole})`), data: rows.map((r) => Math.round(r.ca / 1e4) / 100) },
+            { name: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`), data: rows.map((r) => Math.round(r.benef / 1e4) / 100) },
           ]}
           height={260}
         />
@@ -982,8 +789,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
       <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 24 }}>
         {L(
-          "Estimation a partir de references de marche RDC (couts, prix, taux). Cheptel de depart lu depuis vos donnees reelles. Ajustez les hypotheses pour votre situation.",
-          "Estimate based on DRC market references (costs, prices, rate). Starting herd read from your real data. Adjust assumptions for your situation."
+          "Cheptel de depart lu depuis vos donnees reelles. Les montants de depart sont indicatifs : choisissez votre devise et ajustez les hypotheses, ou importez vos donnees reelles.",
+          "Starting herd read from your real data. Starting amounts are indicative: choose your currency and adjust the assumptions, or import your real data."
         )}
       </div>
     </div>
