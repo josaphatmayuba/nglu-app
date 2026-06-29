@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.2)
+- **FarmOS — Simulateur : périmètre porc strict pour les données de prod**. Le simulateur porcin ne dépend plus du filtre global d'espèce : il force `pig` pour le cheptel détecté, l'import des prix, les ventes, la reproduction, la mortalité et la progression réelle. Les dépenses sont filtrées via leur animal lié quand possible ; les dépenses non attribuables au porc sont ignorées avec une note pour éviter de mélanger poules/chèvres/autres espèces dans les coûts porc. Le fallback démo 88 truies / 14 mâles ne s'active plus quand la base contient des animaux mais aucun porc exploitable. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Fixed (3.124.1)
 - **FarmOS — Simulateur : P2 et réformes appliqués dans l'ordre chronologique**. Le moteur modifiait l'ancien `parc` pendant le parcours des cohortes, ce qui pouvait fausser le plafond P2 et le calcul des ouvriers quand réformes et nouvelles femelles se croisaient. Remplacement par une planification mensuelle (`misesBasParMois`, `reformesParMois`, `femellesGardees`) : les réformes sont appliquées au mois concerné avant la décision garder/vendre des femelles. Le calcul des ouvriers n'utilise plus l'ancien `parc` supprimé. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 

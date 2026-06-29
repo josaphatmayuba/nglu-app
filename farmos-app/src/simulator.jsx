@@ -12,6 +12,7 @@ import { symbolFor, currencyOptions, currencyIdOf } from "./currency";
 // ─────────────────────────────────────────────────────────────────────────
 
 const YEARS = [2026, 2027, 2028, 2029, 2030];
+const SIMULATOR_SPECIES = "pig";
 
 // Hypotheses par defaut : parametres biologiques + montants indicatifs de depart.
 // Les montants sont AGNOSTIQUES de devise : ils sont interpretes dans la devise des
@@ -69,6 +70,31 @@ function coutParPorc(h) {
   const malesTruie = vendablesParTruieAn(h) * (h.partMalesPct / 100);
   const quotePartMere = malesTruie > 0 ? h.alimentTruieParAn / malesTruie : 0;
   return h.alimentEngraissementParPorc + quotePartMere + h.vetoParPorc + h.diversParPorc;
+}
+
+function rowAnimalId(row) {
+  return row?.animalId ?? row?.animal_id ?? row?.relatedAnimalId ?? row?.related_animal_id ?? null;
+}
+
+function makeAnimalSpeciesIndex(animals) {
+  const byId = new Map();
+  for (const a of animals || []) {
+    const id = a?._pk ?? a?.id ?? a?.animalId ?? a?.animal_id;
+    if (id != null && a?.species) byId.set(String(id), a.species);
+  }
+  return byId;
+}
+
+function rowSpecies(row, animalSpeciesById) {
+  const direct = row?.species ?? row?.animalSpecies ?? row?.animal_species;
+  if (direct) return direct;
+  const id = rowAnimalId(row);
+  return id != null ? animalSpeciesById.get(String(id)) : null;
+}
+
+function rowsForSpecies(rows, speciesFilter, animalSpeciesById) {
+  if (!speciesFilter) return rows || [];
+  return (rows || []).filter((row) => rowSpecies(row, animalSpeciesById) === speciesFilter);
 }
 
 // Noms de mois (debut de trimestre) pour l'affichage trimestriel
@@ -297,7 +323,7 @@ const fmt = (n) => {
 
 // Importe les prix reels (api.listPrices) dans la decoupe + prix vif.
 // Matche productType (texte libre) sur le nom de chaque morceau / mot-cle "vif".
-function appliquerPrixReels(h, prixRows) {
+function appliquerPrixReels(h, prixRows, speciesFilter = SIMULATOR_SPECIES) {
   const out = { ...h, decoupe: h.decoupe.map((d) => ({ ...d })) };
   const notes = [];
   const DIACRITICS = new RegExp("[\\u0300-\\u036f]", "g");
@@ -306,7 +332,8 @@ function appliquerPrixReels(h, prixRows) {
     type: norm(r.productType || r.product_type),
     prix: Number(r.unitPrice || r.unit_price) || 0,
     src: norm(r.saleSource || r.sale_source),
-  })).filter((r) => r.prix > 0);
+    species: norm(r.species),
+  })).filter((r) => r.prix > 0 && (!speciesFilter || !r.species || r.species === norm(speciesFilter)));
   // Prix porc vif/entier
   const vif = rows.find((r) => /vif|entier|live|whole|sur pied/.test(r.type));
   if (vif) { out.prixEntierParKg = Math.round(vif.prix); notes.push(`Prix vif importé: ${vif.prix.toLocaleString()}/kg`); }
@@ -347,7 +374,7 @@ function fmtMontant(v, symbole) {
 // ─── CALIBRATION SUR DONNEES REELLES ─────────────────────────────────────
 // Lit les vraies tables (depenses, ventes, repro, mortalite) et derive des
 // hypotheses calibrees + une analyse de progression annee/annee.
-async function loadRealData(speciesFilter) {
+async function loadRealData() {
   const [expR, salR, repR, morR] = await Promise.allSettled([
     api.listExpenses(), api.listSales(), api.listReproductionEvents(), api.listMortalityEvents(),
   ]);
@@ -369,10 +396,15 @@ function calibrate(real, h, animals, speciesFilter, devCode = "") {
   const notes = [];
   const num = (x) => Number(x) || 0;
   const cur = devCode ? ` ${devCode}` : ""; // suffixe devise des donnees (aucune devise codee en dur)
+  const animalSpeciesById = makeAnimalSpeciesIndex(animals);
+  const salesF = rowsForSpecies(real.sales, speciesFilter, animalSpeciesById);
+  const reproF = rowsForSpecies(real.repro, speciesFilter, animalSpeciesById);
+  const mortsF = rowsForSpecies(real.morts, speciesFilter, animalSpeciesById);
+  const expensesAll = real.expenses || [];
+  const exp = rowsForSpecies(expensesAll, speciesFilter, animalSpeciesById);
+  const ignoredExpenses = expensesAll.length - exp.length;
 
   // Prix de vente reel = CA total / kg vendus (ou par tete si pas de poids)
-  const sp = (r) => !speciesFilter || r.species === speciesFilter || !r.species;
-  const salesF = (real.sales || []).filter(sp);
   if (salesF.length) {
     const totAmount = salesF.reduce((s, r) => s + num(r.total_amount || r.amount || r.totalAmount), 0);
     const totQty = salesF.reduce((s, r) => s + (num(r.quantity) || 1), 0);
@@ -388,14 +420,14 @@ function calibrate(real, h, animals, speciesFilter, devCode = "") {
   }
 
   // Taille de portee reelle (offspring_count moyen sur mises bas)
-  const births = (real.repro || []).filter((r) => num(r.offspring_count || r.offspringCount) > 0);
+  const births = reproF.filter((r) => num(r.offspring_count || r.offspringCount) > 0);
   if (births.length) {
     const avg = births.reduce((s, r) => s + num(r.offspring_count || r.offspringCount), 0) / births.length;
     if (avg > 0) { out.nesParPortee = Math.round(avg * 10) / 10; notes.push(`Nes/portee reel ~${out.nesParPortee}`); }
   }
 
   // Mortalite reelle = morts / nes (approx sur la periode)
-  const totMorts = (real.morts || []).length;
+  const totMorts = mortsF.reduce((s, r) => s + (num(r.count) || 1), 0);
   const totNes = births.reduce((s, r) => s + num(r.offspring_count || r.offspringCount), 0);
   if (totNes > 0 && totMorts > 0) {
     const survie = Math.max(50, Math.min(99, Math.round((1 - totMorts / totNes) * 100)));
@@ -403,9 +435,11 @@ function calibrate(real, h, animals, speciesFilter, devCode = "") {
   }
 
   // Couts reels par categorie → injectes dans les hypotheses (pas juste affiches)
-  const exp = real.expenses || [];
   const byCat = {};
   for (const e of exp) { const c = (e.category || "autre").toLowerCase(); byCat[c] = (byCat[c] || 0) + num(e.amount); }
+  if (speciesFilter && ignoredExpenses > 0) {
+    notes.push(`${ignoredExpenses} depense(s) sans lien ${speciesFilter} ignoree(s) pour eviter de melanger les especes`);
+  }
 
   // Base de repartition : nb de porcs vendus enregistres (sinon les nes vivants)
   const porcsVendus = salesF.reduce((s, r) => s + (num(r.quantity) || 1), 0);
@@ -453,15 +487,20 @@ function monthsSpan(items) {
 }
 
 // Analyse de progression : ventilation par annee des donnees reelles
-function progression(real, speciesFilter) {
+function progression(real, speciesFilter, animals = []) {
   const num = (x) => Number(x) || 0;
   const yearOf = (d) => d ? new Date(d).getFullYear() : null;
+  const animalSpeciesById = makeAnimalSpeciesIndex(animals);
+  const sales = rowsForSpecies(real.sales, speciesFilter, animalSpeciesById);
+  const expenses = rowsForSpecies(real.expenses, speciesFilter, animalSpeciesById);
+  const repro = rowsForSpecies(real.repro, speciesFilter, animalSpeciesById);
+  const morts = rowsForSpecies(real.morts, speciesFilter, animalSpeciesById);
   const byYear = {};
   const ensure = (y) => (byYear[y] = byYear[y] || { ventes: 0, ca: 0, depenses: 0, naissances: 0, morts: 0 });
-  for (const s of real.sales || []) { const y = yearOf(s.created_at || s.sale_date || s.date); if (y) { const r = ensure(y); r.ventes += num(s.quantity) || 1; r.ca += num(s.total_amount || s.amount); } }
-  for (const e of real.expenses || []) { const y = yearOf(e.expense_date || e.created_at); if (y) ensure(y).depenses += num(e.amount); }
-  for (const rp of real.repro || []) { const y = yearOf(rp.event_date || rp.created_at); if (y) ensure(y).naissances += num(rp.offspring_count || rp.offspringCount); }
-  for (const m of real.morts || []) { const y = yearOf(m.death_date || m.created_at); if (y) ensure(y).morts += 1; }
+  for (const s of sales) { const y = yearOf(s.created_at || s.sale_date || s.saleDate || s.date); if (y) { const r = ensure(y); r.ventes += num(s.quantity) || 1; r.ca += num(s.total_amount || s.totalAmount || s.amount); } }
+  for (const e of expenses) { const y = yearOf(e.expense_date || e.expenseDate || e.created_at); if (y) ensure(y).depenses += num(e.amount); }
+  for (const rp of repro) { const y = yearOf(rp.event_date || rp.eventDate || rp.created_at); if (y) ensure(y).naissances += num(rp.offspring_count || rp.offspringCount); }
+  for (const m of morts) { const y = yearOf(m.death_date || m.event_date || m.eventDate || m.created_at); if (y) ensure(y).morts += num(m.count) || 1; }
   return Object.entries(byYear).map(([y, v]) => ({ annee: Number(y), ...v })).sort((a, b) => a.annee - b.annee);
 }
 
@@ -632,8 +671,9 @@ function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode
   );
 }
 
-const SimulatorScreen = ({ lang, speciesFilter }) => {
+const SimulatorScreen = ({ lang }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
+  const effectiveSpeciesFilter = SIMULATOR_SPECIES;
   const [h, setH] = React.useState(DEFAULTS);
   const [strategy, setStrategy] = React.useState("P2");
   const [animals, setAnimals] = React.useState([]);
@@ -659,7 +699,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     try {
       const res = await api.listPrices();
       const rows = res?.getAllPrice || res?.data || (Array.isArray(res) ? res : []);
-      const { hypotheses, notes } = appliquerPrixReels(h, rows);
+      const { hypotheses, notes } = appliquerPrixReels(h, rows, effectiveSpeciesFilter);
       setH(hypotheses);
       setPrixNotes(notes.length ? notes : [L("Aucun prix correspondant trouvé dans la liste de prix.", "No matching price found in the price list.")]);
     } catch (e) {
@@ -670,11 +710,11 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const importReal = async () => {
     setImporting(true);
     try {
-      const real = await loadRealData(speciesFilter);
-      const { hypotheses, notes } = calibrate(real, h, animals, speciesFilter, devData);
+      const real = await loadRealData();
+      const { hypotheses, notes } = calibrate(real, h, animals, effectiveSpeciesFilter, devData);
       setH(hypotheses);
       setCalibNotes(notes.length ? notes : [L("Peu de donnees reelles exploitables — verifiez la saisie dans FarmOS.", "Few usable real data — check FarmOS entries.")]);
-      setProg(progression(real, speciesFilter));
+      setProg(progression(real, effectiveSpeciesFilter, animals));
     } catch (e) {
       setCalibNotes([L("Erreur de chargement des donnees.", "Data load error.") + " " + (e.message || "")]);
     } finally { setImporting(false); }
@@ -718,12 +758,13 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const seuilEnBase = Number(h.seuilPrime) || 0;
 
   const { cohortes, cohortesMales, females, males, verrats } = React.useMemo(
-    () => buildCohortes(animals, speciesFilter, h.anneeDebut, h.moisDebut), [animals, speciesFilter, h.anneeDebut, h.moisDebut]);
+    () => buildCohortes(animals, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut), [animals, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut]);
 
-  const cohortesUse = cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }];
+  const useDemoData = !loading && animals.length === 0;
+  const cohortesUse = cohortes.length ? cohortes : (useDemoData ? [{ naissanceMoisAbs: -1, n: 88 }] : []);
   // males a vendre = lots non-reproducteurs (engraissement/porcelets) vendus a l'age de vente
   const cohortesMalesUse = cohortesMales.length ? cohortesMales
-    : (cohortes.length ? [] : [{ naissanceMoisAbs: -1, n: 14 }]); // fallback demo
+    : (useDemoData ? [{ naissanceMoisAbs: -1, n: 14 }] : []); // fallback demo seulement si aucune donnee animal
   const rowsP1 = React.useMemo(
     () => simulate("P1", h, cohortesUse, 0, seuilEnBase, cohortesMalesUse, verrats),
     [h, cohortes, cohortesMales, verrats, seuilEnBase]);
@@ -807,7 +848,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
             {verrats ? <> {" · "}{L("dont verrats (geniteurs, non vendus)", "incl. boars (breeders, not sold)")}: <b>{verrats}</b></> : null}
             {" · "}{cohortes.length} {L("cohorte(s) repro", "breeding cohort(s)")}
             {cohortesMales.length ? <> {" + "}{cohortesMales.length} {L("lot(s) males a vendre", "male lot(s) to sell")}</> : null}
-            {speciesFilter ? ` · ${speciesFilter}` : ` · ${L("toutes especes", "all species")}`}
+            {` · ${L("porcs uniquement", "pigs only")}`}
           </div>
         )}
         <div style={{ marginTop: 12 }} className="no-print">
