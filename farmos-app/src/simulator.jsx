@@ -1012,14 +1012,22 @@ const SimulatorScreen = ({ lang }) => {
       <style>{`
         #sim-report-print { display: none; }
         @media print {
+          html, body, #root { height: auto !important; overflow: visible !important; }
           body * { visibility: hidden !important; }
+          #simulator-report {
+            height: auto !important; overflow: visible !important; max-width: none !important; padding: 0 !important;
+          }
+          #simulator-report > :not(#sim-report-print):not(style) { display: none !important; }
           #sim-report-print, #sim-report-print * { visibility: visible !important; }
           #sim-report-print {
-            display: block !important; position: absolute; left: 0; top: 0;
-            width: 100%; padding: 16px; color: #111; font-size: 12px;
+            display: block !important; position: static !important;
+            width: auto; padding: 0; color: #111; font-size: 12px;
           }
-          #sim-report-print .rep-block { break-inside: avoid; }
-          #sim-report-print table { width: 100%; border-collapse: collapse; }
+          #sim-report-print .rep-block { break-inside: auto; page-break-inside: auto; margin-bottom: 12px; }
+          #sim-report-print table { width: 100%; border-collapse: collapse; break-inside: auto; page-break-inside: auto; }
+          #sim-report-print thead { display: table-header-group; }
+          #sim-report-print tfoot { display: table-footer-group; }
+          #sim-report-print tr { break-inside: avoid; page-break-inside: avoid; }
           #sim-report-print th, #sim-report-print td { border: 1px solid #ccc; padding: 5px 8px; }
           @page { margin: 14mm; }
         }

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.5)
+- **FarmOS — Simulateur : le rapport imprimé conserve tous les tableaux sur plusieurs pages**. Correction de la feuille `@media print` du simulateur : le rapport n'est plus rendu en position absolue dans un conteneur scrollable, les blocs et tables peuvent paginer naturellement, et les en-têtes de tableau sont répétés quand une table continue sur une page suivante. Le rapport garde donc les sections Reproducteurs gardés, Projection, graphe et Détail des prix même si le document dépasse une page. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Added (3.124.4)
 - **FarmOS — Simulateur : rapport par zone + reproducteurs gardés par période**. Le rapport imprimable affiche désormais la zone sélectionnée dans l'en-tête et la synthèse (`Toutes les zones`, zone précise ou `Non renseignée`). Ajout d'un tableau « Reproducteurs gardés » dans le rapport, avec les stocks de fin de période : femelles gardées pour la reproduction, mâles reproducteurs gardés et total reproducteurs. Le moteur expose ces stocks par période depuis la simulation P1/P2 pour que le rapport reflète le cheptel reproducteur réellement conservé. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 
