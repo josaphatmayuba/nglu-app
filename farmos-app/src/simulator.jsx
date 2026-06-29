@@ -82,12 +82,13 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   const HORIZON = nbAns * 12 - 1; // dernier mois inclus (mois 0 = janv debut)
   // buckets mensuels
   const moisData = [];
-  for (let m = 0; m <= HORIZON; m++) moisData.push({ mb: 0, nes: 0, vendus: 0, truies: 0 });
+  for (let m = 0; m <= HORIZON; m++) moisData.push({ mb: 0, nes: 0, vendus: 0, truies: 0, morts: 0, vendusM: 0, vendusF: 0 });
   const add = (mab, key, val) => { if (mab >= 0 && mab <= HORIZON) moisData[mab][key] += val; };
 
   const file = cohortesInit.map((c) => ({ ...c }));
   let parc = cohortesInit.reduce((s, c) => s + c.n, 0);
   add(0, "vendus", malesActuels); // males adultes existants vendus au depart
+  add(0, "vendusM", malesActuels);
 
   const inter = h.porteesParAn > 0 ? 12 / h.porteesParAn : 5.2;
 
@@ -98,12 +99,15 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
       if (mb >= 0) {
         add(mb, "mb", c.n);
         add(mb, "truies", c.n);
-        const nesViv = c.n * h.nesParPortee * (h.surviePct / 100);
+        const nesTotal = c.n * h.nesParPortee;
+        const nesViv = nesTotal * (h.surviePct / 100);
         add(mb, "nes", nesViv);
+        add(mb, "morts", nesTotal - nesViv); // morts a la naissance (1 - survie)
         const femelles = nesViv * (1 - h.partMalesPct / 100);
         const males = nesViv * (h.partMalesPct / 100);
         const venteMois = mb + h.ageVenteMois;
         add(venteMois, "vendus", males);
+        add(venteMois, "vendusM", males);
         if (strategy === "P1") {
           file.push({ naissanceMoisAbs: mb, n: femelles });
           parc += femelles;
@@ -112,7 +116,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
           const gardees = Math.min(femelles, manque);
           const aVendre = femelles - gardees;
           if (gardees > 0) { file.push({ naissanceMoisAbs: mb, n: gardees }); parc += gardees; }
-          if (aVendre > 0) add(venteMois, "vendus", aVendre);
+          if (aVendre > 0) { add(venteMois, "vendus", aVendre); add(venteMois, "vendusF", aVendre); }
         }
       }
       mb = Math.round(mb + inter);
@@ -124,7 +128,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
   const moisParPeriode = granu === "trimestre" ? 3 : 12;
   const periodes = [];
   for (let p0 = 0; p0 <= HORIZON; p0 += moisParPeriode) {
-    const agg = { mb: 0, nes: 0, vendus: 0, truies: 0 };
+    const agg = { mb: 0, nes: 0, vendus: 0, truies: 0, morts: 0, vendusM: 0, vendusF: 0 };
     for (let m = p0; m < p0 + moisParPeriode && m <= HORIZON; m++)
       for (const k in agg) agg[k] += moisData[m][k];
     const anneeP = debut + Math.floor(p0 / 12);
@@ -165,6 +169,10 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0) {
       annee: per.annee,
       mb: Math.round(per.agg.mb),
       vendus,
+      vendusM: Math.round(per.agg.vendusM),
+      vendusF: Math.round(per.agg.vendusF),
+      truies: truiesActives,
+      morts: Math.round(per.agg.morts),
       ca,
       depenses,
       benef: benefApres,
@@ -635,9 +643,15 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const { cohortes, females, males } = React.useMemo(
     () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
 
-  const rows = React.useMemo(
-    () => simulate(strategy, h, cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }], Math.max(0, males - 3), seuilEnBase),
-    [strategy, h, cohortes, males, seuilEnBase]);
+  const cohortesUse = cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }];
+  const malesVendables = Math.max(0, males - 3);
+  const rowsP1 = React.useMemo(
+    () => simulate("P1", h, cohortesUse, malesVendables, seuilEnBase),
+    [h, cohortes, males, seuilEnBase]);
+  const rowsP2 = React.useMemo(
+    () => simulate("P2", h, cohortesUse, malesVendables, seuilEnBase),
+    [h, cohortes, males, seuilEnBase]);
+  const rows = strategy === "P1" ? rowsP1 : rowsP2;
 
   const debutP = h.anneeDebut || 2026;
   const finP = debutP + Math.max(1, h.horizonAns || 5) - 1;
@@ -972,6 +986,48 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
               {s.t}
             </span>
           ))}
+        </div>
+      </div>
+
+      {/* NOUVEAU graphe : comparaison strategie P1 vs P2 (cheptel, ventes, mortalite) */}
+      <div className="card" style={card}>
+        <div style={upper}>{L("Comparaison des stratégies P1 vs P2", "Strategy comparison P1 vs P2")}</div>
+        <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 12 }}>
+          {L("P1 = garder toutes les femelles (cheptel maximal). P2 = plafonner les truies et vendre l'excédent. Un graphe par indicateur ; ligne pleine = P1, pointillés = P2.",
+             "P1 = keep all females (max herd). P2 = cap sows and sell the surplus. One chart per metric; solid line = P1, dashed = P2.")}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
+          {[
+            { t: L("Porcs vendus", "Pigs sold"), p1: rowsP1.map((r) => r.vendus), p2: rowsP2.map((r) => r.vendus) },
+            { t: L("Mâles vendus", "Males sold"), p1: rowsP1.map((r) => r.vendusM), p2: rowsP2.map((r) => r.vendusM) },
+            { t: L("Femelles vendues", "Females sold"), p1: rowsP1.map((r) => r.vendusF), p2: rowsP2.map((r) => r.vendusF) },
+            { t: L("Truies actives (cheptel)", "Active sows (herd)"), p1: rowsP1.map((r) => r.truies), p2: rowsP2.map((r) => r.truies) },
+            { t: L("Mortalité (à la naissance)", "Mortality (at birth)"), p1: rowsP1.map((r) => r.morts), p2: rowsP2.map((r) => r.morts) },
+            { t: L(`Bénéfice (M ${symbole})`, `Profit (M ${symbole})`), p1: rowsP1.map((r) => Math.round(r.benef / 1e4) / 100), p2: rowsP2.map((r) => Math.round(r.benef / 1e4) / 100) },
+          ].map((g) => (
+            <div key={g.t}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{g.t}</div>
+              <MaterialLineChart
+                type="line"
+                colors={["var(--forest-700)", "var(--clay-600)"]}
+                dashArray={[0, 5]}
+                labels={rowsP1.map((r) => r.labelCourt)}
+                series={[
+                  { name: "P1", data: g.p1 },
+                  { name: "P2", data: g.p2 },
+                ]}
+                height={180}
+              />
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 20, marginTop: 8, fontSize: 12, color: "var(--fg-2)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 3, borderRadius: 2, background: "var(--forest-700)" }} />P1
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 16, height: 0, borderTop: "3px dashed var(--clay-600)" }} />P2
+          </span>
         </div>
       </div>
 

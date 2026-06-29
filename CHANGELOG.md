@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.12)
+- **FarmOS — Simulateur : nouveau graphe de comparaison P1 vs P2**. Section dédiée (sans toucher au graphe « Ventes & bénéfice » existant) qui lance les deux stratégies en parallèle (`rowsP1`/`rowsP2`) et superpose P1 (ligne pleine) vs P2 (pointillés) sur 6 mini-graphes : porcs vendus, mâles vendus, femelles vendues, truies actives (cheptel), mortalité (à la naissance), bénéfice. Le moteur `simulate()` expose désormais par période `vendusM`, `vendusF`, `truies`, `morts` (mortalité = `nésTotal − nésVivants` selon le % de survie). Ajout d'une prop `dashArray` rétrocompatible à `MaterialLineChart`. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Changed (3.122.11)
 - **FarmOS — Simulateur : libellés de coûts précisent la période**. Les champs « / porc » et « / mois » n'indiquaient pas l'unité de temps, ce qui prêtait à confusion (par jour ? mois ? an ?). Précisé d'après l'usage réel dans le calcul (`coutParPorc`) : Aliment / véto / divers « / porc (vie entière) » = montant total pour élever un porc jusqu'à la vente ; « Aliment / truie / an » ; « Salaire / ouvrier / mois » ; « Investissement (capex) — amorti sur 10 ans » (le montant n'est pas compté d'un coup mais étalé via `amortAn = capex / 10`). Ajout d'une note explicative sous le titre. Libellés alignés entre le formulaire et le rapport imprimé. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

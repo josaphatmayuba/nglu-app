@@ -86,6 +86,7 @@ export function MaterialLineChart({
   min,
   max,
   strokeWidth = 2.5,
+  dashArray,
 }) {
   const chartSeries = React.useMemo(() => safeSeries(series), [series]);
   const chartColors = colors || chartSeries.map((s) => s.color || "var(--forest-700)");
@@ -95,6 +96,7 @@ export function MaterialLineChart({
       lineCap: "round",
       curve: "smooth",
       width: chartSeries.map(() => strokeWidth),
+      ...(dashArray ? { dashArray } : {}),
     },
     markers: {
       size: chartSeries.length > 1 ? 2.5 : 3.5,
@@ -113,7 +115,7 @@ export function MaterialLineChart({
       min,
       max,
     },
-  }), [chartColors, chartSeries, formatter, labels, max, min, strokeWidth, type]);
+  }), [chartColors, chartSeries, formatter, labels, max, min, strokeWidth, type, dashArray]);
 
   return (
     <ReactApexChart
