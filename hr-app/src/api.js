@@ -101,6 +101,7 @@ export const api = {
   createUser: (body) => jsonFetch("/user/register", { method: "POST", body: JSON.stringify(body) }),
   updateUser: (id, body) => jsonFetch(`/user/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   closeUser: (id, body) => jsonFetch(`/user/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  createDepartment: (body) => jsonFetch("/department", { method: "POST", body: JSON.stringify(body) }),
   createDesignation: (body) => jsonFetch("/designation", { method: "POST", body: JSON.stringify(body) }),
   createShift: (body) => jsonFetch("/shift", { method: "POST", body: JSON.stringify(body) }),
   createAward: (body) => jsonFetch("/award", { method: "POST", body: JSON.stringify(body) }),

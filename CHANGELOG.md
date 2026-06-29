@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.121.1)
+- **HR — Organigramme : création de département**. La page « Postes & départements » permet désormais de créer un **département** (et plus seulement un poste). Nouveau bouton **« Nouveau departement »** dans la carte Départements ouvrant un modal (champ Nom), qui appelle le CRUD générique `POST /department` (déjà whitelisté côté middleware). Le bouton est désactivé sans droit de mutation. **Vérifié** : `vite build` hr-app OK. [SCRUM]
+
 ### Added (3.121.0)
 - **FarmOS — Simulateur : détail des prix éditable et importable**. La carte « Revenu par porc » devient « Détail des prix (modifiable) » : tableau de la **découpe** (chaque morceau avec poids kg + prix/kg + sous-total, total découpe en bas) et **prix du porc vif/kg** (avec aperçu du porc vif au poids de vente). Toutes les valeurs sont **modifiables** directement ; bouton **« 📥 Importer mes prix »** qui charge `api.listPrices()` et applique les prix réels (porc vif détecté par mot-clé vif/entier/live, chaque morceau matché sur son `productType`). Les prix se saisissent dans la devise des données ; les sous-totaux s'affichent dans la devise d'affichage choisie. La synthèse revenu/coût/marge indique le mode de vente actif. **Vérifié** : `vite build --mode development` OK. [SCRUM]
 

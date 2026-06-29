@@ -496,6 +496,7 @@ Object.assign(ACTION_FORMS, {
   employee: { title: "Nouvel employÃ©", submit: "CrÃ©er", success: "EmployÃ© crÃ©Ã© dans la base.", defaults: { firstName: "", lastName: "", username: "", password: "ChangeMe123!", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: TODAY, bloodGroup: "" }, fields: [{ key: "firstName", label: "PrÃ©nom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "password", label: "Mot de passe initial", type: "password", required: true }, { key: "roleId", label: "RÃ´le", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "DÃ©partement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "TÃ©lÃ©phone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }] },
   editEmployee: { title: "Modifier employe", submit: "Enregistrer", success: "Employe modifie dans la base.", defaults: { id: "", firstName: "", lastName: "", username: "", email: "", phone: "", roleId: "", departmentId: "", designationId: "", shiftId: "", employeeId: "", joinDate: "", bloodGroup: "", street: "", city: "", state: "", zipCode: "", country: "", status: "true" }, fields: [{ key: "firstName", label: "Prenom", required: true }, { key: "lastName", label: "Nom", required: true }, { key: "username", label: "Identifiant", required: true }, { key: "roleId", label: "Role", type: "select", optionKey: "roles", required: true }, { key: "departmentId", label: "Departement", type: "select", optionKey: "departments" }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations" }, { key: "shiftId", label: "Horaire", type: "select", optionKey: "shifts" }, { key: "email", label: "Email", type: "email" }, { key: "phone", label: "Telephone" }, { key: "employeeId", label: "Matricule" }, { key: "joinDate", label: "Date d'embauche", type: "date" }, { key: "bloodGroup", label: "Groupe sanguin" }, { key: "street", label: "Adresse" }, { key: "city", label: "Ville" }, { key: "country", label: "Pays" }] },
   designation: { title: "Nouveau poste", submit: "CrÃ©er", success: "Poste crÃ©Ã© dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du poste", required: true }] },
+  department: { title: "Nouveau departement", submit: "Creer", success: "Departement cree dans la base.", defaults: { name: "" }, fields: [{ key: "name", label: "Nom du departement", required: true }] },
   shift: { title: "Nouvel horaire", submit: "CrÃ©er", success: "Horaire crÃ©Ã© dans la base.", defaults: { name: "", startTime: "08:00", endTime: "17:00" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "startTime", label: "DÃ©but", type: "time", required: true }, { key: "endTime", label: "Fin", type: "time", required: true }] },
   award: { title: "Nouvelle rÃ©compense", submit: "CrÃ©er", success: "RÃ©compense crÃ©Ã©e dans la base.", defaults: { name: "", description: "" }, fields: [{ key: "name", label: "Nom", required: true }, { key: "description", label: "Description", type: "textarea" }] },
   designationHistory: { title: "Affecter un poste", submit: "Enregistrer", success: "Historique de poste enregistrÃ©.", defaults: { userId: "", designationId: "", designationStartDate: TODAY, designationEndDate: "", designationComment: "" }, fields: [{ key: "userId", label: "EmployÃ©", type: "select", optionKey: "staff", required: true }, { key: "designationId", label: "Poste", type: "select", optionKey: "designations", required: true }, { key: "designationStartDate", label: "DÃ©but", type: "date" }, { key: "designationEndDate", label: "Fin", type: "date" }, { key: "designationComment", label: "Commentaire", type: "textarea" }] },
@@ -1255,6 +1256,7 @@ function App() {
           state: form.state, zipCode: form.zipCode, country: form.country, status: canManageUserStatus() ? form.status : undefined,
         }));
       }
+      if (kind === "department") await api.createDepartment({ name: form.name });
       if (kind === "designation") await api.createDesignation({ name: form.name });
       if (kind === "shift") await api.createShift({ name: form.name, startTime: form.startTime, endTime: form.endTime });
       if (kind === "award") await api.createAward({ name: form.name, description: form.description || null });
@@ -1302,7 +1304,7 @@ function App() {
     formation: <Formation {...ctx} />,
     recrutement: <Recrutement {...ctx} reload={load} />,
     projets: <ProjetsONG data={data} staff={staff} setModal={setModal} />,
-    organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} />,
+    organigramme: <Organigramme departments={data.departments} designations={data.designations} canMutate={canMutate} onNew={() => setModal({ kind: "designation" })} onNewDept={() => setModal({ kind: "department" })} />,
     reporting: <Reporting data={data} staff={staff} masse={masse} />,
     selfservice: <SelfService data={data} staff={staff} me={me} setModal={setModal} />,
     parametres: <Parametres />,
@@ -3020,7 +3022,7 @@ function Recrutement({ data, reload, setModal }) {
 }
 
 /* Organigramme */
-function Organigramme({ departments, designations, canMutate, onNew }) {
+function Organigramme({ departments, designations, canMutate, onNew, onNewDept }) {
   const tones = { teal: { bg: "var(--teal-50)", bd: "var(--teal-200)", fg: "var(--teal-800)", sub: "var(--teal-600)" }, sky: { bg: "var(--sky-50)", bd: "var(--sky-400)", fg: "var(--sky-700)", sub: "var(--sky-600)" }, emerald: { bg: "var(--emerald-100)", bd: "var(--emerald-500)", fg: "var(--emerald-700)", sub: "var(--emerald-600)" }, amber: { bg: "var(--amber-50)", bd: "var(--amber-400)", fg: "var(--amber-700)", sub: "var(--amber-600)" }, ink: { bg: "var(--ink-50)", bd: "var(--ink-200)", fg: "var(--ink-700)", sub: "var(--ink-500)" } };
   const palette = ["accent-soft", "sky-soft", "emerald", "amber", "ink"];
   const total = departments.reduce((s, d) => s + Number(d.count || 0), 0);
@@ -3032,7 +3034,7 @@ function Organigramme({ departments, designations, canMutate, onNew }) {
         {departments.length === 0 && <EmptyState title="Aucun departement en base" />}
       </div>
       <div className="g2">
-        <div className="card pad"><h3 className="block-title font-display">Departements</h3>{departments.length === 0 && <EmptyState title="Aucun departement en base" />}{departments.map((d) => <div className="row" key={d.id || d.name}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div></div><span className="chip ink">{d.count}</span></div>)}</div>
+        <div className="card pad"><h3 className="block-title font-display">Departements</h3>{departments.length === 0 && <EmptyState title="Aucun departement en base" />}{departments.map((d) => <div className="row" key={d.id || d.name}><span className="row-ic" style={{ background: "var(--teal-100)", color: "var(--teal-600)" }}><Icon name={d.color === "sky" ? "truck" : d.color === "emerald" ? "calculator" : d.color === "amber" ? "usersRound" : "target"} /></span><div style={{ flex: 1 }}><div style={{ fontWeight: 500, fontSize: 13 }}>{d.name}</div></div><span className="chip ink">{d.count}</span></div>)}<button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNewDept}><Icon name="plus" /> Nouveau departement</button></div>
         <div className="card pad"><h3 className="block-title font-display">Postes</h3><div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{designations.map((d, i) => <span key={d.id} className={"chip " + palette[i % palette.length]}>{d.name}</span>)}</div>{designations.length === 0 && <EmptyState title="Aucun poste en base" />}<button className="btn btn-ghost" style={{ marginTop: 16, height: 36 }} disabled={!canMutate} onClick={onNew}><Icon name="plus" /> Ajouter un poste</button></div>
       </div>
     </>
