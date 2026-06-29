@@ -13,9 +13,9 @@ import { defaultCurrencyId, symbolFor, currencyOptions, currencyIdOf } from "./c
 
 const YEARS = [2026, 2027, 2028, 2029, 2030];
 
-// Hypotheses par defaut : parametres BIOLOGIQUES seulement (portees, survie, poids...).
-// Aucun montant monetaire par defaut : couts et prix sont a saisir/importer par
-// l'eleveur dans SA devise (sinon on imposerait des chiffres d'un pays donne).
+// Hypotheses par defaut : parametres biologiques + montants indicatifs de depart.
+// Les montants sont AGNOSTIQUES de devise : ils sont interpretes dans la devise des
+// donnees du compte (aucune devise codee en dur) ; l'eleveur les ajuste/importe.
 const DEFAULTS = {
   nesParPortee: 10,
   porteesParAn: 2.3,
@@ -29,27 +29,28 @@ const DEFAULTS = {
   anneeDebut: 2026,
   horizonAns: 5,
   granularite: "annee",   // "annee" | "trimestre"
-  // couts : AUCUN montant par defaut (chaque eleveur saisit/importe dans SA devise)
-  alimentEngraissementParPorc: 0,
-  alimentTruieParAn: 0,
-  vetoParPorc: 0,
-  diversParPorc: 0,
-  salaireMensuelOuvrier: 0,
-  capex: 0,
+  // couts : valeurs de depart indicatives, EXPRIMEES dans la devise des donnees du
+  // compte (aucune devise codee en dur). L'eleveur ajuste/importe dans sa devise.
+  alimentEngraissementParPorc: 342000,
+  alimentTruieParAn: 1320000,
+  vetoParPorc: 30000,
+  diversParPorc: 40000,
+  salaireMensuelOuvrier: 559000,
+  capex: 206000000,
   // prime travailleurs : seuil exprime dans une devise au choix (aucune fixee)
-  seuilPrime: 0,
+  seuilPrime: 50000,
   seuilPrimeDeviseId: null, // null = devise des donnees ; sinon une devise permise
   tauxPrimePct: 5,
-  // decoupe d'un porc : poids kg = structure indicative ; prix/kg a saisir (aucune devise imposee)
+  // decoupe d'un porc (poids kg, prix/kg dans la devise des donnees)
   decoupe: [
-    { nom: "Viande (chair)", kg: 50, prix: 0 },
-    { nom: "Pieds (Makoso)", kg: 4, prix: 0 },
-    { nom: "Tete / masque", kg: 7, prix: 0 },
-    { nom: "Sternum / bas morceaux", kg: 6, prix: 0 },
-    { nom: "Abats", kg: 8, prix: 0 },
-    { nom: "Gras / couenne / os", kg: 20, prix: 0 },
+    { nom: "Viande (chair)", kg: 50, prix: 22000 },
+    { nom: "Pieds (Makoso)", kg: 4, prix: 4200 },
+    { nom: "Tete / masque", kg: 7, prix: 5200 },
+    { nom: "Sternum / bas morceaux", kg: 6, prix: 6200 },
+    { nom: "Abats", kg: 8, prix: 5000 },
+    { nom: "Gras / couenne / os", kg: 20, prix: 3000 },
   ],
-  prixEntierParKg: 0, // mode porc entier vif (prix a saisir)
+  prixEntierParKg: 6130, // mode porc entier vif
   modeVente: "decoupe",  // "decoupe" | "entier"
   // facteur de montee en charge (1re annee partielle, modele cohorte affine ensuite)
 };
@@ -215,12 +216,6 @@ const fmt = (n) => {
   if (a >= 1e3) return sigNum(n, 1e3) + " k";
   return Math.round(n).toLocaleString("fr-FR");
 };
-const fmtUSD = (n) => {
-  const a = Math.abs(n);
-  if (a >= 1e6) return sigNum(n, 1e6) + " M$";
-  if (a >= 1e3) return sigNum(n, 1e3) + " k$";
-  return Math.round(n).toLocaleString("fr-FR") + " $";
-};
 
 // Importe les prix reels (api.listPrices) dans la decoupe + prix vif.
 // Matche productType (texte libre) sur le nom de chaque morceau / mot-cle "vif".
@@ -327,10 +322,11 @@ async function loadRealData(speciesFilter) {
   return { expenses, sales, repro, morts };
 }
 
-function calibrate(real, h, animals, speciesFilter) {
+function calibrate(real, h, animals, speciesFilter, devCode = "") {
   const out = { ...h };
   const notes = [];
   const num = (x) => Number(x) || 0;
+  const cur = devCode ? ` ${devCode}` : ""; // suffixe devise des donnees (aucune devise codee en dur)
 
   // Prix de vente reel = CA total / kg vendus (ou par tete si pas de poids)
   const sp = (r) => !speciesFilter || r.species === speciesFilter || !r.species;
@@ -344,7 +340,7 @@ function calibrate(real, h, animals, speciesFilter) {
         // Bascule en mode "entier" pour que le prix reel/tete soit reellement utilise
         out.prixEntierParKg = Math.round(parTete / h.poidsVenteKg);
         out.modeVente = "entier";
-        notes.push(`Prix vente reel ~${Math.round(parTete).toLocaleString()} CDF/tete → mode porc entier`);
+        notes.push(`Prix vente reel ~${Math.round(parTete).toLocaleString()}${cur}/tete → mode porc entier`);
       }
     }
   }
@@ -380,24 +376,24 @@ function calibrate(real, h, animals, speciesFilter) {
 
   if (feed > 0 && base > 0) {
     out.alimentEngraissementParPorc = Math.round(feed / base);
-    notes.push(`Aliment reel ~${out.alimentEngraissementParPorc.toLocaleString()} CDF/porc (${Math.round(feed).toLocaleString()} CDF / ${base} porcs)`);
+    notes.push(`Aliment reel ~${out.alimentEngraissementParPorc.toLocaleString()}${cur}/porc (${Math.round(feed).toLocaleString()}${cur} / ${base} porcs)`);
   } else if (feed > 0) {
-    notes.push(`Aliment enregistre: ${Math.round(feed).toLocaleString()} CDF (pas de base de repartition)`);
+    notes.push(`Aliment enregistre: ${Math.round(feed).toLocaleString()}${cur} (pas de base de repartition)`);
   }
   if (veto > 0 && base > 0) {
     out.vetoParPorc = Math.round(veto / base);
-    notes.push(`Veto reel ~${out.vetoParPorc.toLocaleString()} CDF/porc`);
+    notes.push(`Veto reel ~${out.vetoParPorc.toLocaleString()}${cur}/porc`);
   } else if (veto > 0) {
-    notes.push(`Veto enregistre: ${Math.round(veto).toLocaleString()} CDF`);
+    notes.push(`Veto enregistre: ${Math.round(veto).toLocaleString()}${cur}`);
   }
   if (sal > 0) {
     // Salaires enregistres = total sur la periode ; on estime un mensuel/ouvrier
     const moisCouverts = monthsSpan(exp);
     if (moisCouverts > 0) {
       out.salaireMensuelOuvrier = Math.round(sal / moisCouverts);
-      notes.push(`Salaires reels ~${out.salaireMensuelOuvrier.toLocaleString()} CDF/mois (${Math.round(sal).toLocaleString()} CDF / ${moisCouverts} mois)`);
+      notes.push(`Salaires reels ~${out.salaireMensuelOuvrier.toLocaleString()}${cur}/mois (${Math.round(sal).toLocaleString()}${cur} / ${moisCouverts} mois)`);
     } else {
-      notes.push(`Salaires enregistres: ${Math.round(sal).toLocaleString()} CDF`);
+      notes.push(`Salaires enregistres: ${Math.round(sal).toLocaleString()}${cur}`);
     }
   }
 
@@ -493,7 +489,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
     setImporting(true);
     try {
       const real = await loadRealData(speciesFilter);
-      const { hypotheses, notes } = calibrate(real, h, animals, speciesFilter);
+      const { hypotheses, notes } = calibrate(real, h, animals, speciesFilter, devData);
       setH(hypotheses);
       setCalibNotes(notes.length ? notes : [L("Peu de donnees reelles exploitables — verifiez la saisie dans FarmOS.", "Few usable real data — check FarmOS entries.")]);
       setProg(progression(real, speciesFilter));
