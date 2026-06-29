@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.124.7)
+- **FarmOS — Simulateur : tableau des naissances par période dans le rapport**. Ajout d'un tableau imprimable « Naissances par période » entre les reproducteurs gardés et la projection : période, mises bas, nés vivants, mortalité à la naissance, avec ligne Total. Le tableau réutilise les champs déjà calculés par le moteur (`mb`, `naissances`, `morts`) et bénéficie de la pagination multi-page du rapport. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Fixed (3.124.6)
 - **FarmOS — Simulateur : pagination rapport réellement multi-page via portal**. Le rapport imprimable est maintenant rendu directement sous `body` avec `createPortal`, au lieu de rester dans le conteneur scrollable `#simulator-report`. Chrome peut donc calculer la hauteur complète du document et générer les pages suivantes : les tableaux Reproducteurs gardés, Projection et Détail des prix restent présents même si le rapport dépasse une page. **Vérifié** : `npm.cmd run build` farmos-app OK ; test Chrome/Playwright local avec PDF = 2 pages et 3 tableaux présents ; test dev actuel avant correction confirmé à 1 page car le rapport était encore enfant de `#simulator-report`. [SCRUM]
 

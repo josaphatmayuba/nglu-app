@@ -682,6 +682,9 @@ function ReportView({ L, rows, h, strategy, zoneDisplayLabel, females, males, co
   const totVendus = rows.reduce((s, r) => s + r.vendus, 0);
   const totCA = rows.reduce((s, r) => s + r.ca, 0);
   const totDep = rows.reduce((s, r) => s + r.depenses, 0);
+  const totMisesBas = rows.reduce((s, r) => s + (r.mb || 0), 0);
+  const totNaissances = rows.reduce((s, r) => s + (r.naissances || 0), 0);
+  const totMorts = rows.reduce((s, r) => s + (r.morts || 0), 0);
   const h2 = { fontSize: 14, fontWeight: 700, margin: "16px 0 6px", borderBottom: "2px solid #111", paddingBottom: 3 };
   const dl = { display: "flex", flexWrap: "wrap", gap: "4px 24px", margin: "4px 0" };
   const item = (k, v) => <div key={k} style={{ minWidth: 200 }}><b>{k} :</b> {v}</div>;
@@ -760,6 +763,35 @@ function ReportView({ L, rows, h, strategy, zoneDisplayLabel, females, males, co
                 <td style={{ ...rt, fontWeight: 700 }}>{(r.totalRepro || 0).toLocaleString()}</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Naissances par periode */}
+      <div className="rep-block">
+        <div style={h2}>{L("Naissances par période", "Births by period")}</div>
+        <table>
+          <thead><tr>
+            <th style={{ textAlign: "left" }}>{L("Période", "Period")}</th>
+            <th style={rt}>{L("Mises bas", "Farrowings")}</th>
+            <th style={rt}>{L("Nés vivants", "Live births")}</th>
+            <th style={rt}>{L("Mortalité naissance", "Birth mortality")}</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ textAlign: "left" }}>{r.label}</td>
+                <td style={rt}>{(r.mb || 0).toLocaleString()}</td>
+                <td style={{ ...rt, fontWeight: 700 }}>{(r.naissances || 0).toLocaleString()}</td>
+                <td style={rt}>{(r.morts || 0).toLocaleString()}</td>
+              </tr>
+            ))}
+            <tr style={{ fontWeight: 700, background: "#f0f0f0" }}>
+              <td style={{ textAlign: "left" }}>{L("Total", "Total")}</td>
+              <td style={rt}>{totMisesBas.toLocaleString()}</td>
+              <td style={rt}>{totNaissances.toLocaleString()}</td>
+              <td style={rt}>{totMorts.toLocaleString()}</td>
+            </tr>
           </tbody>
         </table>
       </div>
