@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.122.9)
+- **FarmOS — Simulateur : graphe « Ventes & bénéfice » lisible + impression du rapport**. Les 3 courbes (Porcs vendus / Chiffre d'affaires / Bénéfice) étaient toutes vertes (`--forest-700`) car aucune couleur par série n'était passée : ajout de `colors` distincts (vert / rouille / argile, palette déjà utilisée dans le module) + **légende** sous le graphe (pastille colorée + libellé). Ajout d'un bouton **« 🖨️ Imprimer le rapport »** (`window.print()`) avec feuille de style `@media print` qui n'imprime que la zone du simulateur, masque les boutons (`.no-print`) et évite de couper les cartes. Aucune dépendance ajoutée. **Vérifié** : modifs réutilisent les patterns du fichier. [SCRUM]
+
 ### Changed (3.122.8)
 - **FarmOS — Animaux : effectif du lot déplacé dans « Filiation & valeur »**. Le badge « N animaux » de l'en-tête de fiche chevauchait le titre et les boutons d'action. Il est retiré du hero et présenté comme une carte dédiée « Effectif du lot » dans la section **Filiation & valeur** de l'onglet Détails, à côté de Valeur estimée. Le compteur sur les lignes de la liste est conservé. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

@@ -503,7 +503,16 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const td = { textAlign: "right", padding: "6px 8px", fontSize: 13, whiteSpace: "nowrap" };
 
   return (
-    <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
+    <div id="simulator-report" style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #simulator-report, #simulator-report * { visibility: visible !important; }
+          #simulator-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; height: auto; overflow: visible; padding: 0; }
+          #simulator-report .no-print { display: none !important; }
+          #simulator-report .card { break-inside: avoid; box-shadow: none; }
+        }
+      `}</style>
       {/* Devise : reglage global, en haut. Aucune devise imposee tant que non choisie. */}
       <div className="card" style={{ ...card, ...(saisieChoisie ? {} : { borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }) }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -515,6 +524,9 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
               {curOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
             </select>
           </label>
+          <button className="btn no-print" onClick={() => window.print()} style={{ marginLeft: "auto" }}>
+            {L("🖨️ Imprimer le rapport", "🖨️ Print report")}
+          </button>
           <div style={{ fontSize: 11, color: "var(--fg-3)", flex: 1, minWidth: 220 }}>
             {saisieChoisie
               ? L(`Tous les montants sont exprimés en ${saisieCode}. Les chiffres de départ sont indicatifs — ajustez-les ou importez vos données réelles.`,
@@ -534,7 +546,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
             {speciesFilter ? ` · ${speciesFilter}` : ` · ${L("toutes especes", "all species")}`}
           </div>
         )}
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12 }} className="no-print">
           <button className="btn btn-primary" onClick={importReal} disabled={importing}>
             {importing ? L("Import…", "Importing…") : L("📥 Importer mes donnees reelles (depenses, salaires, ventes, repro)", "📥 Import my real data (expenses, salaries, sales, repro)")}
           </button>
@@ -775,6 +787,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         <div style={upper}>{L("Ventes & benefice par", "Sales & profit per")} {h.granularite === "trimestre" ? L("trimestre", "quarter") : L("an", "year")}</div>
         <MaterialLineChart
           type="line"
+          colors={["var(--forest-700)", "var(--rust-500)", "var(--clay-600)"]}
           labels={rows.map((r) => r.labelCourt)}
           series={[
             { name: L("Porcs vendus", "Pigs sold"), data: rows.map((r) => r.vendus) },
@@ -783,6 +796,18 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           ]}
           height={260}
         />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 8, fontSize: 12, color: "var(--fg-2)" }}>
+          {[
+            { c: "var(--forest-700)", t: L("Porcs vendus", "Pigs sold") },
+            { c: "var(--rust-500)", t: L(`Chiffre d'affaires (M ${symbole})`, `Revenue (M ${symbole})`) },
+            { c: "var(--clay-600)", t: L(`Benefice (M ${symbole})`, `Profit (M ${symbole})`) },
+          ].map((s) => (
+            <span key={s.t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 12, height: 3, borderRadius: 2, background: s.c }} />
+              {s.t}
+            </span>
+          ))}
+        </div>
       </div>
 
       <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 24 }}>
