@@ -13,7 +13,9 @@ import { defaultCurrencyId, symbolFor, currencyOptions, currencyIdOf } from "./c
 
 const YEARS = [2026, 2027, 2028, 2029, 2030];
 
-// Hypotheses par defaut (= celles du modele Excel/rapport, refs marche RDC 2026)
+// Hypotheses par defaut : parametres BIOLOGIQUES seulement (portees, survie, poids...).
+// Aucun montant monetaire par defaut : couts et prix sont a saisir/importer par
+// l'eleveur dans SA devise (sinon on imposerait des chiffres d'un pays donne).
 const DEFAULTS = {
   nesParPortee: 10,
   porteesParAn: 2.3,
@@ -27,27 +29,27 @@ const DEFAULTS = {
   anneeDebut: 2026,
   horizonAns: 5,
   granularite: "annee",   // "annee" | "trimestre"
-  // couts (CDF)
-  alimentEngraissementParPorc: 342000,
-  alimentTruieParAn: 1320000,
-  vetoParPorc: 30000,
-  diversParPorc: 40000,
-  salaireMensuelOuvrier: 559000,
-  capex: 206000000,
+  // couts : AUCUN montant par defaut (chaque eleveur saisit/importe dans SA devise)
+  alimentEngraissementParPorc: 0,
+  alimentTruieParAn: 0,
+  vetoParPorc: 0,
+  diversParPorc: 0,
+  salaireMensuelOuvrier: 0,
+  capex: 0,
   // prime travailleurs : seuil exprime dans une devise au choix (aucune fixee)
-  seuilPrime: 50000,
+  seuilPrime: 0,
   seuilPrimeDeviseId: null, // null = devise des donnees ; sinon une devise permise
   tauxPrimePct: 5,
-  // decoupe d'un porc (poids kg, prix CDF/kg)
+  // decoupe d'un porc : poids kg = structure indicative ; prix/kg a saisir (aucune devise imposee)
   decoupe: [
-    { nom: "Viande (chair)", kg: 50, prix: 22000 },
-    { nom: "Pieds (Makoso)", kg: 4, prix: 4200 },
-    { nom: "Tete / masque", kg: 7, prix: 5200 },
-    { nom: "Sternum / bas morceaux", kg: 6, prix: 6200 },
-    { nom: "Abats", kg: 8, prix: 5000 },
-    { nom: "Gras / couenne / os", kg: 20, prix: 3000 },
+    { nom: "Viande (chair)", kg: 50, prix: 0 },
+    { nom: "Pieds (Makoso)", kg: 4, prix: 0 },
+    { nom: "Tete / masque", kg: 7, prix: 0 },
+    { nom: "Sternum / bas morceaux", kg: 6, prix: 0 },
+    { nom: "Abats", kg: 8, prix: 0 },
+    { nom: "Gras / couenne / os", kg: 20, prix: 0 },
   ],
-  prixEntierParKg: 6130, // mode porc entier vif
+  prixEntierParKg: 0, // mode porc entier vif (prix a saisir)
   modeVente: "decoupe",  // "decoupe" | "entier"
   // facteur de montee en charge (1re annee partielle, modele cohorte affine ensuite)
 };
@@ -580,6 +582,12 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const toSaisie = (vBase) => (Number(vBase) || 0) * tauxBaseToSaisie;
   const fromSaisie = (vSaisie) => tauxBaseToSaisie ? (Number(vSaisie) || 0) / tauxBaseToSaisie : (Number(vSaisie) || 0);
 
+  // Aucun montant saisi (couts ET prix a 0) : la projection financiere n'a pas de sens.
+  const aucunCout = !(Number(h.alimentEngraissementParPorc) || Number(h.alimentTruieParAn) ||
+    Number(h.vetoParPorc) || Number(h.diversParPorc) || Number(h.salaireMensuelOuvrier) || Number(h.capex));
+  const aucunPrix = !(Number(h.prixEntierParKg) || h.decoupe.some((d) => Number(d.prix)));
+  const donneesFinIncompletes = aucunCout || aucunPrix;
+
   // Seuil de prime converti dans la devise des donnees (devise du seuil au choix, aucune fixee).
   const seuilDeviseId = h.seuilPrimeDeviseId ?? baseCurrencyId;
   const seuilEnBase = React.useMemo(() => {
@@ -611,6 +619,15 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
   return (
     <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
+      {donneesFinIncompletes && (
+        <div className="card" style={{ ...card, borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }}>
+          <div style={{ fontSize: 13 }}>
+            <b>{L("Renseignez vos coûts et prix", "Enter your costs and prices")}</b><br />
+            {L(`Le simulateur n'impose aucun montant : choisissez votre devise de saisie ci-dessous puis renseignez ${aucunCout ? L("vos coûts", "your costs") : ""}${aucunCout && aucunPrix ? L(" et ", " and ") : ""}${aucunPrix ? L("vos prix de vente", "your sale prices") : ""}, ou cliquez « Importer mes données réelles » / « Importer mes prix ». La projection financière reste partielle tant que ces valeurs sont à 0.`,
+               `The simulator imposes no amount: choose your input currency below, then enter ${aucunCout ? "your costs" : ""}${aucunCout && aucunPrix ? " and " : ""}${aucunPrix ? "your sale prices" : ""}, or click "Import my real data" / "Import my prices". The financial projection stays partial while these values are 0.`)}
+          </div>
+        </div>
+      )}
       {/* En-tete + cheptel detecte */}
       <div className="card" style={card}>
         <div style={upper}>{L("Cheptel de depart (detecte)", "Starting herd (detected)")}</div>

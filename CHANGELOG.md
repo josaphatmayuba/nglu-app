@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.2)
+- **FarmOS — Simulateur : plus aucun montant par défaut imposé (multi-devise correct)**. Les valeurs monétaires codées en dur (coûts et prix en CDF, issues du modèle RDC) faussaient le simulateur pour tout compte dont la devise des données n'est pas le CDF : elles étaient affichées dans la devise système (ex. USD) alors qu'elles valaient des CDF. Désormais `DEFAULTS` ne contient que des paramètres **biologiques** (portées, survie, poids…) ; tous les **coûts** (aliment, véto, divers, salaire, capex, seuil prime) et **prix** (découpe par morceau + porc vif) démarrent à **0**. Chaque éleveur saisit ses montants dans **sa** devise (sélecteur de devise de saisie) ou les importe (« Importer mes données réelles » / « Importer mes prix »). Un **bandeau d'invite** apparaît tant que coûts ou prix sont à 0, signalant que la projection financière est partielle. Les poids de découpe restent comme structure indicative. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Added (3.122.1)
 - **FarmOS — Simulateur : devise de saisie au choix pour les coûts et les prix**. Les cartes « Coûts » et « Détail des prix » n'imposent plus la devise des données système (USD chez certains comptes) : un sélecteur **« Devise de saisie »** sur la carte Coûts permet de saisir coûts/prix dans n'importe quelle devise permise (CDF, EUR…). Les valeurs restent **stockées en devise des données** (moteur de simulation inchangé) ; la conversion saisie↔stockage utilise le taux résolu (compta > web > manuel). Si aucun taux n'existe pour la devise choisie, un avertissement indique que les montants sont traités 1:1 (non convertis). Suffixes et libellés des champs reflètent la devise de saisie active. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 
