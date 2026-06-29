@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.124.3)
+- **FarmOS — Simulateur : vue par zone + mises bas réelles dans la projection**. Ajout d'un filtre « Vue par zone » (détection par `zone_id`, puis salle, bâtiment, lot) qui recalcule la projection P1/P2 et affiche une comparaison par zone (porcs départ, femelles, mâles/verrats, vendus, CA, bénéfice, cheptel fin période). Le moteur charge aussi les événements de reproduction : les mises bas réelles avec `offspring_count` ajoutent les porcelets manquants comme cohortes si les animaux correspondants ne sont pas déjà saisis, et recalent la prochaine mise bas de la mère depuis sa dernière mise bas enregistrée. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
+
 ### Fixed (3.124.2)
 - **FarmOS — Simulateur : périmètre porc strict pour les données de prod**. Le simulateur porcin ne dépend plus du filtre global d'espèce : il force `pig` pour le cheptel détecté, l'import des prix, les ventes, la reproduction, la mortalité et la progression réelle. Les dépenses sont filtrées via leur animal lié quand possible ; les dépenses non attribuables au porc sont ignorées avec une note pour éviter de mélanger poules/chèvres/autres espèces dans les coûts porc. Le fallback démo 88 truies / 14 mâles ne s'active plus quand la base contient des animaux mais aucun porc exploitable. **Vérifié** : `npm.cmd run build` farmos-app OK. [SCRUM]
 

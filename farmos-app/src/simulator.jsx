@@ -13,6 +13,8 @@ import { symbolFor, currencyOptions, currencyIdOf } from "./currency";
 
 const YEARS = [2026, 2027, 2028, 2029, 2030];
 const SIMULATOR_SPECIES = "pig";
+const ZONE_ALL = "__all__";
+const ZONE_NONE = "__none__";
 
 // Hypotheses par defaut : parametres biologiques + montants indicatifs de depart.
 // Les montants sont AGNOSTIQUES de devise : ils sont interpretes dans la devise des
@@ -41,7 +43,7 @@ const DEFAULTS = {
   salaireMensuelOuvrier: 559000,
   capex: 206000000,
   // prime travailleurs : seuil exprime dans la devise choisie
-  seuilPrime: 50000,
+  seuilPrime: 100000000,
   tauxPrimePct: 5,
   // decoupe d'un porc (poids kg, prix/kg dans la devise des donnees)
   decoupe: [
@@ -76,6 +78,10 @@ function rowAnimalId(row) {
   return row?.animalId ?? row?.animal_id ?? row?.relatedAnimalId ?? row?.related_animal_id ?? null;
 }
 
+function recordId(row) {
+  return row?._pk ?? row?.id ?? row?.animalId ?? row?.animal_id ?? null;
+}
+
 function makeAnimalSpeciesIndex(animals) {
   const byId = new Map();
   for (const a of animals || []) {
@@ -95,6 +101,89 @@ function rowSpecies(row, animalSpeciesById) {
 function rowsForSpecies(rows, speciesFilter, animalSpeciesById) {
   if (!speciesFilter) return rows || [];
   return (rows || []).filter((row) => rowSpecies(row, animalSpeciesById) === speciesFilter);
+}
+
+function cleanText(v) {
+  const s = String(v ?? "").trim();
+  return s || "";
+}
+
+function animalQty(a) {
+  return Math.max(1, Number(a?.count) || 1);
+}
+
+function isSimulationAnimal(a, speciesFilter = SIMULATOR_SPECIES) {
+  if (speciesFilter && a?.species !== speciesFilter) return false;
+  if (a?.is_active === 0 || a?.isActive === 0) return false;
+  const st = String(a?.status || "").toLowerCase();
+  return st !== "deceased" && st !== "sold";
+}
+
+function zoneInfoOf(row) {
+  const zoneId = row?.zoneId ?? row?.zone_id;
+  const zoneIdText = cleanText(zoneId);
+  const room = cleanText(row?.room);
+  const barn = cleanText(row?.barn);
+  const lot = cleanText(row?.lot);
+  if (zoneIdText) return { key: `zone:${zoneIdText}`, label: room || barn || lot || `Zone ${zoneIdText}`, rank: 0 };
+  if (room) return { key: `room:${room.toLowerCase()}`, label: room, rank: 1 };
+  if (barn) return { key: `barn:${barn.toLowerCase()}`, label: barn, rank: 2 };
+  if (lot) return { key: `lot:${lot.toLowerCase()}`, label: lot, rank: 3 };
+  return { key: ZONE_NONE, label: "Non renseignee", rank: 9 };
+}
+
+function makeAnimalZoneIndex(animals) {
+  const byId = new Map();
+  for (const a of animals || []) {
+    const id = a?._pk ?? a?.id ?? a?.animalId ?? a?.animal_id;
+    if (id != null) byId.set(String(id), zoneInfoOf(a).key);
+  }
+  return byId;
+}
+
+function rowZoneKey(row, animalZoneById) {
+  const id = rowAnimalId(row);
+  if (id != null && animalZoneById.has(String(id))) return animalZoneById.get(String(id));
+  return zoneInfoOf(row).key;
+}
+
+function rowsForScope(rows, speciesFilter, animalSpeciesById, zoneKey = ZONE_ALL, animalZoneById = new Map()) {
+  const bySpecies = rowsForSpecies(rows, speciesFilter, animalSpeciesById);
+  if (zoneKey === ZONE_ALL) return bySpecies;
+  return bySpecies.filter((row) => rowZoneKey(row, animalZoneById) === zoneKey);
+}
+
+function filterAnimalsByZone(animals, zoneKey) {
+  if (zoneKey === ZONE_ALL) return animals || [];
+  return (animals || []).filter((a) => zoneInfoOf(a).key === zoneKey);
+}
+
+function buildZoneOptions(animals, speciesFilter = SIMULATOR_SPECIES) {
+  const zones = new Map();
+  for (const a of animals || []) {
+    if (!isSimulationAnimal(a, speciesFilter)) continue;
+    const info = zoneInfoOf(a);
+    const prev = zones.get(info.key) || { ...info, count: 0 };
+    prev.count += animalQty(a);
+    if ((!prev.label || prev.key === ZONE_NONE) && info.label) prev.label = info.label;
+    zones.set(info.key, prev);
+  }
+  return Array.from(zones.values()).sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
+}
+
+function eventDateOf(row) {
+  return row?.eventDate || row?.event_date || row?.date || row?.created_at || null;
+}
+
+function offspringCountOf(row) {
+  return Number(row?.offspringCount ?? row?.offspring_count ?? 0) || 0;
+}
+
+function isBirthEvent(row) {
+  const live = offspringCountOf(row);
+  if (live <= 0) return false;
+  const type = String(row?.eventType || row?.event_type || "").toLowerCase();
+  return !type || /birth|birthing|farrow|mise|partur|litter|portee|portée/.test(type);
 }
 
 // Noms de mois (debut de trimestre) pour l'affichage trimestriel
@@ -131,9 +220,11 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
   const misesBasParMois = Array.from({ length: HORIZON + 1 }, () => []);
   const reformesParMois = Array.from({ length: HORIZON + 1 }, () => 0);
 
-  const planifierCohorte = (naissanceMoisAbs, n) => {
+  const planifierCohorte = (naissanceMoisAbs, n, options = {}) => {
     if (!n || n <= 0) return;
-    let mb = naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
+    let mb = Number.isFinite(options.prochaineMiseBasMoisAbs)
+      ? options.prochaineMiseBasMoisAbs
+      : naissanceMoisAbs + h.ageSaillieMois + h.gestationMois;
     // la truie ne se reproduit que jusqu'a l'age de reforme (fin de carriere)
     while (mb <= HORIZON && (mb - naissanceMoisAbs) <= reforme) {
       if (mb >= 0) misesBasParMois[mb].push({ naissanceMoisAbs, n });
@@ -148,7 +239,7 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
     }
   };
 
-  for (const c of cohortesInit) planifierCohorte(c.naissanceMoisAbs, c.n);
+  for (const c of cohortesInit) planifierCohorte(c.naissanceMoisAbs, c.n, c);
 
   for (let m = 0; m <= HORIZON; m++) {
     if (reformesParMois[m] > 0) femellesGardees = Math.max(0, femellesGardees - reformesParMois[m]);
@@ -265,32 +356,66 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
 //  - femelles reproductrices (Truie/Cochette) -> cohortes de repro (saillie selon l'age)
 //  - males reproducteurs (Verrat) -> comptes au cheptel mais JAMAIS vendus
 //  - autres males (Engraissement/Porcelet...) -> cohortes a vendre a l'age de vente
-function buildCohortes(animals, speciesFilter, anneeDebut, moisDebut = 1) {
+function buildCohortes(animals, speciesFilter, anneeDebut, moisDebut = 1, options = {}) {
   const debut = anneeDebut || 2026;
   // mois 0 = (anneeDebut, moisDebut). naissanceMoisAbs peut etre negatif (animal ne avant le depart).
   const civ0 = debut * 12 + Math.min(11, Math.max(0, (moisDebut || 1) - 1));
   const moisAbs = (d) => (d.getFullYear() * 12 + d.getMonth()) - civ0;
+  const h = options.hypotheses || DEFAULTS;
+  const inter = h.porteesParAn > 0 ? Math.max(1, Math.round(12 / h.porteesParAn)) : 5;
   let females = 0, males = 0, verrats = 0;
+  let realBirthsAdded = 0, mothersRecalibrated = 0;
   const cohortes = [];        // femelles reproductrices, par mois de naissance
   const cohortesMales = [];   // males a vendre (engraissement/porcelets), par mois de naissance
   const groupsF = new Map();
   const groupsM = new Map();
   const REPRO_MALE = /verrat|reproduct|breed|boar|geniteur|géniteur/i;
+  const animalById = new Map();
   for (const a of animals || []) {
-    if (speciesFilter && a.species !== speciesFilter) continue;
-    if (a.is_active === 0 || a.isActive === 0) continue;
-    const st = (a.status || "").toLowerCase();
-    if (st === "deceased" || st === "sold") continue;
+    const id = recordId(a);
+    if (id != null) animalById.set(String(id), a);
+  }
+
+  const lastBirthAbsByAnimal = new Map();
+  const realBirthsByMonthZone = new Map();
+  for (const ev of options.reproEvents || []) {
+    if (!isBirthEvent(ev)) continue;
+    const motherId = rowAnimalId(ev);
+    const mother = motherId != null ? animalById.get(String(motherId)) : null;
+    if (!mother || !isSimulationAnimal(mother, speciesFilter)) continue;
+    const d = new Date(eventDateOf(ev));
+    if (isNaN(d)) continue;
+    const mab = moisAbs(d);
+    const idKey = String(recordId(mother));
+    const prev = lastBirthAbsByAnimal.get(idKey);
+    if (mab <= 0 && (prev == null || mab > prev)) lastBirthAbsByAnimal.set(idKey, mab);
+    if (mab <= 0) {
+      const zoneKey = zoneInfoOf(mother).key;
+      const key = `${d.getFullYear()}-${d.getMonth()}|${zoneKey}`;
+      const n = Math.max(0, Math.round(offspringCountOf(ev)));
+      realBirthsByMonthZone.set(key, (realBirthsByMonthZone.get(key) || 0) + n);
+    }
+  }
+
+  const existingBornByMonthZone = new Map();
+  for (const a of animals || []) {
+    if (!isSimulationAnimal(a, speciesFilter)) continue;
     const sex = (a.sex || "").toUpperCase();
     if (!a.date_of_birth && !a.dateOfBirth) continue;
     const dob = new Date(a.date_of_birth || a.dateOfBirth);
     if (isNaN(dob)) continue;
-    const n = Math.max(1, Number(a.count) || 1); // effectif du lot
+    const n = animalQty(a); // effectif du lot
     const type = a.type || a.category || "";
-    const key = `${dob.getFullYear()}-${dob.getMonth()}`;
+    const monthZoneKey = `${dob.getFullYear()}-${dob.getMonth()}|${zoneInfoOf(a).key}`;
+    existingBornByMonthZone.set(monthZoneKey, (existingBornByMonthZone.get(monthZoneKey) || 0) + n);
+    const motherId = recordId(a);
+    const lastBirthAbs = motherId != null ? lastBirthAbsByAnimal.get(String(motherId)) : null;
+    const nextBirthAbs = lastBirthAbs != null ? lastBirthAbs + inter : null;
+    if (nextBirthAbs != null) mothersRecalibrated += n;
+    const key = `${dob.getFullYear()}-${dob.getMonth()}|${nextBirthAbs ?? "auto"}`;
     if (sex === "F" || sex === "FEMALE" || sex === "FEMELLE") {
       females += n;
-      if (!groupsF.has(key)) groupsF.set(key, { naissanceMoisAbs: moisAbs(dob), n: 0 });
+      if (!groupsF.has(key)) groupsF.set(key, { naissanceMoisAbs: moisAbs(dob), prochaineMiseBasMoisAbs: nextBirthAbs, n: 0 });
       groupsF.get(key).n += n;
     } else if (sex === "M" || sex === "MALE" || sex === "MÂLE") {
       males += n;
@@ -302,9 +427,29 @@ function buildCohortes(animals, speciesFilter, anneeDebut, moisDebut = 1) {
       }
     }
   }
+  for (const [key, bornReal] of realBirthsByMonthZone) {
+    const missing = Math.max(0, Math.round(bornReal - (existingBornByMonthZone.get(key) || 0)));
+    if (!missing) continue;
+    const [ym] = key.split("|");
+    const [year, month] = ym.split("-").map((x) => Number(x));
+    const naissanceMoisAbs = (year * 12 + month) - civ0;
+    const malesMissing = Math.round(missing * (h.partMalesPct / 100));
+    const femalesMissing = missing - malesMissing;
+    if (femalesMissing > 0) {
+      const k = `real-birth-f|${key}`;
+      groupsF.set(k, { naissanceMoisAbs, n: femalesMissing });
+      females += femalesMissing;
+    }
+    if (malesMissing > 0) {
+      const k = `real-birth-m|${key}`;
+      groupsM.set(k, { naissanceMoisAbs, n: malesMissing });
+      males += malesMissing;
+    }
+    realBirthsAdded += missing;
+  }
   for (const g of groupsF.values()) cohortes.push(g);
   for (const g of groupsM.values()) cohortesMales.push(g);
-  return { cohortes, cohortesMales, females, males, verrats };
+  return { cohortes, cohortesMales, females, males, verrats, realBirthsAdded, mothersRecalibrated };
 }
 
 // 2-3 chiffres significatifs apres le seuil (ex: 1 256 000 -> 1,26 M)
@@ -391,17 +536,18 @@ async function loadRealData() {
   return { expenses, sales, repro, morts };
 }
 
-function calibrate(real, h, animals, speciesFilter, devCode = "") {
+function calibrate(real, h, animals, speciesFilter, devCode = "", zoneKey = ZONE_ALL) {
   const out = { ...h };
   const notes = [];
   const num = (x) => Number(x) || 0;
   const cur = devCode ? ` ${devCode}` : ""; // suffixe devise des donnees (aucune devise codee en dur)
   const animalSpeciesById = makeAnimalSpeciesIndex(animals);
-  const salesF = rowsForSpecies(real.sales, speciesFilter, animalSpeciesById);
-  const reproF = rowsForSpecies(real.repro, speciesFilter, animalSpeciesById);
-  const mortsF = rowsForSpecies(real.morts, speciesFilter, animalSpeciesById);
+  const animalZoneById = makeAnimalZoneIndex(animals);
+  const salesF = rowsForScope(real.sales, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
+  const reproF = rowsForScope(real.repro, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
+  const mortsF = rowsForScope(real.morts, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
   const expensesAll = real.expenses || [];
-  const exp = rowsForSpecies(expensesAll, speciesFilter, animalSpeciesById);
+  const exp = rowsForScope(expensesAll, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
   const ignoredExpenses = expensesAll.length - exp.length;
 
   // Prix de vente reel = CA total / kg vendus (ou par tete si pas de poids)
@@ -438,7 +584,7 @@ function calibrate(real, h, animals, speciesFilter, devCode = "") {
   const byCat = {};
   for (const e of exp) { const c = (e.category || "autre").toLowerCase(); byCat[c] = (byCat[c] || 0) + num(e.amount); }
   if (speciesFilter && ignoredExpenses > 0) {
-    notes.push(`${ignoredExpenses} depense(s) sans lien ${speciesFilter} ignoree(s) pour eviter de melanger les especes`);
+    notes.push(`${ignoredExpenses} depense(s) hors perimetre porc/zone ignoree(s) pour eviter de melanger les especes`);
   }
 
   // Base de repartition : nb de porcs vendus enregistres (sinon les nes vivants)
@@ -487,14 +633,15 @@ function monthsSpan(items) {
 }
 
 // Analyse de progression : ventilation par annee des donnees reelles
-function progression(real, speciesFilter, animals = []) {
+function progression(real, speciesFilter, animals = [], zoneKey = ZONE_ALL) {
   const num = (x) => Number(x) || 0;
   const yearOf = (d) => d ? new Date(d).getFullYear() : null;
   const animalSpeciesById = makeAnimalSpeciesIndex(animals);
-  const sales = rowsForSpecies(real.sales, speciesFilter, animalSpeciesById);
-  const expenses = rowsForSpecies(real.expenses, speciesFilter, animalSpeciesById);
-  const repro = rowsForSpecies(real.repro, speciesFilter, animalSpeciesById);
-  const morts = rowsForSpecies(real.morts, speciesFilter, animalSpeciesById);
+  const animalZoneById = makeAnimalZoneIndex(animals);
+  const sales = rowsForScope(real.sales, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
+  const expenses = rowsForScope(real.expenses, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
+  const repro = rowsForScope(real.repro, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
+  const morts = rowsForScope(real.morts, speciesFilter, animalSpeciesById, zoneKey, animalZoneById);
   const byYear = {};
   const ensure = (y) => (byYear[y] = byYear[y] || { ventes: 0, ca: 0, depenses: 0, naissances: 0, morts: 0 });
   for (const s of sales) { const y = yearOf(s.created_at || s.sale_date || s.saleDate || s.date); if (y) { const r = ensure(y); r.ventes += num(s.quantity) || 1; r.ca += num(s.total_amount || s.totalAmount || s.amount); } }
@@ -677,6 +824,7 @@ const SimulatorScreen = ({ lang }) => {
   const [h, setH] = React.useState(DEFAULTS);
   const [strategy, setStrategy] = React.useState("P2");
   const [animals, setAnimals] = React.useState([]);
+  const [reproEvents, setReproEvents] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [calibNotes, setCalibNotes] = React.useState(null);
   const [prog, setProg] = React.useState(null);
@@ -685,6 +833,7 @@ const SimulatorScreen = ({ lang }) => {
   const [prixNotes, setPrixNotes] = React.useState(null);     // resultat import prix
   const [importingPrix, setImportingPrix] = React.useState(false);
   const [saisieCurrencyId, setSaisieCurrencyId] = React.useState(null); // devise choisie (null = aucune, a choisir)
+  const [zoneFilter, setZoneFilter] = React.useState(ZONE_ALL);
   const set = (k) => (v) => setH((s) => ({ ...s, [k]: v }));
 
   // Edition d'un morceau de la decoupe (kg ou prix)
@@ -711,10 +860,10 @@ const SimulatorScreen = ({ lang }) => {
     setImporting(true);
     try {
       const real = await loadRealData();
-      const { hypotheses, notes } = calibrate(real, h, animals, effectiveSpeciesFilter, devData);
+      const { hypotheses, notes } = calibrate(real, h, animals, effectiveSpeciesFilter, devData, zoneFilter);
       setH(hypotheses);
       setCalibNotes(notes.length ? notes : [L("Peu de donnees reelles exploitables — verifiez la saisie dans FarmOS.", "Few usable real data — check FarmOS entries.")]);
-      setProg(progression(real, effectiveSpeciesFilter, animals));
+      setProg(progression(real, effectiveSpeciesFilter, animals, zoneFilter));
     } catch (e) {
       setCalibNotes([L("Erreur de chargement des donnees.", "Data load error.") + " " + (e.message || "")]);
     } finally { setImporting(false); }
@@ -723,11 +872,15 @@ const SimulatorScreen = ({ lang }) => {
   React.useEffect(() => {
     let alive = true;
     setLoading(true);
-    api.listAnimals().then((res) => {
+    Promise.allSettled([api.listAnimals(), api.listReproductionEvents()]).then(([animalsRes, reproRes]) => {
       if (!alive) return;
-      const list = res?.getAllAnimal || res?.data || (Array.isArray(res) ? res : []);
+      const av = animalsRes.status === "fulfilled" ? animalsRes.value : null;
+      const rv = reproRes.status === "fulfilled" ? reproRes.value : null;
+      const list = av?.getAllAnimal || av?.data || (Array.isArray(av) ? av : []);
+      const repro = rv?.reproductionEvents || rv?.getAllReproductionEvent || rv?.data || (Array.isArray(rv) ? rv : []);
       setAnimals(list);
-    }).catch(() => setAnimals([])).finally(() => alive && setLoading(false));
+      setReproEvents(repro);
+    }).catch(() => { setAnimals([]); setReproEvents([]); }).finally(() => alive && setLoading(false));
     return () => { alive = false; };
   }, []);
 
@@ -757,8 +910,20 @@ const SimulatorScreen = ({ lang }) => {
   // Seuil de prime : exprime dans la devise choisie (aucune conversion).
   const seuilEnBase = Number(h.seuilPrime) || 0;
 
-  const { cohortes, cohortesMales, females, males, verrats } = React.useMemo(
-    () => buildCohortes(animals, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut), [animals, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut]);
+  const zoneOptions = React.useMemo(
+    () => buildZoneOptions(animals, effectiveSpeciesFilter), [animals, effectiveSpeciesFilter]);
+  React.useEffect(() => {
+    if (zoneFilter !== ZONE_ALL && !zoneOptions.some((z) => z.key === zoneFilter)) setZoneFilter(ZONE_ALL);
+  }, [zoneFilter, zoneOptions]);
+  const zoneLabel = (z) => z?.key === ZONE_NONE ? L("Non renseignée", "Unassigned") : (z?.label || "");
+  const selectedZone = zoneFilter === ZONE_ALL ? null : zoneOptions.find((z) => z.key === zoneFilter);
+  const selectedZoneLabel = zoneFilter === ZONE_ALL ? L("Toutes les zones", "All zones") : zoneLabel(selectedZone);
+  const animalsForProjection = React.useMemo(
+    () => filterAnimalsByZone(animals, zoneFilter), [animals, zoneFilter]);
+
+  const { cohortes, cohortesMales, females, males, verrats, realBirthsAdded, mothersRecalibrated } = React.useMemo(
+    () => buildCohortes(animalsForProjection, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut, { reproEvents, hypotheses: h }),
+    [animalsForProjection, effectiveSpeciesFilter, h, reproEvents]);
 
   const useDemoData = !loading && animals.length === 0;
   const cohortesUse = cohortes.length ? cohortes : (useDemoData ? [{ naissanceMoisAbs: -1, n: 88 }] : []);
@@ -767,11 +932,29 @@ const SimulatorScreen = ({ lang }) => {
     : (useDemoData ? [{ naissanceMoisAbs: -1, n: 14 }] : []); // fallback demo seulement si aucune donnee animal
   const rowsP1 = React.useMemo(
     () => simulate("P1", h, cohortesUse, 0, seuilEnBase, cohortesMalesUse, verrats),
-    [h, cohortes, cohortesMales, verrats, seuilEnBase]);
+    [h, cohortes, cohortesMales, verrats, seuilEnBase, useDemoData]);
   const rowsP2 = React.useMemo(
     () => simulate("P2", h, cohortesUse, 0, seuilEnBase, cohortesMalesUse, verrats),
-    [h, cohortes, cohortesMales, verrats, seuilEnBase]);
+    [h, cohortes, cohortesMales, verrats, seuilEnBase, useDemoData]);
   const rows = strategy === "P1" ? rowsP1 : rowsP2;
+
+  const zoneComparisonRows = React.useMemo(() => zoneOptions.map((z) => {
+    const za = filterAnimalsByZone(animals, z.key);
+    const c = buildCohortes(za, effectiveSpeciesFilter, h.anneeDebut, h.moisDebut, { reproEvents, hypotheses: h });
+    const rs = simulate(strategy, h, c.cohortes, 0, seuilEnBase, c.cohortesMales, c.verrats);
+    return {
+      key: z.key,
+      label: z.label,
+      count: z.count,
+      females: c.females,
+      males: c.males,
+      verrats: c.verrats,
+      vendus: rs.reduce((s, r) => s + r.vendus, 0),
+      ca: rs.reduce((s, r) => s + r.ca, 0),
+      benef: rs.reduce((s, r) => s + r.benef, 0),
+      finVivants: rs[rs.length - 1]?.vivants || 0,
+    };
+  }), [zoneOptions, animals, effectiveSpeciesFilter, h, strategy, seuilEnBase, reproEvents]);
 
   const debutP = h.anneeDebut || 2026;
   const moisD0 = Math.min(11, Math.max(0, (h.moisDebut || 1) - 1));
@@ -838,6 +1021,63 @@ const SimulatorScreen = ({ lang }) => {
           </div>
         </div>
       </div>
+
+      {/* Vue par zone : filtre la projection et compare les zones porc */}
+      <div className="card" style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={upper}>{L("Vue par zone", "Zone view")}</div>
+            <select className="input" value={zoneFilter} style={{ height: 32, minWidth: 220 }}
+              onChange={(e) => setZoneFilter(e.target.value)}>
+              <option value={ZONE_ALL}>{L("Toutes les zones", "All zones")}</option>
+              {zoneOptions.map((z) => (
+                <option key={z.key} value={z.key}>{zoneLabel(z)} ({z.count})</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--fg-3)", maxWidth: 520 }}>
+            {L(
+              `Projection recalculée sur : ${selectedZoneLabel}. Les zones sont déduites dans l'ordre zone_id, salle, bâtiment, lot.`,
+              `Projection recalculated on: ${selectedZoneLabel}. Zones are inferred in this order: zone_id, room, barn, batch.`
+            )}
+          </div>
+        </div>
+        {zoneComparisonRows.length > 0 && (
+          <div style={{ overflowX: "auto", marginTop: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+              <thead><tr style={{ borderBottom: "1px solid var(--border)" }}>
+                <th style={{ ...th, textAlign: "left" }}>{L("Zone", "Zone")}</th>
+                <th style={th}>{L("Porcs depart", "Starting pigs")}</th>
+                <th style={th}>{L("Femelles", "Females")}</th>
+                <th style={th}>{L("Males", "Males")}</th>
+                <th style={th}>{L("Vendus", "Sold")}</th>
+                <th style={th}>CA</th>
+                <th style={th}>{L("Benefice", "Profit")}</th>
+                <th style={th}>{L("Fin periode", "End period")}</th>
+              </tr></thead>
+              <tbody>
+                {zoneComparisonRows.map((z) => (
+                  <tr key={z.key} style={{ borderBottom: "1px solid var(--border-subtle, var(--border))", background: zoneFilter === z.key ? "var(--forest-50, #eef7ee)" : "transparent" }}>
+                    <td style={{ ...td, textAlign: "left", fontWeight: 600 }}>{zoneLabel(z)}</td>
+                    <td style={td}>{z.count.toLocaleString()}</td>
+                    <td style={td}>{z.females.toLocaleString()}</td>
+                    <td style={td}>{z.males.toLocaleString()}{z.verrats ? ` (${z.verrats} verrats)` : ""}</td>
+                    <td style={td}>{Math.round(z.vendus).toLocaleString()}</td>
+                    <td style={td}>{fmtM(z.ca)}</td>
+                    <td style={{ ...td, fontWeight: 600, color: z.benef >= 0 ? "var(--forest-700, green)" : "crimson" }}>{fmtM(z.benef)}</td>
+                    <td style={td}>{Math.round(z.finVivants).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!loading && zoneComparisonRows.length === 0 && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--fg-3)" }}>
+            {L("Aucun porc actif avec zone exploitable.", "No active pig with usable zone data.")}
+          </div>
+        )}
+      </div>
       {/* En-tete + cheptel detecte */}
       <div className="card" style={card}>
         <div style={upper}>{L("Cheptel de depart (detecte)", "Starting herd (detected)")}</div>
@@ -848,7 +1088,9 @@ const SimulatorScreen = ({ lang }) => {
             {verrats ? <> {" · "}{L("dont verrats (geniteurs, non vendus)", "incl. boars (breeders, not sold)")}: <b>{verrats}</b></> : null}
             {" · "}{cohortes.length} {L("cohorte(s) repro", "breeding cohort(s)")}
             {cohortesMales.length ? <> {" + "}{cohortesMales.length} {L("lot(s) males a vendre", "male lot(s) to sell")}</> : null}
-            {` · ${L("porcs uniquement", "pigs only")}`}
+            {realBirthsAdded ? <> {" · "}{L("nés réels ajoutés", "real births added")}: <b>{realBirthsAdded}</b></> : null}
+            {mothersRecalibrated ? <> {" · "}{L("mères recalées", "mothers recalibrated")}: <b>{mothersRecalibrated}</b></> : null}
+            {` · ${L("porcs uniquement", "pigs only")} · ${selectedZoneLabel}`}
           </div>
         )}
         <div style={{ marginTop: 12 }} className="no-print">
