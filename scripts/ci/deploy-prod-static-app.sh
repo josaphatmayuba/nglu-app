@@ -61,9 +61,13 @@ LOCAL_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"
 LOCAL_SUPPORT_ARCHIVE="/tmp/nglu-prod-support-${APP_SAFE}-${STAMP}.tgz"
 REMOTE_DIST_ARCHIVE="/tmp/nglu-prod-${APP_SAFE}-${STAMP}.tgz"
 REMOTE_SUPPORT_ARCHIVE="/tmp/nglu-prod-support-${APP_SAFE}-${STAMP}.tgz"
+CONF_STAGE=""
 
 cleanup_local() {
   rm -f "$LOCAL_DIST_ARCHIVE" "$LOCAL_SUPPORT_ARCHIVE"
+  if [ -n "$CONF_STAGE" ]; then
+    rm -rf "$CONF_STAGE"
+  fi
 }
 trap cleanup_local EXIT INT TERM
 
@@ -73,19 +77,18 @@ tar -czf "$LOCAL_DIST_ARCHIVE" -C "$DIST_DIR" .
 # ongdngolu keeps the default (dual-domain); Avelomi passes SUPPORT_CONF=
 # nginx/nginx.avelomi.conf so it gets its own single-domain config without the
 # shared file overwriting it. Lets the two prods diverge over time.
-# Portable rename (busybox tar on alpine has no --transform): stage a copy
-# under the canonical name in a temp dir, then tar that path.
+# Portable rename (busybox tar on alpine has no --transform): stage the support
+# files together under their final paths, then tar from that directory.
 SUPPORT_CONF="${SUPPORT_CONF:-nginx/nginx.frontend.conf}"
-CONF_STAGE=""
 if [ "$SUPPORT_CONF" != "nginx/nginx.frontend.conf" ]; then
   CONF_STAGE="$(mktemp -d)"
-  mkdir -p "$CONF_STAGE/nginx"
+  mkdir -p "$CONF_STAGE/frontend" "$CONF_STAGE/nginx"
+  cp docker-compose.prod.yml "$CONF_STAGE/docker-compose.prod.yml"
+  cp frontend/Dockerfile.prod "$CONF_STAGE/frontend/Dockerfile.prod"
   cp "$SUPPORT_CONF" "$CONF_STAGE/nginx/nginx.frontend.conf"
-  tar -czf "$LOCAL_SUPPORT_ARCHIVE" \
-    docker-compose.prod.yml \
-    frontend/Dockerfile.prod \
-    -C "$CONF_STAGE" nginx/nginx.frontend.conf
+  tar -czf "$LOCAL_SUPPORT_ARCHIVE" -C "$CONF_STAGE" .
   rm -rf "$CONF_STAGE"
+  CONF_STAGE=""
 else
   tar -czf "$LOCAL_SUPPORT_ARCHIVE" \
     docker-compose.prod.yml \
