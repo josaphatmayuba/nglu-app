@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.10)
+- **FarmOS — Simulateur : « Imprimer le rapport » génère un vrai rapport, pas l'écran**. L'impression précédente reproduisait l'écran (champs de saisie, boutons, sélecteurs) — illisible comme document. Ajout d'un composant `ReportView` masqué à l'écran (`#sim-report-print` en `display:none`) et rendu **uniquement** à l'impression via `@media print` (qui masque toute l'app) : en-tête (titre, projection, stratégie, devise, date), synthèse (cheptel, totaux ventes/CA/dépenses/bénéfice cumulé, marge/porc), hypothèses + coûts en texte, tableau de projection an/trimestre avec total, le graphe colorié, et le détail des prix (découpe + porc vif). Mise en page document (bordures de tableau, `@page` marges, `break-inside: avoid`). **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Added (3.122.9)
 - **FarmOS — Simulateur : graphe « Ventes & bénéfice » lisible + impression du rapport**. Les 3 courbes (Porcs vendus / Chiffre d'affaires / Bénéfice) étaient toutes vertes (`--forest-700`) car aucune couleur par série n'était passée : ajout de `colors` distincts (vert / rouille / argile, palette déjà utilisée dans le module) + **légende** sous le graphe (pastille colorée + libellé). Ajout d'un bouton **« 🖨️ Imprimer le rapport »** (`window.print()`) avec feuille de style `@media print` qui n'imprime que la zone du simulateur, masque les boutons (`.no-print`) et évite de couper les cartes. Aucune dépendance ajoutée. **Vérifié** : modifs réutilisent les patterns du fichier. [SCRUM]
 

@@ -397,6 +397,156 @@ const NumInput = ({ label, value, onChange, suffix }) => (
   </label>
 );
 
+// Vue rapport imprimable : mise en page document (titre, synthese, hypotheses,
+// tableau de projection, graphe, prix). Cachee a l'ecran (#sim-report-print
+// display:none), rendue visible uniquement par @media print.
+function ReportView({ L, rows, h, strategy, females, males, cohortes, saisieCode, fmtM, rev, cout, marge, cumulBenef, debutP, finP, granu }) {
+  const dev = saisieCode || "";
+  const today = new Date().toLocaleDateString(L("fr-CA", "en-CA"));
+  const totVendus = rows.reduce((s, r) => s + r.vendus, 0);
+  const totCA = rows.reduce((s, r) => s + r.ca, 0);
+  const totDep = rows.reduce((s, r) => s + r.depenses, 0);
+  const h2 = { fontSize: 14, fontWeight: 700, margin: "16px 0 6px", borderBottom: "2px solid #111", paddingBottom: 3 };
+  const dl = { display: "flex", flexWrap: "wrap", gap: "4px 24px", margin: "4px 0" };
+  const item = (k, v) => <div key={k} style={{ minWidth: 200 }}><b>{k} :</b> {v}</div>;
+  const rt = { textAlign: "right" };
+
+  return (
+    <div id="sim-report-print">
+      {/* En-tete */}
+      <div className="rep-block" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{L("Rapport de simulation — Élevage", "Simulation report — Livestock")}</div>
+          <div style={{ fontSize: 12, color: "#555" }}>
+            {L("Projection", "Projection")} {debutP}–{finP} · {L("Stratégie", "Strategy")} {strategy}
+            {dev ? ` · ${L("Devise", "Currency")} ${dev}` : ""}
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#555" }}>{L("Édité le", "Generated")} {today}</div>
+      </div>
+
+      {/* Synthese */}
+      <div className="rep-block">
+        <div style={h2}>{L("Synthèse", "Summary")}</div>
+        <div style={dl}>
+          {item(L("Cheptel de départ", "Starting herd"), `${females} ♀ · ${males} ♂ · ${cohortes.length} ${L("cohorte(s)", "cohort(s)")}`)}
+          {item(L("Porcs vendus (total)", "Pigs sold (total)"), totVendus.toLocaleString())}
+          {item(L("Chiffre d'affaires (total)", "Revenue (total)"), fmtM(totCA))}
+          {item(L("Dépenses (total)", "Expenses (total)"), fmtM(totDep))}
+          {item(L("Bénéfice cumulé", "Cumulative profit"), fmtM(cumulBenef))}
+          {item(L("Revenu / porc", "Revenue / pig"), fmtM(rev))}
+          {item(L("Coût / porc", "Cost / pig"), fmtM(cout))}
+          {item(L("Marge / porc", "Margin / pig"), fmtM(marge))}
+        </div>
+      </div>
+
+      {/* Hypotheses */}
+      <div className="rep-block">
+        <div style={h2}>{L("Hypothèses", "Assumptions")}</div>
+        <div style={dl}>
+          {item(L("Nés / portée", "Born / litter"), h.nesParPortee)}
+          {item(L("Portées / an", "Litters / yr"), h.porteesParAn)}
+          {item(L("Survie", "Survival"), `${h.surviePct} %`)}
+          {item(L("Âge saillie", "Breed age"), `${h.ageSaillieMois} ${L("mois", "mo")}`)}
+          {item(L("Poids vente", "Sale weight"), `${h.poidsVenteKg} kg`)}
+          {item(L("Mode de vente", "Sale mode"), h.modeVente === "entier" ? L("Porc entier vif", "Whole live pig") : L("Découpe", "Cuts"))}
+          {strategy === "P2" && item(L("Plafond truies (P2)", "Sow cap (P2)"), h.plafondTruiesP2)}
+        </div>
+        <div style={h2}>{L("Coûts", "Costs")} {dev ? `(${dev})` : ""}</div>
+        <div style={dl}>
+          {item(L("Aliment / porc", "Feed / pig"), fmtM(h.alimentEngraissementParPorc))}
+          {item(L("Aliment truie / an", "Sow feed / yr"), fmtM(h.alimentTruieParAn))}
+          {item(L("Santé (véto) / porc", "Health (vet) / pig"), fmtM(h.vetoParPorc))}
+          {item(L("Divers / porc", "Misc / pig"), fmtM(h.diversParPorc))}
+          {item(L("Salaire / mois", "Salary / mo"), fmtM(h.salaireMensuelOuvrier))}
+          {item(L("Investissement (capex)", "Investment (capex)"), fmtM(h.capex))}
+        </div>
+      </div>
+
+      {/* Tableau de projection */}
+      <div className="rep-block">
+        <div style={h2}>{L("Projection", "Projection")} {granu === "trimestre" ? L("(par trimestre)", "(quarterly)") : L("(par an)", "(yearly)")}</div>
+        <table>
+          <thead><tr>
+            <th style={{ textAlign: "left" }}>{L("Période", "Period")}</th>
+            <th style={rt}>{L("Porcs vendus", "Pigs sold")}</th>
+            <th style={rt}>{L("Chiffre d'affaires", "Revenue")}</th>
+            <th style={rt}>{L("Dépenses", "Expenses")}</th>
+            <th style={rt}>{L("Bénéfice", "Profit")}</th>
+          </tr></thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i}>
+                <td style={{ textAlign: "left" }}>{r.label}</td>
+                <td style={rt}>{r.vendus.toLocaleString()}</td>
+                <td style={rt}>{fmtM(r.ca)}</td>
+                <td style={rt}>{fmtM(r.depenses)}</td>
+                <td style={{ ...rt, fontWeight: 700 }}>{fmtM(r.benef)}</td>
+              </tr>
+            ))}
+            <tr style={{ fontWeight: 700, background: "#f0f0f0" }}>
+              <td style={{ textAlign: "left" }}>{L("Total", "Total")}</td>
+              <td style={rt}>{totVendus.toLocaleString()}</td>
+              <td style={rt}>{fmtM(totCA)}</td>
+              <td style={rt}>{fmtM(totDep)}</td>
+              <td style={rt}>{fmtM(cumulBenef)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Graphe */}
+      <div className="rep-block">
+        <div style={h2}>{L("Ventes & bénéfice", "Sales & profit")}</div>
+        <MaterialLineChart
+          type="line"
+          colors={["var(--forest-700)", "var(--rust-500)", "var(--clay-600)"]}
+          labels={rows.map((r) => r.labelCourt)}
+          series={[
+            { name: L("Porcs vendus", "Pigs sold"), data: rows.map((r) => r.vendus) },
+            { name: L(`Chiffre d'affaires (M ${dev})`, `Revenue (M ${dev})`), data: rows.map((r) => Math.round(r.ca / 1e4) / 100) },
+            { name: L(`Bénéfice (M ${dev})`, `Profit (M ${dev})`), data: rows.map((r) => Math.round(r.benef / 1e4) / 100) },
+          ]}
+          height={240}
+        />
+      </div>
+
+      {/* Detail des prix */}
+      <div className="rep-block">
+        <div style={h2}>{L("Détail des prix — découpe", "Price details — cuts")} {dev ? `(${dev})` : ""}</div>
+        <table>
+          <thead><tr>
+            <th style={{ textAlign: "left" }}>{L("Morceau", "Cut")}</th>
+            <th style={rt}>{L("Poids (kg)", "Weight (kg)")}</th>
+            <th style={rt}>{L("Prix / kg", "Price / kg")}</th>
+            <th style={rt}>{L("Sous-total", "Subtotal")}</th>
+          </tr></thead>
+          <tbody>
+            {(h.decoupe || []).map((d, i) => (
+              <tr key={i}>
+                <td style={{ textAlign: "left" }}>{d.nom}</td>
+                <td style={rt}>{d.kg}</td>
+                <td style={rt}>{fmtM(d.prix)}</td>
+                <td style={rt}>{fmtM(d.kg * d.prix)}</td>
+              </tr>
+            ))}
+            <tr style={{ fontWeight: 700 }}>
+              <td style={{ textAlign: "left" }}>{L("Total découpe", "Cuts total")}</td>
+              <td style={rt}>{(h.decoupe || []).reduce((s, d) => s + Number(d.kg || 0), 0)}</td>
+              <td></td>
+              <td style={rt}>{fmtM((h.decoupe || []).reduce((s, d) => s + d.kg * d.prix, 0))}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style={{ marginTop: 6 }}>
+          <b>{L("Prix porc vif / kg", "Live pig price / kg")} :</b> {fmtM(h.prixEntierParKg)} ·{" "}
+          {L("porc vif", "live pig")} ({h.poidsVenteKg} kg) : <b>{fmtM(h.prixEntierParKg * h.poidsVenteKg)}</b>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const SimulatorScreen = ({ lang, speciesFilter }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [h, setH] = React.useState(DEFAULTS);
@@ -505,14 +655,29 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   return (
     <div id="simulator-report" style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
       <style>{`
+        #sim-report-print { display: none; }
         @media print {
           body * { visibility: hidden !important; }
-          #simulator-report, #simulator-report * { visibility: visible !important; }
-          #simulator-report { position: absolute; left: 0; top: 0; width: 100%; max-width: none; height: auto; overflow: visible; padding: 0; }
-          #simulator-report .no-print { display: none !important; }
-          #simulator-report .card { break-inside: avoid; box-shadow: none; }
+          #sim-report-print, #sim-report-print * { visibility: visible !important; }
+          #sim-report-print {
+            display: block !important; position: absolute; left: 0; top: 0;
+            width: 100%; padding: 16px; color: #111; font-size: 12px;
+          }
+          #sim-report-print .rep-block { break-inside: avoid; }
+          #sim-report-print table { width: 100%; border-collapse: collapse; }
+          #sim-report-print th, #sim-report-print td { border: 1px solid #ccc; padding: 5px 8px; }
+          @page { margin: 14mm; }
         }
       `}</style>
+
+      {/* Vue RAPPORT : invisible a l'ecran, seule chose imprimee (mise en page document) */}
+      <ReportView
+        L={L} rows={rows} h={h} strategy={strategy}
+        females={females} males={males} cohortes={cohortes}
+        saisieCode={saisieCode} fmtM={fmtM}
+        rev={rev} cout={cout} marge={marge} cumulBenef={cumulBenef}
+        debutP={debutP} finP={finP} granu={h.granularite}
+      />
       {/* Devise : reglage global, en haut. Aucune devise imposee tant que non choisie. */}
       <div className="card" style={{ ...card, ...(saisieChoisie ? {} : { borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }) }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
