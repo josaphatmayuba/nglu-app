@@ -27,7 +27,8 @@ const DEFAULTS = {
   ageVenteMois: 7,
   poidsVenteKg: 95,
   plafondTruiesP2: 150,
-  anneeDebut: 2026,
+  anneeDebut: new Date().getFullYear(),
+  moisDebut: new Date().getMonth() + 1, // 1-12 ; defaut = mois courant (on demarre maintenant)
   horizonAns: 5,
   granularite: "annee",   // "annee" | "trimestre"
   // couts : valeurs de depart indicatives, EXPRIMEES dans la devise des donnees du
@@ -141,30 +142,41 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
     }
   }
 
-  // Agregation par periode (annee ou trimestre)
+  // Agregation par periode (annee ou trimestre), ALIGNEE sur le calendrier civil.
+  // mois 0 = (anneeDebut, moisDebut). On demarre au mois choisi : la 1re periode
+  // peut etre PARTIELLE (ex: demarrage en juin -> 1er trimestre = juin-sept partiel),
+  // puis les periodes suivantes sont pleines et calees sur janv/avr/juil/oct.
   const granu = h.granularite === "trimestre" ? "trimestre" : "annee";
-  const moisParPeriode = granu === "trimestre" ? 3 : 12;
+  const tailleP = granu === "trimestre" ? 3 : 12; // mois par periode civile pleine
+  const moisDebut0 = Math.min(11, Math.max(0, (h.moisDebut || 1) - 1)); // 0-11
+  const civAbs0 = debut * 12 + moisDebut0; // mois civil absolu du depart (mois 0)
   const periodes = [];
   let vivants = parcInit; // stock d'animaux vivants, cumule mois par mois
-  for (let p0 = 0; p0 <= HORIZON; p0 += moisParPeriode) {
+  let p0 = 0;
+  while (p0 <= HORIZON) {
+    const civAbs = civAbs0 + p0;          // mois civil absolu du 1er mois de la periode
+    const anneeP = Math.floor(civAbs / 12);
+    const moisCiv = civAbs % 12;          // 0-11
+    // fin de la periode civile courante (frontiere trimestre/annee)
+    const borneCiv = granu === "trimestre" ? (Math.floor(moisCiv / 3) + 1) * 3 : 12;
+    const finP = p0 + (borneCiv - moisCiv); // 1er mois de la periode suivante (exclu)
     const agg = { mb: 0, nes: 0, vendus: 0, truies: 0, morts: 0, vendusM: 0, vendusF: 0 };
-    for (let m = p0; m < p0 + moisParPeriode && m <= HORIZON; m++) {
+    let nbMois = 0;
+    for (let m = p0; m < finP && m <= HORIZON; m++) {
       for (const k in agg) agg[k] += moisData[m][k];
-      // total vivant = entrees (nes vivants) - sorties (vendus) ; morts deja exclus des nes
       vivants += moisData[m].nes - moisData[m].vendus;
+      nbMois++;
     }
     agg.vivants = Math.round(Math.max(0, vivants));
-    const anneeP = debut + Math.floor(p0 / 12);
-    const moisDansAnnee = p0 % 12;
-    const t = Math.floor(moisDansAnnee / 3) + 1;
+    const t = Math.floor(moisCiv / 3); // index trimestre civil 0-3
     const label = granu === "trimestre"
-      ? `T${t} ${anneeP} (${MOIS_T[moisDansAnnee]}–${MOIS_T_FIN[moisDansAnnee]})`
+      ? `T${t + 1} ${anneeP} (${MOIS_T[t * 3]}–${MOIS_T_FIN[t * 3]})`
       : String(anneeP);
-    // label court pour le graphe (axe X) : "T1 27 (avr)"
     const labelCourt = granu === "trimestre"
-      ? `T${t} ${String(anneeP).slice(2)} (${MOIS_T[moisDansAnnee]})`
+      ? `T${t + 1} ${String(anneeP).slice(2)} (${MOIS_T[t * 3]})`
       : String(anneeP);
-    periodes.push({ label, labelCourt, annee: anneeP, agg, moisParPeriode: Math.min(moisParPeriode, HORIZON - p0 + 1) });
+    periodes.push({ label, labelCourt, annee: anneeP, agg, moisParPeriode: nbMois });
+    p0 = finP;
   }
 
   // Volet financier par periode
@@ -215,9 +227,11 @@ function simulate(strategy, h, cohortesInit, malesActuels, seuilEnBase = 0, coho
 //  - femelles reproductrices (Truie/Cochette) -> cohortes de repro (saillie selon l'age)
 //  - males reproducteurs (Verrat) -> comptes au cheptel mais JAMAIS vendus
 //  - autres males (Engraissement/Porcelet...) -> cohortes a vendre a l'age de vente
-function buildCohortes(animals, speciesFilter, anneeDebut) {
+function buildCohortes(animals, speciesFilter, anneeDebut, moisDebut = 1) {
   const debut = anneeDebut || 2026;
-  const moisAbs = (d) => (d.getFullYear() - debut) * 12 + d.getMonth();
+  // mois 0 = (anneeDebut, moisDebut). naissanceMoisAbs peut etre negatif (animal ne avant le depart).
+  const civ0 = debut * 12 + Math.min(11, Math.max(0, (moisDebut || 1) - 1));
+  const moisAbs = (d) => (d.getFullYear() * 12 + d.getMonth()) - civ0;
   let females = 0, males = 0, verrats = 0;
   const cohortes = [];        // femelles reproductrices, par mois de naissance
   const cohortesMales = [];   // males a vendre (engraissement/porcelets), par mois de naissance
@@ -692,7 +706,7 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const seuilEnBase = Number(h.seuilPrime) || 0;
 
   const { cohortes, cohortesMales, females, males, verrats } = React.useMemo(
-    () => buildCohortes(animals, speciesFilter, h.anneeDebut), [animals, speciesFilter, h.anneeDebut]);
+    () => buildCohortes(animals, speciesFilter, h.anneeDebut, h.moisDebut), [animals, speciesFilter, h.anneeDebut, h.moisDebut]);
 
   const cohortesUse = cohortes.length ? cohortes : [{ naissanceMoisAbs: -1, n: 88 }];
   // males a vendre = lots non-reproducteurs (engraissement/porcelets) vendus a l'age de vente
@@ -707,8 +721,11 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
   const rows = strategy === "P1" ? rowsP1 : rowsP2;
 
   const debutP = h.anneeDebut || 2026;
-  const finP = debutP + Math.max(1, h.horizonAns || 5) - 1;
-  const periodeRange = `${debutP}-${finP}`;
+  const moisD0 = Math.min(11, Math.max(0, (h.moisDebut || 1) - 1));
+  const nbMoisTot = Math.max(1, h.horizonAns || 5) * 12;
+  const finCivAbs = debutP * 12 + moisD0 + nbMoisTot - 1; // dernier mois civil inclus
+  const finP = Math.floor(finCivAbs / 12);
+  const periodeRange = debutP === finP ? `${debutP}` : `${debutP}-${finP}`;
   const rev = revenuParPorc(h);
   const cout = coutParPorc(h);
   const marge = rev - cout;
@@ -859,6 +876,16 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
       {/* Periode : annee de depart, horizon, granularite */}
       <div className="card" style={{ ...card, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end" }}>
         <NumInput label={L("Annee de depart", "Start year")} value={h.anneeDebut} onChange={set("anneeDebut")} />
+        <div>
+          <div style={upper}>{L("Mois de depart", "Start month")}</div>
+          <select className="input" value={h.moisDebut || 1} style={{ height: 32, minWidth: 120 }}
+            onChange={(e) => set("moisDebut")(Number(e.target.value))}>
+            {[L("janvier", "January"), L("fevrier", "February"), L("mars", "March"), L("avril", "April"),
+              L("mai", "May"), L("juin", "June"), L("juillet", "July"), L("aout", "August"),
+              L("septembre", "September"), L("octobre", "October"), L("novembre", "November"), L("decembre", "December")]
+              .map((nom, i) => <option key={i + 1} value={i + 1}>{nom}</option>)}
+          </select>
+        </div>
         <NumInput label={L("Horizon", "Horizon")} value={h.horizonAns} onChange={set("horizonAns")} suffix={L("ans", "yrs")} />
         <div>
           <div style={upper}>{L("Granularite", "Granularity")}</div>
@@ -870,8 +897,8 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
           </div>
         </div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", maxWidth: 240 }}>
-          {L(`Projection ${h.anneeDebut} → ${h.anneeDebut + Math.max(1, h.horizonAns) - 1}`,
-             `Projection ${h.anneeDebut} → ${h.anneeDebut + Math.max(1, h.horizonAns) - 1}`)}
+          {L(`Projection ${rows[0]?.label || debutP} → ${rows[rows.length - 1]?.label || finP}`,
+             `Projection ${rows[0]?.label || debutP} → ${rows[rows.length - 1]?.label || finP}`)}
         </div>
       </div>
 
