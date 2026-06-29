@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.124.12)
+- **Domus - placeholders de contrats insérables depuis la modale modèle**. Ajout d'une palette de placeholders groupés (bailleur, preneur, logement, dates, montants) dans la modale d'édition des modèles de contrat : un clic insère le placeholder exact au curseur dans le contenu. Les exemples visibles utilisent désormais les noms réellement pris en charge par le backend (`[MONTANT DU LOYER]`, `[NOM COMPLET DU PRENEUR]`, etc.) au lieu des anciens raccourcis non reconnus. **Vérifié** : `npm.cmd run build` domus-app OK. [SCRUM]
+
 ### Fixed (3.124.11)
 - **Domus - generation de lien locataire sans reouverture de modale**. La creation d'un lien d'inscription ne declenche plus le reload complet de l'ecran Locataires pendant que la modale est ouverte. La modale reste sur l'etat `Lien genere`, puis la liste est rafraichie seulement a la fermeture, ce qui evite le retour automatique au formulaire vide apres clic sur `Generer le lien`. **Verifie** : reproduction prod avec compte demo, dossier test supprime ; test local mock API OK ; `npm.cmd run build` domus-app OK. [SCRUM]
 

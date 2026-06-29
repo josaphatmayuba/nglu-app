@@ -1,5 +1,5 @@
 // SCRUM-247 — Contrats & signature (liste, détail, envoi, modèles).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarX, Check, Clock, Copy, Eye, FileCheck2, FilePen, FilePlus, Files, History,
   Printer, Search, Send, ShieldCheck, X, FileCheck,
@@ -517,7 +517,7 @@ export function Contrats() {
             ))}
           </div>
           <p className="muted" style={{ fontSize: 11, marginTop: 12, marginBottom: 0 }}>
-            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM DU LOCATAIRE], [ADRESSE], [LOYER], etc.
+            Placeholders disponibles : [NOM COMPLET DU BAILLEUR], [NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER], etc.
           </p>
         </aside>
       </div>
@@ -581,11 +581,87 @@ const TEMPLATE_TYPE_OPTIONS = [
   ["short_term", "Bail court terme / saisonnier"],
 ];
 
+const CONTRACT_PLACEHOLDER_GROUPS = [
+  {
+    label: "Bailleur",
+    items: [
+      "NOM COMPLET DU BAILLEUR",
+      "ADRESSE DU BAILLEUR",
+      "TÉLÉPHONE DU BAILLEUR",
+      "EMAIL DU BAILLEUR",
+    ],
+  },
+  {
+    label: "Preneur",
+    items: [
+      "NOM COMPLET DU PRENEUR",
+      "ADRESSE DU PRENEUR",
+      "TÉLÉPHONE DU PRENEUR",
+      "EMAIL DU PRENEUR",
+      "NUMÉRO DE PIÈCE D'IDENTITÉ",
+    ],
+  },
+  {
+    label: "Logement",
+    items: [
+      "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION",
+      "TYPE DE LOGEMENT",
+      "PROPRIÉTÉ",
+      "UNITÉ",
+      "RÉFÉRENCE BAIL",
+      "VILLE",
+    ],
+  },
+  {
+    label: "Dates",
+    items: [
+      "NUMÉRO DE MOIS",
+      "DURÉE DE BAIL EN MOIS",
+      "DATE DE DÉBUT DE BAIL",
+      "DATE DE DÉBUT DE BAIL JJ/MM/AAAA",
+      "DATE DE FIN DE BAIL",
+      "DATE DE FIN DE BAIL JJ/MM/AAAA",
+      "DATE DE SIGNATURE DE BAIL",
+      "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA",
+      "DATE DU JOUR",
+    ],
+  },
+  {
+    label: "Montants",
+    items: [
+      "MONTANT DU LOYER",
+      "MONTANT GARANTIE",
+      "NUMÉRO DE MOIS DE GARANTIE",
+    ],
+  },
+];
+
 function TemplateModal({ value, busy, onClose, onSave }) {
   const [form, setForm] = useState(value);
   const [showPreview, setShowPreview] = useState(false);
+  const textareaRef = useRef(null);
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
   const canSave = form.name.trim() && form.body.trim() && form.type;
+  const insertPlaceholder = (name) => {
+    const token = `[${name}]`;
+    const textarea = textareaRef.current;
+    setShowPreview(false);
+    setForm((current) => {
+      const body = current.body || "";
+      const start = textarea ? textarea.selectionStart : body.length;
+      const end = textarea ? textarea.selectionEnd : body.length;
+      const insert = textarea ? token : `${body ? "\n" : ""}${token}`;
+      const nextBody = `${body.slice(0, start)}${insert}${body.slice(end)}`;
+      const nextCaret = start + insert.length;
+      requestAnimationFrame(() => {
+        const nextTextarea = textareaRef.current;
+        if (!nextTextarea) return;
+        nextTextarea.focus();
+        nextTextarea.setSelectionRange(nextCaret, nextCaret);
+      });
+      return { ...current, body: nextBody };
+    });
+  };
   const previewHtml = hasHtmlMarkup(form.body)
     ? form.body
     : `<pre class="domus-contract-plain">${escapeHtml(form.body || "")}</pre>`;
@@ -598,7 +674,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
             <span className="domus-modal-title-icon"><FilePen size={20} /></span>
             <div>
               <h2>{form.id ? "Modifier le modèle" : "Nouveau modèle"}</h2>
-              <p>Contenu du contrat avec placeholders (ex. [LOYER])</p>
+              <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER])</p>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
@@ -626,14 +702,34 @@ function TemplateModal({ value, busy, onClose, onSave }) {
               <Eye size={14} /> {showPreview ? "Éditer" : "Aperçu"}
             </button>
           </div>
+          <div className="domus-placeholder-panel" aria-label="Placeholders disponibles">
+            {CONTRACT_PLACEHOLDER_GROUPS.map((group) => (
+              <div className="domus-placeholder-group" key={group.label}>
+                <div className="domus-placeholder-label">{group.label}</div>
+                <div className="domus-placeholder-list">
+                  {group.items.map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => insertPlaceholder(item)}
+                      title={`Insérer [${item}]`}
+                    >
+                      [{item}]
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
           {showPreview ? (
             <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
           ) : (
             <textarea
+              ref={textareaRef}
               className="domus-template-body"
               value={form.body}
               onChange={(e) => set({ body: e.target.value })}
-              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM DU LOCATAIRE], [ADRESSE], [LOYER]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
+              placeholder={"CONTRAT DE BAIL\nARTICLE 1 : ...\n[NOM COMPLET DU PRENEUR], [ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION], [MONTANT DU LOYER]...\n\nHTML possible : <h2>Titre</h2> <b>gras</b> <ul><li>...</li></ul>"}
             />
           )}
           <label className="domus-template-active">
