@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.122.5)
+- **FarmOS — Simulateur : sélecteur de devise unique, en haut de la page**. Le choix de devise quittait la carte « Coûts » (où il était peu visible et dupliquait l'info) pour une **carte dédiée en haut** de la page, comme réglage global. Tant qu'aucune devise n'est choisie, cette carte est mise en évidence (bordure d'alerte) et invite à choisir ; une fois choisie, elle rappelle la devise active. Les sélecteurs/textes redondants sur les cartes Coûts et Prix sont retirés. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
+
 ### Changed (3.122.4)
 - **FarmOS — Simulateur : aucune devise présélectionnée, une seule devise au choix de l'utilisateur**. Au démarrage, **aucune devise n'est affichée** (ni USD ni CDF) : les champs coûts/prix n'ont pas de suffixe et un bandeau invite à choisir sa devise. L'utilisateur sélectionne **sa** devise (menu « Devise » sur la carte Coûts) ; tous les montants (saisie ET résultats : tableau, graphe, synthèse) s'étiquettent alors dans cette devise. Choisir une devise **n'effectue aucune conversion** — les chiffres de départ indicatifs restent identiques, simplement étiquetés. Suppression de tout le mécanisme de conversion d'affichage devenu inutile (case « Convertir », sélecteur de devise d'affichage séparé, taux compta/web/manuel, devise du seuil de prime) et du code mort associé (`fetchTauxWeb`, `resolveTaux`, états de taux, lecture du setting système). Plus aucune devise n'est dérivée du paramètre système. **Vérifié** : `vite build` farmos-app OK. [SCRUM]
 

@@ -504,15 +504,26 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
   return (
     <div style={{ padding: "var(--pad-page)", overflow: "auto", height: "100%", maxWidth: 1100 }}>
-      {!saisieChoisie && (
-        <div className="card" style={{ ...card, borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }}>
-          <div style={{ fontSize: 13 }}>
-            <b>{L("Choisissez votre devise pour commencer", "Choose your currency to start")}</b><br />
-            {L("Aucune devise n'est imposée. Sélectionnez la vôtre dans la carte « Coûts » ci-dessous : les montants affichés sont alors exprimés dans cette devise. Les chiffres de départ sont indicatifs — ajustez-les ou importez vos données réelles.",
-               "No currency is imposed. Pick yours in the \"Costs\" card below: displayed amounts are then expressed in that currency. Starting figures are indicative — adjust them or import your real data.")}
+      {/* Devise : reglage global, en haut. Aucune devise imposee tant que non choisie. */}
+      <div className="card" style={{ ...card, ...(saisieChoisie ? {} : { borderLeft: "3px solid var(--warning, #d97706)", background: "var(--warning-bg, #fffbeb)" }) }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+            <b>{L("Devise", "Currency")}</b>
+            <select className="input" value={saisieCurrencyId ?? ""} style={{ height: 32, minWidth: 150 }}
+              onChange={(e) => setSaisieCurrencyId(e.target.value ? Number(e.target.value) : null)}>
+              <option value="">{L("— Choisir —", "— Choose —")}</option>
+              {curOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <div style={{ fontSize: 11, color: "var(--fg-3)", flex: 1, minWidth: 220 }}>
+            {saisieChoisie
+              ? L(`Tous les montants sont exprimés en ${saisieCode}. Les chiffres de départ sont indicatifs — ajustez-les ou importez vos données réelles.`,
+                  `All amounts are expressed in ${saisieCode}. Starting figures are indicative — adjust them or import your real data.`)
+              : L("Choisissez d'abord votre devise : aucune n'est imposée. Tous les montants seront alors exprimés dans cette devise.",
+                  "Choose your currency first: none is imposed. All amounts will then be expressed in that currency.")}
           </div>
         </div>
-      )}
+      </div>
       {/* En-tete + cheptel detecte */}
       <div className="card" style={card}>
         <div style={upper}>{L("Cheptel de depart (detecte)", "Starting herd (detected)")}</div>
@@ -633,23 +644,10 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
 
       {/* Couts : editables, et remplis par "Importer mes donnees reelles" (calibrate) */}
       <div className="card" style={card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--fg-3)" }}>
-            {L("Devise", "Currency")}
-            <select className="input" value={saisieCurrencyId ?? ""} style={{ height: 30, fontSize: 12 }}
-              onChange={(e) => setSaisieCurrencyId(e.target.value ? Number(e.target.value) : null)}>
-              <option value="">{L("— Choisir —", "— Choose —")}</option>
-              {curOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </label>
-        </div>
+        <div style={upper}>{L("Coûts (modifiable)", "Costs (editable)")}</div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
-          {saisieChoisie
-            ? L(`Montants en ${saisieCode}. Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.`,
-                `Amounts in ${saisieCode}. The "Import my real data" button fills these from your expenses.`)
-            : L("Choisissez d'abord votre devise. Les montants sont indicatifs : ajustez-les à votre réalité ou importez vos données.",
-                "Choose your currency first. Amounts are indicative: adjust them to your reality or import your data.")}
+          {L("Le bouton « Importer mes données réelles » remplit ces champs depuis vos dépenses.",
+             "The \"Import my real data\" button fills these from your expenses.")}
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
           <NumInput label={L("Aliment / porc", "Feed / pig")} value={h.alimentEngraissementParPorc} onChange={set("alimentEngraissementParPorc")} suffix={saisieCode} />
@@ -671,10 +669,10 @@ const SimulatorScreen = ({ lang, speciesFilter }) => {
         </div>
         <div style={{ fontSize: 11, color: "var(--fg-3)", marginBottom: 10 }}>
           {saisieChoisie
-            ? L(`Prix en ${saisieCode} (devise choisie dans la carte Coûts). Le mode de vente actif détermine le revenu utilisé.`,
-                `Prices in ${saisieCode} (currency chosen in the Costs card). The active sale mode sets the revenue used.`)
-            : L("Choisissez votre devise dans la carte Coûts ci-dessus. Le mode de vente actif détermine le revenu utilisé.",
-                "Choose your currency in the Costs card above. The active sale mode sets the revenue used.")}
+            ? L(`Prix en ${saisieCode}. Le mode de vente actif détermine le revenu utilisé.`,
+                `Prices in ${saisieCode}. The active sale mode sets the revenue used.`)
+            : L("Choisissez votre devise en haut de la page. Le mode de vente actif détermine le revenu utilisé.",
+                "Choose your currency at the top of the page. The active sale mode sets the revenue used.")}
         </div>
 
         {/* Tableau decoupe */}
