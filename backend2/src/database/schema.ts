@@ -993,6 +993,20 @@ export const realEstatePropertyAssignments = mysqlTable("real_estate_property_as
   updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
 });
 
+// Affectation utilisateur <-> chantier BatiPro (RBAC par chantier, Phase 2).
+// Meme principe que farmos_species_assignments / real_estate_property_assignments :
+// n importe quel user peut etre limite a 1..N chantiers, independamment du role
+// et du poste. project_id -> batipro_projects. Soft-delete via is_active.
+export const batiproProjectAssignments = mysqlTable("batipro_project_assignments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  projectId: bigint("project_id", { mode: "number" }).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Put, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { CurrentBatiproProject, type BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { Permissions } from "../auth/decorators/permissions.decorator";
+import { BatiproProjectGuard } from "../auth/guards/batipro-project.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import {
@@ -18,7 +20,7 @@ import { BatiproService } from "./batipro.service";
 
 @ApiTags("batipro")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, BatiproProjectGuard)
 @Controller("batipro")
 export class BatiproController {
   constructor(private readonly batipro: BatiproService) {}
@@ -26,15 +28,40 @@ export class BatiproController {
   @ApiOperation({ summary: "BatiPro dashboard snapshot" })
   @Permissions("readAll-batipro")
   @Get("dashboard")
-  dashboard(@CurrentOrg() orgId: number) {
-    return this.batipro.dashboard(orgId);
+  dashboard(@CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.dashboard(orgId, scope);
   }
 
   @ApiOperation({ summary: "List BatiPro projects" })
   @Permissions("readAll-batipro")
   @Get("projects")
-  projects(@CurrentOrg() orgId: number) {
-    return this.batipro.projects(orgId);
+  projects(@CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.projects(orgId, scope);
+  }
+
+  @ApiOperation({ summary: "All project assignments of the org (map userId -> projectId[])" })
+  @Permissions("readAll-batipro")
+  @Get("project-assignments")
+  listAllProjectAssignments(@CurrentOrg() orgId: number) {
+    return this.batipro.listAllProjectAssignments(orgId);
+  }
+
+  @ApiOperation({ summary: "List projects assigned to a user (RBAC par chantier)" })
+  @Permissions("readAll-batipro")
+  @Get("project-assignments/:userId")
+  listProjectAssignments(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
+    return this.batipro.listProjectAssignments(userId, orgId);
+  }
+
+  @ApiOperation({ summary: "Set projects assigned to a user (set complet, RBAC par chantier)" })
+  @Permissions("update-batipro")
+  @Post("project-assignments/:userId")
+  setProjectAssignments(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: { projectIds: number[] },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.batipro.setProjectAssignments(userId, Array.isArray(body?.projectIds) ? body.projectIds : [], orgId);
   }
 
   @ApiOperation({ summary: "Create BatiPro project" })
@@ -61,8 +88,8 @@ export class BatiproController {
   @ApiOperation({ summary: "List BatiPro tasks" })
   @Permissions("readAll-batipro")
   @Get("tasks")
-  tasks(@CurrentOrg() orgId: number) {
-    return this.batipro.tasks(orgId);
+  tasks(@CurrentOrg() orgId: number, @CurrentBatiproProject() scope: BatiproProjectScope) {
+    return this.batipro.tasks(orgId, scope);
   }
 
   @ApiOperation({ summary: "Create BatiPro task" })

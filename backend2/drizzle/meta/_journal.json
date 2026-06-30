@@ -1156,6 +1156,13 @@
                         "when":  1780606800000,
                         "tag":  "0189_roles_per_organization",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  165,
+                        "version":  "5",
+                        "when":  1780610400000,
+                        "tag":  "0190_batipro_project_assignments",
+                        "breakpoints":  true
                     }
                 ]
 }

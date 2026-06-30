@@ -1,7 +1,8 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { DRIZZLE } from "../database/database.constants";
-import { batiproCrews, batiproMaterials, batiproProjects, batiproTasks } from "../database/schema";
+import type { BatiproProjectScope } from "../auth/decorators/batipro-project-scope.decorator";
+import { batiproCrews, batiproMaterials, batiproProjectAssignments, batiproProjects, batiproTasks } from "../database/schema";
 import type { Database } from "../database/types";
 import { RealtimeDataPublisher } from "../realtime/realtime-data-publisher.service";
 import type {
@@ -22,10 +23,26 @@ export class BatiproService {
     private readonly realtime: RealtimeDataPublisher,
   ) {}
 
-  async dashboard(orgId: number) {
+  // ── Helpers RBAC par chantier (BatiPro, Phase 2) ─────────────────────────
+  // Filtre DIRECT sur l id du chantier (table batipro_projects). "all" => pas de
+  // filtre ; liste vide => aucun resultat.
+  private projectDirectFilter(column: any, scope: BatiproProjectScope) {
+    if (scope === "all") return undefined;
+    return scope.length ? inArray(column, scope) : sql`1 = 0`;
+  }
+
+  // Filtre VIA une colonne project_id (taches : project_id direct). Les lignes
+  // sans project_id restent visibles (fail-open).
+  private projectViaColumnFilter(projectIdColumn: any, scope: BatiproProjectScope) {
+    if (scope === "all") return undefined;
+    if (!scope.length) return sql`1 = 0`;
+    return inArray(projectIdColumn, scope);
+  }
+
+  async dashboard(orgId: number, projectScope: BatiproProjectScope = "all") {
     const [projects, tasks, materials, crews] = await Promise.all([
-      this.projects(orgId),
-      this.tasks(orgId),
+      this.projects(orgId, projectScope),
+      this.tasks(orgId, projectScope),
       this.materials(orgId),
       this.crews(orgId),
     ]);
@@ -49,11 +66,12 @@ export class BatiproService {
     };
   }
 
-  projects(orgId: number) {
+  projects(orgId: number, projectScope: BatiproProjectScope = "all") {
+    const scopeFilter = this.projectDirectFilter(batiproProjects.id, projectScope);
     return this.db
       .select()
       .from(batiproProjects)
-      .where(and(eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1)))
+      .where(and(eq(batiproProjects.organizationId, orgId), eq(batiproProjects.isActive, 1), scopeFilter))
       .orderBy(desc(batiproProjects.id));
   }
 
@@ -123,11 +141,12 @@ export class BatiproService {
     return { message: "Chantier supprime." };
   }
 
-  tasks(orgId: number) {
+  tasks(orgId: number, projectScope: BatiproProjectScope = "all") {
+    const scopeFilter = this.projectViaColumnFilter(batiproTasks.projectId, projectScope);
     return this.db
       .select()
       .from(batiproTasks)
-      .where(and(eq(batiproTasks.organizationId, orgId), eq(batiproTasks.isActive, 1)))
+      .where(and(eq(batiproTasks.organizationId, orgId), eq(batiproTasks.isActive, 1), scopeFilter))
       .orderBy(desc(batiproTasks.taskDate), desc(batiproTasks.id));
   }
 
@@ -285,6 +304,57 @@ export class BatiproService {
     await this.db.update(batiproCrews).set({ isActive: 0 }).where(and(eq(batiproCrews.id, id), eq(batiproCrews.organizationId, orgId)));
     await this.publish("deleteCrew", ["crews"], "deleted", id, orgId);
     return { message: "Equipe supprimee." };
+  }
+
+  // ── Affectations chantier <-> utilisateur (RBAC par chantier, Phase 2) ────
+  async listAllProjectAssignments(orgId: number) {
+    const rows = await this.db
+      .select({ userId: batiproProjectAssignments.userId, projectId: batiproProjectAssignments.projectId })
+      .from(batiproProjectAssignments)
+      .where(and(eq(batiproProjectAssignments.organizationId, orgId), eq(batiproProjectAssignments.isActive, 1)));
+    const byUser: Record<number, number[]> = {};
+    for (const r of rows) (byUser[r.userId] ??= []).push(r.projectId);
+    return byUser;
+  }
+
+  async listProjectAssignments(userId: number, orgId: number) {
+    return this.db
+      .select({ id: batiproProjectAssignments.id, projectId: batiproProjectAssignments.projectId })
+      .from(batiproProjectAssignments)
+      .where(and(
+        eq(batiproProjectAssignments.userId, userId),
+        eq(batiproProjectAssignments.organizationId, orgId),
+        eq(batiproProjectAssignments.isActive, 1),
+      ));
+  }
+
+  // Remplace l ensemble des chantiers d un user (set complet). Soft-delete des
+  // retires, reactivation/insert des nouveaux (idempotent).
+  async setProjectAssignments(userId: number, projectIds: number[], orgId: number) {
+    const wanted = Array.from(new Set(projectIds.filter((id) => Number.isInteger(id) && id > 0)));
+
+    const existing = await this.db
+      .select({ id: batiproProjectAssignments.id, projectId: batiproProjectAssignments.projectId, isActive: batiproProjectAssignments.isActive })
+      .from(batiproProjectAssignments)
+      .where(and(eq(batiproProjectAssignments.userId, userId), eq(batiproProjectAssignments.organizationId, orgId)));
+    const byProject = new Map(existing.map((row) => [row.projectId, row]));
+
+    for (const row of existing) {
+      if (row.isActive === 1 && !wanted.includes(row.projectId)) {
+        await this.db.update(batiproProjectAssignments).set({ isActive: 0 }).where(eq(batiproProjectAssignments.id, row.id));
+      }
+    }
+    for (const pid of wanted) {
+      const row = byProject.get(pid);
+      if (row) {
+        if (row.isActive !== 1) {
+          await this.db.update(batiproProjectAssignments).set({ isActive: 1 }).where(eq(batiproProjectAssignments.id, row.id));
+        }
+      } else {
+        await this.db.insert(batiproProjectAssignments).values({ userId, projectId: pid, organizationId: orgId, isActive: 1 });
+      }
+    }
+    return this.listProjectAssignments(userId, orgId);
   }
 
   private async publish(kind: string, tables: string[], action: "created" | "updated" | "deleted", entityId: number | string, orgId: number) {
