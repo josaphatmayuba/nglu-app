@@ -410,7 +410,7 @@ export class FarmosService {
       departmentId: dept.id,
       organizationId: orgId,
       status: "true",
-    } as any, {});
+    } as any, orgId, {});
 
     await this.publishFarmosUpdate("createFarmosStaff", ["staff"], "created", created?.id ?? input.email, orgId);
     return { user: created, generatedPassword: input.password ? null : generatedPassword };
