@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.23)
+- **`/sub-accounts` protégé par `JwtAuthGuard` (isolation multi-organisation)**. Le contrôleur utilisait `@CurrentOrg` sans aucun guard d'authentification : `request.user` n'étant jamais peuplé, l'organisation retombait toujours sur l'org 1 — toute organisation lisait les sous-comptes de l'org 1 au lieu des siens. Ajout de `@UseGuards(JwtAuthGuard)`. `backend2/src/sub-accounts/sub-accounts.controller.ts`.
+- **`@CurrentOrg` en « fail closed »**. Le décorateur retombait silencieusement sur l'organisation 1 quand `request.user.organizationId` était absent, ce qui masquait toute route mal protégée et exposait l'organisation la plus sensible. Il lève désormais une erreur si le contexte d'organisation manque. `backend2/src/auth/decorators/current-org.decorator.ts`.
+
 ### Security (3.124.22)
 - **Isolation multi-organisation des contrats de bail et de leurs modèles (Domus)**. Les routes `/property-management/contracts*` (`listContracts`/`getContract`/`sendContract`/`deleteContract`/`renewLease`) et `/property-management/contract-templates*` (CRUD complet) filtrent désormais par `organizationId` via `@CurrentOrg`, et tamponnent l'`organizationId` à la création (contrats, baux renouvelés, journaux d'audit, modèles). Auparavant aucune de ces requêtes ne filtrait par organisation : un gestionnaire d'une organisation pouvait lister/lire/envoyer/supprimer les contrats (avec PII locataire : nom, email, téléphone) et les modèles d'une autre organisation. Latent en mono-org, exploitable dès la 2e organisation. Les surfaces publiques de signature par token (`/contracts/sign/:token`) dérivent l'organisation du contrat trouvé et restent sans auth. `backend2/src/property-management/contracts.service.ts`, `contract-templates.service.ts`, `property-management.controller.ts`, `contract-templates.controller.ts`.
 
