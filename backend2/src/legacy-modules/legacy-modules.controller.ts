@@ -15,6 +15,12 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { LegacyDto } from "./dto/legacy.dto";
 import { LegacyModulesService } from "./legacy-modules.service";
 
+const PUBLIC_LEGACY_RESOURCES = new Set(["slider-images"]);
+
+function PublicListGuard(path: string): MethodDecorator {
+  return PUBLIC_LEGACY_RESOURCES.has(path) ? () => undefined : UseGuards(JwtAuthGuard);
+}
+
 function controllerFor(path: string, tag = path) {
   @ApiTags(tag)
   @ApiBearerAuth()
@@ -29,6 +35,7 @@ function controllerFor(path: string, tag = path) {
     }
 
     @Get("public")
+    @PublicListGuard(path)
     publicList(@Query() query: Record<string, string>) {
       return this.service.list(path, { ...query, query: query.query ?? "all" });
     }

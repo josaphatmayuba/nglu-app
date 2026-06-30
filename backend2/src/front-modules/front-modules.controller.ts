@@ -25,6 +25,12 @@ import {
 } from "./dto/front-modules.dto";
 import { FrontModulesService } from "./front-modules.service";
 
+const PUBLIC_FRONT_RESOURCES = new Set(["product-color"]);
+
+function PublicListGuard(path: string): MethodDecorator {
+  return PUBLIC_FRONT_RESOURCES.has(path) ? () => undefined : UseGuards(JwtAuthGuard);
+}
+
 function crudController(path: string, tag: string, dto: any) {
   @ApiTags(tag)
   @ApiBearerAuth()
@@ -39,6 +45,7 @@ function crudController(path: string, tag: string, dto: any) {
     }
 
     @Get("public")
+    @PublicListGuard(path)
     publicList(@Query() query: Record<string, string>) {
       return this.service.list(path, { ...query, query: "all" });
     }

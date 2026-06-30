@@ -1,11 +1,14 @@
-import { Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Query } from "@nestjs/common";
-import { ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { Controller, DefaultValuePipe, Get, Param, ParseIntPipe, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiQuery, ApiTags } from "@nestjs/swagger";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { MigrationService } from "./migration.service";
 
 // Migration Cockpit — API LECTURE SEULE pour piloter/contrôler la migration
 // legacy PostgreSQL -> Drizzle/MySQL. Servie sous /api/migration/* (whitelist
 // middleware requise). Le RUN reste manuel (Python).
 @ApiTags("migration")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller("migration")
 export class MigrationController {
   constructor(private readonly migrationService: MigrationService) {}
