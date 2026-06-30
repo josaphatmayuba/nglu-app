@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.134.1)
+- **FarmOS - selecteur de fermes plus lisible**. Remplacement des cartes horizontales tronquees de l'ecran Batiments par une grille responsive de boutons stables : icone, badge, localisation ellipsee, compteurs batiments/animaux separes et etat actif plus net. **Verifie** : `npm.cmd run build` FarmOS OK. `farmos-app/src/screens.jsx`.
+
 ### Added (3.134.0)
 - **FarmOS — étiquette QR + scan d'un box (identification physique)**. Chaque box peut recevoir une **étiquette QR** à coller devant lui : le QR encode `FARMOS-BOX-<id>` et, scanné, ouvre la **fiche du box** (Box · Bâtiment · Zone · Ferme + occupation + animaux). **Réutilise le scanner existant** (écran *Identification*, lib zxing — aucun nouveau scanner) : quand le code lu est un `FARMOS-BOX-<id>`, l'écran Identification émet `farmos:open-box` et bascule sur *Bâtiments*, qui résout le contexte via le nouvel endpoint et ouvre le plan avec le box pré-sélectionné. **Génération QR** via `qrcode` (déjà installé, même lib que les étiquettes animaux) : bouton **« Étiquette »** dans l'en-tête du box (aperçu + tailles 30/50/80 mm + impression + PNG) et bouton **« Étiquettes »** sur le plan du bâtiment pour imprimer **toute la planche** d'un coup. Bouton **« Scanner un box »** sur l'écran Bâtiments qui renvoie vers l'écran Identification. Nouvel endpoint d'agrégation `GET /farmos/boxes/:id/context` → `{ box, building, zone, farm, animals, heads }` (service `getBoxContext`, chaînage box→bâtiment→zone→ferme). Aucune nouvelle dépendance npm. `backend2/src/farmos/farmos.controller.ts`, `farmos.service.ts`, `farmos-app/src/api.js`, `farmos-app/src/screens.jsx`, `farmos-app/src/identification.jsx`.
 

@@ -7383,26 +7383,74 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
         </div>
       </div>
 
-      {/* Sélecteur de ferme (Mes fermes) — scroll horizontal sur mobile */}
+      {/* Sélecteur de ferme (Mes fermes) */}
       {farms.length > 0 && (
-        <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 8,
+          alignItems: "stretch",
+        }}>
           {[{ id: null, name: lang === "fr" ? "Toutes les fermes" : "All farms", all: true }, ...farms].map((f) => {
             const active = farmId === (f.all ? null : f.id);
-            const st = f.all ? null : farmStats(f.id);
-            const badge = { active: { fr: "Principale", bg: "var(--forest-50)", fg: "var(--forest-700)" }, ok: { fr: "OK", bg: "var(--autorite-50)", fg: "var(--autorite-700)" }, maintenance: { fr: "Suivi", bg: "var(--oxblood-50)", fg: "var(--oxblood-700)" } }[f.status] || null;
+            const st = f.all
+              ? { buildings: rows.length, animals: rows.reduce((s, b) => s + (b.occupancy ?? 0), 0) }
+              : farmStats(f.id);
+            const badge = { active: { fr: "Principale", en: "Main", bg: "var(--forest-50)", fg: "var(--forest-700)" }, ok: { fr: "OK", en: "OK", bg: "var(--autorite-50)", fg: "var(--autorite-700)" }, maintenance: { fr: "Suivi", en: "Watch", bg: "var(--oxblood-50)", fg: "var(--oxblood-700)" } }[f.status] || null;
+            const meta = f.all
+              ? `${farms.length} ${lang === "fr" ? "fermes" : "farms"}`
+              : [f.location, f.hectares ? `${f.hectares} ha` : null].filter(Boolean).join(" · ");
             return (
-              <button key={f.id ?? "all"} onClick={() => { setFarmId(f.all ? null : f.id); setSelectedId(null); }}
-                className="card" style={{ textAlign: "left", padding: f.all ? "10px 14px" : "12px 14px", minWidth: f.all ? 0 : 180, flexShrink: 0, cursor: "pointer", border: active ? "2px solid var(--forest-700)" : "1px solid var(--border-2)", background: active ? "var(--forest-50)" : "var(--paper)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-900)" }}>{f.name}</span>
-                  {badge && <span style={{ fontSize: 9, fontWeight: 700, color: badge.fg, background: badge.bg, borderRadius: 4, padding: "1px 6px" }}>{badge.fr}</span>}
-                </div>
-                {!f.all && (
-                  <div style={{ fontSize: 10, color: "var(--fg-3)", marginTop: 4 }}>
-                    {[f.location, f.hectares ? `${f.hectares} ha` : null].filter(Boolean).join(" · ")}
-                    {st && <span style={{ marginLeft: 6, color: "var(--fg-2)" }} className="mono">{st.buildings} {lang === "fr" ? "bât." : "bld."} · {st.animals} {lang === "fr" ? "anim." : "ani."}</span>}
+              <button key={f.id ?? "all"} type="button" onClick={() => { setFarmId(f.all ? null : f.id); setSelectedId(null); }}
+                style={{
+                  appearance: "none",
+                  width: "100%",
+                  minWidth: 0,
+                  minHeight: 72,
+                  boxSizing: "border-box",
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  textAlign: "left",
+                  font: "inherit",
+                  color: "inherit",
+                  padding: "11px 12px",
+                  borderRadius: 8,
+                  border: active ? "1px solid var(--forest-700)" : "1px solid var(--border-2)",
+                  background: active ? "var(--forest-50)" : "rgba(255,255,255,0.55)",
+                  boxShadow: active ? "inset 0 0 0 1px var(--forest-700), 0 6px 16px rgba(14,36,24,0.08)" : "0 1px 0 rgba(255,255,255,0.7) inset",
+                  cursor: "pointer",
+                }}>
+                <span style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: active ? "var(--forest-700)" : "var(--bg-sunken)",
+                  border: active ? "1px solid var(--forest-700)" : "1px solid var(--border-1)",
+                }}>
+                  <Icon name={f.all ? "layers" : "barn"} size={15} color={active ? "#FBF8F2" : "var(--forest-700)"}/>
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span title={f.name} style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13.5, lineHeight: 1.2, fontWeight: 800, color: "var(--ink-950)" }}>{f.name}</span>
+                    {badge && <span style={{ flexShrink: 0, fontSize: 9.5, lineHeight: 1, fontWeight: 800, color: badge.fg, background: badge.bg, borderRadius: 5, padding: "4px 6px", border: "1px solid rgba(0,0,0,0.04)" }}>{lang === "fr" ? badge.fr : badge.en}</span>}
                   </div>
-                )}
+                  <div title={meta} style={{ marginTop: 5, minHeight: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11, lineHeight: 1.25, color: "var(--fg-3)" }}>
+                    {meta || (lang === "fr" ? "Sans localisation" : "No location")}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    <span style={{ fontSize: 10.5, lineHeight: 1, fontWeight: 750, color: "var(--fg-2)", background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 6, padding: "4px 6px", fontVariantNumeric: "tabular-nums" }}>
+                      {st.buildings} {lang === "fr" ? "bât." : "bld."}
+                    </span>
+                    <span style={{ fontSize: 10.5, lineHeight: 1, fontWeight: 750, color: "var(--fg-2)", background: "var(--bg-sunken)", border: "1px solid var(--border-1)", borderRadius: 6, padding: "4px 6px", fontVariantNumeric: "tabular-nums" }}>
+                      {st.animals} {lang === "fr" ? "anim." : "ani."}
+                    </span>
+                  </div>
+                </div>
               </button>
             );
           })}
