@@ -10,6 +10,10 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.16)
+- **Clients - detail client sans skeleton infini**. La fiche client recoit maintenant les factures, retours et transactions attendus par l'ecran, et le frontend traite les listes absentes comme des tableaux vides afin d'afficher l'etat vide au lieu d'un chargement permanent.
+- **RH - drawer Profil employe lisible**. Les champs du panneau lateral passent en grille label/valeur avec retour a la ligne pour les emails et identifiants longs, largeur responsive et padding explicite du drawer. **Verifie** : typecheck backend2 OK ; ESLint cible frontend OK. [SCRUM]
+
 ### Security (3.124.15)
 - **Security hardening follow-up**. Removed tracked live env files, blocked weak production secrets, locked Stalwart admin to localhost by default, validated uploaded files by magic bytes, sanitized rich HTML rendering with DOMPurify, replaced `react-quill` with `react-quill-new`, removed `unsafe-inline` from `script-src` in Nginx CSP, and updated vulnerable dependencies where non-breaking. **Verified**: backend2 typecheck/build OK; frontend build:dev OK; domus/chat/journal/farmos builds OK; npm audits OK at moderate/high threshold for verified projects. [SECURITY]
 

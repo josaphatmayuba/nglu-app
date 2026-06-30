@@ -62,9 +62,11 @@ function PlaceholderPanel({ label }) {
 function InfoRow({ label, value }) {
   if (!value) return null;
   return (
-    <div className="flex justify-between py-2 border-b border-ink-100 last:border-0">
-      <span className="text-xs text-ink-500">{label}</span>
-      <span className="text-xs font-medium text-ink-800 text-right max-w-[60%]">{value}</span>
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-3 py-2.5 border-b border-ink-100 last:border-0">
+      <span className="text-xs leading-5 text-ink-500">{label}</span>
+      <span className="min-w-0 break-words text-left text-xs font-medium leading-5 text-ink-800">
+        {value}
+      </span>
     </div>
   );
 }
@@ -80,7 +82,8 @@ function ViewStaffDrawer({ user, onClose }) {
       open={!!user}
       onClose={onClose}
       title="Profil employé"
-      width={400}
+      width="min(460px, 100vw)"
+      bodyStyle={{ padding: 24 }}
     >
       <div className="flex items-center gap-4 mb-6">
         <div
@@ -202,7 +205,7 @@ function CloseAccountModal({ user, onClose, onClosed }) {
   );
 }
 
-function buildTableColumns(onView, onEdit, onClose) {
+function buildTableColumns(onView, onEdit, onClose, currenciesList) {
   return [
     {
       title: "Nom",
@@ -601,7 +604,7 @@ export default function HrPanel() {
               <Table
                 rowKey="id"
                 dataSource={filteredStaff}
-                columns={buildTableColumns(setViewingUser, setEditingUser, setClosingUser)}
+                columns={buildTableColumns(setViewingUser, setEditingUser, setClosingUser, currenciesList)}
                 loading={staffLoading}
                 pagination={{ pageSize: 20 }}
                 size="middle"
