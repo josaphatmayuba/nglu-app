@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Inject, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { and, eq, gt } from "drizzle-orm";
 import { env } from "../../config/env";
@@ -11,6 +11,10 @@ const SUPER_OWNER_ROLE = "super_owner";
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+  // Tracabilite des acces transverses : un super_owner qui agit sur une autre
+  // organisation que la sienne via X-Active-Org est journalise (conformite).
+  private readonly logger = new Logger("SuperOwnerOrgSwitch");
+
   constructor(
     private readonly jwtService: JwtService,
     @Inject(DRIZZLE) private readonly db: Database,
@@ -67,7 +71,13 @@ export class JwtAuthGuard implements CanActivate {
 
   private async assertCurrentAuthContext(
     payload: { sub?: number; roleId?: number; organizationId?: number },
-    request: { headers: Record<string, string | string[] | undefined> },
+    request: {
+      headers: Record<string, string | string[] | undefined>;
+      ip?: string;
+      method?: string;
+      originalUrl?: string;
+      url?: string;
+    },
   ) {
     if (!payload.sub || !payload.roleId) {
       throw new UnauthorizedException("Invalid token payload");
@@ -121,6 +131,22 @@ export class JwtAuthGuard implements CanActivate {
           throw new UnauthorizedException("Organisation active inconnue");
         }
         organizationId = org.id;
+
+        // Acces transverse effectif : on trace qui agit sur quelle organisation.
+        // Best-effort (log applicatif, jamais bloquant), collecte par l infra.
+        const ua = request.headers["user-agent"];
+        this.logger.warn(
+          JSON.stringify({
+            event: "super_owner_org_switch",
+            userId: payload.sub,
+            homeOrg: user.organizationId,
+            activeOrg: organizationId,
+            method: request.method ?? null,
+            path: request.originalUrl ?? request.url ?? null,
+            ip: request.ip ?? null,
+            userAgent: (Array.isArray(ua) ? ua[0] : ua)?.slice(0, 256) ?? null,
+          }),
+        );
       }
     }
 

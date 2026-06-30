@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.24)
+- **Traçabilité des accès transverses super_owner (conformité)**. Quand un `super_owner` agit sur une organisation autre que la sienne via l'en-tête `X-Active-Org`, l'accès est désormais journalisé (event `super_owner_org_switch` : userId, org native, org active, méthode, chemin, IP, user-agent). Log applicatif best-effort dans `JwtAuthGuard`, jamais bloquant. `backend2/src/auth/guards/jwt-auth.guard.ts`.
+
 ### Security (3.124.23)
 - **`/sub-accounts` protégé par `JwtAuthGuard` (isolation multi-organisation)**. Le contrôleur utilisait `@CurrentOrg` sans aucun guard d'authentification : `request.user` n'étant jamais peuplé, l'organisation retombait toujours sur l'org 1 — toute organisation lisait les sous-comptes de l'org 1 au lieu des siens. Ajout de `@UseGuards(JwtAuthGuard)`. `backend2/src/sub-accounts/sub-accounts.controller.ts`.
 - **`@CurrentOrg` en « fail closed »**. Le décorateur retombait silencieusement sur l'organisation 1 quand `request.user.organizationId` était absent, ce qui masquait toute route mal protégée et exposait l'organisation la plus sensible. Il lève désormais une erreur si le contexte d'organisation manque. `backend2/src/auth/decorators/current-org.decorator.ts`.
