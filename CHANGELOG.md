@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.27)
+- **CI : déploiement Avelomi prod (master) réparé — plus de dépendance au clone git**. Les steps `Backend2 / PDF / Middleware → Avelomi` lançaient `docker compose -f docker-compose.prod.yml` en supposant un dépôt cloné sur `/opt/nglu-app`, mais le clone (`avelomi-prod-clone`) échouait silencieusement faute de `REPOSITORY_OAUTH_ACCESS_TOKEN` dans ce contexte : `/opt/nglu-app/backend2` n'existait pas (`scp: No such file`), `git pull` échouait (`could not read Username`) et le compose était absent. Désormais chaque step crée l'arborescence (`mkdir -p` + chown) et scp tout l'artefact nécessaire (dist, package*.json, Dockerfile/Dockerfile.prod, drizzle, `docker-compose.prod.yml`) — même stratégie que Avelomi dev. Anchor `avelomi-prod-clone` mort supprimé. `bitbucket-pipelines.yml`.
+
 ### Fixed (3.124.26)
 - **hr-app — déconnexion**. Le bouton de déconnexion ne quittait pas RH : `clearAuth` vidait le token en mémoire sans dispatcher `hr:auth-changed`, donc `useAuthToken` ne se rafraîchissait pas et l'UI restait sur RH dans un état cassé ; il n'appelait pas non plus `/auth/logout`, laissant le cookie refresh valide côté serveur. `clearAuth` appelle désormais `POST /api/auth/logout` (best-effort), nettoie l'état local et dispatche `hr:auth-changed` pour basculer sur l'écran de connexion. `hr-app/src/auth.jsx`.
 
