@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.125.0)
+- **Gestion des rôles par département (Phase 1)**. L'écran de gestion des permissions (`RolesTab`) reçoit un sélecteur **Département / Portée** au-dessus de la grille : il limite l'affichage aux modules du département choisi (Comptabilité → account/settings/reporting, FarmOS, RH, Domus, BatiPro, Ventes), permettant de gérer simplement « manager compta » vs « manager ferme » sur le même jeu de rôles. Option **« Tous les départements »** (cas Directeur Général / Directeur) qui affiche toute la grille. Filtre 100 % côté front (correspondance département→`permission.type` fixe), **aucune migration** : les cases à cocher, la sauvegarde et l'API restent inchangées ; les permissions cochées hors du filtre courant sont préservées à la sauvegarde. `frontend/src/components/hr/RolesTab.jsx`.
+
 ### Fixed (3.124.28)
 - **hr-app — déconnexion immédiate et non bloquante**. `clearAuth` redevient synchrone : il nettoie l'état local et dispatche `hr:auth-changed` (bascule vers l'écran de connexion) **avant** tout appel réseau, puis envoie `POST /api/auth/logout` en arrière-plan (`keepalive`, best-effort). Évite que l'UI reste sur RH si le logout serveur est lent/échoue. Suite de 3.124.26. `hr-app/src/auth.jsx`.
 
