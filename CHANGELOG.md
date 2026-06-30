@@ -10,6 +10,18 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.20)
+- **Migration `0184_farmos_repro_porcine` (COMP-P2-007) rendue idempotente MySQL 8**. La version précédente utilisait `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, syntaxe non supportée par MySQL 8 → `ER_PARSE_ERROR` au boot, repair opérationnel sauté, colonnes `stillborn_count`/`mummified_count`/`avg_birth_weight`/`birth_difficulty`/`weaned_count`/`weaning_date` jamais créées sur `farmos_reproduction_events`. Réécrite avec le pattern `INFORMATION_SCHEMA` + `PREPARE/EXECUTE` (1 statement par `--> statement-breakpoint`). Colonnes ajoutées à la main sur la DB prod (hors cycle journal). [FARMOS]
+
+### Security (3.124.19)
+- **Redis password (prod + Avelomi)**. Redis now runs with `--requirepass ${REDIS_PASSWORD}` and the healthcheck authenticates with `redis-cli -a`. Added a strong `REDIS_PASSWORD` to the prod `.env`, documented it in `.env.prod.example`. Previously prod Redis accepted unauthenticated connections. Applied live on prod (ongdngolu) and Avelomi; backend2 Redis pub/sub (permissions/data updates) verified working, `redis-cli ping` without auth returns `NOAUTH`. Runtime audit: prod JWT/REFRESH/DB/SMTP(SendGrid)/Twilio secrets are all strong values, not the weak audited ones. [SECURITY] [PROD]
+
+### Security (3.124.18)
+- **Mail admin/JMAP and middleware secret hardening**. Removed public `mail.ongdngolu.org:8088` Stalwart JMAP defaults from prod/dev templates, blocked public Stalwart admin URLs in production config, stopped using SMTP credentials as Stalwart admin fallback in production, and made the middleware reject weak or missing `JWT_SECRET` in production. External retest on 2026-06-30 shows `mail.ongdngolu.org:8088` is public again and still requires firewall/proxy closure. [SECURITY]
+
+### Fixed (3.124.18)
+- **Backend prod boot - env secrets and MySQL repair migrations**. Removed weak production compose defaults for backend secrets, allowed a strong `JWT_SECRET` fallback when legacy prod is missing `REFRESH_SECRET`, and converted `0181_org_plan` / `0184_farmos_repro_porcine` to replay-safe MySQL 8 `INFORMATION_SCHEMA` + `PREPARE` migrations. [PROD]
+
 ### Security (3.124.17)
 - **Frontend HTML hardening and mail admin verification**. Verified `mail.ongdngolu.org:8088` is no longer reachable from the external test environment, sanitized invoice footers and currency HTML, replaced payment method instruction HTML rendering with text, and rendered terms text without HTML injection. **Verified**: frontend `npm run build:dev` OK; frontend `npm audit --audit-level=moderate` OK with only low Quill findings remaining. [SECURITY]
 
