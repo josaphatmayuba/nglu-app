@@ -4,6 +4,7 @@ import { BriefcaseBusiness, Download, Eye, Filter, LayoutGrid, List, Lock, MoreH
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import EditStaffModal from "./EditStaffModal";
+import PropertyAssignTab from "./PropertyAssignTab";
 import RolesTab from "./RolesTab";
 import SpeciesAssignTab from "./SpeciesAssignTab";
 import SalariesPage from "./SalariesPage";
@@ -36,6 +37,7 @@ const TABS = [
   { key: "performance", label: "Performance" },
   { key: "roles", label: "Rôles & Permissions" },
   { key: "especes", label: "Espèces (FarmOS)" },
+  { key: "biens", label: "Biens (Domus)" },
 ];
 
 function getInitials(user) {
@@ -662,6 +664,8 @@ export default function HrPanel() {
       {activeTab === "roles" && <RolesTab />}
 
       {activeTab === "especes" && <SpeciesAssignTab />}
+
+      {activeTab === "biens" && <PropertyAssignTab />}
 
       {/* ── Modals & Drawers ── */}
       <ViewStaffDrawer user={viewingUser} onClose={() => setViewingUser(null)} />

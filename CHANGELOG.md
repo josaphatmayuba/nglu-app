@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.130.1)
+- **UI affectation des biens — Domus (Phase 2)**. Nouvel onglet **« Biens (Domus) »** dans le panneau RH (`PropertyAssignTab`) : tableau Utilisateur × Biens, recherche, badge « Tout » quand aucune restriction, enregistrement par ligne. Les biens sont chargés dynamiquement depuis `/property-management/properties` (avec recherche dans le select). Branche l'UI sur le backend RBAC par bien livré en 3.130.0. `frontend/src/components/hr/PropertyAssignTab.jsx`, `frontend/src/components/hr/HrPanel.jsx`.
+
 ### Added (3.130.0)
 - **RBAC par bien — Domus (Phase 2, 2e module)**. Même mécanique que le RBAC par espèce FarmOS, appliquée à l'immobilier : n'importe quel utilisateur peut être limité à un ou plusieurs **biens** (`real_estate_properties`), **indépendamment du rôle et du poste** (le rôle décide des droits — toujours via `@Permissions` —, le bien du périmètre des données). Nouvelle table `real_estate_property_assignments` (user↔bien, soft-delete, unique user+bien) + migration idempotente `0188` (au journal). Nouveau `DomusPropertyGuard` + décorateur `@CurrentDomusProperty` (réutilise `departmentScope` du JwtAuthGuard : rôles transverses = tous biens). Filtrage appliqué à `GET /property-management/properties` (id direct), `/leases` (property_id du bail), `/payments` (via le bail). **Fail-open** : un user sans affectation voit tout. Endpoints de gestion `GET/POST /property-management/property-assignments[/:userId]`. `backend2/src/database/schema.ts`, `backend2/drizzle/0188_real_estate_property_assignments.sql`, `backend2/src/auth/`, `backend2/src/property-management/`.
 
