@@ -104,10 +104,10 @@ $SSH_CMD "$SERVER" \
 set -euo pipefail
 
 BASE_URL="${BASE_URL:-https://ongdngolu.org}"
-# Avelomi: l'utilisateur SSH n'est pas dans le groupe docker => bascule sur 'sudo docker'.
+# Avelomi: l'utilisateur SSH n'est pas dans le groupe docker => bascule sur 'sudo -n docker'.
 # ongdngolu: groupe docker OK => 'docker'. Auto-detecte si DOCKER non fourni.
 DOCKER="${DOCKER:-docker}"
-$DOCKER ps >/dev/null 2>&1 || DOCKER="sudo docker"
+$DOCKER ps >/dev/null 2>&1 || DOCKER="sudo -n docker"
 LOCK_DIR="/tmp/nglu-prod-deploy.lock"
 LOCK_META="$LOCK_DIR/meta.txt"
 START_TS="$(date +%s)"
@@ -156,9 +156,9 @@ rollback_frontend() {
 write_placeholder() {
   path="$1"
   label="$2"
-  sudo mkdir -p "$path"
+  sudo -n mkdir -p "$path"
   if [ ! -f "$path/index.html" ]; then
-    sudo tee "$path/index.html" >/dev/null <<HTML
+    sudo -n tee "$path/index.html" >/dev/null <<HTML
 <!doctype html>
 <html lang="fr">
   <head><meta charset="utf-8"><title>${label} non deploye</title></head>
@@ -169,9 +169,9 @@ HTML
 }
 
 echo "[remote] syncing prod frontend support files"
-sudo mkdir -p "$REMOTE_ROOT/frontend" "$REMOTE_ROOT/nginx"
-sudo tar -xzf "$REMOTE_SUPPORT_ARCHIVE" -C "$REMOTE_ROOT"
-sudo chown "$REMOTE_USER:$REMOTE_USER" \
+sudo -n mkdir -p "$REMOTE_ROOT/frontend" "$REMOTE_ROOT/nginx"
+sudo -n tar -xzf "$REMOTE_SUPPORT_ARCHIVE" -C "$REMOTE_ROOT"
+sudo -n chown "$REMOTE_USER:$REMOTE_USER" \
   "$REMOTE_ROOT/docker-compose.prod.yml" \
   "$REMOTE_ROOT/frontend/Dockerfile.prod" \
   "$REMOTE_ROOT/nginx/nginx.frontend.conf"
@@ -182,14 +182,14 @@ for static_app in frontend marketing-site avelomi-site farmos-app domus-app jour
 done
 
 echo "[remote] replacing $TARGET_DIST contents"
-sudo mkdir -p "$TARGET_DIST"
-sudo find "$TARGET_DIST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-sudo tar -xzf "$REMOTE_DIST_ARCHIVE" -C "$TARGET_DIST"
+sudo -n mkdir -p "$TARGET_DIST"
+sudo -n find "$TARGET_DIST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+sudo -n tar -xzf "$REMOTE_DIST_ARCHIVE" -C "$TARGET_DIST"
 if [ ! -f "$TARGET_DIST/index.html" ]; then
   echo "[remote] deployed artifact did not produce $TARGET_DIST/index.html" >&2
   exit 1
 fi
-sudo chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
+sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
 rm -f "$REMOTE_DIST_ARCHIVE" "$REMOTE_SUPPORT_ARCHIVE"
 
 if [ -n "$FE_CURRENT_IMAGE" ] && $DOCKER image inspect "$FE_CURRENT_IMAGE" >/dev/null 2>&1; then

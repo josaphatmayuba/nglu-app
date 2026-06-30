@@ -321,11 +321,11 @@ pipelines:
               script:
                 - apk add --no-cache openssh-client
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:dev && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP/chat-app/dist $PROD_APP/nginx && sudo chmod 777 $APP/chat-app/dist"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app-dev PROD_APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - $SSH $SERVER "set -e; mkdir -p $APP/chat-app/dist $PROD_APP/nginx 2>/dev/null || sudo -n mkdir -p $APP/chat-app/dist $PROD_APP/nginx; chmod 777 $APP/chat-app/dist 2>/dev/null || sudo -n chmod 777 $APP/chat-app/dist"
                 - $SSH $SERVER "rm -rf /tmp/chat-app-dist && mkdir -p /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no -r chat-app/dist/* $SERVER:/tmp/chat-app-dist/
-                - $SSH $SERVER "sudo find $APP/chat-app/dist -mindepth 1 -delete && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
+                - $SSH $SERVER "{ find $APP/chat-app/dist -mindepth 1 -delete 2>/dev/null || sudo -n find $APP/chat-app/dist -mindepth 1 -delete; } && cp -r /tmp/chat-app-dist/. $APP/chat-app/dist/ && rm -rf /tmp/chat-app-dist"
                 - scp -o StrictHostKeyChecking=no nginx/nginx.frontend.conf $SERVER:$PROD_APP/nginx/nginx.frontend.conf
                 - $SSH $SERVER "docker exec nglu_prod_frontend nginx -s reload || true"
 
@@ -349,21 +349,21 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx $STACK_APP/frontend /var/www/certbot"
-                - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo touch $STACK_APP/.env.prod"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "sudo -n mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx $STACK_APP/frontend /var/www/certbot"
+                - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo -n mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo -n tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo -n touch $STACK_APP/.env.prod"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "sudo find $APP/avelomi-site/dist -mindepth 1 -delete && sudo cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
                 - $SCP nginx/nginx.avelomi-dev.conf $SERVER:/tmp/nginx.avelomi.conf
                 - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
                 - $SCP frontend/Dockerfile.prod $SERVER:/tmp/Dockerfile.prod
-                - $SSH $SERVER "sudo install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && sudo install -m 0644 /tmp/Dockerfile.prod $STACK_APP/frontend/Dockerfile.prod && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml /tmp/Dockerfile.prod"
-                - $SSH $SERVER "if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo sh; fi; sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true; sudo docker network create nglu_shared 2>/dev/null || true"
-                - $SSH $SERVER "if [ ! -f /etc/letsencrypt/live/dev.avelomi.com/fullchain.pem ]; then if ! command -v certbot >/dev/null 2>&1; then sudo apt-get update -y && sudo apt-get install -y certbot; fi; sudo certbot certonly --standalone -d dev.avelomi.com --email admin@avelomi.com --agree-tos --non-interactive; fi"
-                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps --force-recreate frontend"
-                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
+                - $SSH $SERVER "sudo -n install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo -n install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && sudo -n install -m 0644 /tmp/Dockerfile.prod $STACK_APP/frontend/Dockerfile.prod && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml /tmp/Dockerfile.prod"
+                - $SSH $SERVER "if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo -n sh; fi; sudo -n systemctl start docker 2>/dev/null || sudo -n service docker start 2>/dev/null || true; sudo -n docker network create nglu_shared 2>/dev/null || true"
+                - $SSH $SERVER "if [ ! -f /etc/letsencrypt/live/dev.avelomi.com/fullchain.pem ]; then if ! command -v certbot >/dev/null 2>&1; then sudo -n apt-get update -y && sudo -n apt-get install -y certbot; fi; sudo -n certbot certonly --standalone -d dev.avelomi.com --email admin@avelomi.com --agree-tos --non-interactive; fi"
+                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps --force-recreate frontend"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
 
           # ── Stack DEV isole sur le serveur Avelomi (projet nglu_dev, /opt/nglu-app-dev) ──
           # dev.avelomi.com proxie /api vers nglu_dev_middleware (cf nginx.avelomi-dev.conf).
@@ -379,9 +379,9 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP/backend2 && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "set -e; mkdir -p $APP/backend2 2>/dev/null || sudo -n mkdir -p $APP/backend2; if [ ! -w $APP ] || [ ! -w $APP/backend2 ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/backend2; fi"
                 - *avelomi-dev-env
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 # Sync package.json AVANT le --build (Dockerfile = COPY package*.json + npm ci).
@@ -391,8 +391,8 @@ pipelines:
                 # Sync migrations explicitement (ne pas dependre d'un git pull serveur).
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
               name: PDF Service → Avelomi-dev
@@ -400,14 +400,14 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "set -e; mkdir -p $APP/pdf-service 2>/dev/null || sudo -n mkdir -p $APP/pdf-service; if [ ! -w $APP ] || [ ! -w $APP/pdf-service ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/pdf-service; fi"
                 - *avelomi-dev-env
                 - $SCP -r pdf-service $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps pdf-service"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
               name: Middleware → Avelomi-dev
@@ -415,14 +415,14 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
                 - *avelomi-dev-env
                 - $SCP -r middleware $SERVER:$APP/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
     # ════════════════════════════ MASTER → PROD ════════════════════════════
     # Déploiement prod AUTOMATIQUE au push/merge sur master (comme develop→dev).
@@ -599,13 +599,13 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - *avelomi-prod-env
                 - *avelomi-prod-guard
                 # Cree l'arborescence cible (le repo n'est pas clone sur Avelomi : pas de
                 # token git dans ce contexte). On scp tout l'artefact, pas de git pull.
-                - $SSH $SERVER "sudo mkdir -p $APP/backend2 && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - $SSH $SERVER "set -e; mkdir -p $APP/backend2 2>/dev/null || sudo -n mkdir -p $APP/backend2; if [ ! -w $APP ] || [ ! -w $APP/backend2 ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/backend2; fi"
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
                 # Dockerfile requis par le --build (sans lui -> "failed to read dockerfile").
@@ -613,8 +613,8 @@ pipelines:
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 # Le repo n'est pas clone sur Avelomi : scp explicite du compose requis par le --build.
                 - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: PDF Service → Avelomi
@@ -622,14 +622,14 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - *avelomi-prod-guard
-                - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - $SSH $SERVER "set -e; mkdir -p $APP/pdf-service 2>/dev/null || sudo -n mkdir -p $APP/pdf-service; if [ ! -w $APP ] || [ ! -w $APP/pdf-service ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/pdf-service; fi"
                 - $SCP -r pdf-service $SERVER:$APP/
                 - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps pdf-service"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: Middleware → Avelomi
@@ -637,14 +637,14 @@ pipelines:
               script:
                 - *avelomi-ssh-setup
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - *avelomi-prod-guard
-                - $SSH $SERVER "sudo mkdir -p $APP && sudo chown -R \$(id -un):\$(id -gn) $APP"
+                - $SSH $SERVER "set -e; mkdir -p $APP/middleware 2>/dev/null || sudo -n mkdir -p $APP/middleware; if [ ! -w $APP ] || [ ! -w $APP/middleware ]; then sudo -n chown \$(id -un):\$(id -gn) $APP && sudo -n chown -R \$(id -un):\$(id -gn) $APP/middleware; fi"
                 - $SCP -r middleware $SERVER:$APP/
                 - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
-                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps middleware"
+                - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
               name: Frontend → Avelomi
@@ -657,8 +657,8 @@ pipelines:
                 - export VITE_APP_API=https://avelomi.com/api VITE_API_URL=https://avelomi.com/api VITE_APP_API_NODE=https://avelomi.com/api VITE_SIGNUP_ENABLED=true
                 - cd frontend && npm install --legacy-peer-deps && (npm audit --audit-level=high || true) && npm run build:prod && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
           - step:
@@ -669,8 +669,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
 
           - step:
@@ -681,8 +681,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
 
           - step:
@@ -693,8 +693,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
 
           - step:
@@ -705,8 +705,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
 
           - step:
@@ -717,8 +717,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
 
           - step:
@@ -729,8 +729,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
 
           - step:
@@ -741,8 +741,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
 
           - step:
@@ -753,8 +753,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
 
           - step:
@@ -765,8 +765,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
 
           - step:
@@ -777,8 +777,8 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh avelomi-site /
 
   # ═══════════ Override manuel : tout redeployer (Bitbucket → Run pipeline → custom) ═══════════
@@ -816,21 +816,21 @@ pipelines:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
                 - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app-dev STACK_APP=/opt/nglu-app
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no"
-                - $SSH $SERVER "sudo mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx $STACK_APP/frontend /var/www/certbot"
-                - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo touch $STACK_APP/.env.prod"
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - $SSH $SERVER "sudo -n mkdir -p $APP/avelomi-site/dist $STACK_APP/nginx $STACK_APP/frontend /var/www/certbot"
+                - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo -n mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo -n tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo -n touch $STACK_APP/.env.prod"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "sudo find $APP/avelomi-site/dist -mindepth 1 -delete && sudo cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
                 - $SCP nginx/nginx.avelomi-dev.conf $SERVER:/tmp/nginx.avelomi.conf
                 - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
                 - $SCP frontend/Dockerfile.prod $SERVER:/tmp/Dockerfile.prod
-                - $SSH $SERVER "sudo install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && sudo install -m 0644 /tmp/Dockerfile.prod $STACK_APP/frontend/Dockerfile.prod && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml /tmp/Dockerfile.prod"
-                - $SSH $SERVER "if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo sh; fi; sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true; sudo docker network create nglu_shared 2>/dev/null || true"
-                - $SSH $SERVER "if [ ! -f /etc/letsencrypt/live/dev.avelomi.com/fullchain.pem ]; then if ! command -v certbot >/dev/null 2>&1; then sudo apt-get update -y && sudo apt-get install -y certbot; fi; sudo certbot certonly --standalone -d dev.avelomi.com --email admin@avelomi.com --agree-tos --non-interactive; fi"
-                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps --force-recreate frontend"
-                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
+                - $SSH $SERVER "sudo -n install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo -n install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && sudo -n install -m 0644 /tmp/Dockerfile.prod $STACK_APP/frontend/Dockerfile.prod && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml /tmp/Dockerfile.prod"
+                - $SSH $SERVER "if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo -n sh; fi; sudo -n systemctl start docker 2>/dev/null || sudo -n service docker start 2>/dev/null || true; sudo -n docker network create nglu_shared 2>/dev/null || true"
+                - $SSH $SERVER "if [ ! -f /etc/letsencrypt/live/dev.avelomi.com/fullchain.pem ]; then if ! command -v certbot >/dev/null 2>&1; then sudo -n apt-get update -y && sudo -n apt-get install -y certbot; fi; sudo -n certbot certonly --standalone -d dev.avelomi.com --email admin@avelomi.com --agree-tos --non-interactive; fi"
+                - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps --force-recreate frontend"
+                - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
 
     deploy-all-prod:
       - parallel:
