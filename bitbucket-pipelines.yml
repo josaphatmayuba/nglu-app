@@ -411,6 +411,8 @@ pipelines:
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 # Sync package.json AVANT le --build (Dockerfile = COPY package*.json + npm ci).
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (compose pointe sur Dockerfile.prod) : sans lui -> "failed to read dockerfile".
+                - $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 # Sync migrations explicitement (ne pas dependre d'un git pull serveur).
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
@@ -631,6 +633,8 @@ pipelines:
                 - $SSH $SERVER "cd $APP && (git pull origin master || echo '[deploy] git pull ignore')"
                 - $SCP -r backend2/dist $SERVER:$APP/backend2/
                 - $SCP backend2/package.json backend2/package-lock.json $SERVER:$APP/backend2/
+                # Dockerfile requis par le --build (sans lui -> "failed to read dockerfile").
+                - $SCP backend2/Dockerfile backend2/Dockerfile.prod $SERVER:$APP/backend2/
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"

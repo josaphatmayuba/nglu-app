@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.25)
+- **CI : déploiement Backend2 → Avelomi (dev & prod) réparé**. Le compose buildait `backend2` depuis `backend2/Dockerfile.prod`, mais les steps Avelomi ne copiaient que `dist`/`package*.json`/`drizzle` — jamais le Dockerfile — d'où `failed to read dockerfile: open Dockerfile.prod: no such file or directory` à chaque déploiement Avelomi-dev (le step prod s'en sortait par hasard via `git pull`). Ajout du `scp` explicite de `backend2/Dockerfile` + `backend2/Dockerfile.prod` dans les deux steps. `bitbucket-pipelines.yml`.
+
 ### Security (3.124.24)
 - **Traçabilité des accès transverses super_owner (conformité)**. Quand un `super_owner` agit sur une organisation autre que la sienne via l'en-tête `X-Active-Org`, l'accès est désormais journalisé (event `super_owner_org_switch` : userId, org native, org active, méthode, chemin, IP, user-agent). Log applicatif best-effort dans `JwtAuthGuard`, jamais bloquant. `backend2/src/auth/guards/jwt-auth.guard.ts`.
 
