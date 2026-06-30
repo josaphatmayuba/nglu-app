@@ -371,6 +371,7 @@ export const api = {
   deleteBoxes: (ids) => jsonFetch("/boxes/delete-batch", { method: "POST", body: JSON.stringify({ ids }) }),
   assignAnimalsToBox: (body) => jsonFetch("/boxes/assign", { method: "POST", body: JSON.stringify(body) }),
   declareBoxDisease: (boxId, body) => jsonFetch(`/boxes/${boxId}/declare-disease`, { method: "POST", body: JSON.stringify(body) }),
+  getBoxContext: (boxId) => jsonFetch(`/boxes/${boxId}/context`),
   // Éléments de terrain (décor du plan)
   listLandFeatures: (zoneId) => jsonFetch(`/land-features${buildQuery({ zone_id: zoneId })}`),
   createLandFeature: (body) => jsonFetch("/land-features", { method: "POST", body: JSON.stringify(body) }),

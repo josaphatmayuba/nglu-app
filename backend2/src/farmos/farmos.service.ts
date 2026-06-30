@@ -2166,6 +2166,47 @@ export class FarmosService {
     return row;
   }
 
+  // Contexte complet d'un box en un appel : box + bâtiment + zone + ferme +
+  // animaux présents. Sert l'étiquette imprimable et la résolution au scan.
+  async getBoxContext(id: number, orgId: number) {
+    const box = await this.getBox(id, orgId);
+
+    let building: any = null, zone: any = null, farm: any = null;
+    if (box.buildingId != null) {
+      [building] = await this.db.select().from(farmosBuildings)
+        .where(and(eq(farmosBuildings.id, box.buildingId), eq(farmosBuildings.organizationId, orgId)))
+        .limit(1);
+    }
+    if (building?.zoneId != null) {
+      [zone] = await this.db.select().from(farmosZones)
+        .where(and(eq(farmosZones.id, building.zoneId), eq(farmosZones.organizationId, orgId)))
+        .limit(1);
+    }
+    if (zone?.farmId != null) {
+      [farm] = await this.db.select().from(farmosFarms)
+        .where(and(eq(farmosFarms.id, zone.farmId), eq(farmosFarms.organizationId, orgId)))
+        .limit(1);
+    }
+
+    const animals = await this.db
+      .select({
+        id: farmosAnimals.id, name: farmosAnimals.name, species: farmosAnimals.species,
+        race: farmosAnimals.race, sex: farmosAnimals.sex, count: farmosAnimals.count,
+        status: farmosAnimals.status, lot: farmosAnimals.lot, externalId: farmosAnimals.externalId,
+      })
+      .from(farmosAnimals)
+      .where(and(
+        eq(farmosAnimals.boxId, box.id),
+        eq(farmosAnimals.organizationId, orgId),
+        eq(farmosAnimals.isActive, 1),
+        this.activeLivestockSqlCondition(),
+      ))
+      .orderBy(farmosAnimals.name);
+
+    const heads = animals.reduce((s, a) => s + (Number(a.count ?? 0) || 1), 0);
+    return { box, building: building ?? null, zone: zone ?? null, farm: farm ?? null, animals, heads };
+  }
+
   async createBox(input: any, orgId: number) {
     if (!input.building_id) throw new BadRequestException("building_id requis.");
     if (!input.name) throw new BadRequestException("name requis.");

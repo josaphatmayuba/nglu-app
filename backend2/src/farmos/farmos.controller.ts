@@ -668,6 +668,13 @@ export class FarmosController {
     return this.farmos.listBoxes(orgId, buildingId ? Number(buildingId) : null);
   }
 
+  @ApiOperation({ summary: "Full box context (box + building + zone + farm + animals) — for label & scan." })
+  @Permissions("readAll-farmos")
+  @Get("boxes/:id/context")
+  getBoxContext(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.farmos.getBoxContext(id, orgId);
+  }
+
   @Permissions("create-farmos")
   @Post("boxes")
   createBox(@Body() body: any, @CurrentOrg() orgId: number) {

@@ -337,6 +337,19 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
   // external_id (case-insensitive). If found, treat as identification.
   const onCodeRead = React.useCallback((code) => {
     if (!code || found || scanning) return;
+    // Étiquette de box (FARMOS-BOX-<id>) : on ne cherche pas un animal, on ouvre
+    // la fiche du box (bâtiment + zone + ferme + animaux) via l'écran Bâtiments.
+    const boxMatch = String(code).trim().match(/^FARMOS-BOX-(\d+)$/i);
+    if (boxMatch) {
+      const boxId = Number(boxMatch[1]);
+      window.dispatchEvent(new CustomEvent("farmos:open-box", { detail: { boxId } }));
+      onNav && onNav("buildings");
+      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+        severity: "info",
+        message: lang === "fr" ? "Ouverture du box scanné…" : "Opening scanned box…",
+      } }));
+      return;
+    }
     const norm = String(code).trim().toLowerCase();
     const match = animals.find((a) => (a.id || "").toLowerCase() === norm)
                || animals.find((a) => (a.id || "").toLowerCase().includes(norm));
@@ -354,7 +367,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
         message: lang === "fr" ? `Code « ${code} » : aucun animal correspondant.` : `Code "${code}": no matching animal.`,
       } }));
     }
-  }, [animals, found, scanning, mode, lang]);
+  }, [animals, found, scanning, mode, lang, onNav]);
 
   useZxingScanner(videoRef, cam.stream, modeUsesCamera && (mode === "qr" || mode === "scanner"), onCodeRead);
 

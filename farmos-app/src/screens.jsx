@@ -1,5 +1,6 @@
 /* eslint-disable */
 import React from "react";
+import QRCode from "qrcode";
 import { Icon, AnimalGlyph } from "./icons";
 import { SPECIES, speciesById, t } from "./data";
 import { SpeciesPillBar, KpiCard, Sparkline, FarmScore, EmptyState } from "./shell";
@@ -5879,15 +5880,16 @@ const INTERIOR_CARD_BG    = { ok: "#E7F1E6", sick: "#FBE9E7", quarantine: "#FBF1
 // Box libre : on assigne N animaux (de n'importe quel lot, ou sans lot) à un box,
 // avec capacité max par box (blocage + possibilité de forcer). Cliquer un box ouvre
 // le panneau d'affectation ; bouton "Générer les box" si le bâtiment n'en a aucun.
-const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
+const BldgInteriorPlan = ({ building, animals = [], lang, onClose, initialBoxId = null }) => {
   const L = (fr, en) => (lang === "fr" ? fr : en);
   const [boxes, setBoxes] = React.useState(null); // null = chargement
-  const [selBoxId, setSelBoxId] = React.useState(null);
+  const [selBoxId, setSelBoxId] = React.useState(initialBoxId);
   const [busy, setBusy] = React.useState(false);
   const [genOpen, setGenOpen] = React.useState(false); // modal "Générer les box"
   const [selectMode, setSelectMode] = React.useState(false); // mode suppression en lot
   const [checked, setChecked] = React.useState(() => new Set()); // ids de box cochés
   const [diseaseBoxId, setDiseaseBoxId] = React.useState(null); // box ciblé par "Déclarer une maladie"
+  const [labelBoxId, setLabelBoxId] = React.useState(null); // box ciblé par "Étiquette QR"
 
   const reload = React.useCallback(() => {
     if (!building) return;
@@ -6047,6 +6049,9 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
               {selectMode ? L("Annuler", "Cancel") : L("Sélectionner", "Select")}
             </button>
           )}
+          {hasBoxes && !selBox && <button className="btn btn-sm" disabled={busy} onClick={() => printBoxSheet(building, boxes, lang)} style={{ marginRight: 6 }} title={L("Imprimer toutes les étiquettes QR du bâtiment", "Print all building QR labels")}>
+            <Icon name="qr" size={12} color="var(--ink-700)"/>{L("Étiquettes", "Labels")}
+          </button>}
           {hasBoxes && <button className="btn btn-sm" disabled={busy} onClick={onGenerate} style={{ marginRight: 6 }}>
             <Icon name="plus" size={12} color="var(--ink-700)"/>{L("Box", "Box")}
           </button>}
@@ -6155,6 +6160,10 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                       <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
                         {cap != null ? `${heads}/${cap}` : heads} {L("têtes", "heads")}{over ? ` · ${L("dépassé", "over")}` : (full ? ` · ${L("plein", "full")}` : "")}
                       </span>
+                      <button type="button" title={L("Étiquette QR à coller sur le box", "QR label to stick on the box")} onClick={() => setLabelBoxId(selBox.id)}
+                        style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border-2)", background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                        <Icon name="qr" size={15} color="var(--ink-700)"/>
+                      </button>
                       {inBox.length > 0 && (
                         <button type="button" title={L("Déclarer une maladie sur tout le box", "Declare a disease on the whole box")} disabled={busy} onClick={() => setDiseaseBoxId(selBox.id)}
                           style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid var(--oxblood-300)", background: "var(--oxblood-50)", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "var(--oxblood-700)" }}>
@@ -6267,6 +6276,10 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
           onCancel={() => setDiseaseBoxId(null)}
           onConfirm={(payload) => declareDisease(diseaseBoxId, payload)}/>
       )}
+
+      {labelBoxId != null && (
+        <BoxLabelModal lang={lang} boxId={labelBoxId} onClose={() => setLabelBoxId(null)}/>
+      )}
     </div>
   );
 };
@@ -6361,6 +6374,113 @@ const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, o
     </div>
   );
 };
+
+// ─── Étiquette QR du box (identification physique) ──────────────────────────
+// Le QR encode "FARMOS-BOX-<id>" ; le scanner (zxing, même lib que les animaux)
+// le relit et ouvre la fiche du box. Réutilise le pattern de QrPrintModal animal.
+const boxCode = (id) => `FARMOS-BOX-${id}`;
+const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+
+// HTML d'une étiquette (QR + box · bâtiment · zone · ferme + occupation).
+const boxLabelHtml = ({ qr, box, building, zone, farm, heads, mm = 50 }) => `
+  <div class="lbl">
+    <div class="name">${esc(box?.name ? `Box ${box.name}` : box?.name)}</div>
+    <div class="loc">${[farm?.name, zone?.name, building?.name].filter(Boolean).map(esc).join(" · ") || "—"}</div>
+    <img src="${qr}" alt="QR"/>
+    <div class="meta">${heads != null ? heads : ""}${box?.capacity != null ? `/${esc(box.capacity)}` : ""}${heads != null ? " têtes" : ""}</div>
+    <div class="code">${esc(boxCode(box?.id))}</div>
+  </div>`;
+const labelCss = (mm) => `
+  .lbl { font-family: -apple-system, system-ui, sans-serif; text-align: center; color: #0E2418; background: #FBF8F2; padding: 4mm; box-sizing: border-box; page-break-inside: avoid; border: 0.3mm solid #d8d2c4; border-radius: 3mm; }
+  .lbl .name { font-size: ${Math.max(10, mm / 4)}pt; font-weight: 700; margin-bottom: 1mm; }
+  .lbl .loc { font-size: ${Math.max(7, mm / 7)}pt; color: #4a5944; margin-bottom: 2mm; }
+  .lbl img { width: ${mm}mm; height: ${mm}mm; display: block; margin: 0 auto; }
+  .lbl .meta { font-size: ${Math.max(8, mm / 6)}pt; color: #4a5944; margin-top: 1.5mm; }
+  .lbl .code { font-family: ui-monospace, Menlo, monospace; font-size: ${Math.max(7, mm / 7)}pt; margin-top: 1mm; letter-spacing: 0.3px; }`;
+
+const printWindow = (title, css, bodyHtml) => {
+  const w = window.open("", "_blank", "width=520,height=640");
+  if (!w) return;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${bodyHtml}<script>window.onload=()=>{setTimeout(()=>{window.print();},200);};<\/script></body></html>`);
+  w.document.close();
+};
+
+// Étiquette individuelle d'un box (aperçu + imprimer + PNG).
+const BoxLabelModal = ({ lang, boxId, onClose }) => {
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const [ctx, setCtx] = React.useState(null);
+  const [qr, setQr] = React.useState(null);
+  const [size, setSize] = React.useState("medium");
+  const sizes = { small: { mm: 30 }, medium: { mm: 50 }, large: { mm: 80 } };
+
+  React.useEffect(() => {
+    let cancel = false;
+    api.getBoxContext(boxId).then((c) => { if (!cancel) setCtx(c); }).catch(() => { if (!cancel) setCtx(false); });
+    QRCode.toDataURL(boxCode(boxId), { errorCorrectionLevel: "H", margin: 1, width: 600, color: { dark: "#0E2418", light: "#FBF8F2" } })
+      .then((u) => { if (!cancel) setQr(u); }).catch(() => {});
+    return () => { cancel = true; };
+  }, [boxId]);
+
+  const doPrint = () => {
+    if (!qr || !ctx) return;
+    const mm = sizes[size].mm;
+    printWindow(boxCode(boxId), `@page { margin: 8mm; } body { margin: 0; } .lbl { width: ${mm + 24}mm; margin: 0 auto; }` + labelCss(mm),
+      boxLabelHtml({ qr, ...ctx, mm }));
+  };
+  const downloadPng = () => {
+    if (!qr) return;
+    const a = document.createElement("a");
+    a.href = qr; a.download = `${boxCode(boxId)}.png`; a.click();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(14,36,24,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 380, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div className="overline">{L("Étiquette QR · box", "QR label · box")}</div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}><Icon name="x" size={13} color="var(--ink-700)"/></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
+          {qr ? <img src={qr} alt="QR" style={{ width: 200, height: 200, background: "#FBF8F2", borderRadius: 8, border: "1px solid var(--border-1)" }}/>
+              : <div style={{ width: 200, height: 200, background: "var(--bg-sunken)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-3)", fontSize: 12 }}>{L("Génération…", "Generating…")}</div>}
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700, marginTop: 6 }}>{ctx?.box ? `Box ${ctx.box.name}` : "…"}</div>
+          <div style={{ fontSize: 11.5, color: "var(--fg-2)", textAlign: "center" }}>
+            {ctx ? ([ctx.farm?.name, ctx.zone?.name, ctx.building?.name].filter(Boolean).join(" · ") || "—") : ""}
+          </div>
+          {ctx && <div className="mono" style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{ctx.heads}{ctx.box?.capacity != null ? `/${ctx.box.capacity}` : ""} {L("têtes", "heads")}</div>}
+          <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>{boxCode(boxId)}</div>
+        </div>
+        <div>
+          <div className="overline" style={{ marginBottom: 6 }}>{L("Taille d'impression", "Print size")}</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[{ id: "small", fr: "Petit · 30mm", en: "Small · 30mm" }, { id: "medium", fr: "Moyen · 50mm", en: "Medium · 50mm" }, { id: "large", fr: "Grand · 80mm", en: "Large · 80mm" }].map((s) => (
+              <button key={s.id} onClick={() => setSize(s.id)} className={size === s.id ? "btn btn-sm btn-primary" : "btn btn-sm btn-ghost"} style={{ flex: 1, fontSize: 10.5, padding: "5px 4px" }}>{L(s.fr, s.en)}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-sm btn-ghost" onClick={downloadPng} disabled={!qr} style={{ flex: 1, justifyContent: "center" }}><Icon name="download" size={13} color="var(--ink-700)"/>PNG</button>
+          <button className="btn btn-sm btn-primary" onClick={doPrint} disabled={!qr || !ctx} style={{ flex: 1, justifyContent: "center" }}><Icon name="qr" size={13} color="#fff"/>{L("Imprimer", "Print")}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Planche : imprime toutes les étiquettes des box d'un bâtiment d'un coup.
+async function printBoxSheet(building, boxes, lang) {
+  const mm = 40;
+  const cards = await Promise.all(boxes.map(async (b) => {
+    const qr = await QRCode.toDataURL(boxCode(b.id), { errorCorrectionLevel: "H", margin: 1, width: 400, color: { dark: "#0E2418", light: "#FBF8F2" } }).catch(() => "");
+    return boxLabelHtml({ qr, box: b, building, zone: null, farm: null, heads: null, mm });
+  }));
+  const css = `@page { margin: 8mm; } body { margin: 0; font-family: system-ui, sans-serif; }
+    h1 { font-size: 13pt; text-align: center; margin: 0 0 4mm; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; }
+    ${labelCss(mm)}`;
+  printWindow(`${building?.name || "Box"} — étiquettes`, css,
+    `<h1>${esc(building?.name || "")} — ${lang === "fr" ? "Étiquettes des box" : "Box labels"}</h1><div class="grid">${cards.join("")}</div>`);
+}
 
 // Modal de génération des box (remplace les window.prompt nombre + capacité)
 const GenerateBoxesModal = ({ lang, building, existingCount = 0, busy, onCancel, onConfirm }) => {
@@ -7146,6 +7266,7 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
   const [selectedId, setSelectedId] = React.useState(null);
   const [viewing, setViewing] = React.useState(null); // building en cours de visualisation (modal)
   const [interiorBuilding, setInteriorBuilding] = React.useState(null);
+  const [interiorBoxId, setInteriorBoxId] = React.useState(null); // box pré-sélectionné (scan)
   const [features, setFeatures] = React.useState([]);
   const [planEdit, setPlanEdit] = React.useState(false);
   const [planZoneId, setPlanZoneId] = React.useState(null); // null = sans zone / toutes
@@ -7185,6 +7306,25 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
     if (selectedId === id) setSelectedId(null);
     api.deleteLandFeature(id).catch(() => {});
   }, [selectedId]);
+  // Ouverture d'un box (résolu depuis un scan) → ouvre le plan du bâtiment
+  // avec le box sélectionné. La résolution du QR se fait dans le scanner
+  // existant (écran Identification), qui émet "farmos:open-box".
+  const openBox = React.useCallback((ctx) => {
+    const bld = ctx?.building || (ctx?.box?.buildingId != null ? rows.find((b) => b.id === ctx.box.buildingId) : null);
+    if (bld) { setInteriorBoxId(ctx.box.id); setInteriorBuilding(bld); }
+  }, [rows]);
+  React.useEffect(() => {
+    const h = (ev) => {
+      const boxId = ev?.detail?.boxId;
+      if (boxId == null) return;
+      api.getBoxContext(boxId).then(openBox).catch(() => {
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: { severity: "error", message: lang === "fr" ? "Box introuvable." : "Box not found." } }));
+      });
+    };
+    window.addEventListener("farmos:open-box", h);
+    return () => window.removeEventListener("farmos:open-box", h);
+  }, [openBox, lang]);
+
   // Zones de la ferme sélectionnée (null = toutes)
   const farmZoneIds = farmId ? new Set(zones.filter((z) => z.farmId === farmId).map((z) => z.id)) : null;
   const filtered = rows.filter((b) =>
@@ -7232,6 +7372,10 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
               </button>
             ))}
           </div>
+          <button className="btn btn-sm" onClick={() => window.dispatchEvent(new CustomEvent("farmos:nav", { detail: "identification" }))} title={lang === "fr" ? "Scanner le QR d'un box (écran Identification)" : "Scan a box QR (Identification screen)"}>
+            <Icon name="scanLine" size={13} color="var(--ink-700)"/>
+            {lang === "fr" ? "Scanner un box" : "Scan a box"}
+          </button>
           <button className="btn btn-sm btn-primary" onClick={() => setEditing("new")}>
             <Icon name="plus" size={13} color="#FBF8F2"/>
             {lang === "fr" ? "Nouveau bâtiment" : "New building"}
@@ -7504,7 +7648,8 @@ const BuildingsScreen = ({ lang, speciesFilter, onSpeciesFilter }) => {
           onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setReloadKey((k) => k + 1); }}/>
       )}
       {interiorBuilding && (
-        <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} onClose={() => setInteriorBuilding(null)}/>
+        <BldgInteriorPlan building={interiorBuilding} animals={animals} lang={lang} initialBoxId={interiorBoxId}
+          onClose={() => { setInteriorBuilding(null); setInteriorBoxId(null); }}/>
       )}
     </div>
   );
