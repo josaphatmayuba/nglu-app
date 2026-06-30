@@ -75,11 +75,15 @@ Actions:
 ### Admin mail public en HTTP
 
 Constat:
-- `http://mail.ongdngolu.org:8088/admin/` repond en `200 OK`.
-- Service admin accessible en clair sans TLS sur Internet.
+- avant correction, `http://mail.ongdngolu.org:8088/admin/` repondait en `200 OK`.
+- service admin accessible en clair sans TLS sur Internet.
+
+Statut remediation:
+- config repo durcie pour binder l'admin Stalwart sur `127.0.0.1` par defaut.
+- verification externe le 2026-06-29: `mail.ongdngolu.org:8088` ne repond plus aux tests TCP/HTTP depuis l'environnement de test.
 
 Actions:
-- Fermer le port 8088 publiquement.
+- Garder le port 8088 ferme publiquement.
 - Limiter par firewall/VPN/IP admin.
 - Si necessaire, mettre derriere reverse proxy HTTPS + authentification forte.
 
@@ -122,6 +126,11 @@ Actions:
 - Mettre a jour `dompurify`.
 - Remplacer les rendus HTML non sanitisés.
 - Durcir la CSP ensuite.
+
+Statut remediation:
+- contrats, messages, descriptions produits et editeur riche principal corriges.
+- footers facture/devis/packing/point de vente/ajustement stock sanitises avec DOMPurify.
+- conditions generales rendues en texte, instructions de methode de paiement rendues en texte, symbole devise e-commerce sanitise.
 
 ### Uploads pas toujours valides en profondeur
 
@@ -223,8 +232,8 @@ Notes:
 - [x] Retablir `DELETE /transaction-type/:id`.
 - [x] Authentifier les WebSockets.
 - [x] Durcir la config mail pour ne plus publier `:8088` par defaut.
-- [ ] Fermer `mail.ongdngolu.org:8088` cote infra si encore expose.
-- [x] Sanitize HTML avec DOMPurify sur contrats/messages/produits corriges.
+- [x] Fermer `mail.ongdngolu.org:8088` cote infra et verifier depuis l'exterieur.
+- [x] Sanitize HTML avec DOMPurify sur contrats/messages/produits/factures/devise corriges.
 - [ ] Finir l'audit des rendus HTML legacy restants.
 - [x] Retirer `unsafe-inline` de `script-src` dans les CSP Nginx frontend/Avelomi.
 - [ ] Retirer `unsafe-inline` de `style-src` apres refactor des styles inline.

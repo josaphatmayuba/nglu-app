@@ -3,6 +3,7 @@ import { forwardRef, Fragment, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useReactToPrint } from "react-to-print";
 import { getSetting } from "../../redux/rtk/features/setting/settingSlice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import "./posPrint.css";
 
 const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
@@ -94,7 +95,7 @@ const PrintToPdf = forwardRef(({ data, invoiceData, vatAmount }, ref) => {
           </div>
           <div
             className='text-center mt-4'
-            dangerouslySetInnerHTML={{ __html: invoiceData?.footer }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(invoiceData?.footer) }}
           />
         </div>
       </div>

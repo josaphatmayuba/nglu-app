@@ -87,13 +87,7 @@ export default function GetAllPaymentMethod() {
       title: "Instruction",
       dataIndex: "instruction",
       key: "instruction",
-      render: (instruction) => (
-        <span
-          dangerouslySetInnerHTML={{
-            __html: stringShorter(instruction, 20),
-          }}
-        ></span>
-      ),
+      render: (instruction) => <span>{stringShorter(instruction, 20)}</span>,
 
       renderCsv: (instruction) => instruction,
     },

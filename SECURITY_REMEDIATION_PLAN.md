@@ -273,7 +273,7 @@ Fichiers:
 
 Impact fonctionnel:
 - un nouvel environnement ne devrait plus exposer l'admin mail publiquement par defaut.
-- la fermeture du port deja expose en prod reste une action infra/firewall.
+- le port deja expose en prod a ete ferme cote infra et ne repond plus aux tests externes TCP/HTTP du 2026-06-29.
 
 ### 13. XSS HTML riche
 
@@ -284,6 +284,8 @@ Faille:
 Correction:
 - ajout de DOMPurify comme dependance directe.
 - sanitation des contenus contrats/messages/descriptions produits dans `frontend`, `domus-app`, `chat-app` et `journal-app`.
+- sanitation des footers facture/devis/packing/point de vente/ajustement stock, et du symbole devise e-commerce.
+- rendu texte pour les conditions generales et les instructions de methode de paiement.
 - `journal-app` echappe maintenant le texte de message avant de creer le markup de mention.
 - remplacement frontend de `react-quill` par `react-quill-new` base sur Quill 2.
 - les handlers d'erreur `domus-app`, `journal-app` et `farmos-app` utilisent maintenant `textContent` au lieu de `innerHTML`.
@@ -291,6 +293,14 @@ Correction:
 
 Fichiers principaux:
 - `frontend/src/utils/sanitizeHtml.js`
+- `frontend/src/components/Invoice/SaleReport.jsx`
+- `frontend/src/components/Invoice/QuoteSlip.jsx`
+- `frontend/src/components/Invoice/PackingSlip.jsx`
+- `frontend/src/components/Invoice/PosPrint.jsx`
+- `frontend/src/components/Invoice/AdjustInventorySlip.jsx`
+- `frontend/src/components/TermsAndConditions/DetailsTermsAndConditions.jsx`
+- `frontend/src/components/PaymentMethod/GetAllPaymentMethod.jsx`
+- `frontend/src/components/eComErp/Currency/GetAllCurrency.jsx`
 - `domus-app/src/sanitizeHtml.js`
 - `chat-app/src/sanitizeHtml.js`
 - `journal-app/src/sanitizeHtml.js`
@@ -354,6 +364,7 @@ Commandes:
 - `cmd.exe /c npm run build` dans `farmos-app`
 - `cmd.exe /c npm audit --audit-level=moderate` dans `backend2`, `frontend`, `domus-app`, `chat-app`, `journal-app`
 - `node --check middleware/src/index.js`
+- `curl.exe -I --connect-timeout 6 --max-time 10 http://mail.ongdngolu.org:8088/admin`
 
 Resultat:
 - typecheck OK.
@@ -362,6 +373,7 @@ Resultat:
 - audits OK au seuil moderate/high sur les projets verifies.
 - frontend garde 2 vulnerabilites low via Quill 2.0.3, sans correction non cassante.
 - syntaxe middleware OK.
+- `mail.ongdngolu.org:8088` ne repond plus depuis l'environnement de test externe.
 
 ## Restant a traiter
 
@@ -381,15 +393,15 @@ Action recommandee:
 ### Admin mail `:8088`
 
 Statut:
-- corrige dans la config repo par defaut; a appliquer/redeployer cote infra.
+- corrige dans la config repo par defaut et ferme cote infra d'apres le test externe du 2026-06-29.
 
 Raison:
-- si le port est deja ouvert en prod, il faut fermer le firewall ou redeployer la config mail.
+- l'interface admin ne doit pas redevenir accessible en HTTP public apres redeploiement.
 
 Action recommandee:
-- fermer le port public;
 - limiter par VPN/IP admin;
-- forcer HTTPS si l'interface reste exposee.
+- surveiller les regles firewall apres redeploiement;
+- forcer HTTPS si l'interface doit etre exposee via proxy controle.
 
 ### WebSockets
 
@@ -406,7 +418,7 @@ Statut:
 - partiel avance.
 
 Raison:
-- contrats, messages, produits et editeur riche principal corriges; il reste des rendus HTML legacy a auditer un par un avant CSP stricte.
+- contrats, messages, produits, factures, devise, conditions et instructions de paiement corriges; il reste des rendus HTML legacy a auditer un par un avant CSP stricte.
 
 Action recommandee:
 - continuer le remplacement des `dangerouslySetInnerHTML` legacy restants;

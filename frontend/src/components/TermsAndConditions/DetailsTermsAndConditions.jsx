@@ -60,7 +60,6 @@ export default function DetailsTermsAndConditions() {
     setLoader(false);
   };
 
-  const formattedText = termsAndConditions?.subject?.replace(/\n/g, "<br/>");
   // update form filed
   useEffect(() => {
     form.setFieldValue("subject", termsAndConditions?.subject);
@@ -95,10 +94,7 @@ export default function DetailsTermsAndConditions() {
             </div>
           }
         >
-          <div
-            className='p-4'
-            dangerouslySetInnerHTML={{ __html: formattedText }}
-          />
+          <div className='p-4 whitespace-pre-wrap'>{termsAndConditions?.subject}</div>
         </Card>
       )}
       {openToEdit && (

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.17)
+- **Frontend HTML hardening and mail admin verification**. Verified `mail.ongdngolu.org:8088` is no longer reachable from the external test environment, sanitized invoice footers and currency HTML, replaced payment method instruction HTML rendering with text, and rendered terms text without HTML injection. **Verified**: frontend `npm run build:dev` OK; frontend `npm audit --audit-level=moderate` OK with only low Quill findings remaining. [SECURITY]
+
 ### Fixed (3.124.16)
 - **Clients - detail client sans skeleton infini**. La fiche client recoit maintenant les factures, retours et transactions attendus par l'ecran, et le frontend traite les listes absentes comme des tableaux vides afin d'afficher l'etat vide au lieu d'un chargement permanent.
 - **RH - drawer Profil employe lisible**. Les champs du panneau lateral passent en grille label/valeur avec retour a la ligne pour les emails et identifiants longs, largeur responsive et padding explicite du drawer. **Verifie** : typecheck backend2 OK ; ESLint cible frontend OK. [SCRUM]
