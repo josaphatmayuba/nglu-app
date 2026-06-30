@@ -7,12 +7,12 @@ services:
     image: redis:7-alpine
     container_name: nglu_prod_redis
     restart: unless-stopped
-    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--requirepass", "${REDIS_PASSWORD}"]
     networks:
       - nglu_prod_network
     mem_limit: 64m
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -30,7 +30,7 @@ services:
       DB_PORT: ${DB_PORT:-9306}
       DB_DATABASE: ${DB_DATABASE:-nglu_db}
       DB_USERNAME: ${DB_USERNAME:-nglu_user}
-      DB_PASSWORD: ${DB_PASSWORD:-password}
+      DB_PASSWORD: ${DB_PASSWORD:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-https://ongdngolu.org}
       APP_URL: ${APP_URL:-https://ongdngolu.org}
       # Production routing contract: marketing lives at /, CRM entrypoint is /crm.
@@ -38,8 +38,10 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://ongdngolu.org/crm}
       DB_WAIT_RETRIES: 40
       DB_WAIT_DELAY_MS: 1500
-      JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
-      REFRESH_SECRET: ${REFRESH_SECRET:-changeme_in_prod}
+      JWT_SECRET: ${JWT_SECRET:-}
+      # Optional only for backward compatibility: backend2 falls back to a strong
+      # JWT_SECRET when REFRESH_SECRET is missing. Set a dedicated value in prod.
+      REFRESH_SECRET: ${REFRESH_SECRET:-}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       PERMISSIONS_GUARD_CACHE_TTL_MS: ${PERMISSIONS_GUARD_CACHE_TTL_MS:-0}
       REDIS_ENABLED: ${REDIS_ENABLED:-true}
@@ -60,7 +62,8 @@ services:
       IMAP_PASS: ${IMAP_PASS:-}
       IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
       IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
-      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      # Internal-only Stalwart admin/JMAP endpoint. Never point this at public mail.ongdngolu.org:8088.
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-}
       STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
       STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
       STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}
@@ -98,9 +101,10 @@ services:
     container_name: nglu_prod_middleware
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       PORT: 3001
       BACKEND_URL: http://backend2:8001
-      JWT_SECRET: ${JWT_SECRET:-changeme_in_prod}
+      JWT_SECRET: ${JWT_SECRET:-}
     depends_on:
       - backend2
     networks:

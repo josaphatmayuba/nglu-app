@@ -177,7 +177,7 @@ git clone -b develop https://bitbucket.org/ngolu-ong-gestion/nglu-app.git /opt/n
 ```bash
 # Production
 cp /opt/nglu-app/.env.prod.example /opt/nglu-app/.env.prod
-nano /opt/nglu-app/.env.prod   # Remplir DB_PASSWORD, JWT_SECRET, etc.
+nano /opt/nglu-app/.env.prod   # Remplir DB_PASSWORD, JWT_SECRET, REFRESH_SECRET, etc.
 cp /opt/nglu-app/.env.prod /opt/nglu-app/.env  # Docker Compose lit .env par défaut
 
 # Development

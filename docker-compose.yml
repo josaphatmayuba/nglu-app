@@ -106,7 +106,8 @@ services:
       IMAP_PASS: ${IMAP_PASS:-}
       IMAP_MAILBOX: ${IMAP_MAILBOX:-INBOX}
       IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
-      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://mail.ongdngolu.org:8088/jmap}
+      # Internal-only Stalwart admin/JMAP endpoint. Never use public mail.ongdngolu.org:8088.
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-}
       STALWART_ADMIN_USER: ${STALWART_ADMIN_USER:-}
       STALWART_ADMIN_PASS: ${STALWART_ADMIN_PASS:-}
       STALWART_DOMAIN: ${STALWART_DOMAIN:-ongdngolu.org}

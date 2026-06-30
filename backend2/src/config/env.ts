@@ -15,28 +15,88 @@ const weakSecretValues = new Set([
   "password",
 ]);
 
-function requiredSecret(name: string, fallback: string) {
-  const value = process.env[name] || fallback;
-  if (isProd && (weakSecretValues.has(value) || value.length < 32)) {
+function envValue(name: string) {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function isPlaceholder(value: string) {
+  return value.trim().toLowerCase().startsWith("change_me");
+}
+
+function isWeakSecret(value: string) {
+  const normalized = value.trim();
+  return weakSecretValues.has(normalized) || isPlaceholder(normalized) || normalized.length < 32;
+}
+
+function isWeakProdValue(value: string) {
+  const normalized = value.trim();
+  return weakSecretValues.has(normalized) || isPlaceholder(normalized);
+}
+
+function requiredSecret(name: string, fallback: string, fallbackLabel = "the configured fallback secret") {
+  const configured = envValue(name);
+  const usesStrongFallback = isProd && (!configured || isWeakSecret(configured)) && !isWeakSecret(fallback);
+  const value = usesStrongFallback ? fallback : configured || fallback;
+
+  if (isProd && isWeakSecret(value)) {
     throw new Error(`${name} must be set to a strong value in production.`);
+  }
+  if (usesStrongFallback) {
+    console.warn(`[config] ${name} is not set to a strong value; using ${fallbackLabel}.`);
   }
   return value;
 }
 
 function requiredProdValue(name: string, fallback: string) {
-  const value = process.env[name] || fallback;
-  if (isProd && weakSecretValues.has(value)) {
+  const value = envValue(name) || fallback;
+  if (isProd && isWeakProdValue(value)) {
     throw new Error(`${name} must be set in production.`);
   }
   return value;
 }
 
+function optionalProdSecret(name: string, fallback = "") {
+  const value = envValue(name) || fallback;
+  if (isProd && value && isWeakProdValue(value)) {
+    throw new Error(`${name} must be set to a real value in production or left empty.`);
+  }
+  return value;
+}
+
+function isPublicStalwartAdminUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname.toLowerCase() === "mail.ongdngolu.org" && url.port === "8088";
+  } catch {
+    return false;
+  }
+}
+
+function stalwartJmapUrl(adminUser: string, adminPass: string) {
+  const value = envValue("STALWART_JMAP_URL") || (isProd ? "" : "http://127.0.0.1:8088/jmap");
+
+  if (isProd && value && isPublicStalwartAdminUrl(value)) {
+    throw new Error("STALWART_JMAP_URL must not use public mail.ongdngolu.org:8088 in production.");
+  }
+
+  if (isProd && (adminUser || adminPass) && !value) {
+    throw new Error("STALWART_JMAP_URL must be set to an internal-only endpoint when Stalwart admin credentials are configured.");
+  }
+
+  return value;
+}
+
+const jwtSecret = requiredSecret("JWT_SECRET", "jwt_secret_key");
+const stalwartAdminUser = optionalProdSecret("STALWART_ADMIN_USER", isProd ? "" : process.env.SMTP_USER || "");
+const stalwartAdminPass = optionalProdSecret("STALWART_ADMIN_PASS", isProd ? "" : process.env.SMTP_PASS || "");
+
 export const env = {
   nodeEnv,
   port: Number(process.env.PORT || 8001),
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  jwtSecret: requiredSecret("JWT_SECRET", "jwt_secret_key"),
-  refreshSecret: requiredSecret("REFRESH_SECRET", "refresh_secret_key"),
+  jwtSecret,
+  refreshSecret: requiredSecret("REFRESH_SECRET", jwtSecret, "JWT_SECRET for backward compatibility"),
   google: {
     clientId:
       process.env.GOOGLE_CLIENT_ID ||
@@ -64,9 +124,9 @@ export const env = {
     tlsRejectUnauthorized: process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
   stalwart: {
-    jmapUrl: process.env.STALWART_JMAP_URL || "http://127.0.0.1:8088/jmap",
-    adminUser: process.env.STALWART_ADMIN_USER || process.env.SMTP_USER || "",
-    adminPass: process.env.STALWART_ADMIN_PASS || process.env.SMTP_PASS || "",
+    jmapUrl: stalwartJmapUrl(stalwartAdminUser, stalwartAdminPass),
+    adminUser: stalwartAdminUser,
+    adminPass: stalwartAdminPass,
     domain: process.env.STALWART_DOMAIN || "ongdngolu.org",
   },
   redis: {

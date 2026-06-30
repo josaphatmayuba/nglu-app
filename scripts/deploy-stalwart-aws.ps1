@@ -95,8 +95,8 @@ docker compose ps
 docker logs stalwart-mail --tail 40
 
 echo ""
-echo "[remote] Open: http://mail.ongdngolu.org:8088/admin"
-echo "[remote] If DNS is not ready: http://$HostName:8088/admin"
+echo "[remote] Admin UI is localhost-only: http://127.0.0.1:8088/admin"
+echo "[remote] From your workstation, use: ssh -L 8088:127.0.0.1:8088 $User@$HostName"
 echo "[remote] Recovery admin is in $RemoteDir/.env"
 "@
 
@@ -115,4 +115,5 @@ Write-Step "Installing Stalwart on AWS"
 if ($LASTEXITCODE -ne 0) { throw "Remote Stalwart install failed" }
 
 Write-Step "Done"
-Write-Host "Open http://mail.ongdngolu.org:8088/admin after DNS/firewall is ready."
+Write-Host "Use an SSH tunnel for admin access: ssh -L 8088:127.0.0.1:8088 $User@$HostName"
+Write-Host "Do not open 8088/tcp publicly."

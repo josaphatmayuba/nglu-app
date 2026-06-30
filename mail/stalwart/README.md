@@ -57,17 +57,16 @@ TXT   _dmarc  v=DMARC1; p=none; rua=mailto:postmaster@ongdngolu.org
 
 ## Lightsail Firewall
 
-Open:
+Open publicly:
 
 ```txt
 25/tcp    SMTP inbound
 465/tcp   SMTPS
 587/tcp   SMTP submission
 993/tcp   IMAPS
-8088/tcp  do not open publicly; bind to 127.0.0.1 or restrict by VPN/IP admin
 ```
 
-Keep public access to `8088` closed. If browser admin access is required, put it behind HTTPS plus VPN/IP allowlisting.
+Keep public access to `8088` closed. The admin listener should stay bound to `127.0.0.1`; use the SSH tunnel above for direct access, or put it behind HTTPS plus VPN/IP allowlisting if browser admin access is required.
 
 ## CRM SMTP Settings
 

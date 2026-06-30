@@ -1,6 +1,7 @@
 # Notes audit securite - nglu-app
 
 Date: 2026-06-29
+Mise a jour: 2026-06-30
 
 Portee:
 - Revue passive du code local.
@@ -81,6 +82,9 @@ Constat:
 Statut remediation:
 - config repo durcie pour binder l'admin Stalwart sur `127.0.0.1` par defaut.
 - verification externe le 2026-06-29: `mail.ongdngolu.org:8088` ne repond plus aux tests TCP/HTTP depuis l'environnement de test.
+- regression observee le 2026-06-30: `mail.ongdngolu.org:8088` repond a nouveau (`TCP OK`, `GET /admin` -> `302 Found` vers `/admin/`).
+- remediation infra appliquee le 2026-06-30: le conteneur Stalwart publie `8088` sur `127.0.0.1` seulement, et le test externe sur `mail.ongdngolu.org:8088/admin` expire.
+- le repo ne fournit plus de default prod vers `http://mail.ongdngolu.org:8088/jmap`; la prod utilise un endpoint JMAP interne Docker.
 
 Actions:
 - Garder le port 8088 ferme publiquement.
@@ -131,6 +135,26 @@ Statut remediation:
 - contrats, messages, descriptions produits et editeur riche principal corriges.
 - footers facture/devis/packing/point de vente/ajustement stock sanitises avec DOMPurify.
 - conditions generales rendues en texte, instructions de methode de paiement rendues en texte, symbole devise e-commerce sanitise.
+- audit manuel legacy complete le 2026-06-30: les rendus HTML variables restants identifies utilisent DOMPurify ou un echappement explicite; les widgets IA legacy injectent encore du HTML/CSS statique et restent le principal chantier avant une CSP `style-src` stricte.
+
+### RBAC/multitenant - liste utilisateurs
+
+Constat:
+- test prod controle le 2026-06-30 avec comptes temporaires non-admin dans deux organisations.
+- `X-Active-Org` force n'a pas permis de changer d'organisation sur `/setting` ni `/account`.
+- `/organizations` est bien refuse en `403` pour non-admin.
+- `/user?query=all` retournait des utilisateurs hors organisation pour un compte non-admin.
+
+Impact:
+- fuite de donnees inter-organisation sur la liste utilisateurs.
+
+Correction:
+- `backend2/src/users/users.controller.ts` exige JWT au niveau controleur et injecte `CurrentOrg`.
+- `backend2/src/users/users.service.ts` filtre `findAll`, `findOne`, `create`, `update` et `remove` par `organizationId`.
+- les donnees temporaires du test ont ete supprimees apres verification.
+
+Action restante:
+- deployer cette correction puis retester `/user?query=all` en dev/prod avec comptes non-admin d'organisations differentes.
 
 ### Uploads pas toujours valides en profondeur
 
@@ -234,7 +258,7 @@ Notes:
 - [x] Durcir la config mail pour ne plus publier `:8088` par defaut.
 - [x] Fermer `mail.ongdngolu.org:8088` cote infra et verifier depuis l'exterieur.
 - [x] Sanitize HTML avec DOMPurify sur contrats/messages/produits/factures/devise corriges.
-- [ ] Finir l'audit des rendus HTML legacy restants.
+- [x] Finir l'audit manuel des rendus HTML legacy restants.
 - [x] Retirer `unsafe-inline` de `script-src` dans les CSP Nginx frontend/Avelomi.
 - [ ] Retirer `unsafe-inline` de `style-src` apres refactor des styles inline.
 - [x] Uniformiser la validation upload sur les flux backend2 identifies.
