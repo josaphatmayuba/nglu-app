@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.128.0)
+- **Filtrage RBAC par espèce étendu : ventes, dépenses, santé (FarmOS, Phase 2)**. Le périmètre par espèce, jusqu'ici limité aux animaux, s'applique maintenant aussi à `GET /farmos/sales`, `/farmos/expenses` et `/farmos/treatments`. Trois patterns de liaison, factorisés en helpers réutilisables (`speciesDirectFilter`, `speciesViaAnimalFilter`) : ventes = colonne `species` directe ; dépenses = via `related_animal_id` (fail-open : dépenses sans animal lié restent visibles) ; traitements = via l'animal du LEFT JOIN existant. Partout **fail-open** sur les lignes sans espèce/animal (legacy non masqué) ; un user à portée « toutes » (rôle transverse / sans affectation) voit tout. `backend2/src/farmos/farmos.service.ts`, `farmos.controller.ts`.
+
 ### Changed (3.127.1)
 - **Renommage `farmos_species_managers` → `farmos_species_assignments`** (cohérence : l'affectation concerne tout utilisateur, pas seulement les « managers »). Le nom « managers » était trompeur depuis que l'affectation est devenue indépendante du rôle et du poste. Renommé partout avant tout déploiement (rien n'était poussé) : table + migration `0187` (réécrite, idempotente) + journal Drizzle, identifiant `farmosSpeciesAssignments` (schema/service/guard/décorateur), méthodes service (`listSpeciesAssignments`/`setSpeciesAssignments`), routes API `/farmos/species-assignments` (toujours couvertes par la whitelist préfixe `/farmos`), et appels front (`SpeciesAssignTab`, `EditStaffModal`). `backend2/`, `frontend/src/components/hr/`.
 

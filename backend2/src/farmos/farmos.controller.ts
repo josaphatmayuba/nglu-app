@@ -292,8 +292,8 @@ export class FarmosController {
 
   @Permissions("readAll-farmos")
   @Get("treatments")
-  listTreatments(@CurrentOrg() orgId: number) {
-    return this.farmos.listTreatments(orgId);
+  listTreatments(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listTreatments(orgId, species);
   }
 
   @Permissions("readAll-farmos")
@@ -403,15 +403,15 @@ export class FarmosController {
   @ApiOperation({ summary: "List FarmOS sales for the organisation." })
   @Permissions("readAll-farmos")
   @Get("sales")
-  listSales(@CurrentOrg() orgId: number) {
-    return this.farmos.listSales(orgId);
+  listSales(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listSales(orgId, species);
   }
 
   @ApiOperation({ summary: "List FarmOS expenses for the organisation." })
   @Permissions("readAll-farmos")
   @Get("expenses")
-  listExpenses(@CurrentOrg() orgId: number) {
-    return this.farmos.listExpenses(orgId);
+  listExpenses(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listExpenses(orgId, species);
   }
 
   @Permissions("create-farmos")

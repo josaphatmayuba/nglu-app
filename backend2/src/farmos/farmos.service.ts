@@ -480,16 +480,40 @@ export class FarmosService {
 
   // ─── Animals ─────────────────────────────────────────────────────────────
 
+  // ── Helpers RBAC par espece (Phase 2) ────────────────────────────────────
+  // Filtre DIRECT : la table a une colonne `species`. "all" => pas de filtre ;
+  // liste vide => aucun resultat (user sans espece valide).
+  private speciesDirectFilter(column: any, scope: "all" | string[]) {
+    if (scope === "all") return undefined;
+    return scope.length ? inArray(column, scope) : sql`1 = 0`;
+  }
+
+  // Filtre VIA L ANIMAL LIE : la table n a pas de `species` mais une FK vers
+  // farmos_animals. On garde les lignes dont l animal est d une espece autorisee.
+  // animalRequired=false (defaut) => les lignes SANS animal lie restent visibles
+  // (FAIL-OPEN, ex: depenses generales). animalRequired=true => seules les lignes
+  // avec animal autorise (ex: traitements, animal_id notNull).
+  private speciesViaAnimalFilter(
+    animalIdColumn: any,
+    orgId: number,
+    scope: "all" | string[],
+    animalRequired = false,
+  ) {
+    if (scope === "all") return undefined;
+    if (!scope.length) return sql`1 = 0`;
+    const allowedAnimals = this.db
+      .select({ id: farmosAnimals.id })
+      .from(farmosAnimals)
+      .where(and(eq(farmosAnimals.organizationId, orgId), inArray(farmosAnimals.species, scope)));
+    const inAllowed = inArray(animalIdColumn, allowedAnimals);
+    return animalRequired ? inAllowed : or(isNull(animalIdColumn), inAllowed);
+  }
+
   // speciesScope : "all" (defaut, retro-compatible) = toutes especes ; sinon la
-  // liste est filtree aux especes affectees au gestionnaire (RBAC par espece,
-  // Phase 2). Une liste vide => aucun animal (gestionnaire sans espece valide).
+  // liste est filtree aux especes affectees a l utilisateur (RBAC par espece,
+  // Phase 2). Une liste vide => aucun animal.
   async listAnimals(orgId: number, speciesScope: "all" | string[] = "all") {
-    const speciesFilter =
-      speciesScope === "all"
-        ? undefined
-        : speciesScope.length
-          ? inArray(farmosAnimals.species, speciesScope)
-          : sql`1 = 0`;
+    const speciesFilter = this.speciesDirectFilter(farmosAnimals.species, speciesScope);
 
     return this.db
       .select()
@@ -749,10 +773,19 @@ export class FarmosService {
 
   // ─── Treatments ──────────────────────────────────────────────────────────
 
-  async listTreatments(orgId: number) {
+  async listTreatments(orgId: number, speciesScope: "all" | string[] = "all") {
     // LEFT JOIN sur l'animal (sans filtre isActive) pour conserver l'espece et
     // le nom meme quand l'animal lie a ete soft-delete (vendu/mort) : sinon le
     // frontend recoit species=null et plante en mode "Tout".
+    // RBAC espece : filtre sur l espece de l animal du join ; on tolere species
+    // null (animal disparu) pour ne pas masquer l historique (fail-open).
+    const speciesFilter =
+      speciesScope === "all"
+        ? undefined
+        : speciesScope.length
+          ? or(isNull(farmosAnimals.species), inArray(farmosAnimals.species, speciesScope))
+          : sql`1 = 0`;
+
     const rows = await this.db
       .select({
         treatment: farmosTreatments,
@@ -763,7 +796,7 @@ export class FarmosService {
       })
       .from(farmosTreatments)
       .leftJoin(farmosAnimals, eq(farmosTreatments.animalId, farmosAnimals.id))
-      .where(and(eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1)))
+      .where(and(eq(farmosTreatments.organizationId, orgId), eq(farmosTreatments.isActive, 1), speciesFilter))
       .orderBy(desc(farmosTreatments.id));
     return rows.map((r) => ({
       ...r.treatment,
@@ -982,19 +1015,32 @@ export class FarmosService {
 
   // ─── Sales & expenses (read-only for now) ───────────────────────────────
 
-  async listSales(orgId: number) {
+  // RBAC espece : farmos_sales a une colonne species (filtre direct). Les ventes
+  // sans species restent visibles (or isNull) pour ne pas masquer le legacy.
+  async listSales(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter =
+      speciesScope === "all"
+        ? undefined
+        : speciesScope.length
+          ? or(isNull(farmosSales.species), inArray(farmosSales.species, speciesScope))
+          : sql`1 = 0`;
+
     return this.db
       .select()
       .from(farmosSales)
-      .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1)))
+      .where(and(eq(farmosSales.organizationId, orgId), eq(farmosSales.isActive, 1), speciesFilter))
       .orderBy(desc(farmosSales.saleDate));
   }
 
-  async listExpenses(orgId: number) {
+  // RBAC espece : farmos_expenses se relie via related_animal_id (fail-open :
+  // les depenses sans animal lie restent visibles).
+  async listExpenses(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter = this.speciesViaAnimalFilter(farmosExpenses.relatedAnimalId, orgId, speciesScope);
+
     return this.db
       .select()
       .from(farmosExpenses)
-      .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1)))
+      .where(and(eq(farmosExpenses.organizationId, orgId), eq(farmosExpenses.isActive, 1), speciesFilter))
       .orderBy(desc(farmosExpenses.expenseDate));
   }
 
