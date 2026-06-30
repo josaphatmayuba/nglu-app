@@ -8,6 +8,7 @@ import { AuditService, type AuditContext } from "../audit/audit.service";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import { provisionOrgChartOfAccounts } from "../database/provisioning/chart-of-accounts";
+import { cloneRolesForOrg } from "../database/provisioning/org-roles";
 import { organizations, refreshTokens, roles, sessions, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LoginDto } from "./dto/login.dto";
@@ -325,14 +326,10 @@ export class AuthService {
     const [slugTaken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
     if (slugTaken) throw new ConflictException("Cette adresse est deja utilisee.");
 
-    // Role 'admin' = administrateur de SA propre organisation (pas plateforme).
-    const [adminRole] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.name, "admin")).limit(1);
-    if (!adminRole) throw new BadRequestException("Role admin introuvable (seed manquant).");
-
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const publicId = `org_${randomBytes(6).toString("hex")}`; // 12 hexa opaques
 
-    // Transaction atomique : org + user + plan comptable. Tout ou rien.
+    // Transaction atomique : org + roles + user + plan comptable. Tout ou rien.
     const created = await this.db.transaction(async (tx) => {
       const [orgRes] = await tx.insert(organizations).values({
         publicId,
@@ -345,6 +342,12 @@ export class AuthService {
       } as any);
       const orgId = Number((orgRes as any).insertId);
 
+      // Phase 0 multi-tenant : la nouvelle org recoit SON propre jeu de roles +
+      // permissions (copie de l org modele). L admin pointe sur le role « admin »
+      // de SA propre org, pas celui partage de l org 1.
+      const adminRoleId = await cloneRolesForOrg(tx as unknown as Database, orgId);
+      if (!adminRoleId) throw new BadRequestException("Role admin introuvable dans l org modele (seed manquant).");
+
       const [userRes] = await tx.insert(users).values({
         organizationId: orgId,
         firstName: dto.firstName,
@@ -353,7 +356,7 @@ export class AuthService {
         email,
         phone: dto.phone ?? null,
         password: passwordHash,
-        roleId: adminRole.id,
+        roleId: adminRoleId,
         status: "true",
         isLogin: "true",
         createdAt: sql`CURRENT_TIMESTAMP`,
@@ -365,7 +368,7 @@ export class AuthService {
       // par nom). Le handle tx garantit l atomicite avec l org + user.
       await provisionOrgChartOfAccounts(tx as unknown as Database, orgId);
 
-      return { orgId, userId };
+      return { orgId, userId, adminRoleId };
     });
 
     await this.audit.log("auth.register.ok", `org:${created.orgId}`, { ...ctx, userId: created.userId }, {
@@ -374,7 +377,7 @@ export class AuthService {
 
     // Connexion immediate : JWT + refresh (nouvelle famille = 1er device).
     const familyId = randomUUID();
-    const { accessToken } = await this.issueAccessToken(created.userId, adminRole.id, "admin", created.orgId, ctx, familyId);
+    const { accessToken } = await this.issueAccessToken(created.userId, created.adminRoleId, "admin", created.orgId, ctx, familyId);
     const { token: refreshToken } = await this.issueRefreshToken(created.userId, "admin", familyId, ctx);
 
     return {

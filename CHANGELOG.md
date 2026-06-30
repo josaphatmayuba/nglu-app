@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.131.0)
+- **RBAC multi-tenant — rôles par organisation (Phase 0)**. Les rôles et leurs permissions sont désormais **isolés par organisation** : chaque org a son propre jeu (un « manager » par org, modifiable sans impacter les autres). `organization_id` ajouté sur `role` et `rolePermission` (=1 pour tout l'historique), l'unicité du nom devient composite `(organization_id, name)`. Migration idempotente `0189` (INFORMATION_SCHEMA + PREPARE : MySQL 8 ne gère pas ADD COLUMN/DROP INDEX IF EXISTS ; remplace l'ancien unique global `role.name`). **Non destructif** : l'auth et le permission check résolvent par `roleId` (jamais par nom), donc personne ne perd ses accès. `roles.service`/controller filtrent par `@CurrentOrg` (compatible 1 org : comportement identique aujourd'hui). À la **création d'une organisation** (console super_owner **et** signup public), le jeu de rôles+permissions est **copié depuis l'org modèle** (org 1) via le helper partagé `cloneRolesForOrg` ; l'admin de la nouvelle org pointe sur le rôle « admin » de **sa** propre org. Identifiant public des orgs **inchangé** (format `org_xxxx` hexa conservé). `backend2/src/database/schema.ts`, `backend2/drizzle/0189_roles_per_organization.sql`, `backend2/src/database/provisioning/org-roles.ts`, `backend2/src/roles/`, `backend2/src/role-permissions/`, `backend2/src/organizations/`, `backend2/src/auth/auth.service.ts`.
+
 ### Added (3.130.1)
 - **UI affectation des biens — Domus (Phase 2)**. Nouvel onglet **« Biens (Domus) »** dans le panneau RH (`PropertyAssignTab`) : tableau Utilisateur × Biens, recherche, badge « Tout » quand aucune restriction, enregistrement par ligne. Les biens sont chargés dynamiquement depuis `/property-management/properties` (avec recherche dans le select). Branche l'UI sur le backend RBAC par bien livré en 3.130.0. `frontend/src/components/hr/PropertyAssignTab.jsx`, `frontend/src/components/hr/HrPanel.jsx`.
 

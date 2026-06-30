@@ -5,7 +5,8 @@ import { desc, eq, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import { provisionOrgChartOfAccounts } from "../database/provisioning/chart-of-accounts";
-import { organizations, roles, users } from "../database/schema";
+import { cloneRolesForOrg } from "../database/provisioning/org-roles";
+import { organizations, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { CreateOrganizationDto } from "./dto/create-organization.dto";
 
@@ -56,9 +57,6 @@ export class OrganizationsService {
     const [slugTaken] = await this.db.select({ id: organizations.id }).from(organizations).where(eq(organizations.slug, slug)).limit(1);
     if (slugTaken) throw new ConflictException("Cette adresse est deja utilisee.");
 
-    const [adminRole] = await this.db.select({ id: roles.id }).from(roles).where(eq(roles.name, "admin")).limit(1);
-    if (!adminRole) throw new BadRequestException("Role admin introuvable (seed manquant).");
-
     const passwordHash = await bcrypt.hash(dto.adminPassword, 10);
     const publicId = `org_${randomBytes(6).toString("hex")}`;
 
@@ -73,6 +71,12 @@ export class OrganizationsService {
       } as any);
       const orgId = Number((orgRes as any).insertId);
 
+      // Phase 0 multi-tenant : chaque org recoit SON propre jeu de roles +
+      // permissions, copie depuis l org modele (org 1). L admin pointe sur le
+      // role « admin » de SA nouvelle org (et non celui partage de l org 1).
+      const adminRoleId = await cloneRolesForOrg(tx as unknown as Database, orgId);
+      if (!adminRoleId) throw new BadRequestException("Role admin introuvable dans l org modele (seed manquant).");
+
       await tx.insert(users).values({
         organizationId: orgId,
         firstName: dto.adminFirstName,
@@ -80,7 +84,7 @@ export class OrganizationsService {
         username: email,
         email,
         password: passwordHash,
-        roleId: adminRole.id,
+        roleId: adminRoleId,
         status: "true",
         isLogin: "false",
         createdAt: sql`CURRENT_TIMESTAMP`,
@@ -116,4 +120,5 @@ export class OrganizationsService {
     await this.audit.log("org.reactivate", `org:${org.id}`, ctx, { slug: org.slug });
     return { ...org, status: "active" };
   }
+
 }

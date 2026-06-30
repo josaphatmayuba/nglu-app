@@ -14,6 +14,7 @@ import {
   text,
   timestamp,
   tinyint,
+  unique,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -1987,14 +1988,25 @@ export const paymentPurchaseInvoices = mysqlTable("paymentPurchaseInvoice", {
   updatedAt: timestamp("updated_at"),
 });
 
-export const roles = mysqlTable("role", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull().unique(),
-  status: varchar("status", { length: 255 }).default("true").notNull(),
-  isSystem: tinyint("is_system").default(0).notNull(),
-  createdAt: timestamp("created_at"),
-  updatedAt: timestamp("updated_at"),
-});
+// P2 multi-tenant (Phase 0) : roles isoles par organisation. organization_id=1
+// pour tous les roles historiques. L unicite du nom devient (organization_id,
+// name) — chaque org peut avoir son propre « manager ». Le permission check et
+// l auth resolvent par roleId (jamais par nom), donc l ajout est non destructif.
+export const roles = mysqlTable(
+  "role",
+  {
+    id: serial("id").primaryKey(),
+    organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    status: varchar("status", { length: 255 }).default("true").notNull(),
+    isSystem: tinyint("is_system").default(0).notNull(),
+    createdAt: timestamp("created_at"),
+    updatedAt: timestamp("updated_at"),
+  },
+  (table) => ({
+    orgNameUnique: unique("uq_role_org_name").on(table.organizationId, table.name),
+  }),
+);
 
 export const permissions = mysqlTable("permission", {
   id: serial("id").primaryKey(),
@@ -2004,8 +2016,12 @@ export const permissions = mysqlTable("permission", {
   updatedAt: timestamp("updated_at"),
 });
 
+// P2 multi-tenant (Phase 0) : organization_id denormalise depuis le role parent
+// (=1 pour l historique). Le permission check reste par roleId ; ce champ sert au
+// scope/coherence et a la copie de jeu de roles a la creation d une organisation.
 export const rolePermissions = mysqlTable("rolePermission", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   roleId: bigint("roleId", { mode: "number" }).notNull(),
   permissionId: bigint("permissionId", { mode: "number" }).notNull(),
   createdAt: timestamp("created_at"),

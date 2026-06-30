@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { DRIZZLE } from "../database/database.constants";
 import { permissions, rolePermissions, roles } from "../database/schema";
@@ -14,12 +14,17 @@ export class RolesService {
     private readonly audit: AuditService,
   ) {}
 
-  async findAll(query: Record<string, string>) {
+  // orgId : Phase 0 multi-tenant — les roles sont isoles par organisation. Tant
+  // qu il n y a qu une org (=1), le comportement est identique a avant.
+  async findAll(query: Record<string, string>, orgId?: number) {
+    const orgFilter = orgId !== undefined ? eq(roles.organizationId, orgId) : undefined;
+
     if (query["query"] === "all") {
+      const where = and(eq(roles.status, "true"), orgFilter);
       const rows = await this.db
         .select()
         .from(roles)
-        .where(eq(roles.status, "true"))
+        .where(where)
         .orderBy(desc(roles.id));
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
@@ -27,7 +32,7 @@ export class RolesService {
       const [{ count }] = await this.db
         .select({ count: sql<number>`count(*)` })
         .from(roles)
-        .where(eq(roles.status, "true"));
+        .where(where);
 
       return { getAllRole: withPerms, totalRole: Number(count) };
     }
@@ -35,11 +40,12 @@ export class RolesService {
     if (query["query"] === "search") {
       const key = `%${query["key"] ?? ""}%`;
       const { skip, limit } = this.pagination(query);
+      const where = and(like(roles.name, key), orgFilter);
 
       const rows = await this.db
         .select()
         .from(roles)
-        .where(like(roles.name, key))
+        .where(where)
         .orderBy(desc(roles.id))
         .limit(limit)
         .offset(skip);
@@ -47,7 +53,7 @@ export class RolesService {
       const [{ count }] = await this.db
         .select({ count: sql<number>`count(*)` })
         .from(roles)
-        .where(like(roles.name, key));
+        .where(where);
 
       const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
@@ -61,11 +67,12 @@ export class RolesService {
     const { skip, limit } = this.pagination(query);
 
     const statusFilter = query["status"] ? inArray(roles.status, query["status"].split(",")) : undefined;
+    const where = and(statusFilter, orgFilter);
 
     const rows = await this.db
       .select()
       .from(roles)
-      .where(statusFilter)
+      .where(where)
       .orderBy(desc(roles.id))
       .limit(limit)
       .offset(skip);
@@ -73,23 +80,28 @@ export class RolesService {
     const [{ count }] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(roles)
-      .where(statusFilter);
+      .where(where);
 
     const withPerms = await Promise.all(rows.map((r) => this.attachPermissions(r)));
 
     return { getAllRole: withPerms, totalRole: Number(count) };
   }
 
-  async findOne(id: number) {
-    const [role] = await this.db.select().from(roles).where(eq(roles.id, id)).limit(1);
+  async findOne(id: number, orgId?: number) {
+    const [role] = await this.db
+      .select()
+      .from(roles)
+      .where(and(eq(roles.id, id), orgId !== undefined ? eq(roles.organizationId, orgId) : undefined))
+      .limit(1);
 
     if (!role) throw new NotFoundException("Role not found");
 
     return this.attachPermissions(role);
   }
 
-  async create(dto: CreateRoleDto, ctx: AuditContext = {}) {
+  async create(dto: CreateRoleDto, orgId = 1, ctx: AuditContext = {}) {
     const [result] = await this.db.insert(roles).values({
+      organizationId: orgId,
       name: dto.name,
       status: "true",
       createdAt: sql`CURRENT_TIMESTAMP`,
@@ -99,20 +111,22 @@ export class RolesService {
     const newId = Number(result.insertId);
     await this.audit.log("admin.role.created", `role:${newId}`, ctx, { name: dto.name });
 
-    return this.findOne(newId);
+    return this.findOne(newId, orgId);
   }
 
-  async createMany(data: CreateRoleDto[]) {
+  async createMany(data: CreateRoleDto[], orgId = 1) {
     let created = 0;
     for (const item of data) {
+      // Unicite par (organization_id, name) : on verifie dans la meme org.
       const existing = await this.db
         .select({ id: roles.id })
         .from(roles)
-        .where(eq(roles.name, item.name))
+        .where(and(eq(roles.name, item.name), eq(roles.organizationId, orgId)))
         .limit(1);
 
       if (!existing.length) {
         await this.db.insert(roles).values({
+          organizationId: orgId,
           name: item.name,
           status: "true",
           createdAt: sql`CURRENT_TIMESTAMP`,

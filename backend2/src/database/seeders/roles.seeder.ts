@@ -18,6 +18,8 @@ export async function seedRoles() {
 
   await db.insert(roles).values(
     missingRoles.map((name) => ({
+      // Phase 0 multi-tenant : roles de base rattaches a l org 1 (historique).
+      organizationId: 1,
       name,
       // "true" pour matcher la convention attendue par roles.service.ts
       // (qui filtre `where(eq(roles.status, "true"))`). Cohérent avec
