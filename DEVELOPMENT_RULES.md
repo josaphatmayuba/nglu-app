@@ -83,6 +83,17 @@ Rules:
 - Jira comments after validation must include the base version, build version, commit hash and validation summary.
 - See `VERSIONING.md` for the complete workflow.
 
+## Backend Migration Policy
+
+Backend schema changes must target `backend2/` and Drizzle migrations only.
+
+Rules:
+
+- Migrations live in `backend2/drizzle/*.sql` and must keep exactly one SQL statement per `--> statement-breakpoint`.
+- Operational repair migrations must be idempotent and safe to replay at container boot.
+- MySQL 8 does not reliably support `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` or `CREATE INDEX IF NOT EXISTS`; use `INFORMATION_SCHEMA` checks plus `SET @sql := IF(...); PREPARE; EXECUTE; DEALLOCATE`.
+- If a migration fails in dev or prod, fix the migration file instead of bypassing the failure.
+
 ## Routing Policy
 
 The public marketing site and CRM must stay separated:

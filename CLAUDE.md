@@ -39,6 +39,7 @@ Détail complet : `~/.claude/skills/token-optimizer/SKILL.md` (ou `skills/token-
 - Migrations = fichiers `backend2/drizzle/*.sql` format Drizzle, **1 statement par `--> statement-breakpoint`** (sinon ER_PARSE_ERROR → crash-loop du conteneur au boot).
 - Le conteneur dev **auto-applique** les migrations au démarrage ; ordre piloté par `_journal.json` (champ `when`) — un `when` en désordre fait **sauter** des migrations.
 - Fichiers de réparation = **idempotents** (SET/IF/PREPARE, pas de procédure stockée : `splitSqlStatements` coupe sur `;`).
+- MySQL 8 : ne pas utiliser `ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`; utiliser `INFORMATION_SCHEMA` + `PREPARE/EXECUTE`.
 - Tables/colonnes **hors journal** → pas auto-créées : les ajouter **à la main sur dev ET prod**. Cibler **`nglu_dev_mysql`** (pas `nglu_mysql` = prod).
 - Si une migration plante : corriger le **fichier**, pas contourner.
 
