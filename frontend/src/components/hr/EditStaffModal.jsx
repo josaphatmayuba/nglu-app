@@ -12,6 +12,20 @@ const phoneRule = {
 
 const { Option } = Select;
 
+// Especes FarmOS (cf. backend FARMOS_SPECIES) + libelles FR pour l affectation
+// des gestionnaires par espece (RBAC par espece, Phase 2).
+const FARMOS_SPECIES_OPTIONS = [
+  { value: "cow", label: "Bovin" },
+  { value: "pig", label: "Porc" },
+  { value: "chicken", label: "Poulet" },
+  { value: "fish", label: "Poisson" },
+  { value: "goat", label: "Caprin" },
+  { value: "sheep", label: "Ovin" },
+  { value: "rabbit", label: "Lapin" },
+  { value: "duck", label: "Canard" },
+  { value: "turkey", label: "Dinde" },
+];
+
 function Section({ label }) {
   return (
     <div className="text-[11px] font-semibold text-ink-500 uppercase tracking-wider mb-3 mt-5 border-t border-ink-100 pt-4">
@@ -26,6 +40,7 @@ export default function EditStaffModal({ user, designations, departments, onClos
   const [roles, setRoles] = useState([]);
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [farmosSpecies, setFarmosSpecies] = useState([]);
   const isCreate = mode === "create";
   const isOpen = isCreate ? open : !!user;
 
@@ -44,7 +59,13 @@ export default function EditStaffModal({ user, designations, departments, onClos
 
     if (isCreate) {
       form.resetFields();
+      setFarmosSpecies([]);
     } else if (user) {
+      // Especes FarmOS deja affectees a ce gestionnaire (best-effort).
+      axios
+        .get(`/farmos/species-managers/${user.id}`)
+        .then(({ data }) => setFarmosSpecies(Array.isArray(data) ? data.map((r) => r.species) : []))
+        .catch(() => setFarmosSpecies([]));
       form.setFieldsValue({
         firstName: user.firstName ?? "",
         lastName: user.lastName ?? "",
@@ -83,12 +104,24 @@ export default function EditStaffModal({ user, designations, departments, onClos
       leaveDate: values.leaveDate ? values.leaveDate.format("YYYY-MM-DD") : undefined,
     };
 
+    // Les especes FarmOS ne sont pas un champ du formulaire user : elles sont
+    // gerees par etat (farmosSpecies) et enregistrees a part via l endpoint
+    // dedie (uniquement en edition, on a besoin du userId).
     const request = isCreate
       ? axios.post("/user/register", payload)
       : axios.put(`/user/${user.id}`, payload);
 
     request
-      .then(() => {
+      .then(async () => {
+        if (!isCreate && user?.id) {
+          // Best-effort : ne bloque pas l enregistrement de l employe si l API
+          // especes echoue (ex: droits, FarmOS indisponible).
+          try {
+            await axios.post(`/farmos/species-managers/${user.id}`, { species: farmosSpecies });
+          } catch {
+            message.warning("Employé enregistré, mais l'affectation des espèces a échoué.");
+          }
+        }
         message.success(isCreate ? "Employé créé" : "Employé mis à jour");
         onSaved();
       })
@@ -203,6 +236,21 @@ export default function EditStaffModal({ user, designations, departments, onClos
               </Select>
             </Form.Item>
           </div>
+          {!isCreate && (
+            <Form.Item
+              label="Espèces gérées (FarmOS)"
+              extra="Limite ce gestionnaire aux espèces choisies. Vide = aucune restriction (voit tout)."
+            >
+              <Select
+                mode="multiple"
+                allowClear
+                placeholder="Toutes les espèces"
+                value={farmosSpecies}
+                onChange={setFarmosSpecies}
+                options={FARMOS_SPECIES_OPTIONS}
+              />
+            </Form.Item>
+          )}
           <div className="grid grid-cols-2 gap-x-4">
             <Form.Item name="joinDate" label="Date d'embauche">
               <DatePicker className="w-full" format="YYYY-MM-DD" />

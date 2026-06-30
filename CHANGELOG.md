@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.126.1)
+- **UI affectation des espèces à un gestionnaire (FarmOS, Phase 2)**. La fiche employé (`EditStaffModal`, section Informations RH) reçoit un champ multi-select **« Espèces gérées (FarmOS) »** (libellés FR : Bovin, Porc, Poulet…), visible en mode édition. À l'ouverture il charge les espèces déjà affectées (`GET /farmos/species-managers/:userId`) ; à l'enregistrement il les sauvegarde (`POST …`) en best-effort (n'empêche pas l'enregistrement de l'employé si l'API espèces échoue). Vide = aucune restriction (le gestionnaire voit tout). Branche l'UI sur le backend livré en 3.126.0. `frontend/src/components/hr/EditStaffModal.jsx`.
+
 ### Added (3.126.0)
 - **RBAC par espèce FarmOS — gestionnaires par espèce (Phase 2, pilote)**. Un utilisateur peut être affecté à une ou plusieurs espèces (porc, volaille…) **en plus de son rôle** : le rôle dit *ce qu'il peut faire*, l'espèce *sur quoi*. Nouvelle table `farmos_species_managers` (user ↔ espèces, soft-delete, unique user+espèce), migration idempotente `0187` (au journal, index ≥ 175 → rejouée au boot via OPERATIONAL_REPAIR). Fondation : `JwtAuthGuard` expose `departmentScope` (rôles transverses DG/Directeur/admin/super_owner = portée « toutes »), nouveau `FarmosSpeciesGuard` + décorateur `@CurrentFarmosSpecies` qui peuplent la portée espèce. Pilote appliqué à `GET /farmos/animals` : un gestionnaire ne voit que les animaux de ses espèces (filtre `species IN (...)`). **Fail-open volontaire** : un user sans affectation voit tout (pas de cloisonnement tant que les affectations ne sont pas posées → n'casse pas l'existant). Endpoints de gestion `GET/POST /farmos/species-managers/:userId` (couverts par la whitelist préfixe `/farmos`). Extension prévue : dépenses/ventes/repro via l'animal lié. `backend2/src/database/schema.ts`, `backend2/drizzle/0187_farmos_species_managers.sql`, `backend2/src/auth/guards/`, `backend2/src/farmos/`.
 
