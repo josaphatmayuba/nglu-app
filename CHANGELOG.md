@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.127.0)
+- **Affectation des espèces souple et réajustable — pour TOUT utilisateur (FarmOS, Phase 2)**. L'affectation à des espèces est **indépendante du rôle ET du poste** : n'importe quel employé (vétérinaire, superviseur, ouvrier…) peut être limité à une ou plusieurs espèces ; le rôle décide des droits, l'espèce du périmètre, le poste n'intervient pas. Nouvel **onglet « Espèces (FarmOS) »** dans le panneau RH (`SpeciesAssignTab`) : tableau Utilisateur × Espèces avec recherche, badge « Tout » quand aucune restriction, enregistrement par ligne. Nouvel endpoint `GET /farmos/species-managers` (toutes les affectations de l'org en un appel : map userId→espèces). Dans la fiche employé, le champ est recadré « **Espèces affectées** » (au lieu de « gérées ») avec mention de l'indépendance rôle/poste. `frontend/src/components/hr/SpeciesAssignTab.jsx`, `frontend/src/components/hr/HrPanel.jsx`, `frontend/src/components/hr/EditStaffModal.jsx`, `backend2/src/farmos/`.
+
 ### Added (3.126.1)
 - **UI affectation des espèces à un gestionnaire (FarmOS, Phase 2)**. La fiche employé (`EditStaffModal`, section Informations RH) reçoit un champ multi-select **« Espèces gérées (FarmOS) »** (libellés FR : Bovin, Porc, Poulet…), visible en mode édition. À l'ouverture il charge les espèces déjà affectées (`GET /farmos/species-managers/:userId`) ; à l'enregistrement il les sauvegarde (`POST …`) en best-effort (n'empêche pas l'enregistrement de l'employé si l'API espèces échoue). Vide = aucune restriction (le gestionnaire voit tout). Branche l'UI sur le backend livré en 3.126.0. `frontend/src/components/hr/EditStaffModal.jsx`.
 

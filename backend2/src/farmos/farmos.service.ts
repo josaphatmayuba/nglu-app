@@ -3403,6 +3403,21 @@ export class FarmosService {
   // ── Gestionnaires par espece (RBAC par espece, Phase 2) ──────────────────
   // Affecte/lit les especes gerees par un utilisateur (farmos_species_managers).
 
+  // Toutes les affectations actives de l organisation, en un appel : map
+  // userId -> especes[]. Pour l ecran d ensemble Utilisateur x Especes.
+  async listAllSpeciesAssignments(orgId: number) {
+    const rows = await this.db
+      .select({ userId: farmosSpeciesManagers.userId, species: farmosSpeciesManagers.species })
+      .from(farmosSpeciesManagers)
+      .where(and(eq(farmosSpeciesManagers.organizationId, orgId), eq(farmosSpeciesManagers.isActive, 1)));
+
+    const byUser: Record<number, string[]> = {};
+    for (const r of rows) {
+      (byUser[r.userId] ??= []).push(r.species);
+    }
+    return byUser;
+  }
+
   // Especes actives affectees a un user dans l organisation.
   async listSpeciesManagerAssignments(userId: number, orgId: number) {
     return this.db

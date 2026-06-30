@@ -154,6 +154,13 @@ export class FarmosController {
     return this.farmos.listAnimals(orgId, species);
   }
 
+  @ApiOperation({ summary: "All species assignments of the org (map userId -> species[])" })
+  @Permissions("readAll-farmos")
+  @Get("species-managers")
+  listAllSpeciesAssignments(@CurrentOrg() orgId: number) {
+    return this.farmos.listAllSpeciesAssignments(orgId);
+  }
+
   @ApiOperation({ summary: "List species assigned to a manager (RBAC par espèce)" })
   @Permissions("readAll-farmos")
   @Get("species-managers/:userId")

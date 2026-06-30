@@ -238,8 +238,8 @@ export default function EditStaffModal({ user, designations, departments, onClos
           </div>
           {!isCreate && (
             <Form.Item
-              label="Espèces gérées (FarmOS)"
-              extra="Limite ce gestionnaire aux espèces choisies. Vide = aucune restriction (voit tout)."
+              label="Espèces affectées (FarmOS)"
+              extra="Périmètre des espèces (indépendant du rôle et du poste). Les droits restent ceux du rôle. Vide = aucune restriction (voit tout)."
             >
               <Select
                 mode="multiple"

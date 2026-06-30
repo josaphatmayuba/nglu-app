@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import EditStaffModal from "./EditStaffModal";
 import RolesTab from "./RolesTab";
+import SpeciesAssignTab from "./SpeciesAssignTab";
 import SalariesPage from "./SalariesPage";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import { cleanCurrencySymbol } from "../propertyManagement/shared/format";
@@ -34,6 +35,7 @@ const TABS = [
   { key: "organigramme", label: "Postes & Départements" },
   { key: "performance", label: "Performance" },
   { key: "roles", label: "Rôles & Permissions" },
+  { key: "especes", label: "Espèces (FarmOS)" },
 ];
 
 function getInitials(user) {
@@ -658,6 +660,8 @@ export default function HrPanel() {
       {activeTab === "performance" && <PlaceholderPanel label="Évaluation des performances" />}
 
       {activeTab === "roles" && <RolesTab />}
+
+      {activeTab === "especes" && <SpeciesAssignTab />}
 
       {/* ── Modals & Drawers ── */}
       <ViewStaffDrawer user={viewingUser} onClose={() => setViewingUser(null)} />
