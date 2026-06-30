@@ -9,6 +9,19 @@ import type { Database } from "../../database/types";
 // P1 multi-tenant : seul ce role peut basculer d organisation via X-Active-Org.
 const SUPER_OWNER_ROLE = "super_owner";
 
+// Roles a portee transverse : voient TOUS les departements de leur organisation
+// (pas de filtrage par department_id). Cf. design RBAC par departement, Phase 2.
+// "all" = portee transverse ; sinon la portee vaut le departmentId du user.
+const ALL_DEPARTMENTS_SCOPE = "all";
+const CROSS_DEPARTMENT_ROLES = new Set([
+  SUPER_OWNER_ROLE,
+  "Directeur General",
+  "Directeur",
+  "Observateur direction",
+  "super-admin",
+  "admin",
+]);
+
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   // Tracabilite des acces transverses : un super_owner qui agit sur une autre
@@ -65,6 +78,7 @@ export class JwtAuthGuard implements CanActivate {
     payload.organizationId = current.organizationId;
     // Exposes pour les guards/decorateurs en aval (ex: console super-owner).
     (payload as Record<string, unknown>).isSuperOwner = current.isSuperOwner;
+    (payload as Record<string, unknown>).departmentScope = current.departmentScope;
     request.user = payload;
     return true;
   }
@@ -91,6 +105,7 @@ export class JwtAuthGuard implements CanActivate {
         roleId: users.roleId,
         roleName: roles.name,
         organizationId: users.organizationId,
+        departmentId: users.departmentId,
         isLogin: users.isLogin,
         status: users.status,
       })
@@ -112,6 +127,15 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const isSuperOwner = user.roleName === SUPER_OWNER_ROLE;
+
+    // Portee departement (Phase 2) : les roles transverses voient tous les
+    // departements ("all"), les autres sont limites a leur department_id.
+    // Un user sans departement assigne ET non transverse ne se voit imposer
+    // aucun filtre (null) — fail-open volontaire pour ne pas casser l existant
+    // tant que les department_id ne sont pas peuples.
+    const departmentScope: number | string | null = CROSS_DEPARTMENT_ROLES.has(user.roleName ?? "")
+      ? ALL_DEPARTMENTS_SCOPE
+      : (user.departmentId ?? null);
 
     // Org effective = celle du user en DB. Le super_owner peut la surcharger via
     // X-Active-Org (support / monitoring). Pour tout autre role, l en-tete est
@@ -150,6 +174,6 @@ export class JwtAuthGuard implements CanActivate {
       }
     }
 
-    return { organizationId, isSuperOwner };
+    return { organizationId, isSuperOwner, departmentScope };
   }
 }

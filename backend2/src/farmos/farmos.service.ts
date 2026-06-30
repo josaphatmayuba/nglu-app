@@ -5,7 +5,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesManagers, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -480,11 +480,21 @@ export class FarmosService {
 
   // ─── Animals ─────────────────────────────────────────────────────────────
 
-  async listAnimals(orgId: number) {
+  // speciesScope : "all" (defaut, retro-compatible) = toutes especes ; sinon la
+  // liste est filtree aux especes affectees au gestionnaire (RBAC par espece,
+  // Phase 2). Une liste vide => aucun animal (gestionnaire sans espece valide).
+  async listAnimals(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter =
+      speciesScope === "all"
+        ? undefined
+        : speciesScope.length
+          ? inArray(farmosAnimals.species, speciesScope)
+          : sql`1 = 0`;
+
     return this.db
       .select()
       .from(farmosAnimals)
-      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1)))
+      .where(and(eq(farmosAnimals.organizationId, orgId), eq(farmosAnimals.isActive, 1), speciesFilter))
       .orderBy(desc(farmosAnimals.id));
   }
 
@@ -3388,5 +3398,56 @@ export class FarmosService {
       await this.postExpenseLedgerApproved(expenseId, orgId);
     }
     return { expenseId, approval: result };
+  }
+
+  // ── Gestionnaires par espece (RBAC par espece, Phase 2) ──────────────────
+  // Affecte/lit les especes gerees par un utilisateur (farmos_species_managers).
+
+  // Especes actives affectees a un user dans l organisation.
+  async listSpeciesManagerAssignments(userId: number, orgId: number) {
+    return this.db
+      .select({ id: farmosSpeciesManagers.id, species: farmosSpeciesManagers.species })
+      .from(farmosSpeciesManagers)
+      .where(
+        and(
+          eq(farmosSpeciesManagers.userId, userId),
+          eq(farmosSpeciesManagers.organizationId, orgId),
+          eq(farmosSpeciesManagers.isActive, 1),
+        ),
+      )
+      .orderBy(farmosSpeciesManagers.species);
+  }
+
+  // Remplace l ensemble des especes d un user (set complet). Soft-delete des
+  // affectations retirees, reactivation/insert des nouvelles (idempotent).
+  async setSpeciesManagerAssignments(userId: number, species: string[], orgId: number) {
+    const wanted = Array.from(new Set(species.map((s) => s.trim()).filter(Boolean)));
+
+    const existing = await this.db
+      .select({ id: farmosSpeciesManagers.id, species: farmosSpeciesManagers.species, isActive: farmosSpeciesManagers.isActive })
+      .from(farmosSpeciesManagers)
+      .where(and(eq(farmosSpeciesManagers.userId, userId), eq(farmosSpeciesManagers.organizationId, orgId)));
+
+    const existingBySpecies = new Map(existing.map((row) => [row.species, row]));
+
+    // Desactive les especes retirees.
+    const toDeactivate = existing.filter((row) => row.isActive === 1 && !wanted.includes(row.species));
+    for (const row of toDeactivate) {
+      await this.db.update(farmosSpeciesManagers).set({ isActive: 0 }).where(eq(farmosSpeciesManagers.id, row.id));
+    }
+
+    // Active / insere les especes voulues.
+    for (const sp of wanted) {
+      const row = existingBySpecies.get(sp);
+      if (row) {
+        if (row.isActive !== 1) {
+          await this.db.update(farmosSpeciesManagers).set({ isActive: 1 }).where(eq(farmosSpeciesManagers.id, row.id));
+        }
+      } else {
+        await this.db.insert(farmosSpeciesManagers).values({ userId, species: sp, organizationId: orgId, isActive: 1 });
+      }
+    }
+
+    return this.listSpeciesManagerAssignments(userId, orgId);
   }
 }

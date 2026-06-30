@@ -1135,6 +1135,13 @@
                         "when":  1780596000000,
                         "tag":  "0185_farmos_saved_reports",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  162,
+                        "version":  "5",
+                        "when":  1780599600000,
+                        "tag":  "0187_farmos_species_managers",
+                        "breakpoints":  true
                     }
                 ]
 }

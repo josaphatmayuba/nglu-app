@@ -15,7 +15,9 @@ import {
 import type { Response } from "express";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentFarmosSpecies, type FarmosSpeciesScope } from "../auth/decorators/farmos-species-scope.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
+import { FarmosSpeciesGuard } from "../auth/guards/farmos-species.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
@@ -77,7 +79,7 @@ const FARMOS_REALTIME_TABLES = [
 
 @ApiTags("farmos")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, FarmosSpeciesGuard)
 @Controller("farmos")
 export class FarmosController {
   constructor(private readonly farmos: FarmosService) {}
@@ -148,8 +150,26 @@ export class FarmosController {
   @ApiOperation({ summary: "List FarmOS animals" })
   @Permissions("readAll-farmos")
   @Get("animals")
-  listAnimals(@CurrentOrg() orgId: number) {
-    return this.farmos.listAnimals(orgId);
+  listAnimals(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listAnimals(orgId, species);
+  }
+
+  @ApiOperation({ summary: "List species assigned to a manager (RBAC par espèce)" })
+  @Permissions("readAll-farmos")
+  @Get("species-managers/:userId")
+  listSpeciesManager(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listSpeciesManagerAssignments(userId, orgId);
+  }
+
+  @ApiOperation({ summary: "Set species assigned to a manager (set complet, RBAC par espèce)" })
+  @Permissions("update-farmos")
+  @Post("species-managers/:userId")
+  setSpeciesManager(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: { species: string[] },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.setSpeciesManagerAssignments(userId, Array.isArray(body?.species) ? body.species : [], orgId);
   }
 
   @ApiOperation({ summary: "Get FarmOS animal by id" })
