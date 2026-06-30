@@ -2667,12 +2667,12 @@ export const farmosSemenStraws = mysqlTable("farmos_semen_straws", {
 });
 
 // RBAC par espece (Phase 2) : affecte un utilisateur a une ou plusieurs especes
-// FarmOS. Un gestionnaire ne voit/gere que les especes qui lui sont affectees.
-// Affectation EN PLUS du role : le role dit ce qu il peut faire, l espece sur
-// quoi. Les roles transverses (DG/Directeur/admin/super_owner) ignorent ce
-// filtre (portee = toutes especes). Une espece = varchar, coherent avec
-// farmos_animals.species. unique (user_id, species).
-export const farmosSpeciesManagers = mysqlTable("farmos_species_managers", {
+// FarmOS. N IMPORTE QUEL user (employe, veterinaire, superviseur...) peut etre
+// limite a 1..N especes, INDEPENDAMMENT du role et du poste : le role dit ce
+// qu il peut faire, l espece sur quoi. Les roles transverses
+// (DG/Directeur/admin/super_owner) ignorent ce filtre (portee = toutes especes).
+// Une espece = varchar, coherent avec farmos_animals.species. unique (user_id, species).
+export const farmosSpeciesAssignments = mysqlTable("farmos_species_assignments", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   userId: bigint("user_id", { mode: "number" }).notNull(),

@@ -32,7 +32,7 @@ export default function SpeciesAssignTab() {
     setLoading(true);
     Promise.all([
       axios.get("/hr/staff-overview"),
-      axios.get("/farmos/species-managers"),
+      axios.get("/farmos/species-assignments"),
     ])
       .then(([staffResp, assignResp]) => {
         setStaff(staffResp.data?.staff ?? []);
@@ -54,7 +54,7 @@ export default function SpeciesAssignTab() {
     const species = currentValue(userId);
     setSavingId(userId);
     try {
-      await axios.post(`/farmos/species-managers/${userId}`, { species });
+      await axios.post(`/farmos/species-assignments/${userId}`, { species });
       setAssignments((prev) => ({ ...prev, [userId]: species }));
       setDirty((prev) => {
         const next = { ...prev };

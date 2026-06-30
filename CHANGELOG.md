@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.127.1)
+- **Renommage `farmos_species_managers` → `farmos_species_assignments`** (cohérence : l'affectation concerne tout utilisateur, pas seulement les « managers »). Le nom « managers » était trompeur depuis que l'affectation est devenue indépendante du rôle et du poste. Renommé partout avant tout déploiement (rien n'était poussé) : table + migration `0187` (réécrite, idempotente) + journal Drizzle, identifiant `farmosSpeciesAssignments` (schema/service/guard/décorateur), méthodes service (`listSpeciesAssignments`/`setSpeciesAssignments`), routes API `/farmos/species-assignments` (toujours couvertes par la whitelist préfixe `/farmos`), et appels front (`SpeciesAssignTab`, `EditStaffModal`). `backend2/`, `frontend/src/components/hr/`.
+
 ### Added (3.127.0)
 - **Affectation des espèces souple et réajustable — pour TOUT utilisateur (FarmOS, Phase 2)**. L'affectation à des espèces est **indépendante du rôle ET du poste** : n'importe quel employé (vétérinaire, superviseur, ouvrier…) peut être limité à une ou plusieurs espèces ; le rôle décide des droits, l'espèce du périmètre, le poste n'intervient pas. Nouvel **onglet « Espèces (FarmOS) »** dans le panneau RH (`SpeciesAssignTab`) : tableau Utilisateur × Espèces avec recherche, badge « Tout » quand aucune restriction, enregistrement par ligne. Nouvel endpoint `GET /farmos/species-managers` (toutes les affectations de l'org en un appel : map userId→espèces). Dans la fiche employé, le champ est recadré « **Espèces affectées** » (au lieu de « gérées ») avec mention de l'indépendance rôle/poste. `frontend/src/components/hr/SpeciesAssignTab.jsx`, `frontend/src/components/hr/HrPanel.jsx`, `frontend/src/components/hr/EditStaffModal.jsx`, `backend2/src/farmos/`.
 

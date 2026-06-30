@@ -63,7 +63,7 @@ export default function EditStaffModal({ user, designations, departments, onClos
     } else if (user) {
       // Especes FarmOS deja affectees a ce gestionnaire (best-effort).
       axios
-        .get(`/farmos/species-managers/${user.id}`)
+        .get(`/farmos/species-assignments/${user.id}`)
         .then(({ data }) => setFarmosSpecies(Array.isArray(data) ? data.map((r) => r.species) : []))
         .catch(() => setFarmosSpecies([]));
       form.setFieldsValue({
@@ -117,7 +117,7 @@ export default function EditStaffModal({ user, designations, departments, onClos
           // Best-effort : ne bloque pas l enregistrement de l employe si l API
           // especes echoue (ex: droits, FarmOS indisponible).
           try {
-            await axios.post(`/farmos/species-managers/${user.id}`, { species: farmosSpecies });
+            await axios.post(`/farmos/species-assignments/${user.id}`, { species: farmosSpecies });
           } catch {
             message.warning("Employé enregistré, mais l'affectation des espèces a échoué.");
           }

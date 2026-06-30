@@ -5,7 +5,7 @@ import { and, desc, eq, gte, inArray, isNull, like, lt, notInArray, or, sql } fr
 import { DRIZZLE } from "../database/database.constants";
 import { UsersService } from "../users/users.service";
 import { roles } from "../database/schema";
-import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesManagers, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
+import { departments, designations, farmosAiInsights, farmosAnimalPhotos, farmosAnimals, farmosBoxes, farmosBuildings, farmosDocuments, farmosDiseases, farmosExpenses, farmosFarms, farmosFeedForecasts, farmosLandFeatures, farmosLookups, farmosMedicines, farmosMortalityEvents, farmosPriceList, farmosProductionLogs, farmosReproductionEvents, farmosSales, farmosFieldNotes, farmosSavedReports, farmosSemenStraws, farmosSpeciesAssignments, farmosTasks, farmosTreatments, farmosVaccinations, farmosVaccines, farmosVetExams, farmosVetPrescriptions, farmosWeighings, farmosWorkLogs, farmosZones, suppliers, transactions, transactionTypes, users } from "../database/schema";
 import type { Database } from "../database/types";
 import { LedgerService } from "../ledger/ledger.service";
 import { WorkflowService } from "../workflow/workflow.service";
@@ -3400,16 +3400,17 @@ export class FarmosService {
     return { expenseId, approval: result };
   }
 
-  // ── Gestionnaires par espece (RBAC par espece, Phase 2) ──────────────────
-  // Affecte/lit les especes gerees par un utilisateur (farmos_species_managers).
+  // ── Affectation par espece (RBAC par espece, Phase 2) ────────────────────
+  // Affecte/lit les especes d un utilisateur (farmos_species_assignments).
+  // Concerne N IMPORTE QUEL user, independamment du role et du poste.
 
   // Toutes les affectations actives de l organisation, en un appel : map
   // userId -> especes[]. Pour l ecran d ensemble Utilisateur x Especes.
   async listAllSpeciesAssignments(orgId: number) {
     const rows = await this.db
-      .select({ userId: farmosSpeciesManagers.userId, species: farmosSpeciesManagers.species })
-      .from(farmosSpeciesManagers)
-      .where(and(eq(farmosSpeciesManagers.organizationId, orgId), eq(farmosSpeciesManagers.isActive, 1)));
+      .select({ userId: farmosSpeciesAssignments.userId, species: farmosSpeciesAssignments.species })
+      .from(farmosSpeciesAssignments)
+      .where(and(eq(farmosSpeciesAssignments.organizationId, orgId), eq(farmosSpeciesAssignments.isActive, 1)));
 
     const byUser: Record<number, string[]> = {};
     for (const r of rows) {
@@ -3419,36 +3420,36 @@ export class FarmosService {
   }
 
   // Especes actives affectees a un user dans l organisation.
-  async listSpeciesManagerAssignments(userId: number, orgId: number) {
+  async listSpeciesAssignments(userId: number, orgId: number) {
     return this.db
-      .select({ id: farmosSpeciesManagers.id, species: farmosSpeciesManagers.species })
-      .from(farmosSpeciesManagers)
+      .select({ id: farmosSpeciesAssignments.id, species: farmosSpeciesAssignments.species })
+      .from(farmosSpeciesAssignments)
       .where(
         and(
-          eq(farmosSpeciesManagers.userId, userId),
-          eq(farmosSpeciesManagers.organizationId, orgId),
-          eq(farmosSpeciesManagers.isActive, 1),
+          eq(farmosSpeciesAssignments.userId, userId),
+          eq(farmosSpeciesAssignments.organizationId, orgId),
+          eq(farmosSpeciesAssignments.isActive, 1),
         ),
       )
-      .orderBy(farmosSpeciesManagers.species);
+      .orderBy(farmosSpeciesAssignments.species);
   }
 
   // Remplace l ensemble des especes d un user (set complet). Soft-delete des
   // affectations retirees, reactivation/insert des nouvelles (idempotent).
-  async setSpeciesManagerAssignments(userId: number, species: string[], orgId: number) {
+  async setSpeciesAssignments(userId: number, species: string[], orgId: number) {
     const wanted = Array.from(new Set(species.map((s) => s.trim()).filter(Boolean)));
 
     const existing = await this.db
-      .select({ id: farmosSpeciesManagers.id, species: farmosSpeciesManagers.species, isActive: farmosSpeciesManagers.isActive })
-      .from(farmosSpeciesManagers)
-      .where(and(eq(farmosSpeciesManagers.userId, userId), eq(farmosSpeciesManagers.organizationId, orgId)));
+      .select({ id: farmosSpeciesAssignments.id, species: farmosSpeciesAssignments.species, isActive: farmosSpeciesAssignments.isActive })
+      .from(farmosSpeciesAssignments)
+      .where(and(eq(farmosSpeciesAssignments.userId, userId), eq(farmosSpeciesAssignments.organizationId, orgId)));
 
     const existingBySpecies = new Map(existing.map((row) => [row.species, row]));
 
     // Desactive les especes retirees.
     const toDeactivate = existing.filter((row) => row.isActive === 1 && !wanted.includes(row.species));
     for (const row of toDeactivate) {
-      await this.db.update(farmosSpeciesManagers).set({ isActive: 0 }).where(eq(farmosSpeciesManagers.id, row.id));
+      await this.db.update(farmosSpeciesAssignments).set({ isActive: 0 }).where(eq(farmosSpeciesAssignments.id, row.id));
     }
 
     // Active / insere les especes voulues.
@@ -3456,13 +3457,13 @@ export class FarmosService {
       const row = existingBySpecies.get(sp);
       if (row) {
         if (row.isActive !== 1) {
-          await this.db.update(farmosSpeciesManagers).set({ isActive: 1 }).where(eq(farmosSpeciesManagers.id, row.id));
+          await this.db.update(farmosSpeciesAssignments).set({ isActive: 1 }).where(eq(farmosSpeciesAssignments.id, row.id));
         }
       } else {
-        await this.db.insert(farmosSpeciesManagers).values({ userId, species: sp, organizationId: orgId, isActive: 1 });
+        await this.db.insert(farmosSpeciesAssignments).values({ userId, species: sp, organizationId: orgId, isActive: 1 });
       }
     }
 
-    return this.listSpeciesManagerAssignments(userId, orgId);
+    return this.listSpeciesAssignments(userId, orgId);
   }
 }

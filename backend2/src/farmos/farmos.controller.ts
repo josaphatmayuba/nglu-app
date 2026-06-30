@@ -156,27 +156,27 @@ export class FarmosController {
 
   @ApiOperation({ summary: "All species assignments of the org (map userId -> species[])" })
   @Permissions("readAll-farmos")
-  @Get("species-managers")
+  @Get("species-assignments")
   listAllSpeciesAssignments(@CurrentOrg() orgId: number) {
     return this.farmos.listAllSpeciesAssignments(orgId);
   }
 
-  @ApiOperation({ summary: "List species assigned to a manager (RBAC par espèce)" })
+  @ApiOperation({ summary: "List species assigned to a user (RBAC par espèce)" })
   @Permissions("readAll-farmos")
-  @Get("species-managers/:userId")
-  listSpeciesManager(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
-    return this.farmos.listSpeciesManagerAssignments(userId, orgId);
+  @Get("species-assignments/:userId")
+  listSpeciesAssignments(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
+    return this.farmos.listSpeciesAssignments(userId, orgId);
   }
 
-  @ApiOperation({ summary: "Set species assigned to a manager (set complet, RBAC par espèce)" })
+  @ApiOperation({ summary: "Set species assigned to a user (set complet, RBAC par espèce)" })
   @Permissions("update-farmos")
-  @Post("species-managers/:userId")
-  setSpeciesManager(
+  @Post("species-assignments/:userId")
+  setSpeciesAssignments(
     @Param("userId", ParseIntPipe) userId: number,
     @Body() body: { species: string[] },
     @CurrentOrg() orgId: number,
   ) {
-    return this.farmos.setSpeciesManagerAssignments(userId, Array.isArray(body?.species) ? body.species : [], orgId);
+    return this.farmos.setSpeciesAssignments(userId, Array.isArray(body?.species) ? body.species : [], orgId);
   }
 
   @ApiOperation({ summary: "Get FarmOS animal by id" })

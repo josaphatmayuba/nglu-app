@@ -3,7 +3,7 @@ import type { Request } from "express";
 
 // Portee espece FarmOS (RBAC par espece, Phase 2) injectee par FarmosSpeciesGuard.
 // "all"  = role transverse / aucune affectation restrictive -> voit toutes les especes.
-// string[] = liste des especes affectees a l utilisateur (farmos_species_managers).
+// string[] = liste des especes affectees a l utilisateur (farmos_species_assignments).
 export type FarmosSpeciesScope = "all" | string[];
 
 // Renvoie la portee espece de l utilisateur courant. A n utiliser que sur des

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Inject, Injectable } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
 import { DRIZZLE } from "../../database/database.constants";
-import { farmosSpeciesManagers } from "../../database/schema";
+import { farmosSpeciesAssignments } from "../../database/schema";
 import type { Database } from "../../database/types";
 import type { FarmosSpeciesScope } from "../decorators/farmos-species-scope.decorator";
 
@@ -10,7 +10,7 @@ import type { FarmosSpeciesScope } from "../decorators/farmos-species-scope.deco
 //
 // Regle :
 //  - role transverse (departmentScope === "all") -> "all" (voit toutes especes)
-//  - sinon : especes affectees dans farmos_species_managers (is_active=1)
+//  - sinon : especes affectees dans farmos_species_assignments (is_active=1)
 //  - aucune affectation -> "all" (FAIL-OPEN volontaire : tant que les
 //    affectations ne sont pas posees, on ne cloisonne pas, pour ne pas
 //    masquer des donnees existantes). Le passage en fail-closed sera un choix
@@ -29,12 +29,12 @@ export class FarmosSpeciesGuard implements CanActivate {
 
     if (user?.sub && user.departmentScope !== "all") {
       const rows = await this.db
-        .select({ species: farmosSpeciesManagers.species })
-        .from(farmosSpeciesManagers)
+        .select({ species: farmosSpeciesAssignments.species })
+        .from(farmosSpeciesAssignments)
         .where(
           and(
-            eq(farmosSpeciesManagers.userId, user.sub),
-            eq(farmosSpeciesManagers.isActive, 1),
+            eq(farmosSpeciesAssignments.userId, user.sub),
+            eq(farmosSpeciesAssignments.isActive, 1),
           ),
         );
 
