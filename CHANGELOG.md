@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.130.0)
+- **RBAC par bien — Domus (Phase 2, 2e module)**. Même mécanique que le RBAC par espèce FarmOS, appliquée à l'immobilier : n'importe quel utilisateur peut être limité à un ou plusieurs **biens** (`real_estate_properties`), **indépendamment du rôle et du poste** (le rôle décide des droits — toujours via `@Permissions` —, le bien du périmètre des données). Nouvelle table `real_estate_property_assignments` (user↔bien, soft-delete, unique user+bien) + migration idempotente `0188` (au journal). Nouveau `DomusPropertyGuard` + décorateur `@CurrentDomusProperty` (réutilise `departmentScope` du JwtAuthGuard : rôles transverses = tous biens). Filtrage appliqué à `GET /property-management/properties` (id direct), `/leases` (property_id du bail), `/payments` (via le bail). **Fail-open** : un user sans affectation voit tout. Endpoints de gestion `GET/POST /property-management/property-assignments[/:userId]`. `backend2/src/database/schema.ts`, `backend2/drizzle/0188_real_estate_property_assignments.sql`, `backend2/src/auth/`, `backend2/src/property-management/`.
+
 ### Added (3.129.0)
 - **Filtrage RBAC par espèce — couverture complète FarmOS (Phase 2)**. Le périmètre par espèce s'applique désormais à toutes les listes restantes : `GET /farmos/reproduction-events`, `/production-logs`, `/vaccinations`, `/mortality-events`, `/weighings` (en plus de animals/sales/expenses/treatments déjà couverts). Via les mêmes helpers : species direct (production, vaccinations, mortalité) ou via l'animal lié (repro, pesées — `animal_id` notNull). Fail-open partout sur lignes sans espèce/animal ; portée « toutes » voit tout. `backend2/src/farmos/farmos.service.ts`, `farmos.controller.ts`.
 

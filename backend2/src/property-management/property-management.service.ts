@@ -17,6 +17,7 @@ import {
   realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
   realEstateProperties,
+  realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
   realEstateUnits,
@@ -601,7 +602,24 @@ export class PropertyManagementService {
     return this.findTenant(customerId, orgId);
   }
 
-  async properties(orgId: number) {
+  // ── Helpers RBAC par bien (Domus, Phase 2) ───────────────────────────────
+  // Filtre DIRECT sur l id du bien (table real_estate_properties). "all" => pas
+  // de filtre ; liste vide => aucun resultat.
+  private propertyDirectFilter(column: any, scope: "all" | number[]) {
+    if (scope === "all") return undefined;
+    return scope.length ? inArray(column, scope) : sql`1 = 0`;
+  }
+
+  // Filtre VIA une colonne property_id (baux : property_id direct). Les lignes
+  // sans property_id restent visibles (fail-open).
+  private propertyViaColumnFilter(propertyIdColumn: any, scope: "all" | number[]) {
+    if (scope === "all") return undefined;
+    if (!scope.length) return sql`1 = 0`;
+    return inArray(propertyIdColumn, scope);
+  }
+
+  async properties(orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyDirectFilter(realEstateProperties.id, propertyScope);
     const rows = await this.db
       .select({
         id: realEstateProperties.id,
@@ -628,7 +646,7 @@ export class PropertyManagementService {
         realEstateUnits,
         and(eq(realEstateUnits.propertyId, realEstateProperties.id), ne(realEstateUnits.status, "false")),
       )
-      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId)))
+      .where(and(ne(realEstateProperties.status, "false"), eq(realEstateProperties.isActive, 1), eq(realEstateProperties.organizationId, orgId), scopeFilter))
       .groupBy(realEstateProperties.id)
       .orderBy(desc(realEstateProperties.id));
 
@@ -849,7 +867,9 @@ export class PropertyManagementService {
     return { message: "Unit deleted successfully." };
   }
 
-  leases(orgId: number) {
+  // RBAC bien : filtre direct sur le property_id du bail.
+  leases(orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyViaColumnFilter(realEstateLeases.propertyId, propertyScope);
     return this.leaseQuery()
       .where(and(
         ne(realEstateLeases.status, "cancelled"),
@@ -858,6 +878,7 @@ export class PropertyManagementService {
         ne(leaseUnit.status, "false"),
         eq(leaseUnit.isActive, 1),
         eq(realEstateLeases.organizationId, orgId),
+        scopeFilter,
       ))
       .orderBy(desc(realEstateLeases.id));
   }
@@ -975,11 +996,11 @@ export class PropertyManagementService {
     return { message: "Lease deleted successfully." };
   }
 
-  payments(orgId: number) {
-    return this.paymentQuery(undefined, orgId).orderBy(desc(realEstateRentPayments.id));
+  payments(orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.paymentQuery(undefined, orgId, propertyScope).orderBy(desc(realEstateRentPayments.id));
   }
 
-  private paymentQuery(id?: number, orgId?: number) {
+  private paymentQuery(id?: number, orgId?: number, propertyScope: "all" | number[] = "all") {
     return this.db
       .select({
         id: realEstateRentPayments.id,
@@ -1015,6 +1036,10 @@ export class PropertyManagementService {
         eq(paymentUnit.isActive, 1),
         ...(id ? [eq(realEstateRentPayments.id, id)] : []),
         ...(orgId !== undefined ? [eq(realEstateRentPayments.organizationId, orgId)] : []),
+        // RBAC bien : loyers du bien (via le bail). "all" => pas de filtre.
+        ...(propertyScope !== "all"
+          ? [propertyScope.length ? inArray(paymentLease.propertyId, propertyScope) : sql`1 = 0`]
+          : []),
       ));
   }
 
@@ -2333,5 +2358,60 @@ export class PropertyManagementService {
       entityId,
       scope: {},
     });
+  }
+
+  // ── Affectation par bien (RBAC par bien, Domus, Phase 2) ──────────────────
+  // Affecte/lit les biens d un utilisateur (real_estate_property_assignments).
+  // Concerne N IMPORTE QUEL user, independamment du role et du poste.
+
+  // Toutes les affectations actives de l org : map userId -> propertyId[].
+  async listAllPropertyAssignments(orgId: number) {
+    const rows = await this.db
+      .select({ userId: realEstatePropertyAssignments.userId, propertyId: realEstatePropertyAssignments.propertyId })
+      .from(realEstatePropertyAssignments)
+      .where(and(eq(realEstatePropertyAssignments.organizationId, orgId), eq(realEstatePropertyAssignments.isActive, 1)));
+    const byUser: Record<number, number[]> = {};
+    for (const r of rows) (byUser[r.userId] ??= []).push(r.propertyId);
+    return byUser;
+  }
+
+  async listPropertyAssignments(userId: number, orgId: number) {
+    return this.db
+      .select({ id: realEstatePropertyAssignments.id, propertyId: realEstatePropertyAssignments.propertyId })
+      .from(realEstatePropertyAssignments)
+      .where(and(
+        eq(realEstatePropertyAssignments.userId, userId),
+        eq(realEstatePropertyAssignments.organizationId, orgId),
+        eq(realEstatePropertyAssignments.isActive, 1),
+      ));
+  }
+
+  // Remplace l ensemble des biens d un user (set complet). Soft-delete des
+  // retires, reactivation/insert des nouveaux (idempotent).
+  async setPropertyAssignments(userId: number, propertyIds: number[], orgId: number) {
+    const wanted = Array.from(new Set(propertyIds.filter((id) => Number.isInteger(id) && id > 0)));
+
+    const existing = await this.db
+      .select({ id: realEstatePropertyAssignments.id, propertyId: realEstatePropertyAssignments.propertyId, isActive: realEstatePropertyAssignments.isActive })
+      .from(realEstatePropertyAssignments)
+      .where(and(eq(realEstatePropertyAssignments.userId, userId), eq(realEstatePropertyAssignments.organizationId, orgId)));
+    const byProperty = new Map(existing.map((row) => [row.propertyId, row]));
+
+    for (const row of existing) {
+      if (row.isActive === 1 && !wanted.includes(row.propertyId)) {
+        await this.db.update(realEstatePropertyAssignments).set({ isActive: 0 }).where(eq(realEstatePropertyAssignments.id, row.id));
+      }
+    }
+    for (const pid of wanted) {
+      const row = byProperty.get(pid);
+      if (row) {
+        if (row.isActive !== 1) {
+          await this.db.update(realEstatePropertyAssignments).set({ isActive: 1 }).where(eq(realEstatePropertyAssignments.id, row.id));
+        }
+      } else {
+        await this.db.insert(realEstatePropertyAssignments).values({ userId, propertyId: pid, organizationId: orgId, isActive: 1 });
+      }
+    }
+    return this.listPropertyAssignments(userId, orgId);
   }
 }

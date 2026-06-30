@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { DomusPropertyGuard } from "../auth/guards/domus-property.guard";
 import { CompatModule } from "../compat/compat.module";
 import { DatabaseModule } from "../database/database.module";
 import { LedgerModule } from "../ledger/ledger.module";
@@ -22,6 +23,6 @@ import { TenantOnboardingPublicController } from "./tenant-onboarding-public.con
     PropertyManagementController,
     ContractTemplatesController,
   ],
-  providers: [PropertyManagementService, ContractsService, ContractTemplatesService, RentReminderService],
+  providers: [PropertyManagementService, ContractsService, ContractTemplatesService, RentReminderService, DomusPropertyGuard],
 })
 export class PropertyManagementModule {}

@@ -28,7 +28,9 @@ import {
 import { Throttle } from "@nestjs/throttler";
 import { Permissions } from "../auth/decorators/permissions.decorator";
 import { CurrentOrg } from "../auth/decorators/current-org.decorator";
+import { CurrentDomusProperty, type DomusPropertyScope } from "../auth/decorators/domus-property-scope.decorator";
 import { CurrentUserId } from "../auth/decorators/current-user-id.decorator";
+import { DomusPropertyGuard } from "../auth/guards/domus-property.guard";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { MessageResponseDto } from "../shared/dto/message-response.dto";
@@ -59,7 +61,7 @@ import { RentReminderService } from "./rent-reminder.service";
 @Throttle({ default: { ttl: 60000, limit: 30 } })
 @ApiTags("property-management")
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, DomusPropertyGuard)
 @Controller("property-management")
 export class PropertyManagementController {
   constructor(
@@ -156,8 +158,33 @@ export class PropertyManagementController {
   @ApiOkResponse({ description: "Property list" })
   @Permissions("readAll-propertyManagement")
   @Get("properties")
-  properties(@CurrentOrg() orgId: number) {
-    return this.propertyManagementService.properties(orgId);
+  properties(@CurrentOrg() orgId: number, @CurrentDomusProperty() scope: DomusPropertyScope) {
+    return this.propertyManagementService.properties(orgId, scope);
+  }
+
+  @ApiOperation({ summary: "All property assignments of the org (map userId -> propertyId[])" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-assignments")
+  listAllPropertyAssignments(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listAllPropertyAssignments(orgId);
+  }
+
+  @ApiOperation({ summary: "List properties assigned to a user (RBAC par bien)" })
+  @Permissions("readAll-propertyManagement")
+  @Get("property-assignments/:userId")
+  listPropertyAssignments(@Param("userId", ParseIntPipe) userId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listPropertyAssignments(userId, orgId);
+  }
+
+  @ApiOperation({ summary: "Set properties assigned to a user (set complet, RBAC par bien)" })
+  @Permissions("update-propertyManagement")
+  @Post("property-assignments/:userId")
+  setPropertyAssignments(
+    @Param("userId", ParseIntPipe) userId: number,
+    @Body() body: { propertyIds: number[] },
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.setPropertyAssignments(userId, Array.isArray(body?.propertyIds) ? body.propertyIds : [], orgId);
   }
 
   @ApiOperation({ summary: "Get single property by ID" })
@@ -248,8 +275,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "List leases" })
   @Permissions("readAll-propertyManagement")
   @Get("leases")
-  leases(@CurrentOrg() orgId: number) {
-    return this.propertyManagementService.leases(orgId);
+  leases(@CurrentOrg() orgId: number, @CurrentDomusProperty() scope: DomusPropertyScope) {
+    return this.propertyManagementService.leases(orgId, scope);
   }
 
   @ApiOperation({ summary: "Get single lease by ID" })
@@ -307,8 +334,8 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "List rent payments" })
   @Permissions("readAll-propertyManagement")
   @Get("payments")
-  payments(@CurrentOrg() orgId: number) {
-    return this.propertyManagementService.payments(orgId);
+  payments(@CurrentOrg() orgId: number, @CurrentDomusProperty() scope: DomusPropertyScope) {
+    return this.propertyManagementService.payments(orgId, scope);
   }
 
   @ApiOperation({ summary: "Get single rent payment by ID" })

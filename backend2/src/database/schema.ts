@@ -976,6 +976,22 @@ export const realEstateContractAuditLogs = mysqlTable("real_estate_contract_audi
   createdAt: timestamp("created_at"),
 });
 
+// RBAC par bien (Domus, Phase 2) : affecte un utilisateur a un ou plusieurs
+// biens (real_estate_properties). N IMPORTE QUEL user peut etre limite a 1..N
+// biens, INDEPENDAMMENT du role et du poste : le role dit ce qu il peut faire,
+// le bien sur quoi (baux/loyers/cautions de ces biens). Roles transverses
+// (DG/Directeur/admin/super_owner) ignorent ce filtre (portee = tous biens).
+// Scope par organisation. Soft-delete via is_active. unique (user_id, property_id).
+export const realEstatePropertyAssignments = mysqlTable("real_estate_property_assignments", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  userId: bigint("user_id", { mode: "number" }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").onUpdateNow().notNull(),
+});
+
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
