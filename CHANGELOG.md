@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.133.0)
+- **FarmOS — déclarer une maladie sur tout un box (traitement de masse)**. Au lieu de saisir un traitement animal par animal, un bouton **« Maladie »** dans l'en-tête du box ouvre un modal (maladie filtrée par espèce, médicament, dosage, date de début, délai de retrait viande, notes) avec **la liste des animaux du box pré-cochée et décochable**. Valider crée un traitement par animal coché et passe les animaux sains en statut `sick` (le box vire au rouge via le calcul de statut existant) ; les animaux en vente / vendus / décédés sont ignorés. Nouvel endpoint `POST /farmos/boxes/:id/declare-disease` (DTO `DeclareBoxDiseaseDto`, service `declareBoxDisease` qui réutilise `createTreatment` + `recomputeAnimalWithdrawal`). `backend2/src/farmos/dto/farmos.dto.ts`, `farmos.controller.ts`, `farmos.service.ts`, `farmos-app/src/api.js`, `farmos-app/src/screens.jsx`.
+
 ### Security (3.132.1)
 - **Backend2 - endpoints publics durcis**. Le cockpit migration `/migration/*` exige desormais un JWT. Les routes `*/public` generees par les modules legacy/front sont protegees par defaut avec une whitelist minimale pour les ressources reellement consommees publiquement (`slider-images/public`, `product-color/public`). Validation: `npm.cmd run typecheck`, `npm.cmd run build`. `backend2/src/migration/migration.controller.ts`, `backend2/src/legacy-modules/legacy-modules.controller.ts`, `backend2/src/front-modules/front-modules.controller.ts`.
 

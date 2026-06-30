@@ -21,6 +21,7 @@ import type {
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
+  DeclareBoxDiseaseDto,
   CreateWeighingDto,
   SetFarmosStaffStatusDto,
   UpdateAnimalDto,
@@ -2316,6 +2317,85 @@ export class FarmosService {
       .where(and(eq(farmosAnimals.organizationId, orgId), sql`${farmosAnimals.id} in (${sql.join(animalIds.map((n) => sql`${n}`), sql`, `)})`));
     await this.publishFarmosUpdate("assignBox", ["animals", "boxes"], "updated", targetBoxId, orgId);
     return { assigned: animalIds.length, boxId: targetBoxId, forced: force && capacity != null && incoming > free };
+  }
+
+  // Déclare une maladie sur tout un box d'un coup (traitement de masse).
+  // Crée un traitement par animal traitable + passe les sains en "sick"
+  // (le box devient rouge via le calcul de statut). Les animaux en vente /
+  // vendus / décédés sont ignorés (cohérent avec assertAnimalWritable).
+  async declareBoxDisease(boxId: number, input: DeclareBoxDiseaseDto, orgId: number) {
+    const box = await this.getBox(boxId, orgId);
+
+    const [disease] = await this.db
+      .select({ id: farmosDiseases.id, species: farmosDiseases.species })
+      .from(farmosDiseases)
+      .where(and(
+        eq(farmosDiseases.id, input.disease_id),
+        or(isNull(farmosDiseases.organizationId), eq(farmosDiseases.organizationId, orgId)),
+      ))
+      .limit(1);
+    if (!disease) throw new NotFoundException("Disease not found.");
+
+    // Animaux actifs du box (mêmes filtres que l'occupation), éventuellement
+    // restreints aux cases cochées côté UI.
+    const conds = [
+      eq(farmosAnimals.boxId, box.id),
+      eq(farmosAnimals.organizationId, orgId),
+      eq(farmosAnimals.isActive, 1),
+      this.activeLivestockSqlCondition(),
+    ];
+    const onlyIds = Array.isArray(input.animal_ids)
+      ? input.animal_ids.map(Number).filter((n) => Number.isFinite(n))
+      : [];
+    if (onlyIds.length > 0) {
+      conds.push(sql`${farmosAnimals.id} in (${sql.join(onlyIds.map((n) => sql`${n}`), sql`, `)})`);
+    }
+    const animals = await this.db
+      .select({ id: farmosAnimals.id, species: farmosAnimals.species, status: farmosAnimals.status })
+      .from(farmosAnimals)
+      .where(and(...conds));
+
+    const treated: number[] = [];
+    const skipped: { id: number; reason: string }[] = [];
+    for (const a of animals) {
+      if (a.species !== disease.species) {
+        skipped.push({ id: a.id, reason: `species_mismatch (${a.species}≠${disease.species})` });
+        continue;
+      }
+      try {
+        await this.createTreatment({
+          animal_id: a.id,
+          disease_id: input.disease_id,
+          medicine_id: input.medicine_id ?? null,
+          medicine_quantity: input.medicine_quantity ?? null,
+          medicine_name: input.medicine_name ?? null,
+          dosage: input.dosage ?? null,
+          route: input.route ?? null,
+          start_date: input.start_date ?? null,
+          vet: input.vet ?? null,
+          withdrawal_meat_days: input.withdrawal_meat_days ?? null,
+          withdrawal_milk_hours: input.withdrawal_milk_hours ?? null,
+          withdrawal_eggs_days: input.withdrawal_eggs_days ?? null,
+          notes: input.notes ?? null,
+        } as CreateTreatmentDto, orgId);
+        treated.push(a.id);
+      } catch (e) {
+        skipped.push({ id: a.id, reason: (e as Error).message });
+      }
+    }
+
+    // Passe les animaux traités en "sick" (sans écraser un statut sale-locked,
+    // déjà exclu en amont). Le box vire au rouge automatiquement.
+    if (treated.length > 0) {
+      await this.db.update(farmosAnimals)
+        .set({ status: "sick" })
+        .where(and(
+          eq(farmosAnimals.organizationId, orgId),
+          sql`${farmosAnimals.id} in (${sql.join(treated.map((n) => sql`${n}`), sql`, `)})`,
+        ));
+    }
+    await this.publishFarmosUpdate("declareBoxDisease", ["animals", "treatments", "boxes"], "updated", box.id, orgId);
+    return { boxId: box.id, treated: treated.length, skipped };
   }
 
   // ─── Éléments de terrain (décor du plan : champ, eau, route…) ───────────────

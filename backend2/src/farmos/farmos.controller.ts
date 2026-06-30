@@ -49,6 +49,7 @@ import {
   CreateSaleDto,
   CreateSemenStrawDto,
   CreateTreatmentDto,
+  DeclareBoxDiseaseDto,
   UpdateAnimalDto,
   UpdateDiseaseDto,
   UpdateFarmosSpeciesSettingsDto,
@@ -701,6 +702,17 @@ export class FarmosController {
   @Post("boxes/assign")
   assignAnimalsToBox(@Body() body: any, @CurrentOrg() orgId: number) {
     return this.farmos.assignAnimalsToBox(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Declare a disease on a whole box (mass treatment)." })
+  @Permissions("update-farmos")
+  @Post("boxes/:id/declare-disease")
+  declareBoxDisease(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: DeclareBoxDiseaseDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.farmos.declareBoxDisease(id, body, orgId);
   }
 
   // ─── Éléments de terrain (décor du plan) ──────────────────────────────────

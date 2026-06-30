@@ -5887,6 +5887,7 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
   const [genOpen, setGenOpen] = React.useState(false); // modal "Générer les box"
   const [selectMode, setSelectMode] = React.useState(false); // mode suppression en lot
   const [checked, setChecked] = React.useState(() => new Set()); // ids de box cochés
+  const [diseaseBoxId, setDiseaseBoxId] = React.useState(null); // box ciblé par "Déclarer une maladie"
 
   const reload = React.useCallback(() => {
     if (!building) return;
@@ -5951,6 +5952,20 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
         }
       } else window.alert(msg);
     }
+    setBusy(false);
+  };
+  // Déclaration d'une maladie sur tout un box (traitement de masse).
+  const declareDisease = async (boxId, payload) => {
+    setBusy(true);
+    try {
+      const res = await api.declareBoxDisease(boxId, payload);
+      window.dispatchEvent(new CustomEvent("farmos:data-changed", { detail: { kind: "declareBoxDisease", tables: ["animals", "treatments"] } }));
+      setDiseaseBoxId(null);
+      reload();
+      const skipped = (res?.skipped || []).length;
+      window.alert(L(`${res?.treated || 0} animal(aux) traité(s)${skipped ? `, ${skipped} ignoré(s)` : ""}.`,
+        `${res?.treated || 0} animal(s) treated${skipped ? `, ${skipped} skipped` : ""}.`));
+    } catch (e) { window.alert(String(e.message || e)); }
     setBusy(false);
   };
   const unassign = async (animalId) => {
@@ -6140,6 +6155,12 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
                       <span className="mono" style={{ fontSize: 12.5, fontWeight: 700, color: over ? "#B84040" : "var(--fg-2)", marginLeft: "auto" }}>
                         {cap != null ? `${heads}/${cap}` : heads} {L("têtes", "heads")}{over ? ` · ${L("dépassé", "over")}` : (full ? ` · ${L("plein", "full")}` : "")}
                       </span>
+                      {inBox.length > 0 && (
+                        <button type="button" title={L("Déclarer une maladie sur tout le box", "Declare a disease on the whole box")} disabled={busy} onClick={() => setDiseaseBoxId(selBox.id)}
+                          style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid var(--oxblood-300)", background: "var(--oxblood-50)", display: "flex", alignItems: "center", gap: 5, cursor: "pointer", flexShrink: 0, fontSize: 12, fontWeight: 600, color: "var(--oxblood-700)" }}>
+                          <Icon name="syringe" size={14} color="var(--oxblood-700)"/>{L("Maladie", "Disease")}
+                        </button>
+                      )}
                       <button type="button" title={L("Supprimer ce box", "Delete this box")} disabled={busy} onClick={() => deleteOne(selBox)}
                         style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid var(--oxblood-300)", background: "var(--oxblood-50)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
                         <Icon name="trash" size={15} color="var(--oxblood-700)"/>
@@ -6236,6 +6257,107 @@ const BldgInteriorPlan = ({ building, animals = [], lang, onClose }) => {
           onCancel={() => setGenOpen(false)}
           onConfirm={doGenerate}/>
       )}
+
+      {diseaseBoxId != null && (
+        <DeclareBoxDiseaseModal
+          lang={lang}
+          species={building?.species}
+          animals={(animalsByBox.get(diseaseBoxId) || [])}
+          busy={busy}
+          onCancel={() => setDiseaseBoxId(null)}
+          onConfirm={(payload) => declareDisease(diseaseBoxId, payload)}/>
+      )}
+    </div>
+  );
+};
+
+// Modal "Déclarer une maladie sur tout le box" : choisit la maladie + le
+// traitement une seule fois, appliqués à tous les animaux cochés du box.
+const DeclareBoxDiseaseModal = ({ lang, species, animals = [], busy, onCancel, onConfirm }) => {
+  const L = (fr, en) => (lang === "fr" ? fr : en);
+  const [diseases, setDiseases] = React.useState([]);
+  const [medicines, setMedicines] = React.useState([]);
+  const [diseaseId, setDiseaseId] = React.useState("");
+  const [medicineId, setMedicineId] = React.useState("");
+  const [dosage, setDosage] = React.useState("");
+  const [startDate, setStartDate] = React.useState(() => new Date().toISOString().slice(0, 10));
+  const [meatDays, setMeatDays] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  // Tous les animaux du box pré-cochés ; on peut en décocher.
+  const [picked, setPicked] = React.useState(() => new Set(animals.map((a) => a.id)));
+
+  React.useEffect(() => {
+    api.listDiseases(species).then((d) => setDiseases(Array.isArray(d) ? d : [])).catch(() => setDiseases([]));
+    api.listMedicines().then((m) => setMedicines(Array.isArray(m) ? m : [])).catch(() => setMedicines([]));
+  }, [species]);
+
+  const toggle = (id) => setPicked((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const canSubmit = diseaseId && picked.size > 0 && !busy;
+  const submit = () => {
+    if (!canSubmit) return;
+    onConfirm({
+      disease_id: Number(diseaseId),
+      animal_ids: [...picked],
+      medicine_id: medicineId ? Number(medicineId) : null,
+      dosage: dosage || null,
+      start_date: startDate || null,
+      withdrawal_meat_days: meatDays ? Number(meatDays) : null,
+      notes: notes || null,
+    });
+  };
+
+  return (
+    <div onClick={onCancel} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--paper)", borderRadius: 14, width: "min(440px,100%)", maxHeight: "90vh", overflowY: "auto", padding: 18 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: "var(--ink-950)" }}>{L("Déclarer une maladie sur le box", "Declare a disease on the box")}</div>
+
+        <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Maladie", "Disease")}</label>
+        <select className="input" value={diseaseId} onChange={(e) => setDiseaseId(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="">{L("— choisir —", "— choose —")}</option>
+          {diseases.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+
+        <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Médicament (optionnel)", "Medicine (optional)")}</label>
+        <select className="input" value={medicineId} onChange={(e) => setMedicineId(e.target.value)} style={{ marginBottom: 10 }}>
+          <option value="">{L("— aucun —", "— none —")}</option>
+          {medicines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Dosage", "Dosage")}</label>
+            <input className="input" value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="ex: 5 ml"/>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Début", "Start")}</label>
+            <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}/>
+          </div>
+        </div>
+
+        <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Délai de retrait viande (jours)", "Meat withdrawal (days)")}</label>
+        <input className="input" type="number" min="0" value={meatDays} onChange={(e) => setMeatDays(e.target.value)} style={{ marginBottom: 10 }}/>
+
+        <label style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{L("Notes", "Notes")}</label>
+        <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} style={{ marginBottom: 12, resize: "vertical" }}/>
+
+        <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginBottom: 6 }}>{L(`Animaux concernés (${picked.size}/${animals.length})`, `Affected animals (${picked.size}/${animals.length})`)}</div>
+        <div style={{ maxHeight: 150, overflowY: "auto", border: "1px solid var(--border-1)", borderRadius: 8, padding: 4, marginBottom: 14 }}>
+          {animals.map((a) => (
+            <label key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 7px", fontSize: 12.5, cursor: "pointer" }}>
+              <input type="checkbox" checked={picked.has(a.id)} onChange={() => toggle(a.id)}/>
+              <span style={{ fontWeight: 600 }}>{a.name || a.id}{a.count > 1 ? ` ×${a.count}` : ""}</span>
+              {a.lot && <span style={{ fontSize: 10.5, color: "var(--fg-2)", background: "var(--border-1)", padding: "1px 7px", borderRadius: 20 }}>{a.lot}</span>}
+            </label>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-sm btn-ghost" onClick={onCancel} style={{ flex: 1 }}>{L("Annuler", "Cancel")}</button>
+          <button className="btn btn-sm btn-primary" disabled={!canSubmit} onClick={submit} style={{ flex: 1, justifyContent: "center" }}>
+            {L("Déclarer", "Declare")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

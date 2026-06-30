@@ -544,6 +544,29 @@ export class UpdateTreatmentDto {
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
 }
 
+// Déclaration d'une maladie sur tout un box (traitement de masse).
+// Reprend les champs d'un traitement, sauf animal_id : la cible est le box.
+// animal_ids permet de restreindre aux animaux cochés (sinon tout le box).
+export class DeclareBoxDiseaseDto {
+  @ApiProperty({ description: "FK vers farmos_diseases" })
+  @Type(() => Number) @IsInt() disease_id: number;
+
+  @ApiPropertyOptional({ type: [Number], description: "Restreint aux animaux cochés ; vide = tout le box." })
+  @IsOptional() @IsArray() @Type(() => Number) @IsInt({ each: true }) animal_ids?: number[];
+
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() medicine_id?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsNumber() medicine_quantity?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() medicine_name?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() dosage?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() route?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() start_date?: string | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() vet?: string | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_meat_days?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_milk_hours?: number | null;
+  @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() withdrawal_eggs_days?: number | null;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string | null;
+}
+
 // ─── Sales ───────────────────────────────────────────────────────────────
 export class CreateSaleDto {
   @ApiPropertyOptional() @IsOptional() @Type(() => Number) @IsInt() animal_id?: number | null;
