@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.124.26)
+- **hr-app — déconnexion**. Le bouton de déconnexion ne quittait pas RH : `clearAuth` vidait le token en mémoire sans dispatcher `hr:auth-changed`, donc `useAuthToken` ne se rafraîchissait pas et l'UI restait sur RH dans un état cassé ; il n'appelait pas non plus `/auth/logout`, laissant le cookie refresh valide côté serveur. `clearAuth` appelle désormais `POST /api/auth/logout` (best-effort), nettoie l'état local et dispatche `hr:auth-changed` pour basculer sur l'écran de connexion. `hr-app/src/auth.jsx`.
+
 ### Fixed (3.124.25)
 - **CI : déploiement Backend2 → Avelomi (dev & prod) réparé**. Le compose buildait `backend2` depuis `backend2/Dockerfile.prod`, mais les steps Avelomi ne copiaient que `dist`/`package*.json`/`drizzle` — jamais le Dockerfile — d'où `failed to read dockerfile: open Dockerfile.prod: no such file or directory` à chaque déploiement Avelomi-dev (le step prod s'en sortait par hasard via `git pull`). Ajout du `scp` explicite de `backend2/Dockerfile` + `backend2/Dockerfile.prod` dans les deux steps. `bitbucket-pipelines.yml`.
 

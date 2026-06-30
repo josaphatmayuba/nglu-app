@@ -5,6 +5,7 @@ const NATIVE = typeof window !== "undefined" &&
 const API_HOST = (typeof window !== "undefined" && window.HR_API_HOST) || "https://dev.ongdngolu.org";
 const LOGIN_URL = (NATIVE ? API_HOST : "") + "/api/auth/login";
 const REFRESH_URL = (NATIVE ? API_HOST : "") + "/api/auth/refresh-token";
+const LOGOUT_URL = (NATIVE ? API_HOST : "") + "/api/auth/logout";
 let accessToken = null;
 
 export function getToken() { return accessToken; }
@@ -41,9 +42,21 @@ export async function bootstrapAuth() {
   if (!accessToken) await restoreSession();
 }
 
-export function clearAuth() {
+export async function clearAuth() {
+  const token = accessToken;
+  // Invalide le cookie refresh + la famille de tokens cote serveur. Best-effort :
+  // on nettoie l'etat local meme si l'appel echoue (hors-ligne / token expire).
+  try {
+    await fetch(LOGOUT_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {}
   setToken(null);
   try { ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k)); } catch {}
+  // Force le re-render de useAuthToken -> bascule sur LoginScreen (sinon l'UI reste sur RH).
+  try { window.dispatchEvent(new CustomEvent("hr:auth-changed")); } catch {}
 }
 
 // Utilisateur connecté (nom + rôle) depuis localStorage — alimenté au login /
