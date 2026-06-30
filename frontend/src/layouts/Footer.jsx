@@ -1,3 +1,5 @@
+import { sanitizeHtml } from "../utils/sanitizeHtml";
+
 function Footer({ data }) {
   const year = new Date().getFullYear();
 
@@ -18,7 +20,7 @@ function Footer({ data }) {
       ) : (
         <span
           dangerouslySetInnerHTML={{
-            __html: data.footer,
+            __html: sanitizeHtml(data.footer),
           }}></span>
       )}
     </div>

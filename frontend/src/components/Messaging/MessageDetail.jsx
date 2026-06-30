@@ -1,22 +1,11 @@
 import { Forward, Reply, ReplyAll, Trash2, X } from 'lucide-react';
 import { Button, Tooltip } from 'antd';
 import moment from 'moment';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import './message-detail.css';
 
 const sanitizeEmailHtml = (html) => {
-  if (!html || typeof window === 'undefined' || !window.DOMParser) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  doc.querySelectorAll('script, iframe, object, embed, link, meta').forEach((node) => node.remove());
-  doc.querySelectorAll('*').forEach((node) => {
-    [...node.attributes].forEach((attr) => {
-      const name = attr.name.toLowerCase();
-      const value = attr.value.trim().toLowerCase();
-      if (name.startsWith('on') || value.startsWith('javascript:')) {
-        node.removeAttribute(attr.name);
-      }
-    });
-  });
-  return doc.body.innerHTML;
+  return sanitizeHtml(html);
 };
 
 export default function MessageDetail({

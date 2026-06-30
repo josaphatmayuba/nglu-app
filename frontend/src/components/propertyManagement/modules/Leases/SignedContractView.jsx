@@ -9,15 +9,30 @@ import moment from "moment";
 import { Download, FileText, Printer, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
+const safeImageSrc = (value = "") => {
+  const src = String(value || "").trim();
+  if (/^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(src)) return src;
+  return "";
+};
+
 const landlordStampHtml = (contract) => {
   const company = contract.companyInfo || {};
-  const name = company.companyName || contract.landlordName || "Le Bailleur";
+  const name = escapeHtml(company.companyName || contract.landlordName || "Le Bailleur");
   const dateRef = contract.sentAt || contract.createdAt;
-  const dateStr = dateRef ? new Date(dateRef).toLocaleString("fr-FR") : "";
-  if (company.landlordSignature) {
+  const dateStr = dateRef ? escapeHtml(new Date(dateRef).toLocaleString("fr-FR")) : "";
+  const signatureSrc = safeImageSrc(company.landlordSignature);
+  if (signatureSrc) {
     return `
       <h3>Signature du bailleur</h3>
-      <div class="signature-img"><img src="${company.landlordSignature}" alt="Signature bailleur" /></div>
+      <div class="signature-img"><img src="${signatureSrc}" alt="Signature bailleur" /></div>
       <div class="signed-on">${name}${dateStr ? ` · ${dateStr}` : ""}</div>`;
   }
   return `
@@ -28,7 +43,18 @@ const landlordStampHtml = (contract) => {
       </div>`;
 };
 
-const printableHtml = (contract) => `<!doctype html>
+const printableHtml = (rawContract) => {
+  const contract = {
+    ...(rawContract || {}),
+    id: escapeHtml(rawContract?.id ?? ""),
+    status: escapeHtml(rawContract?.status || ""),
+    tenantName: escapeHtml(rawContract?.tenantName || ""),
+    tenantEmail: escapeHtml(rawContract?.tenantEmail || ""),
+    contractContent: escapeHtml(rawContract?.contractContent || "Contenu du contrat indisponible."),
+    signatureData: safeImageSrc(rawContract?.signatureData),
+  };
+
+  return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -78,6 +104,7 @@ const printableHtml = (contract) => `<!doctype html>
   </div>
 </body>
 </html>`;
+};
 
 const downloadPdf = (contract) => {
   const pdf = new jsPDF({ unit: "mm", format: "a4" });
@@ -131,9 +158,10 @@ const downloadPdf = (contract) => {
   pdf.setTextColor(82, 82, 91);
   pdf.text("Signature du locataire", colX[0], sigStartY);
   let leftY = sigStartY + 4;
-  if (contract.signatureData) {
+  const tenantSignatureSrc = safeImageSrc(contract.signatureData);
+  if (tenantSignatureSrc) {
     try {
-      pdf.addImage(contract.signatureData, "PNG", colX[0], leftY, 70, 28);
+      pdf.addImage(tenantSignatureSrc, "PNG", colX[0], leftY, 70, 28);
       leftY += 30;
     } catch (e) {
       pdf.setFontSize(9);
@@ -163,9 +191,10 @@ const downloadPdf = (contract) => {
   const landlordName = company.companyName || contract.landlordName || "Le Bailleur";
   const dateRef = contract.sentAt || contract.createdAt;
   const dateStr = dateRef ? new Date(dateRef).toLocaleString("fr-FR") : null;
-  if (company.landlordSignature) {
+  const landlordSignatureSrc = safeImageSrc(company.landlordSignature);
+  if (landlordSignatureSrc) {
     try {
-      pdf.addImage(company.landlordSignature, "PNG", colX[1], rightY, 70, 28);
+      pdf.addImage(landlordSignatureSrc, "PNG", colX[1], rightY, 70, 28);
       rightY += 30;
     } catch (e) {
       pdf.setFontSize(9);
@@ -279,10 +308,10 @@ const SignedContractView = ({ open, contractId, onClose }) => {
             </pre>
             <div className="immo-signed-contract-signatures">
               {/* Tenant */}
-              {contract.signatureData ? (
+              {safeImageSrc(contract.signatureData) ? (
                 <div className="immo-signed-contract-signature">
                   <h3>Signature du locataire</h3>
-                  <img src={contract.signatureData} alt="Signature locataire" />
+                  <img src={safeImageSrc(contract.signatureData)} alt="Signature locataire" />
                   {contract.signedAt && (
                     <small>✓ Signé le {moment(contract.signedAt).format("DD/MM/YYYY HH:mm")}</small>
                   )}
@@ -295,10 +324,10 @@ const SignedContractView = ({ open, contractId, onClose }) => {
               )}
 
               {/* Landlord — real image if configured in app_setting, else text stamp */}
-              {contract.companyInfo?.landlordSignature ? (
+              {safeImageSrc(contract.companyInfo?.landlordSignature) ? (
                 <div className="immo-signed-contract-signature">
                   <h3>Signature du bailleur</h3>
-                  <img src={contract.companyInfo.landlordSignature} alt="Signature bailleur" />
+                  <img src={safeImageSrc(contract.companyInfo.landlordSignature)} alt="Signature bailleur" />
                   <small>
                     {contract.companyInfo?.companyName || contract.landlordName || "Le Bailleur"}
                     {contract.sentAt && ` · ${moment(contract.sentAt).format("DD/MM/YYYY HH:mm")}`}

@@ -1,4 +1,5 @@
 import React from "react";
+import DOMPurify from "dompurify";
 import PhoneInputBase, { formatPhoneNumberIntl } from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
 import fr from "react-phone-number-input/locale/fr.json";
@@ -8,6 +9,20 @@ import { LoginScreen, useAuthToken, clearAuth, getUser } from "./auth.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
 import { defaultSymbol, symbolFor, cleanCurrencySymbol } from "./currency.js";
 import { AV_COLORS } from "./data.js";
+
+function sanitizeHtml(html) {
+  return DOMPurify.sanitize(String(html ?? ""), {
+    USE_PROFILES: { html: true },
+  });
+}
+
+function openSanitizedHtml(html, print = false) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(sanitizeHtml(html));
+  w.document.close();
+  if (print) w.print();
+}
 
 /* ───────────────────────────────────────────────────────────────────────
    Icônes (SVG inline, style lucide) — aucune dépendance externe.
@@ -2072,7 +2087,7 @@ function Employee360ProfileModal({ user, data, staff, onClose, onEdit, onCloseAc
               <EmptyState title="Module discipline a connecter" detail="Aucune table/API discipline n'existe encore pour cet employe." />
             </Employee360Panel>
             <Employee360Panel title="Documents signes">
-              <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(d.content); w.document.close(); }}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
+              <Employee360List rows={documents.filter((d) => String(d.status || "") === "signed")} empty="Aucun document signe" render={(d) => <><span>{d.documentType || "Document"}<small>{d.signedBy ? `Signe par ${d.signedBy}` : d.reference || ""}</small></span><strong>{d.content ? <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(d.content)}>Voir</button> : <span className="chip emerald">Signe</span>}</strong></>} />
             </Employee360Panel>
             {candidatureRecord && (
               <Employee360Panel title="Dossier de candidature">
@@ -2426,7 +2441,7 @@ function Paie({ data, staff, masse, setModal, reload }) {
             </div>
             {payrollPreview.loading
               ? <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Chargement…</div>
-              : <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: payrollPreview.html }} />}
+              : <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(payrollPreview.html) }} />}
           </div>
         </div>
       )}
@@ -2618,11 +2633,11 @@ function Dossiers({ data, staff, setModal, reload }) {
               <span style={{ fontWeight: 600, fontSize: 15 }}>{preview.documentType} — {preview.reference}</span>
               <div style={{ display: "flex", gap: 8 }}>
                 <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => api.downloadAuth(`/hr/documents/${preview.id}/pdf`, `${preview.reference || "document"}.pdf`).catch((e) => alert(e.message))}>PDF ↓</button>
-                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => { const w = window.open("", "_blank"); w.document.write(preview.content); w.document.close(); w.print(); }}>Imprimer</button>
+                <button type="button" className="btn" style={{ fontSize: 12 }} onClick={() => openSanitizedHtml(preview.content, true)}>Imprimer</button>
                 <button type="button" className="link" onClick={() => setPreview(null)}><Icon name="x" style={{ width: 18, height: 18 }} /></button>
               </div>
             </div>
-            <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: preview.content }} />
+            <div style={{ padding: 0 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.content) }} />
           </div>
         </div>
       )}

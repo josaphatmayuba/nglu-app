@@ -23,6 +23,14 @@ import { compactMoney } from "../../shared/format";
 import { tenantNameFromLease } from "../../shared/tenants";
 import { leaseDisplayInfo, pickDefaultTemplateFor } from "./leaseUtils";
 
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 const templateIconFor = (type) => {
   if (type === "commercial") return <Briefcase size={18} />;
   if (type === "short_term") return <CalendarClock size={18} />;
@@ -177,8 +185,9 @@ const ContractWorkflowModal = ({ contract, contractLinks, contractTemplates, lea
         message.error("Autorisez les popups pour ouvrir l'aperçu PDF.");
         return;
       }
+      const content = data?.contractContent || buildLeaseContractContent();
       win.document.open();
-      win.document.write(`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;margin:32px">${data?.contractContent || buildLeaseContractContent()}</pre>`);
+      win.document.write(`<pre style="font-family:Arial,sans-serif;white-space:pre-wrap;margin:32px">${escapeHtml(content)}</pre>`);
       win.document.close();
       win.focus();
     } catch {

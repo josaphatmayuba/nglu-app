@@ -7,6 +7,7 @@ import { loadAllCartByCustomerId } from "../../redux/rtk/features/eCommerce/cart
 import { addECommerceSale } from "../../redux/rtk/features/eCommerce/cartOrder/cartOrderSlice";
 import { loadALLPaymentMethod } from "../../redux/rtk/features/paymentMethod/paymentMethodSlice";
 import { couponCalculate } from "../../utils/functions";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import useCurrency from "../../utils/useCurrency";
 
 export default function Payment() {
@@ -112,7 +113,7 @@ export default function Payment() {
                   <div
                     className='p-2 md:p-10'
                     dangerouslySetInnerHTML={{
-                      __html: paymentMethod.instruction,
+                      __html: sanitizeHtml(paymentMethod.instruction),
                     }}
                   />
                 </div>

@@ -273,7 +273,9 @@ Fichiers:
 
 Impact fonctionnel:
 - un nouvel environnement ne devrait plus exposer l'admin mail publiquement par defaut.
-- le port deja expose en prod a ete ferme cote infra et ne repond plus aux tests externes TCP/HTTP du 2026-06-29.
+- le port avait ete observe ferme le 2026-06-29, mais un nouveau test externe du 2026-06-30 montre une regression: `mail.ongdngolu.org:8088` repond a nouveau en TCP et `GET /admin` renvoie `302 Found`.
+- remediation infra appliquee le 2026-06-30: le service Stalwart publie `8088` sur `127.0.0.1` seulement et le test externe `mail.ongdngolu.org:8088/admin` expire.
+- le compose prod ne fournit plus de fallback public `STALWART_JMAP_URL`; la prod utilise un endpoint JMAP interne Docker.
 
 ### 13. XSS HTML riche
 
@@ -285,11 +287,14 @@ Correction:
 - ajout de DOMPurify comme dependance directe.
 - sanitation des contenus contrats/messages/descriptions produits dans `frontend`, `domus-app`, `chat-app` et `journal-app`.
 - sanitation des footers facture/devis/packing/point de vente/ajustement stock, et du symbole devise e-commerce.
+- sanitation des footers publics, instructions de paiement, reponses vendeur, emails HTML, documents HR et rendus imprimables de contrats.
+- les signatures de contrat affichees/imprimees sont limitees aux `data:image` attendus.
 - rendu texte pour les conditions generales et les instructions de methode de paiement.
 - `journal-app` echappe maintenant le texte de message avant de creer le markup de mention.
 - remplacement frontend de `react-quill` par `react-quill-new` base sur Quill 2.
 - les handlers d'erreur `domus-app`, `journal-app` et `farmos-app` utilisent maintenant `textContent` au lieu de `innerHTML`.
 - les CSP Nginx retirent `unsafe-inline` de `script-src` sur les configs frontend/Avelomi.
+- audit manuel legacy finalise le 2026-06-30: les widgets IA injectent encore du HTML/CSS statique et restent le principal blocage connu avant retrait de `unsafe-inline` dans `style-src`.
 
 Fichiers principaux:
 - `frontend/src/utils/sanitizeHtml.js`
@@ -301,6 +306,13 @@ Fichiers principaux:
 - `frontend/src/components/TermsAndConditions/DetailsTermsAndConditions.jsx`
 - `frontend/src/components/PaymentMethod/GetAllPaymentMethod.jsx`
 - `frontend/src/components/eComErp/Currency/GetAllCurrency.jsx`
+- `frontend/src/layouts/Footer.jsx`
+- `frontend/src/eCommerce/Payment/Payment.jsx`
+- `frontend/src/eCommerce/Card/ReviewCard.jsx`
+- `frontend/src/components/Messaging/MessageDetail.jsx`
+- `frontend/src/components/propertyManagement/ContractsTab.jsx`
+- `frontend/src/components/propertyManagement/modules/Leases/SignedContractView.jsx`
+- `hr-app/src/app.jsx`
 - `domus-app/src/sanitizeHtml.js`
 - `chat-app/src/sanitizeHtml.js`
 - `journal-app/src/sanitizeHtml.js`
@@ -352,6 +364,25 @@ Impact fonctionnel:
 - builds verifies apres mise a jour.
 - il reste 2 vulnerabilites low dans `frontend` via Quill 2.0.3, sans fix non cassant disponible via `npm audit`.
 
+### 16. RBAC multitenant utilisateurs
+
+Faille:
+- un test prod controle avec comptes temporaires non-admin de deux organisations a montre que `/user?query=all` pouvait retourner des utilisateurs hors organisation.
+
+Correction:
+- `UsersController` exige maintenant `JwtAuthGuard` au niveau controleur.
+- les operations `findAll`, `findOne`, `create`, `update` et `remove` utilisent `CurrentOrg`.
+- `UsersService` filtre les lectures et mutations par `users.organizationId`.
+
+Fichiers:
+- `backend2/src/users/users.controller.ts`
+- `backend2/src/users/users.service.ts`
+- `backend2/src/farmos/farmos.service.ts`
+
+Impact fonctionnel:
+- un admin/non-admin ne doit plus lister, lire, modifier ou supprimer un utilisateur d'une autre organisation via les routes `/user`.
+- la creation utilisateur force l'organisation courante au lieu de faire confiance au payload client.
+
 ## Verification effectuee
 
 Commandes:
@@ -365,6 +396,8 @@ Commandes:
 - `cmd.exe /c npm audit --audit-level=moderate` dans `backend2`, `frontend`, `domus-app`, `chat-app`, `journal-app`
 - `node --check middleware/src/index.js`
 - `curl.exe -I --connect-timeout 6 --max-time 10 http://mail.ongdngolu.org:8088/admin`
+- `curl.exe -I --connect-timeout 6 --max-time 10 http://mail.ongdngolu.org:8088/jmap`
+- serveur prod: `ss -ltnp` confirme `127.0.0.1:8088` seulement pour Stalwart.
 
 Resultat:
 - typecheck OK.
@@ -373,7 +406,7 @@ Resultat:
 - audits OK au seuil moderate/high sur les projets verifies.
 - frontend garde 2 vulnerabilites low via Quill 2.0.3, sans correction non cassante.
 - syntaxe middleware OK.
-- `mail.ongdngolu.org:8088` ne repond plus depuis l'environnement de test externe.
+- apres remediation infra du 2026-06-30, `mail.ongdngolu.org:8088/admin` expire depuis l'environnement de test externe; sur le serveur, seul `127.0.0.1:8088` repond.
 
 ## Restant a traiter
 
@@ -381,25 +414,27 @@ Resultat:
 
 Statut:
 - corrige cote code/repo pour les defaults faibles et le suivi Git des env reels identifies.
+- prod: `JWT_SECRET` et `REFRESH_SECRET` ont ete rotates le 2026-06-30 et backend/middleware ont ete redemarres.
 
 Raison:
-- il faut encore rotater les secrets reels et verifier les variables d'environnement de prod.
+- les secrets geres par des fournisseurs ou services externes doivent etre rotates dans leur systeme d'origine avant mise a jour applicative coordonnee.
 
 Action recommandee:
-- rotater JWT/refresh/DB/SMTP/Twilio;
+- rotater DB/SMTP/SendGrid/Twilio/Stalwart/admin/mailbox;
 - verifier que les secrets historiques ne restent pas dans un historique Git partage;
 - purger l'historique si le depot a ete partage hors cercle de confiance.
 
 ### Admin mail `:8088`
 
 Statut:
-- corrige dans la config repo par defaut et ferme cote infra d'apres le test externe du 2026-06-29.
+- corrige dans la config repo par defaut et ferme cote infra le 2026-06-30.
 
 Raison:
 - l'interface admin ne doit pas redevenir accessible en HTTP public apres redeploiement.
 
 Action recommandee:
-- limiter par VPN/IP admin;
+- garder le conteneur Stalwart sur `127.0.0.1:8088` seulement, pas `0.0.0.0:8088`;
+- limiter par VPN/IP admin si un acces distant est necessaire;
 - surveiller les regles firewall apres redeploiement;
 - forcer HTTPS si l'interface doit etre exposee via proxy controle.
 
@@ -415,15 +450,14 @@ Action recommandee:
 ### XSS frontend
 
 Statut:
-- partiel avance.
+- audit manuel legacy finalise et corrections principales appliquees.
 
 Raison:
-- contrats, messages, produits, factures, devise, conditions et instructions de paiement corriges; il reste des rendus HTML legacy a auditer un par un avant CSP stricte.
+- les rendus HTML variables identifies sont sanitises ou echappes; les widgets IA legacy injectent encore du HTML/CSS statique et bloquent le retrait complet de `unsafe-inline` dans `style-src`.
 
 Action recommandee:
-- continuer le remplacement des `dangerouslySetInnerHTML` legacy restants;
-- remplacer les `dangerouslySetInnerHTML` non sanitisés;
-- durcir CSP apres nettoyage complet.
+- refactorer les widgets IA legacy pour utiliser une feuille CSS statique et des noeuds DOM/React plutot que `innerHTML`;
+- durcir `style-src` apres ce refactor.
 
 ### Uploads
 
@@ -440,13 +474,12 @@ Action recommandee:
 ### Tests RBAC/multitenant
 
 Statut:
-- partiel.
+- test prod controle effectue avec comptes temporaires non-admin de deux organisations.
 
 Raison:
-- le compte demo fourni est `super-admin`.
+- les tests ont confirme l'isolation sur `/setting`, `/account` et `/organizations`, mais ont trouve une fuite inter-organisation sur `/user?query=all`.
+- la correction code est appliquee localement dans `users.controller.ts` et `users.service.ts`.
 
 Action recommandee:
-- creer/fournir un compte standard;
-- un compte client/locataire;
-- un compte d'une autre organisation;
-- tester IDOR et isolation org avec ces comptes.
+- deployer la correction RBAC;
+- retester `/user?query=all`, `/user/:id`, `PUT /user/:id` et `PATCH /user/:id` avec comptes non-admin d'organisations differentes.
