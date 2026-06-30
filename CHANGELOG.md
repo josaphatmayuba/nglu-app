@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.21)
+- **Isolation multi-organisation de la liste utilisateurs (RBAC)**. `/user` (findAll/findOne/create/update/remove) filtre désormais par `organizationId` via `@CurrentOrg`, et le contrôleur exige le JWT au niveau classe (`/user/register` n'est plus public). Corrige une fuite de données inter-organisation observée en test prod (`/user?query=all` retournait des comptes hors organisation). `backend2/src/users/*`, adaptation `farmos.service.ts`.
+- **Durcissement des secrets prod et de l'exposition admin Stalwart**. `env.ts`/middleware rejettent les secrets faibles/placeholder en prod, REFRESH_SECRET retombe sur un JWT_SECRET fort, et un `STALWART_JMAP_URL` public `mail.ongdngolu.org:8088` est refusé. Les compose retirent les defaults faibles (`changeme_in_prod`, `password`) et le fallback JMAP public ; Redis tourne avec `--requirepass`. Examples/README/script de déploiement gardent `8088` lié à `127.0.0.1` (tunnel SSH pour l'admin).
+- **Sanitisation des surfaces de rendu HTML restantes (XSS)**. DOMPurify/escape sur footer, instructions de paiement, réponses d'avis, corps d'email, contenu et impression des contrats de bail, aperçus paie/documents RH, symbole de devise ; signatures de contrat limitées aux `data:image` attendus. Ajout de `dompurify` à hr-app.
+- **Migration `0181_org_plan` rendue idempotente MySQL 8** (`INFORMATION_SCHEMA` + `PREPARE/EXECUTE`) ; politique de migration MySQL 8 documentée dans CLAUDE.md et DEVELOPMENT_RULES.md.
+
 ### Fixed (3.124.20)
 - **Migration `0184_farmos_repro_porcine` (COMP-P2-007) rendue idempotente MySQL 8**. La version précédente utilisait `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, syntaxe non supportée par MySQL 8 → `ER_PARSE_ERROR` au boot, repair opérationnel sauté, colonnes `stillborn_count`/`mummified_count`/`avg_birth_weight`/`birth_difficulty`/`weaned_count`/`weaning_date` jamais créées sur `farmos_reproduction_events`. Réécrite avec le pattern `INFORMATION_SCHEMA` + `PREPARE/EXECUTE` (1 statement par `--> statement-breakpoint`). Colonnes ajoutées à la main sur la DB prod (hors cycle journal). [FARMOS]
 
