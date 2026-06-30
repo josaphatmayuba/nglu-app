@@ -42,21 +42,22 @@ export async function bootstrapAuth() {
   if (!accessToken) await restoreSession();
 }
 
-export async function clearAuth() {
+export function clearAuth() {
   const token = accessToken;
-  // Invalide le cookie refresh + la famille de tokens cote serveur. Best-effort :
-  // on nettoie l'etat local meme si l'appel echoue (hors-ligne / token expire).
+  // 1) Nettoyer l'etat local et basculer l'UI IMMEDIATEMENT (avant le reseau).
+  setToken(null);
+  try { ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k)); } catch {}
+  try { window.dispatchEvent(new CustomEvent("hr:auth-changed")); } catch {}
+  // 2) Invalider le cookie refresh + la famille de tokens cote serveur (best-effort,
+  //    en arriere-plan : ne doit pas bloquer le retour a l'ecran de connexion).
   try {
-    await fetch(LOGOUT_URL, {
+    fetch(LOGOUT_URL, {
       method: "POST",
       credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+      keepalive: true,
+    }).catch(() => {});
   } catch {}
-  setToken(null);
-  try { ["access-token", "role", "roleId", "user", "id", "isLogged", "email"].forEach((k) => localStorage.removeItem(k)); } catch {}
-  // Force le re-render de useAuthToken -> bascule sur LoginScreen (sinon l'UI reste sur RH).
-  try { window.dispatchEvent(new CustomEvent("hr:auth-changed")); } catch {}
 }
 
 // Utilisateur connecté (nom + rôle) depuis localStorage — alimenté au login /
