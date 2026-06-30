@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.129.0)
+- **Filtrage RBAC par espèce — couverture complète FarmOS (Phase 2)**. Le périmètre par espèce s'applique désormais à toutes les listes restantes : `GET /farmos/reproduction-events`, `/production-logs`, `/vaccinations`, `/mortality-events`, `/weighings` (en plus de animals/sales/expenses/treatments déjà couverts). Via les mêmes helpers : species direct (production, vaccinations, mortalité) ou via l'animal lié (repro, pesées — `animal_id` notNull). Fail-open partout sur lignes sans espèce/animal ; portée « toutes » voit tout. `backend2/src/farmos/farmos.service.ts`, `farmos.controller.ts`.
+
 ### Added (3.128.0)
 - **Filtrage RBAC par espèce étendu : ventes, dépenses, santé (FarmOS, Phase 2)**. Le périmètre par espèce, jusqu'ici limité aux animaux, s'applique maintenant aussi à `GET /farmos/sales`, `/farmos/expenses` et `/farmos/treatments`. Trois patterns de liaison, factorisés en helpers réutilisables (`speciesDirectFilter`, `speciesViaAnimalFilter`) : ventes = colonne `species` directe ; dépenses = via `related_animal_id` (fail-open : dépenses sans animal lié restent visibles) ; traitements = via l'animal du LEFT JOIN existant. Partout **fail-open** sur les lignes sans espèce/animal (legacy non masqué) ; un user à portée « toutes » (rôle transverse / sans affectation) voit tout. `backend2/src/farmos/farmos.service.ts`, `farmos.controller.ts`.
 

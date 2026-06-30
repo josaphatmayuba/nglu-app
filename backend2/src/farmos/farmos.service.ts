@@ -1005,11 +1005,13 @@ export class FarmosService {
 
   // ─── Reproduction events ───────────────────────────────────────────────
 
-  async listReproductionEvents(orgId: number) {
+  // RBAC espece : pas de colonne species, via l animal (animal_id notNull).
+  async listReproductionEvents(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter = this.speciesViaAnimalFilter(farmosReproductionEvents.animalId, orgId, speciesScope, true);
     return this.db
       .select()
       .from(farmosReproductionEvents)
-      .where(and(eq(farmosReproductionEvents.organizationId, orgId), eq(farmosReproductionEvents.isActive, 1)))
+      .where(and(eq(farmosReproductionEvents.organizationId, orgId), eq(farmosReproductionEvents.isActive, 1), speciesFilter))
       .orderBy(desc(farmosReproductionEvents.eventDate));
   }
 
@@ -1547,11 +1549,13 @@ export class FarmosService {
 
   // ─── Production logs ────────────────────────────────────────────────────
 
-  async listProductionLogs(orgId: number) {
+  // RBAC espece : colonne species directe.
+  async listProductionLogs(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter = this.speciesDirectFilter(farmosProductionLogs.species, speciesScope);
     return this.db
       .select()
       .from(farmosProductionLogs)
-      .where(and(eq(farmosProductionLogs.organizationId, orgId), eq(farmosProductionLogs.isActive, 1)))
+      .where(and(eq(farmosProductionLogs.organizationId, orgId), eq(farmosProductionLogs.isActive, 1), speciesFilter))
       .orderBy(desc(farmosProductionLogs.logDate));
   }
 
@@ -1642,11 +1646,13 @@ export class FarmosService {
 
   // ─── Vaccinations & AI insights ─────────────────────────────────────────
 
-  async listVaccinations(orgId: number) {
+  // RBAC espece : colonne species directe.
+  async listVaccinations(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter = this.speciesDirectFilter(farmosVaccinations.species, speciesScope);
     return this.db
       .select()
       .from(farmosVaccinations)
-      .where(and(eq(farmosVaccinations.organizationId, orgId), eq(farmosVaccinations.isActive, 1)))
+      .where(and(eq(farmosVaccinations.organizationId, orgId), eq(farmosVaccinations.isActive, 1), speciesFilter))
       .orderBy(farmosVaccinations.dueDate);
   }
 
@@ -2690,11 +2696,13 @@ export class FarmosService {
     return { message: "Rapport supprimé." };
   }
 
-  async listMortalityEvents(orgId: number) {
+  // RBAC espece : colonne species directe.
+  async listMortalityEvents(orgId: number, speciesScope: "all" | string[] = "all") {
+    const speciesFilter = this.speciesDirectFilter(farmosMortalityEvents.species, speciesScope);
     return this.db
       .select()
       .from(farmosMortalityEvents)
-      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1)))
+      .where(and(eq(farmosMortalityEvents.organizationId, orgId), eq(farmosMortalityEvents.isActive, 1), speciesFilter))
       .orderBy(desc(farmosMortalityEvents.eventDate));
   }
 
@@ -2785,9 +2793,12 @@ export class FarmosService {
   }
 
   // ─── Pesées / courbe de croissance ──────────────────────────────────────
-  async listWeighings(orgId: number, animalId?: number) {
+  // RBAC espece : pas de colonne species, via l animal (animal_id notNull).
+  async listWeighings(orgId: number, animalId?: number, speciesScope: "all" | string[] = "all") {
     const conditions = [eq(farmosWeighings.organizationId, orgId), eq(farmosWeighings.isActive, 1)];
     if (animalId) conditions.push(eq(farmosWeighings.animalId, animalId));
+    const speciesFilter = this.speciesViaAnimalFilter(farmosWeighings.animalId, orgId, speciesScope, true);
+    if (speciesFilter) conditions.push(speciesFilter);
     return this.db
       .select()
       .from(farmosWeighings)

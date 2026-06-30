@@ -387,8 +387,8 @@ export class FarmosController {
   @ApiOperation({ summary: "List reproduction events for the organisation." })
   @Permissions("readAll-farmos")
   @Get("reproduction-events")
-  listReproductionEvents(@CurrentOrg() orgId: number) {
-    return this.farmos.listReproductionEvents(orgId);
+  listReproductionEvents(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listReproductionEvents(orgId, species);
   }
 
   // ─── Sales & expenses ────────────────────────────────────────────────────
@@ -466,8 +466,8 @@ export class FarmosController {
   @ApiOperation({ summary: "List production logs for the organisation." })
   @Permissions("readAll-farmos")
   @Get("production-logs")
-  listProductionLogs(@CurrentOrg() orgId: number) {
-    return this.farmos.listProductionLogs(orgId);
+  listProductionLogs(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listProductionLogs(orgId, species);
   }
 
   @Permissions("create-farmos")
@@ -487,8 +487,8 @@ export class FarmosController {
   @ApiOperation({ summary: "List vaccinations." })
   @Permissions("readAll-farmos")
   @Get("vaccinations")
-  listVaccinations(@CurrentOrg() orgId: number) {
-    return this.farmos.listVaccinations(orgId);
+  listVaccinations(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listVaccinations(orgId, species);
   }
 
   @Permissions("create-farmos")
@@ -751,8 +751,8 @@ export class FarmosController {
 
   @Permissions("readAll-farmos")
   @Get("mortality-events")
-  listMortalityEvents(@CurrentOrg() orgId: number) {
-    return this.farmos.listMortalityEvents(orgId);
+  listMortalityEvents(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope) {
+    return this.farmos.listMortalityEvents(orgId, species);
   }
 
   @Permissions("readAll-farmos")
@@ -770,8 +770,8 @@ export class FarmosController {
   // ─── Pesées ──────────────────────────────────────────────────────────────
   @Permissions("readAll-farmos")
   @Get("weighings")
-  listWeighings(@CurrentOrg() orgId: number, @Query("animal_id") animalId?: string) {
-    return this.farmos.listWeighings(orgId, animalId ? Number(animalId) : undefined);
+  listWeighings(@CurrentOrg() orgId: number, @CurrentFarmosSpecies() species: FarmosSpeciesScope, @Query("animal_id") animalId?: string) {
+    return this.farmos.listWeighings(orgId, animalId ? Number(animalId) : undefined, species);
   }
 
   @Permissions("create-farmos")
