@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import { GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { desc, eq, ne, sql } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -73,12 +73,13 @@ export class ContractsService {
     private readonly sms: CompatService,
   ) {}
 
-  async createContract(dto: CreateContractDto, createdBy?: number) {
-    const lease = await this.getLeaseDetails(dto.leaseId);
-    const company = await this.getCompanyInfo();
-    const content = dto.contractContent ?? (await this.renderContent(lease, company, dto.templateId));
+  async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
+    const lease = await this.getLeaseDetails(dto.leaseId, orgId);
+    const company = await this.getCompanyInfo(orgId);
+    const content = dto.contractContent ?? (await this.renderContent(lease, company, orgId, dto.templateId));
 
     const [result] = await this.db.insert(realEstateContracts).values({
+      organizationId: orgId,
       leaseId: dto.leaseId,
       status: "draft",
       contractContent: content,
@@ -90,21 +91,21 @@ export class ContractsService {
     });
 
     const id = Number(result.insertId);
-    await this.log(id, "created", null, null, `Contract created for lease #${dto.leaseId}`);
+    await this.log(id, orgId, "created", null, null, `Contract created for lease #${dto.leaseId}`);
     await this.publishContractUpdate("created", id, dto.leaseId);
-    return this.getContract(id);
+    return this.getContract(id, orgId);
   }
 
   /**
    * Pick the active template (or one explicitly chosen) and render it.
    * If no template is found, fall back to the legacy hardcoded HTML so existing flows keep working.
    */
-  private async renderContent(lease: LeaseDetails, company: CompanyInfo, templateId?: number): Promise<string> {
-    let template = templateId ? await this.templates.getById(templateId).catch(() => null) : null;
+  private async renderContent(lease: LeaseDetails, company: CompanyInfo, orgId: number, templateId?: number): Promise<string> {
+    let template = templateId ? await this.templates.getById(templateId, orgId).catch(() => null) : null;
 
     if (!template) {
       const type = this.resolveTemplateType(lease.unitType, lease.propertyType);
-      template = await this.templates.getActiveByType(type);
+      template = await this.templates.getActiveByType(type, orgId);
     }
 
     if (!template) {
@@ -177,7 +178,7 @@ export class ContractsService {
     };
   }
 
-  async listContracts() {
+  async listContracts(orgId: number) {
     return this.db
       .select({
         id: realEstateContracts.id,
@@ -191,15 +192,15 @@ export class ContractsService {
         signerToken: realEstateContracts.signerToken,
       })
       .from(realEstateContracts)
-      .where(ne(realEstateContracts.status, "deleted"))
+      .where(and(eq(realEstateContracts.organizationId, orgId), ne(realEstateContracts.status, "deleted")))
       .orderBy(desc(realEstateContracts.id));
   }
 
-  async getContract(id: number) {
+  async getContract(id: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -210,7 +211,7 @@ export class ContractsService {
       .where(eq(realEstateContractAuditLogs.contractId, id))
       .orderBy(desc(realEstateContractAuditLogs.id));
 
-    const companyInfo = await this.getCompanyInfo();
+    const companyInfo = await this.getCompanyInfo(orgId);
 
     let createdByName: string | null = null;
     if (rows[0].createdBy) {
@@ -228,11 +229,11 @@ export class ContractsService {
     return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName, createdByName };
   }
 
-  async sendContract(id: number) {
+  async sendContract(id: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -251,7 +252,7 @@ export class ContractsService {
         sentAt: sql`CURRENT_TIMESTAMP`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContracts.id, id));
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
 
     const signingUrl = `${env.appUrl}/sign/${token}`;
 
@@ -267,13 +268,13 @@ export class ContractsService {
     // Also send the signing link by SMS to the tenant (best-effort).
     let tenantPhone: string | null = null;
     try {
-      const lease = await this.getLeaseDetails(contract.leaseId);
+      const lease = await this.getLeaseDetails(contract.leaseId, orgId);
       tenantPhone = lease.tenantPhone ?? null;
     } catch {
       tenantPhone = null;
     }
     if (tenantPhone) {
-      const company = await this.getCompanyInfo();
+      const company = await this.getCompanyInfo(orgId);
       const companyName = company?.companyName || "votre gestionnaire";
       const greeting = contract.tenantName ? `Bonjour ${contract.tenantName}` : "Bonjour";
       const message =
@@ -287,7 +288,7 @@ export class ContractsService {
       }
     }
 
-    await this.log(id, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
+    await this.log(id, orgId, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
     return { message: "Contract sent.", id, signingUrl, token };
   }
@@ -303,7 +304,7 @@ export class ContractsService {
       await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     }
 
-    await this.log(contract.id, "viewed", ip, ua, null);
+    await this.log(contract.id, contract.organizationId, "viewed", ip, ua, null);
 
     return {
       id: contract.id,
@@ -315,7 +316,7 @@ export class ContractsService {
       sentAt: contract.sentAt,
       signedAt: contract.signedAt,
       createdAt: contract.createdAt,
-      companyInfo: await this.getCompanyInfo(),
+      companyInfo: await this.getCompanyInfo(contract.organizationId),
     };
   }
 
@@ -339,9 +340,9 @@ export class ContractsService {
       })
       .where(eq(realEstateContracts.id, contract.id));
 
-    await this.log(contract.id, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
+    await this.log(contract.id, contract.organizationId, "signed", ip, ua, `Signed by ${contract.tenantName ?? "tenant"}`);
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
-    const signedContract = await this.getContract(contract.id);
+    const signedContract = await this.getContract(contract.id, contract.organizationId);
 
     if (contract.tenantEmail) {
       try {
@@ -359,11 +360,11 @@ export class ContractsService {
     return { message: "Contract signed successfully.", contract: signedContract };
   }
 
-  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, createdBy?: number) {
+  async renewLease(leaseId: number, dto: { startDate?: string; endDate?: string; rentAmount?: number; templateId?: number; endCurrentLease?: boolean }, orgId: number, createdBy?: number) {
     const rows = await this.db
       .select()
       .from(realEstateLeases)
-      .where(eq(realEstateLeases.id, leaseId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -394,6 +395,7 @@ export class ContractsService {
     const rentAmount = dto.rentAmount != null ? String(dto.rentAmount) : current.rentAmount;
 
     const [insertResult] = await this.db.insert(realEstateLeases).values({
+      organizationId: orgId,
       reference,
       propertyId: current.propertyId,
       unitId: current.unitId,
@@ -418,19 +420,19 @@ export class ContractsService {
       await this.db
         .update(realEstateLeases)
         .set({ status: "ended", updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(realEstateLeases.id, leaseId));
+        .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)));
     }
 
-    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, createdBy);
+    const newContract = await this.createContract({ leaseId: newLeaseId, templateId: dto.templateId }, orgId, createdBy);
 
     return { lease: { id: newLeaseId, reference }, contract: newContract };
   }
 
-  async deleteContract(id: number) {
+  async deleteContract(id: number, orgId: number) {
     const rows = await this.db
       .select({ id: realEstateContracts.id, leaseId: realEstateContracts.leaseId })
       .from(realEstateContracts)
-      .where(eq(realEstateContracts.id, id))
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
@@ -438,7 +440,7 @@ export class ContractsService {
     await this.db
       .update(realEstateContracts)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateContracts.id, id));
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)));
     await this.publishContractUpdate("deleted", id, rows[0].leaseId);
     return { message: "Contract deleted." };
   }
@@ -488,7 +490,7 @@ export class ContractsService {
     return contract;
   }
 
-  private async getLeaseDetails(leaseId: number): Promise<LeaseDetails> {
+  private async getLeaseDetails(leaseId: number, orgId: number): Promise<LeaseDetails> {
     const rows = await this.db
       .select({
         leaseId: realEstateLeases.id,
@@ -521,7 +523,7 @@ export class ContractsService {
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
-      .where(eq(realEstateLeases.id, leaseId))
+      .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Bail introuvable.");
@@ -820,8 +822,9 @@ export class ContractsService {
     return labels[type] ?? type;
   }
 
-  private async log(contractId: number, event: string, ip: string | null, ua: string | null, details: string | null) {
+  private async log(contractId: number, orgId: number, event: string, ip: string | null, ua: string | null, details: string | null) {
     await this.db.insert(realEstateContractAuditLogs).values({
+      organizationId: orgId,
       contractId,
       event,
       ip: ip ?? null,

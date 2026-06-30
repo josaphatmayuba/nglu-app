@@ -14,40 +14,47 @@ import {
 export class ContractTemplatesService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
-  async list() {
+  async list(orgId: number) {
     return this.db
       .select()
       .from(realEstateContractTemplates)
-      .where(eq(realEstateContractTemplates.isDeleted, 0))
+      .where(and(eq(realEstateContractTemplates.organizationId, orgId), eq(realEstateContractTemplates.isDeleted, 0)))
       .orderBy(asc(realEstateContractTemplates.type), desc(realEstateContractTemplates.isActive), desc(realEstateContractTemplates.id));
   }
 
-  async getById(id: number) {
+  async getById(id: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContractTemplates)
-      .where(eq(realEstateContractTemplates.id, id))
+      .where(and(eq(realEstateContractTemplates.id, id), eq(realEstateContractTemplates.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) throw new NotFoundException("Modèle de contrat introuvable.");
     return rows[0];
   }
 
-  async getActiveByType(type: ContractTemplateType) {
+  async getActiveByType(type: ContractTemplateType, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateContractTemplates)
-      .where(and(eq(realEstateContractTemplates.type, type), eq(realEstateContractTemplates.isActive, true)))
+      .where(
+        and(
+          eq(realEstateContractTemplates.organizationId, orgId),
+          eq(realEstateContractTemplates.type, type),
+          eq(realEstateContractTemplates.isActive, true),
+        ),
+      )
       .orderBy(desc(realEstateContractTemplates.id))
       .limit(1);
 
     return rows[0] ?? null;
   }
 
-  async create(dto: CreateContractTemplateDto, userId?: number) {
+  async create(dto: CreateContractTemplateDto, orgId: number, userId?: number) {
     this.assertType(dto.type);
 
     const [result] = await this.db.insert(realEstateContractTemplates).values({
+      organizationId: orgId,
       name: dto.name,
       type: dto.type,
       body: dto.body,
@@ -63,14 +70,14 @@ export class ContractTemplatesService {
     const id = Number(result.insertId);
 
     if (dto.isActive) {
-      await this.setActive(id, userId);
+      await this.setActive(id, orgId, userId);
     }
 
-    return this.getById(id);
+    return this.getById(id, orgId);
   }
 
-  async update(id: number, dto: UpdateContractTemplateDto, userId?: number) {
-    const current = await this.getById(id);
+  async update(id: number, dto: UpdateContractTemplateDto, orgId: number, userId?: number) {
+    const current = await this.getById(id, orgId);
 
     if (dto.type) this.assertType(dto.type);
 
@@ -87,27 +94,33 @@ export class ContractTemplatesService {
         updatedBy: userId ?? current.updatedBy ?? null,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContractTemplates.id, id));
+      .where(and(eq(realEstateContractTemplates.id, id), eq(realEstateContractTemplates.organizationId, orgId)));
 
     if (dto.isActive === true) {
-      await this.setActive(id, userId);
+      await this.setActive(id, orgId, userId);
     } else if (dto.isActive === false) {
       await this.db
         .update(realEstateContractTemplates)
         .set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(realEstateContractTemplates.id, id));
+        .where(and(eq(realEstateContractTemplates.id, id), eq(realEstateContractTemplates.organizationId, orgId)));
     }
 
-    return this.getById(id);
+    return this.getById(id, orgId);
   }
 
-  async setActive(id: number, userId?: number) {
-    const template = await this.getById(id);
+  async setActive(id: number, orgId: number, userId?: number) {
+    const template = await this.getById(id, orgId);
 
     await this.db
       .update(realEstateContractTemplates)
       .set({ isActive: false, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(and(eq(realEstateContractTemplates.type, template.type), ne(realEstateContractTemplates.id, id)));
+      .where(
+        and(
+          eq(realEstateContractTemplates.organizationId, orgId),
+          eq(realEstateContractTemplates.type, template.type),
+          ne(realEstateContractTemplates.id, id),
+        ),
+      );
 
     await this.db
       .update(realEstateContractTemplates)
@@ -116,15 +129,16 @@ export class ContractTemplatesService {
         updatedBy: userId ?? template.updatedBy ?? null,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(realEstateContractTemplates.id, id));
+      .where(and(eq(realEstateContractTemplates.id, id), eq(realEstateContractTemplates.organizationId, orgId)));
 
-    return this.getById(id);
+    return this.getById(id, orgId);
   }
 
-  async duplicate(id: number, userId?: number) {
-    const source = await this.getById(id);
+  async duplicate(id: number, orgId: number, userId?: number) {
+    const source = await this.getById(id, orgId);
 
     const [result] = await this.db.insert(realEstateContractTemplates).values({
+      organizationId: orgId,
       name: `${source.name} (copie)`,
       type: source.type,
       body: source.body,
@@ -137,11 +151,11 @@ export class ContractTemplatesService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
-    return this.getById(Number(result.insertId));
+    return this.getById(Number(result.insertId), orgId);
   }
 
-  async remove(id: number) {
-    const template = await this.getById(id);
+  async remove(id: number, orgId: number) {
+    const template = await this.getById(id, orgId);
 
     if (template.isActive) {
       throw new BadRequestException(
@@ -152,7 +166,7 @@ export class ContractTemplatesService {
     await this.db
       .update(realEstateContractTemplates)
       .set({ isDeleted: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateContractTemplates.id, id));
+      .where(and(eq(realEstateContractTemplates.id, id), eq(realEstateContractTemplates.organizationId, orgId)));
     return { message: "Modèle supprimé." };
   }
 

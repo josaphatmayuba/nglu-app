@@ -444,24 +444,24 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "List all contracts" })
   @Permissions("readAll-propertyManagement")
   @Get("contracts")
-  listContracts() {
-    return this.contractsService.listContracts();
+  listContracts(@CurrentOrg() orgId: number) {
+    return this.contractsService.listContracts(orgId);
   }
 
   @ApiOperation({ summary: "Get single contract with audit log" })
   @ApiParam({ name: "id", type: Number })
   @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
   @Get("contracts/:id")
-  getContract(@Param("id", ParseIntPipe) id: number) {
-    return this.contractsService.getContract(id);
+  getContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.contractsService.getContract(id, orgId);
   }
 
   @ApiOperation({ summary: "Create contract from a lease (auto-generates content)" })
   @Permissions("create-propertyManagement")
   @Post("contracts")
-  createContract(@Body() body: CreateContractDto, @Req() req: Request) {
+  createContract(@Body() body: CreateContractDto, @CurrentOrg() orgId: number, @Req() req: Request) {
     const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
-    return this.contractsService.createContract(body, userId);
+    return this.contractsService.createContract(body, orgId, userId);
   }
 
   @ApiOperation({ summary: "Send contract for e-signature by email" })
@@ -469,16 +469,16 @@ export class PropertyManagementController {
   @Permissions("update-propertyManagement")
   @Post("contracts/:id/send")
   @HttpCode(200)
-  sendContract(@Param("id", ParseIntPipe) id: number) {
-    return this.contractsService.sendContract(id);
+  sendContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.contractsService.sendContract(id, orgId);
   }
 
   @ApiOperation({ summary: "Delete a contract" })
   @Permissions("delete-propertyManagement")
   @Delete("contracts/:id")
   @HttpCode(200)
-  deleteContract(@Param("id", ParseIntPipe) id: number) {
-    return this.contractsService.deleteContract(id);
+  deleteContract(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.contractsService.deleteContract(id, orgId);
   }
 
   @ApiOperation({
@@ -487,9 +487,9 @@ export class PropertyManagementController {
   @ApiParam({ name: "id", type: Number, description: "ID of the lease to renew" })
   @Permissions("create-propertyManagement", "update-propertyManagement")
   @Post("leases/:id/renew")
-  renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto, @Req() req: Request) {
+  renewLease(@Param("id", ParseIntPipe) id: number, @Body() body: RenewLeaseDto, @CurrentOrg() orgId: number, @Req() req: Request) {
     const userId = ((req as Request & { user?: { sub?: number } }).user)?.sub;
-    return this.contractsService.renewLease(id, body, userId);
+    return this.contractsService.renewLease(id, body, orgId, userId);
   }
 
   private publicApiBase(req: Request): string {
