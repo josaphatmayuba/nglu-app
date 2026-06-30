@@ -5,7 +5,7 @@ import useCurrency from "@/utils/useCurrency";
 import { CaretRightOutlined } from "@ant-design/icons";
 import { Button, Collapse, Form, Input } from "antd";
 import { useEffect, useState } from "react";
-import ReactQuill from "react-quill";
+import ReactQuill from "react-quill-new";
 import { useDispatch, useSelector } from "react-redux";
 import TagInput from "./TagInput";
 

@@ -16,6 +16,7 @@ import {
   loadContracts,
   sendContract,
 } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 
 const STATUS_COLOR = {
   draft: "default",
@@ -378,7 +379,7 @@ export default function ContractsTab({ leases }) {
             }}
           >
             {hasHtmlMarkup(previewContract?.contractContent) ? (
-              <div dangerouslySetInnerHTML={{ __html: previewContract?.contractContent || "" }} />
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContract?.contractContent || "") }} />
             ) : (
               <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
                 {previewContract?.contractContent}

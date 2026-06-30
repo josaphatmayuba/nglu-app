@@ -13,6 +13,7 @@ import {
 import { parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
@@ -422,7 +423,7 @@ export function Contrats() {
                   )}
                   <div className="contrats-paper-body">
                     {detail && hasHtmlMarkup(detail.contractContent) ? (
-                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: detail.contractContent }} />
+                      <div className="contrats-paper-html" dangerouslySetInnerHTML={{ __html: sanitizeHtml(detail.contractContent) }} />
                     ) : (
                       <pre className="contrats-paper-plain">{detail?.contractContent || "Sélectionnez un contrat pour afficher le contenu."}</pre>
                     )}
@@ -727,7 +728,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
             ))}
           </div>
           {showPreview ? (
-            <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            <div className="domus-template-preview" dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }} />
           ) : (
             <textarea
               ref={textareaRef}

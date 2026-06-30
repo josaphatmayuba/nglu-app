@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Send, X, Paperclip, ArrowLeft, MessageCircle, Users } from "lucide-react";
 import { API_ROOT } from "../api.js";
 import { readToken } from "../auth.jsx";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { io } from "socket.io-client";
 
 const NATIVE =
@@ -37,7 +38,10 @@ function avatarColor(id) {
 }
 
 function parseContent(text) {
-  return text.replace(/@(\w+)/g, (_, name) => `<span class="mention">@${name}</span>`);
+  const escaped = String(text || "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+  return escaped.replace(/@(\w+)/g, (_, name) => `<span class="mention">@${name}</span>`);
 }
 
 // ── Composant principal ──────────────────────────────────────────────────────
@@ -230,7 +234,7 @@ export function Discussion({ entityType, entityId, entityTitle, onClose, current
                 )}
                 <div className={`disc-bubble ${isMe ? "bubble-me" : "bubble-other"}`}>
                   <span
-                    dangerouslySetInnerHTML={{ __html: parseContent(msg.content) }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(parseContent(msg.content)) }}
                   />
                 </div>
                 <div className="disc-msg-time">

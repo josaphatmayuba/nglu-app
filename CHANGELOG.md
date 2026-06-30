@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.124.15)
+- **Security hardening follow-up**. Removed tracked live env files, blocked weak production secrets, locked Stalwart admin to localhost by default, validated uploaded files by magic bytes, sanitized rich HTML rendering with DOMPurify, replaced `react-quill` with `react-quill-new`, removed `unsafe-inline` from `script-src` in Nginx CSP, and updated vulnerable dependencies where non-breaking. **Verified**: backend2 typecheck/build OK; frontend build:dev OK; domus/chat/journal/farmos builds OK; npm audits OK at moderate/high threshold for verified projects. [SECURITY]
+
 ### Fixed (3.124.13)
 - **Domus - devise disponible dans les placeholders de contrat**. Le service de contrats joint désormais la devise du bail et expose `[DEVISE]`, `[SYMBOLE DE DEVISE]`, `[CODE DE DEVISE]`, `[MONTANT DU LOYER AVEC DEVISE]` et `[MONTANT GARANTIE AVEC DEVISE]`. Les modèles seedés qui avaient `$ (USD)` codé en dur sont migrés vers ces placeholders pour respecter la devise réelle du bail. **Vérifié** : `npm.cmd run typecheck` backend2 OK ; `npm.cmd run build` domus-app OK. [SCRUM]
 

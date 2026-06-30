@@ -3,8 +3,8 @@ import { OAuth2Client } from "google-auth-library";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
+import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -48,12 +48,12 @@ export class CompatService {
   }
 
   async uploadFiles(files: any[], body: Record<string, any>) {
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
     const saved = (files ?? []).map((file) => {
-      const extension = file.originalname.split(".").pop() || "bin";
-      const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
-      writeFileSync(join(this.uploadDir, name), file.buffer);
-      return name;
+      return saveValidatedUploadFile(file, this.uploadDir, {
+        allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+        prefix: "compat",
+        maxBytes: 5 * 1024 * 1024,
+      }).name;
     });
 
     if (body.index !== undefined || body.linkUrl !== undefined) {

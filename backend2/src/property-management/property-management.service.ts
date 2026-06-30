@@ -1,10 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
+import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import {
@@ -1718,10 +1718,11 @@ export class PropertyManagementService {
 
   private saveReceiptFile(file: any, publicApiBase?: string): string | null {
     if (!file?.buffer) return null;
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-    const ext = (file.originalname?.split(".").pop() || "bin").replace(/[^a-zA-Z0-9]/g, "") || "bin";
-    const name = `receipt-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
-    writeFileSync(join(this.uploadDir, name), file.buffer);
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_OR_PDF_MIME_TYPES,
+      prefix: "receipt",
+      maxBytes: 5 * 1024 * 1024,
+    });
     const base = publicApiBase ?? "";
     return `${base}/uploads/${name}`;
   }

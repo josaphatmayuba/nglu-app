@@ -234,18 +234,133 @@ Impact fonctionnel:
 - pre-login/public garde un endpoint minimal.
 - les ecrans authentifies recuperent les settings de leur organisation.
 
+### 11. Secrets et fichiers `.env`
+
+Faille:
+- plusieurs fichiers `.env` reels etaient suivis par Git.
+- le backend2 acceptait encore des secrets faibles par defaut en production.
+
+Correction:
+- `.gitignore` ignore maintenant les env reels par defaut, en gardant les templates.
+- retrait du suivi Git pour `.env`, `backend/.env`, `backend/.env.docker`, `frontend/.env` et `frontend/.env.development-local`.
+- `backend2/src/config/env.ts` refuse en production les secrets JWT/refresh faibles ou trop courts.
+- `DB_PASSWORD=password` est refuse en production.
+
+Fichiers:
+- `.gitignore`
+- `backend2/src/config/env.ts`
+
+Impact fonctionnel:
+- les fichiers restent presents localement, mais ne doivent plus etre commites.
+- la prod doit fournir explicitement des secrets forts.
+
+### 12. Admin mail `:8088`
+
+Faille:
+- la config Stalwart publiait l'admin/setup sur `0.0.0.0:8088` par defaut.
+
+Correction:
+- le compose mail bind maintenant l'admin sur `127.0.0.1` par defaut.
+- l'URL publique par defaut ne contient plus `:8088`.
+- le README documente l'acces par SSH tunnel ou par reverse proxy/VPN/IP allowlist.
+- le fallback applicatif `STALWART_JMAP_URL` pointe maintenant vers `127.0.0.1`, pas vers le domaine public.
+
+Fichiers:
+- `mail/stalwart/docker-compose.yml`
+- `mail/stalwart/.env.example`
+- `mail/stalwart/README.md`
+- `backend2/src/config/env.ts`
+
+Impact fonctionnel:
+- un nouvel environnement ne devrait plus exposer l'admin mail publiquement par defaut.
+- la fermeture du port deja expose en prod reste une action infra/firewall.
+
+### 13. XSS HTML riche
+
+Faille:
+- plusieurs ecrans rendaient du HTML venant du backend ou d'un utilisateur avec `dangerouslySetInnerHTML`.
+- `react-quill` tirait `quill <= 1.3.7`, connu vulnerable XSS.
+
+Correction:
+- ajout de DOMPurify comme dependance directe.
+- sanitation des contenus contrats/messages/descriptions produits dans `frontend`, `domus-app`, `chat-app` et `journal-app`.
+- `journal-app` echappe maintenant le texte de message avant de creer le markup de mention.
+- remplacement frontend de `react-quill` par `react-quill-new` base sur Quill 2.
+- les handlers d'erreur `domus-app`, `journal-app` et `farmos-app` utilisent maintenant `textContent` au lieu de `innerHTML`.
+- les CSP Nginx retirent `unsafe-inline` de `script-src` sur les configs frontend/Avelomi.
+
+Fichiers principaux:
+- `frontend/src/utils/sanitizeHtml.js`
+- `domus-app/src/sanitizeHtml.js`
+- `chat-app/src/sanitizeHtml.js`
+- `journal-app/src/sanitizeHtml.js`
+- `domus-app/src/main.jsx`
+- `journal-app/src/main.jsx`
+- `farmos-app/src/main.jsx`
+- `nginx/nginx.frontend.conf`
+- `nginx/nginx.avelomi.conf`
+- `nginx/nginx.avelomi-dev.conf`
+
+Impact fonctionnel:
+- le HTML riche reste affiche, mais scripts/attributs dangereux sont filtres.
+- l'editeur riche frontend build correctement avec `react-quill-new`.
+
+### 14. Uploads
+
+Faille:
+- certains uploads utilisaient l'extension de `originalname` et faisaient confiance au MIME declare.
+- certains endpoints n'avaient pas de limite stricte.
+
+Correction:
+- helper commun `saveValidatedUploadFile`.
+- validation magic bytes pour JPEG/PNG/WebP/PDF.
+- extension derivee du type detecte, pas du nom original.
+- noms randomises.
+- limites Multer sur compat uploads.
+- application aux logos app-settings, uploads compat et recus maintenance.
+
+Fichiers:
+- `backend2/src/common/upload-security.ts`
+- `backend2/src/app-settings/app-settings.service.ts`
+- `backend2/src/compat/compat.controller.ts`
+- `backend2/src/compat/compat.service.ts`
+- `backend2/src/property-management/property-management.service.ts`
+
+Impact fonctionnel:
+- SVG/GIF et fichiers dont le contenu ne correspond pas au MIME sont refuses sur ces flux.
+- images JPEG/PNG/WebP et PDF valides continuent de fonctionner.
+
+### 15. Dependances vulnerables
+
+Correction:
+- `backend2`: overrides `multer` et `nodemailer` mis a jour; audit moderate/high a 0.
+- `chat-app` et `journal-app`: `npm audit fix` applique; audit a 0.
+- `domus-app`: audit a 0.
+- `frontend`: remplacement `react-quill` -> `react-quill-new`; audit moderate/high a 0.
+
+Impact fonctionnel:
+- builds verifies apres mise a jour.
+- il reste 2 vulnerabilites low dans `frontend` via Quill 2.0.3, sans fix non cassant disponible via `npm audit`.
+
 ## Verification effectuee
 
 Commandes:
 - `cmd.exe /c npm run typecheck` dans `backend2`
 - `cmd.exe /c npm run build` dans `backend2`
 - `cmd.exe /c npm run build:dev` dans `frontend`
+- `cmd.exe /c npm run build` dans `domus-app`
+- `cmd.exe /c npm run build:dev` dans `chat-app`
+- `cmd.exe /c npm run build` dans `journal-app`
+- `cmd.exe /c npm run build` dans `farmos-app`
+- `cmd.exe /c npm audit --audit-level=moderate` dans `backend2`, `frontend`, `domus-app`, `chat-app`, `journal-app`
 - `node --check middleware/src/index.js`
 
 Resultat:
 - typecheck OK.
-- build OK.
+- builds OK.
 - build frontend OK avec warnings existants Vite: `lottie-web` utilise `eval` et certains chunks depassent 500 kB.
+- audits OK au seuil moderate/high sur les projets verifies.
+- frontend garde 2 vulnerabilites low via Quill 2.0.3, sans correction non cassante.
 - syntaxe middleware OK.
 
 ## Restant a traiter
@@ -253,24 +368,23 @@ Resultat:
 ### Secrets et `.env`
 
 Statut:
-- non corrige automatiquement.
+- corrige cote code/repo pour les defaults faibles et le suivi Git des env reels identifies.
 
 Raison:
-- il faut rotater les secrets reels et verifier les variables d'environnement de prod.
+- il faut encore rotater les secrets reels et verifier les variables d'environnement de prod.
 
 Action recommandee:
-- retirer les `.env` reels du suivi Git;
 - rotater JWT/refresh/DB/SMTP/Twilio;
-- rendre les secrets obligatoires en prod;
-- ajouter une validation au demarrage.
+- verifier que les secrets historiques ne restent pas dans un historique Git partage;
+- purger l'historique si le depot a ete partage hors cercle de confiance.
 
 ### Admin mail `:8088`
 
 Statut:
-- non corrige dans le code applicatif.
+- corrige dans la config repo par defaut; a appliquer/redeployer cote infra.
 
 Raison:
-- correction infra/firewall/reverse proxy.
+- si le port est deja ouvert en prod, il faut fermer le firewall ou redeployer la config mail.
 
 Action recommandee:
 - fermer le port public;
@@ -289,29 +403,27 @@ Action recommandee:
 ### XSS frontend
 
 Statut:
-- non corrige dans cette passe.
+- partiel avance.
 
 Raison:
-- plusieurs composants et flux HTML; correction a faire avec sanitation centralisee et tests UI.
+- contrats, messages, produits et editeur riche principal corriges; il reste des rendus HTML legacy a auditer un par un avant CSP stricte.
 
 Action recommandee:
-- centraliser DOMPurify;
+- continuer le remplacement des `dangerouslySetInnerHTML` legacy restants;
 - remplacer les `dangerouslySetInnerHTML` non sanitisés;
-- durcir CSP apres nettoyage.
+- durcir CSP apres nettoyage complet.
 
 ### Uploads
 
 Statut:
-- non corrige dans cette passe.
+- corrige pour les flux backend2 identifies comme non valides en profondeur.
 
 Raison:
-- demande un helper commun et tests par endpoint.
+- HR et transactions avaient deja une validation magic bytes; logos/settings, compat uploads et recus maintenance sont maintenant branches au helper commun.
 
 Action recommandee:
-- valider MIME, extension et magic bytes;
-- taille max stricte;
-- extension derivee du MIME valide;
-- ne jamais faire confiance a `originalname`.
+- etendre le helper aux futurs endpoints upload;
+- ajouter tests unitaires de fichiers mal declares.
 
 ### Tests RBAC/multitenant
 

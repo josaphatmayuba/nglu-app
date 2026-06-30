@@ -52,7 +52,7 @@ export class CompatController {
   @Post(["files", "slider-images"])
   @HttpCode(201)
   @UseGuards(JwtAuthGuard)
-  @UseInterceptors(AnyFilesInterceptor())
+  @UseInterceptors(AnyFilesInterceptor({ limits: { fileSize: 5 * 1024 * 1024, files: 5 } }))
   uploadImages(@UploadedFiles() files: any[], @Body() body: Record<string, any>) {
     return this.compat.uploadFiles(files, body);
   }

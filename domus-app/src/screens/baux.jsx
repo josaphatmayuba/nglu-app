@@ -29,6 +29,7 @@ import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } fr
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
 
@@ -969,7 +970,7 @@ function ContractPreviewModal({ contract, onClose }) {
         </div>
         <div
           className="domus-contract-content"
-          dangerouslySetInnerHTML={{ __html: `${body}${contractSignaturesHtml(contract)}` }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
         />
       </div>
     </div>

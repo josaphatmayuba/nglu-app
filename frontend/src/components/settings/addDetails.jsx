@@ -14,7 +14,7 @@ import PhoneInput from "../Shared/PhoneInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
 const phoneRule = { validator: (_, v) => !v || isValidPhoneNumber(v) ? Promise.resolve() : Promise.reject(new Error("Numéro invalide")) };
 import toast from "react-hot-toast";
-import ReactQuill from "react-quill";
+import ReactQuill from "react-quill-new";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllCurrency } from "../../redux/rtk/features/eCommerce/currency/currencySlice";
 import {

@@ -186,12 +186,12 @@ Action:
 ## Dependances npm
 
 Resultats:
-- `backend2`: 11 high.
-- `chat-app`: 2 high.
-- `journal-app`: 2 high.
+- `backend2`: 0 au seuil moderate/high apres overrides `multer`/`nodemailer`.
+- `chat-app`: 0 apres `npm audit fix`.
+- `journal-app`: 0 apres `npm audit fix`.
 - `farmos-app`: 1 high, 1 moderate.
-- `frontend`: 2 moderate.
-- `domus-app`: 1 moderate.
+- `frontend`: 0 au seuil moderate/high apres remplacement `react-quill` -> `react-quill-new`; reste 2 low via Quill 2.0.3.
+- `domus-app`: 0 apres ajout direct de DOMPurify.
 - `marketing-site`: 1 high.
 - `avelomi-site`, `batipro-app`, `comptabilite-app`, `hr-app`, `migration-app`: 0.
 
@@ -211,7 +211,7 @@ Notes:
 
 ## Checklist courte
 
-- [ ] Retirer les `.env` reels du depot.
+- [x] Retirer les `.env` reels identifies du suivi Git.
 - [ ] Rotater tous les secrets faibles ou exposes.
 - [x] Supprimer ou verifier correctement `/googlelogin/login`.
 - [x] Corriger `/auth/logout`.
@@ -222,9 +222,12 @@ Notes:
 - [x] Ajouter `JwtAuthGuard` aux controleurs mutables identifies.
 - [x] Retablir `DELETE /transaction-type/:id`.
 - [x] Authentifier les WebSockets.
-- [ ] Fermer `mail.ongdngolu.org:8088`.
-- [ ] Sanitize HTML avec DOMPurify partout.
-- [ ] Durcir la CSP.
-- [ ] Uniformiser la validation upload.
-- [ ] Mettre a jour les dependances vulnerables.
+- [x] Durcir la config mail pour ne plus publier `:8088` par defaut.
+- [ ] Fermer `mail.ongdngolu.org:8088` cote infra si encore expose.
+- [x] Sanitize HTML avec DOMPurify sur contrats/messages/produits corriges.
+- [ ] Finir l'audit des rendus HTML legacy restants.
+- [x] Retirer `unsafe-inline` de `script-src` dans les CSP Nginx frontend/Avelomi.
+- [ ] Retirer `unsafe-inline` de `style-src` apres refactor des styles inline.
+- [x] Uniformiser la validation upload sur les flux backend2 identifies.
+- [x] Mettre a jour les dependances vulnerables corrigeables sans force sur les projets verifies.
 - [ ] Ajouter lockfiles pour les services sans audit npm.

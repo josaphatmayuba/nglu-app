@@ -8,7 +8,7 @@ import Dragger from "antd/es/upload/Dragger";
 import { useEffect, useState } from "react";
 import { BiCloudUpload } from "react-icons/bi";
 import { IoClose } from "react-icons/io5";
-import ReactQuill from "react-quill";
+import ReactQuill from "react-quill-new";
 import { useDispatch, useSelector } from "react-redux";
 import TagInput from "../CommonUi/TagInput";
 import { textEditorFormats, textEditorModule } from "../product/AddProduct";

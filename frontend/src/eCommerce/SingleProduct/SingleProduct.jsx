@@ -22,6 +22,7 @@ import {
   productWishlistUpdate,
 } from "../../redux/rtk/features/product/productSlice";
 import { groupByAttribute, priceCalculator } from "../../utils/functions";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import useCurrency from "../../utils/useCurrency";
 import ProductDetails from "./ProductDetails";
 import ProductImageSlider from "./ProductImageSlider";
@@ -182,7 +183,7 @@ export default function SingleProduct() {
                   {" "}
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />{" "}
                   {priceCalculator(
@@ -195,7 +196,7 @@ export default function SingleProduct() {
                     <span className='line-through opacity-50'>
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: currency?.currencySymbol,
+                          __html: sanitizeHtml(currency?.currencySymbol),
                         }}
                       />{" "}
                       {product.productSalePriceWithVat}

@@ -1,7 +1,8 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { desc, eq, sql } from "drizzle-orm";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
+import { existsSync } from "fs";
 import { basename, join } from "path";
+import { IMAGE_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
 import { appSettings, currencies } from "../database/schema";
@@ -157,12 +158,11 @@ export class AppSettingsService {
     const file = files?.find((item) => item?.fieldname === "images" || item?.fieldname === "images[]" || item?.fieldname === "image") ?? files?.[0];
     if (!file?.buffer) return null;
 
-    if (!existsSync(this.uploadDir)) mkdirSync(this.uploadDir, { recursive: true });
-
-    const rawExtension = file.originalname?.split(".").pop() || "png";
-    const extension = rawExtension.replace(/[^a-zA-Z0-9]/g, "") || "png";
-    const name = `${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`;
-    writeFileSync(join(this.uploadDir, name), file.buffer);
+    const { name } = saveValidatedUploadFile(file, this.uploadDir, {
+      allowedMimeTypes: IMAGE_MIME_TYPES,
+      prefix: "logo",
+      maxBytes: 10 * 1024 * 1024,
+    });
 
     const base = publicApiBase?.replace(/\/$/, "");
     return base ? `${base}/files/${name}` : `/files/${name}`;

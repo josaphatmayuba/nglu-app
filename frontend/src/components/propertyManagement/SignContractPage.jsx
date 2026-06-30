@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useParams } from "react-router-dom";
 import { getContractForSigning, submitSignature } from "../../redux/rtk/features/propertyManagement/propertyManagementSlice";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import { downloadSignedContractPdf } from "./shared/contractPdf";
 
 const STATUS_LABELS = {
@@ -206,7 +207,7 @@ export default function SignContractPage() {
         <div style={styles.contentBox}>
           <div
             style={styles.htmlContent}
-            dangerouslySetInnerHTML={{ __html: contract?.contractContent ?? "" }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract?.contractContent ?? "") }}
           />
         </div>
 

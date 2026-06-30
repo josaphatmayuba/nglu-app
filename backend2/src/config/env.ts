@@ -2,12 +2,41 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+const nodeEnv = process.env.NODE_ENV || "development";
+const isProd = ["production", "prod"].includes(nodeEnv.toLowerCase());
+const weakSecretValues = new Set([
+  "",
+  "changeme",
+  "changeme_in_prod",
+  "jwt_secret_key",
+  "refresh_secret_key",
+  "hahahhoho",
+  "VIRVVIER",
+  "password",
+]);
+
+function requiredSecret(name: string, fallback: string) {
+  const value = process.env[name] || fallback;
+  if (isProd && (weakSecretValues.has(value) || value.length < 32)) {
+    throw new Error(`${name} must be set to a strong value in production.`);
+  }
+  return value;
+}
+
+function requiredProdValue(name: string, fallback: string) {
+  const value = process.env[name] || fallback;
+  if (isProd && weakSecretValues.has(value)) {
+    throw new Error(`${name} must be set in production.`);
+  }
+  return value;
+}
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || "development",
+  nodeEnv,
   port: Number(process.env.PORT || 8001),
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:3000",
-  jwtSecret: process.env.JWT_SECRET || "jwt_secret_key",
-  refreshSecret: process.env.REFRESH_SECRET || "refresh_secret_key",
+  jwtSecret: requiredSecret("JWT_SECRET", "jwt_secret_key"),
+  refreshSecret: requiredSecret("REFRESH_SECRET", "refresh_secret_key"),
   google: {
     clientId:
       process.env.GOOGLE_CLIENT_ID ||
@@ -35,7 +64,7 @@ export const env = {
     tlsRejectUnauthorized: process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== "false",
   },
   stalwart: {
-    jmapUrl: process.env.STALWART_JMAP_URL || "http://mail.ongdngolu.org:8088/jmap",
+    jmapUrl: process.env.STALWART_JMAP_URL || "http://127.0.0.1:8088/jmap",
     adminUser: process.env.STALWART_ADMIN_USER || process.env.SMTP_USER || "",
     adminPass: process.env.STALWART_ADMIN_PASS || process.env.SMTP_PASS || "",
     domain: process.env.STALWART_DOMAIN || "ongdngolu.org",
@@ -54,7 +83,7 @@ export const env = {
     port: Number(process.env.DB_PORT || 3306),
     database: process.env.DB_DATABASE || "nglu_db",
     user: process.env.DB_USERNAME || "nglu_user",
-    password: process.env.DB_PASSWORD || "password",
+    password: requiredProdValue("DB_PASSWORD", "password"),
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || "",

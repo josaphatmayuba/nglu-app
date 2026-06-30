@@ -25,7 +25,10 @@ class ErrorBoundary extends React.Component {
 window.addEventListener("error", (e) => {
   const root = document.getElementById("root");
   if (root && !root.hasChildNodes()) {
-    root.innerHTML = `<pre style="padding:24px;color:#9f1239;white-space:pre-wrap;font:12px ui-monospace,monospace">window error: ${e?.error?.stack || e.message}</pre>`;
+    const pre = document.createElement("pre");
+    pre.style.cssText = "padding:24px;color:#9f1239;white-space:pre-wrap;font:12px ui-monospace,monospace";
+    pre.textContent = `window error: ${e?.error?.stack || e.message}`;
+    root.replaceChildren(pre);
   }
 });
 

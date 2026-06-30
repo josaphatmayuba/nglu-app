@@ -3,6 +3,7 @@ import { Fragment } from "react";
 import { Link } from "react-router-dom";
 import { Package, Coins, DollarSign, AlertTriangle } from "lucide-react"; // Lucide icons
 import { abbreviateNumber } from "../../utils/nFormetter";
+import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import useCurrency from "../../utils/useCurrency";
 
 export default function ProductCard({ card }) {
@@ -79,7 +80,7 @@ export default function ProductCard({ card }) {
                 {isCurrency && (
                   <span
                     dangerouslySetInnerHTML={{
-                      __html: currency?.currencySymbol,
+                      __html: sanitizeHtml(currency?.currencySymbol),
                     }}
                   />
                 )}
@@ -91,7 +92,7 @@ export default function ProductCard({ card }) {
               {isCurrency && (
                 <span className="text-base mr-1"
                   dangerouslySetInnerHTML={{
-                    __html: currency?.currencySymbol,
+                    __html: sanitizeHtml(currency?.currencySymbol),
                   }}
                 />
               )}

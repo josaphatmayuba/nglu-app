@@ -8,6 +8,7 @@ import { api } from "../api.js";
 import { filterLeases, filterPayments, filterTenants, parseDomusDate, useDateRange } from "../dateRange.jsx";
 import { money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { buildLeaseCards } from "./loyers.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
@@ -335,7 +336,7 @@ function ContractPreviewModal({ contract, onClose }) {
         </div>
         <div
           className="domus-contract-content"
-          dangerouslySetInnerHTML={{ __html: contract.contractContent || "<p>Aucun contenu de contrat.</p>" }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(contract.contractContent || "<p>Aucun contenu de contrat.</p>") }}
         />
       </div>
     </div>

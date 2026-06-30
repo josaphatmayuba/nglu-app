@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useAuthToken, clearToken, LoginScreen, readToken } from "./auth.jsx";
 import { api, API_ROOT } from "./api.js";
+import { sanitizeHtml } from "./sanitizeHtml.js";
 import { io } from "socket.io-client";
 
 const NATIVE =
@@ -148,7 +149,7 @@ function MessageThread({ discussionId, currentUserId, socket }) {
                   <div className="msg-name">{msg.firstName} {msg.lastName}</div>
                 )}
                 <div className={`bubble ${isMe?"bubble-me":"bubble-other"}`}
-                  dangerouslySetInnerHTML={{ __html: parseContent(msg.content) }} />
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(parseContent(msg.content)) }} />
                 <div className="msg-time">
                   {relTime(msg.created_at)}
                   {isMe && <CheckCheck size={12} style={{ color: msg.is_read?"#818cf8":"#64748b" }} />}

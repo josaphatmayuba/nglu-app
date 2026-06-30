@@ -1,7 +1,7 @@
 import { PlusOutlined } from "@ant-design/icons";
 import { Button, Form, Input, Select, Space, Upload } from "antd";
 import React, { useEffect, useState } from "react";
-import ReactQuill from "react-quill";
+import ReactQuill from "react-quill-new";
 import { useDispatch, useSelector } from "react-redux";
 import { loadAllAccount } from "../../redux/rtk/features/account/accountSlice";
 import {
