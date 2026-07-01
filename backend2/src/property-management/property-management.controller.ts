@@ -809,6 +809,33 @@ export class PropertyManagementController {
     return this.contractsService.sendContract(id, orgId);
   }
 
+  @ApiOperation({ summary: "Mark a contract as signed manually (paper contract signed by hand, scan/photo imported)" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("document", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("contracts/:id/mark-signed-manually")
+  @HttpCode(200)
+  markContractSignedManually(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() document: any,
+    @CurrentOrg() orgId: number,
+    @Req() req: Request,
+  ) {
+    const user = (req as Request & { user?: { firstName?: string; lastName?: string; username?: string } }).user;
+    const createdByName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || user.username || null : null;
+    return this.contractsService.markSignedManually(id, document, orgId, createdByName);
+  }
+
   @ApiOperation({ summary: "Delete a contract" })
   @Permissions("delete-propertyManagement")
   @Delete("contracts/:id")

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.0)
+- **Domus : marquer un contrat "signé" manuellement (bail papier)** — dans la modale Contrat de bail, bouton pour importer le scan/photo/PDF du bail signé à la main par le locataire ; le contrat électronique bascule en statut `signed` (comme une signature en ligne), journal d'audit dédié, et un lien "Voir le bail signé importé" permet de le consulter. Colonne `signed_document_id` (migration `0197`) relie le contrat au document stocké via `real_estate_lease_documents`/MinIO. `backend2/src/database/schema.ts`, `backend2/src/property-management/contracts.service.ts`, `backend2/src/property-management/property-management.controller.ts`, `domus-app/src/api.js`, `domus-app/src/screens/baux.jsx`, `domus-app/src/styles/app.css`.
+
 ### Added (3.139.0)
 - **Domus : import du bail signé à la main (papier)** — nouvelle table `real_estate_lease_documents` (migration `0196`), stockage MinIO via `ObjectStorageService.putDocument` (image ou PDF, 15 Mo max), endpoints `GET/POST /leases/:id/documents`, `DELETE /leases/documents/:documentId`, `GET /leases/documents/:documentId/file`. Côté UI, la fiche détail d'un bail (`LeaseDetailModal`) permet d'importer le scan/photo du bail signé et de le consulter/supprimer. `backend2/src/database/schema.ts`, `backend2/src/property-management/{object-storage,property-management}.service.ts`, `backend2/src/property-management/property-management.controller.ts`, `domus-app/src/api.js`, `domus-app/src/screens/baux.jsx`, `domus-app/src/styles/app.css`.
 

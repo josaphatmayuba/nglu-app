@@ -1039,6 +1039,8 @@ export const realEstateContracts = mysqlTable("real_estate_contracts", {
   tenantEmail: varchar("tenant_email", { length: 255 }),
   tenantName: varchar("tenant_name", { length: 255 }),
   createdBy: bigint("created_by", { mode: "number" }),
+  // Bail signé à la main (papier) : scan/photo importé, lié à real_estate_lease_documents.
+  signedDocumentId: bigint("signed_document_id", { mode: "number" }),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

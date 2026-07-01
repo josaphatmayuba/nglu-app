@@ -230,6 +230,11 @@ export const api = {
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
   deleteContract: (id) => del(`/contracts/${id}`),
+  markContractSignedManually: (id, file) => {
+    const form = new FormData();
+    form.append("document", file);
+    return multipartFetch(`/contracts/${id}/mark-signed-manually`, form);
+  },
 
   // Messages / notifications configurables (table email_templates partagée).
   messageTemplates: () => jsonFetch("/email-templates", { method: "GET", base: API_ROOT }),

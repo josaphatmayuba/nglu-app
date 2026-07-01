@@ -9,6 +9,7 @@ import {
   currencies,
   realEstateContractAuditLogs,
   realEstateContracts,
+  realEstateLeaseDocuments,
   realEstateLeases,
   realEstateProperties,
   realEstateUnits,
@@ -24,6 +25,7 @@ import type { SystemEmailType } from "../system-email/system-email.service";
 import { ContractTemplatesService } from "./contract-templates.service";
 import type { ContractTemplateType } from "./dto/contract-template.dto";
 import { CreateContractDto, SignContractDto } from "./dto/property-management.dto";
+import { ObjectStorageService } from "./object-storage.service";
 
 type LeaseDetails = {
   leaseId: number;
@@ -71,6 +73,7 @@ export class ContractsService {
     private readonly emails: SystemEmailService,
     private readonly realtimeData: RealtimeDataPublisher,
     private readonly sms: CompatService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   async createContract(dto: CreateContractDto, orgId: number, createdBy?: number) {
@@ -291,6 +294,64 @@ export class ContractsService {
     await this.log(id, orgId, "sent", null, null, `Sent to ${contract.tenantEmail ?? "no email"}${tenantPhone ? ` / SMS ${tenantPhone}` : ""}`);
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
     return { message: "Contract sent.", id, signingUrl, token };
+  }
+
+  // Le locataire a signé le bail à la main sur papier : on importe le scan/photo
+  // et on marque le contrat "signed" comme pour une signature électronique.
+  async markSignedManually(id: number, file: unknown, orgId: number, createdByName?: string | null) {
+    const rows = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    const contract = rows[0];
+    if (contract.status === "signed") {
+      throw new GoneException("This contract has already been signed.");
+    }
+
+    const stored = await this.objectStorage.putDocument(
+      file as Parameters<ObjectStorageService["putDocument"]>[0],
+      `domus/leases/${orgId}/${contract.leaseId}/documents`,
+    );
+    const originalName = (file as { originalname?: string })?.originalname;
+    const [docResult] = await this.db.insert(realEstateLeaseDocuments).values({
+      organizationId: orgId,
+      leaseId: contract.leaseId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: originalName ? String(originalName).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      notes: "Bail signe a la main (papier)",
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const documentId = Number(docResult.insertId);
+
+    await this.db
+      .update(realEstateContracts)
+      .set({
+        status: "signed",
+        signedAt: sql`CURRENT_TIMESTAMP`,
+        signerToken: null,
+        signedDocumentId: documentId,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateContracts.id, id));
+
+    await this.log(
+      id,
+      orgId,
+      "signed",
+      null,
+      null,
+      `Signature papier importee${createdByName ? ` par ${createdByName}` : ""}`,
+    );
+    await this.publishContractUpdate("status_changed", id, contract.leaseId);
+    return this.getContract(id, orgId);
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {

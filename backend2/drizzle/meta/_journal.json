@@ -1205,6 +1205,13 @@
                         "when":  1780714800000,
                         "tag":  "0196_real_estate_lease_documents",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  172,
+                        "version":  "5",
+                        "when":  1780801200000,
+                        "tag":  "0197_real_estate_contracts_signed_document",
+                        "breakpoints":  true
                     }
                 ]
 }

@@ -478,7 +478,11 @@ export function Baux({ go } = {}) {
         <LeaseDetailModal lease={detailLease.lease} info={detailLease.info} onClose={() => setDetailLease(null)} go={go} />
       )}
       {contractPreview && (
-        <ContractPreviewModal contract={contractPreview} onClose={() => setContractPreview(null)} />
+        <ContractPreviewModal
+          contract={contractPreview}
+          onClose={() => setContractPreview(null)}
+          onSigned={(updated) => { setContractPreview(updated); reload(); }}
+        />
       )}
       {actionError && !leaseModal && <div className="domus-floating-error">{actionError}</div>}
     </>
@@ -1041,7 +1045,9 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   );
 }
 
-function ContractPreviewModal({ contract, onClose }) {
+function ContractPreviewModal({ contract, onClose, onSigned }) {
+  const [signBusy, setSignBusy] = useState(false);
+  const [signError, setSignError] = useState("");
   const raw = contract.contractContent || "";
   // Texte brut (sans balises) → on préserve les sauts de ligne (articles séparés)
   // au lieu de tout coller. Sinon on rend le HTML tel quel.
@@ -1049,6 +1055,25 @@ function ContractPreviewModal({ contract, onClose }) {
     ? (hasHtmlMarkup(raw) ? raw : `<pre class="domus-contract-plain">${escapeHtml(raw)}</pre>`)
     : "<p>Aucun contenu de contrat.</p>";
   const statusLabel = (CONTRACT_STATUS[contract.status] || {}).label || contract.status || "Contrat";
+  const canMarkSigned = contract.status !== "signed";
+
+  async function handleMarkSignedManually(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!window.confirm("Confirmer : le locataire a bien signe ce bail a la main sur papier ?")) return;
+    setSignBusy(true);
+    setSignError("");
+    try {
+      const updated = await api.markContractSignedManually(contract.id, file);
+      onSigned?.(updated);
+    } catch (err) {
+      setSignError(err?.message || "Import de la signature impossible.");
+    } finally {
+      setSignBusy(false);
+    }
+  }
+
   return (
     <div className="modal-layer">
       <div className="modal-scrim" onClick={onClose} />
@@ -1063,6 +1088,28 @@ function ContractPreviewModal({ contract, onClose }) {
           </div>
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
+        {canMarkSigned && (
+          <div className="domus-contract-manual-sign">
+            {signError && <div className="domus-floating-error">{signError}</div>}
+            <label className="immo-btn">
+              <FileSignature size={15} /> Marquer signe a la main (importer le PDF/scan)
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                style={{ display: "none" }}
+                disabled={signBusy}
+                onChange={handleMarkSignedManually}
+              />
+            </label>
+          </div>
+        )}
+        {contract.signedDocumentId && (
+          <div className="domus-contract-manual-sign">
+            <a className="immo-btn" href={api.leaseDocumentUrl(contract.signedDocumentId)} target="_blank" rel="noreferrer">
+              <FileText size={15} /> Voir le bail signe importe
+            </a>
+          </div>
+        )}
         <div
           className="domus-contract-content"
           dangerouslySetInnerHTML={{ __html: sanitizeHtml(`${body}${contractSignaturesHtml(contract)}`) }}
