@@ -11,6 +11,7 @@ import {
   LogIn,
   LogOut,
   MapPin,
+  Percent,
   Plus,
   Search,
   Trash2,
@@ -54,6 +55,7 @@ const emptyReservation = {
   dailyRate: "",
   depositAmount: "",
   currencyId: "",
+  couponCode: "",
   notes: "",
 };
 
@@ -65,6 +67,28 @@ function toId(value) {
 function toMoney(value) {
   const n = Number(value || 0);
   return Number.isFinite(n) ? n : 0;
+}
+function roundMoney(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+function dailyRateFromMonthly(value) {
+  return roundMoney(toMoney(value) / 30);
+}
+function couponDiscount(coupon, gross) {
+  if (!coupon) return 0;
+  const value = toMoney(coupon.discountValue);
+  const raw = coupon.discountType === "percentage" ? (toMoney(gross) * value) / 100 : value;
+  return Math.min(toMoney(gross), Math.max(0, roundMoney(raw)));
+}
+function reservationRateDefaults(properties, units, propertyId, unitId, defaultCurrencyId) {
+  const property = properties.find((p) => String(p.id) === String(propertyId)) || {};
+  const unit = unitId ? units.find((u) => String(u.id) === String(unitId)) : null;
+  const monthly = unit ? (unit.monthlyRent || property.defaultRent || 0) : (property.defaultRent || 0);
+  return {
+    dailyRate: dailyRateFromMonthly(monthly),
+    currencyId: unit?.currencyId || property.currencyId || defaultCurrencyId || "",
+  };
 }
 const compactDate = (value) => (value ? String(value).slice(0, 10) : "-");
 
@@ -82,6 +106,7 @@ export function Reservations({ go }) {
   const [searchIn, setSearchIn] = useState("");
   const [searchOut, setSearchOut] = useState("");
   const [modal, setModal] = useState(null);
+  const [couponModal, setCouponModal] = useState(null);
   const [detail, setDetail] = useState(null); // fiche bien type Airbnb
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState("");
@@ -90,12 +115,13 @@ export function Reservations({ go }) {
   const propertiesApi = useApi(() => api.properties(), []);
   const unitsApi = useApi(() => api.units(), []);
   const photosApi = useApi(() => api.propertyPhotos(), []);
+  const couponsApi = useApi(() => api.coupons(), []);
   const currenciesApi = useApi(() => api.currencies(), []);
   const settingApi = useApi(() => api.setting(), []);
   useRealtimeReload(reservationsApi.reload, ["payment"]);
 
-  const loading = reservationsApi.loading || propertiesApi.loading || unitsApi.loading;
-  const error = reservationsApi.error || propertiesApi.error || unitsApi.error;
+  const loading = reservationsApi.loading || propertiesApi.loading || unitsApi.loading || couponsApi.loading;
+  const error = reservationsApi.error || propertiesApi.error || unitsApi.error || couponsApi.error;
 
   const reservations = useMemo(() => {
     const raw = reservationsApi.data;
@@ -103,6 +129,8 @@ export function Reservations({ go }) {
   }, [reservationsApi.data]);
   const properties = useMemo(() => (Array.isArray(propertiesApi.data) ? propertiesApi.data : propertiesApi.data?.data || []), [propertiesApi.data]);
   const units = useMemo(() => (Array.isArray(unitsApi.data) ? unitsApi.data : unitsApi.data?.data || []), [unitsApi.data]);
+  const coupons = useMemo(() => (Array.isArray(couponsApi.data) ? couponsApi.data : couponsApi.data?.data || []), [couponsApi.data]);
+  const couponsById = useMemo(() => new Map(coupons.map((c) => [Number(c.id), c])), [coupons]);
   const currency = useMemo(() => normalizeCurrencyModule(currenciesApi.data, settingApi.data), [currenciesApi.data, settingApi.data]);
 
   // Photos regroupées par bien : cover = photo primaire ou 1re disponible (pattern biens.jsx).
@@ -138,7 +166,13 @@ export function Reservations({ go }) {
   useEffect(() => {
     if (loading) return;
     const prefill = takeReservationPrefill();
-    if (prefill) setModal({ ...emptyReservation, propertyId: prefill, currencyId: currency.defaultCurrencyId || "" });
+    if (prefill) {
+      setModal({
+        ...emptyReservation,
+        propertyId: prefill,
+        ...reservationRateDefaults(properties, units, prefill, "", currency.defaultCurrencyId),
+      });
+    }
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const propertyName = (id) => properties.find((p) => String(p.id) === String(id))?.name || `Bien ${id}`;
@@ -163,6 +197,7 @@ export function Reservations({ go }) {
     active: reservations.filter((r) => !["checked_out", "cancelled"].includes(r.status)).length,
     checked_out: reservations.filter((r) => r.status === "checked_out").length,
     all: reservations.length,
+    coupons: coupons.length,
   };
   const filterChips = [
     { key: "active", label: "En cours", count: counts.active },
@@ -188,7 +223,7 @@ export function Reservations({ go }) {
         address: [owner.address, owner.city].filter(Boolean).join(", ") || "Adresse non renseignée",
         beds: Number(u.bedrooms || 0),
         baths: Number(u.bathrooms || 0),
-        dailyRate: Number(u.monthlyRent || owner.defaultRent || 0),
+        dailyRate: dailyRateFromMonthly(u.monthlyRent || owner.defaultRent || 0),
         currencyId: u.currencyId || owner.currencyId || currency.defaultCurrencyId || "",
         cover: coverFor(photos),
         photos,
@@ -209,7 +244,7 @@ export function Reservations({ go }) {
         address: [p.address, p.city].filter(Boolean).join(", ") || "Adresse non renseignée",
         beds: Number(p.bedrooms || 0),
         baths: Number(p.bathrooms || 0),
-        dailyRate: Number(p.defaultRent || 0),
+        dailyRate: dailyRateFromMonthly(p.defaultRent || 0),
         currencyId: p.currencyId || currency.defaultCurrencyId || "",
         cover: coverFor(photosByProperty.get(Number(p.id)) || []),
         photos: photosByProperty.get(Number(p.id)) || [],
@@ -256,7 +291,7 @@ export function Reservations({ go }) {
   const openBooking = (stay) => setDetail(stay);
 
   const reloadAll = async () => {
-    await Promise.all([reservationsApi.reload(), propertiesApi.reload(), unitsApi.reload()]);
+    await Promise.all([reservationsApi.reload(), propertiesApi.reload(), unitsApi.reload(), couponsApi.reload()]);
   };
 
   const runAction = async (id, fn, confirmMsg) => {
@@ -266,6 +301,20 @@ export function Reservations({ go }) {
     try {
       await fn();
       await reservationsApi.reload();
+    } catch (err) {
+      setActionError(err.message || String(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const runCouponAction = async (id, fn, confirmMsg) => {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setBusyId(id);
+    setActionError("");
+    try {
+      await fn();
+      await couponsApi.reload();
     } catch (err) {
       setActionError(err.message || String(err));
     } finally {
@@ -291,6 +340,9 @@ export function Reservations({ go }) {
           <button className="immo-btn primary" onClick={() => setModal({ ...emptyReservation, currencyId: currency.defaultCurrencyId || "" })}>
             <Plus size={16} /> Réservation
           </button>
+          <button className="immo-btn" onClick={() => setCouponModal({})}>
+            <Percent size={16} /> Coupon
+          </button>
         </div>
       </div>
 
@@ -301,6 +353,9 @@ export function Reservations({ go }) {
           </button>
           <button type="button" className={view === "list" ? "active" : ""} onClick={() => setView("list")}>
             Réservations <span>{counts.all}</span>
+          </button>
+          <button type="button" className={view === "coupons" ? "active" : ""} onClick={() => setView("coupons")}>
+            Coupons <span>{counts.coupons}</span>
           </button>
         </div>
       </div>
@@ -345,6 +400,15 @@ export function Reservations({ go }) {
             )}
           </div>
         </>
+      ) : view === "coupons" ? (
+        <CouponList
+          coupons={coupons}
+          currency={currency}
+          busyId={busyId}
+          onCreate={() => setCouponModal({})}
+          onEdit={(coupon) => setCouponModal(coupon)}
+          onDelete={(coupon) => runCouponAction(`coupon-${coupon.id}`, () => api.deleteCoupon(coupon.id), `Désactiver le coupon ${coupon.code} ?`)}
+        />
       ) : (
         <>
           <div className="maintenance-toolbar">
@@ -365,7 +429,7 @@ export function Reservations({ go }) {
                 symbol={resSymbol(r)}
                 propertyName={propertyName(r.propertyId)}
                 unitName={unitName(r.unitId)}
-                onEdit={() => setModal(reservationToForm(r, currency.defaultCurrencyId))}
+                onEdit={() => setModal(reservationToForm(r, currency.defaultCurrencyId, couponsById.get(Number(r.couponId))?.code))}
                 onConfirm={() => runAction(r.id, () => api.confirmReservation(r.id))}
                 onCheckIn={() => runAction(r.id, () => api.checkInReservation(r.id))}
                 onCheckOut={() => setModal({ _checkout: r })}
@@ -395,10 +459,22 @@ export function Reservations({ go }) {
           value={modal}
           properties={properties}
           units={units}
+          couponsById={couponsById}
           currency={currency}
           busy={busyId === "save"}
           onClose={() => { setModal(null); setActionError(""); }}
           onSaved={async () => { setModal(null); await reloadAll(); }}
+          onError={setActionError}
+        />
+      )}
+
+      {couponModal && (
+        <CouponModal
+          value={couponModal}
+          currency={currency}
+          busy={busyId === "coupon-save"}
+          onClose={() => { setCouponModal(null); setActionError(""); }}
+          onSaved={async () => { setCouponModal(null); await couponsApi.reload(); }}
           onError={setActionError}
         />
       )}
@@ -462,6 +538,7 @@ function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName,
       <div className="ticket-meta">
         <span><CalendarDays size={14} /> {compactDate(r.checkIn)} → {compactDate(r.checkOut)}</span>
         <span><CalendarCheck size={14} /> {r.days} j × {money(r.dailyRate, symbol)}</span>
+        {toMoney(r.discountAmount) > 0 && <span><Percent size={14} /> Remise {money(r.discountAmount, symbol)}</span>}
         <span title="Total du séjour"><b>{money(r.totalAmount, symbol)}</b></span>
         {r.guestPhone && <span><User size={14} /> {r.guestPhone}</span>}
       </div>
@@ -479,7 +556,7 @@ function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName,
   );
 }
 
-function reservationToForm(r, defaultCurrencyId) {
+function reservationToForm(r, defaultCurrencyId, couponCode = "") {
   return {
     id: r.id,
     propertyId: r.propertyId ? String(r.propertyId) : "",
@@ -492,6 +569,9 @@ function reservationToForm(r, defaultCurrencyId) {
     dailyRate: r.dailyRate ?? "",
     depositAmount: r.depositAmount ?? "",
     currencyId: r.currencyId || defaultCurrencyId || "",
+    couponId: r.couponId ?? null,
+    couponCode,
+    discountAmount: r.discountAmount ?? 0,
     notes: r.notes || "",
   };
 }
@@ -505,19 +585,49 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
     guestName: "", guestPhone: "", guestEmail: "",
     checkIn: initialCheckIn || "", checkOut: initialCheckOut || "",
     dailyRate: stay.dailyRate || "", depositAmount: "",
-    currencyId: stay.currencyId || currency.defaultCurrencyId || "", notes: "",
+    currencyId: stay.currencyId || currency.defaultCurrencyId || "", couponCode: "", notes: "",
   });
+  const [couponPreview, setCouponPreview] = useState(null);
+  const [couponError, setCouponError] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
   const [busy, setBusy] = useState(false);
-  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
+  const set = (patch) => {
+    const couponChanged = Object.prototype.hasOwnProperty.call(patch, "couponCode") && patch.couponCode !== form.couponCode;
+    const currencyChanged = Object.prototype.hasOwnProperty.call(patch, "currencyId") && patch.currencyId !== form.currencyId;
+    if (couponChanged || currencyChanged) {
+      setCouponPreview(null);
+      setCouponError("");
+    }
+    setForm((c) => ({ ...c, ...patch }));
+  };
 
   const symbol = (() => {
     const byId = form.currencyId ? currency.currencyById?.get(Number(form.currencyId)) : null;
     return (byId ? cleanCurrencySymbol(byId) : "") || currency.defaultCurrencySymbol;
   })();
   const days = daysBetween(form.checkIn, form.checkOut);
-  const total = days * toMoney(form.dailyRate);
+  const gross = roundMoney(days * toMoney(form.dailyRate));
+  const discount = couponDiscount(couponPreview, gross);
+  const total = Math.max(0, roundMoney(gross - discount));
   const datesInvalid = form.checkIn && form.checkOut && new Date(form.checkOut) <= new Date(form.checkIn);
   const canBook = form.guestName.trim() && form.checkIn && form.checkOut && !datesInvalid;
+
+  const applyCoupon = async () => {
+    const code = form.couponCode.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    setCouponError("");
+    try {
+      const preview = await api.validateCoupon({ code, amount: gross, currencyId: form.currencyId });
+      setCouponPreview(preview);
+      setForm((c) => ({ ...c, couponCode: preview.code || code.toUpperCase() }));
+    } catch (err) {
+      setCouponPreview(null);
+      setCouponError(err.message || String(err));
+    } finally {
+      setCouponBusy(false);
+    }
+  };
 
   const book = async () => {
     setBusy(true);
@@ -534,6 +644,7 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
         dailyRate: toMoney(form.dailyRate),
         depositAmount: toMoney(form.depositAmount),
         currencyId: toId(form.currencyId) ?? null,
+        couponCode: form.couponCode.trim() || null,
         notes: form.notes.trim() || null,
       };
       if (!canBook) throw new Error("Client et dates valides obligatoires.");
@@ -585,17 +696,25 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
             <DomusPropertyField label="Départ" type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
           </div>
           {datesInvalid && <div className="api-error" style={{ marginTop: 6 }}>Le départ doit être après l'arrivée.</div>}
-          {!datesInvalid && days > 0 && (
-            <div className="stay-booking-total">
-              <span>{money(stay.dailyRate, symbol)} × {days} j</span>
-              <b>{money(total, symbol)}</b>
-            </div>
-          )}
+          {!datesInvalid && days > 0 && <BookingTotal gross={gross} discount={discount} total={total} days={days} dailyRate={form.dailyRate} symbol={symbol} />}
           <div className="stay-booking-guest">
             <DomusPropertyField label="Nom du client" value={form.guestName} required onChange={(guestName) => set({ guestName })} placeholder="ex. Jean Kabila" />
             <DomusPhoneField label="Téléphone" value={form.guestPhone} onChange={(guestPhone) => set({ guestPhone })} />
             <DomusPropertyField label="Email" type="email" value={form.guestEmail} onChange={(guestEmail) => set({ guestEmail })} />
             <MoneyField label="Tarif par jour" value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <CouponField
+              value={form.couponCode}
+              preview={couponPreview}
+              error={couponError}
+              busy={couponBusy}
+              discount={discount}
+              total={total}
+              symbol={symbol}
+              onChange={(couponCode) => set({ couponCode })}
+              onApply={applyCoupon}
+              onClear={() => { set({ couponCode: "" }); setCouponPreview(null); setCouponError(""); }}
+              disabled={gross <= 0}
+            />
             <MoneyField label="Caution (info)" value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
           <button className="immo-btn primary stay-booking-cta" disabled={busy || !canBook} onClick={book}>
@@ -608,18 +727,50 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
   );
 }
 
-function ReservationModal({ value, properties, units, currency, onClose, onSaved, onError }) {
+function ReservationModal({ value, properties, units, couponsById, currency, onClose, onSaved, onError }) {
   const [form, setForm] = useState({ ...value });
+  const initialCouponCode = value.couponCode || "";
+  const initialCoupon = value.couponId ? couponsById.get(Number(value.couponId)) : null;
+  const [couponPreview, setCouponPreview] = useState(initialCoupon || null);
+  const [couponError, setCouponError] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
   const [busy, setBusy] = useState(false);
-  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
+  const set = (patch) => {
+    const couponChanged = Object.prototype.hasOwnProperty.call(patch, "couponCode") && patch.couponCode !== form.couponCode;
+    const currencyChanged = Object.prototype.hasOwnProperty.call(patch, "currencyId") && patch.currencyId !== form.currencyId;
+    if (couponChanged || currencyChanged) {
+      setCouponPreview(null);
+      setCouponError("");
+    }
+    setForm((c) => ({ ...c, ...patch }));
+  };
   const propertyUnits = units.filter((u) => !form.propertyId || String(u.propertyId) === String(form.propertyId));
   const symbol = (() => {
     const byId = form.currencyId ? currency.currencyById?.get(Number(form.currencyId)) : null;
     return (byId ? cleanCurrencySymbol(byId) : "") || currency.defaultCurrencySymbol;
   })();
   const days = daysBetween(form.checkIn, form.checkOut);
-  const total = days * toMoney(form.dailyRate);
+  const gross = roundMoney(days * toMoney(form.dailyRate));
+  const discount = couponDiscount(couponPreview, gross);
+  const total = Math.max(0, roundMoney(gross - discount));
   const datesInvalid = form.checkIn && form.checkOut && new Date(form.checkOut) <= new Date(form.checkIn);
+
+  const applyCoupon = async () => {
+    const code = form.couponCode?.trim();
+    if (!code) return;
+    setCouponBusy(true);
+    setCouponError("");
+    try {
+      const preview = await api.validateCoupon({ code, amount: gross, currencyId: form.currencyId });
+      setCouponPreview(preview);
+      setForm((c) => ({ ...c, couponCode: preview.code || code.toUpperCase() }));
+    } catch (err) {
+      setCouponPreview(null);
+      setCouponError(err.message || String(err));
+    } finally {
+      setCouponBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -638,6 +789,10 @@ function ReservationModal({ value, properties, units, currency, onClose, onSaved
         currencyId: toId(form.currencyId) ?? null,
         notes: form.notes?.trim() || null,
       };
+      const normalizedCouponCode = form.couponCode?.trim() || "";
+      if (!form.id || normalizedCouponCode !== initialCouponCode || normalizedCouponCode) {
+        payload.couponCode = normalizedCouponCode || null;
+      }
       if (!payload.propertyId || !payload.guestName || !payload.checkIn || !payload.checkOut) {
         throw new Error("Bien, client et dates obligatoires.");
       }
@@ -656,20 +811,39 @@ function ReservationModal({ value, properties, units, currency, onClose, onSaved
       <div className="domus-property-form">
         <FormSection icon={<DoorOpen size={14} />} title="Bien & séjour">
           <div className="domus-property-form-grid">
-            <DomusPropertySelect label="Bien" value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
-            <DomusPropertySelect label="Unité (option — sinon bien entier)" value={form.unitId} onChange={(unitId) => set({ unitId })} options={[["", "— Bien entier —"], ...propertyUnits.map((u) => [String(u.id), u.name])]} />
+            <DomusPropertySelect
+              label="Bien"
+              value={form.propertyId}
+              required
+              onChange={(propertyId) => set({ propertyId, unitId: "", ...reservationRateDefaults(properties, units, propertyId, "", currency.defaultCurrencyId) })}
+              options={properties.map((p) => [String(p.id), p.name])}
+            />
+            <DomusPropertySelect
+              label="Unité (option — sinon bien entier)"
+              value={form.unitId}
+              onChange={(unitId) => set({ unitId, ...reservationRateDefaults(properties, units, form.propertyId, unitId, currency.defaultCurrencyId) })}
+              options={[["", "— Bien entier —"], ...propertyUnits.map((u) => [String(u.id), u.name])]}
+            />
             <DomusPropertyField label="Arrivée (check-in)" type="date" value={form.checkIn} required onChange={(checkIn) => set({ checkIn })} />
             <DomusPropertyField label="Départ (check-out)" type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
             <MoneyField label="Tarif par jour" value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
             <MoneyField label="Caution (info)" value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
           {datesInvalid && <div className="api-error" style={{ marginTop: 8 }}>La date de départ doit être postérieure à l'arrivée.</div>}
-          {!datesInvalid && days > 0 && (
-            <div className="ops-score" style={{ marginTop: 8 }}>
-              <span>{days} jour{days > 1 ? "s" : ""} × {money(form.dailyRate || 0, symbol)}</span>
-              <b>{money(total, symbol)}</b>
-            </div>
-          )}
+          <CouponField
+            value={form.couponCode}
+            preview={couponPreview}
+            error={couponError}
+            busy={couponBusy}
+            discount={discount}
+            total={total}
+            symbol={symbol}
+            onChange={(couponCode) => set({ couponCode })}
+            onApply={applyCoupon}
+            onClear={() => { set({ couponCode: "" }); setCouponPreview(null); setCouponError(""); }}
+            disabled={gross <= 0}
+          />
+          {!datesInvalid && days > 0 && <BookingTotal gross={gross} discount={discount} total={total} days={days} dailyRate={form.dailyRate} symbol={symbol} />}
         </FormSection>
         <FormSection icon={<User size={14} />} title="Client">
           <div className="domus-property-form-grid">
@@ -681,6 +855,154 @@ function ReservationModal({ value, properties, units, currency, onClose, onSaved
         </FormSection>
       </div>
       <ModalActions busy={busy} disabled={!form.propertyId || !form.guestName || !form.checkIn || !form.checkOut || datesInvalid} onClose={onClose} onSave={save} />
+    </Modal>
+  );
+}
+
+function BookingTotal({ gross, discount, total, days, dailyRate, symbol }) {
+  return (
+    <div className="reserve-total">
+      <div><span>{days} jour{days > 1 ? "s" : ""} × {money(dailyRate || 0, symbol)}</span><b>{money(gross, symbol)}</b></div>
+      {discount > 0 && <div><span>Remise coupon</span><b>-{money(discount, symbol)}</b></div>}
+      <div className="net"><span>Total net</span><b>{money(total, symbol)}</b></div>
+    </div>
+  );
+}
+
+function CouponField({ value, preview, error, busy, discount, total, symbol, onChange, onApply, onClear, disabled }) {
+  return (
+    <div className="reserve-coupon">
+      <label className="domus-property-field">
+        <span>Code coupon</span>
+        <div className="reserve-coupon-input">
+          <input value={value || ""} onChange={(e) => onChange(e.target.value.toUpperCase())} placeholder="ETE2026" />
+          <button type="button" className="immo-btn" disabled={busy || disabled || !value?.trim()} onClick={onApply}>
+            {busy ? "..." : "Appliquer"}
+          </button>
+          {(value || preview) && <button type="button" className="immo-btn" onClick={onClear}>Effacer</button>}
+        </div>
+      </label>
+      {error && <div className="api-error reserve-coupon-error">{error}</div>}
+      {preview && !error && (
+        <div className="reserve-coupon-preview">
+          <span>{preview.code} appliqué</span>
+          <b>-{money(discount, symbol)} · net {money(total, symbol)}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CouponList({ coupons, currency, busyId, onCreate, onEdit, onDelete }) {
+  const symbolFor = (coupon) => {
+    const byId = coupon.currencyId != null ? currency.currencyById?.get(Number(coupon.currencyId)) : null;
+    return (byId ? cleanCurrencySymbol(byId) : "") || currency.defaultCurrencySymbol;
+  };
+  return (
+    <div className="coupon-panel">
+      <div className="maintenance-toolbar">
+        <div>
+          <h2>Coupons</h2>
+          <p>Codes réutilisables pour les réservations courte durée.</p>
+        </div>
+        <button className="immo-btn primary" onClick={onCreate}><Plus size={16} /> Nouveau coupon</button>
+      </div>
+      <div className="coupon-grid">
+        {coupons.map((coupon) => {
+          const usage = coupon.maxUses ? `${coupon.usedCount || 0}/${coupon.maxUses}` : `${coupon.usedCount || 0}`;
+          const value = coupon.discountType === "percentage"
+            ? `${toMoney(coupon.discountValue)} %`
+            : money(coupon.discountValue, symbolFor(coupon));
+          return (
+            <article className="ticket-card coupon-card" key={coupon.id}>
+              <div className="ticket-head">
+                <span className="chip chip-brand"><Percent size={11} /> {coupon.code}</span>
+                <span className="chip chip-green">Actif</span>
+              </div>
+              <h3>{value}</h3>
+              {coupon.description && <p>{coupon.description}</p>}
+              <div className="ticket-meta">
+                <span>Validité {compactDate(coupon.validFrom)} → {compactDate(coupon.validTo)}</span>
+                <span>Usages {usage}</span>
+              </div>
+              <div className="immo-header-actions" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                <button className="immo-btn" disabled={busyId === `coupon-${coupon.id}`} onClick={() => onEdit(coupon)}>Modifier</button>
+                <button className="immo-btn" disabled={busyId === `coupon-${coupon.id}`} onClick={() => onDelete(coupon)}><Trash2 size={15} /> Désactiver</button>
+              </div>
+            </article>
+          );
+        })}
+        {coupons.length === 0 && <div className="card maintenance-empty">Aucun coupon actif.</div>}
+      </div>
+    </div>
+  );
+}
+
+function CouponModal({ value, currency, onClose, onSaved, onError }) {
+  const [form, setForm] = useState({
+    id: value.id,
+    code: value.code || "",
+    description: value.description || "",
+    discountType: value.discountType || "percentage",
+    discountValue: value.discountValue ?? "",
+    currencyId: value.currencyId || currency.defaultCurrencyId || "",
+    validFrom: compactDate(value.validFrom) === "-" ? "" : compactDate(value.validFrom),
+    validTo: compactDate(value.validTo) === "-" ? "" : compactDate(value.validTo),
+    maxUses: value.maxUses ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
+  const fixed = form.discountType === "fixed";
+
+  const save = async () => {
+    setBusy(true);
+    onError("");
+    try {
+      const payload = {
+        code: form.code.trim().toUpperCase(),
+        description: form.description.trim() || null,
+        discountType: form.discountType,
+        discountValue: toMoney(form.discountValue),
+        currencyId: fixed ? (toId(form.currencyId) ?? null) : null,
+        validFrom: form.validFrom || null,
+        validTo: form.validTo || null,
+        maxUses: form.maxUses === "" ? null : Number(form.maxUses),
+        isActive: true,
+      };
+      if (!payload.code || payload.discountValue <= 0) throw new Error("Code et valeur de remise obligatoires.");
+      if (form.id) await api.updateCoupon(form.id, payload);
+      else await api.createCoupon(payload);
+      await onSaved();
+    } catch (err) {
+      onError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={form.id ? "Modifier le coupon" : "Nouveau coupon"} subtitle="Réduction appliquée aux réservations" icon={<Percent size={20} />} className="domus-property-modal" onClose={onClose}>
+      <div className="domus-property-form">
+        <FormSection icon={<Percent size={14} />} title="Coupon">
+          <div className="domus-property-form-grid">
+            <DomusPropertyField label="Code" value={form.code} required onChange={(code) => set({ code: code.toUpperCase() })} placeholder="ETE2026" />
+            <DomusPropertySelect label="Type" value={form.discountType} onChange={(discountType) => set({ discountType })} options={[["percentage", "Pourcentage"], ["fixed", "Montant fixe"]]} />
+            <MoneyField
+              label={fixed ? "Montant de remise" : "Pourcentage"}
+              value={form.discountValue}
+              currencyId={fixed ? form.currencyId : ""}
+              currencyOptions={fixed ? currency.currencyOptions : [{ value: "", symbol: "%" }]}
+              onAmountChange={(discountValue) => set({ discountValue })}
+              onCurrencyChange={(currencyId) => set({ currencyId })}
+            />
+            <DomusPropertyField label="Quota d'usages" type="number" value={form.maxUses} onChange={(maxUses) => set({ maxUses })} placeholder="Illimité" />
+            <DomusPropertyField label="Valide à partir du" type="date" value={form.validFrom} onChange={(validFrom) => set({ validFrom })} />
+            <DomusPropertyField label="Valide jusqu'au" type="date" value={form.validTo} onChange={(validTo) => set({ validTo })} />
+          </div>
+          <DomusPropertyField label="Description" value={form.description} onChange={(description) => set({ description })} textarea />
+        </FormSection>
+      </div>
+      <ModalActions busy={busy} disabled={!form.code.trim() || toMoney(form.discountValue) <= 0} onClose={onClose} onSave={save} />
     </Modal>
   );
 }
@@ -711,10 +1033,14 @@ function CheckOutModal({ reservation: r, symbol, onClose, onDone, onError }) {
     <Modal title={`Check-out — ${r.reference}`} subtitle={`${r.guestName} · recette enregistrée en comptabilité`} icon={<LogOut size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
         <FormSection icon={<CalendarCheck size={14} />} title="Encaissement du séjour">
-          <div className="ops-score" style={{ marginBottom: 10 }}>
-            <span>{r.days} jour{r.days > 1 ? "s" : ""} × {money(r.dailyRate, symbol)}</span>
-            <b>{money(r.totalAmount, symbol)}</b>
-          </div>
+          <BookingTotal
+            gross={roundMoney(toMoney(r.days) * toMoney(r.dailyRate))}
+            discount={toMoney(r.discountAmount)}
+            total={toMoney(r.totalAmount)}
+            days={toMoney(r.days)}
+            dailyRate={r.dailyRate}
+            symbol={symbol}
+          />
           <div className="domus-property-form-grid">
             <DomusPropertyField label="Date d'encaissement" type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
             <DomusPropertySelect label="Moyen de paiement" value={form.method} onChange={(method) => set({ method })} options={[["cash", "Cash (Caisse)"], ["bank", "Banque"], ["card", "Carte"], ["cheque", "Chèque"]]} />

@@ -207,6 +207,12 @@ export const api = {
   cancelReservation: (id) => post(`/reservations/${id}/cancel`),
   reservationAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>
     get(`/reservations/availability?propertyId=${propertyId}${unitId ? `&unitId=${unitId}` : ""}&checkIn=${checkIn}&checkOut=${checkOut}`),
+  coupons: () => get("/coupons"),
+  validateCoupon: ({ code, amount, currencyId }) =>
+    get(`/coupons/validate?code=${encodeURIComponent(code || "")}&amount=${encodeURIComponent(amount || 0)}${currencyId ? `&currencyId=${encodeURIComponent(currencyId)}` : ""}`),
+  createCoupon: (b) => post("/coupons", b),
+  updateCoupon: (id, b) => put(`/coupons/${id}`, b),
+  deleteCoupon: (id) => del(`/coupons/${id}`),
 
   contracts: () => get("/contracts"),
   contract: (id) => get(`/contracts/${id}`),

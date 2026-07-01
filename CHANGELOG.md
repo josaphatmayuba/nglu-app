@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.138.0)
+- **SCRUM — Domus réservations : tarif journalier mensuel/30 + coupons côté app**. L'écran Réservations calcule désormais le tarif suggéré à partir du loyer mensuel (`monthlyRent` d'unité ou `defaultRent` du bien) divisé par 30, tout en laissant le tarif éditable au moment de réserver. Ajout d'un champ coupon dans la fiche de réservation et la réservation rapide : validation du code via l'API, aperçu brut/remise/net, puis envoi du `couponCode` pour stocker le total net et `discountAmount` côté backend. Ajout d'un onglet **Coupons** avec liste, création, modification et désactivation des codes actifs. Le check-out affiche le récap net, sans changer la logique comptable. **Vérifié** : `npm.cmd run build` Domus OK. `domus-app/src/api.js`, `domus-app/src/screens/reservations.jsx`, `domus-app/src/styles/app.css`.
+
 ### Fixed (3.137.1)
 - **Domus — photos des biens en 500 (dev + prod) : MinIO n'était jamais déployé**. Le module photos attend un stockage objet S3 à `http://minio:9000`, mais le pipeline lance les services en `up --no-deps`, donc le service `minio` du docker-compose n'était **jamais créé** sur aucun serveur → `getaddrinfo EAI_AGAIN minio` → **500** sur tous les endpoints photos (liste, upload, fichier). Correctif : une **unique** instance MinIO partagée par dev + prod, sur le réseau externe `nglu_shared` avec alias réseau `minio` et bucket `nglu-files`, provisionnée par un script **idempotent** `scripts/ci/ensure-shared-minio.sh` appelé après chaque déploiement backend (dev, prod, Avelomi-dev, Avelomi-prod) ; le script dérive les credentials du backend déjà déployé (jamais affichés) et rattache le backend à `nglu_shared`. Instance déjà lancée manuellement sur ongdngolu (`nglu_minio_shared`) pour débloquer immédiatement ; les backends résolvent `minio` et le health check répond `200`. `scripts/ci/ensure-shared-minio.sh`, `bitbucket-pipelines.yml`. (SCRUM)
 
