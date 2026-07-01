@@ -16,6 +16,9 @@ import {
   ShieldCheck,
   Sparkles,
   User,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { publicApi } from "../api.js";
 import { cleanCurrencySymbol, money, normalizeCurrencyModule } from "../data.js";
@@ -193,9 +196,14 @@ function PublicStayCard({ stay, currency, onOpen }) {
 
 function PublicStayDetail({ stay, settings, currency, onBack }) {
   const [activePhoto, setActivePhoto] = useState(0);
+  const [lightbox, setLightbox] = useState(false);
   const photos = Array.isArray(stay.photos) && stay.photos.length ? stay.photos : (stay.cover ? [stay.cover] : []);
   const photo = photos[activePhoto] || null;
   const symbol = symbolFor(currency, stay.currencyId);
+
+  function lightboxPrev() { setActivePhoto(i => (i - 1 + photos.length) % photos.length); }
+  function lightboxNext() { setActivePhoto(i => (i + 1) % photos.length); }
+
   return (
     <>
       <button className="public-back" onClick={onBack}><ArrowLeft size={17} /> Tous les biens</button>
@@ -212,7 +220,9 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
       <section className="public-detail-layout">
         <div className="public-detail-main">
           <div className="public-detail-gallery">
-            {photo ? <img src={photo.url} alt={stay.title} /> : <div><ImageOff size={34} /> Pas de photo</div>}
+            {photo
+              ? <img src={photo.url} alt={stay.title} onClick={() => setLightbox(true)} style={{cursor:"zoom-in"}} />
+              : <div><ImageOff size={34} /> Pas de photo</div>}
           </div>
           {photos.length > 1 && (
             <div className="public-thumbs">
@@ -241,6 +251,21 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
           <PublicLeaseForm stay={stay} settings={settings} />
         </aside>
       </section>
+      {lightbox && photo && (
+        <div className="lightbox-overlay" onClick={() => setLightbox(false)}>
+          <button className="lightbox-close" onClick={() => setLightbox(false)}><X size={28} /></button>
+          {photos.length > 1 && (
+            <button className="lightbox-nav lightbox-prev" onClick={(e) => { e.stopPropagation(); lightboxPrev(); }}><ChevronLeft size={36} /></button>
+          )}
+          <img src={photo.url} alt={stay.title} onClick={(e) => e.stopPropagation()} />
+          {photos.length > 1 && (
+            <button className="lightbox-nav lightbox-next" onClick={(e) => { e.stopPropagation(); lightboxNext(); }}><ChevronRight size={36} /></button>
+          )}
+          {photos.length > 1 && (
+            <div className="lightbox-counter">{activePhoto + 1} / {photos.length}</div>
+          )}
+        </div>
+      )}
     </>
   );
 }

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.138.3)
+- **Domus : lightbox photo page publique** — clic sur l'image principale ouvre un overlay plein écran avec navigation gauche/droite et compteur si plusieurs photos. `domus-app/src/screens/public-reservations.jsx`, `domus-app/src/styles/app.css`.
+
 ### Fixed (3.138.2)
 - **Domus : case "Visible sur la page publique" ne persistait pas** — `findUnit` ne retournait pas `availableForBooking`, `unitPayload` ne l'envoyait pas, `unitToForm` ne le lisait pas. Les trois corrigés + `emptyUnit` initialisé à `false`. `backend2/src/property-management/property-management.service.ts`, `domus-app/src/screens/biens.jsx`.
 
