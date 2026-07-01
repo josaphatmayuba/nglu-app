@@ -151,9 +151,10 @@ export const api = {
   deleteProperty: (id) => del(`/properties/${id}`),
   propertyPhotos: () => get("/properties/photos"),
   propertyPhotosForProperty: (id) => get(`/properties/${id}/photos`),
-  uploadPropertyPhoto: (id, file) => {
+  uploadPropertyPhoto: (id, file, unitId = null) => {
     const form = new FormData();
     form.append("photo", file);
+    if (unitId != null && unitId !== "") form.append("unitId", String(unitId));
     return multipartFetch(`/properties/${id}/photos`, form);
   },
   deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),

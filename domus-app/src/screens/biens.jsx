@@ -123,9 +123,20 @@ export function Biens({ go }) {
   const photosByProperty = useMemo(() => {
     const grouped = new Map();
     (data?.propertyPhotos || []).forEach((photo) => {
+      if (photo.unitId != null) return;
       const propertyId = Number(photo.propertyId);
       if (!grouped.has(propertyId)) grouped.set(propertyId, []);
       grouped.get(propertyId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+    });
+    return grouped;
+  }, [data?.propertyPhotos]);
+  const photosByUnit = useMemo(() => {
+    const grouped = new Map();
+    (data?.propertyPhotos || []).forEach((photo) => {
+      if (photo.unitId == null) return;
+      const unitId = Number(photo.unitId);
+      if (!grouped.has(unitId)) grouped.set(unitId, []);
+      grouped.get(unitId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
     });
     return grouped;
   }, [data?.propertyPhotos]);
@@ -141,8 +152,8 @@ export function Biens({ go }) {
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const leaseStatusByUnit = useMemo(() => buildLeaseStatusByUnit(leases, paymentsRaw), [leases, paymentsRaw]);
   const units = useMemo(
-    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty, index)),
-    [data, leaseStatusByUnit, photosByProperty, properties],
+    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, photosByUnit, index)),
+    [data, leaseStatusByUnit, photosByUnit, properties],
   );
   const payments = useMemo(() => paymentsRaw.slice(0, 6).map(normalizePayment), [paymentsRaw]);
 
@@ -252,16 +263,21 @@ export function Biens({ go }) {
 
   async function uploadDetailPhoto(file) {
     const propertyId = Number(detailModal?.propertyId);
+    const unitId = detailModal?.isEmptyProperty ? null : Number(detailModal?.unitId);
     if (!file || !propertyId) return;
     setBusy(true);
     setActionError("");
     try {
-      await api.uploadPropertyPhoto(propertyId, file);
+      await api.uploadPropertyPhoto(propertyId, file, Number.isFinite(unitId) ? unitId : null);
       await reload();
       const nextPhotos = await api.propertyPhotosForProperty(propertyId);
+      const targetPhotos = nextPhotos.filter((photo) => {
+        if (detailModal?.isEmptyProperty) return photo.unitId == null;
+        return Number(photo.unitId) === Number(detailModal?.unitId);
+      });
       setDetailModal((current) => current ? {
         ...current,
-        photos: nextPhotos.map((photo) => ({ ...photo, url: api.propertyPhotoUrl(photo.id) })),
+        photos: targetPhotos.map((photo) => ({ ...photo, url: api.propertyPhotoUrl(photo.id) })),
       } : current);
     } catch (e) {
       setActionError(e.message);
@@ -1171,7 +1187,7 @@ function normalizeEmptyProperty(property, photosByProperty = new Map()) {
 
 function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = new Map(), index) {
   const owner = properties.find((p) => Number(p.id) === Number(unit.propertyId)) || {};
-  const photos = photosByProperty.get(Number(unit.propertyId)) || [];
+  const photos = photosByProperty.get(Number(unit.id)) || [];
   const rawType = String(unit.unitType || owner.propertyType || "").toLowerCase();
   const type = TYPE_MAP[rawType] || "Appartement";
   const rawStatus = String(unit.status || "").toLowerCase();

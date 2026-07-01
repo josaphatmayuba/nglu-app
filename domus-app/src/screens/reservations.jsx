@@ -111,14 +111,26 @@ export function Reservations({ go }) {
     const raw = photosApi.data;
     const list = Array.isArray(raw) ? raw : raw?.propertyPhotos || raw?.data || [];
     list.forEach((photo) => {
+      if (photo.unitId != null) return;
       const pid = Number(photo.propertyId);
       if (!grouped.has(pid)) grouped.set(pid, []);
       grouped.get(pid).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
     });
     return grouped;
   }, [photosApi.data]);
-  const coverFor = (propertyId) => {
-    const photos = photosByProperty.get(Number(propertyId)) || [];
+  const photosByUnit = useMemo(() => {
+    const grouped = new Map();
+    const raw = photosApi.data;
+    const list = Array.isArray(raw) ? raw : raw?.propertyPhotos || raw?.data || [];
+    list.forEach((photo) => {
+      if (photo.unitId == null) return;
+      const unitId = Number(photo.unitId);
+      if (!grouped.has(unitId)) grouped.set(unitId, []);
+      grouped.get(unitId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+    });
+    return grouped;
+  }, [photosApi.data]);
+  const coverFor = (photos) => {
     return photos.find((p) => p.isPrimary) || photos[0] || null;
   };
 
@@ -164,6 +176,7 @@ export function Reservations({ go }) {
     const propsWithUnit = new Set(units.map((u) => Number(u.propertyId)));
     const fromUnits = units.map((u) => {
       const owner = properties.find((p) => Number(p.id) === Number(u.propertyId)) || {};
+      const photos = photosByUnit.get(Number(u.id)) || [];
       return {
         key: `u-${u.id}`,
         propertyId: Number(u.propertyId),
@@ -177,8 +190,8 @@ export function Reservations({ go }) {
         baths: Number(u.bathrooms || 0),
         dailyRate: Number(u.monthlyRent || owner.defaultRent || 0),
         currencyId: u.currencyId || owner.currencyId || currency.defaultCurrencyId || "",
-        cover: coverFor(u.propertyId),
-        photos: photosByProperty.get(Number(u.propertyId)) || [],
+        cover: coverFor(photos),
+        photos,
         description: u.description || owner.description || "",
         amenities: u.amenities || "",
       };
@@ -198,13 +211,13 @@ export function Reservations({ go }) {
         baths: Number(p.bathrooms || 0),
         dailyRate: Number(p.defaultRent || 0),
         currencyId: p.currencyId || currency.defaultCurrencyId || "",
-        cover: coverFor(p.id),
+        cover: coverFor(photosByProperty.get(Number(p.id)) || []),
         photos: photosByProperty.get(Number(p.id)) || [],
         description: p.description || "",
         amenities: p.amenities || "",
       }));
     return [...fromProps, ...fromUnits];
-  }, [properties, units, photosByProperty, currency.defaultCurrencyId]);
+  }, [properties, units, photosByProperty, photosByUnit, currency.defaultCurrencyId]);
 
   // Une réservation active (non annulée/soldée) occupe un logement sur sa plage.
   const activeReservations = useMemo(

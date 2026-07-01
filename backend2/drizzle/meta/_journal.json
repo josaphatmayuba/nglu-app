@@ -1177,6 +1177,20 @@
                         "when":  1780617600000,
                         "tag":  "0192_real_estate_reservations",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  168,
+                        "version":  "5",
+                        "when":  1780621200000,
+                        "tag":  "0193_real_estate_coupons",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  169,
+                        "version":  "5",
+                        "when":  1780624800000,
+                        "tag":  "0194_real_estate_photo_units",
+                        "breakpoints":  true
                     }
                 ]
 }

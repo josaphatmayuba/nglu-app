@@ -19,6 +19,7 @@ import {
   realEstateProperties,
   realEstatePropertyPhotos,
   realEstateReservations,
+  realEstateCoupons,
   realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
@@ -61,6 +62,8 @@ import {
   CreateReservationDto,
   UpdateReservationDto,
   CheckOutReservationDto,
+  CreateCouponDto,
+  UpdateCouponDto,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 
@@ -673,6 +676,7 @@ export class PropertyManagementService {
         id: realEstatePropertyPhotos.id,
         organizationId: realEstatePropertyPhotos.organizationId,
         propertyId: realEstatePropertyPhotos.propertyId,
+        unitId: realEstatePropertyPhotos.unitId,
         bucket: realEstatePropertyPhotos.bucket,
         objectKey: realEstatePropertyPhotos.objectKey,
         originalName: realEstatePropertyPhotos.originalName,
@@ -702,9 +706,14 @@ export class PropertyManagementService {
     file: any,
     orgId: number,
     propertyScope: "all" | number[] = "all",
+    unitId?: number | null,
   ) {
     await this.ensureActiveProperty(propertyId, orgId);
     this.ensurePropertyInScope(propertyId, propertyScope);
+    const photoUnitId = unitId != null && Number.isFinite(unitId) && unitId > 0 ? Number(unitId) : null;
+    if (photoUnitId != null) {
+      await this.ensureActiveUnitInProperty(photoUnitId, propertyId, orgId);
+    }
 
     const [countRow] = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -712,13 +721,18 @@ export class PropertyManagementService {
       .where(and(
         eq(realEstatePropertyPhotos.organizationId, orgId),
         eq(realEstatePropertyPhotos.propertyId, propertyId),
+        this.photoUnitFilter(photoUnitId),
         eq(realEstatePropertyPhotos.isActive, 1),
       ));
     const count = Number(countRow?.count || 0);
-    const stored = await this.objectStorage.putImage(file, `domus/properties/${orgId}/${propertyId}`);
+    const stored = await this.objectStorage.putImage(
+      file,
+      photoUnitId != null ? `domus/properties/${orgId}/${propertyId}/units/${photoUnitId}` : `domus/properties/${orgId}/${propertyId}`,
+    );
     const [result] = await this.db.insert(realEstatePropertyPhotos).values({
       organizationId: orgId,
       propertyId,
+      unitId: photoUnitId,
       bucket: stored.bucket,
       objectKey: stored.objectKey,
       originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
@@ -751,6 +765,7 @@ export class PropertyManagementService {
         .where(and(
           eq(realEstatePropertyPhotos.organizationId, orgId),
           eq(realEstatePropertyPhotos.propertyId, photo.propertyId),
+          this.photoUnitFilter(photo.unitId),
           eq(realEstatePropertyPhotos.isActive, 1),
         ))
         .orderBy(realEstatePropertyPhotos.sortOrder, desc(realEstatePropertyPhotos.id))
@@ -1647,8 +1662,18 @@ export class PropertyManagementService {
 
     const days = this.reservationDays(input.checkIn, input.checkOut);
     const dailyRate = Number(input.dailyRate) || 0;
-    const total = Math.round(days * dailyRate * 100) / 100;
+    const gross = Math.round(days * dailyRate * 100) / 100;
     const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
+
+    // Coupon facultatif : la remise baisse le total NET comptabilisé au check-out.
+    let couponId: number | null = null;
+    let discount = 0;
+    if (input.couponCode?.trim()) {
+      const coupon = await this.resolveCoupon(input.couponCode, orgId, input.checkIn, currencyId ?? null);
+      couponId = Number(coupon.id);
+      discount = this.couponDiscount(coupon, gross);
+    }
+    const total = Math.max(0, Math.round((gross - discount) * 100) / 100);
 
     const [result] = await this.db.insert(realEstateReservations).values({
       organizationId: orgId,
@@ -1663,6 +1688,8 @@ export class PropertyManagementService {
       checkOut: input.checkOut,
       days,
       dailyRate: this.money(dailyRate),
+      couponId,
+      discountAmount: this.money(discount),
       totalAmount: this.money(total),
       currencyId: currencyId ?? null,
       depositAmount: this.money(input.depositAmount),
@@ -1673,6 +1700,9 @@ export class PropertyManagementService {
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
 
+    if (couponId != null) {
+      await this.bumpCouponUsage(couponId);
+    }
     const id = Number(result.insertId);
     await this.publishPaymentUpdate("created", id, { propertyId: input.propertyId, unitId: input.unitId ?? undefined });
     return this.findReservation(id, orgId, propertyScope);
@@ -1703,7 +1733,34 @@ export class PropertyManagementService {
 
     const days = this.reservationDays(checkIn, checkOut);
     const dailyRate = input.dailyRate != null ? Number(input.dailyRate) : Number(reservation.dailyRate);
-    const total = Math.round(days * dailyRate * 100) / 100;
+    const gross = Math.round(days * dailyRate * 100) / 100;
+    const currencyId = input.currencyId ?? reservation.currencyId;
+
+    // Coupon : code fourni non vide → (ré)applique ; chaîne vide → retire ; absent
+    // → conserve l'existant mais recalcule la remise sur le nouveau brut.
+    let couponId: number | null = reservation.couponId ?? null;
+    let discount = Number(reservation.discountAmount) || 0;
+    if (input.couponCode !== undefined) {
+      if (input.couponCode?.trim()) {
+        const coupon = await this.resolveCoupon(input.couponCode, orgId, checkIn, currencyId ?? null);
+        if (Number(coupon.id) !== reservation.couponId) {
+          await this.bumpCouponUsage(Number(coupon.id));
+        }
+        couponId = Number(coupon.id);
+        discount = this.couponDiscount(coupon, gross);
+      } else {
+        couponId = null;
+        discount = 0;
+      }
+    } else if (couponId != null) {
+      const [coupon] = await this.db
+        .select()
+        .from(realEstateCoupons)
+        .where(eq(realEstateCoupons.id, couponId))
+        .limit(1);
+      discount = coupon ? this.couponDiscount(coupon, gross) : 0;
+    }
+    const total = Math.max(0, Math.round((gross - discount) * 100) / 100);
 
     await this.db
       .update(realEstateReservations)
@@ -1718,8 +1775,10 @@ export class PropertyManagementService {
         checkOut,
         days,
         dailyRate: this.money(dailyRate),
+        couponId,
+        discountAmount: this.money(discount),
         totalAmount: this.money(total),
-        currencyId: input.currencyId ?? reservation.currencyId,
+        currencyId,
         depositAmount: input.depositAmount != null ? this.money(input.depositAmount) : reservation.depositAmount,
         notes: input.notes !== undefined ? input.notes : reservation.notes,
         updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -1838,6 +1897,171 @@ export class PropertyManagementService {
       .where(eq(realEstateReservations.id, id));
     await this.publishPaymentUpdate("deleted", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
     return { message: "Réservation supprimée." };
+  }
+
+  // ── Coupons de réduction (réservations temporaires) ─────────────────────────
+
+  listCoupons(orgId: number) {
+    return this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.isActive, 1)))
+      .orderBy(desc(realEstateCoupons.id));
+  }
+
+  private normalizeCouponCode(code: string) {
+    return code.trim().toUpperCase();
+  }
+
+  async createCoupon(input: CreateCouponDto, orgId: number) {
+    const code = this.normalizeCouponCode(input.code);
+    if (!code) {
+      throw new BadRequestException("Le code coupon est obligatoire.");
+    }
+    const [existing] = await this.db
+      .select({ id: realEstateCoupons.id })
+      .from(realEstateCoupons)
+      .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.code, code)))
+      .limit(1);
+    if (existing) {
+      throw new BadRequestException(`Le code « ${code} » existe déjà.`);
+    }
+    const [result] = await this.db.insert(realEstateCoupons).values({
+      organizationId: orgId,
+      code,
+      description: input.description ?? null,
+      discountType: input.discountType,
+      discountValue: this.money(input.discountValue),
+      currencyId: input.currencyId ?? null,
+      validFrom: input.validFrom ?? null,
+      validTo: input.validTo ?? null,
+      maxUses: input.maxUses ?? null,
+      usedCount: 0,
+      isActive: input.isActive === false ? 0 : 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    return this.findCoupon(Number(result.insertId), orgId);
+  }
+
+  private async findCoupon(id: number, orgId: number) {
+    const [row] = await this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(
+        eq(realEstateCoupons.id, id),
+        eq(realEstateCoupons.organizationId, orgId),
+        eq(realEstateCoupons.isActive, 1),
+      ))
+      .limit(1);
+    if (!row) {
+      throw new NotFoundException("Coupon introuvable.");
+    }
+    return row;
+  }
+
+  async updateCoupon(id: number, input: UpdateCouponDto, orgId: number) {
+    const coupon = await this.findCoupon(id, orgId);
+    const code = input.code != null ? this.normalizeCouponCode(input.code) : coupon.code;
+    if (code !== coupon.code) {
+      const [dup] = await this.db
+        .select({ id: realEstateCoupons.id })
+        .from(realEstateCoupons)
+        .where(and(eq(realEstateCoupons.organizationId, orgId), eq(realEstateCoupons.code, code)))
+        .limit(1);
+      if (dup) {
+        throw new BadRequestException(`Le code « ${code} » existe déjà.`);
+      }
+    }
+    await this.db
+      .update(realEstateCoupons)
+      .set({
+        code,
+        description: input.description !== undefined ? input.description : coupon.description,
+        discountType: input.discountType ?? coupon.discountType,
+        discountValue: input.discountValue != null ? this.money(input.discountValue) : coupon.discountValue,
+        currencyId: input.currencyId !== undefined ? input.currencyId : coupon.currencyId,
+        validFrom: input.validFrom !== undefined ? input.validFrom : coupon.validFrom,
+        validTo: input.validTo !== undefined ? input.validTo : coupon.validTo,
+        maxUses: input.maxUses !== undefined ? input.maxUses : coupon.maxUses,
+        isActive: input.isActive != null ? (input.isActive ? 1 : 0) : coupon.isActive,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateCoupons.id, id));
+    return this.findCoupon(id, orgId);
+  }
+
+  async deleteCoupon(id: number, orgId: number) {
+    await this.findCoupon(id, orgId);
+    await this.db
+      .update(realEstateCoupons)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateCoupons.id, id));
+    return { message: "Coupon désactivé." };
+  }
+
+  // Valide un code coupon pour une date/devise donnée. Retourne le coupon ou lève.
+  private async resolveCoupon(code: string, orgId: number, onDate: string, currencyId: number | null) {
+    const normalized = this.normalizeCouponCode(code);
+    const [coupon] = await this.db
+      .select()
+      .from(realEstateCoupons)
+      .where(and(
+        eq(realEstateCoupons.organizationId, orgId),
+        eq(realEstateCoupons.code, normalized),
+        eq(realEstateCoupons.isActive, 1),
+      ))
+      .limit(1);
+    if (!coupon) {
+      throw new BadRequestException(`Coupon « ${normalized} » invalide ou inactif.`);
+    }
+    if (coupon.validFrom && onDate < coupon.validFrom) {
+      throw new BadRequestException(`Le coupon « ${normalized} » n'est pas encore valide.`);
+    }
+    if (coupon.validTo && onDate > coupon.validTo) {
+      throw new BadRequestException(`Le coupon « ${normalized} » a expiré.`);
+    }
+    if (coupon.maxUses != null && coupon.usedCount >= coupon.maxUses) {
+      throw new BadRequestException(`Le coupon « ${normalized} » a atteint son quota d'utilisation.`);
+    }
+    if (
+      coupon.discountType === "fixed" &&
+      coupon.currencyId != null &&
+      currencyId != null &&
+      Number(coupon.currencyId) !== Number(currencyId)
+    ) {
+      throw new BadRequestException(`Le coupon « ${normalized} » ne s'applique pas à cette devise.`);
+    }
+    return coupon;
+  }
+
+  // Calcule la remise (bornée au brut) d'un coupon sur un montant brut.
+  private couponDiscount(coupon: typeof realEstateCoupons.$inferSelect, gross: number) {
+    const value = Number(coupon.discountValue) || 0;
+    const raw = coupon.discountType === "percentage" ? (gross * value) / 100 : value;
+    return Math.min(gross, Math.max(0, Math.round(raw * 100) / 100));
+  }
+
+  // Endpoint public de validation : renvoie la remise/net pour un aperçu UI.
+  async validateCoupon(code: string, gross: number, orgId: number, currencyId?: number | null) {
+    const onDate = this.formatDateOnly(new Date());
+    const coupon = await this.resolveCoupon(code, orgId, onDate, currencyId ?? null);
+    const discount = this.couponDiscount(coupon, Number(gross) || 0);
+    return {
+      couponId: Number(coupon.id),
+      code: coupon.code,
+      discountType: coupon.discountType,
+      discountValue: Number(coupon.discountValue),
+      discountAmount: discount,
+      net: Math.max(0, (Number(gross) || 0) - discount),
+    };
+  }
+
+  private async bumpCouponUsage(couponId: number) {
+    await this.db
+      .update(realEstateCoupons)
+      .set({ usedCount: sql`${realEstateCoupons.usedCount} + 1`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateCoupons.id, couponId));
   }
 
   // Disponibilité : true si aucune réservation active ne chevauche la plage.
@@ -2118,6 +2342,7 @@ export class PropertyManagementService {
         id: realEstatePropertyPhotos.id,
         organizationId: realEstatePropertyPhotos.organizationId,
         propertyId: realEstatePropertyPhotos.propertyId,
+        unitId: realEstatePropertyPhotos.unitId,
         bucket: realEstatePropertyPhotos.bucket,
         objectKey: realEstatePropertyPhotos.objectKey,
         originalName: realEstatePropertyPhotos.originalName,
@@ -2142,9 +2367,14 @@ export class PropertyManagementService {
     return rows[0];
   }
 
+  private photoUnitFilter(unitId?: number | null) {
+    return unitId == null ? isNull(realEstatePropertyPhotos.unitId) : eq(realEstatePropertyPhotos.unitId, unitId);
+  }
+
   private propertyPhotoResponse(row: {
     id: number;
     propertyId: number;
+    unitId?: number | null;
     originalName?: string | null;
     mimeType: string;
     sizeBytes: number;
@@ -2155,6 +2385,7 @@ export class PropertyManagementService {
     return {
       id: row.id,
       propertyId: row.propertyId,
+      unitId: row.unitId ?? null,
       originalName: row.originalName,
       mimeType: row.mimeType,
       sizeBytes: Number(row.sizeBytes || 0),
@@ -2760,6 +2991,26 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) {
       throw new NotFoundException("Unit not found.");
+    }
+  }
+
+  private async ensureActiveUnitInProperty(id: number, propertyId: number, orgId: number) {
+    const rows = await this.db
+      .select({ id: realEstateUnits.id })
+      .from(realEstateUnits)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateUnits.propertyId))
+      .where(and(
+        eq(realEstateUnits.id, id),
+        eq(realEstateUnits.propertyId, propertyId),
+        ne(realEstateUnits.status, "false"),
+        eq(realEstateUnits.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        eq(realEstateUnits.organizationId, orgId),
+      ))
+      .limit(1);
+    if (!rows.length) {
+      throw new BadRequestException("Cette unite n'appartient pas au bien selectionne.");
     }
   }
 

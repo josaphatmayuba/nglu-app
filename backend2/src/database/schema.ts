@@ -798,6 +798,7 @@ export const realEstatePropertyPhotos = mysqlTable("real_estate_property_photos"
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  unitId: bigint("unit_id", { mode: "number" }),
   bucket: varchar("bucket", { length: 255 }).notNull(),
   objectKey: varchar("object_key", { length: 512 }).notNull(),
   originalName: varchar("original_name", { length: 255 }),
@@ -924,6 +925,10 @@ export const realEstateReservations = mysqlTable("real_estate_reservations", {
   // Nombre de jours facturés (check_out − check_in, borne à 1 minimum).
   days: int("days").default(1).notNull(),
   dailyRate: decimal("daily_rate", { precision: 15, scale: 2 }).default("0").notNull(),
+  // Coupon de reduction applique (facultatif) + montant de la remise en devise.
+  couponId: bigint("coupon_id", { mode: "number" }),
+  discountAmount: decimal("discount_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  // totalAmount = NET encaisse (brut jours*tarif - remise). Compta au check-out.
   totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).default("0").notNull(),
   currencyId: bigint("currency_id", { mode: "number" }),
   depositAmount: decimal("deposit_amount", { precision: 15, scale: 2 }).default("0").notNull(),
@@ -932,6 +937,27 @@ export const realEstateReservations = mysqlTable("real_estate_reservations", {
   // Transaction créée à la comptabilisation de la recette (au check-out).
   transactionId: bigint("transaction_id", { mode: "number" }),
   notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
+// Coupons de reduction reutilisables pour les reservations temporaires (Domus).
+// discount_type = percentage (discount_value = %) ou fixed (montant en devise).
+export const realEstateCoupons = mysqlTable("real_estate_coupons", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  code: varchar("code", { length: 64 }).notNull(),
+  description: varchar("description", { length: 255 }),
+  discountType: varchar("discount_type", { length: 16 }).default("percentage").notNull(),
+  discountValue: decimal("discount_value", { precision: 15, scale: 2 }).default("0").notNull(),
+  // Devise pour les remises fixed (ignoree pour percentage).
+  currencyId: bigint("currency_id", { mode: "number" }),
+  validFrom: date("valid_from", { mode: "string" }),
+  validTo: date("valid_to", { mode: "string" }),
+  // Quota d utilisations (NULL = illimite) et compteur d usage.
+  maxUses: int("max_uses"),
+  usedCount: int("used_count").default(0).notNull(),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),

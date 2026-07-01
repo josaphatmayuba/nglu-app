@@ -60,6 +60,8 @@ import {
   CreateReservationDto,
   UpdateReservationDto,
   CheckOutReservationDto,
+  CreateCouponDto,
+  UpdateCouponDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -228,11 +230,13 @@ export class PropertyManagementController {
   @Post("properties/:id/photos")
   uploadPropertyPhoto(
     @Param("id", ParseIntPipe) id: number,
+    @Body() body: { unitId?: string },
     @UploadedFile() photo: any,
     @CurrentOrg() orgId: number,
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
-    return this.propertyManagementService.uploadPropertyPhoto(id, photo, orgId, scope);
+    const unitId = body?.unitId != null && body.unitId !== "" ? Number(body.unitId) : null;
+    return this.propertyManagementService.uploadPropertyPhoto(id, photo, orgId, scope, unitId);
   }
 
   @ApiOperation({ summary: "Delete a property photo" })
@@ -388,6 +392,53 @@ export class PropertyManagementController {
     @CurrentDomusProperty() scope: DomusPropertyScope,
   ) {
     return this.propertyManagementService.deleteReservation(id, orgId, scope);
+  }
+
+  // ── Coupons de réduction (réservations) ────────────────────────────────────
+  @ApiOperation({ summary: "List active discount coupons" })
+  @Permissions("readAll-propertyManagement")
+  @Get("coupons")
+  listCoupons(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.listCoupons(orgId);
+  }
+
+  @ApiOperation({ summary: "Validate a coupon code against a gross amount" })
+  @Permissions("readAll-propertyManagement")
+  @Get("coupons/validate")
+  validateCoupon(
+    @Query("code") code: string,
+    @Query("amount") amount: string,
+    @Query("currencyId") currencyId: string | undefined,
+    @CurrentOrg() orgId: number,
+  ) {
+    const cur = currencyId != null && currencyId !== "" ? Number(currencyId) : null;
+    return this.propertyManagementService.validateCoupon(code, Number(amount) || 0, orgId, cur);
+  }
+
+  @ApiOperation({ summary: "Create a discount coupon" })
+  @Permissions("create-propertyManagement")
+  @Post("coupons")
+  createCoupon(@Body() body: CreateCouponDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.createCoupon(body, orgId);
+  }
+
+  @ApiOperation({ summary: "Update a discount coupon" })
+  @Permissions("update-propertyManagement")
+  @Put("coupons/:id")
+  updateCoupon(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateCouponDto,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.updateCoupon(id, body, orgId);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) a discount coupon" })
+  @Permissions("update-propertyManagement")
+  @Delete("coupons/:id")
+  @HttpCode(200)
+  deleteCoupon(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteCoupon(id, orgId);
   }
 
   @ApiOperation({ summary: "Get single property by ID" })

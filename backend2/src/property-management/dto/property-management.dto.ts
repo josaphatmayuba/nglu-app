@@ -973,6 +973,11 @@ export class CreateReservationDto {
   @IsString()
   reference?: string | null;
 
+  @ApiPropertyOptional({ example: "ETE2026", description: "Code coupon a appliquer (baisse le total)." })
+  @IsOptional()
+  @IsString()
+  couponCode?: string | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -980,6 +985,59 @@ export class CreateReservationDto {
 }
 
 export class UpdateReservationDto extends PartialType(CreateReservationDto) {}
+
+export class CreateCouponDto {
+  @ApiProperty({ example: "ETE2026" })
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string | null;
+
+  @ApiProperty({ example: "percentage", enum: ["percentage", "fixed"] })
+  @IsIn(["percentage", "fixed"])
+  discountType: "percentage" | "fixed";
+
+  @ApiProperty({ example: 10, description: "% si percentage, montant en devise si fixed." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  discountValue: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise (remises fixed)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number | null;
+
+  @ApiPropertyOptional({ example: "2026-07-01" })
+  @IsOptional()
+  @IsDateString()
+  validFrom?: string | null;
+
+  @ApiPropertyOptional({ example: "2026-08-31" })
+  @IsOptional()
+  @IsDateString()
+  validTo?: string | null;
+
+  @ApiPropertyOptional({ example: 100, description: "Quota d'usage (NULL = illimite)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxUses?: number | null;
+
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateCouponDto extends PartialType(CreateCouponDto) {}
 
 export class CheckOutReservationDto {
   @ApiPropertyOptional({ example: "2026-07-05", description: "Date de comptabilisation de la recette. Défaut = aujourd'hui." })
