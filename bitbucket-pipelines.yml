@@ -290,7 +290,7 @@ pipelines:
           - step:
               name: Migration Cockpit → dev
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
@@ -483,99 +483,159 @@ pipelines:
                 - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
           - step:
-              name: Domus → prod
+              name: Domus → prod (ongdngolu + Avelomi)
               caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois : le dist/ des apps statiques est identique pour les 2 prods
+                # (aucune variable VITE specifique par serveur, contrairement au frontend).
+                # On deploie ensuite le MEME artefact vers ongdngolu puis Avelomi -> economise
+                # un 2e npm install + build (le gros du temps pipeline).
+                - *avelomi-ssh-setup
                 - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                # 1) ongdngolu (bloquant : un echec ici doit rougir le step)
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
+                # 2) Avelomi (tolerant : si le serveur est down/pas pret, on ne bloque pas
+                #    le deploy ongdngolu deja reussi ; le script skip proprement sinon)
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Journal → prod
+              name: Journal → prod (ongdngolu + Avelomi)
               caches: [node-journal]
-              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Tickets → prod
+              name: Tickets → prod (ongdngolu + Avelomi)
               caches: [node-tickets]
-              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: FarmOS → prod
+              name: FarmOS → prod (ongdngolu + Avelomi)
               caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: BatiPro → prod
+              name: BatiPro → prod (ongdngolu + Avelomi)
               caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: HR → prod
+              name: HR → prod (ongdngolu + Avelomi)
               caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Comptabilite → prod
+              name: Comptabilite → prod (ongdngolu + Avelomi)
               caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Migration Cockpit → prod
+              name: Migration Cockpit → prod (ongdngolu + Avelomi)
               caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
+              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
-              name: Chat → prod
+              name: Chat → prod (ongdngolu + Avelomi)
               caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf", "nginx/nginx.avelomi.conf"] } }
               script:
-                - apk add --no-cache openssh-client
+                # Build UNE fois, deploie le meme dist/ vers les 2 prods (cf. Domus).
+                - *avelomi-ssh-setup
                 - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app SSH="ssh -o StrictHostKeyChecking=no"
+                - export SERVER=admin@16.54.167.125 APP=/opt/nglu-app BASE_URL=https://ongdngolu.org SUPPORT_CONF=nginx/nginx.frontend.conf
+                - export SSH="ssh -o StrictHostKeyChecking=no" SCP="scp -o StrictHostKeyChecking=no"
                 - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
+                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
+                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
+                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/ || echo "[deploy] Avelomi skip/echec tolere"
 
           - step:
               name: Marketing → prod
               caches: [node-marketing]
-              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
+              condition: { changesets: { includePaths: ["marketing-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd marketing-site && npm install --legacy-peer-deps && npm run build && cd ..
@@ -661,118 +721,15 @@ pipelines:
                 - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
                 - sh scripts/ci/deploy-prod-static-app.sh frontend /crm
 
-          - step:
-              name: Domus → Avelomi
-              caches: [node-domus]
-              condition: { changesets: { includePaths: ["domus-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd domus-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh domus-app /domus/
-
-          - step:
-              name: Journal → Avelomi
-              caches: [node-journal]
-              condition: { changesets: { includePaths: ["journal-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd journal-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh journal-app /journal/
-
-          - step:
-              name: Tickets → Avelomi
-              caches: [node-tickets]
-              condition: { changesets: { includePaths: ["tickets-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd tickets-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh tickets-app /tickets/
-
-          - step:
-              name: FarmOS → Avelomi
-              caches: [node-farmos]
-              condition: { changesets: { includePaths: ["farmos-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd farmos-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh farmos-app /farmos/
-
-          - step:
-              name: BatiPro → Avelomi
-              caches: [node-batipro]
-              condition: { changesets: { includePaths: ["batipro-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd batipro-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh batipro-app /batipro/
-
-          - step:
-              name: HR → Avelomi
-              caches: [node-hr]
-              condition: { changesets: { includePaths: ["hr-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd hr-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh hr-app /hr/
-
-          - step:
-              name: Comptabilite → Avelomi
-              caches: [node-comptabilite]
-              condition: { changesets: { includePaths: ["comptabilite-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd comptabilite-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh comptabilite-app /comptabilite/
-
-          - step:
-              name: Migration Cockpit → Avelomi
-              caches: [node-migration]
-              condition: { changesets: { includePaths: ["migration-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.frontend.conf", "docker-compose.prod.yml"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd migration-app && npm install --legacy-peer-deps && npm run build && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh migration-app /migration/
-
-          - step:
-              name: Chat → Avelomi
-              caches: [node-chat]
-              condition: { changesets: { includePaths: ["chat-app/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.frontend.conf"] } }
-              script:
-                - *avelomi-ssh-setup
-                - cd chat-app && npm install --legacy-peer-deps && npm run build:prod && cd ..
-                - export SERVER=admin@3.128.45.29 APP=/opt/nglu-app BASE_URL=https://avelomi.com SUPPORT_CONF=nginx/nginx.avelomi.conf
-                - export SSH="ssh -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2"
-                - export SCP="scp -i ~/.ssh/avelomi.pem -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20"
-                - sh scripts/ci/deploy-prod-static-app.sh chat-app /chat/
+          # NB: Journal/Tickets/FarmOS/BatiPro/HR/Comptabilite/Migration/Chat → Avelomi
+          # ont ete FUSIONNES dans leurs steps "→ prod (ongdngolu + Avelomi)" ci-dessus :
+          # build unique puis deploy vers les 2 serveurs (economie pipeline). Seuls
+          # Frontend (API differente) et Avelomi-site (app distincte) restent separes.
 
           - step:
               name: Avelomi-site → Avelomi
               caches: [node-avelomi]
-              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "docker-compose.prod.yml", "nginx/nginx.avelomi.conf"] } }
+              condition: { changesets: { includePaths: ["avelomi-site/**", "scripts/ci/deploy-prod-static-app.sh", "frontend/Dockerfile.prod", "nginx/nginx.avelomi.conf"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd avelomi-site && npm install --legacy-peer-deps && npm run build && cd ..
