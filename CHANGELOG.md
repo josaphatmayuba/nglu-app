@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.138.4)
+- **Domus : numéro de bail/réservation exposé publiquement** — le message d'indisponibilité de la page publique de réservation affichait la référence interne (`bail LEASE-xxxxx` / réservation) au visiteur, une information confidentielle. Messages génériques désormais : « Ce bien est loué sur cette période. » et « Ces dates chevauchent une réservation existante. ». `backend2/src/property-management/property-management.service.ts`.
+
 ### Added (3.138.3)
 - **Domus : lightbox photo page publique** — clic sur l'image principale ouvre un overlay plein écran avec navigation gauche/droite et compteur si plusieurs photos. `domus-app/src/screens/public-reservations.jsx`, `domus-app/src/styles/app.css`.
 

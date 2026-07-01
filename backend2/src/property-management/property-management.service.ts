@@ -1843,7 +1843,7 @@ export class PropertyManagementService {
     excludeId?: number,
   ) {
     const rows = await this.db
-      .select({ id: realEstateReservations.id, reference: realEstateReservations.reference })
+      .select({ id: realEstateReservations.id })
       .from(realEstateReservations)
       .where(and(
         eq(realEstateReservations.organizationId, orgId),
@@ -1858,7 +1858,7 @@ export class PropertyManagementService {
       .limit(1);
     if (rows.length) {
       throw new BadRequestException(
-        `Ces dates chevauchent la réservation ${rows[0].reference || rows[0].id}.`,
+        "Ces dates chevauchent une réservation existante.",
       );
     }
   }
@@ -1876,7 +1876,7 @@ export class PropertyManagementService {
     checkOut: string,
   ) {
     const rows = await this.db
-      .select({ id: realEstateLeases.id, reference: realEstateLeases.reference })
+      .select({ id: realEstateLeases.id })
       .from(realEstateLeases)
       .where(and(
         eq(realEstateLeases.organizationId, orgId),
@@ -1889,7 +1889,7 @@ export class PropertyManagementService {
       .limit(1);
     if (rows.length) {
       throw new BadRequestException(
-        `Ce bien est loué (bail ${rows[0].reference || rows[0].id}) sur cette période.`,
+        "Ce bien est loué sur cette période.",
       );
     }
   }
