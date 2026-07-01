@@ -359,6 +359,18 @@ export class PropertyManagementController {
     return this.propertyManagementService.checkInReservation(id, orgId, scope);
   }
 
+  @ApiOperation({ summary: "Record payment for a reservation ahead of check-out" })
+  @Permissions("update-propertyManagement")
+  @Post("reservations/:id/pay")
+  payReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CheckOutReservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.payReservation(id, body, orgId, scope);
+  }
+
   @ApiOperation({ summary: "Check-out a reservation (recognizes revenue at check-out)" })
   @Permissions("update-propertyManagement")
   @Post("reservations/:id/check-out")

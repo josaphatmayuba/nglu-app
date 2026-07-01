@@ -214,6 +214,7 @@ export const api = {
   deleteReservation: (id) => del(`/reservations/${id}`),
   confirmReservation: (id) => post(`/reservations/${id}/confirm`),
   checkInReservation: (id) => post(`/reservations/${id}/check-in`),
+  payReservation: (id, b) => post(`/reservations/${id}/pay`, b),
   checkOutReservation: (id, b) => post(`/reservations/${id}/check-out`, b),
   cancelReservation: (id) => post(`/reservations/${id}/cancel`),
   reservationAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>

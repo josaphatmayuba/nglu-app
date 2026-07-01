@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.2)
+- **Domus : bouton "Payer" indépendant du check-out (réservations)** — jusqu'ici le seul moyen d'encaisser un séjour était le Check-out, ce qui forçait à déclarer la sortie du client en même temps que le paiement. Nouveau bouton **Payer** disponible dès qu'une réservation est active (pending/confirmed/checked_in) : il comptabilise la recette (transaction + ledger) sans changer le statut. Une fois payée, la réservation affiche un badge « Payé » et le bouton Check-out passe en 1 clic (confirme juste la sortie, sans redemander le paiement). Colonne `paid_at` (migration `0198`). `backend2/src/database/schema.ts`, `backend2/src/property-management/property-management.{service,controller}.ts`, `domus-app/src/api.js`, `domus-app/src/screens/reservations.jsx`.
+
 ### Fixed (3.140.1)
 - **FarmOS : scan QR box n'affichait rien** — le scanner Identification résolvait le QR de box (`FARMOS-BOX-<id>`) puis naviguait vers l'écran Bâtiments, mais le résultat ne s'affichait pas de façon fiable. Le scan affiche désormais directement, dans l'écran Identification, une carte de résultat avec nom du box, localisation (ferme·zone·bâtiment), occupation et liste des animaux dedans (`api.getBoxContext`), avec un bouton optionnel pour ouvrir le plan du bâtiment. `farmos-app/src/identification.jsx`.
 

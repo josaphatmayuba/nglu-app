@@ -1212,6 +1212,13 @@
                         "when":  1780801200000,
                         "tag":  "0197_real_estate_contracts_signed_document",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  173,
+                        "version":  "5",
+                        "when":  1780887600000,
+                        "tag":  "0198_real_estate_reservation_paid_at",
+                        "breakpoints":  true
                     }
                 ]
 }

@@ -16,6 +16,7 @@ import {
   Search,
   Trash2,
   User,
+  Wallet,
   XCircle,
 } from "lucide-react";
 import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
@@ -432,7 +433,8 @@ export function Reservations({ go }) {
                 onEdit={() => setModal(reservationToForm(r, currency.defaultCurrencyId, couponsById.get(Number(r.couponId))?.code))}
                 onConfirm={() => runAction(r.id, () => api.confirmReservation(r.id))}
                 onCheckIn={() => runAction(r.id, () => api.checkInReservation(r.id))}
-                onCheckOut={() => setModal({ _checkout: r })}
+                onPay={() => setModal({ _pay: r })}
+                onCheckOut={() => (r.paidAt ? runAction(r.id, () => api.checkOutReservation(r.id, {})) : setModal({ _checkout: r }))}
                 onCancel={() => runAction(r.id, () => api.cancelReservation(r.id), `Annuler la réservation ${r.reference} ?`)}
                 onDelete={() => runAction(r.id, () => api.deleteReservation(r.id), `Supprimer la réservation ${r.reference} ?`)}
               />
@@ -454,7 +456,7 @@ export function Reservations({ go }) {
         />
       )}
 
-      {modal && !modal._checkout && (
+      {modal && !modal._checkout && !modal._pay && (
         <ReservationModal
           value={modal}
           properties={properties}
@@ -475,6 +477,16 @@ export function Reservations({ go }) {
           busy={busyId === "coupon-save"}
           onClose={() => { setCouponModal(null); setActionError(""); }}
           onSaved={async () => { setCouponModal(null); await couponsApi.reload(); }}
+          onError={setActionError}
+        />
+      )}
+
+      {modal?._pay && (
+        <PayModal
+          reservation={modal._pay}
+          symbol={resSymbol(modal._pay)}
+          onClose={() => { setModal(null); setActionError(""); }}
+          onDone={async () => { setModal(null); await reservationsApi.reload(); }}
           onError={setActionError}
         />
       )}
@@ -525,12 +537,13 @@ function StayCard({ stay, nights, symbol, onBook }) {
   );
 }
 
-function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName, onEdit, onConfirm, onCheckIn, onCheckOut, onCancel, onDelete }) {
+function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName, onEdit, onConfirm, onCheckIn, onPay, onCheckOut, onCancel, onDelete }) {
   const closed = ["checked_out", "cancelled"].includes(r.status);
   return (
     <article className="ticket-card maintenance-ticket">
       <div className="ticket-head">
         <span className={`chip ${STATUS_CLASS[r.status] || "chip-amber"}`}>{STATUS_LABEL[r.status] || r.status}</span>
+        {r.paidAt && <span className="chip chip-green"><Wallet size={11} /> Payé</span>}
         <span className="chip chip-ink"><BedDouble size={11} /> {r.reference}</span>
       </div>
       <h3>{r.guestName}</h3>
@@ -546,6 +559,7 @@ function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName,
         <div className="immo-header-actions" style={{ marginTop: 10, flexWrap: "wrap" }}>
           {r.status === "pending" && <button className="immo-btn" disabled={busy} onClick={onConfirm}><CheckCircle2 size={15} /> Confirmer</button>}
           {["pending", "confirmed"].includes(r.status) && <button className="immo-btn" disabled={busy} onClick={onCheckIn}><LogIn size={15} /> Arrivée</button>}
+          {!r.paidAt && <button className="immo-btn" disabled={busy} onClick={onPay}><Wallet size={15} /> Payer</button>}
           <button className="immo-btn primary" disabled={busy} onClick={onCheckOut}><LogOut size={15} /> Check-out</button>
           <button className="immo-btn" disabled={busy} onClick={onEdit}>Modifier</button>
           <button className="immo-btn" disabled={busy} onClick={onCancel}><XCircle size={15} /> Annuler</button>
@@ -1003,6 +1017,52 @@ function CouponModal({ value, currency, onClose, onSaved, onError }) {
         </FormSection>
       </div>
       <ModalActions busy={busy} disabled={!form.code.trim() || toMoney(form.discountValue) <= 0} onClose={onClose} onSave={save} />
+    </Modal>
+  );
+}
+
+function PayModal({ reservation: r, symbol, onClose, onDone, onError }) {
+  const [form, setForm] = useState({ paymentDate: new Date().toISOString().slice(0, 10), method: "cash", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const set = (patch) => setForm((c) => ({ ...c, ...patch }));
+
+  const submit = async () => {
+    setBusy(true);
+    onError("");
+    try {
+      await api.payReservation(r.id, {
+        paymentDate: form.paymentDate || undefined,
+        method: form.method || "cash",
+        notes: form.notes?.trim() || null,
+      });
+      await onDone();
+    } catch (err) {
+      onError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title={`Payer — ${r.reference}`} subtitle={`${r.guestName} · recette enregistrée en comptabilité (avant le check-out)`} icon={<Wallet size={20} />} className="domus-property-modal" onClose={onClose}>
+      <div className="domus-property-form">
+        <FormSection icon={<CalendarCheck size={14} />} title="Encaissement du séjour">
+          <BookingTotal
+            gross={roundMoney(toMoney(r.days) * toMoney(r.dailyRate))}
+            discount={toMoney(r.discountAmount)}
+            total={toMoney(r.totalAmount)}
+            days={toMoney(r.days)}
+            dailyRate={r.dailyRate}
+            symbol={symbol}
+          />
+          <div className="domus-property-form-grid">
+            <DomusPropertyField label="Date d'encaissement" type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
+            <DomusPropertySelect label="Moyen de paiement" value={form.method} onChange={(method) => set({ method })} options={[["cash", "Cash (Caisse)"], ["bank", "Banque"], ["card", "Carte"], ["cheque", "Chèque"]]} />
+          </div>
+          <DomusPropertyField label="Notes" value={form.notes} onChange={(notes) => set({ notes })} textarea />
+        </FormSection>
+      </div>
+      <ModalActions busy={busy} disabled={false} onClose={onClose} onSave={submit} />
     </Modal>
   );
 }

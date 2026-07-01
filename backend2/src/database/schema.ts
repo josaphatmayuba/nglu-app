@@ -954,6 +954,8 @@ export const realEstateReservations = mysqlTable("real_estate_reservations", {
   status: varchar("status", { length: 50 }).default("pending").notNull(),
   // Transaction créée à la comptabilisation de la recette (au check-out).
   transactionId: bigint("transaction_id", { mode: "number" }),
+  // Date d'encaissement si payé avant le check-out (indépendant du statut).
+  paidAt: date("paid_at", { mode: "string" }),
   notes: text("notes"),
   isActive: tinyint("is_active").default(1).notNull(),
   createdAt: timestamp("created_at"),

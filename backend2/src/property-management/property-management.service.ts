@@ -2079,18 +2079,15 @@ export class PropertyManagementService {
     return this.setReservationStatus(id, ["pending", "confirmed", "checked_in"], "cancelled", orgId, propertyScope);
   }
 
-  // Check-out : on solde la réservation ET on comptabilise la recette (débit
-  // Caisse/Banque, crédit « Short-term Rental Revenue ») via le ledger + la table
-  // plate transactions (dual-write), en devise. Idempotent sur reservation:{id}.
-  async checkOutReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
-    const reservation = await this.findReservation(id, orgId, propertyScope);
-    if (reservation.status === "checked_out") {
-      throw new BadRequestException("Réservation déjà soldée.");
-    }
-    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
-      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
-    }
-
+  // Comptabilise la recette d'un séjour (débit Caisse/Banque, crédit « Short-term
+  // Rental Revenue ») via le ledger + la table plate transactions (dual-write), en
+  // devise. Utilisé au paiement anticipé (payReservation) et au check-out.
+  private async recordReservationPayment(
+    reservation: { id: number; reference: string; guestName: string; totalAmount: unknown; currencyId: number | null; transactionId: number | null },
+    input: CheckOutReservationDto,
+    orgId: number,
+    idempotencyKey: string,
+  ): Promise<number | null> {
     const amount = Number(reservation.totalAmount) || 0;
     const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
     const currencyId = reservation.currencyId ?? (await this.resolveDefaultCurrency(orgId));
@@ -2125,7 +2122,7 @@ export class PropertyManagementService {
           sourceModule: "rent",
           relatedId: String(reservation.id),
           currencyId: currencyId ?? undefined,
-          idempotencyKey: `reservation-checkout:${reservation.id}`,
+          idempotencyKey,
           lines: [
             { accountId: debitId, side: "DEBIT", amount, description: particulars },
             { accountId: revenueId, side: "CREDIT", amount, description: "Short-term Rental Revenue" },
@@ -2135,9 +2132,55 @@ export class PropertyManagementService {
       );
     }
 
+    return transactionId;
+  }
+
+  // Paiement anticipé (avant le check-out) : comptabilise la recette sans changer
+  // le statut de la réservation, pour ne pas confondre paiement et sortie physique.
+  async payReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.paidAt) {
+      throw new BadRequestException("Réservation déjà payée.");
+    }
+    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+
+    const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+    const transactionId = await this.recordReservationPayment(reservation, input, orgId, `reservation-payment:${reservation.id}`);
+
     await this.db
       .update(realEstateReservations)
-      .set({ status: "checked_out", transactionId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({ paidAt: paymentDate, transactionId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  // Check-out : marque la sortie physique. Si la réservation n'a pas déjà été
+  // payée à l'avance (payReservation), comptabilise aussi la recette ici.
+  async checkOutReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.status === "checked_out") {
+      throw new BadRequestException("Réservation déjà soldée.");
+    }
+    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+
+    let transactionId: number | null = reservation.transactionId ?? null;
+    let paidAt: string | null = reservation.paidAt ?? null;
+
+    if (!paidAt) {
+      const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+      transactionId = await this.recordReservationPayment(reservation, input, orgId, `reservation-checkout:${reservation.id}`);
+      paidAt = paymentDate;
+    }
+
+    await this.db
+      .update(realEstateReservations)
+      .set({ status: "checked_out", transactionId, paidAt, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(eq(realEstateReservations.id, id));
 
     await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
