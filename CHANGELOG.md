@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.139.0)
+- **Domus : import du bail signé à la main (papier)** — nouvelle table `real_estate_lease_documents` (migration `0196`), stockage MinIO via `ObjectStorageService.putDocument` (image ou PDF, 15 Mo max), endpoints `GET/POST /leases/:id/documents`, `DELETE /leases/documents/:documentId`, `GET /leases/documents/:documentId/file`. Côté UI, la fiche détail d'un bail (`LeaseDetailModal`) permet d'importer le scan/photo du bail signé et de le consulter/supprimer. `backend2/src/database/schema.ts`, `backend2/src/property-management/{object-storage,property-management}.service.ts`, `backend2/src/property-management/property-management.controller.ts`, `domus-app/src/api.js`, `domus-app/src/screens/baux.jsx`, `domus-app/src/styles/app.css`.
+
 ### Fixed (3.138.4)
 - **Domus : numéro de bail/réservation exposé publiquement** — le message d'indisponibilité de la page publique de réservation affichait la référence interne (`bail LEASE-xxxxx` / réservation) au visiteur, une information confidentielle. Messages génériques désormais : « Ce bien est loué sur cette période. » et « Ces dates chevauchent une réservation existante. ». `backend2/src/property-management/property-management.service.ts`.
 

@@ -564,6 +564,61 @@ export class PropertyManagementController {
     return this.propertyManagementService.deleteLease(id, orgId);
   }
 
+  @ApiOperation({ summary: "List signed lease documents (scanned paper contracts)" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/:id/documents")
+  leaseDocuments(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.leaseDocuments(id, orgId);
+  }
+
+  @ApiOperation({ summary: "Upload a signed lease document (paper contract scan/photo) to object storage" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("document", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("leases/:id/documents")
+  uploadLeaseDocument(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: { notes?: string },
+    @UploadedFile() document: any,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadLeaseDocument(id, document, orgId, body?.notes ?? null);
+  }
+
+  @ApiOperation({ summary: "Delete a signed lease document" })
+  @Permissions("update-propertyManagement")
+  @Delete("leases/documents/:documentId")
+  @HttpCode(200)
+  deleteLeaseDocument(@Param("documentId", ParseIntPipe) documentId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteLeaseDocument(documentId, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream a signed lease document from object storage" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("leases/documents/:documentId/file")
+  async leaseDocumentFile(
+    @Param("documentId", ParseIntPipe) documentId: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.leaseDocumentFile(documentId, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
   @ApiOperation({ summary: "List security deposits (held + returned)" })
   @Permissions("readAll-propertyManagement")
   @Get("deposits")

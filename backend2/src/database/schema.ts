@@ -863,6 +863,22 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   updatedAt: timestamp("updated_at"),
 });
 
+// Bail signé à la main par le locataire, scanné/photographié et importé pour archivage + consultation.
+export const realEstateLeaseDocuments = mysqlTable("real_estate_lease_documents", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  leaseId: bigint("lease_id", { mode: "number" }).notNull(),
+  bucket: varchar("bucket", { length: 255 }).notNull(),
+  objectKey: varchar("object_key", { length: 500 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }),
+  mimeType: varchar("mime_type", { length: 100 }),
+  sizeBytes: bigint("size_bytes", { mode: "number" }),
+  notes: varchar("notes", { length: 500 }),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateRentPayments = mysqlTable("real_estate_rent_payments", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

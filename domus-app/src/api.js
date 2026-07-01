@@ -173,6 +173,17 @@ export const api = {
   renewLease: (id, b) => post(`/leases/${id}/renew`, b),
   deleteLease: (id) => del(`/leases/${id}`),
 
+  // Bail signé à la main (papier) — import du scan/photo pour archivage + consultation.
+  leaseDocuments: (id) => get(`/leases/${id}/documents`),
+  uploadLeaseDocument: (id, file, notes = "") => {
+    const form = new FormData();
+    form.append("document", file);
+    if (notes) form.append("notes", notes);
+    return multipartFetch(`/leases/${id}/documents`, form);
+  },
+  deleteLeaseDocument: (documentId) => del(`/leases/documents/${documentId}`),
+  leaseDocumentUrl: (documentId) => authenticatedFileUrl(`/leases/documents/${documentId}/file`),
+
   payments: () => get("/payments"),
   createPayment: (b) => post("/payments", b),
   sendReminder: (b) => post("/payments/reminder", b),

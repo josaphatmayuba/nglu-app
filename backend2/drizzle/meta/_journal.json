@@ -1198,6 +1198,13 @@
                         "when":  1780628400000,
                         "tag":  "0195_unit_property_available_for_booking",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  171,
+                        "version":  "5",
+                        "when":  1780714800000,
+                        "tag":  "0196_real_estate_lease_documents",
+                        "breakpoints":  true
                     }
                 ]
 }

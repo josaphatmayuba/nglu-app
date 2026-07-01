@@ -1006,6 +1006,12 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-detail-notes { border-top:1px solid #f4f4f5; display:grid; gap:12px; padding:18px 24px 24px; }
 .domus-detail-notes p { color:#3f3f46; display:grid; font-size:14px; gap:6px; line-height:1.5; margin:0; }
 .domus-detail-notes strong { color:#18181b; font-size:12px; text-transform:uppercase; }
+.domus-lease-documents { display:grid; gap:8px; list-style:none; margin:0; padding:0; }
+.domus-lease-documents li { align-items:center; background:#fafafa; border:1px solid #e4e4e7; border-radius:8px; display:flex; gap:8px; justify-content:space-between; padding:8px 10px; }
+.domus-lease-documents a { align-items:center; color:#3f3f46; display:inline-flex; gap:6px; font-size:13px; overflow:hidden; text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+.domus-lease-documents a:hover { color:#4f46e5; }
+.domus-lease-document-remove { align-items:center; background:none; border:none; border-radius:6px; color:#a1a1aa; cursor:pointer; display:inline-flex; height:26px; justify-content:center; width:26px; }
+.domus-lease-document-remove:hover { background:#fef2f2; color:#dc2626; }
 .domus-contract-preview { max-width:860px; width:min(860px,calc(100vw - 32px)); }
 .domus-contract-content { background:#fafafa; border-top:1px solid #f4f4f5; color:#18181b; line-height:1.55; max-height:65vh; overflow:auto; padding:24px; }
 .domus-contract-content h1, .domus-contract-content h2, .domus-contract-content h3 { color:#09090b; }

@@ -922,6 +922,53 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
     ["Statut", info.statusText],
   ];
 
+  const [documents, setDocuments] = useState([]);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docError, setDocError] = useState("");
+
+  async function reloadDocuments() {
+    try {
+      setDocuments(await api.leaseDocuments(lease.id));
+    } catch (err) {
+      setDocError(err?.message || "Chargement des documents impossible.");
+    }
+  }
+
+  useEffect(() => {
+    reloadDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lease.id]);
+
+  async function handleUploadDocument(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setDocBusy(true);
+    setDocError("");
+    try {
+      await api.uploadLeaseDocument(lease.id, file);
+      await reloadDocuments();
+    } catch (err) {
+      setDocError(err?.message || "Import du bail signe impossible.");
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
+  async function handleDeleteDocument(documentId) {
+    if (!window.confirm("Supprimer ce document ?")) return;
+    setDocBusy(true);
+    setDocError("");
+    try {
+      await api.deleteLeaseDocument(documentId);
+      await reloadDocuments();
+    } catch (err) {
+      setDocError(err?.message || "Suppression impossible.");
+    } finally {
+      setDocBusy(false);
+    }
+  }
+
   return (
     <div className="modal-layer">
       <div className="modal-scrim" onClick={onClose} />
@@ -950,6 +997,39 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
             {lease.moveInNotes && <p><strong>Notes d'entree</strong>{lease.moveInNotes}</p>}
           </div>
         )}
+        <div className="domus-detail-notes">
+          <p><strong>Bail signe a la main</strong></p>
+          {docError && <div className="domus-floating-error">{docError}</div>}
+          {documents.length > 0 && (
+            <ul className="domus-lease-documents">
+              {documents.map((doc) => (
+                <li key={doc.id}>
+                  <a href={api.leaseDocumentUrl(doc.id)} target="_blank" rel="noreferrer">
+                    <FileText size={14} /> {doc.originalName || `Document ${doc.id}`}
+                  </a>
+                  <button
+                    className="domus-lease-document-remove"
+                    disabled={docBusy}
+                    onClick={() => handleDeleteDocument(doc.id)}
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <label className="immo-btn">
+            <FilePlus size={15} /> Importer le bail signe (photo/scan/PDF)
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              style={{ display: "none" }}
+              disabled={docBusy}
+              onChange={handleUploadDocument}
+            />
+          </label>
+        </div>
         {go && (
           <div className="domus-detail-actions">
             <button className="immo-btn" onClick={() => { onClose(); go("loyers"); }}><Receipt size={15} /> Voir les paiements</button>

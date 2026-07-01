@@ -13,6 +13,7 @@ import {
   customers,
   emailTemplates,
   realEstateContracts,
+  realEstateLeaseDocuments,
   realEstateLeases,
   realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
@@ -2714,6 +2715,79 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
     return rows[0];
+  }
+
+  async leaseDocuments(leaseId: number, orgId: number) {
+    await this.findLease(leaseId);
+    return this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(and(
+        eq(realEstateLeaseDocuments.leaseId, leaseId),
+        eq(realEstateLeaseDocuments.organizationId, orgId),
+        eq(realEstateLeaseDocuments.isActive, 1),
+      ))
+      .orderBy(desc(realEstateLeaseDocuments.id));
+  }
+
+  async uploadLeaseDocument(leaseId: number, file: any, orgId: number, notes?: string | null) {
+    await this.findLease(leaseId);
+    const stored = await this.objectStorage.putDocument(file, `domus/leases/${orgId}/${leaseId}/documents`);
+
+    const [result] = await this.db.insert(realEstateLeaseDocuments).values({
+      organizationId: orgId,
+      leaseId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      notes: notes ? String(notes).slice(0, 500) : null,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const [doc] = await this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(eq(realEstateLeaseDocuments.id, Number(result.insertId)))
+      .limit(1);
+    return doc;
+  }
+
+  async findLeaseDocument(documentId: number, orgId: number) {
+    const [doc] = await this.db
+      .select()
+      .from(realEstateLeaseDocuments)
+      .where(and(
+        eq(realEstateLeaseDocuments.id, documentId),
+        eq(realEstateLeaseDocuments.organizationId, orgId),
+        eq(realEstateLeaseDocuments.isActive, 1),
+      ))
+      .limit(1);
+    if (!doc) throw new NotFoundException("Document not found.");
+    return doc;
+  }
+
+  async deleteLeaseDocument(documentId: number, orgId: number) {
+    const doc = await this.findLeaseDocument(documentId, orgId);
+    await this.objectStorage.deleteObject(doc.objectKey);
+    await this.db
+      .update(realEstateLeaseDocuments)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstateLeaseDocuments.id, documentId), eq(realEstateLeaseDocuments.organizationId, orgId)));
+    return { message: "Document supprime." };
+  }
+
+  async leaseDocumentFile(documentId: number, orgId: number) {
+    const doc = await this.findLeaseDocument(documentId, orgId);
+    const object = await this.objectStorage.getObject(doc.objectKey);
+    return {
+      ...object,
+      originalName: doc.originalName || `lease-document-${doc.id}`,
+      mimeType: doc.mimeType,
+    };
   }
 
   async findPayment(id: number) {
