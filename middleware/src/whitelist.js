@@ -71,6 +71,7 @@ module.exports = [
   // ── Onboarding locataire (public) ──────────────
   { method: '*',    prefix: '/tenant-onboarding',             auth: false },
   { method: '*',    prefix: '/property-management/contracts/sign', auth: false },
+  { method: '*',    prefix: '/property-management/public',     auth: false },
 
   // ── Routes protégées (JWT requis) ──────────────
   { method: '*',    prefix: '/dashboard',                     auth: true  },

@@ -1039,6 +1039,99 @@ export class CreateCouponDto {
 
 export class UpdateCouponDto extends PartialType(CreateCouponDto) {}
 
+export class PublicReservationRequestDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1, description: "NULL = bien entier ; sinon une unite du bien." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  guestName: string;
+
+  @ApiPropertyOptional({ example: "+243812345678" })
+  @IsOptional()
+  @IsString()
+  guestPhone?: string | null;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  guestEmail?: string | null;
+
+  @ApiProperty({ example: "2026-07-01" })
+  @IsDateString()
+  checkIn: string;
+
+  @ApiProperty({ example: "2026-07-05" })
+  @IsDateString()
+  checkOut: string;
+
+  @ApiPropertyOptional({ example: "ETE2026" })
+  @IsOptional()
+  @IsString()
+  couponCode?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class PublicLeaseRequestDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean" })
+  @IsString()
+  @IsNotEmpty()
+  firstName: string;
+
+  @ApiProperty({ example: "Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  lastName: string;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  email?: string | null;
+
+  @ApiProperty({ example: "+243812345678" })
+  @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @ApiPropertyOptional({ example: "2026-08-01" })
+  @IsOptional()
+  @IsDateString()
+  desiredMoveIn?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  message?: string | null;
+}
+
 export class CheckOutReservationDto {
   @ApiPropertyOptional({ example: "2026-07-05", description: "Date de comptabilisation de la recette. Défaut = aujourd'hui." })
   @IsOptional()

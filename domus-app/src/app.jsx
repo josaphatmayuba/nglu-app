@@ -20,6 +20,7 @@ import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
+import { PublicReservationsPage } from "./screens/public-reservations.jsx";
 import { Placeholder } from "./screens/placeholder.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
@@ -98,9 +99,33 @@ function useOnboardingRoute() {
   return token;
 }
 
+function usePublicReservationsRoute() {
+  const read = () => {
+    if (typeof window === "undefined") return null;
+    const { pathname, hash } = window.location;
+    const match = (pathname || "").match(/\/public(?:\/([^/?#]+))?\/?$/);
+    if (match) return decodeURIComponent(match[1] || "");
+    const hashMatch = (hash || "").match(/^#\/public(?:\/([^/?#]+))?$/);
+    if (hashMatch) return decodeURIComponent(hashMatch[1] || "");
+    return null;
+  };
+  const [key, setKey] = useState(read);
+  useEffect(() => {
+    const on = () => setKey(read());
+    window.addEventListener("popstate", on);
+    window.addEventListener("hashchange", on);
+    return () => {
+      window.removeEventListener("popstate", on);
+      window.removeEventListener("hashchange", on);
+    };
+  }, []);
+  return key;
+}
+
 export default function App() {
   const token = useAuthToken();
   const onboardingToken = useOnboardingRoute();
+  const publicReservationsKey = usePublicReservationsRoute();
   const [view, setView] = useState("dashboard");
   const [moreOpen, setMoreOpen] = useState(false);
   const device = useDeviceMode();
@@ -117,6 +142,7 @@ export default function App() {
 
   // Page publique d'onboarding : prioritaire sur l'authentification.
   if (onboardingToken !== null) return <TenantOnboardingPublic token={onboardingToken} />;
+  if (publicReservationsKey !== null) return <PublicReservationsPage routeKey={publicReservationsKey} />;
 
   if (!token) return <LoginScreen />;
 

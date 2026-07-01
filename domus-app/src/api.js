@@ -272,6 +272,17 @@ export const publicApi = {
     publicFetch(`/tenant-onboarding/save?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
   submitOnboarding: (token, values) =>
     publicFetch(`/tenant-onboarding/submit?token=${encodeURIComponent(token)}`, { method: "POST", body: JSON.stringify(values || {}) }),
+  stays: () => publicFetch("/property-management/public/stays"),
+  stay: (key) => publicFetch(`/property-management/public/stays/${encodeURIComponent(key)}`),
+  publicPhotoUrl: (photoId) => `${API_ROOT}/property-management/public/photos/${encodeURIComponent(photoId)}/file`,
+  publicAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>
+    publicFetch(`/property-management/public/availability?propertyId=${encodeURIComponent(propertyId)}${unitId ? `&unitId=${encodeURIComponent(unitId)}` : ""}&checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}`),
+  validatePublicCoupon: ({ code, amount, currencyId }) =>
+    publicFetch(`/property-management/public/coupons/validate?code=${encodeURIComponent(code || "")}&amount=${encodeURIComponent(amount || 0)}${currencyId ? `&currencyId=${encodeURIComponent(currencyId)}` : ""}`),
+  createPublicReservation: (values) =>
+    publicFetch("/property-management/public/reservations", { method: "POST", body: JSON.stringify(values || {}) }),
+  createPublicLeaseRequest: (values) =>
+    publicFetch("/property-management/public/lease-requests", { method: "POST", body: JSON.stringify(values || {}) }),
 };
 
 // ── Rejeu de la file d'attente hors ligne ──

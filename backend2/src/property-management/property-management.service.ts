@@ -64,6 +64,8 @@ import {
   CheckOutReservationDto,
   CreateCouponDto,
   UpdateCouponDto,
+  PublicReservationRequestDto,
+  PublicLeaseRequestDto,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 
@@ -790,6 +792,254 @@ export class PropertyManagementService {
       originalName: photo.originalName || `property-photo-${photo.id}`,
       mimeType: photo.mimeType,
     };
+  }
+
+  async publicPropertyPhotoFile(photoId: number, orgId = 1) {
+    return this.propertyPhotoFile(photoId, orgId, "all");
+  }
+
+  async publicCatalog(orgId = 1) {
+    const [properties, units, photos, setting, currencyRows] = await Promise.all([
+      this.properties(orgId, "all"),
+      this.units(orgId),
+      this.propertyPhotos(orgId, "all"),
+      readOrgAppSetting(this.db, orgId, {
+        companyName: appSettings.companyName,
+        tagLine: appSettings.tagLine,
+        address: appSettings.address,
+        phone: appSettings.phone,
+        email: appSettings.email,
+        website: appSettings.website,
+        currencyId: appSettings.currencyId,
+      }),
+      this.db
+        .select({
+          id: currencies.id,
+          currencyCode: currencies.currencyCode,
+          currencyName: currencies.currencyName,
+          currencySymbol: currencies.currencySymbol,
+          status: currencies.status,
+        })
+        .from(currencies)
+        .where(ne(currencies.status, "false")),
+    ]);
+
+    const photosByProperty = new Map<number, any[]>();
+    const photosByUnit = new Map<number, any[]>();
+    for (const photo of photos) {
+      const publicPhoto = this.publicPhotoResponse(photo);
+      if (photo.unitId != null) {
+        const unitId = Number(photo.unitId);
+        if (!photosByUnit.has(unitId)) photosByUnit.set(unitId, []);
+        photosByUnit.get(unitId)!.push(publicPhoto);
+      } else {
+        const propertyId = Number(photo.propertyId);
+        if (!photosByProperty.has(propertyId)) photosByProperty.set(propertyId, []);
+        photosByProperty.get(propertyId)!.push(publicPhoto);
+      }
+    }
+
+    const propsWithUnits = new Set(units.map((unit) => Number(unit.propertyId)));
+    const propertyById = new Map(properties.map((property) => [Number(property.id), property]));
+    const stays = [
+      ...properties
+        .filter((property) => !propsWithUnits.has(Number(property.id)))
+        .map((property) => this.publicStayFromProperty(property, photosByProperty.get(Number(property.id)) || [], setting?.currencyId as number | null | undefined)),
+      ...units.map((unit) => {
+        const property = propertyById.get(Number(unit.propertyId));
+        return this.publicStayFromUnit(unit, property, photosByUnit.get(Number(unit.id)) || [], setting?.currencyId as number | null | undefined);
+      }),
+    ].filter(Boolean);
+
+    return {
+      settings: {
+        companyName: setting?.companyName || "Domus",
+        tagLine: setting?.tagLine || "Logements disponibles a la reservation",
+        address: setting?.address || null,
+        phone: setting?.phone || null,
+        email: setting?.email || null,
+        website: setting?.website || null,
+        currencyId: setting?.currencyId || null,
+      },
+      currencies: currencyRows,
+      stays,
+    };
+  }
+
+  async publicStay(key: string, orgId = 1) {
+    const catalog = await this.publicCatalog(orgId);
+    const stay = catalog.stays.find((item: any) => item.key === key);
+    if (!stay) throw new NotFoundException("Bien introuvable.");
+    return { ...catalog, stay };
+  }
+
+  async createPublicReservation(input: PublicReservationRequestDto, orgId = 1) {
+    const stay = await this.resolvePublicStayForRequest(input.propertyId, input.unitId ?? null, orgId);
+    return this.createReservation({
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      guestName: input.guestName,
+      guestPhone: input.guestPhone ?? null,
+      guestEmail: input.guestEmail ?? null,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      dailyRate: stay.dailyRate,
+      depositAmount: 0,
+      currencyId: stay.currencyId ?? undefined,
+      couponCode: input.couponCode ?? null,
+      notes: [input.notes, "Demande recue depuis la vitrine publique Domus"].filter(Boolean).join("\n"),
+    }, orgId, "all");
+  }
+
+  async createPublicLeaseRequest(input: PublicLeaseRequestDto, orgId = 1) {
+    const stay = await this.resolvePublicStayForRequest(input.propertyId, input.unitId ?? null, orgId);
+    const phone = normalizePhoneE164(input.phone) || input.phone;
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const data = JSON.stringify({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email ?? null,
+      phone,
+      desiredMoveIn: input.desiredMoveIn ?? null,
+      message: input.message ?? null,
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      listingKey: stay.key,
+      listingTitle: stay.title,
+      source: "domus-public-listing",
+    });
+    const [result] = await this.db.insert(tenantOnboardings).values({
+      phone,
+      tokenHash: this.hashToken(token),
+      token,
+      status: "submitted",
+      data,
+      expiresAt,
+      submittedAt: sql`CURRENT_TIMESTAMP`,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+    const id = Number((result as any).insertId);
+    await this.publishOnboardingUpdate("created", id);
+    return {
+      id,
+      status: "submitted",
+      message: "Votre demande de bail a ete envoyee. Nous vous contacterons pour finaliser le dossier.",
+    };
+  }
+
+  private publicPhotoResponse(photo: { id: number; propertyId: number; unitId?: number | null; isPrimary?: boolean | number; sortOrder?: number }) {
+    return {
+      id: Number(photo.id),
+      propertyId: Number(photo.propertyId),
+      unitId: photo.unitId == null ? null : Number(photo.unitId),
+      isPrimary: photo.isPrimary === true || Number(photo.isPrimary) === 1,
+      sortOrder: Number(photo.sortOrder || 0),
+      url: `/api/property-management/public/photos/${photo.id}/file`,
+    };
+  }
+
+  private publicDailyRate(monthly: string | number | null | undefined) {
+    const n = Number(monthly || 0);
+    return Number.isFinite(n) ? Math.round((n / 30) * 100) / 100 : 0;
+  }
+
+  private publicCover(photos: any[]) {
+    return photos.find((photo) => photo.isPrimary) || photos[0] || null;
+  }
+
+  private publicStayFromProperty(property: any, photos: any[], defaultCurrencyId?: number | null) {
+    return {
+      key: `p-${property.id}`,
+      propertyId: Number(property.id),
+      unitId: null,
+      title: property.name || `Bien ${property.id}`,
+      propertyName: property.name || `Bien ${property.id}`,
+      type: property.propertyType || "Bien entier",
+      city: property.city || "",
+      country: property.country || "",
+      address: [property.address, property.city].filter(Boolean).join(", ") || "Adresse sur demande",
+      bedrooms: Number(property.bedrooms || 0),
+      bathrooms: Number(property.bathrooms || 0),
+      parkingSpaces: Number(property.parkingSpaces || 0),
+      floors: Number(property.floors || 0),
+      area: null,
+      dailyRate: this.publicDailyRate(property.defaultRent),
+      monthlyRent: Number(property.defaultRent || 0),
+      currencyId: property.currencyId || defaultCurrencyId || null,
+      description: property.description || "",
+      amenities: "",
+      photos,
+      cover: this.publicCover(photos),
+      bookingMode: "property",
+    };
+  }
+
+  private publicStayFromUnit(unit: any, property: any, photos: any[], defaultCurrencyId?: number | null) {
+    if (!property) return null;
+    return {
+      key: `u-${unit.id}`,
+      propertyId: Number(unit.propertyId),
+      unitId: Number(unit.id),
+      title: unit.name || `Unite ${unit.id}`,
+      propertyName: property.name || unit.propertyName || `Bien ${unit.propertyId}`,
+      type: unit.unitType || property.propertyType || "Logement",
+      city: property.city || "",
+      country: property.country || "",
+      address: [property.address, property.city].filter(Boolean).join(", ") || "Adresse sur demande",
+      bedrooms: Number(unit.bedrooms || 0),
+      bathrooms: Number(unit.bathrooms || 0),
+      parkingSpaces: Number(property.parkingSpaces || 0),
+      floors: Number(property.floors || 0),
+      area: Number(unit.area || 0),
+      dailyRate: this.publicDailyRate(unit.monthlyRent || property.defaultRent),
+      monthlyRent: Number(unit.monthlyRent || property.defaultRent || 0),
+      currencyId: unit.currencyId || property.currencyId || defaultCurrencyId || null,
+      description: unit.description || property.description || "",
+      amenities: unit.amenities || "",
+      photos,
+      cover: this.publicCover(photos),
+      bookingMode: "unit",
+    };
+  }
+
+  private async resolvePublicStayForRequest(propertyId: number, unitId: number | null, orgId: number) {
+    await this.ensureActiveProperty(propertyId, orgId);
+    const [property] = await this.db
+      .select()
+      .from(realEstateProperties)
+      .where(and(
+        eq(realEstateProperties.id, propertyId),
+        eq(realEstateProperties.organizationId, orgId),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+      ))
+      .limit(1);
+    if (!property) throw new NotFoundException("Bien introuvable.");
+    let unit: any = null;
+    if (unitId != null) {
+      const rows = await this.db
+        .select()
+        .from(realEstateUnits)
+        .where(and(
+          eq(realEstateUnits.id, unitId),
+          eq(realEstateUnits.propertyId, propertyId),
+          eq(realEstateUnits.organizationId, orgId),
+          ne(realEstateUnits.status, "false"),
+          eq(realEstateUnits.isActive, 1),
+        ))
+        .limit(1);
+      if (!rows.length) throw new BadRequestException("Cette unite n'appartient pas au bien selectionne.");
+      unit = rows[0];
+    }
+    const stay = unit
+      ? this.publicStayFromUnit(unit, property, [], property.currencyId)
+      : this.publicStayFromProperty(property, [], property.currencyId);
+    if (!stay || !stay.dailyRate) {
+      throw new BadRequestException("Ce bien n'a pas de tarif public disponible.");
+    }
+    return stay;
   }
 
   async createProperty(input: CreatePropertyDto, orgId: number) {

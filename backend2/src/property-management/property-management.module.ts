@@ -11,6 +11,7 @@ import { ContractTemplatesService } from "./contract-templates.service";
 import { ContractsPublicController } from "./contracts-public.controller";
 import { ContractsService } from "./contracts.service";
 import { PropertyManagementController } from "./property-management.controller";
+import { PropertyManagementPublicController } from "./property-management-public.controller";
 import { PropertyManagementService } from "./property-management.service";
 import { ObjectStorageService } from "./object-storage.service";
 import { RentReminderService } from "./rent-reminder.service";
@@ -21,6 +22,7 @@ import { TenantOnboardingPublicController } from "./tenant-onboarding-public.con
   controllers: [
     ContractsPublicController,
     TenantOnboardingPublicController,
+    PropertyManagementPublicController,
     PropertyManagementController,
     ContractTemplatesController,
   ],
