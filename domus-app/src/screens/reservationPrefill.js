@@ -12,3 +12,20 @@ export function takeReservationPrefill() {
   prefillPropertyId = null;
   return value;
 }
+
+// Même mécanisme de handoff pour « Créer un bail » depuis un bien : on mémorise
+// le bien et son unité à présélectionner dans le formulaire de bail.
+let prefillLease = null;
+
+export function setLeasePrefill(propertyId, unitId) {
+  prefillLease = {
+    propertyId: propertyId != null ? String(propertyId) : "",
+    unitId: unitId != null ? String(unitId) : "",
+  };
+}
+
+export function takeLeasePrefill() {
+  const value = prefillLease;
+  prefillLease = null;
+  return value;
+}

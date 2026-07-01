@@ -32,6 +32,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
+import { takeLeasePrefill } from "./reservationPrefill.js";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
 const DAY = 86400000;
@@ -134,6 +135,20 @@ export function Baux({ go } = {}) {
   const [saving, setSaving] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [actionError, setActionError] = useState("");
+
+  // Bouton « Créer un bail » depuis un bien : ouvre le formulaire pré-rempli.
+  useEffect(() => {
+    if (loading) return;
+    const prefill = takeLeasePrefill();
+    if (prefill) {
+      setLeaseModal({
+        ...emptyLease,
+        propertyId: prefill.propertyId || "",
+        unitId: prefill.unitId || "",
+        currencyId: currency.defaultCurrencyId || "",
+      });
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fermer le menu « … » au clic en dehors ou sur Échap.
   useEffect(() => {
