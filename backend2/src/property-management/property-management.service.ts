@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, Logger, NotFoundException } fr
 import * as bcrypt from "bcryptjs";
 import { createHash, randomBytes } from "crypto";
 import { join } from "path";
-import { and, desc, eq, getTableColumns, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
 import { IMAGE_OR_PDF_MIME_TYPES, saveValidatedUploadFile } from "../common/upload-security";
 import { env } from "../config/env";
@@ -18,6 +18,7 @@ import {
   realEstateMaintenanceRequests,
   realEstateProperties,
   realEstatePropertyPhotos,
+  realEstateReservations,
   realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
@@ -57,6 +58,9 @@ import {
   UpdateMaintenanceDto,
   UpdatePropertyDto,
   UpdateUnitDto,
+  CreateReservationDto,
+  UpdateReservationDto,
+  CheckOutReservationDto,
 } from "./dto/property-management.dto";
 import { ObjectStorageService } from "./object-storage.service";
 
@@ -1512,6 +1516,347 @@ export class PropertyManagementService {
       .where(eq(realEstateSecurityDeposits.id, id))
       .limit(1);
     return rows[0];
+  }
+
+  // ─── Réservation temporaire type hôtel (courte durée, tarif par jour) ────────
+  // Un client occupe un bien entier OU une unité sur une plage de dates.
+  // Indépendant du bail longue durée. Recette comptabilisée au check-out.
+
+  async reservations(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
+    const scopeFilter = this.propertyDirectFilter(realEstateReservations.propertyId, propertyScope);
+    return this.db
+      .select()
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+        propertyId ? eq(realEstateReservations.propertyId, propertyId) : undefined,
+        scopeFilter,
+      ))
+      .orderBy(desc(realEstateReservations.id));
+  }
+
+  async findReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const rows = await this.db
+      .select()
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.id, id),
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Réservation introuvable.");
+    this.ensurePropertyInScope(rows[0].propertyId, propertyScope);
+    return rows[0];
+  }
+
+  // Nombre de jours facturés entre deux dates (borne à 1 minimum).
+  private reservationDays(checkIn: string, checkOut: string) {
+    const start = this.parseDateOnly(checkIn);
+    const end = this.parseDateOnly(checkOut);
+    const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
+    return Math.max(1, diff);
+  }
+
+  // Rejette tout chevauchement de dates sur le même bien+unité pour une
+  // réservation active non annulée/soldée. [checkIn, checkOut) se chevauchent si
+  // existing.check_in < new.check_out ET existing.check_out > new.check_in.
+  private async assertNoOverlap(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+    excludeId?: number,
+  ) {
+    const rows = await this.db
+      .select({ id: realEstateReservations.id, reference: realEstateReservations.reference })
+      .from(realEstateReservations)
+      .where(and(
+        eq(realEstateReservations.organizationId, orgId),
+        eq(realEstateReservations.isActive, 1),
+        eq(realEstateReservations.propertyId, propertyId),
+        unitId == null ? isNull(realEstateReservations.unitId) : eq(realEstateReservations.unitId, unitId),
+        inArray(realEstateReservations.status, ["pending", "confirmed", "checked_in"]),
+        lt(realEstateReservations.checkIn, checkOut),
+        sql`${realEstateReservations.checkOut} > ${checkIn}`,
+        excludeId ? ne(realEstateReservations.id, excludeId) : undefined,
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        `Ces dates chevauchent la réservation ${rows[0].reference || rows[0].id}.`,
+      );
+    }
+  }
+
+  // Rejette une réservation dont les dates chevauchent un bail longue durée
+  // ACTIF sur le même bien/unité. Un bail est toujours rattaché à une unité
+  // (lease.unit_id NOT NULL) : réserver le bien entier entre en conflit avec
+  // n'importe quel bail actif du bien ; réserver une unité, avec le bail de
+  // cette unité. Bail ouvert (end_date NULL) = occupe indéfiniment.
+  private async assertNoLeaseConflict(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+  ) {
+    const rows = await this.db
+      .select({ id: realEstateLeases.id, reference: realEstateLeases.reference })
+      .from(realEstateLeases)
+      .where(and(
+        eq(realEstateLeases.organizationId, orgId),
+        eq(realEstateLeases.status, "active"),
+        eq(realEstateLeases.propertyId, propertyId),
+        unitId == null ? undefined : eq(realEstateLeases.unitId, unitId),
+        lt(realEstateLeases.startDate, checkOut),
+        or(isNull(realEstateLeases.endDate), sql`${realEstateLeases.endDate} > ${checkIn}`),
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        `Ce bien est loué (bail ${rows[0].reference || rows[0].id}) sur cette période.`,
+      );
+    }
+  }
+
+  private async nextReservationReference(orgId: number) {
+    const [row] = await this.db
+      .select({ id: realEstateReservations.id })
+      .from(realEstateReservations)
+      .where(eq(realEstateReservations.organizationId, orgId))
+      .orderBy(desc(realEstateReservations.id))
+      .limit(1);
+    const next = (Number(row?.id) || 0) + 1;
+    return `RES-${String(next).padStart(4, "0")}`;
+  }
+
+  async createReservation(input: CreateReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    await this.ensureActiveProperty(input.propertyId, orgId);
+    this.ensurePropertyInScope(input.propertyId, propertyScope);
+    if (input.unitId != null) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+    if (this.parseDateOnly(input.checkOut) <= this.parseDateOnly(input.checkIn)) {
+      throw new BadRequestException("La date de départ doit être postérieure à l'arrivée.");
+    }
+    await this.assertNoOverlap(orgId, input.propertyId, input.unitId ?? null, input.checkIn, input.checkOut);
+    await this.assertNoLeaseConflict(orgId, input.propertyId, input.unitId ?? null, input.checkIn, input.checkOut);
+
+    const days = this.reservationDays(input.checkIn, input.checkOut);
+    const dailyRate = Number(input.dailyRate) || 0;
+    const total = Math.round(days * dailyRate * 100) / 100;
+    const currencyId = input.currencyId ?? (await this.resolveDefaultCurrency(orgId));
+
+    const [result] = await this.db.insert(realEstateReservations).values({
+      organizationId: orgId,
+      reference: input.reference?.trim() || (await this.nextReservationReference(orgId)),
+      propertyId: input.propertyId,
+      unitId: input.unitId ?? null,
+      guestName: input.guestName,
+      guestPhone: input.guestPhone ?? null,
+      guestEmail: input.guestEmail ?? null,
+      tenantId: input.tenantId ?? null,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      days,
+      dailyRate: this.money(dailyRate),
+      totalAmount: this.money(total),
+      currencyId: currencyId ?? null,
+      depositAmount: this.money(input.depositAmount),
+      status: "pending",
+      notes: input.notes ?? null,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    const id = Number(result.insertId);
+    await this.publishPaymentUpdate("created", id, { propertyId: input.propertyId, unitId: input.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  async updateReservation(id: number, input: UpdateReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (["checked_out", "cancelled"].includes(reservation.status)) {
+      throw new BadRequestException("Une réservation soldée ou annulée n'est plus modifiable.");
+    }
+    if (input.unitId != null) {
+      await this.ensureActiveUnit(input.unitId, orgId);
+    }
+
+    const checkIn = input.checkIn ?? reservation.checkIn;
+    const checkOut = input.checkOut ?? reservation.checkOut;
+    const propertyId = input.propertyId ?? reservation.propertyId;
+    const unitId = input.unitId !== undefined ? (input.unitId ?? null) : reservation.unitId;
+    if (input.propertyId != null && input.propertyId !== reservation.propertyId) {
+      await this.ensureActiveProperty(input.propertyId, orgId);
+      this.ensurePropertyInScope(input.propertyId, propertyScope);
+    }
+    if (this.parseDateOnly(checkOut) <= this.parseDateOnly(checkIn)) {
+      throw new BadRequestException("La date de départ doit être postérieure à l'arrivée.");
+    }
+    await this.assertNoOverlap(orgId, propertyId, unitId, checkIn, checkOut, id);
+    await this.assertNoLeaseConflict(orgId, propertyId, unitId, checkIn, checkOut);
+
+    const days = this.reservationDays(checkIn, checkOut);
+    const dailyRate = input.dailyRate != null ? Number(input.dailyRate) : Number(reservation.dailyRate);
+    const total = Math.round(days * dailyRate * 100) / 100;
+
+    await this.db
+      .update(realEstateReservations)
+      .set({
+        propertyId,
+        unitId,
+        guestName: input.guestName ?? reservation.guestName,
+        guestPhone: input.guestPhone !== undefined ? input.guestPhone : reservation.guestPhone,
+        guestEmail: input.guestEmail !== undefined ? input.guestEmail : reservation.guestEmail,
+        tenantId: input.tenantId !== undefined ? (input.tenantId ?? null) : reservation.tenantId,
+        checkIn,
+        checkOut,
+        days,
+        dailyRate: this.money(dailyRate),
+        totalAmount: this.money(total),
+        currencyId: input.currencyId ?? reservation.currencyId,
+        depositAmount: input.depositAmount != null ? this.money(input.depositAmount) : reservation.depositAmount,
+        notes: input.notes !== undefined ? input.notes : reservation.notes,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId, unitId: unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  // Transitions de statut : pending → confirmed → checked_in → checked_out.
+  private async setReservationStatus(
+    id: number,
+    from: string[],
+    to: string,
+    orgId: number,
+    propertyScope: "all" | number[],
+  ) {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (!from.includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+    await this.db
+      .update(realEstateReservations)
+      .set({ status: to, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  confirmReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending"], "confirmed", orgId, propertyScope);
+  }
+
+  checkInReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending", "confirmed"], "checked_in", orgId, propertyScope);
+  }
+
+  cancelReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    return this.setReservationStatus(id, ["pending", "confirmed", "checked_in"], "cancelled", orgId, propertyScope);
+  }
+
+  // Check-out : on solde la réservation ET on comptabilise la recette (débit
+  // Caisse/Banque, crédit « Short-term Rental Revenue ») via le ledger + la table
+  // plate transactions (dual-write), en devise. Idempotent sur reservation:{id}.
+  async checkOutReservation(id: number, input: CheckOutReservationDto, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.status === "checked_out") {
+      throw new BadRequestException("Réservation déjà soldée.");
+    }
+    if (!["pending", "confirmed", "checked_in"].includes(reservation.status)) {
+      throw new BadRequestException(`Transition invalide depuis « ${reservation.status} ».`);
+    }
+
+    const amount = Number(reservation.totalAmount) || 0;
+    const paymentDate = input.paymentDate || this.formatDateOnly(new Date());
+    const currencyId = reservation.currencyId ?? (await this.resolveDefaultCurrency(orgId));
+    let transactionId: number | null = reservation.transactionId ?? null;
+
+    if (amount > 0) {
+      const debitId = input.paymentAccountId ?? (this.isBankMethod(input.method) ? 2 : 1); // 2=Bank, 1=Cash
+      const revenueId = await this.getOrCreateSubAccount("Short-term Rental Revenue", 5, orgId); // 5 = Revenue
+      const particulars = input.notes || `Séjour ${reservation.reference} — ${reservation.guestName}`;
+
+      const [txResult] = await this.db.insert(transactions).values({
+        organizationId: orgId,
+        date: new Date(paymentDate),
+        debitId,
+        creditId: revenueId,
+        particulars,
+        amount,
+        currencyId: currencyId ?? null,
+        type: this.isBankMethod(input.method) ? "BNQ - Short-term Rental" : "CAI - Short-term Rental",
+        relatedId: String(reservation.id),
+        status: "true",
+        createdAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      });
+      transactionId = Number(txResult.insertId);
+
+      await this.ledger.post(
+        {
+          date: new Date(paymentDate),
+          reference: `RES-${reservation.id}`,
+          particulars,
+          sourceModule: "rent",
+          relatedId: String(reservation.id),
+          currencyId: currencyId ?? undefined,
+          idempotencyKey: `reservation-checkout:${reservation.id}`,
+          lines: [
+            { accountId: debitId, side: "DEBIT", amount, description: particulars },
+            { accountId: revenueId, side: "CREDIT", amount, description: "Short-term Rental Revenue" },
+          ],
+        },
+        orgId,
+      );
+    }
+
+    await this.db
+      .update(realEstateReservations)
+      .set({ status: "checked_out", transactionId, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+
+    await this.publishPaymentUpdate("updated", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return this.findReservation(id, orgId, propertyScope);
+  }
+
+  async deleteReservation(id: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const reservation = await this.findReservation(id, orgId, propertyScope);
+    if (reservation.status === "checked_out") {
+      throw new BadRequestException("Impossible de supprimer une réservation soldée.");
+    }
+    await this.db
+      .update(realEstateReservations)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateReservations.id, id));
+    await this.publishPaymentUpdate("deleted", id, { propertyId: reservation.propertyId, unitId: reservation.unitId ?? undefined });
+    return { message: "Réservation supprimée." };
+  }
+
+  // Disponibilité : true si aucune réservation active ne chevauche la plage.
+  async checkReservationAvailability(
+    orgId: number,
+    propertyId: number,
+    unitId: number | null,
+    checkIn: string,
+    checkOut: string,
+    propertyScope: "all" | number[] = "all",
+  ) {
+    this.ensurePropertyInScope(propertyId, propertyScope);
+    try {
+      await this.assertNoOverlap(orgId, propertyId, unitId, checkIn, checkOut);
+      await this.assertNoLeaseConflict(orgId, propertyId, unitId, checkIn, checkOut);
+      return { available: true };
+    } catch (err) {
+      return { available: false, reason: (err as any)?.message || "Indisponible" };
+    }
   }
 
   private async getOrCreateLiabilitySubAccount(name: string, orgId: number) {

@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
+import { setReservationPrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -470,6 +471,7 @@ function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
     if (action === "assign") go?.("locataires");
     if (action === "payments") go?.("loyers");
     if (action === "lease") go?.("baux");
+    if (action === "reserve") { setReservationPrefill(property.propertyId || property.id); go?.("reservations"); }
     if (action === "delete") onDelete?.();
   };
 
@@ -486,6 +488,8 @@ function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
               <span>{property.code}</span>
             </div>
             <button className="highlight" onClick={() => handleMenuAction("edit")}><Edit3 size={16} /> Modifier l'unite</button>
+            <div className="immo-menu-separator" />
+            <button onClick={() => handleMenuAction("reserve")}><BedDouble size={16} /> Réserver (courte durée)</button>
             {!hasTenant && (
               <>
                 <div className="immo-menu-separator" />

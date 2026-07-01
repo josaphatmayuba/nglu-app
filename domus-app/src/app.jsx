@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   LayoutDashboard, Building, Building2, MapPin, Users, FileSignature, FileCheck2,
-  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp,
+  UserPlus, Wallet, Smartphone, Wrench, UserRound, Settings, Home, Menu, LogOut, CloudUpload, TrendingUp, BedDouble,
 } from "lucide-react";
 import { LoginScreen, useAuthToken, useAuthUser, clearToken } from "./auth.jsx";
 import { startRealtimeClient, stopRealtimeClient, useRealtimeStatus } from "./realtime.js";
@@ -14,6 +14,7 @@ import { Locataires } from "./screens/locataires.jsx";
 import { Loyers, Paiement } from "./screens/loyers.jsx";
 import { Maintenance } from "./screens/maintenance.jsx";
 import { Baux } from "./screens/baux.jsx";
+import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
@@ -36,6 +37,7 @@ const NAV = [
   ] },
   { sec: "Locatif", items: [
     { key: "baux", label: "Baux", icon: FileSignature },
+    { key: "reservations", label: "Réservations", icon: BedDouble },
     { key: "contrats", label: "Contrats & signature", icon: FileCheck2 },
     { key: "onboarding", label: "Onboarding locataire", icon: UserPlus },
     { key: "loyers", label: "Loyers & paiements", icon: Wallet },
@@ -50,7 +52,7 @@ const NAV = [
 
 const TITLES = Object.fromEntries(NAV.flatMap((s) => s.items).map((i) => [i.key, i.label]));
 const DAILY = ["dashboard", "loyers", "locataires", "maintenance"];
-const MORE = ["previsionnel", "baux", "contrats", "onboarding", "carte", "portail", "reglages"];
+const MORE = ["previsionnel", "baux", "reservations", "contrats", "onboarding", "carte", "portail", "reglages"];
 
 const SCREENS = {
   dashboard: (nav, device) => <Dashboard go={nav} device={device} />,
@@ -59,6 +61,7 @@ const SCREENS = {
   carte: (_nav, device) => <CarteBiens device={device} />,
   locataires: (_nav, device) => <Locataires device={device} />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
+  reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
   onboarding: (_nav, device) => <Placeholder title="Onboarding locataire" story="SCRUM-246" device={device} />,
   loyers: (nav, device) => <Loyers go={nav} device={device} />,

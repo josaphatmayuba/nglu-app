@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   Res,
   StreamableFile,
@@ -56,6 +57,9 @@ import {
   UpdatePropertyDto,
   UpdateTenantDto,
   UpdateUnitDto,
+  CreateReservationDto,
+  UpdateReservationDto,
+  CheckOutReservationDto,
 } from "./dto/property-management.dto";
 import { RenewLeaseDto } from "./dto/contract-template.dto";
 import { PropertyManagementService } from "./property-management.service";
@@ -259,6 +263,131 @@ export class PropertyManagementController {
       ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
     });
     return new StreamableFile(file.body);
+  }
+
+  // ── Réservations temporaires (type hôtel, tarif par jour) ──────────────────
+  @ApiOperation({ summary: "List reservations for the current org/scope" })
+  @Permissions("readAll-propertyManagement")
+  @Get("reservations")
+  reservations(@CurrentOrg() orgId: number, @CurrentDomusProperty() scope: DomusPropertyScope) {
+    return this.propertyManagementService.reservations(orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Check availability of a property/unit for a date range" })
+  @Permissions("readAll-propertyManagement")
+  @Get("reservations/availability")
+  reservationAvailability(
+    @Query("propertyId", ParseIntPipe) propertyId: number,
+    @Query("checkIn") checkIn: string,
+    @Query("checkOut") checkOut: string,
+    @Query("unitId") unitId: string | undefined,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    const unit = unitId != null && unitId !== "" ? Number(unitId) : null;
+    return this.propertyManagementService.checkReservationAvailability(orgId, propertyId, unit, checkIn, checkOut, scope);
+  }
+
+  @ApiOperation({ summary: "List reservations for one property" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("properties/:id/reservations")
+  reservationsForProperty(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.reservations(orgId, scope, id);
+  }
+
+  @ApiOperation({ summary: "Get a single reservation" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("reservations/:id")
+  findReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.findReservation(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Create a reservation (quick/temporary booking)" })
+  @Permissions("create-propertyManagement")
+  @Post("reservations")
+  createReservation(
+    @Body() body: CreateReservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.createReservation(body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Update a reservation" })
+  @Permissions("update-propertyManagement")
+  @Put("reservations/:id")
+  updateReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: UpdateReservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.updateReservation(id, body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Confirm a reservation" })
+  @Permissions("update-propertyManagement")
+  @Post("reservations/:id/confirm")
+  confirmReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.confirmReservation(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Check-in a reservation" })
+  @Permissions("update-propertyManagement")
+  @Post("reservations/:id/check-in")
+  checkInReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.checkInReservation(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Check-out a reservation (recognizes revenue at check-out)" })
+  @Permissions("update-propertyManagement")
+  @Post("reservations/:id/check-out")
+  checkOutReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() body: CheckOutReservationDto,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.checkOutReservation(id, body, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Cancel a reservation" })
+  @Permissions("update-propertyManagement")
+  @Post("reservations/:id/cancel")
+  cancelReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.cancelReservation(id, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Delete (soft) a reservation" })
+  @Permissions("update-propertyManagement")
+  @Delete("reservations/:id")
+  @HttpCode(200)
+  deleteReservation(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.deleteReservation(id, orgId, scope);
   }
 
   @ApiOperation({ summary: "Get single property by ID" })

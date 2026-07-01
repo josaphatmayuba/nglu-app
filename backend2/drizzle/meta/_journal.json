@@ -1170,6 +1170,13 @@
                         "when":  1780614000000,
                         "tag":  "0191_real_estate_property_photos",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  167,
+                        "version":  "5",
+                        "when":  1780617600000,
+                        "tag":  "0192_real_estate_reservations",
+                        "breakpoints":  true
                     }
                 ]
 }

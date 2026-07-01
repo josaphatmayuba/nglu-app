@@ -904,6 +904,39 @@ export const realEstateSecurityDeposits = mysqlTable("real_estate_security_depos
   updatedAt: timestamp("updated_at"),
 });
 
+// Réservation temporaire type hôtel : un client occupe un bien entier OU une
+// unité sur une plage de dates, au tarif par jour. Indépendant du bail longue
+// durée (real_estate_leases). Recette comptabilisée au check-out.
+export const realEstateReservations = mysqlTable("real_estate_reservations", {
+  id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
+  reference: varchar("reference", { length: 255 }).notNull(),
+  propertyId: bigint("property_id", { mode: "number" }).notNull(),
+  // NULL = bien entier ; sinon réservation d'une unité (chambre) du bien.
+  unitId: bigint("unit_id", { mode: "number" }),
+  guestName: varchar("guest_name", { length: 255 }).notNull(),
+  guestPhone: varchar("guest_phone", { length: 50 }),
+  guestEmail: varchar("guest_email", { length: 255 }),
+  // Si le client est déjà un locataire enregistré (facultatif).
+  tenantId: bigint("tenant_id", { mode: "number" }),
+  checkIn: date("check_in", { mode: "string" }).notNull(),
+  checkOut: date("check_out", { mode: "string" }).notNull(),
+  // Nombre de jours facturés (check_out − check_in, borne à 1 minimum).
+  days: int("days").default(1).notNull(),
+  dailyRate: decimal("daily_rate", { precision: 15, scale: 2 }).default("0").notNull(),
+  totalAmount: decimal("total_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  currencyId: bigint("currency_id", { mode: "number" }),
+  depositAmount: decimal("deposit_amount", { precision: 15, scale: 2 }).default("0").notNull(),
+  // pending → confirmed → checked_in → checked_out · cancelled à tout moment.
+  status: varchar("status", { length: 50 }).default("pending").notNull(),
+  // Transaction créée à la comptabilisation de la recette (au check-out).
+  transactionId: bigint("transaction_id", { mode: "number" }),
+  notes: text("notes"),
+  isActive: tinyint("is_active").default(1).notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
+});
+
 export const realEstateMaintenanceRequests = mysqlTable("real_estate_maintenance_requests", {
   id: serial("id").primaryKey(),
   organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),

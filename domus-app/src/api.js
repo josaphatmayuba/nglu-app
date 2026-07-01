@@ -193,6 +193,20 @@ export const api = {
   collectDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit`, b),
   returnDeposit: (leaseId, b) => post(`/leases/${leaseId}/deposit/return`, b),
 
+  // Réservations temporaires (type hôtel, tarif par jour, recette au check-out).
+  reservations: () => get("/reservations"),
+  reservation: (id) => get(`/reservations/${id}`),
+  reservationsForProperty: (id) => get(`/properties/${id}/reservations`),
+  createReservation: (b) => post("/reservations", b),
+  updateReservation: (id, b) => put(`/reservations/${id}`, b),
+  deleteReservation: (id) => del(`/reservations/${id}`),
+  confirmReservation: (id) => post(`/reservations/${id}/confirm`),
+  checkInReservation: (id) => post(`/reservations/${id}/check-in`),
+  checkOutReservation: (id, b) => post(`/reservations/${id}/check-out`, b),
+  cancelReservation: (id) => post(`/reservations/${id}/cancel`),
+  reservationAvailability: ({ propertyId, unitId, checkIn, checkOut }) =>
+    get(`/reservations/availability?propertyId=${propertyId}${unitId ? `&unitId=${unitId}` : ""}&checkIn=${checkIn}&checkOut=${checkOut}`),
+
   contracts: () => get("/contracts"),
   contract: (id) => get(`/contracts/${id}`),
   createContract: (b) => post("/contracts", b),

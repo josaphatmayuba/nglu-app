@@ -902,3 +902,105 @@ export class CreateMaintenanceCostDto {
   @IsString()
   receiptUrl?: string;
 }
+
+// ── Réservation temporaire type hôtel (courte durée, tarif par jour) ──────────
+export class CreateReservationDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  propertyId: number;
+
+  @ApiPropertyOptional({ example: 1, description: "NULL = bien entier ; sinon une unité du bien." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  unitId?: number | null;
+
+  @ApiProperty({ example: "Jean Kabila" })
+  @IsString()
+  @IsNotEmpty()
+  guestName: string;
+
+  @ApiPropertyOptional({ example: "+243812345678" })
+  @IsOptional()
+  @IsString()
+  guestPhone?: string | null;
+
+  @ApiPropertyOptional({ example: "guest@example.com" })
+  @IsOptional()
+  @IsEmail()
+  guestEmail?: string | null;
+
+  @ApiPropertyOptional({ example: 1, description: "Locataire déjà enregistré (facultatif)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tenantId?: number | null;
+
+  @ApiProperty({ example: "2026-07-01" })
+  @IsDateString()
+  checkIn: string;
+
+  @ApiProperty({ example: "2026-07-05" })
+  @IsDateString()
+  checkOut: string;
+
+  @ApiProperty({ example: 50, description: "Tarif par jour." })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  dailyRate: number;
+
+  @ApiPropertyOptional({ example: 100, default: 0, description: "Caution encaissée à la réservation (info ; pas de compta ici)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  depositAmount?: number;
+
+  @ApiPropertyOptional({ example: 16, description: "Devise. Par défaut celle du bien, puis appSetting.currencyId." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  currencyId?: number;
+
+  @ApiPropertyOptional({ example: "RES-001" })
+  @IsOptional()
+  @IsString()
+  reference?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
+
+export class UpdateReservationDto extends PartialType(CreateReservationDto) {}
+
+export class CheckOutReservationDto {
+  @ApiPropertyOptional({ example: "2026-07-05", description: "Date de comptabilisation de la recette. Défaut = aujourd'hui." })
+  @IsOptional()
+  @IsDateString()
+  paymentDate?: string;
+
+  @ApiPropertyOptional({ example: "cash", default: "cash", description: "cash → débit Caisse · bank/card/cheque → débit Banque." })
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @ApiPropertyOptional({ example: 1, description: "Compte de trésorerie encaisseur (sinon dérivé du moyen)." })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  paymentAccountId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string | null;
+}
