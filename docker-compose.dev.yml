@@ -44,6 +44,20 @@ services:
       timeout: 5s
       retries: 10
 
+  minio:
+    image: minio/minio:latest
+    container_name: nglu_dev_minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nglu_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nglu_minio_password_change_me}
+    volumes:
+      - nglu_dev_minio_data:/data
+    networks:
+      - nglu_dev_network
+    mem_limit: 128m
+
   backend2:
     build:
       context: ./backend2
@@ -86,11 +100,19 @@ services:
       RENT_REMINDER_OVERDUE_DAYS: ${RENT_REMINDER_OVERDUE_DAYS:-15}
       RENT_REMINDER_CRON: ${RENT_REMINDER_CRON:-0 9 * * *}
       PDF_SERVICE_URL: ${PDF_SERVICE_URL:-http://pdf-service:8002}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
+      OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-nglu_minio}
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-nglu_minio_password_change_me}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-nglu-files}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - nglu_dev_network
     mem_limit: 160m
@@ -127,6 +149,8 @@ services:
 volumes:
   nglu_dev_mysql_data:
     name: nglu_dev_mysql_data
+  nglu_dev_minio_data:
+    name: nglu_dev_minio_data
 
 networks:
   nglu_dev_network:

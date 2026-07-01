@@ -4,6 +4,7 @@ import {
   Bath,
   BedDouble,
   Building2,
+  Camera,
   Check,
   CreditCard,
   DollarSign,
@@ -22,6 +23,7 @@ import {
   Search,
   SlidersHorizontal,
   Trash2,
+  Upload,
   UserPlus,
   Users,
   Wallet,
@@ -112,10 +114,20 @@ export function Biens({ go }) {
   const [filters, setFilters] = useState({ city: "", minRent: "", maxRent: "", minBedrooms: "", minArea: "" });
   const [propertyModal, setPropertyModal] = useState(null);
   const [unitModal, setUnitModal] = useState(null);
+  const [detailModal, setDetailModal] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
 
   const properties = useMemo(() => filterProperties(data?.properties || []).map(normalizeProperty), [data]);
+  const photosByProperty = useMemo(() => {
+    const grouped = new Map();
+    (data?.propertyPhotos || []).forEach((photo) => {
+      const propertyId = Number(photo.propertyId);
+      if (!grouped.has(propertyId)) grouped.set(propertyId, []);
+      grouped.get(propertyId).push({ ...photo, url: api.propertyPhotoUrl(photo.id) });
+    });
+    return grouped;
+  }, [data?.propertyPhotos]);
   const leases = useMemo(
     () => filterLeases(data?.leases || [], dateRange),
     [data?.leases, dateRange],
@@ -128,8 +140,8 @@ export function Biens({ go }) {
   const currency = useMemo(() => normalizeCurrencyModule(data?.currencies, data?.setting), [data]);
   const leaseStatusByUnit = useMemo(() => buildLeaseStatusByUnit(leases, paymentsRaw), [leases, paymentsRaw]);
   const units = useMemo(
-    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, index)),
-    [data, leaseStatusByUnit, properties],
+    () => filterUnits(data?.units || [], properties).map((unit, index) => normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty, index)),
+    [data, leaseStatusByUnit, photosByProperty, properties],
   );
   const payments = useMemo(() => paymentsRaw.slice(0, 6).map(normalizePayment), [paymentsRaw]);
 
@@ -139,9 +151,9 @@ export function Biens({ go }) {
     const propertyIdsWithUnit = new Set(units.map((u) => Number(u.propertyId)));
     const emptyProperties = properties
       .filter((p) => !propertyIdsWithUnit.has(Number(p.id)))
-      .map(normalizeEmptyProperty);
+      .map((property) => normalizeEmptyProperty(property, photosByProperty));
     return [...units, ...emptyProperties];
-  }, [units, properties]);
+  }, [units, properties, photosByProperty]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -237,6 +249,44 @@ export function Biens({ go }) {
     }
   }
 
+  async function uploadDetailPhoto(file) {
+    const propertyId = Number(detailModal?.propertyId);
+    if (!file || !propertyId) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.uploadPropertyPhoto(propertyId, file);
+      await reload();
+      const nextPhotos = await api.propertyPhotosForProperty(propertyId);
+      setDetailModal((current) => current ? {
+        ...current,
+        photos: nextPhotos.map((photo) => ({ ...photo, url: api.propertyPhotoUrl(photo.id) })),
+      } : current);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteDetailPhoto(photoId) {
+    if (!photoId || !window.confirm("Supprimer cette photo ?")) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await api.deletePropertyPhoto(photoId);
+      await reload();
+      setDetailModal((current) => current ? {
+        ...current,
+        photos: (current.photos || []).filter((photo) => Number(photo.id) !== Number(photoId)),
+      } : current);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <Loading />;
   if (error) return <ApiError error={error} />;
 
@@ -314,6 +364,7 @@ export function Biens({ go }) {
       ) : view === "list" ? (
         <PropertyTable
           rows={filtered}
+          onOpen={setDetailModal}
           onEdit={editCard}
           onDelete={removeUnit}
           go={go}
@@ -327,6 +378,7 @@ export function Biens({ go }) {
               key={property.unitId}
               property={property}
               index={index}
+              onOpen={() => setDetailModal(property)}
               onEdit={() => editCard(property)}
               onDelete={() => removeUnit(property)}
               go={go}
@@ -361,23 +413,41 @@ export function Biens({ go }) {
           onSave={saveUnit}
         />
       )}
+
+      {detailModal && (
+        <PropertyDetailModal
+          property={detailModal}
+          busy={busy}
+          error={actionError}
+          onClose={() => setDetailModal(null)}
+          onUploadPhoto={uploadDetailPhoto}
+          onDeletePhoto={deleteDetailPhoto}
+          onEdit={() => {
+            const current = detailModal;
+            setDetailModal(null);
+            editCard(current);
+          }}
+          go={go}
+        />
+      )}
     </section>
   );
 }
 
 async function loadPropertiesModule() {
-  const [properties, units, payments, leases, currencies, setting] = await Promise.all([
+  const [properties, units, payments, leases, currencies, setting, propertyPhotos] = await Promise.all([
     api.properties(),
     api.units(),
     api.payments(),
     api.leases(),
     api.currencies(),
     api.setting(),
+    api.propertyPhotos(),
   ]);
-  return { properties, units, payments, leases, currencies, setting };
+  return { properties, units, payments, leases, currencies, setting, propertyPhotos };
 }
 
-function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
+function PropertyCard({ property, index = 0, onOpen, onEdit, onDelete, go }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasTenant = property.rawStatus === "occupied" && property.tenant && property.tenant !== "A assigner";
   const mediaClass = property.paymentStatus === "late"
@@ -404,12 +474,13 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
   };
 
   return (
-    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`}>
-      <div className="immo-property-media">
+    <article className={`immo-property-card ${mediaClass}${menuOpen ? " menu-open" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
+      <div className={`immo-property-media${property.coverPhoto ? " has-photo" : ""}`}>
+        {property.coverPhoto ? <img className="immo-property-photo" src={property.coverPhoto.url} alt={property.name} /> : null}
         <span className={`immo-status-chip ${statusClass}`}>{property.isEmptyProperty ? "Sans lot" : property.status}</span>
-        <button className="immo-icon-button" title="Options" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></button>
+        <button className="immo-icon-button" title="Options" onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}><MoreHorizontal size={16} /></button>
         {menuOpen && (
-          <div className="property-menu immo-property-context-menu">
+          <div className="property-menu immo-property-context-menu" onClick={(e) => e.stopPropagation()}>
             <div className={`immo-menu-head ${hasTenant ? "pendingSignature" : ""}`}>
               <strong>{property.name}</strong>
               <span>{property.code}</span>
@@ -432,7 +503,7 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
             <button className="danger" onClick={() => handleMenuAction("delete")}><Trash2 size={16} /> Supprimer</button>
           </div>
         )}
-        <span className="immo-property-watermark">{watermark}</span>
+        {!property.coverPhoto && <span className="immo-property-watermark">{watermark}</span>}
         <span className="immo-property-code">{property.type} - {property.code}</span>
       </div>
       <div className="immo-property-body">
@@ -455,7 +526,7 @@ function PropertyCard({ property, index = 0, onEdit, onDelete, go }) {
   );
 }
 
-function PropertyTable({ rows, onEdit, onDelete, go }) {
+function PropertyTable({ rows, onOpen, onEdit, onDelete, go }) {
   return (
     <div className="immo-property-list-table">
       <table>
@@ -464,7 +535,7 @@ function PropertyTable({ rows, onEdit, onDelete, go }) {
         </thead>
         <tbody>
           {rows.map((property) => (
-            <tr key={property.unitId}>
+            <tr key={property.unitId} onClick={() => onOpen?.(property)}>
               <td><b>{property.name}</b><div className="muted">{property.address}</div></td>
               <td>{property.type} - {property.code}</td>
               <td>{property.tenant}</td>
@@ -472,9 +543,9 @@ function PropertyTable({ rows, onEdit, onDelete, go }) {
               <td><b>{property.rent}</b><span className="muted"> /mois</span></td>
               <td><StatusPill status={property.status} /></td>
               <td className="row-actions">
-                <button title="Modifier" onClick={() => onEdit(property)}><Edit3 size={15} /></button>
-                <button title="Paiements" onClick={() => go?.("loyers")}>$</button>
-                <button title="Supprimer" onClick={() => onDelete(property)}><Trash2 size={15} /></button>
+                <button title="Modifier" onClick={(e) => { e.stopPropagation(); onEdit(property); }}><Edit3 size={15} /></button>
+                <button title="Paiements" onClick={(e) => { e.stopPropagation(); go?.("loyers"); }}>$</button>
+                <button title="Supprimer" onClick={(e) => { e.stopPropagation(); onDelete(property); }}><Trash2 size={15} /></button>
               </td>
             </tr>
           ))}
@@ -497,6 +568,106 @@ function PropertyMap({ rows }) {
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, onDeletePhoto, onEdit, go }) {
+  const photos = Array.isArray(property.photos) ? property.photos : [];
+  const cover = photos[0];
+  return (
+    <Modal
+      title={property.name}
+      subtitle={`${property.type} - ${property.code}`}
+      icon={property.type === "Maison" ? <Home size={20} /> : <Building2 size={20} />}
+      className="domus-property-detail-modal"
+      onClose={onClose}
+    >
+      <div className="domus-property-detail">
+        <section className="domus-detail-gallery">
+          <div className={`domus-detail-hero${cover ? " has-photo" : ""}`}>
+            {cover ? <img src={cover.url} alt={property.name} /> : (
+              <div className="domus-detail-empty-photo">
+                <Camera size={34} />
+                <span>Aucune photo</span>
+              </div>
+            )}
+          </div>
+          <div className="domus-photo-strip">
+            {photos.map((photo) => (
+              <div className="domus-photo-thumb" key={photo.id}>
+                <img src={photo.url} alt={photo.originalName || property.name} />
+                <button type="button" onClick={() => onDeletePhoto(photo.id)} disabled={busy} title="Supprimer la photo">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            <label className="domus-photo-add">
+              <Upload size={16} />
+              <span>Ajouter</span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={busy}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) onUploadPhoto(file);
+                }}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="domus-property-detail-summary">
+          <div>
+            <h3>{property.name}</h3>
+            <p>{property.address}</p>
+          </div>
+          <StatusPill status={property.status} />
+        </section>
+
+        <div className="domus-property-detail-grid">
+          <DetailLine label="Type" value={property.type} />
+          <DetailLine label="Code" value={property.code} />
+          <DetailLine label="Locataire" value={property.tenant} />
+          <DetailLine label="Loyer" value={`${property.rent} /mois`} />
+          <DetailLine label="Chambres" value={property.beds || "0"} />
+          <DetailLine label="Salles de bain" value={property.baths || "0"} />
+          <DetailLine label="Surface" value={property.area} />
+          <DetailLine label="Etages" value={property.floors ?? "-"} />
+          <DetailLine label="Parking" value={property.parkingSpaces ?? "0"} />
+          <DetailLine label="Ville" value={property.city || "-"} />
+        </div>
+
+        {(property.description || property.unitDescription || property.amenities) && (
+          <div className="domus-property-detail-notes">
+            {property.description && <p><strong>Description bien</strong>{property.description}</p>}
+            {property.unitDescription && <p><strong>Description unite</strong>{property.unitDescription}</p>}
+            {property.amenities && <p><strong>Equipements</strong>{property.amenities}</p>}
+          </div>
+        )}
+
+        {error && <div className="api-error">{error}</div>}
+      </div>
+      <div className="domus-modal-footer">
+        <button className="domus-modal-cancel" onClick={onClose} disabled={busy}>Fermer</button>
+        <div>
+          <button className="domus-modal-draft" onClick={() => go?.("loyers")} disabled={busy}><DollarSign size={14} /> Loyers</button>
+          <button className="domus-modal-submit" onClick={onEdit} disabled={busy}>
+            <Edit3 size={14} /> Modifier
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function DetailLine({ label, value }) {
+  return (
+    <div className="domus-property-detail-line">
+      <span>{label}</span>
+      <strong>{value ?? "-"}</strong>
     </div>
   );
 }
@@ -947,8 +1118,9 @@ function normalizeProperty(property) {
 }
 
 // Carte "propriete sans lot" : meme forme qu'un lot mais sans unitId, pour inviter a ajouter un lot.
-function normalizeEmptyProperty(property) {
+function normalizeEmptyProperty(property, photosByProperty = new Map()) {
   const rawType = String(property.propertyType || "").toLowerCase();
+  const photos = photosByProperty.get(Number(property.id)) || [];
   return {
     raw: property,
     isEmptyProperty: true,
@@ -963,6 +1135,14 @@ function normalizeEmptyProperty(property) {
     name: property.name || `Propriete #${property.id}`,
     address: property.address || "Adresse non renseignee",
     city: property.city || "",
+    country: property.country || "",
+    floors: property.floors,
+    parkingSpaces: property.parkingSpaces,
+    marketValue: property.marketValue,
+    defaultRent: property.defaultRent,
+    description: property.description || "",
+    photos,
+    coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
     beds: 0,
     baths: 0,
     areaValue: 0,
@@ -975,8 +1155,9 @@ function normalizeEmptyProperty(property) {
   };
 }
 
-function normalizeUnit(unit, properties, leaseStatusByUnit, index) {
+function normalizeUnit(unit, properties, leaseStatusByUnit, photosByProperty = new Map(), index) {
   const owner = properties.find((p) => Number(p.id) === Number(unit.propertyId)) || {};
+  const photos = photosByProperty.get(Number(unit.propertyId)) || [];
   const rawType = String(unit.unitType || owner.propertyType || "").toLowerCase();
   const type = TYPE_MAP[rawType] || "Appartement";
   const rawStatus = String(unit.status || "").toLowerCase();
@@ -1005,6 +1186,16 @@ function normalizeUnit(unit, properties, leaseStatusByUnit, index) {
     name: owner.name || unit.propertyName || `Propriete #${unit.propertyId}`,
     address: [unit.propertyAddress || owner.address, owner.city].filter(Boolean).join(" - ") || "Adresse non renseignee",
     city: owner.city || "",
+    country: owner.country || "",
+    floors: owner.floors,
+    parkingSpaces: owner.parkingSpaces,
+    marketValue: owner.marketValue,
+    defaultRent: owner.defaultRent,
+    description: owner.description || "",
+    unitDescription: unit.description || "",
+    amenities: unit.amenities || "",
+    photos,
+    coverPhoto: photos.find((photo) => photo.isPrimary) || photos[0] || null,
     beds: Number(unit.bedrooms || 0),
     baths: Number(unit.bathrooms || 0),
     areaValue,

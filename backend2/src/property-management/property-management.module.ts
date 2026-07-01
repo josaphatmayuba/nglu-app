@@ -12,6 +12,7 @@ import { ContractsPublicController } from "./contracts-public.controller";
 import { ContractsService } from "./contracts.service";
 import { PropertyManagementController } from "./property-management.controller";
 import { PropertyManagementService } from "./property-management.service";
+import { ObjectStorageService } from "./object-storage.service";
 import { RentReminderService } from "./rent-reminder.service";
 import { TenantOnboardingPublicController } from "./tenant-onboarding-public.controller";
 
@@ -23,6 +24,6 @@ import { TenantOnboardingPublicController } from "./tenant-onboarding-public.con
     PropertyManagementController,
     ContractTemplatesController,
   ],
-  providers: [PropertyManagementService, ContractsService, ContractTemplatesService, RentReminderService, DomusPropertyGuard],
+  providers: [PropertyManagementService, ObjectStorageService, ContractsService, ContractTemplatesService, RentReminderService, DomusPropertyGuard],
 })
 export class PropertyManagementModule {}

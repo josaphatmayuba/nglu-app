@@ -138,6 +138,17 @@ export const env = {
     userUpdatesChannel: process.env.REDIS_CHANNEL_USER_UPDATES || "permissions-updates",
     dataUpdatesChannel: process.env.REDIS_CHANNEL_DATA_UPDATES || "data-updates",
   },
+  objectStorage: {
+    endpoint: process.env.OBJECT_STORAGE_ENDPOINT || "http://minio:9000",
+    accessKeyId: process.env.OBJECT_STORAGE_ACCESS_KEY_ID || process.env.MINIO_ROOT_USER || "nglu_minio",
+    secretAccessKey:
+      process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY ||
+      process.env.MINIO_ROOT_PASSWORD ||
+      (isProd ? "" : "nglu_minio_password_change_me"),
+    bucket: process.env.OBJECT_STORAGE_BUCKET || "nglu-files",
+    region: process.env.OBJECT_STORAGE_REGION || "us-east-1",
+    forcePathStyle: process.env.OBJECT_STORAGE_FORCE_PATH_STYLE !== "false",
+  },
   db: {
     host: process.env.DB_HOST || "mysql",
     port: Number(process.env.DB_PORT || 3306),

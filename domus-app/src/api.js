@@ -82,6 +82,27 @@ const put = (path, body) => jsonFetch(path, { method: "PUT", body: JSON.stringif
 const patch = (path, body) => jsonFetch(path, { method: "PATCH", body: JSON.stringify(body || {}) });
 const del = (path) => jsonFetch(path, { method: "DELETE" });
 
+async function multipartFetch(path, formData) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+  if (!res.ok) {
+    if (res.status === 401) clearToken();
+    const body = await res.text().catch(() => "");
+    throw new Error(cleanApiError(res, body));
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function authenticatedFileUrl(path) {
+  const token = readToken();
+  const sep = path.includes("?") ? "&" : "?";
+  return `${BASE}${path}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
+}
+
 // ── Endpoints (alignés sur property-management.controller.ts) ──
 export const api = {
   currencies: () => jsonFetch("/currency?query=all", { method: "GET", base: API_ROOT }),
@@ -128,6 +149,15 @@ export const api = {
   createProperty: (b) => post("/properties", b),
   updateProperty: (id, b) => put(`/properties/${id}`, b),
   deleteProperty: (id) => del(`/properties/${id}`),
+  propertyPhotos: () => get("/properties/photos"),
+  propertyPhotosForProperty: (id) => get(`/properties/${id}/photos`),
+  uploadPropertyPhoto: (id, file) => {
+    const form = new FormData();
+    form.append("photo", file);
+    return multipartFetch(`/properties/${id}/photos`, form);
+  },
+  deletePropertyPhoto: (photoId) => del(`/properties/photos/${photoId}`),
+  propertyPhotoUrl: (photoId) => authenticatedFileUrl(`/properties/photos/${photoId}/file`),
 
   units: () => get("/units"),
   unit: (id) => get(`/units/${id}`),

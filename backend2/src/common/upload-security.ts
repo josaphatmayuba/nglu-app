@@ -30,12 +30,10 @@ function detectedMime(buffer: Buffer): string | null {
   return null;
 }
 
-export function saveValidatedUploadFile(
+export function validateUploadedFile(
   file: UploadedBufferFile,
-  uploadDir: string,
   options: {
     allowedMimeTypes: readonly string[];
-    prefix?: string;
     maxBytes?: number;
   },
 ) {
@@ -51,10 +49,24 @@ export function saveValidatedUploadFile(
     throw new BadRequestException("Le contenu du fichier ne correspond pas a un type autorise.");
   }
 
+  return { mimetype: actual, extension: MIME_TO_EXT[actual], size };
+}
+
+export function saveValidatedUploadFile(
+  file: UploadedBufferFile,
+  uploadDir: string,
+  options: {
+    allowedMimeTypes: readonly string[];
+    prefix?: string;
+    maxBytes?: number;
+  },
+) {
+  const validated = validateUploadedFile(file, options);
+
   if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
 
   const prefix = options.prefix ? `${options.prefix}-` : "";
-  const name = `${prefix}${Date.now()}-${randomBytes(8).toString("hex")}.${MIME_TO_EXT[actual]}`;
-  writeFileSync(join(uploadDir, name), file.buffer);
-  return { name, mimetype: actual, extension: MIME_TO_EXT[actual] };
+  const name = `${prefix}${Date.now()}-${randomBytes(8).toString("hex")}.${validated.extension}`;
+  writeFileSync(join(uploadDir, name), file.buffer!);
+  return { name, mimetype: validated.mimetype, extension: validated.extension };
 }

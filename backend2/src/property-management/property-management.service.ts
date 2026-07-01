@@ -17,6 +17,7 @@ import {
   realEstateMaintenanceCosts,
   realEstateMaintenanceRequests,
   realEstateProperties,
+  realEstatePropertyPhotos,
   realEstatePropertyAssignments,
   realEstateRentPayments,
   realEstateSecurityDeposits,
@@ -57,6 +58,7 @@ import {
   UpdatePropertyDto,
   UpdateUnitDto,
 } from "./dto/property-management.dto";
+import { ObjectStorageService } from "./object-storage.service";
 
 const leaseProperty = alias(realEstateProperties, "leaseProperty");
 const leaseUnit = alias(realEstateUnits, "leaseUnit");
@@ -80,6 +82,7 @@ export class PropertyManagementService {
     private readonly ledger: LedgerService,
     private readonly workflow: WorkflowService,
     private readonly projects: ProjectsService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   /** Approuve un cout de maintenance ; comptabilise a l'approbation finale. */
@@ -618,6 +621,12 @@ export class PropertyManagementService {
     return inArray(propertyIdColumn, scope);
   }
 
+  private ensurePropertyInScope(propertyId: number, scope: "all" | number[]) {
+    if (scope !== "all" && !scope.includes(propertyId)) {
+      throw new NotFoundException("Property not found.");
+    }
+  }
+
   async properties(orgId: number, propertyScope: "all" | number[] = "all") {
     const scopeFilter = this.propertyDirectFilter(realEstateProperties.id, propertyScope);
     const rows = await this.db
@@ -651,6 +660,117 @@ export class PropertyManagementService {
       .orderBy(desc(realEstateProperties.id));
 
     return rows.map((row) => ({ ...row, unitsCount: Number(row.unitsCount) }));
+  }
+
+  async propertyPhotos(orgId: number, propertyScope: "all" | number[] = "all", propertyId?: number) {
+    const scopeFilter = this.propertyDirectFilter(realEstatePropertyPhotos.propertyId, propertyScope);
+    const rows = await this.db
+      .select({
+        id: realEstatePropertyPhotos.id,
+        organizationId: realEstatePropertyPhotos.organizationId,
+        propertyId: realEstatePropertyPhotos.propertyId,
+        bucket: realEstatePropertyPhotos.bucket,
+        objectKey: realEstatePropertyPhotos.objectKey,
+        originalName: realEstatePropertyPhotos.originalName,
+        mimeType: realEstatePropertyPhotos.mimeType,
+        sizeBytes: realEstatePropertyPhotos.sizeBytes,
+        isPrimary: realEstatePropertyPhotos.isPrimary,
+        sortOrder: realEstatePropertyPhotos.sortOrder,
+        createdAt: realEstatePropertyPhotos.createdAt,
+      })
+      .from(realEstatePropertyPhotos)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyPhotos.propertyId))
+      .where(and(
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        propertyId ? eq(realEstatePropertyPhotos.propertyId, propertyId) : undefined,
+        scopeFilter,
+      ))
+      .orderBy(desc(realEstatePropertyPhotos.isPrimary), realEstatePropertyPhotos.sortOrder, desc(realEstatePropertyPhotos.id));
+
+    return rows.map((row) => this.propertyPhotoResponse(row));
+  }
+
+  async uploadPropertyPhoto(
+    propertyId: number,
+    file: any,
+    orgId: number,
+    propertyScope: "all" | number[] = "all",
+  ) {
+    await this.ensureActiveProperty(propertyId, orgId);
+    this.ensurePropertyInScope(propertyId, propertyScope);
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(realEstatePropertyPhotos)
+      .where(and(
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.propertyId, propertyId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+      ));
+    const count = Number(countRow?.count || 0);
+    const stored = await this.objectStorage.putImage(file, `domus/properties/${orgId}/${propertyId}`);
+    const [result] = await this.db.insert(realEstatePropertyPhotos).values({
+      organizationId: orgId,
+      propertyId,
+      bucket: stored.bucket,
+      objectKey: stored.objectKey,
+      originalName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+      mimeType: stored.mimeType,
+      sizeBytes: stored.sizeBytes,
+      isPrimary: count === 0 ? 1 : 0,
+      sortOrder: count,
+      isActive: 1,
+      createdAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    });
+
+    await this.publishPropertyUpdate("updated", propertyId, { propertyId });
+    const photo = await this.findPropertyPhoto(Number(result.insertId), orgId, propertyScope);
+    return this.propertyPhotoResponse(photo);
+  }
+
+  async deletePropertyPhoto(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const photo = await this.findPropertyPhoto(photoId, orgId, propertyScope);
+    await this.objectStorage.deleteObject(photo.objectKey);
+    await this.db
+      .update(realEstatePropertyPhotos)
+      .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(and(eq(realEstatePropertyPhotos.id, photoId), eq(realEstatePropertyPhotos.organizationId, orgId)));
+
+    if (Number(photo.isPrimary) === 1) {
+      const [next] = await this.db
+        .select({ id: realEstatePropertyPhotos.id })
+        .from(realEstatePropertyPhotos)
+        .where(and(
+          eq(realEstatePropertyPhotos.organizationId, orgId),
+          eq(realEstatePropertyPhotos.propertyId, photo.propertyId),
+          eq(realEstatePropertyPhotos.isActive, 1),
+        ))
+        .orderBy(realEstatePropertyPhotos.sortOrder, desc(realEstatePropertyPhotos.id))
+        .limit(1);
+      if (next) {
+        await this.db
+          .update(realEstatePropertyPhotos)
+          .set({ isPrimary: 1, updatedAt: sql`CURRENT_TIMESTAMP` })
+          .where(eq(realEstatePropertyPhotos.id, next.id));
+      }
+    }
+
+    await this.publishPropertyUpdate("updated", photo.propertyId, { propertyId: photo.propertyId });
+    return { message: "Photo supprimee." };
+  }
+
+  async propertyPhotoFile(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const photo = await this.findPropertyPhoto(photoId, orgId, propertyScope);
+    const object = await this.objectStorage.getObject(photo.objectKey);
+    return {
+      ...object,
+      originalName: photo.originalName || `property-photo-${photo.id}`,
+      mimeType: photo.mimeType,
+    };
   }
 
   async createProperty(input: CreatePropertyDto, orgId: number) {
@@ -1644,6 +1764,59 @@ export class PropertyManagementService {
       .limit(1);
     if (!rows.length) throw new NotFoundException("Property not found.");
     return rows[0];
+  }
+
+  private async findPropertyPhoto(photoId: number, orgId: number, propertyScope: "all" | number[] = "all") {
+    const scopeFilter = this.propertyDirectFilter(realEstatePropertyPhotos.propertyId, propertyScope);
+    const rows = await this.db
+      .select({
+        id: realEstatePropertyPhotos.id,
+        organizationId: realEstatePropertyPhotos.organizationId,
+        propertyId: realEstatePropertyPhotos.propertyId,
+        bucket: realEstatePropertyPhotos.bucket,
+        objectKey: realEstatePropertyPhotos.objectKey,
+        originalName: realEstatePropertyPhotos.originalName,
+        mimeType: realEstatePropertyPhotos.mimeType,
+        sizeBytes: realEstatePropertyPhotos.sizeBytes,
+        isPrimary: realEstatePropertyPhotos.isPrimary,
+        sortOrder: realEstatePropertyPhotos.sortOrder,
+        createdAt: realEstatePropertyPhotos.createdAt,
+      })
+      .from(realEstatePropertyPhotos)
+      .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstatePropertyPhotos.propertyId))
+      .where(and(
+        eq(realEstatePropertyPhotos.id, photoId),
+        eq(realEstatePropertyPhotos.organizationId, orgId),
+        eq(realEstatePropertyPhotos.isActive, 1),
+        ne(realEstateProperties.status, "false"),
+        eq(realEstateProperties.isActive, 1),
+        scopeFilter,
+      ))
+      .limit(1);
+    if (!rows.length) throw new NotFoundException("Photo introuvable.");
+    return rows[0];
+  }
+
+  private propertyPhotoResponse(row: {
+    id: number;
+    propertyId: number;
+    originalName?: string | null;
+    mimeType: string;
+    sizeBytes: number;
+    isPrimary: number;
+    sortOrder: number;
+    createdAt?: Date | string | null;
+  }) {
+    return {
+      id: row.id,
+      propertyId: row.propertyId,
+      originalName: row.originalName,
+      mimeType: row.mimeType,
+      sizeBytes: Number(row.sizeBytes || 0),
+      isPrimary: Number(row.isPrimary) === 1,
+      sortOrder: Number(row.sortOrder || 0),
+      createdAt: row.createdAt,
+    };
   }
 
   private async nextPropertyCode() {

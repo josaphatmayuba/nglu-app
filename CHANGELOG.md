@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.135.0)
+- **Domus — photos des biens (stockage objet MinIO/S3)**. Chaque bien peut recevoir plusieurs **photos** uploadées et stockées dans un **stockage objet compatible S3** (MinIO en dev/prod) ; la BD ne garde que les métadonnées et la clé objet (table `real_estate_property_photos`, migration `0191`). La **première photo** d'un bien devient automatiquement la photo **principale** ; à la suppression (soft delete `is_active=0`) d'une principale, la suivante prend le relais. Upload sécurisé : validation MIME réelle par magic bytes (JPEG/PNG/WebP), limite **8 Mo**, bucket auto-créé au premier upload. Endpoints `GET /property-management/properties/photos` (org+scope), `GET /properties/:id/photos`, `POST /properties/:id/photos` (multipart), `DELETE /properties/photos/:photoId`, `GET /properties/photos/:photoId/file` (stream, auth via header ou `?token=`) — tous soumis aux permissions et au scope Domus existants. Nouveau service `ObjectStorageService` (`@aws-sdk/client-s3`), service MinIO ajouté aux 3 `docker-compose` + variables `OBJECT_STORAGE_*`. UI Domus : ajout/aperçu/suppression des photos et badge photo principale dans l'écran Biens. `backend2/src/property-management/object-storage.service.ts`, `property-management.{controller,service,module}.ts`, `backend2/src/database/schema.ts`, `backend2/drizzle/0191_real_estate_property_photos.sql`, `backend2/src/common/upload-security.ts`, `backend2/src/config/env.ts`, `domus-app/src/api.js`, `domus-app/src/screens/biens.jsx`.
+
 ### Fixed (3.134.1)
 - **FarmOS - selecteur de fermes plus lisible**. Remplacement des cartes horizontales tronquees de l'ecran Batiments par une grille responsive de boutons stables : icone, badge, localisation ellipsee, compteurs batiments/animaux separes et etat actif plus net. **Verifie** : `npm.cmd run build` FarmOS OK. `farmos-app/src/screens.jsx`.
 

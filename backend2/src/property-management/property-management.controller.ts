@@ -11,12 +11,15 @@ import {
   Post,
   Put,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
+import type { Response } from "express";
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -185,6 +188,77 @@ export class PropertyManagementController {
     @CurrentOrg() orgId: number,
   ) {
     return this.propertyManagementService.setPropertyAssignments(userId, Array.isArray(body?.propertyIds) ? body.propertyIds : [], orgId);
+  }
+
+  @ApiOperation({ summary: "List property photos for the current org/scope" })
+  @Permissions("readAll-propertyManagement")
+  @Get("properties/photos")
+  propertyPhotos(@CurrentOrg() orgId: number, @CurrentDomusProperty() scope: DomusPropertyScope) {
+    return this.propertyManagementService.propertyPhotos(orgId, scope);
+  }
+
+  @ApiOperation({ summary: "List photos for one property" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("properties/:id/photos")
+  propertyPhotosForProperty(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.propertyPhotos(orgId, scope, id);
+  }
+
+  @ApiOperation({ summary: "Upload a property photo to object storage" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("photo", {
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP."), false);
+      }
+    },
+  }))
+  @Post("properties/:id/photos")
+  uploadPropertyPhoto(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() photo: any,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.uploadPropertyPhoto(id, photo, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Delete a property photo" })
+  @Permissions("update-propertyManagement")
+  @Delete("properties/photos/:photoId")
+  @HttpCode(200)
+  deletePropertyPhoto(
+    @Param("photoId", ParseIntPipe) photoId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+  ) {
+    return this.propertyManagementService.deletePropertyPhoto(photoId, orgId, scope);
+  }
+
+  @ApiOperation({ summary: "Stream a property photo from object storage" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("properties/photos/:photoId/file")
+  async propertyPhotoFile(
+    @Param("photoId", ParseIntPipe) photoId: number,
+    @CurrentOrg() orgId: number,
+    @CurrentDomusProperty() scope: DomusPropertyScope,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.propertyPhotoFile(photoId, orgId, scope);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
   }
 
   @ApiOperation({ summary: "Get single property by ID" })
