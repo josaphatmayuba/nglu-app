@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.138.2)
+- **Domus : case "Visible sur la page publique" ne persistait pas** — `findUnit` ne retournait pas `availableForBooking`, `unitPayload` ne l'envoyait pas, `unitToForm` ne le lisait pas. Les trois corrigés + `emptyUnit` initialisé à `false`. `backend2/src/property-management/property-management.service.ts`, `domus-app/src/screens/biens.jsx`.
+
 ### Added (3.138.1)
 - **SCRUM — Domus : case "Visible sur la page publique de réservation" sur chaque unité et propriété**. Migration 0195 ajoute `available_for_booking` (tinyint, défaut 0) sur `real_estate_units` et `real_estate_properties`. Le catalogue public (`/public/stays`) ne retourne plus que les biens/unités cochés. La page publique n'affiche plus l'adresse : elle montre le groupe immobilier (en gras) suivi du nom/numéro de l'unité. `backend2/drizzle/0195_unit_property_available_for_booking.sql`, `backend2/src/database/schema.ts`, `backend2/src/property-management/dto/property-management.dto.ts`, `backend2/src/property-management/property-management.service.ts`, `domus-app/src/screens/biens.jsx`, `domus-app/src/screens/public-reservations.jsx`, `domus-app/src/styles/app.css`.
 

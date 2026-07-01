@@ -2682,6 +2682,7 @@ export class PropertyManagementService {
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
+        availableForBooking: realEstateUnits.availableForBooking,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
       })

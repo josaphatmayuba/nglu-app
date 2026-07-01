@@ -92,6 +92,7 @@ const emptyUnit = {
   bathrooms: 1,
   area: 0,
   monthlyRent: 0,
+  availableForBooking: false,
   securityDeposit: 0,
   amenities: "",
   description: "",
@@ -1377,6 +1378,7 @@ function unitPayload(form) {
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     amenities: form.amenities || null,
     description: form.description || null,
+    availableForBooking: !!form.availableForBooking,
   };
 }
 
@@ -1398,6 +1400,7 @@ function unitToForm(row) {
     currencyId: unit.currencyId || row.currencyId || "",
     amenities: unit.amenities || "",
     description: unit.description || "",
+    availableForBooking: !!unit.availableForBooking,
   };
 }
 
