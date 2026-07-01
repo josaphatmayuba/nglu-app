@@ -126,7 +126,7 @@ pipelines:
           - step:
               name: Backend2 → dev
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "scripts/ci/ensure-shared-minio.sh"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -141,6 +141,10 @@ pipelines:
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                # MinIO partage (dev+prod, meme instance): le pipeline lance backend2 en --no-deps,
+                # donc le service minio du compose n'est jamais cree -> photos 500 (EAI_AGAIN minio).
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
@@ -374,7 +378,7 @@ pipelines:
           - step:
               name: Backend2 → Avelomi-dev
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "nginx/nginx.avelomi-dev.conf"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.dev.yml", ".env.dev", "nginx/nginx.avelomi-dev.conf", "scripts/ci/ensure-shared-minio.sh"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -392,6 +396,9 @@ pipelines:
                 - $SCP -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SCP docker-compose.dev.yml $SERVER:$APP/docker-compose.dev.yml
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml --env-file .env.dev up -d --build --no-deps backend2"
+                # MinIO partage (idempotent): backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
+                - $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_dev_backend2"
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_dev -f docker-compose.dev.yml ps"
 
           - step:
@@ -432,7 +439,7 @@ pipelines:
           - step:
               name: Backend2 → prod
               caches: [node-backend2]
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "scripts/ci/ensure-shared-minio.sh"] } }
               script:
                 - apk add --no-cache openssh-client
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -447,6 +454,10 @@ pipelines:
                 # ne pas dépendre du git pull serveur qui peut échouer silencieusement).
                 - scp -o StrictHostKeyChecking=no -r backend2/drizzle $SERVER:$APP/backend2/
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                # MinIO partage (dev+prod, meme instance): backend2 lance en --no-deps -> service
+                # minio du compose jamais cree -> photos 500 (EAI_AGAIN minio). Script idempotent.
+                - scp -o StrictHostKeyChecking=no scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
                 - $SSH $SERVER "cd $APP && docker compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
@@ -654,7 +665,7 @@ pipelines:
               caches: [node-backend2]
               # Ce step porte le provisionnement Avelomi (.env.prod + arborescence
               # /opt/nglu-app via scp ; pas de clone git, token OAuth indispo ici).
-              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod"] } }
+              condition: { changesets: { includePaths: ["backend2/**", "docker-compose.prod.yml", ".env.prod", "scripts/ci/ensure-shared-minio.sh"] } }
               script:
                 - *avelomi-ssh-setup
                 - cd backend2 && npm ci && npm audit --audit-level=critical && npm run build && cd ..
@@ -674,6 +685,9 @@ pipelines:
                 # Le repo n'est pas clone sur Avelomi : scp explicite du compose requis par le --build.
                 - $SCP docker-compose.prod.yml $SERVER:$APP/docker-compose.prod.yml
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps backend2"
+                # MinIO partage (idempotent): backend2 lance en --no-deps -> service minio jamais cree -> photos 500.
+                - $SCP scripts/ci/ensure-shared-minio.sh $SERVER:$APP/
+                - $SSH $SERVER "cd $APP && sh ensure-shared-minio.sh nglu_prod_backend2"
                 - $SSH $SERVER "cd $APP && D=docker; docker ps >/dev/null 2>&1 || D='sudo -n docker'; \$D compose -p nglu_prod -f docker-compose.prod.yml ps"
 
           - step:
