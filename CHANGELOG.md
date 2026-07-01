@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.140.1)
+- **FarmOS : scan QR box n'affichait rien** — le scanner Identification résolvait le QR de box (`FARMOS-BOX-<id>`) puis naviguait vers l'écran Bâtiments, mais le résultat ne s'affichait pas de façon fiable. Le scan affiche désormais directement, dans l'écran Identification, une carte de résultat avec nom du box, localisation (ferme·zone·bâtiment), occupation et liste des animaux dedans (`api.getBoxContext`), avec un bouton optionnel pour ouvrir le plan du bâtiment. `farmos-app/src/identification.jsx`.
+
 ### Added (3.140.0)
 - **Domus : marquer un contrat "signé" manuellement (bail papier)** — dans la modale Contrat de bail, bouton pour importer le scan/photo/PDF du bail signé à la main par le locataire ; le contrat électronique bascule en statut `signed` (comme une signature en ligne), journal d'audit dédié, et un lien "Voir le bail signé importé" permet de le consulter. Colonne `signed_document_id` (migration `0197`) relie le contrat au document stocké via `real_estate_lease_documents`/MinIO. `backend2/src/database/schema.ts`, `backend2/src/property-management/contracts.service.ts`, `backend2/src/property-management/property-management.controller.ts`, `domus-app/src/api.js`, `domus-app/src/screens/baux.jsx`, `domus-app/src/styles/app.css`.
 

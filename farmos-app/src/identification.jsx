@@ -125,6 +125,8 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
   const [mode, setMode] = React.useState("scanner");
   const [scanning, setScanning] = React.useState(false);
   const [found, setFound] = React.useState(null);
+  const [boxCtx, setBoxCtx] = React.useState(null);
+  const [boxLoading, setBoxLoading] = React.useState(false);
   const [photo, setPhoto] = React.useState(null);
   const [flash, setFlash] = React.useState(false);
   const [animals, setAnimals] = React.useState([]);
@@ -336,18 +338,22 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
   // Find an animal by code read from QR/barcode/NFC. Matches against
   // external_id (case-insensitive). If found, treat as identification.
   const onCodeRead = React.useCallback((code) => {
-    if (!code || found || scanning) return;
-    // Étiquette de box (FARMOS-BOX-<id>) : on ne cherche pas un animal, on ouvre
-    // la fiche du box (bâtiment + zone + ferme + animaux) via l'écran Bâtiments.
+    if (!code || found || boxCtx || boxLoading || scanning) return;
+    // Étiquette de box (FARMOS-BOX-<id>) : on ne cherche pas un animal, on
+    // affiche directement la fiche du box (bâtiment + zone + ferme + animaux)
+    // ici même, sans naviguer vers l'écran Bâtiments.
     const boxMatch = String(code).trim().match(/^FARMOS-BOX-(\d+)$/i);
     if (boxMatch) {
       const boxId = Number(boxMatch[1]);
-      window.dispatchEvent(new CustomEvent("farmos:open-box", { detail: { boxId } }));
-      onNav && onNav("buildings");
-      window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
-        severity: "info",
-        message: lang === "fr" ? "Ouverture du box scanné…" : "Opening scanned box…",
-      } }));
+      setBoxLoading(true);
+      api.getBoxContext(boxId).then((ctx) => {
+        setBoxCtx(ctx);
+      }).catch(() => {
+        window.dispatchEvent(new CustomEvent("farmos:toast", { detail: {
+          severity: "error",
+          message: lang === "fr" ? "Box introuvable." : "Box not found.",
+        } }));
+      }).finally(() => setBoxLoading(false));
       return;
     }
     const norm = String(code).trim().toLowerCase();
@@ -367,7 +373,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
         message: lang === "fr" ? `Code « ${code} » : aucun animal correspondant.` : `Code "${code}": no matching animal.`,
       } }));
     }
-  }, [animals, found, scanning, mode, lang, onNav]);
+  }, [animals, found, boxCtx, boxLoading, scanning, mode, lang, onNav]);
 
   useZxingScanner(videoRef, cam.stream, modeUsesCamera && (mode === "qr" || mode === "scanner"), onCodeRead);
 
@@ -388,7 +394,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
     },
   );
 
-  const reset = () => { setFound(null); setPhoto(null); };
+  const reset = () => { setFound(null); setBoxCtx(null); setPhoto(null); };
 
   return (
     <div style={{ padding: "var(--pad-page)", display: "flex", flexDirection: "column", gap: 14, overflow: "auto", height: "100%" }}>
@@ -427,7 +433,7 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
       </div>
 
       {/* Viewport + result */}
-      {!found && mode !== "manual" && (
+      {!found && !boxCtx && !boxLoading && mode !== "manual" && (
         <>
           {mode === "face" && <FaceStatusBar lang={lang} face={face} onRetry={ensureFaceIndex}/>}
           <CameraViewport
@@ -445,12 +451,20 @@ const Identification = ({ lang, speciesFilter, onNav }) => {
         </>
       )}
 
-      {!found && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => acceptResult(a)}/>}
+      {!found && !boxCtx && !boxLoading && mode === "manual" && <ManualEntry lang={lang} animals={animals} onFound={(a) => acceptResult(a)}/>}
+
+      {boxLoading && (
+        <div style={{ padding: 24, textAlign: "center", color: "var(--fg-3)", fontSize: 13 }}>
+          {lang === "fr" ? "Chargement du box…" : "Loading box…"}
+        </div>
+      )}
+
+      {boxCtx && <BoxResultCard lang={lang} ctx={boxCtx} onClose={reset} onNav={onNav}/>}
 
       {found && <ResultCard lang={lang} animal={found} method={mode} onClose={reset} onNav={onNav}/>}
 
       {/* Recent identifications */}
-      {!found && (
+      {!found && !boxCtx && !boxLoading && (
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <div className="overline">{lang === "fr" ? `Récents · ${recent.length}` : `Recent · ${recent.length}`}</div>
@@ -888,6 +902,106 @@ const ManualEntry = ({ lang, animals, onFound }) => {
 };
 
 // ─── Result card (after identification) ──────────────────────────────────
+// BoxResultCard — affiche le contexte complet d'un box scanné (nom, ferme ·
+// zone · bâtiment, occupation, animaux dedans) directement dans l'écran
+// Identification, sans naviguer vers l'écran Bâtiments.
+const BoxResultCard = ({ lang, ctx, onClose, onNav }) => {
+  const { box, building, zone, farm, animals = [], heads } = ctx || {};
+  const location = [farm?.name, zone?.name, building?.name].filter(Boolean).join(" · ") || "—";
+  const capacity = box?.capacity != null ? Number(box.capacity) : null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Success banner */}
+      <div style={{
+        background: "linear-gradient(135deg, var(--sage-700) 0%, var(--sage-900) 100%)",
+        color: "var(--bone-50)", borderRadius: 14, padding: "14px 18px",
+        display: "flex", alignItems: "center", gap: 12,
+        boxShadow: "0 6px 16px -4px rgba(46,92,66,0.32)",
+      }}>
+        <div style={{ width: 36, height: 36, borderRadius: 999, background: "rgba(255,255,255,0.18)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="check" size={18} color="#FBF8F2"/>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.7)" }}>
+            {lang === "fr" ? "Box scanné" : "Scanned box"}
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em", marginTop: 1 }}>
+            {lang === "fr" ? "Box " : "Box "}{box?.name}
+          </div>
+        </div>
+        <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 999, border: 0, background: "rgba(255,255,255,0.15)", color: "var(--bone-50)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="x" size={14} color="currentColor"/>
+        </button>
+      </div>
+
+      {/* Box card */}
+      <div className="card" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--ink-950)" }}>
+            {box?.name ? `Box ${box.name}` : "—"}
+          </div>
+          <div style={{ fontSize: 13, color: "var(--fg-2)", marginTop: 2 }}>{location}</div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span className="tag">
+            <Icon name="users" size={11} color="currentColor"/>
+            {heads ?? 0}{capacity != null ? `/${capacity}` : ""} {lang === "fr" ? "têtes" : "heads"}
+          </span>
+          {box?.section && <span className="tag">{box.section}</span>}
+        </div>
+
+        {box?.notes && (
+          <div style={{ fontSize: 12.5, color: "var(--fg-2)", background: "var(--bg-sunken)", borderRadius: 8, padding: "8px 10px" }}>
+            {box.notes}
+          </div>
+        )}
+
+        <div>
+          <div className="overline" style={{ marginBottom: 6 }}>
+            {lang === "fr" ? `Animaux dans ce box · ${animals.length}` : `Animals in this box · ${animals.length}`}
+          </div>
+          {animals.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: "var(--fg-3)", padding: 12, textAlign: "center", background: "var(--bg-sunken)", borderRadius: 8 }}>
+              {lang === "fr" ? "Aucun animal dans ce box." : "No animals in this box."}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {animals.map((a) => {
+                const sp = speciesById(a.species) || { glyph: null, accent: "var(--ink-700)", accentBg: "var(--bg-sunken)" };
+                return (
+                  <div key={a.id} className="card" style={{
+                    padding: "10px 14px", display: "flex", alignItems: "center", gap: 12,
+                    border: "1px solid var(--border-1)", background: "var(--paper)",
+                  }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: sp.accentBg, color: sp.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <AnimalGlyph kind={sp.glyph} size={20} color="currentColor"/>
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--ink-900)", letterSpacing: "-0.01em" }}>{a.name || a.externalId || a.id}</div>
+                      <div className="mono" style={{ fontSize: 11, color: "var(--fg-3)", marginTop: 1 }}>{a.externalId || a.id}</div>
+                    </div>
+                    {a.count > 1 && <span className="tag" style={{ fontSize: 10.5 }}>×{a.count}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {building && onNav && (
+          <button className="btn btn-sm btn-ghost" style={{ justifyContent: "center" }}
+            onClick={() => { window.dispatchEvent(new CustomEvent("farmos:open-box", { detail: { boxId: box.id } })); onNav("buildings"); }}>
+            <Icon name="eye" size={13} color="var(--ink-700)"/>
+            {lang === "fr" ? "Voir le plan du bâtiment" : "View building plan"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const ResultCard = ({ lang, animal, method, onClose, onNav }) => {
   const sp = speciesById(animal.species);
   const statusColor = animal.status === "healthy" ? "var(--sage-500)" : animal.status === "treatment" ? "var(--wheat-500)" : "var(--rust-700)";
