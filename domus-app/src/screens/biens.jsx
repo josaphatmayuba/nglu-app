@@ -825,6 +825,14 @@ function PropertyModal({ value, busy, error, currencyOptions = [], defaultCurren
             <DomusPropertyField label="Places de parking" type="number" value={form.parkingSpaces} onChange={(parkingSpaces) => set({ parkingSpaces })} />
           </div>
           <DomusPropertyField label="Description" value={form.description} onChange={(description) => set({ description })} placeholder="Notes, equipements, particularites du bien..." textarea />
+          <label className="domus-checkbox-row">
+            <input
+              type="checkbox"
+              checked={!!form.availableForBooking}
+              onChange={(e) => set({ availableForBooking: e.target.checked })}
+            />
+            <span>Visible sur la page publique de reservation</span>
+          </label>
         </FormSection>
 
         <FormSection icon={<Wallet size={14} />} title="Informations financieres">
@@ -988,6 +996,14 @@ function UnitModal({ value, properties, currencyOptions = [], defaultCurrencyId 
         <Field label="Equipements" value={form.amenities} onChange={(amenities) => setForm({ ...form, amenities })} />
         <Field label="Description" value={form.description} onChange={(description) => setForm({ ...form, description })} />
       </div>
+      <label className="domus-checkbox-row">
+        <input
+          type="checkbox"
+          checked={!!form.availableForBooking}
+          onChange={(e) => setForm({ ...form, availableForBooking: e.target.checked })}
+        />
+        <span>Visible sur la page publique de reservation</span>
+      </label>
       {error && <div className="api-error">{error}</div>}
       <ModalActions busy={busy} onClose={onClose} onSave={() => onSave(form)} disabled={!form.propertyId || !form.name} />
     </Modal>

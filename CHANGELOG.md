@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.138.1)
+- **SCRUM — Domus : case "Visible sur la page publique de réservation" sur chaque unité et propriété**. Migration 0195 ajoute `available_for_booking` (tinyint, défaut 0) sur `real_estate_units` et `real_estate_properties`. Le catalogue public (`/public/stays`) ne retourne plus que les biens/unités cochés. La page publique n'affiche plus l'adresse : elle montre le groupe immobilier (en gras) suivi du nom/numéro de l'unité. `backend2/drizzle/0195_unit_property_available_for_booking.sql`, `backend2/src/database/schema.ts`, `backend2/src/property-management/dto/property-management.dto.ts`, `backend2/src/property-management/property-management.service.ts`, `domus-app/src/screens/biens.jsx`, `domus-app/src/screens/public-reservations.jsx`, `domus-app/src/styles/app.css`.
+
 ### Added (3.138.0)
 - **SCRUM — Domus réservations : tarif journalier mensuel/30 + coupons côté app**. L'écran Réservations calcule désormais le tarif suggéré à partir du loyer mensuel (`monthlyRent` d'unité ou `defaultRent` du bien) divisé par 30, tout en laissant le tarif éditable au moment de réserver. Ajout d'un champ coupon dans la fiche de réservation et la réservation rapide : validation du code via l'API, aperçu brut/remise/net, puis envoi du `couponCode` pour stocker le total net et `discountAmount` côté backend. Ajout d'un onglet **Coupons** avec liste, création, modification et désactivation des codes actifs. Le check-out affiche le récap net, sans changer la logique comptable. **Vérifié** : `npm.cmd run build` Domus OK. `domus-app/src/api.js`, `domus-app/src/screens/reservations.jsx`, `domus-app/src/styles/app.css`.
 

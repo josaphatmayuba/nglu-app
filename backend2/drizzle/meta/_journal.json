@@ -1191,6 +1191,13 @@
                         "when":  1780624800000,
                         "tag":  "0194_real_estate_photo_units",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  170,
+                        "version":  "5",
+                        "when":  1780628400000,
+                        "tag":  "0195_unit_property_available_for_booking",
+                        "breakpoints":  true
                     }
                 ]
 }

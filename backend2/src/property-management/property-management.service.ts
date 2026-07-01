@@ -655,6 +655,7 @@ export class PropertyManagementService {
         defaultRent: realEstateProperties.defaultRent,
         currencyId: realEstateProperties.currencyId,
         description: realEstateProperties.description,
+        availableForBooking: realEstateProperties.availableForBooking,
         createdAt: realEstateProperties.createdAt,
         updatedAt: realEstateProperties.updatedAt,
         unitsCount: sql<number>`count(${realEstateUnits.id})`,
@@ -839,13 +840,14 @@ export class PropertyManagementService {
       }
     }
 
+    const bookableUnits = units.filter((unit) => Number(unit.availableForBooking) === 1);
     const propsWithUnits = new Set(units.map((unit) => Number(unit.propertyId)));
     const propertyById = new Map(properties.map((property) => [Number(property.id), property]));
     const stays = [
       ...properties
-        .filter((property) => !propsWithUnits.has(Number(property.id)))
+        .filter((property) => !propsWithUnits.has(Number(property.id)) && Number(property.availableForBooking) === 1)
         .map((property) => this.publicStayFromProperty(property, photosByProperty.get(Number(property.id)) || [], setting?.currencyId as number | null | undefined)),
-      ...units.map((unit) => {
+      ...bookableUnits.map((unit) => {
         const property = propertyById.get(Number(unit.propertyId));
         return this.publicStayFromUnit(unit, property, photosByUnit.get(Number(unit.id)) || [], setting?.currencyId as number | null | undefined);
       }),
@@ -1063,6 +1065,7 @@ export class PropertyManagementService {
       defaultRent: this.money(input.defaultRent),
       currencyId,
       description: input.description ?? null,
+      availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1095,6 +1098,7 @@ export class PropertyManagementService {
         ]),
         ...(input.marketValue !== undefined ? { marketValue: this.money(input.marketValue) } : {}),
         ...(input.defaultRent !== undefined ? { defaultRent: this.money(input.defaultRent) } : {}),
+        ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
       .where(and(eq(realEstateProperties.id, id), eq(realEstateProperties.organizationId, orgId)));
@@ -1154,6 +1158,7 @@ export class PropertyManagementService {
         securityDeposit: realEstateUnits.securityDeposit,
         amenities: realEstateUnits.amenities,
         description: realEstateUnits.description,
+        availableForBooking: realEstateUnits.availableForBooking,
         propertyName: realEstateProperties.name,
         propertyAddress: realEstateProperties.address,
         propertyIsActive: realEstateProperties.isActive,
@@ -1192,6 +1197,7 @@ export class PropertyManagementService {
       securityDeposit: this.money(input.securityDeposit),
       amenities: input.amenities ?? null,
       description: input.description ?? null,
+      availableForBooking: input.availableForBooking ? 1 : 0,
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     });
@@ -1223,6 +1229,7 @@ export class PropertyManagementService {
           "amenities",
           "description",
         ]),
+        ...(input.availableForBooking !== undefined ? { availableForBooking: input.availableForBooking ? 1 : 0 } : {}),
         ...(input.area !== undefined ? { area: this.money(input.area) } : {}),
         ...(input.monthlyRent !== undefined ? { monthlyRent: this.money(input.monthlyRent) } : {}),
         ...(input.securityDeposit !== undefined ? { securityDeposit: this.money(input.securityDeposit) } : {}),

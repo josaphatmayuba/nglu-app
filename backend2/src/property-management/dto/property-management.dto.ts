@@ -91,6 +91,12 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({ example: false, description: "Afficher dans la page publique de reservation" })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  availableForBooking?: boolean;
 }
 
 export class UpdatePropertyDto extends PartialType(CreatePropertyDto) {}
@@ -173,6 +179,12 @@ export class CreateUnitDto {
   @IsOptional()
   @IsString()
   description?: string | null;
+
+  @ApiPropertyOptional({ example: false, description: "Afficher dans la page publique de reservation" })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  availableForBooking?: boolean;
 }
 
 export class UpdateUnitDto extends PartialType(CreateUnitDto) {}

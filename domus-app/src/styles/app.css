@@ -503,6 +503,9 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-money-input input { padding:0 12px; }
 .domus-money-input select { border-left:1px solid #e4e4e7; color:#4f46e5; font-weight:800; padding:0 8px; text-align:center; }
 .domus-money-input input:focus, .domus-money-input select:focus { border:0; box-shadow:none; }
+.domus-checkbox-row { align-items:center; cursor:pointer; display:flex; gap:10px; padding:2px 0; }
+.domus-checkbox-row input[type=checkbox] { accent-color:#4f46e5; cursor:pointer; height:16px; width:16px; flex:none; }
+.domus-checkbox-row span { color:#3f3f46; font-size:13px; font-weight:500; }
 .domus-radio-cards { display:grid; gap:8px; grid-template-columns:repeat(3,minmax(0,1fr)); }
 .domus-radio-cards button { align-items:center; background:#fff; border:1px solid #e4e4e7; border-radius:8px; color:#3f3f46; cursor:pointer; display:flex; font:500 13px 'Inter',sans-serif; gap:10px; height:44px; padding:0 14px; transition:border-color .15s, box-shadow .15s, background .15s; }
 .domus-radio-cards button:hover { background:#fafafa; border-color:#c7d2fe; }
@@ -1405,6 +1408,7 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .public-stay-title h2 { font-size:16px; line-height:1.25; margin:0; }
 .public-stay-title b { font-size:13px; white-space:nowrap; }
 .public-stay-body p { display:flex; align-items:center; gap:5px; color:#64748b; font-size:13px; margin:0; }
+.public-stay-location { color:#64748b; font-size:13px; margin:0; }
 .public-stay-specs { display:flex; flex-wrap:wrap; gap:10px; color:#475569; font-size:12.5px; }
 .public-stay-specs span { display:inline-flex; align-items:center; gap:4px; }
 .public-empty, .public-state { max-width:520px; margin:12vh auto 0; background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:28px; text-align:center; color:#475569; }

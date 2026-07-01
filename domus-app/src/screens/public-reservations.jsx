@@ -11,7 +11,6 @@ import {
   KeyRound,
   Loader2,
   Mail,
-  MapPin,
   Phone,
   Search,
   ShieldCheck,
@@ -181,7 +180,7 @@ function PublicStayCard({ stay, currency, onOpen }) {
           <h2>{stay.title}</h2>
           <b>{money(stay.dailyRate, symbol)} / jour</b>
         </div>
-        <p><MapPin size={14} /> {stay.address}</p>
+        <p className="public-stay-location">{stay.unitId ? <><strong>{stay.propertyName}</strong> &middot; {stay.title}</> : stay.propertyName}</p>
         <div className="public-stay-specs">
           {stay.bedrooms > 0 && <span><BedDouble size={15} /> {stay.bedrooms} ch.</span>}
           {stay.bathrooms > 0 && <span><Bath size={15} /> {stay.bathrooms} sdb</span>}
@@ -203,7 +202,7 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
       <section className="public-detail-head">
         <div>
           <h1>{stay.title}</h1>
-          <p><MapPin size={16} /> {stay.address}</p>
+          <p className="public-stay-location">{stay.unitId ? <><strong>{stay.propertyName}</strong> &middot; {stay.title}</> : stay.propertyName}</p>
         </div>
         <div className="public-detail-price">
           <b>{money(stay.dailyRate, symbol)}</b>
