@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.5)
+- **Domus : i18n FR/EN — écran Prévisionnel traduit** — traduction du 6e écran (`forecast.jsx`, 28 chaînes) : horizons/hypothèses/simulation, titres, messages calcul/erreur, labels KPI, détail mensuel, suivi prévu vs réel. Dictionnaire EN étendu. Reste 12 écrans (~8724 lignes) à traduire.
+
 ### Added (3.140.4)
 - **Domus : i18n FR/EN — écran Signature du bailleur traduit** — traduction du 5e écran (`landlordSignature.jsx`, 18 chaînes) : titres, descriptions, libellés de boutons, messages de confirmation et d'erreur, formats de fichier. Dictionnaire EN étendu. Reste 13 écrans (~9735 lignes) à traduire.
 
