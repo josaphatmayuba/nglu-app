@@ -24,29 +24,30 @@ import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
+import { t, tf } from "../i18n.js";
 
 const VIEWS = [
-  { key: "kanban", label: "Kanban", icon: Columns3 },
-  { key: "list", label: "Liste", icon: List },
-  { key: "table", label: "Tableau", icon: Table2 },
-  { key: "calendar", label: "Calendrier", icon: CalendarRange },
+  { key: "kanban", label: t("Kanban"), icon: Columns3 },
+  { key: "list", label: t("Liste"), icon: List },
+  { key: "table", label: t("Tableau"), icon: Table2 },
+  { key: "calendar", label: t("Calendrier"), icon: CalendarRange },
 ];
 
 const COLUMNS = [
-  { key: "open", label: "Ouvert", accent: "#ef4444" },
-  { key: "in_progress", label: "En cours", accent: "#f59e0b" },
-  { key: "done", label: "Resolu", accent: "#10b981" },
+  { key: "open", label: t("Ouvert"), accent: "#ef4444" },
+  { key: "in_progress", label: t("En cours"), accent: "#f59e0b" },
+  { key: "done", label: t("Resolu"), accent: "#10b981" },
 ];
 
 const STATUS_LABEL = {
-  open: "Ouvert",
-  in_progress: "En cours",
-  done: "Resolu",
-  resolved: "Resolu",
-  closed: "Cloture",
+  open: t("Ouvert"),
+  in_progress: t("En cours"),
+  done: t("Resolu"),
+  resolved: t("Resolu"),
+  closed: t("Cloture"),
 };
 const NEXT_STATUS = { open: "in_progress", in_progress: "done" };
-const PRIORITY_LABEL = { urgent: "Urgent", high: "Urgent", medium: "Moyen", low: "Bas" };
+const PRIORITY_LABEL = { urgent: t("Urgent"), high: t("Urgent"), medium: t("Moyen"), low: t("Bas") };
 const PRIORITY_CLASS = { urgent: "chip-rose", high: "chip-rose", medium: "chip-amber", low: "chip-ink" };
 
 const emptyTicket = {
@@ -204,10 +205,10 @@ export function Maintenance() {
   }, [tickets, costSymbol]);
 
   const filterChips = [
-    { key: "all", label: "Tous", count: tickets.length },
-    { key: "urgent", label: "Urgent", count: urgentTickets.length },
-    { key: "in_progress", label: "En cours", count: inProgressTickets.length },
-    { key: "done", label: "Resolus", count: doneTickets.length },
+    { key: "all", label: t("Tous"), count: tickets.length },
+    { key: "urgent", label: t("Urgent"), count: urgentTickets.length },
+    { key: "in_progress", label: t("En cours"), count: inProgressTickets.length },
+    { key: "done", label: t("Resolus"), count: doneTickets.length },
   ];
 
   const setViewAndStore = (next) => {
@@ -234,7 +235,7 @@ export function Maintenance() {
         currencyId: toId(form.currencyId) ?? null,
         description: form.description?.trim() || null,
       };
-      if (!payload.title || !payload.propertyId) throw new Error("Titre et bien obligatoires.");
+      if (!payload.title || !payload.propertyId) throw new Error(t("Titre et bien obligatoires."));
       if (form.id) await api.updateMaintenance(form.id, payload);
       else await api.createMaintenance(payload);
       setTicketModal(null);
@@ -247,7 +248,7 @@ export function Maintenance() {
   };
 
   const deleteTicket = async (ticket) => {
-    if (!window.confirm(`Supprimer le ticket "${ticket.title}" ?`)) return;
+    if (!window.confirm(tf(t("Supprimer le ticket {title} ?"), {title: ticket.title}))) return;
     setBusyId(ticket.id);
     setActionError("");
     try {
@@ -293,7 +294,7 @@ export function Maintenance() {
         paymentDate: form.paymentDate || undefined,
         notes: form.notes?.trim() || undefined,
       };
-      if (!payload.description || !payload.amount) throw new Error("Description et montant obligatoires.");
+      if (!payload.description || !payload.amount) throw new Error(t("Description et montant obligatoires."));
       await api.addMaintenanceCost(ticket.id, payload);
       setCostModal(null);
       await maintenanceApi.reload();
@@ -311,26 +312,26 @@ export function Maintenance() {
     <>
       <div className="immo-header">
         <div>
-          <h1>Maintenance</h1>
-          <p>Interventions, tickets et couts</p>
+          <h1>{t("Maintenance")}</h1>
+          <p>{t("Interventions, tickets et couts")}</p>
         </div>
         <div className="immo-header-actions">
           <label className="immo-search">
             <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ticket, unite, locataire..." />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Ticket, unite, locataire...")} />
           </label>
-          <button className="immo-btn" onClick={() => setViewAndStore("calendar")}><CalendarDays size={16} /> Planning</button>
+          <button className="immo-btn" onClick={() => setViewAndStore("calendar")}><CalendarDays size={16} /> {t("Planning")}</button>
           <button className="immo-btn primary" onClick={() => setTicketModal({ ...emptyTicket, currencyId: currency.defaultCurrencyId || "" })}>
-            <Plus size={16} /> Ticket
+            <Plus size={16} /> {t("Ticket")}
           </button>
         </div>
       </div>
 
       <div className="immo-metrics-grid">
-        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label="Tickets ouverts" value={openTickets.length} />
-        <Metric icon={<AlertTriangle size={20} />} tone="immo-tone-red" label="Urgents" value={urgentTickets.length} danger />
-        <Metric icon={<Columns3 size={20} />} tone="immo-tone-brand" label="En cours" value={inProgressTickets.length} />
-        <Metric icon={<CheckCircle2 size={20} />} tone="immo-tone-green" label="Termines" value={doneTickets.length} success />
+        <Metric icon={<Wrench size={20} />} tone="immo-tone-amber" label={t("Tickets ouverts")} value={openTickets.length} />
+        <Metric icon={<AlertTriangle size={20} />} tone="immo-tone-red" label={t("Urgents")} value={urgentTickets.length} danger />
+        <Metric icon={<Columns3 size={20} />} tone="immo-tone-brand" label={t("En cours")} value={inProgressTickets.length} />
+        <Metric icon={<CheckCircle2 size={20} />} tone="immo-tone-green" label={t("Termines")} value={doneTickets.length} success />
       </div>
 
       <div className="maintenance-toolbar">
@@ -402,13 +403,13 @@ export function Maintenance() {
       {view === "calendar" && <CalendarView tickets={filtered} onOpen={(ticket) => setTicketModal(ticketToForm(ticket, currency.defaultCurrencyId))} />}
 
       <div className="card ops-panel maintenance-summary-card">
-        <div className="panel-title">Priorites</div>
+        <div className="panel-title">{t("Priorites")}</div>
         {costTotalsByCurrency.length === 0
-          ? <div className="ops-score"><span>Cout estime total</span><b>{money(0, currency.defaultCurrencySymbol)}</b></div>
+          ? <div className="ops-score"><span>{t("Cout estime total")}</span><b>{money(0, currency.defaultCurrencySymbol)}</b></div>
           : costTotalsByCurrency.map((c) => (
               <div className="ops-score" key={c.symbol}>
-                <span>Couts {c.symbol}</span>
-                <b>{money(c.estimated, c.symbol)} estimé{c.spent > 0 ? ` · ${money(c.spent, c.symbol)} dépensé` : ""}</b>
+                <span>{tf("Couts {sym}", {sym: c.symbol})}</span>
+                <b>{money(c.estimated, c.symbol)} {t("estimé")}{c.spent > 0 ? ` · ${money(c.spent, c.symbol)} ${t("dépensé")}` : ""}</b>
               </div>
             ))}
         <div className="ops-track"><span style={{ width: `${Math.min(100, urgentTickets.length * 20)}%` }} /></div>
@@ -416,7 +417,7 @@ export function Maintenance() {
           {urgentTickets.slice(0, 3).map((ticket, index) => (
             <div key={ticket.id}><b>{index + 1}</b><span>{ticket.title}</span></div>
           ))}
-          {urgentTickets.length === 0 && <div><b>0</b><span>Aucun ticket urgent</span></div>}
+          {urgentTickets.length === 0 && <div><b>0</b><span>{t("Aucun ticket urgent")}</span></div>}
         </div>
       </div>
 
@@ -489,7 +490,7 @@ function KanbanView({ tickets, busyId, menuId, setMenuId, onAdvance, onStatusCha
                   onMove={(status) => onStatusChange(ticket, status)}
                 />
               ))}
-              {items.length === 0 && <div className="maintenance-empty-col">Aucun ticket</div>}
+              {items.length === 0 && <div className="maintenance-empty-col">{t("Aucun ticket")}</div>}
             </div>
           </section>
         );
@@ -527,16 +528,16 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
       <p>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</p>
       {!compact && ticket.description && <p className="maintenance-description">{ticket.description}</p>}
       <div className="ticket-meta">
-        <span><User size={14} /> {assignee || "Non assigne"}</span>
+        <span><User size={14} /> {assignee || t("Non assigne")}</span>
         <span><CalendarDays size={14} /> {compactDate(ticketDate(ticket))}</span>
         {Number(ticket.estimatedCost || 0) > 0 && <span><Wrench size={14} /> {money(ticket.estimatedCost, sym)}</span>}
         {spent.map((e) => (
-          <span key={e.symbol} title="Coût réel déjà dépensé"><CircleDollarSign size={14} /> {money(e.amount, e.symbol)} dépensé</span>
+          <span key={e.symbol} title={t("Coût réel déjà dépensé")}><CircleDollarSign size={14} /> {money(e.amount, e.symbol)} {t("dépensé")}</span>
         ))}
       </div>
       {next && (
         <button className="immo-btn maintenance-next" disabled={busy} onClick={() => onAdvance(ticket)}>
-          {busy ? "..." : `Passer a ${STATUS_LABEL[next]}`}
+          {busy ? "..." : tf(t("Passer a {status}"), {status: STATUS_LABEL[next]})}
         </button>
       )}
     </article>
@@ -546,18 +547,18 @@ function TicketCard({ ticket, compact = false, busy, menuOpen, costSymbol, onMen
 function ActionMenu({ open, onToggle, onEdit, onDelete, onCost, onMove }) {
   return (
     <span className="maintenance-menu">
-      <button type="button" className="maintenance-menu-btn" onClick={(e) => { e.stopPropagation(); onToggle?.(); }} aria-label="Actions du ticket">
+      <button type="button" className="maintenance-menu-btn" onClick={(e) => { e.stopPropagation(); onToggle?.(); }} aria-label={t("Actions du ticket")}>
         <MoreHorizontal size={16} />
       </button>
       {open && (
         <div className="maintenance-menu-pop">
-          <button type="button" onClick={() => onCost?.("view")}><Eye size={14} /> Voir les couts</button>
-          <button type="button" onClick={() => onCost?.("add")}><CircleDollarSign size={14} /> Enregistrer un cout</button>
-          <button type="button" onClick={onEdit}><Pencil size={14} /> Modifier</button>
-          {onMove && <button type="button" onClick={() => onMove("open")}>Mettre ouvert</button>}
-          {onMove && <button type="button" onClick={() => onMove("in_progress")}>Mettre en cours</button>}
-          {onMove && <button type="button" onClick={() => onMove("done")}>Marquer resolu</button>}
-          <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} /> Supprimer</button>
+          <button type="button" onClick={() => onCost?.("view")}><Eye size={14} /> {t("Voir les couts")}</button>
+          <button type="button" onClick={() => onCost?.("add")}><CircleDollarSign size={14} /> {t("Enregistrer un cout")}</button>
+          <button type="button" onClick={onEdit}><Pencil size={14} /> {t("Modifier")}</button>
+          {onMove && <button type="button" onClick={() => onMove("open")}>{t("Mettre ouvert")}</button>}
+          {onMove && <button type="button" onClick={() => onMove("in_progress")}>{t("Mettre en cours")}</button>}
+          {onMove && <button type="button" onClick={() => onMove("done")}>{t("Marquer resolu")}</button>}
+          <button type="button" className="danger" onClick={onDelete}><Trash2 size={14} /> {t("Supprimer")}</button>
         </div>
       )}
     </span>
@@ -570,7 +571,7 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
     <div className="card" style={{ overflowX: "auto" }}>
       <table className="tbl" style={{ width: "100%", minWidth: 860 }}>
         <thead>
-          <tr><th>Ticket</th><th>Bien</th><th>Priorite</th><th>Statut</th><th>Assigne</th><th>Date</th><th className="r">Cout estime</th><th className="r">Depense</th><th></th></tr>
+          <tr><th>{t("Ticket")}</th><th>{t("Bien")}</th><th>{t("Priorite")}</th><th>{t("Statut")}</th><th>{t("Assigne")}</th><th>{t("Date")}</th><th className="r">{t("Cout estime")}</th><th className="r">{t("Depense")}</th><th></th></tr>
         </thead>
         <tbody>
           {tickets.map((ticket) => {
@@ -582,14 +583,14 @@ function TableView({ tickets, currencySymbol, costSymbol, onEdit, onDelete, onCo
               <td>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</td>
               <td><span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || "Moyen"}</span></td>
               <td>{STATUS_LABEL[ticket.status] || ticket.status}</td>
-              <td>{assigneeName(ticket) || "Non assigne"}</td>
+              <td>{assigneeName(ticket) || t("Non assigne")}</td>
               <td>{compactDate(ticketDate(ticket))}</td>
               <td className="r">{money(ticket.estimatedCost, sym)}</td>
               <td className="r">{spent.length ? spent.map((e) => <div key={e.symbol}>{money(e.amount, e.symbol)}</div>) : <span className="muted">-</span>}</td>
               <td className="r">
-                <button className="immo-link" onClick={() => onCost(ticket, "view")}>Couts</button>
-                <button className="immo-link" onClick={() => onEdit(ticket)}>Modifier</button>
-                <button className="immo-link danger" onClick={() => onDelete(ticket)}>Supprimer</button>
+                <button className="immo-link" onClick={() => onCost(ticket, "view")}>{t("Couts")}</button>
+                <button className="immo-link" onClick={() => onEdit(ticket)}>{t("Modifier")}</button>
+                <button className="immo-link danger" onClick={() => onDelete(ticket)}>{t("Supprimer")}</button>
               </td>
             </tr>
             );
@@ -616,7 +617,7 @@ function CalendarView({ tickets, onOpen }) {
           <div className="panel-title"><CalendarDays size={15} /> {day}</div>
           {grouped[day].map((ticket) => (
             <button type="button" key={ticket.id} onClick={() => onOpen(ticket)}>
-              <span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || "Moyen"}</span>
+              <span className={`chip ${PRIORITY_CLASS[ticket.priority] || "chip-amber"}`}>{PRIORITY_LABEL[ticket.priority] || t("Moyen")}</span>
               <strong>{ticket.title}</strong>
               <small>{ticket.propertyName || "-"}{ticket.unitName ? ` - ${ticket.unitName}` : ""}</small>
             </button>
@@ -628,7 +629,7 @@ function CalendarView({ tickets, onOpen }) {
 }
 
 function EmptyMaintenance() {
-  return <div className="card maintenance-empty">Aucun ticket a afficher pour ce filtre.</div>;
+  return <div className="card maintenance-empty">{t("Aucun ticket a afficher pour ce filtre.")}</div>;
 }
 
 function ticketToForm(ticket, defaultCurrencyId) {
@@ -651,19 +652,19 @@ function TicketModal({ value, properties, units, currencyOptions, defaultCurrenc
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
   const propertyUnits = units.filter((unit) => !form.propertyId || String(unit.propertyId) === String(form.propertyId));
   return (
-    <Modal title={form.id ? "Modifier le ticket" : "Nouveau ticket"} subtitle="Meme flux que le CRM immobilier" icon={<Wrench size={20} />} className="domus-property-modal" onClose={onClose}>
+    <Modal title={form.id ? t("Modifier le ticket") : t("Nouveau ticket")} subtitle={t("Meme flux que le CRM immobilier")} icon={<Wrench size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
-        <FormSection icon={<Wrench size={14} />} title="Intervention">
-          <DomusPropertyField label="Titre" value={form.title} onChange={(title) => set({ title })} required placeholder="ex. Fuite cuisine" />
+        <FormSection icon={<Wrench size={14} />} title={t("Intervention")}>
+          <DomusPropertyField label={t("Titre")} value={form.title} onChange={(title) => set({ title })} required placeholder={t("ex. Fuite cuisine")} />
           <div className="domus-property-form-grid">
-            <DomusPropertySelect label="Bien" value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
-            <DomusPropertySelect label="Unite" value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
-            <DomusPropertySelect label="Priorite" value={form.priority} onChange={(priority) => set({ priority })} options={[["low", "Bas"], ["medium", "Moyen"], ["high", "Urgent"]]} />
-            <DomusPropertySelect label="Statut" value={form.status} onChange={(status) => set({ status })} options={[["open", "Ouvert"], ["in_progress", "En cours"], ["done", "Resolu"]]} />
-            <DomusPropertyField label="Date prevue" type="date" value={form.scheduledDate} onChange={(scheduledDate) => set({ scheduledDate })} />
-            <MoneyField label="Cout estime" value={form.estimatedCost} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(estimatedCost) => set({ estimatedCost })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <DomusPropertySelect label={t("Bien")} value={form.propertyId} required onChange={(propertyId) => set({ propertyId, unitId: "" })} options={properties.map((p) => [String(p.id), p.name])} />
+            <DomusPropertySelect label={t("Unite")} value={form.unitId} onChange={(unitId) => set({ unitId })} options={propertyUnits.map((u) => [String(u.id), `${u.name}${u.propertyName ? ` - ${u.propertyName}` : ""}`])} />
+            <DomusPropertySelect label={t("Priorite")} value={form.priority} onChange={(priority) => set({ priority })} options={[["low", t("Bas")], ["medium", t("Moyen")], ["high", t("Urgent")]]} />
+            <DomusPropertySelect label={t("Statut")} value={form.status} onChange={(status) => set({ status })} options={[["open", t("Ouvert")], ["in_progress", t("En cours")], ["done", t("Resolu")]]} />
+            <DomusPropertyField label={t("Date prevue")} type="date" value={form.scheduledDate} onChange={(scheduledDate) => set({ scheduledDate })} />
+            <MoneyField label={t("Cout estime")} value={form.estimatedCost} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(estimatedCost) => set({ estimatedCost })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
-          <DomusPropertyField label="Description" value={form.description} onChange={(description) => set({ description })} textarea />
+          <DomusPropertyField label={t("Description")} value={form.description} onChange={(description) => set({ description })} textarea />
         </FormSection>
       </div>
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
@@ -686,10 +687,10 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
     return map;
   }, new Map()).entries()];
   return (
-    <Modal title={`Couts - ${ticket.title}`} subtitle={ticket.propertyName || ""} icon={<CircleDollarSign size={20} />} className="domus-property-modal" onClose={onClose}>
+    <Modal title={tf(t("Couts - {title}"), {title: ticket.title})} subtitle={ticket.propertyName || ""} icon={<CircleDollarSign size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
-        <FormSection icon={<Eye size={14} />} title="Couts existants">
-          {costsApi.loading ? <p className="muted">Chargement...</p> : (
+        <FormSection icon={<Eye size={14} />} title={t("Couts existants")}>
+          {costsApi.loading ? <p className="muted">{t("Chargement...")}</p> : (
             <div className="maintenance-cost-list">
               {costs.map((cost) => (
                 <div key={cost.id}>
@@ -697,36 +698,36 @@ function CostModal({ ticket, mode, currencyOptions, defaultCurrencyId, defaultCu
                   <span>{money(cost.amount, costSym(cost))} - {cost.vendorName || cost.type}</span>
                 </div>
               ))}
-              {costs.length === 0 && <p className="muted">Aucun cout enregistre.</p>}
+              {costs.length === 0 && <p className="muted">{t("Aucun cout enregistre.")}</p>}
             </div>
           )}
           {totalsByCur.length === 0
-            ? <div className="ops-score"><span>Total</span><b>{money(0, defaultCurrencySymbol)}</b></div>
+            ? <div className="ops-score"><span>{t("Total")}</span><b>{money(0, defaultCurrencySymbol)}</b></div>
             : totalsByCur.map(([sym, amount]) => (
-                <div className="ops-score" key={sym}><span>Total {sym}</span><b>{money(amount, sym)}</b></div>
+                <div className="ops-score" key={sym}><span>{tf(t("Total {sym}"), {sym})}</span><b>{money(amount, sym)}</b></div>
               ))}
         </FormSection>
         {mode !== "view" && (
-          <FormSection icon={<Plus size={14} />} title="Nouveau cout">
+          <FormSection icon={<Plus size={14} />} title={t("Nouveau cout")}>
             <div className="domus-property-form-grid">
-              <DomusPropertySelect label="Type" value={form.type} onChange={(type) => set({ type })} options={[["service", "Service"], ["labour", "Main d'oeuvre"]]} />
-              <DomusPropertySelect label="Paiement" value={form.paymentMethod} onChange={(paymentMethod) => set({ paymentMethod })} options={[["cash", "Cash"], ["bank", "Banque"], ["mobile_money", "Mobile money"], ["cheque", "Cheque"]]} />
-              <DomusPropertySelect label="Fournisseur" value={form.supplierId} onChange={(supplierId) => {
+              <DomusPropertySelect label={t("Type")} value={form.type} onChange={(type) => set({ type })} options={[["service", t("Service")], ["labour", t("Main d'oeuvre")]]} />
+              <DomusPropertySelect label={t("Paiement")} value={form.paymentMethod} onChange={(paymentMethod) => set({ paymentMethod })} options={[["cash", t("Cash")], ["bank", t("Banque")], ["mobile_money", t("Mobile money")], ["cheque", t("Cheque")]]} />
+              <DomusPropertySelect label={t("Fournisseur")} value={form.supplierId} onChange={(supplierId) => {
                 const opt = supplierOptions.find(([id]) => id === supplierId);
                 set({ supplierId, vendorName: opt ? opt[1].replace(" (personne)", "") : form.vendorName });
-              }} options={[["", "— Aucun / saisir ci-dessous —"], ...supplierOptions]} />
-              <DomusPropertyField label="Fournisseur (texte libre)" value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
-              <DomusPropertyField label="Date paiement" type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
-              <MoneyField label="Montant" value={form.amount} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(amount) => set({ amount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+              }} options={[["", t("— Aucun / saisir ci-dessous —")], ...supplierOptions]} />
+              <DomusPropertyField label={t("Fournisseur (texte libre)")} value={form.vendorName} onChange={(vendorName) => set({ vendorName })} />
+              <DomusPropertyField label={t("Date paiement")} type="date" value={form.paymentDate} onChange={(paymentDate) => set({ paymentDate })} />
+              <MoneyField label={t("Montant")} value={form.amount} currencyId={form.currencyId} currencyOptions={currencyOptions} onAmountChange={(amount) => set({ amount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
             </div>
-            <DomusPropertyField label="Description" value={form.description} onChange={(description) => set({ description })} required />
-            <DomusPropertyField label="Notes" value={form.notes} onChange={(notes) => set({ notes })} textarea />
+            <DomusPropertyField label={t("Description")} value={form.description} onChange={(description) => set({ description })} required />
+            <DomusPropertyField label={t("Notes")} value={form.notes} onChange={(notes) => set({ notes })} textarea />
           </FormSection>
         )}
       </div>
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
       {mode === "view" ? (
-        <div className="modal-actions"><button className="btn" onClick={onClose}>Fermer</button></div>
+        <div className="modal-actions"><button className="btn" onClick={onClose}>{t("Fermer")}</button></div>
       ) : (
         <ModalActions busy={busy} disabled={!form.description || !form.amount} onClose={onClose} onSave={() => onSave(ticket, form)} />
       )}

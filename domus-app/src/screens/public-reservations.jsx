@@ -23,6 +23,7 @@ import {
 import { publicApi } from "../api.js";
 import { cleanCurrencySymbol, money, normalizeCurrencyModule } from "../data.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { t, tf } from "../i18n.js";
 
 const PUBLIC_BASE = "/domus/public";
 
@@ -100,7 +101,7 @@ export function PublicReservationsPage({ routeKey = "" }) {
   if (loading) {
     return (
       <main className="public-stays-page">
-        <div className="public-state"><Loader2 className="domus-spin" size={24} /><span>Chargement des biens...</span></div>
+        <div className="public-state"><Loader2 className="domus-spin" size={24} /><span>{t("Chargement des biens...")}</span></div>
       </main>
     );
   }
@@ -109,9 +110,9 @@ export function PublicReservationsPage({ routeKey = "" }) {
     return (
       <main className="public-stays-page">
         <div className="public-state">
-          <h1>Catalogue indisponible</h1>
+          <h1>{t("Catalogue indisponible")}</h1>
           <p>{error}</p>
-          <button className="public-btn primary" onClick={() => window.location.reload()}>Reessayer</button>
+          <button className="public-btn primary" onClick={() => window.location.reload()}>{t("Reessayer")}</button>
         </div>
       </main>
     );
@@ -126,17 +127,17 @@ export function PublicReservationsPage({ routeKey = "" }) {
         <>
           <section className="public-hero">
             <div>
-              <span className="public-eyebrow"><Sparkles size={14} /> Sejours et baux</span>
-              <h1>Trouvez un bien et reservez en ligne</h1>
-              <p>{catalog?.settings?.tagLine || "Selectionnez un logement, consultez ses photos et envoyez votre demande en quelques minutes."}</p>
+              <span className="public-eyebrow"><Sparkles size={14} /> {t("Sejours et baux")}</span>
+              <h1>{t("Trouvez un bien et reservez en ligne")}</h1>
+              <p>{catalog?.settings?.tagLine || t("Selectionnez un logement, consultez ses photos et envoyez votre demande en quelques minutes.")}</p>
             </div>
             <div className="public-hero-search">
               <label>
                 <Search size={16} />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ville, quartier, type..." />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Ville, quartier, type...")} />
               </label>
               <select value={city} onChange={(e) => setCity(e.target.value)}>
-                <option value="">Toutes les villes</option>
+                <option value="">{t("Toutes les villes")}</option>
                 {cities.map((item) => <option key={item} value={item}>{item}</option>)}
               </select>
             </div>
@@ -145,7 +146,7 @@ export function PublicReservationsPage({ routeKey = "" }) {
             {filtered.map((stay) => (
               <PublicStayCard key={stay.key} stay={stay} currency={currency} onOpen={() => openStay(stay.key)} />
             ))}
-            {!filtered.length && <div className="public-empty">Aucun bien ne correspond a votre recherche.</div>}
+            {!filtered.length && <div className="public-empty">{t("Aucun bien ne correspond a votre recherche.")}</div>}
           </section>
         </>
       )}
@@ -176,20 +177,20 @@ function PublicStayCard({ stay, currency, onOpen }) {
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}>
       <div className="public-stay-media">
         {photo ? <img src={photo.url} alt={stay.title} loading="lazy" /> : <div><ImageOff size={28} /></div>}
-        <span>{stay.unitId ? "Unite" : "Bien entier"}</span>
+        <span>{stay.unitId ? t("Unite") : t("Bien entier")}</span>
       </div>
       <div className="public-stay-body">
         <div className="public-stay-title">
           <h2>{stay.title}</h2>
           <div className="public-stay-prices">
-            <b>{money(stay.dailyRate, symbol)} / jour</b>
-            {stay.monthlyRent > 0 && <span>{money(stay.monthlyRent, symbol)} / mois</span>}
+            <b>{money(stay.dailyRate, symbol)} / {t("jour")}</b>
+            {stay.monthlyRent > 0 && <span>{money(stay.monthlyRent, symbol)} / {t("mois")}</span>}
           </div>
         </div>
         <p className="public-stay-location">{stay.unitId ? <><strong>{stay.propertyName}</strong> &middot; {stay.title}</> : stay.propertyName}</p>
         <div className="public-stay-specs">
-          {stay.bedrooms > 0 && <span><BedDouble size={15} /> {stay.bedrooms} ch.</span>}
-          {stay.bathrooms > 0 && <span><Bath size={15} /> {stay.bathrooms} sdb</span>}
+          {stay.bedrooms > 0 && <span><BedDouble size={15} /> {tf("{n} ch.", {n: stay.bedrooms})}</span>}
+          {stay.bathrooms > 0 && <span><Bath size={15} /> {tf("{n} sdb", {n: stay.bathrooms})}</span>}
           {stay.area > 0 && <span>{Math.round(stay.area)} m2</span>}
         </div>
       </div>
@@ -209,7 +210,7 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
 
   return (
     <>
-      <button className="public-back" onClick={onBack}><ArrowLeft size={17} /> Tous les biens</button>
+      <button className="public-back" onClick={onBack}><ArrowLeft size={17} /> {t("Tous les biens")}</button>
       <section className="public-detail-head">
         <div>
           <h1>{stay.title}</h1>
@@ -217,9 +218,9 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
         </div>
         <div className="public-detail-price">
           <b>{money(stay.dailyRate, symbol)}</b>
-          <span>par jour</span>
+          <span>{t("par jour")}</span>
           {stay.monthlyRent > 0 && (
-            <span className="public-detail-price-monthly">{money(stay.monthlyRent, symbol)} / mois</span>
+            <span className="public-detail-price-monthly">{money(stay.monthlyRent, symbol)} / {t("mois")}</span>
           )}
         </div>
       </section>
@@ -228,7 +229,7 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
           <div className="public-detail-gallery">
             {photo
               ? <img src={photo.url} alt={stay.title} onClick={() => setLightbox(true)} style={{cursor:"zoom-in"}} />
-              : <div><ImageOff size={34} /> Pas de photo</div>}
+              : <div><ImageOff size={34} /> {t("Pas de photo")}</div>}
           </div>
           {photos.length > 1 && (
             <div className="public-thumbs">
@@ -240,16 +241,16 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
             </div>
           )}
           <div className="public-detail-section">
-            <h2>Details du bien</h2>
+            <h2>{t("Details du bien")}</h2>
             <div className="public-feature-grid">
-              <span><Home size={16} /> {stay.type || "Logement"}</span>
-              {stay.bedrooms > 0 && <span><BedDouble size={16} /> {stay.bedrooms} chambre{stay.bedrooms > 1 ? "s" : ""}</span>}
-              {stay.bathrooms > 0 && <span><Bath size={16} /> {stay.bathrooms} salle{stay.bathrooms > 1 ? "s" : ""} de bain</span>}
+              <span><Home size={16} /> {stay.type || t("Logement")}</span>
+              {stay.bedrooms > 0 && <span><BedDouble size={16} /> {tf("{n} chambre{s}", {n: stay.bedrooms, s: stay.bedrooms > 1 ? "s" : ""})}</span>}
+              {stay.bathrooms > 0 && <span><Bath size={16} /> {tf("{n} salle{s} de bain", {n: stay.bathrooms, s: stay.bathrooms > 1 ? "s" : ""})}</span>}
               {stay.area > 0 && <span>{Math.round(stay.area)} m2</span>}
               {stay.unitId && <span><KeyRound size={16} /> {stay.propertyName}</span>}
             </div>
             {stay.description && <p>{stay.description}</p>}
-            {stay.amenities && <p><strong>Equipements :</strong> {stay.amenities}</p>}
+            {stay.amenities && <p><strong>{t("Equipements :")}</strong> {stay.amenities}</p>}
           </div>
         </div>
         <aside className="public-action-panel">
@@ -358,40 +359,40 @@ function PublicBookingForm({ stay, symbol }) {
 
   return (
     <div className="public-panel-card">
-      <h2><CalendarCheck size={18} /> Reserver ce bien</h2>
+      <h2><CalendarCheck size={18} /> {t("Reserver ce bien")}</h2>
       <div className="public-form-grid two">
-        <Field label="Arrivee" type="date" value={form.checkIn} onChange={(checkIn) => set({ checkIn })} />
-        <Field label="Depart" type="date" value={form.checkOut} onChange={(checkOut) => set({ checkOut })} />
+        <Field label={t("Arrivee")} type="date" value={form.checkIn} onChange={(checkIn) => set({ checkIn })} />
+        <Field label={t("Depart")} type="date" value={form.checkOut} onChange={(checkOut) => set({ checkOut })} />
       </div>
-      {datesInvalid && <div className="public-form-error">Le depart doit etre apres l'arrivee.</div>}
+      {datesInvalid && <div className="public-form-error">{t("Le depart doit etre apres l'arrivee.")}</div>}
       {days > 0 && !datesInvalid && (
         <div className="public-total">
-          <div><span>{days} jour{days > 1 ? "s" : ""} x {money(stay.dailyRate, symbol)}</span><b>{money(gross, symbol)}</b></div>
-          {discount > 0 && <div><span>Remise coupon</span><b>-{money(discount, symbol)}</b></div>}
-          <div><span>Total net</span><b>{money(total, symbol)}</b></div>
+          <div><span>{tf("{days} jour{s} x {price}", {days, s: days > 1 ? "s" : "", price: money(stay.dailyRate, symbol)})}</span><b>{money(gross, symbol)}</b></div>
+          {discount > 0 && <div><span>{t("Remise coupon")}</span><b>-{money(discount, symbol)}</b></div>}
+          <div><span>{t("Total net")}</span><b>{money(total, symbol)}</b></div>
         </div>
       )}
       <button className="public-btn" disabled={!form.checkIn || !form.checkOut || datesInvalid} onClick={checkAvailability}>
-        Verifier disponibilite
+        {t("Verifier disponibilite")}
       </button>
-      {availability && <div className={`public-availability ${availability.available ? "ok" : "ko"}`}>{availability.available ? "Disponible sur ces dates" : availability.reason || "Indisponible"}</div>}
-      <Field label="Nom complet" value={form.guestName} onChange={(guestName) => set({ guestName })} placeholder="Votre nom" />
-      <DomusPhoneField label="Telephone" value={form.guestPhone} onChange={(guestPhone) => set({ guestPhone })} />
-      <Field label="Email" type="email" value={form.guestEmail} onChange={(guestEmail) => set({ guestEmail })} placeholder="vous@email.com" />
+      {availability && <div className={`public-availability ${availability.available ? "ok" : "ko"}`}>{availability.available ? t("Disponible sur ces dates") : availability.reason || t("Indisponible")}</div>}
+      <Field label={t("Nom complet")} value={form.guestName} onChange={(guestName) => set({ guestName })} placeholder={t("Votre nom")} />
+      <DomusPhoneField label={t("Telephone")} value={form.guestPhone} onChange={(guestPhone) => set({ guestPhone })} />
+      <Field label={t("Email")} type="email" value={form.guestEmail} onChange={(guestEmail) => set({ guestEmail })} placeholder="vous@email.com" />
       <div className="public-coupon-row">
-        <Field label="Coupon" value={form.couponCode} onChange={(couponCode) => set({ couponCode: couponCode.toUpperCase() })} placeholder="ETE2026" />
-        <button className="public-btn" disabled={!form.couponCode.trim() || gross <= 0} onClick={applyCoupon}>Appliquer</button>
+        <Field label={t("Coupon")} value={form.couponCode} onChange={(couponCode) => set({ couponCode: couponCode.toUpperCase() })} placeholder="ETE2026" />
+        <button className="public-btn" disabled={!form.couponCode.trim() || gross <= 0} onClick={applyCoupon}>{t("Appliquer")}</button>
       </div>
-      {coupon && <div className="public-availability ok">Coupon {coupon.code} : -{money(coupon.discountAmount, symbol)}</div>}
+      {coupon && <div className="public-availability ok">{tf("Coupon {code} : -{amount}", {code: coupon.code, amount: money(coupon.discountAmount, symbol)})}</div>}
       <label className="public-field">
-        <span>Message</span>
-        <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Besoin particulier, heure d'arrivee..." />
+        <span>{t("Message")}</span>
+        <textarea value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder={t("Besoin particulier, heure d'arrivee...")} />
       </label>
       {error && <div className="public-form-error">{error}</div>}
       <button className="public-btn primary wide" disabled={busy || !form.guestName.trim() || !form.checkIn || !form.checkOut || datesInvalid} onClick={submit}>
-        {busy ? "Envoi..." : "Envoyer la reservation"}
+        {busy ? t("Envoi...") : t("Envoyer la reservation")}
       </button>
-      <p className="public-secure"><ShieldCheck size={14} /> Aucun paiement en ligne requis pour envoyer la demande.</p>
+      <p className="public-secure"><ShieldCheck size={14} /> {t("Aucun paiement en ligne requis pour envoyer la demande.")}</p>
     </div>
   );
 }
@@ -430,27 +431,27 @@ function PublicLeaseForm({ stay, settings }) {
     return (
       <div className="public-panel-card success">
         <CheckCircle2 size={24} />
-        <h2>Demande de bail envoyee</h2>
-        <p>{settings?.companyName || "Notre equipe"} vous contactera pour la suite du dossier.</p>
+        <h2>{t("Demande de bail envoyee")}</h2>
+        <p>{settings?.companyName || t("Notre equipe")} {t("vous contactera pour la suite du dossier.")}</p>
       </div>
     );
   }
   return (
     <div className="public-panel-card secondary">
-      <h2><User size={18} /> Demander un bail</h2>
+      <h2><User size={18} /> {t("Demander un bail")}</h2>
       <div className="public-form-grid two">
-        <Field label="Prenom" value={form.firstName} onChange={(firstName) => set({ firstName })} />
-        <Field label="Nom" value={form.lastName} onChange={(lastName) => set({ lastName })} />
+        <Field label={t("Prenom")} value={form.firstName} onChange={(firstName) => set({ firstName })} />
+        <Field label={t("Nom")} value={form.lastName} onChange={(lastName) => set({ lastName })} />
       </div>
-      <DomusPhoneField label="Telephone" value={form.phone} onChange={(phone) => set({ phone })} />
-      <Field label="Email" type="email" value={form.email} onChange={(email) => set({ email })} />
-      <Field label="Date d'entree souhaitee" type="date" value={form.desiredMoveIn} onChange={(desiredMoveIn) => set({ desiredMoveIn })} />
+      <DomusPhoneField label={t("Telephone")} value={form.phone} onChange={(phone) => set({ phone })} />
+      <Field label={t("Email")} type="email" value={form.email} onChange={(email) => set({ email })} />
+      <Field label={t("Date d'entree souhaitee")} type="date" value={form.desiredMoveIn} onChange={(desiredMoveIn) => set({ desiredMoveIn })} />
       <label className="public-field">
-        <span>Message</span>
-        <textarea value={form.message} onChange={(e) => set({ message: e.target.value })} placeholder="Situation, duree souhaitee, questions..." />
+        <span>{t("Message")}</span>
+        <textarea value={form.message} onChange={(e) => set({ message: e.target.value })} placeholder={t("Situation, duree souhaitee, questions...")} />
       </label>
       {error && <div className="public-form-error">{error}</div>}
-      <button className="public-btn wide" disabled={busy} onClick={submit}>{busy ? "Envoi..." : "Envoyer la demande de bail"}</button>
+      <button className="public-btn wide" disabled={busy} onClick={submit}>{busy ? t("Envoi...") : t("Envoyer la demande de bail")}</button>
     </div>
   );
 }

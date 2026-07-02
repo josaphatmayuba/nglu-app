@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.7)
+- **Domus : i18n FR/EN — 3 écrans (Batch 2 restant) traduits** — traduction des 8e, 9e et 10e écrans : `onboarding-public.jsx` (359 lignes, ~37 chaînes : identité, profil civil, contact urgence, situation pro., revenus, historique ménage, messages d'état), `public-reservations.jsx` (470 lignes, ~22 chaînes : catalogue, détails bien, formulaire réservation & bail, messages succ./erreur), `maintenance.jsx` (749 lignes, ~64 chaînes : vues/statuts/priorités, tickets, modales, tableau, calendrier). Dictionnaire EN étendu avec 123 nouvelles clés. Reste 8 écrans (~7100 lignes) à traduire (Batch 3 & 4).
+
 ### Added (3.140.6)
 - **Domus : i18n FR/EN — écran Espace locataire (portail) traduit** — traduction du 7e écran (`portail.jsx`, 18 chaînes) : titre portail, sélecteur locataire, statuts loyer, aide, documents, historique, modal contrat. Dictionnaire EN étendu. Reste 11 écrans (~8276 lignes) à traduire.
 
