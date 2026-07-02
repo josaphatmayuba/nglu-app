@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.141.2)
+- **Domus : impression contrat de bail — corrections et design renforcé** (`domus-app/src/contractUtils.js`, `contractPdf.js`) —
+  - Bouton « Imprimer / PDF » de la popup inopérant (le `onclick` inline était bloqué par la CSP héritée) : le déclenchement de `window.print()` est désormais piloté depuis l'app + impression lancée automatiquement à l'ouverture.
+  - Le bouton « PDF » retélécharge automatiquement un fichier, mais avec le nouveau design (rendu du même HTML via `jsPDF.html`/html2canvas) au lieu de l'ancien texte brut.
+  - « Signature non disponible » n'apparaît plus à l'impression : ligne de signature vierge (pour signature manuscrite).
+  - Design premium des contrats en texte brut (templates DB) : rendu ligne à ligne stylé — titre centré avec double filet or, en-têtes « ARTICLE N : » en petites capitales avec ornement or, lignes BAILLEUR/PRENEUR encadrées, « Fait à … » centré italique. Texte strictement inchangé (décoration CSS uniquement).
+
 ### Changed (3.141.1)
 - **Domus : refonte design de l'impression du contrat de bail** (`domus-app/src/contractUtils.js`) — rendu imprimable A4 « document officiel » : typographie serif (Georgia), palette noir/blanc/or discret (#b08d3e), header centré avec double filet or, styles des articles injectés (titres non coupés en bas de page, orphans/widows, tableaux propres), bloc signatures insécable en bas avec cadres élégants. Contenu du contrat strictement inchangé (design uniquement). Le bouton « PDF » (`contrats.jsx`, `baux.jsx`) ouvre désormais la même vue imprimable (Enregistrer en PDF) au lieu du rendu jsPDF texte brut. (Pas de clé Jira — demandé en session.)
 

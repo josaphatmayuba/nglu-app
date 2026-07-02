@@ -25,8 +25,8 @@ import {
   X,
 } from "lucide-react";
 import { api } from "../api.js";
-import { contractSignaturesHtml } from "../contractPdf.js";
-import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
+import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
+import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } from "../contractUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
 import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -1254,7 +1254,7 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
   setActionError("");
   try {
     const contract = await ensureContract(lease, contractsByLease);
-    openContractPrint(contract);
+    await downloadSignedContractPdf(contract);
     await reload();
   } catch (e) {
     setActionError(e.message || "Impossible de telecharger le contrat.");
