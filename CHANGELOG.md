@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.142.3)
+- **Contrat de bail imprimable : en-tête dédoublonné** (`domus-app/src/contractUtils.js`, `frontend/.../contractPrintTemplate.js`) — « CONTRAT DE BAIL » apparaissait deux fois (en-tête + titre du contenu). L'en-tête ne montre plus que la référence CTR en petite ligne or ; le titre du document vient du contenu du contrat.
+
 ### Changed (3.142.2)
 - **Contrat de bail : design premium partout** —
   - Page publique de signature (`frontend/src/components/propertyManagement/`) : « Télécharger ma copie PDF » utilise désormais le même design notarial que Domus (nouveau module partagé `shared/contractPrintTemplate.js`, rendu jsPDF.html) au lieu de l'ancien PDF texte brut ; `printableSignedContractHtml` aligné sur le même template.

@@ -140,32 +140,12 @@ export const CONTRACT_PRINT_CSS = `
       padding: 9px 22px;
       text-transform: uppercase;
     }
-    .contract-doc .header {
-      border-bottom: 1px solid #1a1a1a;
-      margin-bottom: 8px;
-      padding-bottom: 22px;
-      text-align: center;
-    }
-    .contract-doc .header::after {
-      border-bottom: 3px double #b08d3e;
-      content: "";
-      display: block;
-      margin: 30px auto 0;
-      width: 160px;
-    }
-    .contract-doc .eyebrow {
+    .contract-doc .header { margin-bottom: 4px; text-align: center; }
+    .contract-doc .doc-ref {
       color: #b08d3e;
-      font-size: 11px;
-      font-variant: small-caps;
-      letter-spacing: .35em;
+      font-size: 12px;
+      letter-spacing: .3em;
       text-transform: uppercase;
-    }
-    .contract-doc .header h1 {
-      color: #1a1a1a;
-      font-size: 30px;
-      font-weight: normal;
-      letter-spacing: .06em;
-      margin: 12px 0 16px;
     }
     .contract-doc .contract-content { color: #292524; font-size: 13px; line-height: 1.75; margin-top: 26px; }
     .contract-doc .contract-content p { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
@@ -285,8 +265,7 @@ export function contractPrintBody(contract) {
 
   return `
   <div class="header">
-    <div class="eyebrow">Contrat de bail</div>
-    <h1>${escapeHtml(contractRef(contract))}</h1>
+    <div class="doc-ref">${escapeHtml(contractRef(contract))}</div>
   </div>
   <div class="contract-content">${contractContentHtml(contract?.contractContent || "")}</div>
   <div class="signature">
