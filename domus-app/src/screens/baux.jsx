@@ -28,7 +28,7 @@ import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
 import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } from "../contractUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
-import { money, normalizeCurrencyModule, useApi } from "../data.js";
+import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
@@ -109,7 +109,9 @@ function contractChip(contract, isExpired) {
   }
 }
 
-const fmtDate = (d) => (d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—");
+// timeZone UTC : les dates de bail sont stockées à minuit UTC ; sans ça, un
+// navigateur derrière UTC affiche la veille (03/06 au lieu de 04/06).
+const fmtDate = (d) => (d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "UTC" }) : "—");
 
 export function Baux({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadLeaseModule, []);
@@ -922,8 +924,8 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
     ["Bien", info.propertyLabel],
     ["Debut", fmtDate(info.start)],
     ["Fin", fmtDate(info.end)],
-    ["Loyer", `${money(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
-    ["Depot", money(lease.securityDeposit || 0, lease.currencySymbol || "$")],
+    ["Loyer", `${moneyExact(lease.rentAmount, lease.currencySymbol || "$")}/mois`],
+    ["Depot", moneyExact(lease.securityDeposit || 0, lease.currencySymbol || "$")],
     ["Statut", info.statusText],
   ];
 
@@ -1056,7 +1058,8 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
     ? (hasHtmlMarkup(raw) ? raw : `<pre class="domus-contract-plain">${escapeHtml(raw)}</pre>`)
     : "<p>Aucun contenu de contrat.</p>";
   const statusLabel = (CONTRACT_STATUS[contract.status] || {}).label || contract.status || "Contrat";
-  const canMarkSigned = contract.status !== "signed";
+  // Signé sans preuve attachée (scan supprimé) → on ré-affiche l'import.
+  const canMarkSigned = contract.status !== "signed" || !contract.signedDocumentId;
 
   async function handleMarkSignedManually(e) {
     const file = e.target.files?.[0];

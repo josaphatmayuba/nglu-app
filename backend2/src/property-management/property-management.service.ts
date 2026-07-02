@@ -2820,6 +2820,33 @@ export class PropertyManagementService {
       .update(realEstateLeaseDocuments)
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
       .where(and(eq(realEstateLeaseDocuments.id, documentId), eq(realEstateLeaseDocuments.organizationId, orgId)));
+    // Un contrat peut référencer ce document comme preuve de signature papier
+    // (signedDocumentId) : on détache la référence, sinon l'UI garde un bouton
+    // « Voir le bail signé importé » qui pointe vers un document supprimé (404).
+    const linkedContracts = await this.db
+      .select({ id: realEstateContracts.id })
+      .from(realEstateContracts)
+      .where(and(
+        eq(realEstateContracts.signedDocumentId, documentId),
+        eq(realEstateContracts.organizationId, orgId),
+      ));
+    if (linkedContracts.length) {
+      await this.db
+        .update(realEstateContracts)
+        .set({ signedDocumentId: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(
+          eq(realEstateContracts.signedDocumentId, documentId),
+          eq(realEstateContracts.organizationId, orgId),
+        ));
+      for (const contract of linkedContracts) {
+        await this.realtimeData.publishDataUpdated({
+          entity: "contract",
+          action: "updated",
+          entityId: contract.id,
+          scope: { module: "propertyManagement" },
+        });
+      }
+    }
     return { message: "Document supprime." };
   }
 

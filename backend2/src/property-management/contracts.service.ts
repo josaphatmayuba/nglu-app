@@ -307,7 +307,9 @@ export class ContractsService {
 
     if (!rows.length) throw new NotFoundException("Contract not found.");
     const contract = rows[0];
-    if (contract.status === "signed") {
+    // Contrat déjà signé : on refuse seulement s'il a encore sa preuve attachée.
+    // Si le scan a été supprimé (signedDocumentId détaché), on autorise le ré-import.
+    if (contract.status === "signed" && contract.signedDocumentId) {
       throw new GoneException("This contract has already been signed.");
     }
 

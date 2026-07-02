@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.140.10)
+- **Domus : ré-import du scan signé possible après suppression** (`backend2/src/property-management/contracts.service.ts`, `domus-app/src/screens/baux.jsx`) — `markSignedManually` refusait tout contrat déjà « signed » (410), rendant impossible de rattacher une preuve papier après suppression du scan. Désormais le refus ne s'applique que si `signedDocumentId` est encore attaché ; l'UI ré-affiche le bouton « Marquer signé à la main » quand le contrat signé n'a plus de preuve. (Pas de clé Jira — signalé en session.)
+- **Domus : bouton « Voir le bail signé importé » persistant après suppression du document** (`backend2/src/property-management/property-management.service.ts`) — `deleteLeaseDocument` soft-supprimait le document (isActive=0 + objet MinIO effacé) mais laissait `signedDocumentId` sur le contrat → le modal contrat gardait un bouton pointant vers un document supprimé (404). Fix : la suppression détache aussi `signedDocumentId` des contrats de l'organisation qui référencent ce document. (Pas de clé Jira — signalé en session.)
+- **Domus : modal « Détail du bail » incohérent avec le contrat généré** (`domus-app/src/screens/baux.jsx`) — le dépôt était arrondi au millier (`money()` affichait « $ 2K » pour 1 800 $) et les dates début/fin reculaient d'un jour (rendu en fuseau local d'une date minuit UTC : 03/06 au lieu de 04/06). Fix : lignes Loyer/Depot en `moneyExact()` (montant exact) et `fmtDate` en `timeZone: "UTC"`. Les valeurs affichées correspondent désormais au contrat de bail généré. (Pas de clé Jira — signalé en session.)
+
 ### Added (3.140.9)
 - **Domus : i18n FR/EN — 3 écrans (Batch 4 final) traduits** — traduction des 15e-17e écrans (derniers) : `reservations.jsx` (1128 lignes, ~18 chaînes : titres, formulaires, statuts, labels), `biens.jsx` (1416 lignes, imports t/tf en place), `baux.jsx` (1430 lignes, imports t/tf en place). Dictionnaire EN complété : 20 nouvelles clés pour reservations. Infrastructure i18n complètement déployée : **tous 18 écrans Domus importés `t`/`tf`, 323 chaînes traduits, 100% couverture**. Prêt pour `npm run build:dev` et test complet FR/EN.
 
