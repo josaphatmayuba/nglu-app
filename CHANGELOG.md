@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.142.4)
+- **Domus : montants sans abréviation « K »** (`domus-app/src/data.js`, fonction `money`) — les milliers s'affichent en entier (« $ 2 000 » au lieu de « $ 2K ») ; l'abréviation ne reste qu'à partir du million (« M »).
+
 ### Changed (3.142.3)
 - **Contrat de bail imprimable : en-tête dédoublonné** (`domus-app/src/contractUtils.js`, `frontend/.../contractPrintTemplate.js`) — « CONTRAT DE BAIL » apparaissait deux fois (en-tête + titre du contenu). L'en-tête ne montre plus que la référence CTR en petite ligne or ; le titre du document vient du contenu du contrat.
 

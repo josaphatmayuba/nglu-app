@@ -196,8 +196,8 @@ export function money(n, currency = "CDF") {
   const v = Number(n || 0);
   const symbol = decodeCurrencyText(currency || "CDF").trim() || "CDF";
   if (Math.abs(v) >= 1_000_000) return `${symbol} ${(v / 1_000_000).toFixed(1).replace(".0", "")}M`;
-  if (Math.abs(v) >= 1_000) return `${symbol} ${Math.round(v / 1000)}K`;
-  return `${symbol} ${v.toLocaleString("fr-FR")}`;
+  // Pas d'abréviation K : les milliers s'affichent en entier (ex. « $ 2 000 »).
+  return `${symbol} ${v.toLocaleString("fr-FR", { maximumFractionDigits: Math.abs(v) >= 1_000 ? 0 : 2 })}`;
 }
 
 // Montant complet, sans abréviation (ex. « $ 9 591 450 »). Utilisé pour
