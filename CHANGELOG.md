@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.141.1)
+- **Domus : refonte design de l'impression du contrat de bail** (`domus-app/src/contractUtils.js`) — rendu imprimable A4 « document officiel » : typographie serif (Georgia), palette noir/blanc/or discret (#b08d3e), header centré avec double filet or, styles des articles injectés (titres non coupés en bas de page, orphans/widows, tableaux propres), bloc signatures insécable en bas avec cadres élégants. Contenu du contrat strictement inchangé (design uniquement). Le bouton « PDF » (`contrats.jsx`, `baux.jsx`) ouvre désormais la même vue imprimable (Enregistrer en PDF) au lieu du rendu jsPDF texte brut. (Pas de clé Jira — demandé en session.)
+
 ### Security (3.141.0)
 - **Corrections fuites inter-organisations (multi-tenant)** — audit sécurité. Ajout du filtrage par `organization_id` (`@CurrentOrg`) sur des endpoints qui l'omettaient :
   - `roles` : `update`/`remove`/`deleteMany` isolés par org ; `deleteMany` converti en soft delete (règle projet) au lieu d'un DELETE physique.

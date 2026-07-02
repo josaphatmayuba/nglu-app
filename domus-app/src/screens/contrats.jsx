@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
-import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
   AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef, escapeHtml,
   formatAuditWhen, formatSignedAt, hasHtmlMarkup, openContractPrint, signingUrlFromContract,
@@ -373,7 +372,7 @@ export function Contrats() {
                   <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail)}>
                     <Printer size={14} /> Imprimer
                   </button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail)}>
+                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail)}>
                     <FileCheck size={14} /> PDF
                   </button>
                   {signingLink && (
