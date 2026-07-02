@@ -1247,6 +1247,13 @@
                         "when":  1780902000000,
                         "tag":  "0202_tenant_details_id_number",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  178,
+                        "version":  "5",
+                        "when":  1780905600000,
+                        "tag":  "0203_domus_residential_template_v2",
+                        "breakpoints":  true
                     }
                 ]
 }

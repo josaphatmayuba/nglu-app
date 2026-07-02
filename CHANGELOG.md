@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.145.0)
+- **Domus : modèle de bail résidentiel v2 (loi n°15/025 RDC)** —
+  - Migration `0203_domus_residential_template_v2` : insère un nouveau modèle « Bail résidentiel v2 (RDC, loi 15/025) » (type `residential`, org 1) et l'active en désactivant les anciens modèles résidentiels (guard NOT EXISTS, idempotente).
+  - Contenu : 16 articles — documents requis du preneur + déclaration sur l'honneur, préavis 3 mois, garantie max 3 mois non compensable, échéance le 30 + tolérance jusqu'au 5 + mise en demeure + pénalité 5%/mois + retard répété, charge de syndic forfaitaire, garant/caution solidaire (optionnel), état des lieux, visites d'inspection trimestrielles (préavis 48h), clause résolutoire loi 15/025, enregistrement sous 30 jours, élection de domicile.
+  - Texte fourni par le propriétaire repris verbatim ; seule correction : placeholder `[MONTANT … AVEC DEVICE]` → `[MONTANT … AVEC DEVISE]` (loyer + garantie) pour le remplissage automatique. Les champs garant/occupants (`[NOM DU GARANT]`, `[NUMÉRO]`, `[NOMBRE]`…) restent affichés tels quels, à compléter par le gestionnaire.
+
 ### Added (3.144.0)
 - **Domus : pièce d'identité du locataire (type, numéro, copie scannée)** —
   - Migration `0202_tenant_details_id_number` : colonnes `id_document_type`, `id_number` + référence MinIO (`id_document_bucket/key/mime/name`) sur `tenant_details`.
