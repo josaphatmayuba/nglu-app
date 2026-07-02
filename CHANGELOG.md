@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.4)
+- **Domus : i18n FR/EN — écran Signature du bailleur traduit** — traduction du 5e écran (`landlordSignature.jsx`, 18 chaînes) : titres, descriptions, libellés de boutons, messages de confirmation et d'erreur, formats de fichier. Dictionnaire EN étendu. Reste 13 écrans (~9735 lignes) à traduire.
+
 ### Added (3.140.3)
 - **Domus : infrastructure i18n FR/EN — 4 écrans traduits** — ajout fonction `tf(key, vars)` pour interpolation (placeholders `{x}` au lieu de template strings) dans `domus-app/src/i18n.js`. Traduction de 4 premiers écrans et extension du dictionnaire EN : `placeholder.jsx` (2 chaînes), `carte.jsx` (10 chaînes), `dashboard.jsx` (21 chaînes). Aucune lib i18n externe — extension du pattern maison existant. Reste 14 écrans (~9996 lignes) à traduire dans les sessions futures (`landlordSignature`, `forecast`, `portail`, `onboarding-public`, `public-reservations`, `maintenance`, `contrats`, `reglages`, `loyers`, `locataires`, `reservations`, `biens`, `baux`). `domus-app/src/i18n.js`, `domus-app/src/screens/{placeholder,carte,dashboard}.jsx`.
 

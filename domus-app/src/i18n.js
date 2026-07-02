@@ -102,6 +102,26 @@ const EN = {
   "{n} unité(s) vacante(s)": "{n} vacant unit(s)",
   "{n} occupée(s)": "{n} occupied",
   "Impossible de charger les données": "Failed to load data",
+  // Écran: landlordSignature.jsx
+  "Impossible de lire l'image.": "Failed to read image.",
+  "Aucune signature à enregistrer.": "No signature to save.",
+  "Signature du bailleur enregistrée.": "Landlord signature saved.",
+  "Échec de l'enregistrement.": "Save failed.",
+  "Effacer la signature actuelle ? Le cachet textuel par défaut sera utilisé.": "Clear current signature? The default text stamp will be used.",
+  "Signature effacée.": "Signature cleared.",
+  "Échec.": "Failed.",
+  "Signature du bailleur": "Landlord signature",
+  "Signature par défaut sur tous les contrats (aperçu, impression, PDF). Partagée avec le CRM.": "Default signature on all contracts (preview, print, PDF). Shared with CRM.",
+  "Signature actuelle": "Current signature",
+  "Utilisée sur les contrats signés.": "Used on signed contracts.",
+  "Cachet eIDAS": "eIDAS stamp",
+  "Cachet visuel (non qualifié eIDAS légalement). Valeur probatoire avec horodatage contrat.": "Visual stamp (not legally eIDAS-qualified). Probative value with contract timestamp.",
+  "Effacer le tracé": "Clear drawing",
+  "Texte": "Text",
+  "Police": "Font",
+  "Choisir PNG / JPG": "Choose PNG / JPG",
+  "Aperçu": "Preview",
+  "Enregistrement...": "Saving...",
 };
 
 const DICT = { fr: {}, en: EN };
