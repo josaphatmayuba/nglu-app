@@ -10,7 +10,9 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-password}
       MYSQL_USER: ${DB_USERNAME:-nglu_user}
     ports:
-      - "3306:3306"
+      # Lié à la loopback : accessible seulement depuis l'hôte (SSH tunnel),
+      # jamais depuis Internet. Les conteneurs se parlent via le réseau Docker.
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -41,8 +43,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-nglu_minio}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-nglu_minio_password_change_me}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     networks:
@@ -210,7 +212,8 @@ services:
       PMA_ROOT_PASSWORD: ${DB_PASSWORD:-root}
       PMA_PORT: 3306
     ports:
-      - "8080:80"
+      # Admin DB : jamais exposé sur Internet, accès via tunnel SSH uniquement.
+      - "127.0.0.1:8080:80"
     depends_on:
       - mysql
     networks:

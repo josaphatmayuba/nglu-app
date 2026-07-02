@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.140.11)
+- **Durcissement exposition réseau (audit sécu)** : dans `docker-compose.yml` (socle prod), les ports MySQL (`3306`), MinIO (`9000`/`9001`) et phpMyAdmin (`8080`) sont désormais liés à `127.0.0.1` au lieu de `0.0.0.0` — plus d'écoute sur l'IP publique, accès uniquement via tunnel SSH. Les conteneurs continuent de communiquer par le réseau Docker (`DB_HOST=mysql`), aucune régression fonctionnelle. Sur prod, seul `3306` était réellement exposé (mais filtré par le pare-feu Lightsail) ; ce changement retire la dépendance à cette seule règle de pare-feu (défense en profondeur).
+- **Script de restriction des comptes MySQL** : `scripts/sql/harden_mysql_accounts.sql` (idempotent) pour supprimer `root@%` et basculer `nglu_user@%` vers le sous-réseau Docker. À appliquer manuellement sur DEV et PROD par le propriétaire.
+- **Rappel durcissement MinIO** : mot de passe root MinIO prod à changer (valeur par défaut du compose). À faire côté `.env.prod`.
+
 ### Fixed (3.140.10)
 - **Domus : ré-import du scan signé possible après suppression** (`backend2/src/property-management/contracts.service.ts`, `domus-app/src/screens/baux.jsx`) — `markSignedManually` refusait tout contrat déjà « signed » (410), rendant impossible de rattacher une preuve papier après suppression du scan. Désormais le refus ne s'applique que si `signedDocumentId` est encore attaché ; l'UI ré-affiche le bouton « Marquer signé à la main » quand le contrat signé n'a plus de preuve. (Pas de clé Jira — signalé en session.)
 - **Domus : bouton « Voir le bail signé importé » persistant après suppression du document** (`backend2/src/property-management/property-management.service.ts`) — `deleteLeaseDocument` soft-supprimait le document (isActive=0 + objet MinIO effacé) mais laissait `signedDocumentId` sur le contrat → le modal contrat gardait un bouton pointant vers un document supprimé (404). Fix : la suppression détache aussi `signedDocumentId` des contrats de l'organisation qui référencent ce document. (Pas de clé Jira — signalé en session.)
