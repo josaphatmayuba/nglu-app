@@ -126,11 +126,11 @@ export default function SignContractPage() {
     setSubmitting(false);
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!contract?.signatureData) return;
     try {
       setDownloadingPdf(true);
-      downloadSignedContractPdf(contract);
+      await downloadSignedContractPdf(contract);
     } catch (e) {
       alert("Impossible de generer le PDF. Veuillez reessayer.");
     } finally {

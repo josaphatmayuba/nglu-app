@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  Printer,
   RefreshCw,
   Receipt,
   Search,
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 import { api } from "../api.js";
 import { contractSignaturesHtml, downloadSignedContractPdf } from "../contractPdf.js";
-import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, signingUrlFromContract } from "../contractUtils.js";
+import { CONTRACT_STATUS, escapeHtml, hasHtmlMarkup, openContractPrint, signingUrlFromContract } from "../contractUtils.js";
 import { filterLeases, filterProperties, filterTenants, filterUnits, useDateRange } from "../dateRange.jsx";
 import { money, moneyExact, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -1101,6 +1102,11 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
             </div>
           </div>
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+        </div>
+        <div className="domus-contract-manual-sign">
+          <button type="button" className="immo-btn" onClick={() => openContractPrint(contract)}>
+            <Printer size={15} /> Imprimer
+          </button>
         </div>
         {canMarkSigned && (
           <div className="domus-contract-manual-sign">

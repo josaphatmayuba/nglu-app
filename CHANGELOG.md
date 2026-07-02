@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.142.2)
+- **Contrat de bail : design premium partout** —
+  - Page publique de signature (`frontend/src/components/propertyManagement/`) : « Télécharger ma copie PDF » utilise désormais le même design notarial que Domus (nouveau module partagé `shared/contractPrintTemplate.js`, rendu jsPDF.html) au lieu de l'ancien PDF texte brut ; `printableSignedContractHtml` aligné sur le même template.
+  - Domus (`baux.jsx`) : bouton « Imprimer » ajouté dans le modal d'aperçu du contrat (à côté de « Marquer signé à la main »).
+
 ### Fixed (3.142.1)
 - **Domus : impression/PDF contrat de bail — retouches** (`domus-app/src/contractUtils.js`, `contractPdf.js`) —
   - PDF téléchargé blanc : jsPDF clonait le conteneur avec son offset hors-écran (`left:-12000px`) → contenu dessiné hors page. L'hôte cloné est désormais neutre, l'offset porté par un wrapper non cloné.
