@@ -62,6 +62,9 @@ type CompanyInfo = {
   phone: string | null;
   email: string | null;
   landlordSignature: string | null;
+  // Identité du bailleur (réglages) — prioritaire sur le nom/téléphone de l'entreprise.
+  landlordName: string | null;
+  landlordPhone: string | null;
 };
 
 @Injectable()
@@ -147,9 +150,9 @@ export class ContractsService {
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
 
     return {
-      "NOM COMPLET DU BAILLEUR": company.companyName ?? "",
+      "NOM COMPLET DU BAILLEUR": company.landlordName || company.companyName || "",
       "ADRESSE DU BAILLEUR": company.address ?? "",
-      "TÉLÉPHONE DU BAILLEUR": company.phone ?? "",
+      "TÉLÉPHONE DU BAILLEUR": company.landlordPhone || company.phone || "",
       "EMAIL DU BAILLEUR": company.email ?? "",
       "NOM COMPLET DU PRENEUR": lease.tenantName ?? "",
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
@@ -230,7 +233,7 @@ export class ContractsService {
       }
     }
 
-    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.companyName, createdByName };
+    return { ...rows[0], auditLogs, companyInfo, landlordName: companyInfo.landlordName || companyInfo.companyName, createdByName };
   }
 
   async sendContract(id: number, orgId: number) {
@@ -614,9 +617,9 @@ export class ContractsService {
     const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
-    const landlordName = company.companyName || "[NOM DU BAILLEUR]";
+    const landlordName = company.landlordName || company.companyName || "[NOM DU BAILLEUR]";
     const landlordAddress = company.address || "[ADRESSE DU BAILLEUR]";
-    const landlordPhone = company.phone || "N/A";
+    const landlordPhone = company.landlordPhone || company.phone || "N/A";
     const landlordEmail = company.email || "N/A";
 
     const art = (num: string, title: string, body: string) =>
@@ -782,9 +785,21 @@ export class ContractsService {
       phone: appSettings.phone,
       email: appSettings.email,
       landlordSignature: appSettings.landlordSignature,
+      landlordName: appSettings.landlordName,
+      landlordPhone: appSettings.landlordPhone,
     });
 
-    return (row as CompanyInfo) ?? { companyName: null, address: null, phone: null, email: null, landlordSignature: null };
+    return (
+      (row as CompanyInfo) ?? {
+        companyName: null,
+        address: null,
+        phone: null,
+        email: null,
+        landlordSignature: null,
+        landlordName: null,
+        landlordPhone: null,
+      }
+    );
   }
 
   private formatDate(value: Date | string | null | undefined) {

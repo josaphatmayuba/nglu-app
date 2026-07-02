@@ -1848,6 +1848,9 @@ export const appSettings = mysqlTable("appSetting", {
   footer: text("footer"),
   logo: varchar("logo", { length: 255 }),
   landlordSignature: text("landlord_signature"),
+  // Identité du bailleur pour les contrats — distincte du nom de l'entreprise.
+  landlordName: varchar("landlord_name", { length: 255 }),
+  landlordPhone: varchar("landlord_phone", { length: 50 }),
   currencyId: bigint("currencyId", { mode: "number" }),
   payrollLockStage: varchar("payrollLockStage", { length: 20 }).default("paid").notNull(),
   isPos: varchar("isPos", { length: 10 }).default("false"),

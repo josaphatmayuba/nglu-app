@@ -8,7 +8,7 @@ import {
 } from "../landlordSignature.js";
 
 export function LandlordSignatureCard({ setting, onSaved }) {
-  const companyName = setting?.companyName || "Le Bailleur";
+  const companyName = setting?.landlordName || setting?.companyName || "Le Bailleur";
   const stored = setting?.landlordSignature || null;
 
   const [type, setType] = useState("image");

@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.143.0)
+- **Domus : identité du bailleur configurable (nom + téléphone), distincte de l'entreprise** —
+  - Migration `0201_appsetting_landlord_contact` : colonnes `landlord_name`/`landlord_phone` sur `appSetting` + injection de « Téléphone : [TÉLÉPHONE DU BAILLEUR] » dans la ligne BAILLEUR des modèles de contrat par défaut (guard NOT LIKE, idempotente).
+  - Backend : champs `landlordName`/`landlordPhone` dans le DTO/service app-settings ; génération de contrat : `[NOM COMPLET DU BAILLEUR]` = nom bailleur (repli nom entreprise), `[TÉLÉPHONE DU BAILLEUR]` = téléphone bailleur (repli téléphone entreprise) ; nom bailleur aussi utilisé pour le bloc signature.
+  - Domus Réglages : nouvelle carte « Identité du bailleur » (nom + téléphone international +243) dans « Contrats & communication » ; la signature cursive par défaut reprend ce nom.
+
 ### Changed (3.142.5)
 - **Domus : devise affichée dans le modal caution** (`baux.jsx`, `DepositModal`) — les champs « Montant » (encaissement) et « Retenue (dégâts) » (restitution) affichent la devise du bail (ex. « Montant ($) »), au lieu d'un nombre sans devise.
 

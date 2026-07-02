@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Globe2, WalletCards, Smartphone, Hash, Search, Check, Save, Coins,
-  MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard,
+  MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard, UserRound,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -11,6 +11,7 @@ import {
 } from "../data.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { LandlordSignatureCard } from "./landlordSignature.jsx";
+import { DomusPhoneField } from "../components/PhoneField.jsx";
 
 async function loadConfig() {
   // status=all → toutes les devises (actives + inactives) pour la liste « Devises supportees ».
@@ -86,6 +87,7 @@ export function Reglages({ device }) {
       </SettingsGroup>
 
       <SettingsGroup label={t("Contrats & communication")} cols={2}>
+        <LandlordInfoCard setting={data?.setting} onSaved={reload} />
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
       </SettingsGroup>
@@ -678,6 +680,51 @@ function MessageEditorModal({ value, busy, onClose, onSave }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Identité du bailleur pour les contrats — distincte du nom de l'entreprise
+// (remplace [NOM COMPLET DU BAILLEUR] / [TÉLÉPHONE DU BAILLEUR] à la génération).
+function LandlordInfoCard({ setting, onSaved }) {
+  const [name, setName] = useState(setting?.landlordName || "");
+  const [phone, setPhone] = useState(setting?.landlordPhone || "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const save = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.updateSetting({ landlordName: name, landlordPhone: phone });
+      setMsg({ type: "ok", text: "Identite du bailleur enregistree." });
+      onSaved?.();
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="card settings-card">
+      <h3><UserRound size={17} /> {t("Identite du bailleur")}</h3>
+      <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+        {t("Nom et telephone utilises dans les contrats de bail. Si vide, le nom de l'entreprise est utilise.")}
+      </p>
+      <label className="domus-property-field">
+        <span>{t("Nom du bailleur")}</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={setting?.companyName || "ex. Jean Mukendi"} />
+      </label>
+      <DomusPhoneField label={t("Telephone du bailleur")} value={phone} onChange={setPhone} />
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={save}>
+          {busy ? "Enregistrement..." : <><Save size={15} /> Enregistrer</>}
+        </button>
+        {msg && <span style={{ fontSize: 12, color: msg.type === "err" ? "#dc2626" : "#059669", display: "inline-flex", alignItems: "center", gap: 5 }}>
+          {msg.type === "ok" && <Check size={14} />}{msg.text}
+        </span>}
+      </div>
+    </section>
   );
 }
 

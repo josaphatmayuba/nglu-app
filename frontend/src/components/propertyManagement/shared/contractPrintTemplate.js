@@ -76,7 +76,7 @@ function contractContentHtml(value = "") {
 
 function landlordPrintBlock(contract) {
   const company = contract?.companyInfo || {};
-  const name = contract?.landlordName || company.companyName || "Bailleur";
+  const name = contract?.landlordName || company.landlordName || company.companyName || "Bailleur";
   const sig = company.landlordSignature;
   if (sig) {
     return `<img class="signature-image" src="${sig}" alt="Signature bailleur" /><div class="signature-name">${escapeHtml(name)}</div>`;
