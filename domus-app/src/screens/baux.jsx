@@ -694,7 +694,7 @@ function DepositModal({ state, onClose, onDone }) {
           {mode === "collect" ? (
             <section className="domus-form-section">
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Montant</span>
+                <label className="immo-field"><span>Montant ({symbol})</span>
                   <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
                 <label className="immo-field"><span>Date</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -710,7 +710,7 @@ function DepositModal({ state, onClose, onDone }) {
             <section className="domus-form-section">
               <div className="immo-pay-row"><span>Caution détenue</span><strong>{money(held, symbol)}</strong></div>
               <div className="domus-property-form-grid">
-                <label className="immo-field"><span>Retenue (dégâts)</span>
+                <label className="immo-field"><span>Retenue (dégâts) ({symbol})</span>
                   <input type="number" min="0" max={held} value={deduction} onChange={(e) => setDeduction(e.target.value)} /></label>
                 <label className="immo-field"><span>Date de restitution</span>
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>

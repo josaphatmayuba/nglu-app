@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Changed (3.142.5)
+- **Domus : devise affichée dans le modal caution** (`baux.jsx`, `DepositModal`) — les champs « Montant » (encaissement) et « Retenue (dégâts) » (restitution) affichent la devise du bail (ex. « Montant ($) »), au lieu d'un nombre sans devise.
+
 ### Changed (3.142.4)
 - **Domus : montants sans abréviation « K »** (`domus-app/src/data.js`, fonction `money`) — les milliers s'affichent en entier (« $ 2 000 » au lieu de « $ 2K ») ; l'abréviation ne reste qu'à partir du million (« M »).
 
