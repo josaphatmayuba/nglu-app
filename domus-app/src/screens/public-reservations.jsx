@@ -181,7 +181,10 @@ function PublicStayCard({ stay, currency, onOpen }) {
       <div className="public-stay-body">
         <div className="public-stay-title">
           <h2>{stay.title}</h2>
-          <b>{money(stay.dailyRate, symbol)} / jour</b>
+          <div className="public-stay-prices">
+            <b>{money(stay.dailyRate, symbol)} / jour</b>
+            {stay.monthlyRent > 0 && <span>{money(stay.monthlyRent, symbol)} / mois</span>}
+          </div>
         </div>
         <p className="public-stay-location">{stay.unitId ? <><strong>{stay.propertyName}</strong> &middot; {stay.title}</> : stay.propertyName}</p>
         <div className="public-stay-specs">
@@ -215,6 +218,9 @@ function PublicStayDetail({ stay, settings, currency, onBack }) {
         <div className="public-detail-price">
           <b>{money(stay.dailyRate, symbol)}</b>
           <span>par jour</span>
+          {stay.monthlyRent > 0 && (
+            <span className="public-detail-price-monthly">{money(stay.monthlyRent, symbol)} / mois</span>
+          )}
         </div>
       </section>
       <section className="public-detail-layout">
