@@ -5,6 +5,7 @@ import {
   ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet,
 } from "lucide-react";
 import { api, domusOnboardingUrl } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -284,13 +285,13 @@ export function Locataires() {
     <>
       <div className="immo-header">
         <div>
-          <h1>Locataires</h1>
+          <h1>{t("Locataires")}</h1>
           <p>Annuaire des locataires, dossiers et soldes</p>
         </div>
         <div className="immo-header-actions">
           <label className="immo-search">
             <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, telephone, unite..." />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, unite...")} />
           </label>
           <button className="immo-btn" onClick={openLinkModal}>
             <UserRound size={16} /> Lien d'inscription
@@ -302,11 +303,11 @@ export function Locataires() {
       </div>
 
       <MetricsGrid>
-        <Metric tone="brand" icon={<Users size={20} />} label="Locataires" value={view.length} helper={`${activeCount} actif(s)`} />
-        <Metric tone="green" icon={<Home size={20} />} label="Occupants au foyer" value={occupants} helper="personnes declarees" />
-        <Metric tone="amber" icon={<Clock size={20} />} label="Onboarding" value={pendingOnboarding.length}
+        <Metric tone="brand" icon={<Users size={20} />} label={t("Locataires")} value={view.length} helper={tf("{n} actif(s)", {n: activeCount})} />
+        <Metric tone="green" icon={<Home size={20} />} label={t("Occupants au foyer")} value={occupants} helper={t("personnes declarees")} />
+        <Metric tone="amber" icon={<Clock size={20} />} label={t("Onboarding")} value={pendingOnboarding.length}
           valueColor={pendingOnboarding.length > 0 ? "#d97706" : undefined} helper="dossiers en ligne" />
-        <Metric tone="brand" icon={<Briefcase size={20} />} label="Salaries / fonction." value={salaried} helper="revenu stable declare" />
+        <Metric tone="brand" icon={<Briefcase size={20} />} label={t("Salaries / fonction.")} value={salaried} helper={t("revenu stable declare")} />
       </MetricsGrid>
 
       {filteredOnboarding.length > 0 && (
@@ -334,13 +335,13 @@ export function Locataires() {
       {view.length === 0 ? (
         <div className="immo-empty">
           <Users size={28} />
-          <h3>Aucun locataire</h3>
+          <h3>{t("Aucun locataire")}</h3>
           <p>Cliquez « Nouveau locataire » pour creer le premier dossier.</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="immo-empty">
           <Search size={26} />
-          <h3>Aucun resultat</h3>
+          <h3>{t("Aucun resultat")}</h3>
           <p>Aucun locataire ne correspond a « {query} ».</p>
         </div>
       ) : (
@@ -450,13 +451,13 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
   return (
     <>
       <div className="domus-drawer-scrim" onClick={onClose} />
-      <aside className="domus-drawer" role="dialog" aria-label={`Detail ${tenant._name}`}>
+      <aside className="domus-drawer" role="dialog" aria-label={tf(t("Detail {name}"), {name: tenant._name})}>
         <div className="domus-drawer-head">
-          <h3>Fiche locataire</h3>
+          <h3>{t("Fiche locataire")}</h3>
           <div className="domus-drawer-head-actions">
-            {onEdit && <button type="button" className="domus-drawer-iconbtn" onClick={onEdit} title="Modifier"><Pencil size={16} /></button>}
-            {onDelete && <button type="button" className="domus-drawer-iconbtn danger" onClick={onDelete} title="Supprimer"><Trash2 size={16} /></button>}
-            <button type="button" className="domus-drawer-close" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+            {onEdit && <button type="button" className="domus-drawer-iconbtn" onClick={onEdit} title={t("Modifier")}><Pencil size={16} /></button>}
+            {onDelete && <button type="button" className="domus-drawer-iconbtn danger" onClick={onDelete} title={t("Supprimer")}><Trash2 size={16} /></button>}
+            <button type="button" className="domus-drawer-close" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
           </div>
         </div>
         <div className="domus-drawer-body">
@@ -477,14 +478,14 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
           </div>
 
           <div className="info-grid">
-            <Info2 icon={Phone} label="Telephone" value={tenant.phone || "—"} />
-            <Info2 icon={Mail} label="Email" value={tenant.email || "—"} />
-            <Info2 icon={MapPin} label="Adresse" value={tenant.address || "—"} />
-            <Info2 icon={IdCard} label="Nationalite" value={tenant.nationality || "—"} />
-            <Info2 icon={Briefcase} label="Activite" value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
-            <Info2 icon={Building2} label="Employeur" value={tenant.entityName || "—"} />
-            <Info2 icon={Home} label="Foyer" value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
-            <Info2 icon={User} label="Etat civil" value={tenant.maritalStatus || "—"} />
+            <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
+            <Info2 icon={Mail} label={t("Email")} value={tenant.email || "—"} />
+            <Info2 icon={MapPin} label={t("Adresse")} value={tenant.address || "—"} />
+            <Info2 icon={IdCard} label={t("Nationalite")} value={tenant.nationality || "—"} />
+            <Info2 icon={Briefcase} label={t("Activite")} value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
+            <Info2 icon={Building2} label={t("Employeur")} value={tenant.entityName || "—"} />
+            <Info2 icon={Home} label={t("Foyer")} value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
+            <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus || "—"} />
           </div>
 
           {activeLease && (

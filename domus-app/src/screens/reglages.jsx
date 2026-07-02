@@ -4,6 +4,7 @@ import {
   MessageSquare, Plus, Pencil, Trash2, X, Sparkles, CreditCard,
 } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import {
   DEVICE_MODES, useApi, decodeCurrencyText, cleanCurrencySymbol, buildCurrencyOptions,
   paymentMethodRows, PAYMENT_PRESETS, PAYMENT_PRESET_NAMES, PAYMENT_PRESET_BY_NAME,
@@ -55,42 +56,42 @@ export function Reglages({ device }) {
     <div className="settings-layout">
       <div className="immo-header">
         <div>
-          <h1>Reglages</h1>
-          <p>Devises, facturation et configuration du module</p>
+          <h1>{t("Reglages")}</h1>
+          <p>{t("Devises, facturation et configuration du module")}</p>
         </div>
       </div>
 
       <div className="settings-hero card">
         <div>
-          <span className="chip chip-iris"><Globe2 size={12} /> App locative</span>
-          <h3>Domus est connecte au CRM NgoluApp</h3>
-          <p>Devises, numerotation et parametres sont partages avec la session principale (meme API).</p>
+          <span className="chip chip-iris"><Globe2 size={12} /> {t("App locative")}</span>
+          <h3>{t("Domus est connecte au CRM NgoluApp")}</h3>
+          <p>{t("Devises, numerotation et parametres sont partages avec la session principale (meme API).")}</p>
         </div>
         <div className="settings-mini">
           <WalletCards size={20} />
-          <b>{activeMethods.length} moyen(s) de paiement</b>
-          <span>{activeMethods.map((m) => m.name).slice(0, 4).join(", ") || "Aucun configuré"}</span>
+          <b>{tf("{n} moyen(s) de paiement", {n: activeMethods.length})}</b>
+          <span>{activeMethods.map((m) => m.name).slice(0, 4).join(", ") || t("Aucun configuré")}</span>
         </div>
         <div className="settings-mini">
           <Smartphone size={20} />
-          <b>PWA / mobile</b>
-          <span>Device {device?.mode || "auto"}</span>
+          <b>{t("PWA / mobile")}</b>
+          <span>{tf("Device {mode}", {mode: device?.mode || "auto"})}</span>
         </div>
       </div>
 
-      <SettingsGroup label="Devises & facturation">
+      <SettingsGroup label={t("Devises & facturation")}>
         <CurrenciesCard initial={data?.currencies} onChanged={reload} />
         <PaymentMethodsCard initial={data?.paymentMethods} subAccounts={data?.subAccounts} onChanged={reload} />
         <NumberingCard setting={data?.setting} currencies={data?.currencies} onSaved={reload} />
       </SettingsGroup>
 
-      <SettingsGroup label="Contrats & communication" cols={2}>
+      <SettingsGroup label={t("Contrats & communication")} cols={2}>
         <LandlordSignatureCard setting={data?.setting} onSaved={reload} />
         <MessagesCard />
       </SettingsGroup>
 
       {device && (
-        <SettingsGroup label="Affichage & application">
+        <SettingsGroup label={t("Affichage & application")}>
           <section className="card settings-card device-settings-card">
             <h3><Smartphone size={17} /> Apercu device</h3>
             <div className="device-segmented">

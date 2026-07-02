@@ -5,6 +5,7 @@ import {
   Printer, Search, Send, ShieldCheck, X, FileCheck,
 } from "lucide-react";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { downloadSignedContractPdf } from "../contractPdf.js";
 import {
   AUDIT_EVENT_LABEL, CONTRACT_STATUS, TEMPLATE_TYPE_LABEL, contractRef, escapeHtml,
@@ -308,10 +309,10 @@ export function Contrats() {
       </div>
 
       <MetricsGrid>
-        <Metric tone="green" icon={<FileCheck2 size={20} />} label="Signés" value={metrics.signed} />
-        <Metric tone="amber" icon={<Clock size={20} />} label="En attente de signature" value={metrics.pending} />
-        <Metric tone="brand" icon={<FilePen size={20} />} label="Brouillons" value={metrics.draft} />
-        <Metric tone="red" icon={<CalendarX size={20} />} label="Baux expirent &lt; 30 j" value={metrics.expiring} />
+        <Metric tone="green" icon={<FileCheck2 size={20} />} label={t("Signés")} value={metrics.signed} />
+        <Metric tone="amber" icon={<Clock size={20} />} label={t("En attente de signature")} value={metrics.pending} />
+        <Metric tone="brand" icon={<FilePen size={20} />} label={t("Brouillons")} value={metrics.draft} />
+        <Metric tone="red" icon={<CalendarX size={20} />} label={t("Baux expirent < 30 j")} value={metrics.expiring} />
       </MetricsGrid>
 
       <div className="contrats-layout">
@@ -535,7 +536,7 @@ export function Contrats() {
                   <p>Depuis un bail actif</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setCreateOpen(false)} aria-label="Fermer"><X size={18} /></button>
+              <button type="button" onClick={() => setCreateOpen(false)} aria-label={t("Fermer")}><X size={18} /></button>
             </div>
             <div style={{ padding: "0 24px 20px" }}>
               <label className="domus-property-field">
@@ -683,7 +684,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
               <p>Contenu du contrat avec placeholders (ex. [MONTANT DU LOYER AVEC DEVISE])</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
+          <button type="button" onClick={onClose} aria-label={t("Fermer")}><X size={18} /></button>
         </div>
         <div className="domus-template-form">
           <div className="domus-property-form-grid">
