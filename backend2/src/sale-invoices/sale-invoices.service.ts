@@ -353,19 +353,19 @@ export class SaleInvoicesService {
     return { getAllSaleInvoice: rows, totalSaleInvoice: Number(total ?? 0) };
   }
 
-  async findHold() {
+  async findHold(orgId: number) {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.isHold, "true"), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
-  async findByCustomer(customerId: number) {
+  async findByCustomer(customerId: number, orgId: number) {
     return this.db
       .select()
       .from(saleInvoices)
-      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true")))
+      .where(and(eq(saleInvoices.customerId, customerId), eq(saleInvoices.status, "true"), eq(saleInvoices.organizationId, orgId)))
       .orderBy(desc(saleInvoices.createdAt));
   }
 
@@ -446,11 +446,11 @@ export class SaleInvoicesService {
     };
   }
 
-  async update(id: string, input: UpdateSaleInvoiceDto) {
+  async update(id: string, input: UpdateSaleInvoiceDto, orgId: number) {
     const rows = await this.db
       .select({ id: saleInvoices.id })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, id))
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
@@ -466,16 +466,16 @@ export class SaleInvoicesService {
         ...(input.note !== undefined ? { note: input.note } : {}),
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })
-      .where(eq(saleInvoices.id, id));
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
 
-    return this.findOne(id);
+    return this.findOne(id, orgId);
   }
 
-  async updateHold(id: string, input: UpdateHoldDto) {
+  async updateHold(id: string, input: UpdateHoldDto, orgId: number) {
     const rows = await this.db
       .select({ id: saleInvoices.id })
       .from(saleInvoices)
-      .where(eq(saleInvoices.id, id))
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)))
       .limit(1);
 
     if (!rows.length) {
@@ -485,16 +485,26 @@ export class SaleInvoicesService {
     await this.db
       .update(saleInvoices)
       .set({ isHold: input.isHold, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(saleInvoices.id, id));
+      .where(and(eq(saleInvoices.id, id), eq(saleInvoices.organizationId, orgId)));
 
     return { message: "Hold status updated." };
   }
 
-  async updateOrderStatus(input: UpdateOrderStatusDto) {
+  async updateOrderStatus(input: UpdateOrderStatusDto, orgId: number) {
+    const rows = await this.db
+      .select({ id: saleInvoices.id })
+      .from(saleInvoices)
+      .where(and(eq(saleInvoices.id, input.id), eq(saleInvoices.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) {
+      throw new NotFoundException("Sale invoice not found.");
+    }
+
     await this.db
       .update(saleInvoices)
       .set({ orderStatus: input.orderStatus, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(saleInvoices.id, input.id));
+      .where(and(eq(saleInvoices.id, input.id), eq(saleInvoices.organizationId, orgId)));
 
     return { message: "Order status updated." };
   }

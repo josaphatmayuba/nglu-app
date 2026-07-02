@@ -10,6 +10,16 @@ This project follows:
 
 ## [Unreleased]
 
+### Security (3.141.0)
+- **Corrections fuites inter-organisations (multi-tenant)** — audit sécurité. Ajout du filtrage par `organization_id` (`@CurrentOrg`) sur des endpoints qui l'omettaient :
+  - `roles` : `update`/`remove`/`deleteMany` isolés par org ; `deleteMany` converti en soft delete (règle projet) au lieu d'un DELETE physique.
+  - `sale-invoices` : `update`, `updateHold`, `updateOrderStatus`, `findHold`, `findByCustomer` isolés par org.
+  - `property-management` : `deleteMaintenanceCost`, `deleteOnboarding`, `onboardingList`, `generateTenantOnboarding` isolés par org.
+  - CRUD génériques `front-modules` (departments/educations/employment-status) et `legacy-modules` (payment-sale/purchase-invoice, return-sale/purchase-invoice, products, product-reports, reorder) : filtrage org sur les tables qui portent `organization_id` (flag `orgScoped`), soft delete quand la table le supporte. Les référentiels globaux (couleurs, tailles, unités, attributs produit) restent partagés intentionnellement.
+  - `orgId` rendu **obligatoire** (pas de défaut `= 1`) sur les méthodes concernées : un contexte org manquant échoue au lieu de retomber silencieusement sur l'org 1.
+- **Migration `0199_tenant_onboardings_organization_id`** : ajoute `organization_id` (NOT NULL DEFAULT 1) à `tenant_onboardings` qui n'avait aucune colonne tenant. Idempotente (INFORMATION_SCHEMA + PREPARE), inscrite au journal Drizzle → auto-appliquée au boot.
+- **À traiter séparément (migration à prévoir)** : `quotes`, `manualPayments`, `adjustInvoices`, `emails`, `emailConfigs`, `announcements` n'ont pas encore de colonne `organization_id` ; leurs CRUD legacy restent non isolés en attendant l'ajout de la colonne.
+
 ### Security (3.140.11)
 - **Durcissement exposition réseau (audit sécu)** : dans `docker-compose.yml` (socle prod), les ports MySQL (`3306`), MinIO (`9000`/`9001`) et phpMyAdmin (`8080`) sont désormais liés à `127.0.0.1` au lieu de `0.0.0.0` — plus d'écoute sur l'IP publique, accès uniquement via tunnel SSH. Les conteneurs continuent de communiquer par le réseau Docker (`DB_HOST=mysql`), aucune régression fonctionnelle. Sur prod, seul `3306` était réellement exposé (mais filtré par le pare-feu Lightsail) ; ce changement retire la dépendance à cette seule règle de pare-feu (défense en profondeur).
 - **Script de restriction des comptes MySQL** : `scripts/sql/harden_mysql_accounts.sql` (idempotent) pour supprimer `root@%` et basculer `nglu_user@%` vers le sous-réseau Docker. À appliquer manuellement sur DEV et PROD par le propriétaire.

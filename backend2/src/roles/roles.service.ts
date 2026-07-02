@@ -138,16 +138,32 @@ export class RolesService {
     return { count: created };
   }
 
-  async deleteMany(ids: number[], ctx: AuditContext = {}) {
-    for (const id of ids) {
-      await this.db.delete(roles).where(eq(roles.id, id));
+  async deleteMany(ids: number[], orgId: number, ctx: AuditContext = {}) {
+    // Soft delete (regle projet) + isolation par org : on ne desactive que les
+    // roles de l organisation appelante, et jamais un role systeme.
+    const targets = await this.db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(and(inArray(roles.id, ids), eq(roles.organizationId, orgId), eq(roles.isSystem, 0)));
+
+    const deletable = targets.map((r) => r.id);
+    if (deletable.length) {
+      await this.db
+        .update(roles)
+        .set({ status: "false", updatedAt: sql`CURRENT_TIMESTAMP` })
+        .where(and(inArray(roles.id, deletable), eq(roles.organizationId, orgId)));
     }
-    await this.audit.log("admin.role.deleted", `roles:[${ids.join(",")}]`, ctx, { count: ids.length, ids });
-    return { count: ids.length };
+
+    await this.audit.log("admin.role.deleted", `roles:[${deletable.join(",")}]`, ctx, { count: deletable.length, ids: deletable });
+    return { count: deletable.length };
   }
 
-  async update(id: number, dto: UpdateRoleDto, ctx: AuditContext = {}) {
-    const [role] = await this.db.select({ id: roles.id, isSystem: roles.isSystem }).from(roles).where(eq(roles.id, id)).limit(1);
+  async update(id: number, dto: UpdateRoleDto, orgId: number, ctx: AuditContext = {}) {
+    const [role] = await this.db
+      .select({ id: roles.id, isSystem: roles.isSystem })
+      .from(roles)
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)))
+      .limit(1);
     if (!role) throw new NotFoundException("Role not found");
     if (role.isSystem) throw new BadRequestException("System roles cannot be modified.");
 
@@ -156,21 +172,26 @@ export class RolesService {
     await this.db
       .update(roles)
       .set({ ...(name ? { name } : {}), updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(roles.id, id));
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)));
 
     await this.audit.log("admin.role.updated", `role:${id}`, ctx, { name });
 
     return { message: "Role Updated Successfully" };
   }
 
-  async remove(id: number, status: string, ctx: AuditContext = {}) {
-    const [role] = await this.db.select({ isSystem: roles.isSystem, name: roles.name }).from(roles).where(eq(roles.id, id)).limit(1);
-    if (role?.isSystem) throw new BadRequestException("System roles cannot be deleted.");
+  async remove(id: number, status: string, orgId: number, ctx: AuditContext = {}) {
+    const [role] = await this.db
+      .select({ isSystem: roles.isSystem, name: roles.name })
+      .from(roles)
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)))
+      .limit(1);
+    if (!role) throw new NotFoundException("Role not found");
+    if (role.isSystem) throw new BadRequestException("System roles cannot be deleted.");
 
     await this.db
       .update(roles)
       .set({ status, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(roles.id, id));
+      .where(and(eq(roles.id, id), eq(roles.organizationId, orgId)));
 
     await this.audit.log("admin.role.status_changed", `role:${id}`, ctx, { status, name: role?.name });
 

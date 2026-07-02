@@ -114,15 +114,15 @@ export class PropertyManagementController {
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
   @Permissions("create-propertyManagement")
   @Post("onboarding")
-  generateTenantOnboarding(@Body() body: GenerateTenantOnboardingDto) {
-    return this.propertyManagementService.generateTenantOnboarding(body);
+  generateTenantOnboarding(@Body() body: GenerateTenantOnboardingDto, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.generateTenantOnboarding(body, orgId);
   }
 
   @ApiOperation({ summary: "List tenant onboarding dossiers" })
   @Permissions("readAll-propertyManagement")
   @Get("onboarding")
-  tenantOnboardingList() {
-    return this.propertyManagementService.onboardingList();
+  tenantOnboardingList(@CurrentOrg() orgId: number) {
+    return this.propertyManagementService.onboardingList(orgId);
   }
 
   @ApiOperation({ summary: "Send the onboarding link by email on demand" })
@@ -159,8 +159,8 @@ export class PropertyManagementController {
   @Permissions("delete-propertyManagement")
   @Delete("onboarding/:id")
   @HttpCode(200)
-  deleteTenantOnboarding(@Param("id", ParseIntPipe) id: number) {
-    return this.propertyManagementService.deleteOnboarding(id);
+  deleteTenantOnboarding(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteOnboarding(id, orgId);
   }
 
   @ApiOperation({ summary: "List properties with unit counts" })
@@ -783,8 +783,8 @@ export class PropertyManagementController {
   @Permissions("delete-maintenance-cost")
   @Delete("maintenance/costs/:costId")
   @HttpCode(200)
-  deleteMaintenanceCost(@Param("costId", ParseIntPipe) costId: number) {
-    return this.propertyManagementService.deleteMaintenanceCost(costId);
+  deleteMaintenanceCost(@Param("costId", ParseIntPipe) costId: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteMaintenanceCost(costId, orgId);
   }
 
   // ── Contracts ──────────────────────────────────────────────────────────────

@@ -5,6 +5,8 @@
 -- hote. Le pare-feu Lightsail filtre 3306, mais une seule regle protege alors une
 -- base root exposee. On restreint root a localhost et nglu_user au sous-reseau Docker.
 --
+-- SECURITE : ne jamais committer de mot de passe reel dans ce fichier.
+--
 -- IMPORTANT : ajuster le sous-reseau '172.%' au reseau reel du bridge Docker
 -- (verifier via : docker network inspect nglu_network | grep Subnet).
 -- L'application se connecte avec DB_HOST=mysql (nom de service Docker), donc via
@@ -16,14 +18,12 @@ DROP USER IF EXISTS 'root'@'%';
 
 -- 2) nglu_user : basculer de '%' vers le sous-reseau Docker.
 --    On cree la version restreinte AVANT de supprimer '%' pour eviter toute coupure.
---    Le mot de passe est repris depuis la variable @db_pass ci-dessous.
-SET @db_pass = 'R9#tuP4@zN8$Qx2R9#tuP4@zN8$Qx2';
-
-CREATE USER IF NOT EXISTS 'nglu_user'@'172.%' IDENTIFIED BY '@db_pass_placeholder';
--- Ne pas laisser le placeholder : definir le vrai mot de passe puis les droits.
--- (Executer les 2 lignes suivantes en remplacant le mot de passe reel.)
--- ALTER USER 'nglu_user'@'172.%' IDENTIFIED BY 'LE_VRAI_MOT_DE_PASSE';
--- GRANT ALL PRIVILEGES ON `nglu_db`.* TO 'nglu_user'@'172.%';
+--    NE PAS ecrire le mot de passe dans ce fichier (il est versionne dans git).
+--    Le remplacer au moment de l'execution par la valeur reelle de DB_PASSWORD
+--    (celle du .env / docker-compose), passee de facon ephemere.
+CREATE USER IF NOT EXISTS 'nglu_user'@'172.%' IDENTIFIED BY 'REMPLACER_A_L_EXECUTION';
+GRANT ALL PRIVILEGES ON `nglu_db`.* TO 'nglu_user'@'172.%';
+-- Verifier que l'app se reconnecte bien avec le compte @172.% avant l'etape 3.
 
 -- 3) une fois la version '172.%' validee (l'app se reconnecte), supprimer '%'.
 -- DROP USER IF EXISTS 'nglu_user'@'%';

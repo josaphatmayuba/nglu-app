@@ -331,7 +331,7 @@ export class PropertyManagementService {
     return this.findTenant(id, orgId);
   }
 
-  async generateTenantOnboarding(input: GenerateTenantOnboardingDto) {
+  async generateTenantOnboarding(input: GenerateTenantOnboardingDto, orgId: number) {
     // SCRUM-229 — store the phone identifier in canonical E.164.
     const phoneE164 = normalizePhoneE164Strict(input.phone);
     const token = randomBytes(32).toString("hex");
@@ -345,6 +345,7 @@ export class PropertyManagementService {
     });
 
     const [result] = await this.db.insert(tenantOnboardings).values({
+      organizationId: orgId,
       phone: phoneE164,
       tokenHash,
       token,
@@ -396,7 +397,7 @@ export class PropertyManagementService {
   }
 
 
-  async onboardingList() {
+  async onboardingList(orgId: number) {
     const rows = await this.db
       .select({
         id: tenantOnboardings.id,
@@ -412,14 +413,21 @@ export class PropertyManagementService {
         updatedAt: tenantOnboardings.updatedAt,
       })
       .from(tenantOnboardings)
-      .where(ne(tenantOnboardings.status, "deleted"))
+      .where(and(ne(tenantOnboardings.status, "deleted"), eq(tenantOnboardings.organizationId, orgId)))
       .orderBy(desc(tenantOnboardings.id));
 
     return rows.map((row) => this.adminOnboardingResponse(row));
   }
 
-  async deleteOnboarding(id: number) {
-    const onboarding = await this.findOnboarding(id);
+  async deleteOnboarding(id: number, orgId: number) {
+    const [onboarding] = await this.db
+      .select({ id: tenantOnboardings.id, status: tenantOnboardings.status })
+      .from(tenantOnboardings)
+      .where(and(eq(tenantOnboardings.id, id), eq(tenantOnboardings.organizationId, orgId)))
+      .limit(1);
+    if (!onboarding) {
+      throw new NotFoundException("Onboarding not found");
+    }
     if (onboarding.status === "validated") {
       throw new BadRequestException(
         "Impossible de supprimer : ce dossier est validé et lié à un locataire.",
@@ -428,7 +436,7 @@ export class PropertyManagementService {
     await this.db
       .update(tenantOnboardings)
       .set({ status: "deleted", updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(tenantOnboardings.id, id));
+      .where(and(eq(tenantOnboardings.id, id), eq(tenantOnboardings.organizationId, orgId)));
     await this.publishOnboardingUpdate("deleted", id);
     return { message: "Dossier d'inscription supprimé." };
   }
@@ -913,6 +921,7 @@ export class PropertyManagementService {
       source: "domus-public-listing",
     });
     const [result] = await this.db.insert(tenantOnboardings).values({
+      organizationId: orgId,
       phone,
       tokenHash: this.hashToken(token),
       token,
@@ -2996,17 +3005,21 @@ export class PropertyManagementService {
       .then((rows) => rows[0]);
   }
 
-  async deleteMaintenanceCost(costId: number) {
+  async deleteMaintenanceCost(costId: number, orgId: number) {
     const rows = await this.db
       .select()
       .from(realEstateMaintenanceCosts)
-      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.isActive, 1)))
+      .where(and(
+        eq(realEstateMaintenanceCosts.id, costId),
+        eq(realEstateMaintenanceCosts.isActive, 1),
+        eq(realEstateMaintenanceCosts.organizationId, orgId),
+      ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Maintenance cost not found.");
     await this.db
       .update(realEstateMaintenanceCosts)
       .set({ isActive: 0, updatedAt: sql`CURRENT_TIMESTAMP` })
-      .where(eq(realEstateMaintenanceCosts.id, costId));
+      .where(and(eq(realEstateMaintenanceCosts.id, costId), eq(realEstateMaintenanceCosts.organizationId, orgId)));
     return { message: "Deleted successfully." };
   }
 

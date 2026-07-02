@@ -58,21 +58,21 @@ export class RolesController {
   @Post()
   @HttpCode(201)
   create(@Body() body: unknown, @Query("query") query: string | undefined, @Req() req: Request, @CurrentOrg() orgId: number) {
-    if (query === "deletemany") return this.rolesService.deleteMany(body as number[], auditCtx(req));
+    if (query === "deletemany") return this.rolesService.deleteMany(body as number[], orgId, auditCtx(req));
     if (query === "createmany") return this.rolesService.createMany(body as CreateRoleDto[], orgId);
     return this.rolesService.create(body as CreateRoleDto, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Update role" })
   @Put(":id")
-  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto, @Req() req: Request) {
-    return this.rolesService.update(id, body, auditCtx(req));
+  update(@Param("id", ParseIntPipe) id: number, @Body() body: UpdateRoleDto, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.rolesService.update(id, body, orgId, auditCtx(req));
   }
 
   @ApiOperation({ summary: "Soft delete role (update status)" })
   @Patch(":id")
   @HttpCode(200)
-  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request) {
-    return this.rolesService.remove(id, status, auditCtx(req));
+  remove(@Param("id", ParseIntPipe) id: number, @Body("status") status: string, @Req() req: Request, @CurrentOrg() orgId: number) {
+    return this.rolesService.remove(id, status, orgId, auditCtx(req));
   }
 }

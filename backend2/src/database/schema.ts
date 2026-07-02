@@ -672,6 +672,7 @@ export const tenantDetails = mysqlTable("tenant_details", {
 
 export const tenantOnboardings = mysqlTable("tenant_onboardings", {
   id: serial("id").primaryKey(),
+  organizationId: bigint("organization_id", { mode: "number" }).default(1).notNull(),
   phone: varchar("phone", { length: 255 }).notNull(),
   tokenHash: varchar("token_hash", { length: 128 }).notNull().unique(),
   token: varchar("token", { length: 128 }),

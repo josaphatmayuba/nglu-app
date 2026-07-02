@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { CurrentOrg } from "../auth/decorators/current-org.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { LegacyDto } from "./dto/legacy.dto";
 import { LegacyModulesService } from "./legacy-modules.service";
@@ -30,44 +31,45 @@ function controllerFor(path: string, tag = path) {
 
     @Get()
     @UseGuards(JwtAuthGuard)
-    list(@Query() query: Record<string, string>) {
-      return this.service.list(path, query);
+    list(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+      return this.service.list(path, query, orgId);
     }
 
     @Get("public")
     @PublicListGuard(path)
     publicList(@Query() query: Record<string, string>) {
-      return this.service.list(path, { ...query, query: query.query ?? "all" });
+      // Route publique reservee aux referentiels non org-scoped (slider-images).
+      return this.service.list(path, { ...query, query: query.query ?? "all" }, 0);
     }
 
     @Get(":id")
     @UseGuards(JwtAuthGuard)
-    findOne(@Param("id") id: string) {
-      return this.service.findOne(path, id);
+    findOne(@Param("id") id: string, @CurrentOrg() orgId: number) {
+      return this.service.findOne(path, id, orgId);
     }
 
     @Post()
     @UseGuards(JwtAuthGuard)
-    create(@Body() body: LegacyDto) {
-      return this.service.create(path, body);
+    create(@Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+      return this.service.create(path, body, orgId);
     }
 
     @Put(":id")
     @UseGuards(JwtAuthGuard)
-    update(@Param("id") id: string, @Body() body: LegacyDto) {
-      return this.service.update(path, id, body);
+    update(@Param("id") id: string, @Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+      return this.service.update(path, id, body, orgId);
     }
 
     @Patch(":id")
     @UseGuards(JwtAuthGuard)
-    patch(@Param("id") id: string, @Body() body: LegacyDto) {
-      return this.service.patch(path, id, body);
+    patch(@Param("id") id: string, @Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+      return this.service.patch(path, id, body, orgId);
     }
 
     @Delete(":id")
     @UseGuards(JwtAuthGuard)
-    delete(@Param("id") id: string) {
-      return this.service.delete(path, id);
+    delete(@Param("id") id: string, @CurrentOrg() orgId: number) {
+      return this.service.delete(path, id, orgId);
     }
   }
 
@@ -102,37 +104,37 @@ export class ManualPaymentController {
   constructor(public readonly service: LegacyModulesService) {}
 
   @Get()
-  list(@Query() query: Record<string, string>) {
-    return this.service.list("manual-payment", query);
+  list(@Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.service.list("manual-payment", query, orgId);
   }
 
   @Get("payment-method/:id")
-  byPaymentMethod(@Param("id") id: string, @Query() query: Record<string, string>) {
-    return this.service.list("manual-payment", { ...query, paymentMethodId: id });
+  byPaymentMethod(@Param("id") id: string, @Query() query: Record<string, string>, @CurrentOrg() orgId: number) {
+    return this.service.list("manual-payment", { ...query, paymentMethodId: id }, orgId);
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.service.findOne("manual-payment", id);
+  findOne(@Param("id") id: string, @CurrentOrg() orgId: number) {
+    return this.service.findOne("manual-payment", id, orgId);
   }
 
   @Post()
-  create(@Body() body: LegacyDto) {
-    return this.service.create("manual-payment", body);
+  create(@Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+    return this.service.create("manual-payment", body, orgId);
   }
 
   @Patch()
-  patchRoot(@Body() body: LegacyDto) {
-    return this.service.patch("manual-payment", null, body);
+  patchRoot(@Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+    return this.service.patch("manual-payment", null, body, orgId);
   }
 
   @Patch(":id")
-  patch(@Param("id") id: string, @Body() body: LegacyDto) {
-    return this.service.patch("manual-payment", id, body);
+  patch(@Param("id") id: string, @Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+    return this.service.patch("manual-payment", id, body, orgId);
   }
 
   @Put("verify/:id")
-  verify(@Param("id") id: string, @Body() body: LegacyDto) {
-    return this.service.verifyManualPayment(id, body);
+  verify(@Param("id") id: string, @Body() body: LegacyDto, @CurrentOrg() orgId: number) {
+    return this.service.verifyManualPayment(id, body, orgId);
   }
 }
