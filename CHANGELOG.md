@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.3)
+- **Domus : infrastructure i18n FR/EN — 4 écrans traduits** — ajout fonction `tf(key, vars)` pour interpolation (placeholders `{x}` au lieu de template strings) dans `domus-app/src/i18n.js`. Traduction de 4 premiers écrans et extension du dictionnaire EN : `placeholder.jsx` (2 chaînes), `carte.jsx` (10 chaînes), `dashboard.jsx` (21 chaînes). Aucune lib i18n externe — extension du pattern maison existant. Reste 14 écrans (~9996 lignes) à traduire dans les sessions futures (`landlordSignature`, `forecast`, `portail`, `onboarding-public`, `public-reservations`, `maintenance`, `contrats`, `reglages`, `loyers`, `locataires`, `reservations`, `biens`, `baux`). `domus-app/src/i18n.js`, `domus-app/src/screens/{placeholder,carte,dashboard}.jsx`.
+
 ### Added (3.140.2)
 - **Domus : bouton "Payer" indépendant du check-out (réservations)** — jusqu'ici le seul moyen d'encaisser un séjour était le Check-out, ce qui forçait à déclarer la sortie du client en même temps que le paiement. Nouveau bouton **Payer** disponible dès qu'une réservation est active (pending/confirmed/checked_in) : il comptabilise la recette (transaction + ledger) sans changer le statut. Une fois payée, la réservation affiche un badge « Payé » et le bouton Check-out passe en 1 clic (confirme juste la sortie, sans redemander le paiement). Colonne `paid_at` (migration `0198`). `backend2/src/database/schema.ts`, `backend2/src/property-management/property-management.{service,controller}.ts`, `domus-app/src/api.js`, `domus-app/src/screens/reservations.jsx`.
 

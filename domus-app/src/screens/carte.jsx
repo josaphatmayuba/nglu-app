@@ -1,4 +1,5 @@
 import { Building, Building2, MapPin, Navigation, Layers, DoorOpen } from "lucide-react";
+import { t } from "../i18n.js";
 
 const PROPERTIES = [
   { id: 1, name: "Belvedere", address: "Av. Mobutu", type: "Residence", units: 48, occupancy: 94, x: 28, y: 36, tone: "iris" },
@@ -12,12 +13,12 @@ export function CarteBiens() {
     <>
       <div className="page-head">
         <div>
-          <div className="eyebrow">Patrimoine geolocalise</div>
-          <h2 className="title">Carte des proprietes</h2>
+          <div className="eyebrow">{t("Patrimoine geolocalise")}</div>
+          <h2 className="title">{t("Carte des proprietes")}</h2>
         </div>
         <div className="toolbar">
-          <button className="btn"><Layers size={16} /> Calques</button>
-          <button className="btn btn-primary"><Navigation size={16} /> Itineraire</button>
+          <button className="btn"><Layers size={16} /> {t("Calques")}</button>
+          <button className="btn btn-primary"><Navigation size={16} /> {t("Itineraire")}</button>
         </div>
       </div>
 
@@ -31,14 +32,14 @@ export function CarteBiens() {
             </button>
           ))}
           <div className="map-legend">
-            <span><i className="legend-dot iris" /> Residence</span>
-            <span><i className="legend-dot ink" /> Bureaux</span>
-            <span><i className="legend-dot amber" /> Mixte</span>
+            <span><i className="legend-dot iris" /> {t("Residence")}</span>
+            <span><i className="legend-dot ink" /> {t("Bureaux")}</span>
+            <span><i className="legend-dot amber" /> {t("Mixte")}</span>
           </div>
         </section>
 
         <aside className="card map-side">
-          <div className="panel-title">Proprietes geolocalisees</div>
+          <div className="panel-title">{t("Proprietes geolocalisees")}</div>
           {PROPERTIES.map((p) => (
             <div key={p.id} className="property-row">
               <span className={`property-icon ${p.tone}`}>
@@ -53,8 +54,8 @@ export function CarteBiens() {
           ))}
 
           <div className="map-summary">
-            <div><DoorOpen size={16} /><b>120 / 151</b><span>unites occupees</span></div>
-            <div><MapPin size={16} /><b>4</b><span>zones suivies</span></div>
+            <div><DoorOpen size={16} /><b>120 / 151</b><span>{t("unites occupees")}</span></div>
+            <div><MapPin size={16} /><b>4</b><span>{t("zones suivies")}</span></div>
           </div>
         </aside>
       </div>
