@@ -17,7 +17,7 @@ DROP USER IF EXISTS 'root'@'%';
 -- 2) nglu_user : basculer de '%' vers le sous-reseau Docker.
 --    On cree la version restreinte AVANT de supprimer '%' pour eviter toute coupure.
 --    Le mot de passe est repris depuis la variable @db_pass ci-dessous.
-SET @db_pass = 'REMPLACER_PAR_DB_PASSWORD';
+SET @db_pass = 'R9#tuP4@zN8$Qx2R9#tuP4@zN8$Qx2';
 
 CREATE USER IF NOT EXISTS 'nglu_user'@'172.%' IDENTIFIED BY '@db_pass_placeholder';
 -- Ne pas laisser le placeholder : definir le vrai mot de passe puis les droits.
