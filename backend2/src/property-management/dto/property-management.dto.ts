@@ -533,6 +533,16 @@ export class CreateTenantDto {
   @IsString()
   phone2?: string | null;
 
+  @ApiPropertyOptional({ example: "Carte d'électeur", description: "Type de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_document_type?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456", description: "Numéro de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_number?: string | null;
+
   @ApiProperty({ example: "Marie Dupont" })
   @IsString()
   @IsNotEmpty()
@@ -734,6 +744,16 @@ export class SaveTenantOnboardingDto {
   @IsOptional()
   @IsString()
   phone2?: string | null;
+
+  @ApiPropertyOptional({ example: "Carte d'électeur", description: "Type de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_document_type?: string | null;
+
+  @ApiPropertyOptional({ example: "CNI-0123456", description: "Numéro de pièce d'identité (contrat de bail)" })
+  @IsOptional()
+  @IsString()
+  id_number?: string | null;
 
   @ApiPropertyOptional({ example: "Marie Dupont" })
   @IsOptional()

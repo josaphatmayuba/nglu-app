@@ -207,6 +207,9 @@ export class PropertyManagementService {
         nationality: tenantDetails.nationality,
         maritalStatus: tenantDetails.maritalStatus,
         originProvince: tenantDetails.originProvince,
+        idDocumentType: tenantDetails.idDocumentType,
+        idNumber: tenantDetails.idNumber,
+        idDocumentName: tenantDetails.idDocumentName,
         phone2: tenantDetails.phone2,
         contactedPerson: tenantDetails.contactedPerson,
         contactedPersonPhoneNumber: tenantDetails.contactedPersonPhoneNumber,
@@ -263,6 +266,8 @@ export class PropertyManagementService {
     if (input.nationality !== undefined) detail.nationality = input.nationality;
     if (input.marital_status !== undefined) detail.maritalStatus = input.marital_status;
     if (input.origin_province !== undefined) detail.originProvince = input.origin_province ?? "";
+    if (input.id_document_type !== undefined) detail.idDocumentType = input.id_document_type ?? null;
+    if (input.id_number !== undefined) detail.idNumber = input.id_number ?? null;
     if (input.phone2 !== undefined) detail.phone2 = input.phone2 ?? null;
     if (input.contacted_person !== undefined) detail.contactedPerson = input.contacted_person;
     if (input.contacted_person_phone_number !== undefined) detail.contactedPersonPhoneNumber = input.contacted_person_phone_number;
@@ -300,6 +305,8 @@ export class PropertyManagementService {
         nationality: input.nationality ?? "",
         maritalStatus: input.marital_status ?? "",
         originProvince: input.origin_province ?? "",
+        idDocumentType: input.id_document_type ?? null,
+        idNumber: input.id_number ?? null,
         phone2: input.phone2 ?? null,
         contactedPerson: input.contacted_person ?? "",
         contactedPersonPhoneNumber: input.contacted_person_phone_number ?? "",
@@ -590,6 +597,8 @@ export class PropertyManagementService {
         nationality: input.nationality,
         maritalStatus: input.marital_status,
         originProvince: input.origin_province ?? "",
+        idDocumentType: input.id_document_type ?? null,
+        idNumber: input.id_number ?? null,
         phone2: input.phone2 ?? null,
         contactedPerson: input.contacted_person,
         contactedPersonPhoneNumber: input.contacted_person_phone_number,
@@ -2869,6 +2878,73 @@ export class PropertyManagementService {
       originalName: doc.originalName || `lease-document-${doc.id}`,
       mimeType: doc.mimeType,
     };
+  }
+
+  // ── Copie de la pièce d'identité du locataire (MinIO, une copie par locataire) ──
+  private async tenantIdDocumentRow(tenantId: number) {
+    const [row] = await this.db
+      .select({
+        idDocumentKey: tenantDetails.idDocumentKey,
+        idDocumentMime: tenantDetails.idDocumentMime,
+        idDocumentName: tenantDetails.idDocumentName,
+      })
+      .from(tenantDetails)
+      .where(eq(tenantDetails.customerId, tenantId))
+      .limit(1);
+    return row;
+  }
+
+  async uploadTenantIdDocument(tenantId: number, file: any, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const current = await this.tenantIdDocumentRow(tenantId);
+    if (!current) throw new NotFoundException("Fiche locataire incomplete.");
+    const stored = await this.objectStorage.putDocument(file, `domus/tenants/${orgId}/${tenantId}/id-document`);
+    if (current.idDocumentKey) {
+      // Remplacement : on efface l ancienne copie du stockage objet.
+      await this.objectStorage.deleteObject(current.idDocumentKey).catch(() => undefined);
+    }
+    await this.db
+      .update(tenantDetails)
+      .set({
+        idDocumentBucket: stored.bucket,
+        idDocumentKey: stored.objectKey,
+        idDocumentMime: stored.mimeType,
+        idDocumentName: file?.originalname ? String(file.originalname).slice(0, 255) : null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantDetails.customerId, tenantId));
+    return this.findTenant(tenantId, orgId);
+  }
+
+  async tenantIdDocumentFile(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const row = await this.tenantIdDocumentRow(tenantId);
+    if (!row?.idDocumentKey) throw new NotFoundException("Aucune copie de piece d identite.");
+    const object = await this.objectStorage.getObject(row.idDocumentKey);
+    return {
+      ...object,
+      originalName: row.idDocumentName || `piece-identite-${tenantId}`,
+      mimeType: row.idDocumentMime,
+    };
+  }
+
+  async deleteTenantIdDocument(tenantId: number, orgId: number) {
+    await this.findTenant(tenantId, orgId);
+    const row = await this.tenantIdDocumentRow(tenantId);
+    if (row?.idDocumentKey) {
+      await this.objectStorage.deleteObject(row.idDocumentKey).catch(() => undefined);
+    }
+    await this.db
+      .update(tenantDetails)
+      .set({
+        idDocumentBucket: null,
+        idDocumentKey: null,
+        idDocumentMime: null,
+        idDocumentName: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(tenantDetails.customerId, tenantId));
+    return { message: "Copie de la piece supprimee." };
   }
 
   async findPayment(id: number) {

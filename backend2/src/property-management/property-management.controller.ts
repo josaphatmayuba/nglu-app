@@ -111,6 +111,53 @@ export class PropertyManagementController {
     return this.propertyManagementService.updateTenant(id, body, orgId);
   }
 
+  @ApiOperation({ summary: "Upload the tenant identity document copy (scan/photo)" })
+  @Permissions("update-propertyManagement")
+  @UseInterceptors(FileInterceptor("document", {
+    limits: { fileSize: 15 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      const allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (allowed.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new BadRequestException("Type de fichier non autorise. Formats acceptes : JPEG, PNG, WebP, PDF."), false);
+      }
+    },
+  }))
+  @Post("tenants/:id/id-document")
+  uploadTenantIdDocument(
+    @Param("id", ParseIntPipe) id: number,
+    @UploadedFile() document: any,
+    @CurrentOrg() orgId: number,
+  ) {
+    return this.propertyManagementService.uploadTenantIdDocument(id, document, orgId);
+  }
+
+  @ApiOperation({ summary: "Stream the tenant identity document copy from object storage" })
+  @Permissions("readSingle-propertyManagement", "readAll-propertyManagement")
+  @Get("tenants/:id/id-document/file")
+  async tenantIdDocumentFile(
+    @Param("id", ParseIntPipe) id: number,
+    @CurrentOrg() orgId: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.propertyManagementService.tenantIdDocumentFile(id, orgId);
+    res.set({
+      "Content-Type": file.mimeType || file.contentType,
+      "Cache-Control": "private, max-age=300",
+      ...(file.contentLength ? { "Content-Length": String(file.contentLength) } : {}),
+    });
+    return new StreamableFile(file.body);
+  }
+
+  @ApiOperation({ summary: "Delete the tenant identity document copy" })
+  @Permissions("update-propertyManagement")
+  @Delete("tenants/:id/id-document")
+  @HttpCode(200)
+  deleteTenantIdDocument(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.propertyManagementService.deleteTenantIdDocument(id, orgId);
+  }
+
   @ApiOperation({ summary: "Generate a secure tenant onboarding link" })
   @Permissions("create-propertyManagement")
   @Post("onboarding")

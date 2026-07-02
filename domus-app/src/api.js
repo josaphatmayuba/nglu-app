@@ -136,6 +136,14 @@ export const api = {
   updateTenant: (id, b) => put(`/tenants/${id}`, b),
   // Suppression = soft-delete (status=false) via l'API customer partagée du CRM.
   deleteTenant: (id) => jsonFetch(`/customer/${id}`, { method: "PATCH", base: API_ROOT, body: JSON.stringify({ status: "false" }) }),
+  // Copie de la pièce d'identité du locataire (une copie par locataire, MinIO).
+  uploadTenantIdDocument: (id, file) => {
+    const form = new FormData();
+    form.append("document", file);
+    return multipartFetch(`/tenants/${id}/id-document`, form);
+  },
+  deleteTenantIdDocument: (id) => del(`/tenants/${id}/id-document`),
+  tenantIdDocumentUrl: (id) => authenticatedFileUrl(`/tenants/${id}/id-document/file`),
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),

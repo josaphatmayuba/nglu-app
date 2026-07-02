@@ -403,6 +403,10 @@ export function Locataires() {
                 : form.id
                   ? await api.updateTenant(form.id, tenantPayload(form))
                   : await api.createTenant(tenantPayload(form));
+              const tenantId = saved?.id || form.id;
+              if (form._idFile && tenantId) {
+                await api.uploadTenantIdDocument(tenantId, form._idFile);
+              }
               setModal(null);
               await reload();
               if (saved?.id || form.id) setSelectedId(saved?.id || form.id);
@@ -486,7 +490,16 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
             <Info2 icon={Building2} label={t("Employeur")} value={tenant.entityName || "—"} />
             <Info2 icon={Home} label={t("Foyer")} value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
             <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus || "—"} />
+            <Info2 icon={IdCard} label={t("Piece d'identite")} value={[tenant.idDocumentType, tenant.idNumber].filter(Boolean).join(" · ") || "—"} />
           </div>
+
+          {tenant.idDocumentName && (
+            <div className="action-strip" style={{ marginTop: 8 }}>
+              <a className="btn" href={api.tenantIdDocumentUrl(tenant.id)} target="_blank" rel="noreferrer">
+                <IdCard size={16} /> Voir la copie de la piece
+              </a>
+            </div>
+          )}
 
           {activeLease && (
             <div className="info-grid" style={{ marginTop: 8 }}>
@@ -649,6 +662,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
 
 const emptyTenant = {
   firstName: "", lastName: "", email: "", phone: "", phone2: "", address: "",
+  id_document_type: "", id_number: "", _idFile: null,
   birth_date: "", sex: "M", nationality: "Congolaise", marital_status: "célibataire",
   contacted_person: "", contacted_person_phone_number: "",
   prossional_status: "salarie", main_activity: "", entity_name: "",
@@ -701,6 +715,9 @@ function tenantToForm(t) {
     sex: t.sex || "M",
     nationality: t.nationality || "Congolaise",
     marital_status: t.maritalStatus || "célibataire",
+    id_document_type: t.idDocumentType || "",
+    id_number: t.idNumber || "",
+    _idDocumentName: t.idDocumentName || "",
     contacted_person: t.contactedPerson || "",
     contacted_person_phone_number: t.contactedPersonPhoneNumber || "",
     prossional_status: t.professionalStatus || "salarie",
@@ -758,6 +775,8 @@ function tenantPayload(f) {
     sex: f.sex,
     nationality: f.nationality.trim(),
     marital_status: f.marital_status,
+    id_document_type: f.id_document_type.trim() || null,
+    id_number: f.id_number.trim() || null,
     phone2: f.phone2.trim() || null,
     contacted_person: f.contacted_person.trim(),
     contacted_person_phone_number: f.contacted_person_phone_number.trim(),
@@ -831,6 +850,27 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
               <DomusPhoneField label="Telephone du conjoint" value={form.partenair_number} onChange={(v) => set({ partenair_number: v })} required />
             </div>
           )}
+          <div className="domus-property-form-grid">
+            <DomusPropertyField label="Piece d'identite (type)" value={form.id_document_type} onChange={(v) => set({ id_document_type: v })} placeholder="ex. Carte d'electeur, Passeport" />
+            <DomusPropertyField label="N&deg; de la piece" value={form.id_number} onChange={(v) => set({ id_number: v })} placeholder="ex. CNI-0123456" />
+          </div>
+          <label className="domus-property-field">
+            <span>Copie de la piece (scan/photo)</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={(e) => set({ _idFile: e.target.files?.[0] || null })}
+            />
+            {form._idFile
+              ? <small className="muted">Sera importee a l'enregistrement : {form._idFile.name}</small>
+              : form._idDocumentName
+                ? (
+                  <small className="muted">
+                    Copie actuelle : <a href={api.tenantIdDocumentUrl(form.id)} target="_blank" rel="noreferrer">{form._idDocumentName}</a>
+                  </small>
+                )
+                : <small className="muted">Aucune copie importee.</small>}
+          </label>
         </FormSection>
 
         <FormSection icon={<Phone size={14} />} title="Contact">

@@ -646,6 +646,13 @@ export const tenantDetails = mysqlTable("tenant_details", {
   nationality: varchar("nationality", { length: 255 }).notNull(),
   maritalStatus: varchar("marital_status", { length: 255 }).notNull(),
   originProvince: varchar("origin_province", { length: 255 }).notNull(),
+  // Pièce d'identité (type + numéro + copie scannée sur MinIO) — utilisée par le contrat de bail.
+  idDocumentType: varchar("id_document_type", { length: 100 }),
+  idNumber: varchar("id_number", { length: 100 }),
+  idDocumentBucket: varchar("id_document_bucket", { length: 255 }),
+  idDocumentKey: varchar("id_document_key", { length: 500 }),
+  idDocumentMime: varchar("id_document_mime", { length: 100 }),
+  idDocumentName: varchar("id_document_name", { length: 255 }),
   phone2: varchar("phone2", { length: 255 }),
   contactedPerson: varchar("contacted_person", { length: 255 }).notNull(),
   contactedPersonPhoneNumber: varchar("contacted_person_phone_number", { length: 255 }).notNull(),

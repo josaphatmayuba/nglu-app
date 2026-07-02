@@ -13,6 +13,7 @@ import {
   realEstateLeases,
   realEstateProperties,
   realEstateUnits,
+  tenantDetails,
   users,
 } from "../database/schema";
 import type { Database } from "../database/types";
@@ -53,6 +54,8 @@ type LeaseDetails = {
   tenantEmail: string | null;
   tenantPhone: string | null;
   tenantAddress: string | null;
+  tenantIdDocumentType: string | null;
+  tenantIdNumber: string | null;
   tenantName: string;
 };
 
@@ -158,7 +161,8 @@ export class ContractsService {
       "ADRESSE DU PRENEUR": lease.tenantAddress ?? "",
       "TÉLÉPHONE DU PRENEUR": lease.tenantPhone ?? "",
       "EMAIL DU PRENEUR": lease.tenantEmail ?? "",
-      "NUMÉRO DE PIÈCE D'IDENTITÉ": "", // collected outside of the lease form for now
+      "NUMÉRO DE PIÈCE D'IDENTITÉ": lease.tenantIdNumber ?? "",
+      "TYPE DE PIÈCE D'IDENTITÉ": lease.tenantIdDocumentType ?? "",
       "ADRESSE COMPLÈTE DU LOGEMENT DE LOCATION": rentalAddress,
       "TYPE DE LOGEMENT": destination,
       "PROPRIÉTÉ": lease.propertyName ?? "",
@@ -586,11 +590,14 @@ export class ContractsService {
         tenantEmail: customers.email,
         tenantPhone: customers.phone,
         tenantAddress: customers.address,
+        tenantIdDocumentType: tenantDetails.idDocumentType,
+        tenantIdNumber: tenantDetails.idNumber,
       })
       .from(realEstateLeases)
       .leftJoin(realEstateProperties, eq(realEstateProperties.id, realEstateLeases.propertyId))
       .leftJoin(realEstateUnits, eq(realEstateUnits.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
+      .leftJoin(tenantDetails, eq(tenantDetails.customerId, customers.id))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId))
       .where(and(eq(realEstateLeases.id, leaseId), eq(realEstateLeases.organizationId, orgId)))
       .limit(1);
@@ -669,7 +676,7 @@ export class ContractsService {
     <hr style="border:none;border-top:1px dashed #c5cae9;margin:12px 0;">
     <div>
       <div style="font-size:11.5px;font-weight:bold;color:#1a237e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Le Preneur (Locataire)</div>
-      <strong>${e(lease.tenantName)}</strong> &mdash; Pièce d&rsquo;identité n°&nbsp;<em>[NUMÉRO]</em><br>
+      <strong>${e(lease.tenantName)}</strong> &mdash; ${e(lease.tenantIdDocumentType || "Pièce d'identité")} n°&nbsp;<em>${e(lease.tenantIdNumber || "N/A")}</em><br>
       Adresse&nbsp;: ${e(lease.tenantAddress ?? "[ADRESSE DU PRENEUR]")}<br>
       Téléphone&nbsp;: ${e(lease.tenantPhone ?? "N/A")} &nbsp;&nbsp; Courriel&nbsp;: ${e(lease.tenantEmail ?? "N/A")}
     </div>

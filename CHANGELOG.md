@@ -10,6 +10,13 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.144.0)
+- **Domus : pièce d'identité du locataire (type, numéro, copie scannée)** —
+  - Migration `0202_tenant_details_id_number` : colonnes `id_document_type`, `id_number` + référence MinIO (`id_document_bucket/key/mime/name`) sur `tenant_details`.
+  - Backend : champs `id_document_type`/`id_number` dans Create/UpdateTenantDto et le service ; endpoints `POST/GET/DELETE /property-management/tenants/:id/id-document` (upload scan/photo JPEG/PNG/WebP/PDF 15 Mo max, une copie par locataire, remplacement supprime l'ancienne du stockage).
+  - Contrats : placeholders `[NUMÉRO DE PIÈCE D'IDENTITÉ]` (enfin rempli — il était toujours vide) et nouveau `[TYPE DE PIÈCE D'IDENTITÉ]` ; le fallback legacy affiche aussi type + numéro réels.
+  - Domus Locataires : champs « Pièce d'identité (type) » et « N° de la pièce » + import de la copie dans le formulaire (envoyée après création/mise à jour), ligne pièce d'identité et bouton « Voir la copie de la pièce » dans le détail.
+
 ### Added (3.143.0)
 - **Domus : identité du bailleur configurable (nom + téléphone), distincte de l'entreprise** —
   - Migration `0201_appsetting_landlord_contact` : colonnes `landlord_name`/`landlord_phone` sur `appSetting` + injection de « Téléphone : [TÉLÉPHONE DU BAILLEUR] » dans la ligne BAILLEUR des modèles de contrat par défaut (guard NOT LIKE, idempotente).

@@ -1240,6 +1240,13 @@
                         "when":  1780898400000,
                         "tag":  "0201_appsetting_landlord_contact",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  177,
+                        "version":  "5",
+                        "when":  1780902000000,
+                        "tag":  "0202_tenant_details_id_number",
+                        "breakpoints":  true
                     }
                 ]
 }
