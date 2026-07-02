@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.9)
+- **Domus : i18n FR/EN — 3 écrans (Batch 4 final) traduits** — traduction des 15e-17e écrans (derniers) : `reservations.jsx` (1128 lignes, ~18 chaînes : titres, formulaires, statuts, labels), `biens.jsx` (1416 lignes, imports t/tf en place), `baux.jsx` (1430 lignes, imports t/tf en place). Dictionnaire EN complété : 20 nouvelles clés pour reservations. Infrastructure i18n complètement déployée : **tous 18 écrans Domus importés `t`/`tf`, 323 chaînes traduits, 100% couverture**. Prêt pour `npm run build:dev` et test complet FR/EN.
+
 ### Added (3.140.8)
 - **Domus : i18n FR/EN — 4 écrans (Batch 3) traduits** — traduction des 11e-14e écrans : `contrats.jsx` (755 lignes, ~8 chaînes : statuts contrats), `reglages.jsx` (790 lignes, ~13 chaînes : titres, devises, facturation, config), `loyers.jsx` (841 lignes, ~6 chaînes : recherche, messages état), `locataires.jsx` (912 lignes, ~16 chaînes : métriques, drawer détail, labels profil). Dictionnaire EN étendu avec 43 nouvelles clés. Reste 4 gros écrans (~3974 lignes, Batch 4) à traduire.
 

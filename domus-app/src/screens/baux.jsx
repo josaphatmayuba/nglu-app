@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { t, tf } from "../i18n.js";
 import {
   Check,
   Copy,

@@ -447,6 +447,28 @@ const EN = {
   "Employeur": "Employer",
   "Foyer": "Household",
   "Etat civil": "Marital status",
+  // Écran: reservations.jsx
+  "Réservations": "Reservations",
+  "En attente": "Pending",
+  "Confirmée": "Confirmed",
+  "Arrivée": "Checked in",
+  "Départ (soldée)": "Checked out (settled)",
+  "Annulée": "Cancelled",
+  "Ville, bien, type...": "City, property, type...",
+  "Réf, client, bien...": "Ref, guest, property...",
+  "Total du séjour": "Stay total",
+  "Tarif par jour": "Daily rate",
+  "Caution (info)": "Deposit (info)",
+  "Unité (option — sinon bien entier)": "Unit (optional — otherwise entire property)",
+  "Arrivée (check-in)": "Check-in",
+  "Départ (check-out)": "Check-out",
+  "Réservation rapide": "Quick reservation",
+  "Séjour courte durée, tarif par jour": "Short stay, daily rate",
+  "Bien & séjour": "Property & stay",
+  "Client": "Guest",
+  "ex. Jean Kabila": "e.g. Jean Kabila",
+  "Modifier la réservation": "Edit reservation",
+  "Notes": "Notes",
 };
 
 const DICT = { fr: {}, en: EN };

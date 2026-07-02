@@ -22,6 +22,7 @@ import {
 import { money, normalizeCurrencyModule, cleanCurrencySymbol, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
+import { t, tf } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
@@ -31,11 +32,11 @@ import { takeReservationPrefill } from "./reservationPrefill.js";
 // unité sur une plage de dates, au tarif par jour. Recette au check-out.
 
 const STATUS_LABEL = {
-  pending: "En attente",
-  confirmed: "Confirmée",
-  checked_in: "Arrivée",
-  checked_out: "Départ (soldée)",
-  cancelled: "Annulée",
+  pending: t("En attente"),
+  confirmed: t("Confirmée"),
+  checked_in: t("Arrivée"),
+  checked_out: t("Départ (soldée)"),
+  cancelled: t("Annulée"),
 };
 const STATUS_CLASS = {
   pending: "chip-amber",
@@ -330,13 +331,13 @@ export function Reservations({ go }) {
     <>
       <div className="immo-header">
         <div>
-          <h1>Réservations</h1>
+          <h1>{t("Réservations")}</h1>
           <p>Séjours courte durée (type hôtel), facturés au jour</p>
         </div>
         <div className="immo-header-actions">
           <label className="immo-search">
             <Search size={16} />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === "stay" ? "Ville, bien, type..." : "Réf, client, bien..."} />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === "stay" ? t("Ville, bien, type...") : t("Réf, client, bien...")} />
           </label>
           <button className="immo-btn primary" onClick={() => setModal({ ...emptyReservation, currencyId: currency.defaultCurrencyId || "" })}>
             <Plus size={16} /> Réservation
@@ -552,7 +553,7 @@ function ReservationCard({ reservation: r, busy, symbol, propertyName, unitName,
         <span><CalendarDays size={14} /> {compactDate(r.checkIn)} → {compactDate(r.checkOut)}</span>
         <span><CalendarCheck size={14} /> {r.days} j × {money(r.dailyRate, symbol)}</span>
         {toMoney(r.discountAmount) > 0 && <span><Percent size={14} /> Remise {money(r.discountAmount, symbol)}</span>}
-        <span title="Total du séjour"><b>{money(r.totalAmount, symbol)}</b></span>
+        <span title={t("Total du séjour")}><b>{money(r.totalAmount, symbol)}</b></span>
         {r.guestPhone && <span><User size={14} /> {r.guestPhone}</span>}
       </div>
       {!closed && (
@@ -706,16 +707,16 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
             <b>{money(stay.dailyRate, symbol)}</b> <span>/ jour</span>
           </div>
           <div className="domus-property-form-grid">
-            <DomusPropertyField label="Arrivée" type="date" value={form.checkIn} required onChange={(checkIn) => set({ checkIn })} />
-            <DomusPropertyField label="Départ" type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
+            <DomusPropertyField label={t("Arrivée")} type="date" value={form.checkIn} required onChange={(checkIn) => set({ checkIn })} />
+            <DomusPropertyField label={t("Départ")} type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
           </div>
           {datesInvalid && <div className="api-error" style={{ marginTop: 6 }}>Le départ doit être après l'arrivée.</div>}
           {!datesInvalid && days > 0 && <BookingTotal gross={gross} discount={discount} total={total} days={days} dailyRate={form.dailyRate} symbol={symbol} />}
           <div className="stay-booking-guest">
-            <DomusPropertyField label="Nom du client" value={form.guestName} required onChange={(guestName) => set({ guestName })} placeholder="ex. Jean Kabila" />
-            <DomusPhoneField label="Téléphone" value={form.guestPhone} onChange={(guestPhone) => set({ guestPhone })} />
-            <DomusPropertyField label="Email" type="email" value={form.guestEmail} onChange={(guestEmail) => set({ guestEmail })} />
-            <MoneyField label="Tarif par jour" value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <DomusPropertyField label={t("Nom du client")} value={form.guestName} required onChange={(guestName) => set({ guestName })} placeholder={t("ex. Jean Kabila")} />
+            <DomusPhoneField label={t("Téléphone")} value={form.guestPhone} onChange={(guestPhone) => set({ guestPhone })} />
+            <DomusPropertyField label={t("Email")} type="email" value={form.guestEmail} onChange={(guestEmail) => set({ guestEmail })} />
+            <MoneyField label={t("Tarif par jour")} value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
             <CouponField
               value={form.couponCode}
               preview={couponPreview}
@@ -729,7 +730,7 @@ function StayDetailModal({ stay, currency, initialCheckIn, initialCheckOut, onCl
               onClear={() => { set({ couponCode: "" }); setCouponPreview(null); setCouponError(""); }}
               disabled={gross <= 0}
             />
-            <MoneyField label="Caution (info)" value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <MoneyField label={t("Caution (info)")} value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
           <button className="immo-btn primary stay-booking-cta" disabled={busy || !canBook} onClick={book}>
             {busy ? "Réservation…" : "Réserver"}
@@ -821,27 +822,27 @@ function ReservationModal({ value, properties, units, couponsById, currency, onC
   };
 
   return (
-    <Modal title={form.id ? "Modifier la réservation" : "Réservation rapide"} subtitle="Séjour courte durée, tarif par jour" icon={<BedDouble size={20} />} className="domus-property-modal" onClose={onClose}>
+    <Modal title={form.id ? t("Modifier la réservation") : t("Réservation rapide")} subtitle={t("Séjour courte durée, tarif par jour")} icon={<BedDouble size={20} />} className="domus-property-modal" onClose={onClose}>
       <div className="domus-property-form">
-        <FormSection icon={<DoorOpen size={14} />} title="Bien & séjour">
+        <FormSection icon={<DoorOpen size={14} />} title={t("Bien & séjour")}>
           <div className="domus-property-form-grid">
             <DomusPropertySelect
-              label="Bien"
+              label={t("Bien")}
               value={form.propertyId}
               required
               onChange={(propertyId) => set({ propertyId, unitId: "", ...reservationRateDefaults(properties, units, propertyId, "", currency.defaultCurrencyId) })}
               options={properties.map((p) => [String(p.id), p.name])}
             />
             <DomusPropertySelect
-              label="Unité (option — sinon bien entier)"
+              label={t("Unité (option — sinon bien entier)")}
               value={form.unitId}
               onChange={(unitId) => set({ unitId, ...reservationRateDefaults(properties, units, form.propertyId, unitId, currency.defaultCurrencyId) })}
               options={[["", "— Bien entier —"], ...propertyUnits.map((u) => [String(u.id), u.name])]}
             />
-            <DomusPropertyField label="Arrivée (check-in)" type="date" value={form.checkIn} required onChange={(checkIn) => set({ checkIn })} />
-            <DomusPropertyField label="Départ (check-out)" type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
-            <MoneyField label="Tarif par jour" value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
-            <MoneyField label="Caution (info)" value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <DomusPropertyField label={t("Arrivée (check-in)")} type="date" value={form.checkIn} required onChange={(checkIn) => set({ checkIn })} />
+            <DomusPropertyField label={t("Départ (check-out)")} type="date" value={form.checkOut} required onChange={(checkOut) => set({ checkOut })} />
+            <MoneyField label={t("Tarif par jour")} value={form.dailyRate} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(dailyRate) => set({ dailyRate })} onCurrencyChange={(currencyId) => set({ currencyId })} />
+            <MoneyField label={t("Caution (info)")} value={form.depositAmount} currencyId={form.currencyId} currencyOptions={currency.currencyOptions} onAmountChange={(depositAmount) => set({ depositAmount })} onCurrencyChange={(currencyId) => set({ currencyId })} />
           </div>
           {datesInvalid && <div className="api-error" style={{ marginTop: 8 }}>La date de départ doit être postérieure à l'arrivée.</div>}
           <CouponField
