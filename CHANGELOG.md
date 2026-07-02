@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.142.1)
+- **Domus : impression/PDF contrat de bail — retouches** (`domus-app/src/contractUtils.js`, `contractPdf.js`) —
+  - PDF téléchargé blanc : jsPDF clonait le conteneur avec son offset hors-écran (`left:-12000px`) → contenu dessiné hors page. L'hôte cloné est désormais neutre, l'offset porté par un wrapper non cloné.
+  - En-tête d'impression : retrait du bloc Locataire/Courriel/Statut (dupliquait le corps du contrat) ; seule la référence CTR reste.
+  - Signatures : « Signé le : … » sous chaque signataire (bailleur et locataire), pointillés si non signé ; suppression du « Signé le: Non signé » global.
+
 ### Added (3.142.0)
 - **Domus : ville de signature portée par le bail** — le « Fait à [VILLE] » du contrat est la ville de signature (attribut du bail), distincte de la ville du bien (localisation).
   - Migration `0200_real_estate_leases_signing_city` : colonne `signing_city` sur `real_estate_leases` (journal Drizzle → auto-appliquée au boot).

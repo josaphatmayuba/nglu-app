@@ -167,13 +167,6 @@ export const CONTRACT_PRINT_CSS = `
       letter-spacing: .06em;
       margin: 12px 0 16px;
     }
-    .contract-doc .meta {
-      color: #57534e;
-      font-size: 12px;
-      font-style: italic;
-      letter-spacing: .03em;
-      line-height: 1.9;
-    }
     .contract-doc .contract-content { color: #292524; font-size: 13px; line-height: 1.75; margin-top: 26px; }
     .contract-doc .contract-content p { margin: 0 0 12px; orphans: 3; text-align: justify; widows: 3; }
     .contract-doc .contract-content li { margin-bottom: 6px; orphans: 3; widows: 3; }
@@ -266,6 +259,7 @@ export const CONTRACT_PRINT_CSS = `
       padding: 10px;
     }
     .contract-doc .signature-name { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin-top: 8px; }
+    .contract-doc .signature-date { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin-top: 10px; }
     .contract-doc .signature-line { border-bottom: 1px solid #1a1a1a; display: inline-block; min-width: 240px; padding: 34px 0 8px; }
     .contract-doc .signature p { color: #57534e; font-size: 11.5px; font-style: italic; letter-spacing: .04em; margin: 26px 0 0; text-align: center; }
     .contract-doc .typed-signature {
@@ -280,31 +274,32 @@ export const CONTRACT_PRINT_CSS = `
 `;
 
 export function contractPrintBody(contract) {
-  const signedAt = formatSignedAt(contract?.signedAt);
-  const meta = CONTRACT_STATUS[contract?.status] || { label: contract?.status };
+  const dots = "..............................";
+  const tenantSignedDate = contract?.signedAt ? escapeHtml(formatSignedAt(contract.signedAt)) : dots;
+  const landlordSignedDate = contract?.companyInfo?.landlordSignature && (contract?.sentAt || contract?.createdAt)
+    ? escapeHtml(formatSignedAt(contract.sentAt || contract.createdAt))
+    : dots;
   const tenantSignature = contract?.signatureData
-    ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />${
-        contract?.signedAt ? `<div class="signature-name">Signé le : ${escapeHtml(formatSignedAt(contract.signedAt))}</div>` : ""
-      }`
+    ? `<img class="signature-image" src="${contract.signatureData}" alt="Signature du locataire" />`
     : `<div class="signature-line"></div>`;
 
   return `
   <div class="header">
     <div class="eyebrow">Contrat de bail</div>
     <h1>${escapeHtml(contractRef(contract))}</h1>
-    <div class="meta">
-      Locataire: ${escapeHtml(contract?.tenantName || "-")}<br />
-      Courriel: ${escapeHtml(contract?.tenantEmail || "-")}<br />
-      Statut: ${escapeHtml(meta.label || "-")}
-    </div>
   </div>
   <div class="contract-content">${contractContentHtml(contract?.contractContent || "")}</div>
   <div class="signature">
     <div class="signature-grid">
-      <div><h2>Signature du bailleur</h2>${landlordPrintBlock(contract)}</div>
-      <div><h2>Signature du locataire</h2>${tenantSignature}</div>
+      <div>
+        <h2>Signature du bailleur</h2>${landlordPrintBlock(contract)}
+        <div class="signature-date">Signé le : ${landlordSignedDate}</div>
+      </div>
+      <div>
+        <h2>Signature du locataire</h2>${tenantSignature}
+        <div class="signature-date">Signé le : ${tenantSignedDate}</div>
+      </div>
     </div>
-    <p>Signé le: ${escapeHtml(signedAt)}</p>
   </div>`;
 }
 

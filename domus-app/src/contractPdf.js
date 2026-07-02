@@ -46,10 +46,15 @@ export const contractSignaturesHtml = (contract) => `
 // Rend le contrat (m\u00eame design que la vue imprimable) et le t\u00e9l\u00e9charge automatiquement en PDF.
 export const downloadSignedContractPdf = async (contract) => {
   const pageWidthPx = 794; // A4 \u00e0 96dpi
+  // jsPDF clone l'\u00e9l\u00e9ment source avec ses styles inline : l'h\u00f4te doit rester neutre
+  // (aucun offset), c'est le wrapper non clon\u00e9 qui le sort de l'\u00e9cran.
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = "position:fixed;left:-12000px;top:0;z-index:-1;";
   const host = document.createElement("div");
-  host.style.cssText = `position:fixed;left:-12000px;top:0;width:${pageWidthPx}px;background:#fff;z-index:-1;`;
+  host.style.cssText = `width:${pageWidthPx}px;background:#fff;`;
   host.innerHTML = `<style>${CONTRACT_PRINT_CSS}</style><div class="contract-doc">${contractPrintBody(contract)}</div>`;
-  document.body.appendChild(host);
+  wrapper.appendChild(host);
+  document.body.appendChild(wrapper);
   try {
     const pdf = new jsPDF({ unit: "pt", format: "a4" });
     const pageWidthPt = pdf.internal.pageSize.getWidth(); // 595pt
@@ -64,6 +69,6 @@ export const downloadSignedContractPdf = async (contract) => {
     pdf.save(filename);
     return filename;
   } finally {
-    host.remove();
+    wrapper.remove();
   }
 };
