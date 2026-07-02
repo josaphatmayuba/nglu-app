@@ -40,6 +40,7 @@ type LeaseDetails = {
   securityDeposit: string | null;
   billingCycle: string | null;
   terms: string | null;
+  signingCity: string | null;
   moveInMeterReading: string | null;
   propertyName: string | null;
   propertyType: string | null;
@@ -174,7 +175,7 @@ export class ContractsService {
       "DEVISE": currency,
       "SYMBOLE DE DEVISE": lease.currencySymbol ?? "",
       "CODE DE DEVISE": lease.currencyCode ?? "",
-      "VILLE": lease.propertyCity ?? "",
+      "VILLE": lease.signingCity || lease.propertyCity || "",
       "DATE DE SIGNATURE DE BAIL": today,
       "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA": today,
       "DATE DU JOUR": today,
@@ -472,6 +473,7 @@ export class ContractsService {
       moveInMeterReading: current.moveInMeterReading,
       moveInNotes: current.moveInNotes,
       terms: current.terms,
+      signingCity: current.signingCity,
       status: "active",
       createdAt: sql`CURRENT_TIMESTAMP`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
@@ -568,6 +570,7 @@ export class ContractsService {
         securityDeposit: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         terms: realEstateLeases.terms,
+        signingCity: realEstateLeases.signingCity,
         moveInMeterReading: realEstateLeases.moveInMeterReading,
         propertyName: realEstateProperties.name,
         propertyType: realEstateProperties.propertyType,
@@ -608,7 +611,7 @@ export class ContractsService {
     const securityDeposit = this.formatMoney(lease.securityDeposit);
     const currency = this.currencyLabel(lease) || "USD";
     const guaranteeMonths = this.guaranteeMonths(lease.rentAmount, lease.securityDeposit);
-    const city = lease.propertyCity || "[VILLE]";
+    const city = lease.signingCity || lease.propertyCity || "[VILLE]";
     const rentalAddress = [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || "N/A";
     const destination = this.humanizeType(lease.unitType || lease.propertyType || "habitation");
     const landlordName = company.companyName || "[NOM DU BAILLEUR]";

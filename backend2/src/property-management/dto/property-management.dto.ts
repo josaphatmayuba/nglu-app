@@ -268,6 +268,11 @@ export class CreateLeaseDto {
   @IsString()
   terms?: string | null;
 
+  @ApiPropertyOptional({ example: "Kinshasa", description: "Ville de signature du contrat (Fait à ...)." })
+  @IsOptional()
+  @IsString()
+  signingCity?: string | null;
+
   @ApiPropertyOptional({ example: "active", default: "draft" })
   @IsOptional()
   @IsString()

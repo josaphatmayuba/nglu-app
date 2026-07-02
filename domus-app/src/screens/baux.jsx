@@ -50,6 +50,7 @@ const emptyLease = {
   status: "active",
   terms: "",
   moveInNotes: "",
+  signingCity: "",
   taxApplyMode: "never",
   taxName: "",
   taxType: "percent",
@@ -778,7 +779,10 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
                 label="Propriete"
                 value={form.propertyId}
                 required
-                onChange={(propertyId) => set({ propertyId, unitId: "" })}
+                onChange={(propertyId) => {
+                  const property = properties.find((p) => String(p.id) === String(propertyId));
+                  set({ propertyId, unitId: "", ...(form.signingCity ? {} : { signingCity: property?.city || "" }) });
+                }}
                 options={properties.map((property) => [String(property.id), property.name || `Propriete #${property.id}`])}
               />
               <LeaseSelect
@@ -795,6 +799,12 @@ function LeaseModal({ value, properties, units, tenants, currencyOptions = [], d
               required
               onChange={(tenantId) => set({ tenantId })}
               options={tenants.map((tenant) => [String(tenant.id), tenantLabel(tenant)])}
+            />
+            <LeaseField
+              label="Ville de signature (Fait a ...)"
+              value={form.signingCity}
+              onChange={(signingCity) => set({ signingCity })}
+              placeholder="ex. Kinshasa"
             />
           </section>
 
@@ -1191,6 +1201,7 @@ function leaseToForm(lease) {
     status: lease.status || "active",
     terms: lease.terms || "",
     moveInNotes: lease.moveInNotes || "",
+    signingCity: lease.signingCity || "",
     taxApplyMode: lease.taxApplyMode || "never",
     taxName: lease.taxName || "",
     taxType: lease.taxType || "percent",
@@ -1212,6 +1223,7 @@ function leasePayload(form) {
     ...(form.currencyId ? { currencyId: toNumber(form.currencyId) } : {}),
     terms: form.terms || null,
     moveInNotes: form.moveInNotes || null,
+    signingCity: form.signingCity || null,
     status: form.status || "active",
     taxApplyMode: form.taxApplyMode || "never",
     taxName: form.taxApplyMode === "auto" ? (form.taxName || null) : (form.taxName || null),

@@ -852,6 +852,8 @@ export const realEstateLeases = mysqlTable("real_estate_leases", {
   moveInMeterReading: decimal("move_in_meter_reading", { precision: 12, scale: 2 }),
   moveInNotes: text("move_in_notes"),
   terms: text("terms"),
+  // Ville de signature du contrat ("Fait à ...") — distincte de la ville du bien.
+  signingCity: varchar("signing_city", { length: 255 }),
   status: varchar("status", { length: 255 }).default("draft").notNull(),
   // Taxe par bail (incluse/informative) — calculée sur le loyer au paiement.
   taxName: varchar("tax_name", { length: 255 }),

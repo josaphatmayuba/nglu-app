@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.142.0)
+- **Domus : ville de signature portée par le bail** — le « Fait à [VILLE] » du contrat est la ville de signature (attribut du bail), distincte de la ville du bien (localisation).
+  - Migration `0200_real_estate_leases_signing_city` : colonne `signing_city` sur `real_estate_leases` (journal Drizzle → auto-appliquée au boot).
+  - Backend : `signingCity` dans `CreateLeaseDto`/`UpdateLeaseDto`, `createLease`/`updateLease`/renouvellement, exposée par `leaseQuery`; génération de contrat (`contracts.service.ts`) : `[VILLE]` = ville de signature du bail, repli sur la ville du bien.
+  - Frontend (`baux.jsx`) : champ « Ville de signature (Fait à …) » dans le formulaire de bail, pré-rempli avec la ville du bien sélectionné. (Pas de clé Jira — demandé en session.)
+
 ### Fixed (3.141.2)
 - **Domus : impression contrat de bail — corrections et design renforcé** (`domus-app/src/contractUtils.js`, `contractPdf.js`) —
   - Bouton « Imprimer / PDF » de la popup inopérant (le `onclick` inline était bloqué par la CSP héritée) : le déclenchement de `window.print()` est désormais piloté depuis l'app + impression lancée automatiquement à l'ouverture.
