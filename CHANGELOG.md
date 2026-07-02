@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.140.6)
+- **Domus : i18n FR/EN — écran Espace locataire (portail) traduit** — traduction du 7e écran (`portail.jsx`, 18 chaînes) : titre portail, sélecteur locataire, statuts loyer, aide, documents, historique, modal contrat. Dictionnaire EN étendu. Reste 11 écrans (~8276 lignes) à traduire.
+
 ### Added (3.140.5)
 - **Domus : i18n FR/EN — écran Prévisionnel traduit** — traduction du 6e écran (`forecast.jsx`, 28 chaînes) : horizons/hypothèses/simulation, titres, messages calcul/erreur, labels KPI, détail mensuel, suivi prévu vs réel. Dictionnaire EN étendu. Reste 12 écrans (~8724 lignes) à traduire.
 
