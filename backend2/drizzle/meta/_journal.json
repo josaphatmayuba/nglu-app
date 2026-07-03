@@ -1254,6 +1254,13 @@
                         "when":  1780905600000,
                         "tag":  "0203_domus_residential_template_v2",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  179,
+                        "version":  "5",
+                        "when":  1780909200000,
+                        "tag":  "0204_contract_welcome_message_sent_at",
+                        "breakpoints":  true
                     }
                 ]
 }

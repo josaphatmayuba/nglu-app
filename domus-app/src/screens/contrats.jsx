@@ -207,6 +207,22 @@ export function Contrats() {
     );
   };
 
+  // Renvoi manuel du message de bienvenue (contrat signé mais message jamais parti).
+  const handleSendWelcome = async () => {
+    if (!selectedId) return;
+    setBusy("welcome");
+    setActionError("");
+    try {
+      await api.sendContractWelcome(selectedId);
+      await reload();
+      await loadDetail(selectedId);
+    } catch (e) {
+      setActionError(e.message || "Impossible d'envoyer le message de bienvenue.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const handleDelete = async () => {
     if (!selectedId) return;
     const ok = window.confirm(
@@ -391,6 +407,17 @@ export function Contrats() {
                       <Send size={14} /> {detail?.status === "sent" || detail?.status === "viewed" ? "Renvoyer" : "Envoyer"}
                     </button>
                   )}
+                  {detail?.status === "signed" && !detail?.welcomeMessageSentAt && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={Boolean(busy)}
+                      onClick={handleSendWelcome}
+                      title="Envoyer le message de bienvenue (email + SMS) au locataire"
+                    >
+                      <Send size={14} /> Message de bienvenue
+                    </button>
+                  )}
                   {detail?.status === "draft" && (
                     <button type="button" className="btn" style={{ color: "#be123c" }} disabled={Boolean(busy)} onClick={handleDelete}>
                       Retirer
@@ -477,6 +504,13 @@ export function Contrats() {
                   {detail?.signedAt && (
                     <p className="muted" style={{ fontSize: 12, marginTop: 12 }}>
                       Signé le {formatSignedAt(detail.signedAt)}
+                    </p>
+                  )}
+                  {detail?.status === "signed" && (
+                    <p style={{ fontSize: 12, marginTop: 4, color: detail?.welcomeMessageSentAt ? "#059669" : "#b45309" }}>
+                      {detail?.welcomeMessageSentAt
+                        ? `Message de bienvenue envoyé le ${formatSignedAt(detail.welcomeMessageSentAt)}`
+                        : "Message de bienvenue non envoyé — utilisez le bouton « Message de bienvenue »."}
                     </p>
                   )}
                 </div>

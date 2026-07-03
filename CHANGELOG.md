@@ -10,6 +10,14 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.146.0)
+- **Domus : message de bienvenue au locataire après signature du bail (email + SMS)** —
+  - Migration `0204_contract_welcome_message_sent_at` : colonne `welcome_message_sent_at` sur `real_estate_contracts` (suivi d'envoi unique).
+  - Backend : à la signature (électronique via `POST /contracts/sign/:token` ou papier via `mark-signed-manually`), envoi automatique d'un message de bienvenue au locataire — salutation avec nom complet, confirmation que le contrat est signé, félicitations/bienvenue et remerciement pour la confiance, adresse complète du logement (propriété + ville + unité) et période de location (dates début/fin + durée en mois). Email et SMS best-effort (la signature reste valide si l'envoi échoue), événement `welcome_sent` dans l'audit du contrat.
+  - Nouveau endpoint `POST /property-management/contracts/:id/send-welcome` : envoi manuel, uniquement si le contrat est signé et que le message n'est jamais parti (400 sinon).
+  - Message configurable : nouvel événement `contract_signed` (« Bienvenue / contrat signé ») dans Réglages → Messages & notifications, avec nouveaux placeholders `{address}`, `{startDate}`, `{endDate}`, `{duration}`, `{contactPhone}` (téléphone bailleur, repli entreprise) en plus de `{tenantName}`/`{firstName}`/`{reference}`/`{amount}` ; exemple prêt à l'emploi ajouté.
+  - Domus Contrats : bouton « Message de bienvenue » dans le détail d'un contrat signé dont le message n'a jamais été envoyé.
+
 ### Added (3.145.0)
 - **Domus : modèle de bail résidentiel v2 (loi n°15/025 RDC)** —
   - Migration `0203_domus_residential_template_v2` : insère un nouveau modèle « Bail résidentiel v2 (RDC, loi 15/025) » (type `residential`, org 1) et l'active en désactivant les anciens modèles résidentiels (guard NOT EXISTS, idempotente).

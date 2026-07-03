@@ -1,5 +1,5 @@
 import * as crypto from "crypto";
-import { GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, GoneException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { env } from "../config/env";
 import { DRIZZLE } from "../database/database.constants";
@@ -7,6 +7,7 @@ import {
   appSettings,
   customers,
   currencies,
+  emailTemplates,
   realEstateContractAuditLogs,
   realEstateContracts,
   realEstateLeaseDocuments,
@@ -199,6 +200,7 @@ export class ContractsService {
         tenantName: realEstateContracts.tenantName,
         sentAt: realEstateContracts.sentAt,
         signedAt: realEstateContracts.signedAt,
+        welcomeMessageSentAt: realEstateContracts.welcomeMessageSentAt,
         createdAt: realEstateContracts.createdAt,
         signerToken: realEstateContracts.signerToken,
       })
@@ -361,7 +363,146 @@ export class ContractsService {
       `Signature papier importee${createdByName ? ` par ${createdByName}` : ""}`,
     );
     await this.publishContractUpdate("status_changed", id, contract.leaseId);
+
+    // Message de bienvenue (email + SMS) : envoyé une seule fois, best-effort.
+    if (!contract.welcomeMessageSentAt) {
+      try {
+        await this.deliverWelcomeMessage(contract, orgId);
+      } catch (error) {
+        this.logger.warn(`Contract ${id} marked signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     return this.getContract(id, orgId);
+  }
+
+  // Envoi manuel du message de bienvenue (bouton UI) : uniquement si le contrat
+  // est signé et que le message n'est jamais parti (échec de l'envoi automatique).
+  async sendWelcomeMessage(id: number, orgId: number) {
+    const rows = await this.db
+      .select()
+      .from(realEstateContracts)
+      .where(and(eq(realEstateContracts.id, id), eq(realEstateContracts.organizationId, orgId)))
+      .limit(1);
+
+    if (!rows.length) throw new NotFoundException("Contract not found.");
+    const contract = rows[0];
+    if (contract.status !== "signed") {
+      throw new BadRequestException("Le contrat doit d'abord être signé pour envoyer le message de bienvenue.");
+    }
+    if (contract.welcomeMessageSentAt) {
+      throw new BadRequestException("Le message de bienvenue a déjà été envoyé à ce locataire.");
+    }
+
+    return this.deliverWelcomeMessage(contract, orgId);
+  }
+
+  /**
+   * Message de bienvenue au locataire après signature du bail : salutation avec le nom
+   * complet, confirmation que le contrat est signé, remerciement pour la confiance,
+   * adresse complète du logement et période de location. Envoyé par email ET SMS
+   * (même texte court, comme les autres messages Domus). Un template configurable
+   * "contract_signed" (Réglages → Messages) est prioritaire sur le texte par défaut.
+   */
+  private async deliverWelcomeMessage(
+    contract: { id: number; leaseId: number; tenantEmail: string | null; tenantName: string | null },
+    orgId: number,
+  ) {
+    const lease = await this.getLeaseDetails(contract.leaseId, orgId);
+    const company = await this.getCompanyInfo(orgId);
+    const companyName = company.companyName || company.landlordName || "Votre gestionnaire";
+    // Téléphone de contact : bailleur en priorité, sinon entreprise (même logique que les contrats).
+    const contactPhone = company.landlordPhone || company.phone || "";
+
+    const tenantName = lease.tenantName || contract.tenantName || "Locataire";
+    const reference = lease.reference ?? "";
+    const startDate = this.formatDate(lease.startDate);
+    const endDate = this.formatDate(lease.endDate);
+    const months = this.monthsBetween(lease.startDate, lease.endDate);
+    const duration = months > 0 ? `${months} mois` : "";
+    const address =
+      [lease.propertyAddress, lease.propertyCity].filter(Boolean).join(", ") || lease.propertyName || "votre logement";
+    const unitPart = lease.unitName ? ` (${lease.unitName})` : "";
+    const rentDisplay = this.formatMoneyWithCurrency(lease.rentAmount, lease);
+
+    let subject = `Bienvenue ! Votre bail ${reference} est signé et confirmé`.replace(/\s+/g, " ").trim();
+    let text =
+      `Bonjour ${tenantName}, félicitations ! Votre contrat de bail ${reference} est bien signé et confirmé. ` +
+      `Bienvenue dans votre nouveau logement : ${address}${unitPart}. ` +
+      `Votre location court du ${startDate} au ${endDate}${duration ? ` (${duration})` : ""}. ` +
+      `Merci de votre confiance. ` +
+      `${contactPhone ? `Pour toute question, contactez-nous au ${contactPhone}. ` : ""}` +
+      `— ${companyName}`;
+
+    // Message configurable (Réglages → Messages) : si un template "contract_signed"
+    // actif existe, on l'utilise avec substitution des placeholders.
+    const tpl = await this.db
+      .select({ subject: emailTemplates.subject, body: emailTemplates.body })
+      .from(emailTemplates)
+      .where(and(eq(emailTemplates.eventType, "contract_signed"), eq(emailTemplates.status, "true")))
+      .limit(1);
+    if (tpl.length) {
+      const fill = (s: string | null) =>
+        String(s || "")
+          .replace(/\{tenantName\}/g, tenantName)
+          .replace(/\{firstName\}/g, lease.tenantFirstName || tenantName)
+          .replace(/\{reference\}/g, reference)
+          .replace(/\{amount\}/g, rentDisplay)
+          .replace(/\{address\}/g, `${address}${unitPart}`)
+          .replace(/\{startDate\}/g, startDate)
+          .replace(/\{endDate\}/g, endDate)
+          .replace(/\{duration\}/g, duration)
+          .replace(/\{contactPhone\}/g, contactPhone);
+      if (tpl[0].subject) subject = fill(tpl[0].subject);
+      if (tpl[0].body) text = fill(tpl[0].body);
+    }
+
+    const tenantEmail = lease.tenantEmail || contract.tenantEmail;
+    if (!tenantEmail && !lease.tenantPhone) {
+      throw new BadRequestException("Aucun email ni téléphone connu pour ce locataire.");
+    }
+
+    let emailSent = false;
+    if (tenantEmail) {
+      try {
+        await this.sendEmail(tenantEmail, subject, `<p>${this.escapeHtml(text).replace(/\n/g, "<br>")}</p>`, "contract_signed");
+        emailSent = true;
+      } catch (error) {
+        this.logger.warn(`Welcome email failed (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    let smsSent = false;
+    if (lease.tenantPhone) {
+      try {
+        const res = await this.sms.sendSms({ phone: lease.tenantPhone, message: text });
+        smsSent = Boolean(res?.success);
+        if (!smsSent) this.logger.warn(`Welcome SMS not sent (contract ${contract.id}): ${res?.message}`);
+      } catch (error) {
+        this.logger.warn(`Welcome SMS error (contract ${contract.id}): ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (!emailSent && !smsSent) {
+      throw new BadRequestException("Le message de bienvenue n'a pas pu être envoyé (email et SMS en échec).");
+    }
+
+    await this.db
+      .update(realEstateContracts)
+      .set({ welcomeMessageSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(realEstateContracts.id, contract.id));
+
+    await this.log(
+      contract.id,
+      orgId,
+      "welcome_sent",
+      null,
+      null,
+      `Message de bienvenue envoye : ${[emailSent ? tenantEmail : null, smsSent ? `SMS ${lease.tenantPhone}` : null].filter(Boolean).join(" / ")}`,
+    );
+    await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
+
+    return { message: "Message de bienvenue envoyé.", emailSent, smsSent };
   }
 
   async getContractByToken(token: string, ip: string, ua: string) {
@@ -415,17 +556,11 @@ export class ContractsService {
     await this.publishContractUpdate("status_changed", contract.id, contract.leaseId);
     const signedContract = await this.getContract(contract.id, contract.organizationId);
 
-    if (contract.tenantEmail) {
-      try {
-        await this.sendEmail(
-        contract.tenantEmail,
-        "Contrat signé — confirmation",
-        `<p>Bonjour ${contract.tenantName ?? ""},</p><p>Votre contrat a bien été signé électroniquement. Merci.</p>`,
-        "contract_signed",
-        );
-      } catch (error) {
-        this.logger.warn(`Contract ${contract.id} signed, but confirmation email failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
+    // Message de bienvenue (email + SMS) : best-effort, la signature reste valide même si l'envoi échoue.
+    try {
+      await this.deliverWelcomeMessage(contract, contract.organizationId);
+    } catch (error) {
+      this.logger.warn(`Contract ${contract.id} signed, but welcome message failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     return { message: "Contract signed successfully.", contract: signedContract };

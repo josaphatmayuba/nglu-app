@@ -238,6 +238,7 @@ export const api = {
   contract: (id) => get(`/contracts/${id}`),
   createContract: (b) => post("/contracts", b),
   sendContract: (id, b) => post(`/contracts/${id}/send`, b),
+  sendContractWelcome: (id) => post(`/contracts/${id}/send-welcome`),
   deleteContract: (id) => del(`/contracts/${id}`),
   markContractSignedManually: (id, file) => {
     const form = new FormData();

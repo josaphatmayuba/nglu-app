@@ -1053,6 +1053,8 @@ export const realEstateContracts = mysqlTable("real_estate_contracts", {
   createdBy: bigint("created_by", { mode: "number" }),
   // Bail signé à la main (papier) : scan/photo importé, lié à real_estate_lease_documents.
   signedDocumentId: bigint("signed_document_id", { mode: "number" }),
+  // Message de bienvenue (email/SMS) envoyé au locataire après signature.
+  welcomeMessageSentAt: timestamp("welcome_message_sent_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

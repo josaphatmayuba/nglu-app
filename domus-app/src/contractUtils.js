@@ -19,6 +19,7 @@ export const AUDIT_EVENT_LABEL = {
   sent: "Envoyé pour signature",
   viewed: "Consulté par le locataire",
   signed: "Signé électroniquement",
+  welcome_sent: "Message de bienvenue envoyé",
   status_changed: "Statut mis à jour",
   deleted: "Contrat retiré",
 };

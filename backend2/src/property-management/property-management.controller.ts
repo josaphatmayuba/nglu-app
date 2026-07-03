@@ -868,6 +868,15 @@ export class PropertyManagementController {
     return this.contractsService.sendContract(id, orgId);
   }
 
+  @ApiOperation({ summary: "Send the post-signature welcome message (email + SMS) to the tenant, if never sent" })
+  @ApiParam({ name: "id", type: Number })
+  @Permissions("update-propertyManagement")
+  @Post("contracts/:id/send-welcome")
+  @HttpCode(200)
+  sendContractWelcome(@Param("id", ParseIntPipe) id: number, @CurrentOrg() orgId: number) {
+    return this.contractsService.sendWelcomeMessage(id, orgId);
+  }
+
   @ApiOperation({ summary: "Mark a contract as signed manually (paper contract signed by hand, scan/photo imported)" })
   @ApiParam({ name: "id", type: Number })
   @Permissions("update-propertyManagement")

@@ -464,6 +464,7 @@ function PaymentMethodEditor({ value, busy, onClose, onSave }) {
 const MESSAGE_EVENTS = [
   ["tenant_onboarding", "Inscription locataire"],
   ["lease_created", "Bail créé / signé"],
+  ["contract_signed", "Bienvenue / contrat signé"],
   ["payment_received", "Paiement reçu / quittance"],
   ["payment_reminder", "Rappel de loyer / retard"],
   ["custom", "Autre / personnalisé"],
@@ -492,6 +493,15 @@ const DEFAULT_MESSAGES = [
     body:
       "Bonjour {tenantName}, votre bail {reference} est confirmé (loyer mensuel : {amount}). " +
       "Consultez et signez votre contrat ici : {url}. Merci de votre confiance. — Votre gestionnaire",
+  },
+  {
+    name: "Bienvenue après signature",
+    eventType: "contract_signed",
+    subject: "Bienvenue ! Votre bail {reference} est signé et confirmé",
+    body:
+      "Bonjour {tenantName}, félicitations ! Votre contrat de bail {reference} est bien signé et confirmé. " +
+      "Bienvenue dans votre nouveau logement : {address}. Votre location court du {startDate} au {endDate} ({duration}). " +
+      "Merci de votre confiance. Pour toute question, contactez-nous au {contactPhone}. — Votre gestionnaire",
   },
   {
     name: "Quittance / paiement reçu",
@@ -593,7 +603,7 @@ function MessagesCard() {
         </div>
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-        Personnalisez les messages envoyes par email et SMS (inscription, bail, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »).
+        Personnalisez les messages envoyes par email et SMS (inscription, bail, bienvenue apres signature, paiement, retard). Gardez un texte court et sans mise en forme : le meme contenu sert d'email et de SMS. Placeholders : {"{firstName}"}, {"{tenantName}"}, {"{url}"}, {"{reference}"}, {"{amount}"} (montant avec devise, ex. « 620000 FC »). Pour le message de bienvenue : {"{address}"} (adresse du logement), {"{startDate}"}, {"{endDate}"}, {"{duration}"} (duree du bail), {"{contactPhone}"} (telephone du bailleur ou de l'entreprise).
       </p>
 
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.type === "err" ? "#dc2626" : "#059669" }}>{msg.text}</div>}
