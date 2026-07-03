@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.146.1)
+- **Domus : lien rapide « Declarer un probleme » depuis la fiche d'un bien** — bouton dans le modal détail bien qui ouvre l'écran Maintenance avec le bien et l'unité pré-remplis (handoff `setMaintenancePrefill`/`takeMaintenancePrefill`, même pattern que « Réserver »/« Créer un bail »).
+
 ### Added (3.146.0)
 - **Domus : message de bienvenue au locataire après signature du bail (email + SMS)** —
   - Migration `0204_contract_welcome_message_sent_at` : colonne `welcome_message_sent_at` sur `real_estate_contracts` (suivi d'envoi unique).

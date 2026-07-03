@@ -29,3 +29,20 @@ export function takeLeasePrefill() {
   prefillLease = null;
   return value;
 }
+
+// Même mécanisme de handoff pour « Déclarer un problème » depuis un bien : on
+// mémorise le bien et son unité à présélectionner dans le ticket de maintenance.
+let prefillMaintenance = null;
+
+export function setMaintenancePrefill(propertyId, unitId) {
+  prefillMaintenance = {
+    propertyId: propertyId != null ? String(propertyId) : "",
+    unitId: unitId != null ? String(unitId) : "",
+  };
+}
+
+export function takeMaintenancePrefill() {
+  const value = prefillMaintenance;
+  prefillMaintenance = null;
+  return value;
+}

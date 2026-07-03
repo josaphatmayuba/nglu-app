@@ -28,10 +28,11 @@ import {
   UserPlus,
   Users,
   Wallet,
+  Wrench,
   X,
 } from "lucide-react";
 import { api } from "../api.js";
-import { setReservationPrefill, setLeasePrefill } from "./reservationPrefill.js";
+import { setReservationPrefill, setLeasePrefill, setMaintenancePrefill } from "./reservationPrefill.js";
 import { filterLeases, filterPayments, filterProperties, filterUnits, useDateRange } from "../dateRange.jsx";
 import { groupAmountsByCurrency, money, normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
@@ -686,6 +687,11 @@ function PropertyDetailModal({ property, busy, error, onClose, onUploadPhoto, on
             disabled={busy}
           ><FileText size={14} /> Créer un bail</button>
           <button className="domus-modal-draft" onClick={() => go?.("loyers")} disabled={busy}><DollarSign size={14} /> Loyers</button>
+          <button
+            className="domus-modal-draft"
+            onClick={() => { setMaintenancePrefill(property.propertyId || property.id, property.unitId); onClose(); go?.("maintenance"); }}
+            disabled={busy}
+          ><Wrench size={14} /> Declarer un probleme</button>
           <button className="domus-modal-submit" onClick={onEdit} disabled={busy}>
             <Edit3 size={14} /> Modifier
           </button>

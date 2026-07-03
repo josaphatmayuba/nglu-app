@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CalendarDays,
@@ -24,6 +24,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { api } from "../api.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
+import { takeMaintenancePrefill } from "./reservationPrefill.js";
 import { t, tf } from "../i18n.js";
 
 const VIEWS = [
@@ -128,6 +129,14 @@ export function Maintenance() {
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState("");
+
+  // Prefill contextuel « Declarer un probleme » depuis la fiche d'un bien.
+  useEffect(() => {
+    const prefill = takeMaintenancePrefill();
+    if (prefill) {
+      setTicketModal({ ...emptyTicket, propertyId: prefill.propertyId, unitId: prefill.unitId });
+    }
+  }, []);
 
   const maintenanceApi = useApi(() => api.maintenance(), []);
   const propertiesApi = useApi(() => api.properties(), []);
