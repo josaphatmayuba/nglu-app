@@ -3357,7 +3357,13 @@ export class PropertyManagementService {
   }
 
   private async ensureCustomerEmailAvailable(email: string) {
-    const rows = await this.db.select({ id: customers.id }).from(customers).where(eq(customers.email, email)).limit(1);
+    // On ignore les locataires soft-deletes (status='false') : un email libere
+    // par une suppression logique doit pouvoir etre reutilise.
+    const rows = await this.db
+      .select({ id: customers.id })
+      .from(customers)
+      .where(and(eq(customers.email, email), eq(customers.status, "true")))
+      .limit(1);
     if (rows.length) {
       throw new BadRequestException("Customer email already exists.");
     }
