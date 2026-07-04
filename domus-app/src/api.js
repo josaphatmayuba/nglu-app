@@ -147,6 +147,7 @@ export const api = {
 
   onboardingList: () => get("/onboarding"),
   generateOnboarding: (b) => post("/onboarding", b),
+  updateOnboarding: (id, b) => patch(`/onboarding/${id}`, b),
   validateOnboarding: (id) => post(`/onboarding/${id}/validate`),
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
   sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Search, UserPlus, Mail, Briefcase, Home, AlertTriangle, CheckCircle2,
   Users, Clock, User, Building2, MapPin, IdCard, Info, UserRound, Copy,
-  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet,
+  ExternalLink, FileClock, MessageSquare, Pencil, Trash2, Plus, X, Wallet, FileSignature,
 } from "lucide-react";
 import { api, domusOnboardingUrl } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -13,6 +13,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { setLeasePrefill } from "./reservationPrefill.js";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
 const avatarTones = ["iris", "orange", "purple", "emerald", "ink"];
@@ -156,7 +157,7 @@ function DomusTenantMoneyField({ label, value, currencyId, onAmountChange, onCur
   );
 }
 
-export function Locataires() {
+export function Locataires({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
   const dateRange = useDateRange();
@@ -260,9 +261,12 @@ export function Locataires() {
     await api.deleteOnboarding(record.id);
     await reload();
   };
-  const validateOnboarding = async (record) => {
-    await api.validateOnboarding(record.id);
-    await reload();
+  // « Valider » n'engage plus en un clic : on ouvre la fiche pré-remplie pour
+  // que le gestionnaire revoie/corrige les données avant de créer le locataire.
+  const validateOnboarding = (record) => {
+    setActionError("");
+    const d = parseOnboardingData(record);
+    setModal({ ...emptyTenant, ...d, phone: d.phone || record.phone || "", _onboardingId: record.id, _validating: true });
   };
   const openLinkModal = () => {
     setRefreshOnLinkClose(false);
@@ -398,6 +402,7 @@ export function Locataires() {
           onClose={() => setSelectedId(null)}
           onEdit={() => { setActionError(""); setModal(tenantToForm(selected)); }}
           onDelete={() => handleDeleteTenant(selected)}
+          onCreateLease={go ? () => { setLeasePrefill(null, null, selected.id); go("baux"); } : undefined}
         />
       )}
 
@@ -411,18 +416,26 @@ export function Locataires() {
             setSaving(true);
             setActionError("");
             try {
-              const saved = form._onboardingId
-                ? await api.validateOnboarding(form._onboardingId)
-                : form.id
-                  ? await api.updateTenant(form.id, tenantPayload(form))
-                  : await api.createTenant(tenantPayload(form));
-              const tenantId = saved?.id || form.id;
+              let saved;
+              if (form._onboardingId) {
+                // On persiste d'abord les corrections du gestionnaire dans le
+                // dossier, puis on valide (qui crée le locataire depuis ce dossier).
+                await api.updateOnboarding(form._onboardingId, tenantPayload(form));
+                saved = await api.validateOnboarding(form._onboardingId);
+              } else if (form.id) {
+                saved = await api.updateTenant(form.id, tenantPayload(form));
+              } else {
+                saved = await api.createTenant(tenantPayload(form));
+              }
+              // Après validation, l'id du locataire créé est dans saved.customer ;
+              // sinon (create/update tenant) c'est saved.id / form.id.
+              const tenantId = (form._onboardingId ? saved?.customer?.id : saved?.id) || form.id;
               if (form._idFile && tenantId) {
                 await api.uploadTenantIdDocument(tenantId, form._idFile);
               }
               setModal(null);
               await reload();
-              if (saved?.id || form.id) setSelectedId(saved?.id || form.id);
+              if (tenantId) setSelectedId(tenantId);
             } catch (e) {
               setActionError(e.message || String(e));
             } finally {
@@ -454,7 +467,7 @@ function Info2({ icon: Icon, label, value }) {
 }
 
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
-function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
+function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -492,6 +505,9 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
           <div className="action-strip">
             {tenant.phone && <a className="btn" href={`tel:${tenant.phone}`}><Phone size={16} /> Appeler</a>}
             {tenant.email && <a className="btn" href={`mailto:${tenant.email}`}><Mail size={16} /> Email</a>}
+            {!activeLease && onCreateLease && (
+              <button type="button" className="btn btn-primary" onClick={onCreateLease}><FileSignature size={16} /> Creer le bail</button>
+            )}
           </div>
 
           <div className="info-grid">
@@ -830,6 +846,7 @@ function tenantPayload(f) {
 }
 
 function TenantModal({ value, busy, error, onClose, onSave }) {
+  const validating = !!value._validating;
   const [form, setForm] = useState(value);
   const set = (patch) => setForm((cur) => ({ ...cur, ...patch }));
   const married = isMarried(form.marital_status);
@@ -850,13 +867,19 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
 
   return (
     <Modal
-      title={value.id ? "Modifier le locataire" : "Nouveau locataire"}
-      subtitle={value.id ? "Mettre a jour le dossier locataire (meme API que le CRM)" : "Cree un dossier locataire (meme API que le CRM)"}
-      icon={value.id ? <Pencil size={20} /> : <UserPlus size={20} />}
+      title={validating ? "Valider l'inscription" : value.id ? "Modifier le locataire" : "Nouveau locataire"}
+      subtitle={validating ? "Verifiez et corrigez les informations avant de creer le locataire" : value.id ? "Mettre a jour le dossier locataire (meme API que le CRM)" : "Cree un dossier locataire (meme API que le CRM)"}
+      icon={validating ? <CheckCircle2 size={20} /> : value.id ? <Pencil size={20} /> : <UserPlus size={20} />}
       className="domus-property-modal"
       onClose={onClose}
     >
       <div className="domus-property-form">
+        {validating && (
+          <div className="domus-onboarding-notice" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", margin: "0 0 4px", borderRadius: 10, background: "rgba(79,70,229,0.08)", border: "1px solid rgba(79,70,229,0.2)" }}>
+            <Info size={16} style={{ marginTop: 2, flexShrink: 0, color: "#4f46e5" }} />
+            <span style={{ fontSize: 13, lineHeight: 1.4 }}>Un locataire actif sera cree dans votre annuaire a partir de ce dossier. Aucun bail n'est cree a cette etape — vous pourrez le creer ensuite depuis la fiche.</span>
+          </div>
+        )}
         <FormSection icon={<User size={14} />} title="Identite">
           <div className="domus-property-form-grid">
             <DomusPropertyField label="Prenom" value={form.firstName} onChange={(v) => set({ firstName: v })} required placeholder="ex. Jean" />
@@ -973,7 +996,16 @@ function TenantModal({ value, busy, error, onClose, onSave }) {
       </div>
 
       {error && <div className="api-error" style={{ margin: "0 24px" }}>{error}</div>}
-      <ModalActions busy={busy} disabled={!canSaveTenant(form)} onClose={onClose} onSave={() => onSave(form)} />
+      {validating ? (
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose} disabled={busy}>Annuler</button>
+          <button className="btn btn-primary" onClick={() => onSave(form)} disabled={busy || !canSaveTenant(form)}>
+            <CheckCircle2 size={16} /> {busy ? "Validation..." : "Valider et creer le locataire"}
+          </button>
+        </div>
+      ) : (
+        <ModalActions busy={busy} disabled={!canSaveTenant(form)} onClose={onClose} onSave={() => onSave(form)} />
+      )}
     </Modal>
   );
 }

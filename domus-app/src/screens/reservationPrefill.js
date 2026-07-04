@@ -17,10 +17,11 @@ export function takeReservationPrefill() {
 // le bien et son unité à présélectionner dans le formulaire de bail.
 let prefillLease = null;
 
-export function setLeasePrefill(propertyId, unitId) {
+export function setLeasePrefill(propertyId, unitId, tenantId) {
   prefillLease = {
     propertyId: propertyId != null ? String(propertyId) : "",
     unitId: unitId != null ? String(unitId) : "",
+    tenantId: tenantId != null ? String(tenantId) : "",
   };
 }
 

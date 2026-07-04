@@ -150,6 +150,7 @@ export function Baux({ go } = {}) {
         ...emptyLease,
         propertyId: prefill.propertyId || "",
         unitId: prefill.unitId || "",
+        tenantId: prefill.tenantId || "",
         currencyId: currency.defaultCurrencyId || "",
       });
     }

@@ -60,7 +60,7 @@ const SCREENS = {
   previsionnel: () => <Forecast />,
   biens: (nav, device) => <Biens go={nav} device={device} />,
   carte: (_nav, device) => <CarteBiens device={device} />,
-  locataires: (_nav, device) => <Locataires device={device} />,
+  locataires: (nav, device) => <Locataires go={nav} device={device} />,
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
