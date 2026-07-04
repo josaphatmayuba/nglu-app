@@ -214,8 +214,12 @@ export function Locataires() {
   const occupants = view.reduce((s, t) => s + Number(t.occupantNumber || 0), 0);
   const salaried = view.filter((t) => /salar|fonction/i.test(String(t.professionalStatus || ""))).length;
 
-  if (loading) return <Loading />;
-  if (error) return <ApiError error={error} />;
+  // Bloquer uniquement au PREMIER chargement (data absente). Un reload en
+  // arriere-plan (event realtime "onboarding created" apres generation du lien)
+  // ne doit pas remonter la page : sinon la modale OnboardingLinkModal est
+  // demontee et revient vide -> l'utilisateur croit que le formulaire "se rouvre".
+  if (loading && !data) return <Loading />;
+  if (error && !data) return <ApiError error={error} />;
 
   const copyText = async (value) => {
     if (!value) return;

@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.147.2)
+- **Domus : la modal « Lien d'inscription locataire » se rouvrait à vide après « Generer le lien »** (vraie cause restante après 3.146.2). Le POST réussissait (dossier créé en base), mais la génération déclenche un event realtime `onboarding created` capté par `useRealtimeReload` → `reload()` → `setLoading(true)`. L'écran `Locataires` faisait `if (loading) return <Loading />`, ce qui **démontait** la modale `OnboardingLinkModal` et perdait son état `result` ; au retour du reload la modale remontait à zéro sur le formulaire vide. Correctif : ne bloquer sur `<Loading />` / `<ApiError />` qu'au **premier** chargement (`!data`) ; un reload realtime en arrière-plan garde la page et la modale montées.
+
 ### Fixed (3.147.1)
 - **Domus : boutons secondaires (`.btn`) qui semblaient disparaître au survol** — la règle `.btn:hover` ne changeait que le fond (blanc → `--ink-50`, gris quasi-blanc) sans renforcer la bordure ; dans la barre d'action collante `.onb-actions` (inscription locataire) et ailleurs, le bouton (ex. « Enregistrer ») se fondait dans son entourage au survol. Le survol renforce désormais fond + bordure + contraste du texte (`--ink-100`/`--ink-300`/`--ink-800`).
 
