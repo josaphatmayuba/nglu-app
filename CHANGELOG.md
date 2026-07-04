@@ -14,6 +14,7 @@ This project follows:
 - **Domus : « Valider » une inscription locataire ouvre désormais une fiche de revue avant de créer le locataire** (au lieu de valider en un clic silencieux). Le gestionnaire visualise et **corrige** les informations saisies par le locataire ; les corrections sont persistées (`PATCH /onboarding/:id`) avant la validation. Un bandeau précise qu'un locataire actif va être créé et qu'aucun bail n'est créé à cette étape. Après validation, la fiche du locataire créé s'ouvre avec un bouton **« Créer le bail »** (visible tant qu'aucun bail actif) qui route vers l'écran Baux avec le locataire pré-sélectionné. Corrige aussi un bug latent : après validation, on sélectionnait l'id du dossier au lieu de l'id du locataire créé. (v3.147.4)
 
 ### Fixed
+- Domus : la validation d'une inscription locataire ne plante plus avec `Cannot read properties of null (reading 'trim')`. `tenantPayload` (et la validation) appelaient `.trim()` directement sur des champs de dossier pouvant être `null` (email, id_document_type, id_number, phone2, old_address, old_lessor, moving_reason, partenair_*). Sécurisé via un helper `s(v) = String(v ?? "").trim()`. (v3.147.5)
 - Domus onboarding locataire : le message « Veuillez remplir les champs obligatoires… » est désormais scrollé automatiquement à l'écran lors de la soumission, au lieu de rester en haut de page hors de vue. (v3.147.3)
 
 ### Fixed (3.147.2)

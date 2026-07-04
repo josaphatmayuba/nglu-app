@@ -784,6 +784,9 @@ function isMarried(status) {
   return MARRIED_STATES.includes(String(status || "").toLowerCase());
 }
 
+// Accès sûr : les dossiers d'inscription pré-remplis peuvent contenir des champs null.
+const s = (v) => String(v ?? "").trim();
+
 function canSaveTenant(f) {
   const required = [
     f.firstName, f.lastName, f.phone, f.address, f.birth_date, f.sex, f.nationality,
@@ -792,7 +795,7 @@ function canSaveTenant(f) {
   ];
   if (required.some((v) => !String(v ?? "").trim())) return false;
   if (Number(f.occupant_number || 0) < 1) return false;
-  if (isMarried(f.marital_status) && (!f.partenair_name.trim() || !f.partenair_number.trim())) return false;
+  if (isMarried(f.marital_status) && (!s(f.partenair_name) || !s(f.partenair_number))) return false;
   const childN = Number(f.child_number || 0);
   if (childN > 0) {
     const ages = f.child_ages || [];
@@ -808,23 +811,23 @@ function tenantPayload(f) {
   const married = isMarried(f.marital_status);
   const childN = Number(f.child_number || 0);
   const payload = {
-    firstName: f.firstName.trim(),
-    lastName: f.lastName.trim(),
-    email: f.email.trim() || null,
-    phone: f.phone.trim(),
-    address: f.address.trim(),
+    firstName: s(f.firstName),
+    lastName: s(f.lastName),
+    email: s(f.email) || null,
+    phone: s(f.phone),
+    address: s(f.address),
     birth_date: f.birth_date,
     sex: f.sex,
-    nationality: f.nationality.trim(),
+    nationality: s(f.nationality),
     marital_status: f.marital_status,
-    id_document_type: f.id_document_type.trim() || null,
-    id_number: f.id_number.trim() || null,
-    phone2: f.phone2.trim() || null,
-    contacted_person: f.contacted_person.trim(),
-    contacted_person_phone_number: f.contacted_person_phone_number.trim(),
+    id_document_type: s(f.id_document_type) || null,
+    id_number: s(f.id_number) || null,
+    phone2: s(f.phone2) || null,
+    contacted_person: s(f.contacted_person),
+    contacted_person_phone_number: s(f.contacted_person_phone_number),
     prossional_status: f.prossional_status,
-    main_activity: f.main_activity.trim(),
-    entity_name: f.entity_name.trim(),
+    main_activity: s(f.main_activity),
+    entity_name: s(f.entity_name),
     contract_type: f.contract_type,
     occupant_number: Number(f.occupant_number || 1),
     child_number: childN > 0 ? childN : 0,
@@ -832,12 +835,12 @@ function tenantPayload(f) {
   if (f.monthly_pay !== "") payload.monthly_pay = Number(f.monthly_pay);
   if (f.salary_currency_id !== "") payload.salary_currency_id = Number(f.salary_currency_id);
   if (f.other_monthly_income !== "") payload.other_monthly_income = Number(f.other_monthly_income);
-  if (f.old_address.trim()) payload.old_address = f.old_address.trim();
-  if (f.old_lessor.trim()) payload.old_lessor = f.old_lessor.trim();
-  if (f.moving_reason.trim()) payload.moving_reason = f.moving_reason.trim();
+  if (s(f.old_address)) payload.old_address = s(f.old_address);
+  if (s(f.old_lessor)) payload.old_lessor = s(f.old_lessor);
+  if (s(f.moving_reason)) payload.moving_reason = s(f.moving_reason);
   if (married) {
-    payload.partenair_name = f.partenair_name.trim();
-    payload.partenair_number = f.partenair_number.trim();
+    payload.partenair_name = s(f.partenair_name);
+    payload.partenair_number = s(f.partenair_number);
   }
   if (childN > 0) {
     payload.child_age = (f.child_ages || []).slice(0, childN).map((a) => Number(a)).filter((n) => Number.isFinite(n));
