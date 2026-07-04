@@ -38,7 +38,7 @@ body {
 .btn { height:40px; padding:0 14px; border-radius:8px; border:1px solid var(--border);
   background:#fff; font-size:13px; font-weight:600; display:inline-flex; align-items:center;
   gap:8px; cursor:pointer; color:var(--ink-700); font-family:inherit; white-space:nowrap; }
-.btn:hover { background:var(--ink-50); }
+.btn:hover { background:var(--ink-100); border-color:var(--ink-300); color:var(--ink-800); }
 .btn-primary { background:var(--grad-iris); color:#fff; border:none; }
 .btn-primary:hover { filter:brightness(1.05); }
 

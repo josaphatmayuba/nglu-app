@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.147.1)
+- **Domus : boutons secondaires (`.btn`) qui semblaient disparaître au survol** — la règle `.btn:hover` ne changeait que le fond (blanc → `--ink-50`, gris quasi-blanc) sans renforcer la bordure ; dans la barre d'action collante `.onb-actions` (inscription locataire) et ailleurs, le bouton (ex. « Enregistrer ») se fondait dans son entourage au survol. Le survol renforce désormais fond + bordure + contraste du texte (`--ink-100`/`--ink-300`/`--ink-800`).
+
 ### Added (3.147.0)
 - **Domus : suivi d'envoi SMS/email des dossiers d'inscription locataire** — le bouton affichait toujours « Renvoyer SMS »/« Renvoyer email » sur un dossier d'onboarding, même si aucun message n'avait jamais été envoyé, ce qui était trompeur.
   - Migration `0205_tenant_onboardings_sent_at` : colonnes `sms_sent_at`/`email_sent_at` sur `tenant_onboardings`.
