@@ -172,13 +172,18 @@ export class PropertyManagementController {
     return this.propertyManagementService.onboardingList(orgId);
   }
 
+  @ApiOperation({ summary: "Send the onboarding link by SMS on demand" })
+  @Permissions("create-propertyManagement")
+  @Post("onboarding/:id/send-sms")
+  sendOnboardingSms(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.sendOnboardingSms(id);
+  }
+
   @ApiOperation({ summary: "Send the onboarding link by email on demand" })
   @Permissions("create-propertyManagement")
-  @Post("onboarding/send-email")
-  sendOnboardingEmail(
-    @Body() body: { email: string; url: string; firstName?: string | null },
-  ) {
-    return this.propertyManagementService.sendOnboardingEmail(body);
+  @Post("onboarding/:id/send-email")
+  sendOnboardingEmail(@Param("id", ParseIntPipe) id: number) {
+    return this.propertyManagementService.sendOnboardingEmail(id);
   }
 
   @ApiOperation({ summary: "Admin update tenant onboarding draft" })

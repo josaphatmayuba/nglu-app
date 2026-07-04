@@ -182,6 +182,7 @@ export function Locataires() {
   const [refreshOnLinkClose, setRefreshOnLinkClose] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [sendingId, setSendingId] = useState(null); // `${record.id}:sms|email` pendant l'envoi
 
   const view = useMemo(
     () => tenants.map((t) => ({ ...t, _name: tenantName(t), _initials: initials(tenantName(t)) })),
@@ -225,24 +226,30 @@ export function Locataires() {
     window.open(value, "_blank", "noopener,noreferrer");
   };
   const resendSms = async (record) => {
-    const d = parseOnboardingData(record);
-    const url = onboardingUrl(record);
-    const phone = d.phone || record.phone;
-    if (!phone || !url) return;
-    await api.sendOnboardingSms({
-      phone,
-      message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
-    });
+    setActionError("");
+    setSendingId(`${record.id}:sms`);
+    try {
+      await api.sendOnboardingSms(record.id);
+      await reload();
+      window.alert("SMS envoye.");
+    } catch (e) {
+      window.alert(e.message || String(e));
+    } finally {
+      setSendingId(null);
+    }
   };
   const resendEmail = async (record) => {
-    const d = parseOnboardingData(record);
-    const url = onboardingUrl(record);
-    if (!d.email || !url) return;
-    await api.sendOnboardingEmail({
-      email: d.email,
-      url,
-      firstName: d.firstName || onboardingDisplayName(record),
-    });
+    setActionError("");
+    setSendingId(`${record.id}:email`);
+    try {
+      await api.sendOnboardingEmail(record.id);
+      await reload();
+      window.alert("Email envoye.");
+    } catch (e) {
+      window.alert(e.message || String(e));
+    } finally {
+      setSendingId(null);
+    }
   };
   const deleteOnboarding = async (record) => {
     if (!window.confirm("Supprimer ce dossier d'inscription ?")) return;
@@ -318,6 +325,7 @@ export function Locataires() {
               key={`onboarding-${record.id}`}
               record={record}
               index={index}
+              sendingId={sendingId}
               onEdit={(r) => {
                 const d = parseOnboardingData(r);
                 setModal({ ...emptyTenant, ...d, phone: d.phone || r.phone || "", _onboardingId: r.id });
@@ -535,6 +543,7 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete }) {
 function OnboardingCard({
   record,
   index,
+  sendingId,
   onEdit,
   onValidate,
   onDelete,
@@ -548,6 +557,10 @@ function OnboardingCard({
   const status = onboardingStatusMeta[record.status] || onboardingStatusMeta.sent;
   const phone = data.phone || record.phone;
   const tone = avatarTones[index % avatarTones.length];
+  const smsBusy = sendingId === `${record.id}:sms`;
+  const emailBusy = sendingId === `${record.id}:email`;
+  const smsLabel = smsBusy ? "Envoi..." : record.smsSentAt ? "Renvoyer SMS" : "Envoyer SMS";
+  const emailLabel = emailBusy ? "Envoi..." : record.emailSentAt ? "Renvoyer email" : "Envoyer email";
   return (
     <article className="domus-onboarding-card">
       <div className={`tenant-avatar ${tone}`}>{initials(name)}</div>
@@ -575,8 +588,12 @@ function OnboardingCard({
           {record.status === "submitted" && (
             <button type="button" className="primary" onClick={() => onValidate(record)}><CheckCircle2 size={14} /> Valider</button>
           )}
-          <button type="button" onClick={() => onResendSms(record)}><MessageSquare size={14} /> Renvoyer SMS</button>
-          <button type="button" onClick={() => onResendEmail(record)}><Mail size={14} /> Renvoyer email</button>
+          <button type="button" disabled={smsBusy} onClick={() => onResendSms(record)}>
+            <MessageSquare size={14} /> {smsLabel}
+          </button>
+          <button type="button" disabled={emailBusy} onClick={() => onResendEmail(record)}>
+            <Mail size={14} /> {emailLabel}
+          </button>
           <button type="button" className="danger" onClick={() => onDelete(record)}><Trash2 size={14} /> Supprimer</button>
         </div>
       </div>

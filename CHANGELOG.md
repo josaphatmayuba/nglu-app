@@ -10,6 +10,12 @@ This project follows:
 
 ## [Unreleased]
 
+### Added (3.147.0)
+- **Domus : suivi d'envoi SMS/email des dossiers d'inscription locataire** — le bouton affichait toujours « Renvoyer SMS »/« Renvoyer email » sur un dossier d'onboarding, même si aucun message n'avait jamais été envoyé, ce qui était trompeur.
+  - Migration `0205_tenant_onboardings_sent_at` : colonnes `sms_sent_at`/`email_sent_at` sur `tenant_onboardings`.
+  - Backend : nouveaux endpoints `POST /property-management/onboarding/:id/send-sms` et `POST /property-management/onboarding/:id/send-email` (remplace l'ancien `send-email` sans id et l'appel générique `/send-sms`) — envoient le message puis tracent le timestamp, erreur claire (400) si téléphone/email/lien manquant.
+  - Frontend : bouton « Envoyer SMS/email » si jamais envoyé, « Renvoyer » sinon ; état « Envoi... » désactivé pendant l'appel ; confirmation ou erreur affichée après l'envoi.
+
 ### Fixed (3.146.2)
 - **Domus : modal « Lien d'inscription locataire » restait bloquée sur le formulaire** — le bouton « Generer le lien » restait actif alors que le champ téléphone ne contenait que l'indicatif pays (`+243` sans chiffres), envoyant un numéro invalide à `POST /onboarding`. Le backend levait `InvalidPhoneNumberError` (simple `Error`, pas une `HttpException`) → 500 générique sans message, la modal restait donc affichée sur le formulaire vide au lieu de montrer le lien généré.
   - Backend : `InvalidPhoneNumberError` est maintenant convertie en `BadRequestException` (400 + message clair) dans `generateTenantOnboarding` et la validation admin des dossiers d'onboarding.

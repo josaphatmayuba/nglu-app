@@ -149,8 +149,8 @@ export const api = {
   generateOnboarding: (b) => post("/onboarding", b),
   validateOnboarding: (id) => post(`/onboarding/${id}/validate`),
   deleteOnboarding: (id) => del(`/onboarding/${id}`),
-  sendOnboardingSms: (b) => jsonFetch("/send-sms", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
-  sendOnboardingEmail: (b) => jsonFetch("/property-management/onboarding/send-email", { method: "POST", base: API_ROOT, body: JSON.stringify(b || {}) }),
+  sendOnboardingSms: (id) => post(`/onboarding/${id}/send-sms`),
+  sendOnboardingEmail: (id) => post(`/onboarding/${id}/send-email`),
 
   properties: () => get("/properties"),
   property: (id) => get(`/properties/${id}`),

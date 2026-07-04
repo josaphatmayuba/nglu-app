@@ -1261,6 +1261,13 @@
                         "when":  1780909200000,
                         "tag":  "0204_contract_welcome_message_sent_at",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  180,
+                        "version":  "5",
+                        "when":  1780912800000,
+                        "tag":  "0205_tenant_onboardings_sent_at",
+                        "breakpoints":  true
                     }
                 ]
 }

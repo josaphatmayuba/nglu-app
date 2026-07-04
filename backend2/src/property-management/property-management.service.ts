@@ -373,34 +373,85 @@ export class PropertyManagementService {
     return response;
   }
 
-  async sendOnboardingEmail(input: { email: string; url: string; firstName?: string | null }) {
-    if (!input?.email || !input?.url) {
-      throw new BadRequestException("email and url are required.");
+  /**
+   * Envoie (ou renvoie) le SMS de lien d'inscription pour un dossier onboarding
+   * existant, puis trace `sms_sent_at` afin que le frontend sache distinguer
+   * "Envoyer" de "Renvoyer" (le dossier n'a jamais reçu de SMS avant ce champ).
+   */
+  async sendOnboardingSms(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    const data = this.parseOnboardingData(onboarding.data);
+    const phone = data.phone || onboarding.phone;
+    if (!phone) {
+      throw new BadRequestException("Aucun numero de telephone pour ce dossier d'inscription.");
     }
+    const url = onboarding.token ? this.onboardingUrl(onboarding.token) : null;
+    if (!url) {
+      throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
+    }
+
+    const result = await this.sms.sendSms({
+      phone,
+      message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
+    });
+    if (!result?.success) {
+      throw new BadRequestException(result?.message || "Impossible d'envoyer le SMS.");
+    }
+
+    await this.db
+      .update(tenantOnboardings)
+      .set({ smsSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tenantOnboardings.id, id));
+
+    return this.adminOnboardingResponse(await this.findOnboarding(id));
+  }
+
+  /**
+   * Envoie (ou renvoie) l'email de lien d'inscription pour un dossier onboarding
+   * existant, puis trace `email_sent_at` (voir sendOnboardingSms ci-dessus).
+   */
+  async sendOnboardingEmail(id: number) {
+    const onboarding = await this.findOnboarding(id);
+    const data = this.parseOnboardingData(onboarding.data);
+    const email = data.email;
+    if (!email) {
+      throw new BadRequestException("Aucun email pour ce dossier d'inscription.");
+    }
+    const url = onboarding.token ? this.onboardingUrl(onboarding.token) : null;
+    if (!url) {
+      throw new BadRequestException("Ce dossier d'inscription n'a pas de lien valide.");
+    }
+
     const company = await readOrgAppSetting(this.db, 1, { name: appSettings.companyName });
     const companyName = (company?.name as string | null) || "votre gestionnaire";
-    const greeting = input.firstName ? `Bonjour ${input.firstName}` : "Bonjour";
+    const greeting = data.firstName ? `Bonjour ${data.firstName}` : "Bonjour";
     const html =
       `<p>${greeting},</p>` +
       `<p>Voici votre lien d'inscription en tant que locataire. Veuillez cliquer sur ce lien :</p>` +
-      `<p><a href="${input.url}">${input.url}</a></p>` +
+      `<p><a href="${url}">${url}</a></p>` +
       `<p>Merci de le compléter dès que possible.</p>` +
       `<p>Cordialement,<br>${companyName}</p>`;
     try {
       await this.emails.send({
-        to: input.email,
+        to: email,
         subject: "Votre lien d'inscription locataire",
         html,
         type: "form_link",
         relatedType: "tenant-onboarding",
       });
-      return { success: true, message: "Email envoyé." };
     } catch (error) {
       this.logger.warn(
-        `Onboarding link email error to ${input.email}: ${error instanceof Error ? error.message : String(error)}`,
+        `Onboarding link email error to ${email}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return { success: false, message: "Impossible d'envoyer l'email." };
+      throw new BadRequestException("Impossible d'envoyer l'email.");
     }
+
+    await this.db
+      .update(tenantOnboardings)
+      .set({ emailSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .where(eq(tenantOnboardings.id, id));
+
+    return this.adminOnboardingResponse(await this.findOnboarding(id));
   }
 
 
@@ -416,6 +467,8 @@ export class PropertyManagementService {
         submittedAt: tenantOnboardings.submittedAt,
         validatedAt: tenantOnboardings.validatedAt,
         customerId: tenantOnboardings.customerId,
+        smsSentAt: tenantOnboardings.smsSentAt,
+        emailSentAt: tenantOnboardings.emailSentAt,
         createdAt: tenantOnboardings.createdAt,
         updatedAt: tenantOnboardings.updatedAt,
       })
