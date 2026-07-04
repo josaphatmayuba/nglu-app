@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- Domus onboarding locataire : le message « Veuillez remplir les champs obligatoires… » est désormais scrollé automatiquement à l'écran lors de la soumission, au lieu de rester en haut de page hors de vue. (v3.147.3)
+
 ### Fixed (3.147.2)
 - **Domus : la modal « Lien d'inscription locataire » se rouvrait à vide après « Generer le lien »** (vraie cause restante après 3.146.2). Le POST réussissait (dossier créé en base), mais la génération déclenche un event realtime `onboarding created` capté par `useRealtimeReload` → `reload()` → `setLoading(true)`. L'écran `Locataires` faisait `if (loading) return <Loading />`, ce qui **démontait** la modale `OnboardingLinkModal` et perdait son état `result` ; au retour du reload la modale remontait à zéro sur le formulaire vide. Correctif : ne bloquer sur `<Loading />` / `<ApiError />` qu'au **premier** chargement (`!data`) ; un reload realtime en arrière-plan garde la page et la modale montées.
 

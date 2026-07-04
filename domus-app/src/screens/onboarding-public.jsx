@@ -3,7 +3,7 @@
 // token suffit. Mêmes endpoints publics que la page tenant du CRM
 // (/tenant-onboarding), mais habillage Domus moderne (hero iris, progression,
 // sections en cartes, barre d'action collante).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2, CheckCircle2, Loader2, User, IdCard, Phone, Briefcase, Home, ShieldCheck,
 } from "lucide-react";
@@ -86,6 +86,7 @@ export function TenantOnboardingPublic({ token }) {
   const [record, setRecord] = useState(null);
   const [values, setValues] = useState({ child_number: 0, first_rental: false });
   const [error, setError] = useState("");
+  const errorRef = useRef(null);
   const [fatal, setFatal] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +94,12 @@ export function TenantOnboardingPublic({ token }) {
   const [savedAt, setSavedAt] = useState(null);
 
   const set = (field, v) => setValues((c) => ({ ...c, [field]: v }));
+
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [error]);
 
   useEffect(() => {
     let alive = true;
@@ -250,7 +257,7 @@ export function TenantOnboardingPublic({ token }) {
         </header>
 
         <div className="onb-body">
-          {error && <div className="onb-alert">{error}</div>}
+          {error && <div ref={errorRef} className="onb-alert">{error}</div>}
 
           <Card icon={<User size={18} />} tone="iris" title={t("Identité")}
             subtitle={t("Vos informations de base et de contact")}>
