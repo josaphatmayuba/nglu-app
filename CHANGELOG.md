@@ -10,6 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed (3.146.2)
+- **Domus : modal « Lien d'inscription locataire » restait bloquée sur le formulaire** — le bouton « Generer le lien » restait actif alors que le champ téléphone ne contenait que l'indicatif pays (`+243` sans chiffres), envoyant un numéro invalide à `POST /onboarding`. Le backend levait `InvalidPhoneNumberError` (simple `Error`, pas une `HttpException`) → 500 générique sans message, la modal restait donc affichée sur le formulaire vide au lieu de montrer le lien généré.
+  - Backend : `InvalidPhoneNumberError` est maintenant convertie en `BadRequestException` (400 + message clair) dans `generateTenantOnboarding` et la validation admin des dossiers d'onboarding.
+  - Frontend : le bouton « Generer le lien » reste désactivé tant que `isValidPhoneNumber()` (react-phone-number-input) n'est pas vrai, avec un message d'erreur sous le champ.
+
 ### Added (3.146.1)
 - **Domus : lien rapide « Declarer un probleme » depuis la fiche d'un bien** — bouton dans le modal détail bien qui ouvre l'écran Maintenance avec le bien et l'unité pré-remplis (handoff `setMaintenancePrefill`/`takeMaintenancePrefill`, même pattern que « Réserver »/« Créer un bail »).
 

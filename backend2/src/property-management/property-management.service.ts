@@ -42,7 +42,7 @@ import { SystemEmailService } from "../system-email/system-email.service";
 import { LedgerService } from "../ledger/ledger.service";
 import { ProjectsService } from "../projects/projects.service";
 import { WorkflowService } from "../workflow/workflow.service";
-import { normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
+import { InvalidPhoneNumberError, normalizePhoneE164, normalizePhoneE164Strict } from "../common/phone.util";
 import {
   CreateLeaseDto,
   CreateMaintenanceCostDto,
@@ -340,7 +340,7 @@ export class PropertyManagementService {
 
   async generateTenantOnboarding(input: GenerateTenantOnboardingDto, orgId: number) {
     // SCRUM-229 — store the phone identifier in canonical E.164.
-    const phoneE164 = normalizePhoneE164Strict(input.phone);
+    const phoneE164 = this.normalizePhoneOrBadRequest(input.phone);
     const token = randomBytes(32).toString("hex");
     const tokenHash = this.hashToken(token);
     const expiresAt = new Date(Date.now() + (input.expiresInDays ?? 7) * 24 * 60 * 60 * 1000);
@@ -464,10 +464,24 @@ export class PropertyManagementService {
         const cleaned = normalizePhoneE164(next[f]);
         next[f] = cleaned ?? next[f];
       } else {
-        next[f] = normalizePhoneE164Strict(next[f]);
+        next[f] = this.normalizePhoneOrBadRequest(next[f]);
       }
     }
     return next as T;
+  }
+
+  // SCRUM-229 — un numéro invalide est une erreur de saisie utilisateur (400),
+  // pas une panne serveur : InvalidPhoneNumberError n'est pas une HttpException
+  // et remontait sinon en 500 générique côté client.
+  private normalizePhoneOrBadRequest(raw: string): string {
+    try {
+      return normalizePhoneE164Strict(raw);
+    } catch (err) {
+      if (err instanceof InvalidPhoneNumberError) {
+        throw new BadRequestException(`Numero de telephone invalide : "${raw}"`);
+      }
+      throw err;
+    }
   }
 
   async saveOnboardingByAdmin(id: number, input: SaveTenantOnboardingDto) {

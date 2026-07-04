@@ -13,6 +13,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 const avatarTones = ["iris", "orange", "purple", "emerald", "ink"];
 let tenantCurrencyOptions = [];
@@ -591,6 +592,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
   const [result, setResult] = useState(null);
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
   const url = result ? domusOnboardingUrl(result.url || result.onboardingUrl || "") : "";
+  const phoneValid = isValidPhoneNumber(form.phone?.trim() || "");
 
   const generate = async () => {
     setBusy(true);
@@ -623,6 +625,9 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
         {!result ? (
           <FormSection icon={<UserRound size={14} />} title="Coordonnees du locataire">
             <DomusPhoneField label="Telephone" value={form.phone} onChange={(v) => set({ phone: v })} required />
+            {form.phone?.trim() && !phoneValid && (
+              <small className="api-error" style={{ display: "block", marginTop: -8 }}>Numero de telephone incomplet ou invalide.</small>
+            )}
             <div className="domus-property-form-grid">
               <DomusPropertyField label="Prenom" value={form.firstName} onChange={(v) => set({ firstName: v })} placeholder="Optionnel" />
               <DomusPropertyField label="Nom" value={form.lastName} onChange={(v) => set({ lastName: v })} placeholder="Optionnel" />
@@ -648,7 +653,7 @@ function OnboardingLinkModal({ value, onClose, onGenerated }) {
         {!result ? (
           <>
             <button className="btn" onClick={onClose} disabled={busy}>Annuler</button>
-            <button className="btn btn-primary" onClick={generate} disabled={busy || !form.phone.trim()}>
+            <button className="btn btn-primary" onClick={generate} disabled={busy || !phoneValid}>
               {busy ? "Generation..." : "Generer le lien"}
             </button>
           </>
