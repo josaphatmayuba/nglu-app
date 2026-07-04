@@ -787,6 +787,14 @@ function isMarried(status) {
 // Accès sûr : les dossiers d'inscription pré-remplis peuvent contenir des champs null.
 const s = (v) => String(v ?? "").trim();
 
+// Email optionnel : n'envoyer que s'il est plausible, sinon null.
+// Le backend a @IsEmail() et rejette une chaîne non vide invalide.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const optionalEmail = (v) => {
+  const e = s(v);
+  return e && EMAIL_RE.test(e) ? e : null;
+};
+
 function canSaveTenant(f) {
   const required = [
     f.firstName, f.lastName, f.phone, f.address, f.birth_date, f.sex, f.nationality,
@@ -813,7 +821,7 @@ function tenantPayload(f) {
   const payload = {
     firstName: s(f.firstName),
     lastName: s(f.lastName),
-    email: s(f.email) || null,
+    email: optionalEmail(f.email),
     phone: s(f.phone),
     address: s(f.address),
     birth_date: f.birth_date,
