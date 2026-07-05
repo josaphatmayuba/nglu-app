@@ -29,7 +29,32 @@ const onboardingStatusMeta = {
   expired: { label: "Expire", className: "danger" },
 };
 
-const MARRIED_STATES = ["marié", "marie", "conjoint de fait", "union libre"];
+const MARRIED_STATES = ["married", "common_law"];
+// État civil : on stocke un CODE neutre en base (i18n-ready) et on affiche le libellé traduit.
+// Voir migration 0207. Les libellés FR sont les CLÉS i18n (t(label) traduit en EN).
+const MARITAL_LABELS = {
+  single: "Célibataire",
+  married: "Marié(e)",
+  common_law: "Conjoint de fait",
+  divorced: "Divorcé(e)",
+  widowed: "Veuf / Veuve",
+};
+// Anciennes valeurs FR/EN libres → code canonique (filet pour les fiches non migrées).
+const MARITAL_LEGACY_TO_CODE = {
+  "célibataire": "single", "celibataire": "single", "single": "single",
+  "marié": "married", "marie": "married", "married": "married",
+  "conjoint de fait": "common_law", "union libre": "common_law", "common_law": "common_law",
+  "divorcé": "divorced", "divorce": "divorced", "divorced": "divorced",
+  "veuf": "widowed", "veuve": "widowed", "widowed": "widowed",
+};
+function normalizeMaritalStatus(status) {
+  const key = String(status || "").trim().toLowerCase();
+  return MARITAL_LEGACY_TO_CODE[key] || status;
+}
+function labelForMarital(status) {
+  const code = normalizeMaritalStatus(status);
+  return MARITAL_LABELS[code] || status || "";
+}
 
 function tenantName(t) {
   const n = [t.firstName, t.lastName].filter(Boolean).join(" ").trim();
@@ -474,7 +499,7 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCr
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const married = MARRIED_STATES.includes(String(tenant.maritalStatus || "").toLowerCase());
+  const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
   const { activeLease, activeUnit } = leaseInfo || {};
 
@@ -518,7 +543,7 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCr
             <Info2 icon={Briefcase} label={t("Activite")} value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
             <Info2 icon={Building2} label={t("Employeur")} value={tenant.entityName || "—"} />
             <Info2 icon={Home} label={t("Foyer")} value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
-            <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus || "—"} />
+            <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus ? t(labelForMarital(tenant.maritalStatus)) : "—"} />
             <Info2 icon={IdCard} label={t("Piece d'identite")} value={[tenant.idDocumentType, tenant.idNumber].filter(Boolean).join(" · ") || "—"} />
           </div>
 
@@ -730,11 +755,11 @@ const emptyTenant = {
 };
 
 const SEX_OPTIONS = [["M", "Masculin"], ["F", "Feminin"]];
+// value = CODE canonique (stocké en base), text = libellé traduit. Mêmes codes que le CRM.
 const MARITAL_OPTIONS = [
-  ["célibataire", "Celibataire"], ["marié", "Marie(e)"], ["conjoint de fait", "Conjoint de fait"],
-  ["union libre", "Union libre"], ["divorcé", "Divorce(e)"], ["veuf", "Veuf/Veuve"],
+  ["single", t("Célibataire")], ["married", t("Marié(e)")], ["common_law", t("Conjoint de fait")],
+  ["divorced", t("Divorcé(e)")], ["widowed", t("Veuf / Veuve")],
 ];
-// Mêmes valeurs/libellés que le CRM (TenantFormModal) pour garder les données cohérentes.
 const PRO_OPTIONS = [
   ["salarie", "Salarié"], ["entrepreneur", "Entrepreneur"], ["commercant", "Commerçant"],
   ["independant", "Travailleur autonome / Indépendant"], ["pigiste", "Pigiste"],
@@ -771,7 +796,7 @@ function tenantToForm(t) {
     birth_date: dateOnly(t.birthDate),
     sex: t.sex || "M",
     nationality: t.nationality || "Congolaise",
-    marital_status: t.maritalStatus || "célibataire",
+    marital_status: t.maritalStatus ? normalizeMaritalStatus(t.maritalStatus) : "single",
     id_document_type: t.idDocumentType || "",
     id_number: t.idNumber || "",
     _idDocumentName: t.idDocumentName || "",
@@ -796,7 +821,7 @@ function tenantToForm(t) {
 }
 
 function isMarried(status) {
-  return MARRIED_STATES.includes(String(status || "").toLowerCase());
+  return MARRIED_STATES.includes(normalizeMaritalStatus(status));
 }
 
 // Accès sûr : les dossiers d'inscription pré-remplis peuvent contenir des champs null.

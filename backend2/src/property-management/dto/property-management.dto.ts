@@ -625,13 +625,13 @@ export class CreateTenantDto {
   occupant_number: number;
 
   @ApiPropertyOptional({ example: "Jeanne Dupont" })
-  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @ValidateIf((dto) => ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
   @IsString()
   @IsNotEmpty()
   partenair_name?: string | null;
 
   @ApiPropertyOptional({ example: "+243840000000" })
-  @ValidateIf((dto) => ["marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
+  @ValidateIf((dto) => ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(String(dto.marital_status).toLowerCase()))
   @IsString()
   @IsNotEmpty()
   partenair_number?: string | null;

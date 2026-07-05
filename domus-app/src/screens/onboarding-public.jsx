@@ -11,6 +11,7 @@ import { publicApi } from "../api.js";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
 import { t, tf } from "../i18n.js";
 
+// On stocke un CODE neutre (i18n-ready) et on affiche le libellé traduit ; voir migration 0207.
 const MARITAL_OPTIONS = [
   ["", t("Sélectionnez…")],
   ["single", t("Célibataire")],
@@ -19,7 +20,7 @@ const MARITAL_OPTIONS = [
   ["divorced", t("Divorcé(e)")],
   ["widowed", t("Veuf / Veuve")],
 ];
-const COUPLE_STATUSES = ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"];
+const COUPLE_STATUSES = ["married", "common_law"];
 
 const PRO_OPTIONS = [
   ["", t("Sélectionnez…")],

@@ -1275,6 +1275,13 @@
                         "when":  1780916400000,
                         "tag":  "0206_tenant_onboardings_sms_delivery",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  182,
+                        "version":  "5",
+                        "when":  1780920000000,
+                        "tag":  "0207_tenant_marital_status_normalize",
+                        "breakpoints":  true
                     }
                 ]
 }

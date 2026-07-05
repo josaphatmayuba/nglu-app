@@ -12,6 +12,7 @@ import "./PropertyManagement.css";
 import PhoneInput from "../Shared/PhoneInput";
 import MoneyInput from "../Shared/MoneyInput";
 import { isValidPhoneNumber } from "react-phone-number-input";
+import { maritalStatuses, coupleStatuses } from "./shared/constants";
 
 const phoneValidator = {
   validator: (_, value) =>
@@ -22,15 +23,6 @@ const phoneValidator = {
 const requiredPhoneRules = [{ required: true, message: "Champ obligatoire" }, phoneValidator];
 const optionalPhoneRules = [phoneValidator];
 
-const maritalStatuses = [
-  { label: "Célibataire", value: "single" },
-  { label: "Marié", value: "married" },
-  { label: "Conjoint de fait", value: "common_law" },
-  { label: "Divorcé", value: "divorced" },
-  { label: "Veuf", value: "widowed" },
-];
-
-const coupleStatuses = ["married", "common_law", "marié", "marie", "conjoint de fait"];
 const requiredRules = [{ required: true, message: "Champ obligatoire" }];
 
 const professionalStatuses = [

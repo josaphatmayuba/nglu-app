@@ -151,7 +151,7 @@ export async function seedDemoRealEstate() {
       firstName: "Marie", lastName: "Kabongo", email: "marie.kabongo@email.cd", phone: "+243 999 123 456",
       address: "15 Av. Tombalbaye, Kinshasa",
       details: {
-        birthDate: "1988-04-12", sex: "F", nationality: "Congolaise", maritalStatus: "marié",
+        birthDate: "1988-04-12", sex: "F", nationality: "Congolaise", maritalStatus: "married",
         originProvince: "Kasaï Central", contactedPerson: "Joseph Kabongo", contactedPersonPhoneNumber: "+243 998 111 222",
         professionalStatus: "Salariée", mainActivity: "Direction marketing", entityName: "Vodacom RDC",
         entityAddress: "Bd du 30 juin, Gombe", hiringDate: "2019-03-15", contractType: "CDI",
@@ -164,7 +164,7 @@ export async function seedDemoRealEstate() {
       firstName: "Paul", lastName: "Lumumba", email: "paul.l@gmail.com", phone: "+243 815 678 901",
       address: "42 Av. Bandundu, Kinshasa",
       details: {
-        birthDate: "1982-11-30", sex: "M", nationality: "Congolaise", maritalStatus: "marié",
+        birthDate: "1982-11-30", sex: "M", nationality: "Congolaise", maritalStatus: "married",
         originProvince: "Sankuru", contactedPerson: "Pauline Lumumba", contactedPersonPhoneNumber: "+243 815 999 888",
         professionalStatus: "Indépendant", mainActivity: "Import-export véhicules", entityName: "Lumumba Trading",
         entityAddress: "Av. Kasa-Vubu, Kinshasa", hiringDate: "2010-01-01", contractType: "Auto-entrepreneur",
@@ -177,7 +177,7 @@ export async function seedDemoRealEstate() {
       firstName: "Christine", lastName: "Tshisekedi", email: "c.tshisekedi@email.com", phone: "+243 818 345 678",
       address: "3 Bd du 30 juin, Kinshasa",
       details: {
-        birthDate: "1990-07-22", sex: "F", nationality: "Congolaise", maritalStatus: "célibataire",
+        birthDate: "1990-07-22", sex: "F", nationality: "Congolaise", maritalStatus: "single",
         originProvince: "Kasaï Oriental", contactedPerson: "André Tshisekedi", contactedPersonPhoneNumber: "+243 818 555 444",
         professionalStatus: "Commerçante", mainActivity: "Boutique cosmétiques", entityName: "Galerie Christine",
         entityAddress: "3 Bd du 30 juin, Gombe", hiringDate: "2020-06-01", contractType: "Auto-entrepreneur",
@@ -190,7 +190,7 @@ export async function seedDemoRealEstate() {
       firstName: "Jean", lastName: "Bemba", email: "jean.bemba@yahoo.fr", phone: "+243 812 456 789",
       address: "8 Bd Lumumba, Kinshasa",
       details: {
-        birthDate: "1985-02-18", sex: "M", nationality: "Congolaise", maritalStatus: "marié",
+        birthDate: "1985-02-18", sex: "M", nationality: "Congolaise", maritalStatus: "married",
         originProvince: "Équateur", contactedPerson: "Sarah Bemba", contactedPersonPhoneNumber: "+243 812 777 666",
         professionalStatus: "Salarié", mainActivity: "Comptable", entityName: "Rawbank",
         entityAddress: "3771 Av. de la Justice, Gombe", hiringDate: "2015-09-10", contractType: "CDI",
@@ -203,7 +203,7 @@ export async function seedDemoRealEstate() {
       firstName: "Antoine", lastName: "Kalala", email: "antoine.k@email.com", phone: "+243 999 567 890",
       address: "5 Av. Lukoki, Kinshasa",
       details: {
-        birthDate: "1978-08-05", sex: "M", nationality: "Congolaise", maritalStatus: "conjoint de fait",
+        birthDate: "1978-08-05", sex: "M", nationality: "Congolaise", maritalStatus: "common_law",
         originProvince: "Haut-Katanga", contactedPerson: "Diane Kalala", contactedPersonPhoneNumber: "+243 999 333 222",
         professionalStatus: "Salarié", mainActivity: "Ingénieur télécoms", entityName: "Orange RDC",
         entityAddress: "Bd du 30 juin, Gombe", hiringDate: "2012-04-01", contractType: "CDI",
@@ -217,7 +217,7 @@ export async function seedDemoRealEstate() {
       firstName: "Sysconnect", lastName: "SARL", email: "contact@sysconnect.cd", phone: "+243 821 234 567",
       address: "25 Av. Wagenia, Kinshasa",
       details: {
-        birthDate: "2018-01-15", sex: "M", nationality: "Congolaise", maritalStatus: "célibataire",
+        birthDate: "2018-01-15", sex: "M", nationality: "Congolaise", maritalStatus: "single",
         originProvince: "Kinshasa", contactedPerson: "Directeur SI", contactedPersonPhoneNumber: "+243 821 999 000",
         professionalStatus: "Société", mainActivity: "Intégration informatique", entityName: "Sysconnect SARL",
         entityAddress: "RCCM CD/KIN/RCCM/18-B-1234", hiringDate: "2018-01-15", contractType: "Société",

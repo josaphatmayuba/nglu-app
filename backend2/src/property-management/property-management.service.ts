@@ -3571,7 +3571,10 @@ export class PropertyManagementService {
   }
 
   private isCoupleStatus(value: string) {
-    return ["marié", "marie", "conjoint de fait", "union libre"].includes(value.trim().toLowerCase());
+    // Codes canoniques (voir migration 0207) ; on tolère les anciennes valeurs FR legacy par sécurité.
+    return ["married", "common_law", "marié", "marie", "conjoint de fait", "union libre"].includes(
+      String(value ?? "").trim().toLowerCase(),
+    );
   }
 
   private usernameFromEmail(email?: string | null) {

@@ -8,7 +8,7 @@ import {
   saveTenantOnboardingAdmin,
   validateTenantOnboarding,
 } from "../../../../redux/rtk/features/propertyManagement/propertyManagementSlice";
-import { coupleStatuses, maritalStatuses } from "../../shared/constants";
+import { coupleStatuses, maritalStatuses, normalizeMaritalStatus } from "../../shared/constants";
 import CurrencyCombobox from "../../../Shared/CurrencyCombobox";
 import PhoneInput from "../../../Shared/PhoneInput";
 import MoneyInput from "../../../Shared/MoneyInput";
@@ -41,7 +41,8 @@ const toTenantFormRecord = (record) => {
   if (!record) return {};
   // Take everything as-is — backend returns the same shape it expects on save.
   // (The legacy `toFormRecord("tenant", ...)` is a passthrough.)
-  return { ...record };
+  // On normalise l'état civil vers un code (fiches legacy FR non encore migrées → select vide sinon).
+  return { ...record, marital_status: normalizeMaritalStatus(record.marital_status) };
 };
 
 const TenantFormModal = ({ open, record, mode = "tenant", onClose, onSaved }) => {

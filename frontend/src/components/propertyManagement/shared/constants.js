@@ -18,15 +18,36 @@ export const unitTypes = [
   { label: "Maison entière", value: "house" },
 ];
 
+// État civil : on stocke un CODE neutre en base (i18n-ready) et on affiche le libellé.
+// Voir migration 0207 qui normalise l'historique vers ces codes.
 export const maritalStatuses = [
-  { label: "Célibataire", value: "célibataire" },
-  { label: "Marié", value: "marié" },
-  { label: "Conjoint de fait", value: "conjoint de fait" },
-  { label: "Divorcé", value: "divorcé" },
-  { label: "Veuf", value: "veuf" },
+  { label: "Célibataire", value: "single" },
+  { label: "Marié", value: "married" },
+  { label: "Conjoint de fait", value: "common_law" },
+  { label: "Divorcé", value: "divorced" },
+  { label: "Veuf", value: "widowed" },
 ];
 
-export const coupleStatuses = ["marié", "marie", "conjoint de fait", "union libre"];
+export const coupleStatuses = ["married", "common_law"];
+
+// Anciennes valeurs FR/EN libres → code canonique (filet pour les fiches non migrées).
+const MARITAL_LEGACY_TO_CODE = {
+  "célibataire": "single", "celibataire": "single", "single": "single",
+  "marié": "married", "marie": "married", "married": "married",
+  "conjoint de fait": "common_law", "union libre": "common_law", "common_law": "common_law",
+  "divorcé": "divorced", "divorce": "divorced", "divorced": "divorced",
+  "veuf": "widowed", "veuve": "widowed", "widowed": "widowed",
+};
+
+export function normalizeMaritalStatus(value) {
+  const key = String(value ?? "").trim().toLowerCase();
+  return MARITAL_LEGACY_TO_CODE[key] || value;
+}
+
+export function maritalStatusLabel(value) {
+  const code = normalizeMaritalStatus(value);
+  return maritalStatuses.find((s) => s.value === code)?.label || value || "";
+}
 
 export const statusColor = {
   available: "green",
