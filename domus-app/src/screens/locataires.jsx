@@ -597,6 +597,21 @@ function OnboardingCard({
         <div className="domus-onboarding-line">
           <span><FileClock size={16} /> Inscription locataire</span>
         </div>
+        {(record.smsSentAt || record.emailSentAt) && (
+          <div className={`domus-onboarding-sent${record.smsStatus === "failed" || record.smsStatus === "undelivered" ? " failed" : ""}`}>
+            <CheckCircle2 size={13} />
+            <span>
+              {record.smsSentAt &&
+                (record.smsDeliveredAt
+                  ? `SMS livre le ${formatShortDate(record.smsDeliveredAt)}`
+                  : record.smsStatus === "failed" || record.smsStatus === "undelivered"
+                    ? "SMS non delivre"
+                    : `SMS transmis le ${formatShortDate(record.smsSentAt)}`)}
+              {record.smsSentAt && record.emailSentAt && " · "}
+              {record.emailSentAt && `Email transmis le ${formatShortDate(record.emailSentAt)}`}
+            </span>
+          </div>
+        )}
         <div className="domus-onboarding-line">
           <span>Expire {formatShortDate(record.expiresAt)}</span>
           <strong>{record.status === "submitted" ? "A valider" : "Non valide"}</strong>

@@ -10,7 +10,11 @@ This project follows:
 
 ## [Unreleased]
 
+### Added
+- **Domus : confirmation de livraison des SMS d'inscription locataire via Twilio (StatusCallback, option A).** À l'envoi (`POST /property-management/onboarding/:id/send-sms`), on passe un `StatusCallback` à Twilio et on persiste le `sms_sid`. Twilio rappelle l'endpoint public signé `POST /tenant-onboarding/sms-status` (validation `X-Twilio-Signature`) à chaque changement de statut, qui met à jour `sms_status` / `sms_delivered_at` sur `tenant_onboardings` (relié par `sms_sid`). La carte affiche désormais **« SMS livré le … »** (livraison confirmée), **« SMS transmis le … »** (accepté, en attente) ou **« SMS non délivré »** (échec, en rouge). Migration `0206_tenant_onboardings_sms_delivery.sql`. Route déjà couverte par la whitelist middleware (`/tenant-onboarding`). Config prod requise : `APP_URL` public joignable par Twilio. (v3.148.0)
+
 ### Changed
+- **Domus : le libellé du bouton SMS ne ment plus.** `sendSms` (compat) ne renvoie un succès que si Twilio **accepte** réellement le message (statut ≠ `failed`/`undelivered`, pas d'`error_code`) ; `sms_sent_at` n'est donc écrit — et le bouton ne passe à « Renvoyer SMS » — que sur confirmation de l'API Twilio. (v3.148.0)
 - **Domus : « Valider » une inscription locataire ouvre désormais une fiche de revue avant de créer le locataire** (au lieu de valider en un clic silencieux). Le gestionnaire visualise et **corrige** les informations saisies par le locataire ; les corrections sont persistées (`PATCH /onboarding/:id`) avant la validation. Un bandeau précise qu'un locataire actif va être créé et qu'aucun bail n'est créé à cette étape. Après validation, la fiche du locataire créé s'ouvre avec un bouton **« Créer le bail »** (visible tant qu'aucun bail actif) qui route vers l'écran Baux avec le locataire pré-sélectionné. Corrige aussi un bug latent : après validation, on sélectionnait l'id du dossier au lieu de l'id du locataire créé. (v3.147.4)
 
 ### Fixed

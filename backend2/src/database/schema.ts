@@ -691,6 +691,9 @@ export const tenantOnboardings = mysqlTable("tenant_onboardings", {
   customerId: bigint("customer_id", { mode: "number" }),
   smsSentAt: timestamp("sms_sent_at"),
   emailSentAt: timestamp("email_sent_at"),
+  smsSid: varchar("sms_sid", { length: 64 }),
+  smsStatus: varchar("sms_status", { length: 32 }),
+  smsDeliveredAt: timestamp("sms_delivered_at"),
   createdAt: timestamp("created_at"),
   updatedAt: timestamp("updated_at"),
 });

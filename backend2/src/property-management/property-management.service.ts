@@ -1,6 +1,6 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
-import { createHash, randomBytes } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { join } from "path";
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -393,6 +393,9 @@ export class PropertyManagementService {
     const result = await this.sms.sendSms({
       phone,
       message: `Bonjour, completez votre dossier locataire Domus ici: ${url}`,
+      // Option A : Twilio rappellera cet endpoint public signe pour tracer la
+      // livraison reelle (voir handleSmsStatusCallback).
+      statusCallback: `${env.appUrl.replace(/\/$/, "")}/api/tenant-onboarding/sms-status`,
     });
     if (!result?.success) {
       throw new BadRequestException(result?.message || "Impossible d'envoyer le SMS.");
@@ -400,7 +403,13 @@ export class PropertyManagementService {
 
     await this.db
       .update(tenantOnboardings)
-      .set({ smsSentAt: sql`CURRENT_TIMESTAMP`, updatedAt: sql`CURRENT_TIMESTAMP` })
+      .set({
+        smsSentAt: sql`CURRENT_TIMESTAMP`,
+        smsSid: result.sid ?? null,
+        smsStatus: result.status ?? "queued",
+        smsDeliveredAt: null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
       .where(eq(tenantOnboardings.id, id));
 
     return this.adminOnboardingResponse(await this.findOnboarding(id));
@@ -454,6 +463,52 @@ export class PropertyManagementService {
     return this.adminOnboardingResponse(await this.findOnboarding(id));
   }
 
+  /**
+   * Webhook public appele par Twilio (StatusCallback, option A) a chaque
+   * changement de statut d'un SMS. Relie le message au dossier via sms_sid et
+   * met a jour sms_status / sms_delivered_at. Endpoint public => on valide la
+   * signature X-Twilio-Signature avant toute ecriture.
+   */
+  async handleSmsStatusCallback(fullUrl: string, signature: string, body: Record<string, any>) {
+    if (!this.isValidTwilioSignature(fullUrl, signature, body)) {
+      throw new UnauthorizedException("Invalid Twilio signature.");
+    }
+    const sid = body?.MessageSid || body?.SmsSid;
+    const status = String(body?.MessageStatus || body?.SmsStatus || "").toLowerCase();
+    if (!sid || !status) return { ok: true };
+
+    const patch: Record<string, any> = {
+      smsStatus: status,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    };
+    if (status === "delivered") {
+      patch.smsDeliveredAt = sql`CURRENT_TIMESTAMP`;
+    }
+    await this.db
+      .update(tenantOnboardings)
+      .set(patch)
+      .where(eq(tenantOnboardings.smsSid, String(sid)));
+    return { ok: true };
+  }
+
+  // Signature Twilio: HMAC-SHA1(authToken, url + concat des params POST tries
+  // par cle) encode en base64, compare a X-Twilio-Signature.
+  private isValidTwilioSignature(url: string, signature: string, params: Record<string, any>) {
+    const authToken = env.twilio.authToken;
+    if (!authToken || !signature) return false;
+    const data = Object.keys(params)
+      .sort()
+      .reduce((acc, key) => acc + key + String(params[key] ?? ""), url);
+    const expected = createHmac("sha1", authToken).update(Buffer.from(data, "utf-8")).digest("base64");
+    try {
+      const a = Buffer.from(expected);
+      const b = Buffer.from(signature);
+      return a.length === b.length && timingSafeEqual(a, b);
+    } catch {
+      return false;
+    }
+  }
+
 
   async onboardingList(orgId: number) {
     const rows = await this.db
@@ -469,6 +524,8 @@ export class PropertyManagementService {
         customerId: tenantOnboardings.customerId,
         smsSentAt: tenantOnboardings.smsSentAt,
         emailSentAt: tenantOnboardings.emailSentAt,
+        smsStatus: tenantOnboardings.smsStatus,
+        smsDeliveredAt: tenantOnboardings.smsDeliveredAt,
         createdAt: tenantOnboardings.createdAt,
         updatedAt: tenantOnboardings.updatedAt,
       })
@@ -3181,7 +3238,7 @@ export class PropertyManagementService {
   }
 
   private adminOnboardingResponse(onboarding: any) {
-    const { tokenHash: _tokenHash, token, ...payload } = onboarding;
+    const { tokenHash: _tokenHash, token, smsSid: _smsSid, ...payload } = onboarding;
     return {
       ...payload,
       url: token ? this.onboardingUrl(token) : null,

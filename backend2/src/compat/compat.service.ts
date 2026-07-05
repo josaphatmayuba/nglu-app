@@ -97,6 +97,12 @@ export class CompatService {
       }
       params.set("To", body.phone);
       params.set("Body", body.message || body.text || "Message de NgoluApp");
+      // Option A : StatusCallback par message. Twilio rappellera cette URL a
+      // chaque changement de statut (sent/delivered/failed) pour tracer la
+      // livraison reelle. L'appelant fournit l'URL publique (endpoint signe).
+      if (body.statusCallback) {
+        params.set("StatusCallback", String(body.statusCallback));
+      }
 
       const credentials = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
       const res = await fetch(
@@ -115,7 +121,17 @@ export class CompatService {
         this.logger.error(`SMS failed to ${body.phone}: ${data?.message}`);
         return { success: false, message: data?.message || "SMS delivery failed." };
       }
-      return { success: true, sid: data.sid };
+      // Un 2xx ne garantit pas l'acceptation : Twilio peut renvoyer un statut
+      // d'echec (failed/undelivered) ou un error_code. On ne declare un succes
+      // que si le message a bien ete pris en charge (queued/accepted/sending/sent/delivered).
+      const status = String(data?.status || "").toLowerCase();
+      if (data?.error_code || status === "failed" || status === "undelivered") {
+        this.logger.error(
+          `SMS rejected by Twilio to ${body.phone}: status=${status || "?"} error_code=${data?.error_code ?? "?"} ${data?.error_message ?? ""}`,
+        );
+        return { success: false, message: data?.error_message || "SMS delivery failed." };
+      }
+      return { success: true, sid: data.sid, status: data.status };
     } catch (error) {
       this.logger.error(`SMS failed to ${body.phone}: ${error instanceof Error ? error.message : String(error)}`);
       return { success: false, message: "SMS delivery failed." };

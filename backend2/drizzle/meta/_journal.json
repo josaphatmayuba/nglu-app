@@ -1268,6 +1268,13 @@
                         "when":  1780912800000,
                         "tag":  "0205_tenant_onboardings_sent_at",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  181,
+                        "version":  "5",
+                        "when":  1780916400000,
+                        "tag":  "0206_tenant_onboardings_sms_delivery",
+                        "breakpoints":  true
                     }
                 ]
 }
