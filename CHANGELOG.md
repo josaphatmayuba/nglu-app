@@ -11,6 +11,7 @@ This project follows:
 ## [Unreleased]
 
 ### Fixed
+- **Avelomi : re-déclenche le step CI `Avelomi-site → dev` maintenant que le fix chown `/opt/nglu-app` (v3.148.2) est en place**, pour rebâtir l'image frontend Avelomi et servir le vrai `avelomi-site`. (v3.148.3)
 - **CI Avelomi dev : `cd: /opt/nglu-app: Permission denied` sur les steps `Avelomi-site → dev`.** `/opt/nglu-app` (`$STACK_APP`) appartient à root en `drwx------` (provisioning sudo) → `admin` ne peut ni lire ni traverser. Le step court (rebuild image) n'avait aucune garde ; le step `full` gardait avec `[ -x ]` seul, insuffisant (sur du root-owned 0700 le test peut passer sans que le `cd` réussisse). Aligné sur la logique robuste de `deploy-prod-static-app.sh` : chown idempotent si **lecture ET traversée** manquent (`{ [ -x ] && [ -r ]; } || sudo chown`). (v3.148.2)
 - **Avelomi : re-déclenchement du rebuild de l'image frontend pour servir le vrai `avelomi-site` à la racine `avelomi.com/`.** La racine sert `root /usr/share/nginx/html-avelomi-prod`, un répertoire **baké dans l'image** (`frontend/Dockerfile.prod` → `COPY avelomi-site/dist/`). Tant que l'image n'est pas rebâtie avec un `dist` frais, `avelomi.com/` affiche le placeholder « avelomi-site non deploye. ». Ce commit touche `avelomi-site/**` pour re-déclencher le step CI `deploy-avelomi-site-prod` (`scripts/ci/deploy-prod-static-app.sh avelomi-site /`) qui build le dist, rebâtit l'image frontend Avelomi et recrée le conteneur. (v3.148.1)
 
