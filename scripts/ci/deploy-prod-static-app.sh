@@ -135,6 +135,9 @@ trap cleanup EXIT
   echo "smoke_route=$SMOKE_ROUTE"
 } > "$LOCK_META"
 
+# $REMOTE_ROOT (/opt/nglu-app) peut appartenir a root (provisioning sudo) => "cd: Permission denied".
+# On garantit la propriete du dossier avant le cd (idempotent).
+[ -x "$REMOTE_ROOT" ] && [ -r "$REMOTE_ROOT" ] || sudo -n chown "$(id -un):$(id -gn)" "$REMOTE_ROOT"
 cd "$REMOTE_ROOT"
 REMOTE_USER="$(id -un)"
 TARGET_DIST="$REMOTE_ROOT/$APP_DIR/dist"

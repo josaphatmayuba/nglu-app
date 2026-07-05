@@ -805,6 +805,9 @@ pipelines:
                 - $SSH $SERVER "sudo -n install -m 0644 /tmp/nginx.avelomi.conf $STACK_APP/nginx/nginx.frontend.conf && sudo -n install -m 0644 /tmp/docker-compose.prod.yml $STACK_APP/docker-compose.prod.yml && sudo -n install -m 0644 /tmp/Dockerfile.prod $STACK_APP/frontend/Dockerfile.prod && rm -f /tmp/nginx.avelomi.conf /tmp/docker-compose.prod.yml /tmp/Dockerfile.prod"
                 - $SSH $SERVER "if ! command -v docker >/dev/null 2>&1; then curl -fsSL https://get.docker.com | sudo -n sh; fi; sudo -n systemctl start docker 2>/dev/null || sudo -n service docker start 2>/dev/null || true; sudo -n docker network create nglu_shared 2>/dev/null || true"
                 - $SSH $SERVER "if [ ! -f /etc/letsencrypt/live/dev.avelomi.com/fullchain.pem ]; then if ! command -v certbot >/dev/null 2>&1; then sudo -n apt-get update -y && sudo -n apt-get install -y certbot; fi; sudo -n certbot certonly --standalone -d dev.avelomi.com --email admin@avelomi.com --agree-tos --non-interactive; fi"
+                # /opt/nglu-app peut appartenir a root (provisioning sudo) -> "cd: Permission denied".
+                # On garantit la propriete du dossier avant le cd (idempotent).
+                - $SSH $SERVER "[ -x $STACK_APP ] || sudo -n chown \$(id -un):\$(id -gn) $STACK_APP"
                 - $SSH $SERVER "set -e; cd $STACK_APP; DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; FRONTEND_PROJECT=\$(\$DOCKER inspect -f '{{with index .Config.Labels \"com.docker.compose.project\"}}{{.}}{{end}}' nglu_prod_frontend 2>/dev/null || true); [ -n \"\$FRONTEND_PROJECT\" ] || FRONTEND_PROJECT=nglu_prod; \$DOCKER compose -p \"\$FRONTEND_PROJECT\" -f docker-compose.prod.yml --env-file .env.prod up -d --build --no-deps --force-recreate frontend"
                 - $SSH $SERVER "DOCKER=docker; docker ps >/dev/null 2>&1 || DOCKER='sudo -n docker'; \$DOCKER exec nglu_prod_frontend nginx -t"
 
