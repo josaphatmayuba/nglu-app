@@ -364,7 +364,11 @@ pipelines:
                 - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo -n mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo -n tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo -n touch $STACK_APP/.env.prod"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                # Le dist frais va dans $APP (dev, bind-mont) ET $STACK_APP (prod, bake par
+                # le COPY du Dockerfile). Ce step rebuild l'image PARTAGEE nglu_prod_frontend:
+                # sans copier le vrai dist dans $STACK_APP, le bake reprend le placeholder prod
+                # et casse avelomi.com. On ecrit donc les deux avant le rebuild.
+                - $SSH $SERVER "for D in $APP/avelomi-site/dist $STACK_APP/avelomi-site/dist; do sudo -n mkdir -p \$D && sudo -n find \$D -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. \$D/ && sudo -n chown -R \$(id -un):\$(id -gn) \$D; done; rm -rf /tmp/avelomi-site-dist"
                 - $SCP nginx/nginx.avelomi-dev.conf $SERVER:/tmp/nginx.avelomi.conf
                 - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
                 - $SCP frontend/Dockerfile.prod $SERVER:/tmp/Dockerfile.prod
@@ -801,7 +805,11 @@ pipelines:
                 - $SSH $SERVER "for static_app in frontend marketing-site avelomi-site farmos-app domus-app journal-app tickets-app batipro-app hr-app comptabilite-app migration-app chat-app; do sudo -n mkdir -p $APP/\$static_app/dist $STACK_APP/\$static_app/dist; if [ ! -f $STACK_APP/\$static_app/dist/index.html ]; then printf '<!doctype html><html><body>%s non deploye.</body></html>\n' \"\$static_app\" | sudo -n tee $STACK_APP/\$static_app/dist/index.html >/dev/null; fi; done; sudo -n touch $STACK_APP/.env.prod"
                 - $SSH $SERVER "rm -rf /tmp/avelomi-site-dist && mkdir -p /tmp/avelomi-site-dist"
                 - $SCP -r avelomi-site/dist/* $SERVER:/tmp/avelomi-site-dist/
-                - $SSH $SERVER "sudo -n find $APP/avelomi-site/dist -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. $APP/avelomi-site/dist/ && sudo -n chown -R \$(id -un):\$(id -gn) $APP/avelomi-site/dist && rm -rf /tmp/avelomi-site-dist"
+                # Le dist frais va dans $APP (dev, bind-mont) ET $STACK_APP (prod, bake par
+                # le COPY du Dockerfile). Ce step rebuild l'image PARTAGEE nglu_prod_frontend:
+                # sans copier le vrai dist dans $STACK_APP, le bake reprend le placeholder prod
+                # et casse avelomi.com. On ecrit donc les deux avant le rebuild.
+                - $SSH $SERVER "for D in $APP/avelomi-site/dist $STACK_APP/avelomi-site/dist; do sudo -n mkdir -p \$D && sudo -n find \$D -mindepth 1 -delete && sudo -n cp -r /tmp/avelomi-site-dist/. \$D/ && sudo -n chown -R \$(id -un):\$(id -gn) \$D; done; rm -rf /tmp/avelomi-site-dist"
                 - $SCP nginx/nginx.avelomi-dev.conf $SERVER:/tmp/nginx.avelomi.conf
                 - $SCP docker-compose.prod.yml $SERVER:/tmp/docker-compose.prod.yml
                 - $SCP frontend/Dockerfile.prod $SERVER:/tmp/Dockerfile.prod
