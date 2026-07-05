@@ -423,6 +423,7 @@ export function Locataires({ go } = {}) {
       {selected && (
         <TenantDetailDrawer
           tenant={selected}
+          currency={currency}
           leaseInfo={tenantLeaseInfo(selected, leases, units)}
           onClose={() => setSelectedId(null)}
           onEdit={() => { setActionError(""); setModal(tenantToForm(selected)); }}
@@ -492,7 +493,7 @@ function Info2({ icon: Icon, label, value }) {
 }
 
 // ── Tiroir « détail locataire » (s'ouvre à droite au clic sur une carte) ──
-function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
+function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDelete, onCreateLease }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -502,6 +503,17 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCr
   const married = MARRIED_STATES.includes(normalizeMaritalStatus(tenant.maritalStatus));
   const active = isActive(tenant);
   const { activeLease, activeUnit } = leaseInfo || {};
+
+  const labelFor = (opts, code) => {
+    const lbl = opts.find(([v]) => v === code)?.[1];
+    return lbl ? t(lbl) : (code || "—");
+  };
+  const salarySym = (() => {
+    const cur = tenant.salaryCurrencyId != null ? currency?.currencyById?.get(Number(tenant.salaryCurrencyId)) : null;
+    return cur?.symbol || currency?.defaultCurrencySymbol || "CDF";
+  })();
+  const money = (v) => (v != null && v !== "" ? `${salarySym} ${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 0 })}` : "—");
+  const childAges = parseChildAges(tenant.childAges);
 
   return (
     <>
@@ -537,12 +549,21 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCr
 
           <div className="info-grid">
             <Info2 icon={Phone} label={t("Telephone")} value={tenant.phone || "—"} />
+            <Info2 icon={Phone} label={t("Telephone 2")} value={tenant.phone2 || "—"} />
             <Info2 icon={Mail} label={t("Email")} value={tenant.email || "—"} />
             <Info2 icon={MapPin} label={t("Adresse")} value={tenant.address || "—"} />
+            <Info2 icon={User} label={t("Sexe")} value={labelFor(SEX_OPTIONS, tenant.sex)} />
+            <Info2 icon={IdCard} label={t("Date de naissance")} value={dateOnly(tenant.birthDate) || "—"} />
             <Info2 icon={IdCard} label={t("Nationalite")} value={tenant.nationality || "—"} />
+            <Info2 icon={Briefcase} label={t("Statut")} value={labelFor(PRO_OPTIONS, tenant.professionalStatus)} />
             <Info2 icon={Briefcase} label={t("Activite")} value={[tenant.mainActivity, tenant.contractType].filter(Boolean).join(" · ") || "—"} />
             <Info2 icon={Building2} label={t("Employeur")} value={tenant.entityName || "—"} />
+            <Info2 icon={Wallet} label={t("Salaire mensuel")} value={money(tenant.monthlyPay)} />
+            <Info2 icon={Wallet} label={t("Autres revenus / mois")} value={money(tenant.otherMonthlyIncome)} />
             <Info2 icon={Home} label={t("Foyer")} value={`${tenant.occupantNumber || 0} occupant(s)${Number(tenant.childNumber) > 0 ? ` · ${tenant.childNumber} enfant(s)` : ""}`} />
+            {childAges.length > 0 && (
+              <Info2 icon={Home} label={t("Age des enfants")} value={childAges.join(" · ")} />
+            )}
             <Info2 icon={User} label={t("Etat civil")} value={tenant.maritalStatus ? t(labelForMarital(tenant.maritalStatus)) : "—"} />
             <Info2 icon={IdCard} label={t("Piece d'identite")} value={[tenant.idDocumentType, tenant.idNumber].filter(Boolean).join(" · ") || "—"} />
           </div>
@@ -573,9 +594,19 @@ function TenantDetailDrawer({ tenant, leaseInfo, onClose, onEdit, onDelete, onCr
                 <span>{[tenant.partenairName, tenant.partenairNumber].filter(Boolean).join(" · ") || "Non renseigne"}</span>
               </div>
             )}
+            {(tenant.oldAddress || tenant.oldLessor || tenant.movingReason) && (
+              <div className="timeline-item done">
+                <b>{t("Historique logement")}</b>
+                <span>{[
+                  tenant.oldAddress && `${t("Ancienne adresse")} : ${tenant.oldAddress}`,
+                  tenant.oldLessor && `${t("Ancien bailleur")} : ${tenant.oldLessor}`,
+                  tenant.movingReason && `${t("Motif du déménagement")} : ${tenant.movingReason}`,
+                ].filter(Boolean).join(" — ")}</span>
+              </div>
+            )}
             <div className="timeline-item">
-              <b>Origine</b>
-              <span>{tenant.originProvince || "Province non renseignee"}</span>
+              <b>{t("Origine")}</b>
+              <span>{tenant.originProvince || t("Province non renseignee")}</span>
             </div>
           </div>
         </div>
