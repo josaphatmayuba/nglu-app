@@ -10,6 +10,9 @@ This project follows:
 
 ## [Unreleased]
 
+### Fixed
+- **Avelomi : re-déclenchement du rebuild de l'image frontend pour servir le vrai `avelomi-site` à la racine `avelomi.com/`.** La racine sert `root /usr/share/nginx/html-avelomi-prod`, un répertoire **baké dans l'image** (`frontend/Dockerfile.prod` → `COPY avelomi-site/dist/`). Tant que l'image n'est pas rebâtie avec un `dist` frais, `avelomi.com/` affiche le placeholder « avelomi-site non deploye. ». Ce commit touche `avelomi-site/**` pour re-déclencher le step CI `deploy-avelomi-site-prod` (`scripts/ci/deploy-prod-static-app.sh avelomi-site /`) qui build le dist, rebâtit l'image frontend Avelomi et recrée le conteneur. (v3.148.1)
+
 ### Added
 - **Domus : confirmation de livraison des SMS d'inscription locataire via Twilio (StatusCallback, option A).** À l'envoi (`POST /property-management/onboarding/:id/send-sms`), on passe un `StatusCallback` à Twilio et on persiste le `sms_sid`. Twilio rappelle l'endpoint public signé `POST /tenant-onboarding/sms-status` (validation `X-Twilio-Signature`) à chaque changement de statut, qui met à jour `sms_status` / `sms_delivered_at` sur `tenant_onboardings` (relié par `sms_sid`). La carte affiche désormais **« SMS livré le … »** (livraison confirmée), **« SMS transmis le … »** (accepté, en attente) ou **« SMS non délivré »** (échec, en rouge). Migration `0206_tenant_onboardings_sms_delivery.sql`. Route déjà couverte par la whitelist middleware (`/tenant-onboarding`). Config prod requise : `APP_URL` public joignable par Twilio. (v3.148.0)
 
