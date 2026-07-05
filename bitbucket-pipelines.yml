@@ -79,6 +79,11 @@ definitions:
       else
         $SSH $SERVER "DBPW='$AVELOMI_DB_PASSWORD' bash -s" <<'ENVGEN'
       set -e
+      # /opt/nglu-app peut appartenir a root (cree en sudo au provisioning) -> ecrire
+      # .env.prod en tant qu'admin donne "Permission denied". On s'assure du dossier +
+      # de sa propriete AVANT d'ecrire (idempotent, robuste quel que soit l'ordre).
+      mkdir -p /opt/nglu-app 2>/dev/null || sudo -n mkdir -p /opt/nglu-app
+      [ -w /opt/nglu-app ] || sudo -n chown "$(id -un):$(id -gn)" /opt/nglu-app
       f=/opt/nglu-app/.env.prod
       if [ ! -s "$f" ]; then
         printf "APP_URL=https://avelomi.com\nCORS_ORIGIN=https://avelomi.com\nFRONTEND_URL=https://avelomi.com/crm\nDB_HOST=35.169.124.49\nDB_PORT=9306\nDB_DATABASE=avelomi_db\nDB_USERNAME=avelomi\nDB_PASSWORD=%s\nDB_ROOT_PASSWORD=\nDB_WAIT_RETRIES=40\nDB_WAIT_DELAY_MS=1500\nJWT_SECRET=%s\nREFRESH_SECRET=%s\nREDIS_ENABLED=true\nREDIS_HOST=redis\nREDIS_PORT=6379\nREDIS_CHANNEL_DATA_UPDATES=data-updates\nREDIS_CHANNEL_USER_UPDATES=user-updates\nPERMISSIONS_GUARD_CACHE_TTL_MS=60000\nRENT_REMINDERS_ENABLED=false\nVITE_API_URL=https://avelomi.com/api\nVITE_APP_API=https://avelomi.com/api\nVITE_APP_API_NODE=https://avelomi.com/api\n" \
