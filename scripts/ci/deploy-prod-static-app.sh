@@ -188,11 +188,14 @@ echo "[remote] replacing $TARGET_DIST contents"
 sudo -n mkdir -p "$TARGET_DIST"
 sudo -n find "$TARGET_DIST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 sudo -n tar -xzf "$REMOTE_DIST_ARCHIVE" -C "$TARGET_DIST"
+# tar tourne en sudo => index.html appartient a root, et le dossier peut ne pas
+# etre traversable par l'utilisateur SSH tant que le chown ci-dessous n'a pas eu
+# lieu. On chown D'ABORD, puis on verifie (sinon faux negatif "did not produce").
+sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
 if [ ! -f "$TARGET_DIST/index.html" ]; then
   echo "[remote] deployed artifact did not produce $TARGET_DIST/index.html" >&2
   exit 1
 fi
-sudo -n chown -R "$REMOTE_USER:$REMOTE_USER" "$TARGET_DIST"
 rm -f "$REMOTE_DIST_ARCHIVE" "$REMOTE_SUPPORT_ARCHIVE"
 
 if [ -n "$FE_CURRENT_IMAGE" ] && $DOCKER image inspect "$FE_CURRENT_IMAGE" >/dev/null 2>&1; then
