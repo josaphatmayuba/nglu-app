@@ -1475,6 +1475,10 @@ export class PropertyManagementService {
       orgId,
     );
 
+    if (input.currencyId !== undefined && input.currencyId !== null) {
+      await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
+
     await this.db
       .update(realEstateLeases)
       .set({
@@ -1492,6 +1496,9 @@ export class PropertyManagementService {
           "taxType",
           "taxApplyMode",
         ]),
+        ...(input.currencyId !== undefined && input.currencyId !== null
+          ? { currencyId: input.currencyId }
+          : {}),
         ...(input.startDate !== undefined ? { startDate: this.requiredDate(input.startDate) } : {}),
         ...(input.endDate !== undefined ? { endDate: this.date(input.endDate) } : {}),
         ...(input.nextInvoiceDate !== undefined ? { nextInvoiceDate: this.date(input.nextInvoiceDate) } : {}),
