@@ -82,7 +82,21 @@ const VARIABLE_GROUPS = [
       "DATE DU JOUR",
     ],
   },
+  {
+    title: "Notes / conditions (optionnel)",
+    items: [
+      "CONDITIONS PARTICULIÈRES",
+      "NOTES ÉTAT DES LIEUX",
+    ],
+  },
 ];
+
+// Placeholders facultatifs : insérés dans une section conditionnelle {{#if}}...{{/if}}
+// pour que l'article correspondant disparaisse du contrat quand le champ du bail est vide.
+const OPTIONAL_VARIABLES = new Set(["CONDITIONS PARTICULIÈRES", "NOTES ÉTAT DES LIEUX"]);
+
+const snippetFor = (variable) =>
+  OPTIONAL_VARIABLES.has(variable) ? `{{#if ${variable}}}[${variable}]{{/if}}` : `[${variable}]`;
 
 const SAMPLE_VARIABLES = {
   "NOM COMPLET DU BAILLEUR": "SARL Immobilière du Fleuve",
@@ -109,13 +123,22 @@ const SAMPLE_VARIABLES = {
   "VILLE": "Kinshasa",
   "DATE DE SIGNATURE DE BAIL": "15/05/2026",
   "DATE DU JOUR": "15/05/2026",
+  "CONDITIONS PARTICULIÈRES": "Animaux non autorisés. Renouvellement tacite sauf préavis de 3 mois.",
+  "NOTES ÉTAT DES LIEUX": "Logement remis en bon état. 3 jeux de clés. Compteur SNEL relevé à 04521 kWh.",
 };
 
-const applySample = (body) =>
-  body.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, raw) => {
+const applySample = (body) => {
+  // Sections conditionnelles {{#if NOM}}...{{/if}} : garde le bloc si la variable
+  // d'exemple est non vide, le retire sinon — miroir du rendu backend.
+  const withSections = body.replace(
+    /\{\{\s*#if\s+([^{}]+?)\s*\}\}([\s\S]*?)\{\{\s*\/if\s*\}\}/g,
+    (_match, raw, inner) => (SAMPLE_VARIABLES[raw.toUpperCase().trim()] ? inner : ""),
+  );
+  return withSections.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, raw) => {
     const key = raw.toUpperCase().trim();
     return SAMPLE_VARIABLES[key] || match;
   });
+};
 
 const emptyTemplate = (type = "residential") => ({
   id: null,
@@ -379,7 +402,7 @@ export default function ContractTemplatesPage() {
                           onClick={() =>
                             setEditing((current) => ({
                               ...current,
-                              body: `${current.body || ""}${current.body?.endsWith("\n") ? "" : "\n"}[${variable}]`,
+                              body: `${current.body || ""}${current.body?.endsWith("\n") ? "" : "\n"}${snippetFor(variable)}`,
                             }))
                           }
                         >
