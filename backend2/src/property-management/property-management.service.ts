@@ -1407,9 +1407,9 @@ export class PropertyManagementService {
   }
 
   // RBAC bien : filtre direct sur le property_id du bail.
-  leases(orgId: number, propertyScope: "all" | number[] = "all") {
+  async leases(orgId: number, propertyScope: "all" | number[] = "all") {
     const scopeFilter = this.propertyViaColumnFilter(realEstateLeases.propertyId, propertyScope);
-    return this.leaseQuery()
+    const rows = await this.leaseQuery()
       .where(and(
         ne(realEstateLeases.status, "cancelled"),
         ne(leaseProperty.status, "false"),
@@ -1420,6 +1420,7 @@ export class PropertyManagementService {
         scopeFilter,
       ))
       .orderBy(desc(realEstateLeases.id));
+    return this.withOverdueStats(rows);
   }
 
   async createLease(input: CreateLeaseDto, orgId: number) {
@@ -2969,7 +2970,8 @@ export class PropertyManagementService {
       ))
       .limit(1);
     if (!rows.length) throw new NotFoundException("Lease not found.");
-    return rows[0];
+    const [enriched] = await this.withOverdueStats(rows);
+    return enriched;
   }
 
   async leaseDocuments(leaseId: number, orgId: number) {
@@ -3351,6 +3353,113 @@ export class PropertyManagementService {
       .leftJoin(leaseUnit, eq(leaseUnit.id, realEstateLeases.unitId))
       .leftJoin(customers, eq(customers.id, realEstateLeases.tenantId))
       .leftJoin(currencies, eq(currencies.id, realEstateLeases.currencyId));
+  }
+
+  // Retard historique par bail (badge "Mauvais payeur" côté front) :
+  // dérive les échéances mensuelles (billingCycle) depuis startDate jusqu'à
+  // aujourd'hui (bornées à endDate), rapproche par ordre chronologique avec
+  // les paiements du bail, délai de grâce 5 jours. Batch les paiements par
+  // leaseId en une seule requête (pas de N+1).
+  private static readonly OVERDUE_GRACE_DAYS = 5;
+
+  private async withOverdueStats<T extends { id: number; startDate: string; endDate: string | null; billingCycle: string | null; status: string }>(
+    rows: T[],
+  ): Promise<Array<T & { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean }>> {
+    if (!rows.length) return [];
+    const leaseIds = rows.map((r) => r.id);
+    const payments = await this.db
+      .select({
+        leaseId: realEstateRentPayments.leaseId,
+        paymentDate: realEstateRentPayments.paymentDate,
+      })
+      .from(realEstateRentPayments)
+      .where(inArray(realEstateRentPayments.leaseId, leaseIds))
+      .orderBy(realEstateRentPayments.paymentDate);
+
+    const paymentsByLease = new Map<number, string[]>();
+    for (const p of payments) {
+      const list = paymentsByLease.get(p.leaseId) ?? [];
+      list.push(p.paymentDate);
+      paymentsByLease.set(p.leaseId, list);
+    }
+
+    const today = this.parseDateOnly(this.formatDateOnly(new Date()));
+    return rows.map((row) => {
+      const stats = this.computeLeaseOverdueStats(
+        row.startDate,
+        row.endDate,
+        row.billingCycle,
+        paymentsByLease.get(row.id) ?? [],
+        today,
+      );
+      return { ...row, ...stats };
+    });
+  }
+
+  // Dérive les échéances mensuelles depuis startDate jusqu'à today (bornées à
+  // endDate si présent) et rapproche avec les paiements par ordre chronologique :
+  // une échéance est couverte par le 1er paiement non encore consommé dont la
+  // paymentDate correspond au mois de l'échéance. Retard si payé >5j après
+  // l'échéance, ou dépassée de >5j et toujours non couverte.
+  private computeLeaseOverdueStats(
+    startDate: string,
+    endDate: string | null,
+    billingCycle: string | null,
+    paymentDates: string[],
+    today: Date,
+  ): { lateCount: number; dueCount: number; lateRatio: number; isOverdue: boolean } {
+    const start = this.parseDateOnly(startDate);
+    const boundary = endDate ? this.parseDateOnly(endDate) : null;
+    const payments = paymentDates.map((d) => this.parseDateOnly(d));
+    const usedPaymentIndexes = new Set<number>();
+
+    let dueCount = 0;
+    let lateCount = 0;
+    let isOverdue = false;
+    // Chaque échéance est ancrée sur `start` + N cycles (et non chaînée sur la
+    // date précédente) pour éviter que le clamp fin-de-mois (ex. 31 -> 28 en
+    // février) ne fige les échéances suivantes sur le jour raboté.
+    let period = 0;
+    let dueDate = start;
+
+    while (dueDate.getTime() <= today.getTime() && (!boundary || dueDate.getTime() <= boundary.getTime())) {
+      dueCount += 1;
+
+      // 1er paiement non consommé du même mois/année que l'échéance.
+      const matchIndex = payments.findIndex(
+        (p, idx) =>
+          !usedPaymentIndexes.has(idx) &&
+          p.getUTCFullYear() === dueDate.getUTCFullYear() &&
+          p.getUTCMonth() === dueDate.getUTCMonth(),
+      );
+
+      if (matchIndex >= 0) {
+        usedPaymentIndexes.add(matchIndex);
+        const paidAt = payments[matchIndex];
+        const graceLimit = new Date(dueDate.getTime());
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        if (paidAt.getTime() > graceLimit.getTime()) {
+          lateCount += 1;
+        }
+      } else {
+        const graceLimit = new Date(dueDate.getTime());
+        graceLimit.setUTCDate(graceLimit.getUTCDate() + PropertyManagementService.OVERDUE_GRACE_DAYS);
+        if (today.getTime() > graceLimit.getTime()) {
+          lateCount += 1;
+          isOverdue = true;
+        }
+      }
+
+      period += 1;
+      dueDate = this.addBillingCycle(start, billingCycle, period);
+    }
+
+    return {
+      lateCount,
+      dueCount,
+      lateRatio: dueCount > 0 ? lateCount / dueCount : 0,
+      isOverdue,
+    };
   }
 
   private async getLeaseOrThrow(id: number, orgId: number) {
@@ -3758,14 +3867,22 @@ export class PropertyManagementService {
     return value.toISOString().slice(0, 10);
   }
 
-  private addBillingCycle(value: Date, billingCycle?: string | null, direction = 1) {
+  private addBillingCycle(value: Date, billingCycle?: string | null, periods = 1) {
     const next = new Date(value.getTime());
     const normalized = String(billingCycle || "monthly").toLowerCase();
     const months =
       normalized === "yearly" || normalized === "annual" ? 12 :
       normalized === "quarterly" ? 3 :
       1;
-    next.setUTCMonth(next.getUTCMonth() + months * direction);
+    // On fixe le jour à 1 avant le décalage de mois pour éviter le débordement
+    // (ex. 31 janv + 1 mois -> 3 mars) puis on cale sur le jour d'origine borné
+    // au dernier jour du mois cible (28/29/30). Sans ça, les échéances d'un bail
+    // dont startDate tombe en fin de mois dérivent et faussent lateCount/dueCount.
+    const day = next.getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + months * periods);
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
     return next;
   }
 

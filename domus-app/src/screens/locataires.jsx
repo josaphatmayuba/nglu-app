@@ -21,7 +21,7 @@ let tenantCurrencyOptions = [];
 let tenantDefaultCurrencyId = "";
 // Dégradés des avatars de carte locataire (mêmes teintes que le CRM immobilier).
 const LETTER_TONES = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
-const onboardingStatusMeta = {
+export const onboardingStatusMeta = {
   sent: { label: "Non rempli", className: "warning" },
   draft: { label: "En remplissage", className: "warning" },
   submitted: { label: "Soumis", className: "success" },
@@ -71,7 +71,7 @@ function isActive(t) {
 function normalize(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
-function parseOnboardingData(record) {
+export function parseOnboardingData(record) {
   if (!record?.data) return {};
   if (typeof record.data === "object") return record.data;
   try {
@@ -80,7 +80,7 @@ function parseOnboardingData(record) {
     return {};
   }
 }
-function isPendingOnboarding(record, now = Date.now()) {
+export function isPendingOnboarding(record, now = Date.now()) {
   if (!record || record.status === "validated") return false;
   if (record.status !== "submitted" && record.expiresAt) {
     const expiry = new Date(record.expiresAt).getTime();
@@ -88,16 +88,16 @@ function isPendingOnboarding(record, now = Date.now()) {
   }
   return true;
 }
-function onboardingUrl(record) {
+export function onboardingUrl(record) {
   // Le backend renvoie le lien CRM ; on le réécrit vers la page publique Domus.
   return domusOnboardingUrl(record?.url || record?.onboardingUrl || "");
 }
-function onboardingDisplayName(record) {
+export function onboardingDisplayName(record) {
   const data = parseOnboardingData(record);
   return [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
     data.email || data.phone || record?.phone || "Dossier locataire";
 }
-function formatShortDate(value) {
+export function formatShortDate(value) {
   if (!value) return "-";
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return "-";
@@ -130,6 +130,14 @@ function tenantBadge(tenant, tenantLeases, activeLease) {
     const d = activeLease?.overdueDays;
     return { label: `En retard${d ? ` ${d}j` : ""}`, tone: "danger" };
   }
+  // Retard historique (payé en retard sur le passé, pas seulement l'échéance
+  // courante) : cumulé sur tous les baux du locataire, calculé côté backend
+  // (lateCount/dueCount par bail via property-management.service.ts).
+  const totalLate = tenantLeases.reduce((s, l) => s + Number(l.lateCount || 0), 0);
+  const totalDue = tenantLeases.reduce((s, l) => s + Number(l.dueCount || 0), 0);
+  if (totalDue >= 3 && totalLate / totalDue > 0.3) {
+    return { label: `Mauvais payeur · ${totalLate} retards`, tone: "danger" };
+  }
   const daysToEnd = activeLease?.endDate
     ? Math.ceil((new Date(activeLease.endDate).getTime() - Date.now()) / 86400000)
     : null;
@@ -139,8 +147,14 @@ function tenantBadge(tenant, tenantLeases, activeLease) {
   const years = activeLease?.startDate
     ? Math.max(1, Math.floor((Date.now() - new Date(activeLease.startDate).getTime()) / (365 * 86400000)))
     : 0;
-  if (years >= 3 || tenantLeases.length >= 2) return { label: `VIP · ${years || 3} ans`, tone: "success" };
-  return { label: `Standard · ${years || 1} an`, tone: "neutral" };
+  const hasAnyLate = tenantLeases.some((l) => l.isOverdue || l.status === "late") || totalLate > 0;
+  const y = years || 1;
+  const plural = y > 1 ? "s" : "";
+  if (!hasAnyLate) {
+    if (tenantLeases.length >= 2 || years >= 3) return { label: `Or · ${tenantLeases.length >= 2 ? `${tenantLeases.length} baux` : `${years} ans`}`, tone: "success" };
+    if (years >= 2) return { label: `Argent · ${y} an${plural}`, tone: "brand" };
+  }
+  return { label: `Bronze · ${y} an${plural}`, tone: "neutral" };
 }
 
 function unitKindIcon(kind) {
@@ -616,7 +630,7 @@ function TenantDetailDrawer({ tenant, currency, leaseInfo, onClose, onEdit, onDe
 }
 
 // ── Formulaire « Nouveau locataire » (même API que le CRM) ──────────────────
-function OnboardingCard({
+export function OnboardingCard({
   record,
   index,
   sendingId,
@@ -693,7 +707,7 @@ function OnboardingCard({
 }
 
 // ── Modale « Lien d'inscription » (génère un dossier d'onboarding) ──────────
-function OnboardingLinkModal({ value, onClose, onGenerated }) {
+export function OnboardingLinkModal({ value, onClose, onGenerated }) {
   const [form, setForm] = useState(value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
