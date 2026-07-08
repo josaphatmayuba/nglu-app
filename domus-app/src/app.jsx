@@ -18,10 +18,10 @@ import { Reservations } from "./screens/reservations.jsx";
 import { Reglages } from "./screens/reglages.jsx";
 import { Portail } from "./screens/portail.jsx";
 import { Contrats } from "./screens/contrats.jsx";
+import { Onboarding } from "./screens/onboarding.jsx";
 import { Forecast } from "./screens/forecast.jsx";
 import { TenantOnboardingPublic } from "./screens/onboarding-public.jsx";
 import { PublicReservationsPage } from "./screens/public-reservations.jsx";
-import { Placeholder } from "./screens/placeholder.jsx";
 import { useDeviceMode } from "./data.js";
 import { DateRangeBar, DateRangeProvider } from "./dateRange.jsx";
 import { AiAssistant } from "./aiAssistant.jsx";
@@ -64,7 +64,7 @@ const SCREENS = {
   baux: (nav, device) => <Baux go={nav} device={device} />,
   reservations: (nav, device) => <Reservations go={nav} device={device} />,
   contrats: (_nav, device) => <Contrats device={device} />,
-  onboarding: (_nav, device) => <Placeholder title="Onboarding locataire" story="SCRUM-246" device={device} />,
+  onboarding: (nav) => <Onboarding go={nav} />,
   loyers: (nav, device) => <Loyers go={nav} device={device} />,
   paiement: (nav, device) => <Paiement go={nav} device={device} />,
   maintenance: (_nav, device) => <Maintenance device={device} />,

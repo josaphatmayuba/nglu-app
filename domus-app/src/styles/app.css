@@ -1239,6 +1239,27 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-onboarding-actions button.danger{border-color:#fecaca;color:#dc2626;}
 .shell[data-layout="mobile"] .domus-onboarding-card{padding:18px;}.shell[data-layout="mobile"] .domus-onboarding-strip{grid-template-columns:1fr;}
 
+/* ── Écran interne Onboarding (SCRUM-246) ── */
+.immo-eyebrow{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.08em;margin:0 0 2px;text-transform:uppercase;}
+.domus-onboarding-top{align-items:stretch;display:grid;gap:14px;grid-template-columns:2fr 1fr;margin:0 0 8px;}
+.domus-onboarding-invite,.domus-onboarding-stats{padding:22px 24px;}
+.domus-onboarding-invite h3,.domus-onboarding-stats h3{align-items:center;display:flex;font-size:15px;font-weight:700;gap:8px;margin:0 0 8px;}
+.domus-onboarding-invite h3 svg,.domus-onboarding-stats h3 svg{color:#4f46e5;}
+.domus-onboarding-steps{display:grid;gap:8px;grid-template-columns:repeat(4,1fr);margin:16px 0;}
+.domus-onboarding-step{align-items:center;background:#f4f4f5;border-radius:9px;color:#3f3f46;display:flex;flex-direction:column;font-size:12px;font-weight:600;gap:5px;justify-content:center;padding:12px 6px;text-align:center;}
+.domus-onboarding-step svg{color:#4f46e5;}
+.domus-onboarding-invite-actions{align-items:center;display:flex;flex-wrap:wrap;gap:14px;margin-top:6px;}
+.domus-onboarding-stats ul{display:flex;flex-direction:column;gap:10px;list-style:none;margin:6px 0 0;padding:0;}
+.domus-onboarding-stats li{align-items:center;display:flex;font-size:14px;justify-content:space-between;}
+.domus-onboarding-stats li span{color:#71717a;}
+.domus-onboarding-stats li strong{font-weight:800;}
+.domus-onboarding-stats li strong.amber{color:#d97706;}
+.domus-onboarding-stats li strong.green{color:#059669;}
+.domus-onboarding-section-title{font-size:15px;font-weight:700;margin:22px 0 12px;}
+.domus-empty{align-items:center;background:var(--surface);border:1px dashed var(--border);border-radius:10px;color:#71717a;display:flex;flex-direction:column;gap:12px;padding:40px 20px;text-align:center;}
+.domus-empty svg{color:#a1a1aa;}
+.shell[data-layout="mobile"] .domus-onboarding-top{grid-template-columns:1fr;}
+
 /* ── Page publique d'inscription locataire (Domus, hors auth) ── */
 .onb-page{background:radial-gradient(1200px 600px at 50% -200px,#e0e7ff 0%,transparent 60%),linear-gradient(180deg,#eef1fb 0%,#f5f7fc 100%);min-height:100vh;padding:32px 16px 132px;display:flex;justify-content:center;align-items:flex-start;}
 .onb-shell{max-width:840px;width:100%;}
