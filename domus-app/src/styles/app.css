@@ -666,6 +666,27 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .immo-filter-group button.active, .immo-view-switch button.active { background:#eef2ff; border-color:#e0e7ff; color:#4f46e5; }
 
 .immo-property-grid { display:grid; gap:18px; grid-template-columns:repeat(3,minmax(0,1fr)); }
+/* Niveau 2 : en-tete d'un immeuble (drill-down des unites) */
+.immo-property-units-view { display:flex; flex-direction:column; gap:16px; }
+.immo-property-units-head {
+  position:relative; overflow:hidden;
+  display:flex; align-items:center; flex-wrap:wrap; gap:16px 20px;
+  padding:18px 20px 18px 24px; border-radius:14px;
+}
+.immo-property-units-head::before {
+  content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--grad-iris);
+}
+.immo-property-units-head > .immo-btn { flex:0 0 auto; }
+.immo-property-units-title { flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.immo-property-units-title h3 { margin:0; font-size:19px; font-weight:750; color:var(--ink-900); letter-spacing:-.01em; }
+.immo-property-units-title p { margin:0; font-size:13.5px; display:inline-flex; align-items:center; gap:6px; color:#64748b; }
+.immo-property-units-actions { flex:0 0 auto; display:flex; align-items:center; gap:10px; margin-left:auto; }
+@media (max-width:640px) {
+  .immo-property-units-head { padding:16px; }
+  .immo-property-units-actions { width:100%; margin-left:0; }
+  .immo-property-units-actions .immo-btn { flex:1; }
+}
+
 .immo-property-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; cursor:pointer; min-width:0; overflow:hidden; }
 .immo-property-card:hover { border-color:#c7d2fe; box-shadow:0 14px 34px -28px rgba(15,23,42,.65); }
 .immo-property-card.menu-open { overflow:visible; }

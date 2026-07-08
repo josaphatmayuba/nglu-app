@@ -637,7 +637,7 @@ function PropertyUnitsView({ property, onBack, onEditProperty, onAddUnit, onOpen
         <button className="immo-btn" onClick={onBack}><ChevronLeft size={16} /> Retour</button>
         <div className="immo-property-units-title">
           <h3>{property.name}</h3>
-          <p className="muted">{property.address}</p>
+          <p><MapPin size={14} /> {property.address}</p>
         </div>
         <div className="immo-property-units-actions">
           <button className="immo-btn" onClick={onAddUnit}><Plus size={16} /> Ajouter une unite</button>
