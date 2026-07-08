@@ -182,7 +182,19 @@ export class ContractTemplatesService {
       normalized[key.toUpperCase().trim()] = value == null || value === "" ? "" : String(value);
     }
 
-    return body.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, raw: string) => {
+    // Conditional sections: {{#if NOM}}...{{/if}} — the whole block is dropped
+    // when the variable is empty/unknown, kept (and its placeholders resolved)
+    // otherwise. Lets optional articles (conditions, garant...) disappear
+    // instead of leaving an orphan placeholder in the signed contract.
+    const withSections = body.replace(
+      /\{\{\s*#if\s+([^{}]+?)\s*\}\}([\s\S]*?)\{\{\s*\/if\s*\}\}/g,
+      (_match, raw: string, inner: string) => {
+        const key = raw.toUpperCase().trim();
+        return normalized[key] ? inner : "";
+      },
+    );
+
+    return withSections.replace(/\[\s*([^\[\]]+?)\s*\]/g, (match, raw: string) => {
       const key = raw.toUpperCase().trim();
       if (key in normalized) {
         const value = normalized[key];

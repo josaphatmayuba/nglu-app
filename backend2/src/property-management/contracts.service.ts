@@ -42,6 +42,7 @@ type LeaseDetails = {
   securityDeposit: string | null;
   billingCycle: string | null;
   terms: string | null;
+  moveInNotes: string | null;
   signingCity: string | null;
   moveInMeterReading: string | null;
   propertyName: string | null;
@@ -187,6 +188,8 @@ export class ContractsService {
       "DATE DE SIGNATURE DE BAIL": today,
       "DATE DE SIGNATURE DE BAIL JJ/MM/AAAA": today,
       "DATE DU JOUR": today,
+      "CONDITIONS PARTICULIÈRES": lease.terms ?? "",
+      "NOTES ÉTAT DES LIEUX": lease.moveInNotes ?? "",
     };
   }
 
@@ -712,6 +715,7 @@ export class ContractsService {
         securityDeposit: realEstateLeases.securityDeposit,
         billingCycle: realEstateLeases.billingCycle,
         terms: realEstateLeases.terms,
+        moveInNotes: realEstateLeases.moveInNotes,
         signingCity: realEstateLeases.signingCity,
         moveInMeterReading: realEstateLeases.moveInMeterReading,
         propertyName: realEstateProperties.name,
