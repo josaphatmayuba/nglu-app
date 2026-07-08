@@ -676,7 +676,18 @@ const CONTRACT_PLACEHOLDER_GROUPS = [
       "CODE DE DEVISE",
     ],
   },
+  {
+    label: "Notes / conditions (optionnel)",
+    items: [
+      "CONDITIONS PARTICULIÈRES",
+      "NOTES ÉTAT DES LIEUX",
+    ],
+  },
 ];
+
+// Placeholders facultatifs : insérés dans une section conditionnelle {{#if}}...{{/if}}
+// pour que l'article disparaisse du contrat quand le champ du bail est vide.
+const OPTIONAL_PLACEHOLDERS = new Set(["CONDITIONS PARTICULIÈRES", "NOTES ÉTAT DES LIEUX"]);
 
 function TemplateModal({ value, busy, onClose, onSave }) {
   const [form, setForm] = useState(value);
@@ -685,7 +696,7 @@ function TemplateModal({ value, busy, onClose, onSave }) {
   const set = (patch) => setForm((c) => ({ ...c, ...patch }));
   const canSave = form.name.trim() && form.body.trim() && form.type;
   const insertPlaceholder = (name) => {
-    const token = `[${name}]`;
+    const token = OPTIONAL_PLACEHOLDERS.has(name) ? `{{#if ${name}}}[${name}]{{/if}}` : `[${name}]`;
     const textarea = textareaRef.current;
     setShowPreview(false);
     setForm((current) => {
@@ -704,9 +715,12 @@ function TemplateModal({ value, busy, onClose, onSave }) {
       return { ...current, body: nextBody };
     });
   };
-  const previewHtml = hasHtmlMarkup(form.body)
-    ? form.body
-    : `<pre class="domus-contract-plain">${escapeHtml(form.body || "")}</pre>`;
+  // Dans l'aperçu, on masque les balises de section {{#if ...}}/{{/if}} et on garde
+  // leur contenu (le rendu réel des blocs conditionnels est fait côté backend).
+  const previewBody = (form.body || "").replace(/\{\{\s*(#if\s+[^{}]+?|\/if)\s*\}\}/g, "");
+  const previewHtml = hasHtmlMarkup(previewBody)
+    ? previewBody
+    : `<pre class="domus-contract-plain">${escapeHtml(previewBody)}</pre>`;
   return (
     <div className="modal-layer">
       <div className="modal-scrim" onClick={() => !busy && onClose()} />
