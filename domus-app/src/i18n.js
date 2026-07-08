@@ -89,6 +89,8 @@ const EN = {
   "Votre parc locatif": "Your rental portfolio",
   "Rechercher propriete, locataire...": "Search property, tenant...",
   "Nouveau bail": "New lease",
+  "Un bail actif couvre déjà cette unité sur cette période (double location interdite).":
+    "An active lease already covers this unit for this period (double booking is not allowed).",
   "Proprietes": "Properties",
   "lots": "units",
   "Occupation": "Occupancy",

@@ -473,7 +473,7 @@ export function Baux({ go } = {}) {
               setLeaseModal(null);
               await reload();
             } catch (e) {
-              setActionError(e.message);
+              setActionError(t(e.message));
             } finally {
               setSaving(false);
             }

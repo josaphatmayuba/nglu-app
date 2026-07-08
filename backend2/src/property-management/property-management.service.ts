@@ -1424,6 +1424,15 @@ export class PropertyManagementService {
 
   async createLease(input: CreateLeaseDto, orgId: number) {
     await this.ensureLeaseReferences(input.propertyId, input.unitId, input.tenantId, orgId);
+    if ((input.status ?? "draft") === "active") {
+      await this.assertNoLeaseOverlap(
+        orgId,
+        input.propertyId,
+        input.unitId,
+        this.requiredDate(input.startDate),
+        this.date(input.endDate),
+      );
+    }
     const currencyId = (input as any).currencyId ?? (await this.resolveDefaultCurrency(orgId));
     const [result] = await this.db.insert(realEstateLeases).values({
       organizationId: orgId,
@@ -1477,6 +1486,24 @@ export class PropertyManagementService {
 
     if (input.currencyId !== undefined && input.currencyId !== null) {
       await this.ensureExists(currencies, input.currencyId, "Currency not found.");
+    }
+
+    // Double location : si le bail résultant est "active", vérifier qu'aucun
+    // autre bail actif ne chevauche ses dates sur la même unité.
+    const resultingStatus = input.status ?? current.status;
+    if (resultingStatus === "active") {
+      const resultingStart =
+        input.startDate !== undefined ? this.requiredDate(input.startDate) : (current.startDate as string);
+      const resultingEnd =
+        input.endDate !== undefined ? this.date(input.endDate) : ((current.endDate as string | null) ?? null);
+      await this.assertNoLeaseOverlap(
+        orgId,
+        input.propertyId ?? current.propertyId,
+        input.unitId ?? current.unitId,
+        resultingStart,
+        resultingEnd,
+        id,
+      );
     }
 
     await this.db
@@ -1981,6 +2008,40 @@ export class PropertyManagementService {
     const end = this.parseDateOnly(checkOut);
     const diff = Math.round((end.getTime() - start.getTime()) / 86400000);
     return Math.max(1, diff);
+  }
+
+  // Rejette la double location : un même bien+unité ne peut avoir deux baux
+  // "active" dont les périodes se chevauchent. Un end_date NULL = bail à durée
+  // indéterminée (occupe jusqu'à +infini), traité via COALESCE('9999-12-31').
+  // [startA, endA) et [startB, endB) se chevauchent si startA < endB ET endA > startB.
+  private async assertNoLeaseOverlap(
+    orgId: number,
+    propertyId: number,
+    unitId: number,
+    startDate: string,
+    endDate: string | null,
+    excludeId?: number,
+  ) {
+    const FAR = "9999-12-31";
+    const newEnd = endDate ?? FAR;
+    const rows = await this.db
+      .select({ id: realEstateLeases.id })
+      .from(realEstateLeases)
+      .where(and(
+        eq(realEstateLeases.organizationId, orgId),
+        eq(realEstateLeases.propertyId, propertyId),
+        eq(realEstateLeases.unitId, unitId),
+        eq(realEstateLeases.status, "active"),
+        lt(realEstateLeases.startDate, newEnd),
+        sql`COALESCE(${realEstateLeases.endDate}, ${FAR}) > ${startDate}`,
+        excludeId ? ne(realEstateLeases.id, excludeId) : undefined,
+      ))
+      .limit(1);
+    if (rows.length) {
+      throw new BadRequestException(
+        "Un bail actif couvre déjà cette unité sur cette période (double location interdite).",
+      );
+    }
   }
 
   // Rejette tout chevauchement de dates sur le même bien+unité pour une
