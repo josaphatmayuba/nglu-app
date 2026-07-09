@@ -88,6 +88,18 @@ export function isPendingOnboarding(record, now = Date.now()) {
   }
   return true;
 }
+// Statut EFFECTIF d'un dossier : un record "sent"/"draft" dont expiresAt est
+// depasse est en realite "expired" (le backend ne repasse pas toujours le flag).
+export function effectiveOnboardingStatus(record, now = Date.now()) {
+  if (!record) return "sent";
+  if (record.status === "validated") return "validated";
+  if (record.status === "submitted") return "submitted";
+  if (record.expiresAt) {
+    const expiry = new Date(record.expiresAt).getTime();
+    if (Number.isFinite(expiry) && expiry < now) return "expired";
+  }
+  return record.status || "sent";
+}
 export function onboardingUrl(record) {
   // Le backend renvoie le lien CRM ; on le réécrit vers la page publique Domus.
   return domusOnboardingUrl(record?.url || record?.onboardingUrl || "");
@@ -216,6 +228,7 @@ export function Locataires({ go } = {}) {
   tenantDefaultCurrencyId = currency.defaultCurrencyId;
 
   const [query, setQuery] = useState("");
+  const [onboardingStatus, setOnboardingStatus] = useState("online"); // online|expired|validated|all
   const [selectedId, setSelectedId] = useState(null);
   const [modal, setModal] = useState(null);
   const [linkModal, setLinkModal] = useState(null);
@@ -236,19 +249,25 @@ export function Locataires({ go } = {}) {
       .some((v) => String(v || "").toLowerCase().includes(q)));
   }, [view, query]);
 
-  // Dossiers d'onboarding encore "en ligne" (ni validés, ni expirés) : sert au KPI ET aux cartes,
+  // Dossiers d'onboarding encore "en ligne" (ni validés, ni expirés) : sert au KPI,
   // sinon le compteur affiche 4 alors qu'on ne voit que 3 dossiers en attente.
   const pendingOnboarding = useMemo(() => onboarding.filter(isPendingOnboarding), [onboarding]);
 
+  // Cartes affichees : filtrees par le menu Statut (en ligne / expire / valide / tous),
+  // puis par la recherche texte.
   const filteredOnboarding = useMemo(() => {
     const q = normalize(query);
-    if (!q) return pendingOnboarding;
-    return pendingOnboarding.filter((record) => {
+    return onboarding.filter((record) => {
+      const eff = effectiveOnboardingStatus(record);
+      if (onboardingStatus === "online" && !isPendingOnboarding(record)) return false;
+      if (onboardingStatus === "expired" && eff !== "expired") return false;
+      if (onboardingStatus === "validated" && eff !== "validated") return false;
+      if (!q) return true;
       const d = parseOnboardingData(record);
       return [d.firstName, d.lastName, d.email, d.phone, record.phone, record.status]
         .some((v) => normalize(v).includes(q));
     });
-  }, [pendingOnboarding, query]);
+  }, [onboarding, onboardingStatus, query]);
 
   const activeCount = view.filter(isActive).length;
   const occupants = view.reduce((s, t) => s + Number(t.occupantNumber || 0), 0);
@@ -348,6 +367,17 @@ export function Locataires({ go } = {}) {
             <Search size={16} />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("Nom, telephone, unite...")} />
           </label>
+          <select
+            className="immo-select"
+            value={onboardingStatus}
+            onChange={(e) => setOnboardingStatus(e.target.value)}
+            title="Filtrer les dossiers d'inscription"
+          >
+            <option value="online">Dossiers en ligne</option>
+            <option value="expired">Dossiers expires</option>
+            <option value="validated">Dossiers valides</option>
+            <option value="all">Tous les dossiers</option>
+          </select>
           <button className="immo-btn" onClick={openLinkModal}>
             <UserRound size={16} /> Lien d'inscription
           </button>
@@ -365,6 +395,11 @@ export function Locataires({ go } = {}) {
         <Metric tone="brand" icon={<Briefcase size={20} />} label={t("Salaries / fonction.")} value={salaried} helper={t("revenu stable declare")} />
       </MetricsGrid>
 
+      {filteredOnboarding.length === 0 && onboardingStatus !== "online" && (
+        <p className="muted" style={{ margin: "0 0 20px", fontSize: 13.5 }}>
+          Aucun dossier {onboardingStatus === "expired" ? "expire" : onboardingStatus === "validated" ? "valide" : ""} a afficher.
+        </p>
+      )}
       {filteredOnboarding.length > 0 && (
         <div className="domus-onboarding-strip">
           {filteredOnboarding.map((record, index) => (
