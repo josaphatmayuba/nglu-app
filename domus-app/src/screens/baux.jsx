@@ -34,6 +34,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 import { takeLeasePrefill } from "./reservationPrefill.js";
 
 const AVATARS = ["indigo", "orange", "violet", "blue", "rose", "green", "slate"];
@@ -119,6 +120,7 @@ export function Baux({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadLeaseModule, []);
   useRealtimeReload(reload, ["leases", "properties", "units", "tenants", "contracts"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -401,7 +403,7 @@ export function Baux({ go } = {}) {
                       }}
                       onCancelSend={() => {
                         setOpenMenuId(null);
-                        handleCancelContract(contract, setBusyAction, setActionError, reload);
+                        handleCancelContract(contract, setBusyAction, setActionError, reload, confirm);
                       }}
                       onPayments={() => {
                         go?.("loyers");
@@ -417,11 +419,11 @@ export function Baux({ go } = {}) {
                       }}
                       onRenew={() => {
                         setOpenMenuId(null);
-                        handleRenewLease(lease, setBusyAction, setActionError, reload);
+                        handleRenewLease(lease, setBusyAction, setActionError, reload, confirm);
                       }}
                       onDelete={() => {
                         setOpenMenuId(null);
-                        handleDeleteLease(lease, setBusyAction, setActionError, reload);
+                        handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm);
                       }}
                       onClose={() => setOpenMenuId(null)}
                     />
@@ -544,6 +546,8 @@ function LeaseActionsMenu({
   onClose,
 }) {
   const disabled = Boolean(busy);
+  const toast = useToast();
+  const prompt = usePrompt();
   const copyReference = async () => {
     try {
       await navigator.clipboard?.writeText?.(info.reference.replace(/^#/, ""));
@@ -553,12 +557,13 @@ function LeaseActionsMenu({
   const copySigningLink = async () => {
     const link = signingUrlFromContract(contract);
     if (!link) {
-      window.alert("Envoyez d'abord le contrat pour obtenir un lien de signature.");
+      toast.error(t("Envoyez d'abord le contrat pour obtenir un lien de signature."));
     } else {
       try {
         await navigator.clipboard?.writeText?.(link);
+        toast.success(t("Lien de signature copié."));
       } catch {
-        window.prompt("Copiez le lien de signature :", link);
+        await prompt({ title: t("Lien de signature"), label: t("Copiez le lien :"), defaultValue: link, readOnly: true, copyable: true });
       }
     }
     onClose?.();
@@ -941,6 +946,7 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
     ["Statut", info.statusText],
   ];
 
+  const confirm = useConfirm();
   const [documents, setDocuments] = useState([]);
   const [docBusy, setDocBusy] = useState(false);
   const [docError, setDocError] = useState("");
@@ -975,7 +981,12 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
   }
 
   async function handleDeleteDocument(documentId) {
-    if (!window.confirm("Supprimer ce document ?")) return;
+    if (!(await confirm({
+      title: t("Supprimer le document"),
+      message: t("Supprimer ce document ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     setDocBusy(true);
     setDocError("");
     try {
@@ -1061,6 +1072,8 @@ function LeaseDetailModal({ lease, info, onClose, go }) {
 }
 
 function ContractPreviewModal({ contract, onClose, onSigned }) {
+  const confirm = useConfirm();
+  const toast = useToast();
   const [signBusy, setSignBusy] = useState(false);
   const [signError, setSignError] = useState("");
   const raw = contract.contractContent || "";
@@ -1077,7 +1090,11 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!window.confirm("Confirmer : le locataire a bien signe ce bail a la main sur papier ?")) return;
+    if (!(await confirm({
+      title: t("Signature manuscrite"),
+      message: t("Confirmer : le locataire a bien signé ce bail à la main sur papier ?"),
+      confirmLabel: t("Confirmer"),
+    }))) return;
     setSignBusy(true);
     setSignError("");
     try {
@@ -1105,7 +1122,7 @@ function ContractPreviewModal({ contract, onClose, onSigned }) {
           <button onClick={onClose} aria-label="Fermer"><X size={18} /></button>
         </div>
         <div className="domus-contract-manual-sign">
-          <button type="button" className="immo-btn" onClick={() => openContractPrint(contract)}>
+          <button type="button" className="immo-btn" onClick={() => openContractPrint(contract, { onError: toast.error })}>
             <Printer size={15} /> Imprimer
           </button>
         </div>
@@ -1282,8 +1299,12 @@ async function handleContractDownload(lease, contractsByLease, setBusyAction, se
   }
 }
 
-async function handleRenewLease(lease, setBusyAction, setActionError, reload) {
-  const ok = window.confirm(`Renouveler le bail ${lease.reference || lease.id} pour 12 mois ?`);
+async function handleRenewLease(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Renouveler le bail"),
+    message: tf(t("Renouveler le bail {ref} pour 12 mois ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Renouveler"),
+  });
   if (!ok) return;
   const startDate = addDaysISO(dateOnly(lease.endDate) || todayISO(), 1);
   const endDate = addMonthsISO(startDate, 12, -1);
@@ -1327,12 +1348,18 @@ async function handleResendContract(contract, setBusyAction, setActionError, rel
   }
 }
 
-async function handleCancelContract(contract, setBusyAction, setActionError, reload) {
+async function handleCancelContract(contract, setBusyAction, setActionError, reload, confirm) {
   if (!contract?.id) {
     setActionError("Aucun envoi à annuler.");
     return;
   }
-  const ok = window.confirm("Annuler l'envoi du contrat ? Le locataire ne pourra plus le signer via ce lien.");
+  const ok = await confirm({
+    title: t("Annuler l'envoi"),
+    message: t("Annuler l'envoi du contrat ? Le locataire ne pourra plus le signer via ce lien."),
+    confirmLabel: t("Annuler l'envoi"),
+    cancelLabel: t("Retour"),
+    danger: true,
+  });
   if (!ok) return;
   setBusyAction(`cancel-${contract.id}`);
   setActionError("");
@@ -1346,8 +1373,13 @@ async function handleCancelContract(contract, setBusyAction, setActionError, rel
   }
 }
 
-async function handleDeleteLease(lease, setBusyAction, setActionError, reload) {
-  const ok = window.confirm(`Resilier le bail ${lease.reference || lease.id} ?`);
+async function handleDeleteLease(lease, setBusyAction, setActionError, reload, confirm) {
+  const ok = await confirm({
+    title: t("Résilier le bail"),
+    message: tf(t("Résilier le bail {ref} ?"), { ref: lease.reference || lease.id }),
+    confirmLabel: t("Résilier"),
+    danger: true,
+  });
   if (!ok) return;
   setBusyAction(`delete-${lease.id}`);
   setActionError("");

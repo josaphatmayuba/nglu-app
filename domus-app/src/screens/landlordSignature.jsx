@@ -6,8 +6,10 @@ import {
   SIGNATURE_TYPES, CURSIVE_FONTS, buildEidasDataUrl, fileToDataUrl,
   generateCursiveSignature, loadCursiveFonts,
 } from "../landlordSignature.js";
+import { useConfirm } from "../components/Dialog.jsx";
 
 export function LandlordSignatureCard({ setting, onSaved }) {
+  const confirm = useConfirm();
   const companyName = setting?.landlordName || setting?.companyName || "Le Bailleur";
   const stored = setting?.landlordSignature || null;
 
@@ -122,7 +124,12 @@ export function LandlordSignatureCard({ setting, onSaved }) {
   };
 
   const clearStored = async () => {
-    if (!window.confirm(t("Effacer la signature actuelle ? Le cachet textuel par défaut sera utilisé."))) return;
+    if (!(await confirm({
+      title: t("Effacer la signature"),
+      message: t("Effacer la signature actuelle ? Le cachet textuel par défaut sera utilisé."),
+      confirmLabel: t("Effacer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setMsg(null);
     try {

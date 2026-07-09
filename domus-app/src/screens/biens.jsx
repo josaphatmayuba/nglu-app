@@ -40,6 +40,7 @@ import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { ImmoHeader, Metric, MetricsGrid, MoneyStack, avatarClass } from "./ui.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 
 const TYPES = ["Tous", "Appartement", "Maison", "Bureau", "Commerce"];
 const TYPE_MAP = {
@@ -105,6 +106,7 @@ export function Biens({ go }) {
   const { data, loading, error, reload } = useApi(loadPropertiesModule, []);
   useRealtimeReload(reload, ["properties", "units", "leases", "payments"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
   const [type, setType] = useState("Tous");
   const [view, setView] = useState("grid");
   const [query, setQuery] = useState(() => {
@@ -295,7 +297,12 @@ export function Biens({ go }) {
   }
 
   async function removeProperty(card) {
-    if (!window.confirm(`Supprimer l'immeuble ${card.name} et le retirer de la liste ?`)) return;
+    if (!(await confirm({
+      title: t("Supprimer l'immeuble"),
+      message: tf(t("Supprimer l'immeuble {name} et le retirer de la liste ?"), { name: card.name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setActionError("");
     try {
@@ -320,7 +327,12 @@ export function Biens({ go }) {
 
   async function removeUnit(row) {
     if (row?.isEmptyProperty) return; // pas de lot a supprimer
-    if (!window.confirm(`Supprimer ${row.name} ?`)) return;
+    if (!(await confirm({
+      title: t("Supprimer le lot"),
+      message: tf(t("Supprimer {name} ?"), { name: row.name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setActionError("");
     try {
@@ -359,7 +371,13 @@ export function Biens({ go }) {
   }
 
   async function deleteDetailPhoto(photoId) {
-    if (!photoId || !window.confirm("Supprimer cette photo ?")) return;
+    if (!photoId) return;
+    if (!(await confirm({
+      title: t("Supprimer la photo"),
+      message: t("Supprimer cette photo ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     setBusy(true);
     setActionError("");
     try {

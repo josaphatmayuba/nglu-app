@@ -13,6 +13,7 @@ import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { useConfirm, useToast } from "../components/Dialog.jsx";
 import { setLeasePrefill } from "./reservationPrefill.js";
 import { isValidPhoneNumber } from "react-phone-number-input";
 
@@ -210,6 +211,8 @@ function DomusTenantMoneyField({ label, value, currencyId, onAmountChange, onCur
 
 export function Locataires({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadTenantsModule, []);
+  const confirm = useConfirm();
+  const toast = useToast();
   useRealtimeReload(reload, ["tenants", "onboarding", "leases", "units"]);
   const dateRange = useDateRange();
   const tenants = useMemo(
@@ -294,9 +297,9 @@ export function Locataires({ go } = {}) {
     try {
       await api.sendOnboardingSms(record.id);
       await reload();
-      window.alert("SMS envoye.");
+      toast.success(t("SMS envoyé."));
     } catch (e) {
-      window.alert(e.message || String(e));
+      toast.error(e.message || String(e));
     } finally {
       setSendingId(null);
     }
@@ -307,15 +310,20 @@ export function Locataires({ go } = {}) {
     try {
       await api.sendOnboardingEmail(record.id);
       await reload();
-      window.alert("Email envoye.");
+      toast.success(t("Email envoyé."));
     } catch (e) {
-      window.alert(e.message || String(e));
+      toast.error(e.message || String(e));
     } finally {
       setSendingId(null);
     }
   };
   const deleteOnboarding = async (record) => {
-    if (!window.confirm("Supprimer ce dossier d'inscription ?")) return;
+    if (!(await confirm({
+      title: t("Supprimer le dossier"),
+      message: t("Supprimer ce dossier d'inscription ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     await api.deleteOnboarding(record.id);
     await reload();
   };
@@ -340,16 +348,21 @@ export function Locataires({ go } = {}) {
   const handleDeleteTenant = async (tenant) => {
     const hasActiveLease = leases.some((l) => String(l.tenantId) === String(tenant.id) && l.status === "active");
     if (hasActiveLease) {
-      window.alert("Impossible : ce locataire a un bail actif. Resiliez d'abord le bail.");
+      toast.error(t("Impossible : ce locataire a un bail actif. Résiliez d'abord le bail."));
       return;
     }
-    if (!window.confirm(`Supprimer le locataire « ${tenant._name} » ?`)) return;
+    if (!(await confirm({
+      title: t("Supprimer le locataire"),
+      message: tf(t("Supprimer le locataire « {name} » ?"), { name: tenant._name }),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     try {
       await api.deleteTenant(tenant.id);
       setSelectedId(null);
       await reload();
     } catch (e) {
-      window.alert(e.message || String(e));
+      toast.error(e.message || String(e));
     }
   };
 

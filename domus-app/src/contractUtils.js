@@ -303,10 +303,11 @@ ${contractPrintBody(contract)}
 </html>`;
 }
 
-export function openContractPrint(contract, { autoPrint = true } = {}) {
+export function openContractPrint(contract, { autoPrint = true, onError } = {}) {
   const win = window.open("", "_blank", "width=920,height=1100");
   if (!win) {
-    window.alert("Autorisez les fenêtres popup pour imprimer le contrat.");
+    const msg = "Autorisez les fenêtres popup pour imprimer le contrat.";
+    if (onError) onError(msg); else window.alert(msg);
     return;
   }
   win.document.open();

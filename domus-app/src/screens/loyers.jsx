@@ -10,6 +10,7 @@ import { groupAmountsByCurrency, money, normalizeCurrencyModule, paymentMethodRo
 import { useRealtimeReload } from "../realtime.js";
 import { MoneyStack } from "./ui.jsx";
 import { Loading, ApiError } from "./dashboard.jsx";
+import { useToast } from "../components/Dialog.jsx";
 
 // Liste par défaut (repli) si aucun moyen de paiement n'est configuré côté backend.
 const METHODS = [
@@ -358,6 +359,7 @@ export function Loyers({ go }) {
   const { data, loading, error, reload } = useApi(loadPaymentsModule, []);
   useRealtimeReload(reload, ["payments", "leases"]);
   const dateRange = useDateRange();
+  const toast = useToast();
   const leases = useMemo(
     () => filterLeases(Array.isArray(data?.leases) ? data.leases : [], dateRange),
     [data?.leases, dateRange],
@@ -488,7 +490,7 @@ export function Loyers({ go }) {
             {hasArrears ? <MoneyStack rows={arrearsByCurrency} fallbackSymbol={currency.defaultCurrencySymbol} /> : "—"}
           </div>
           <button className="immo-btn" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-            onClick={() => api.runOverdueReminders().then(() => alert("Rappels lancés")).catch((e) => alert(e.message))}>
+            onClick={() => api.runOverdueReminders().then(() => toast.success(t("Rappels lancés"))).catch((e) => toast.error(e.message))}>
             <BellRing size={16} /> Relancer les impayés
           </button>
         </div>

@@ -15,6 +15,7 @@ import { t, tf } from "../i18n.js";
 import { useDateRange } from "../dateRange.jsx";
 import { useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
+import { useConfirm, useToast } from "../components/Dialog.jsx";
 import { ApiError, Loading } from "./dashboard.jsx";
 import {
   OnboardingCard, OnboardingLinkModal, isPendingOnboarding, onboardingUrl,
@@ -182,6 +183,8 @@ export function Onboarding({ go } = {}) {
   const { data, loading, error, reload } = useApi(loadOnboardingModule, []);
   useRealtimeReload(reload, ["onboarding", "tenants"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const onboarding = useMemo(() => {
     const list = Array.isArray(data?.onboarding) ? data.onboarding : [];
@@ -227,18 +230,23 @@ export function Onboarding({ go } = {}) {
   const openLink = (value) => { if (value) window.open(value, "_blank", "noopener,noreferrer"); };
   const resendSms = async (record) => {
     setSendingId(`${record.id}:sms`);
-    try { await api.sendOnboardingSms(record.id); await reload(); window.alert("SMS envoye."); }
-    catch (e) { window.alert(e.message || String(e)); }
+    try { await api.sendOnboardingSms(record.id); await reload(); toast.success(t("SMS envoyé.")); }
+    catch (e) { toast.error(e.message || String(e)); }
     finally { setSendingId(null); }
   };
   const resendEmail = async (record) => {
     setSendingId(`${record.id}:email`);
-    try { await api.sendOnboardingEmail(record.id); await reload(); window.alert("Email envoye."); }
-    catch (e) { window.alert(e.message || String(e)); }
+    try { await api.sendOnboardingEmail(record.id); await reload(); toast.success(t("Email envoyé.")); }
+    catch (e) { toast.error(e.message || String(e)); }
     finally { setSendingId(null); }
   };
   const deleteOnboarding = async (record) => {
-    if (!window.confirm("Supprimer ce dossier d'inscription ?")) return;
+    if (!(await confirm({
+      title: t("Supprimer le dossier"),
+      message: t("Supprimer ce dossier d'inscription ?"),
+      confirmLabel: t("Supprimer"),
+      danger: true,
+    }))) return;
     await api.deleteOnboarding(record.id); await reload();
   };
   // La validation crée le locataire via la fiche pré-remplie, qui vit dans

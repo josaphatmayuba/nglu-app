@@ -18,6 +18,7 @@ import { sanitizeHtml } from "../sanitizeHtml.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useConfirm, usePrompt, useToast } from "../components/Dialog.jsx";
 
 async function loadContractsModule() {
   const [contracts, leases, templates] = await Promise.all([
@@ -57,6 +58,9 @@ export function Contrats() {
   const { data, loading, error, reload } = useApi(loadContractsModule, []);
   useRealtimeReload(reload, ["contracts", "leases"]);
   const dateRange = useDateRange();
+  const confirm = useConfirm();
+  const promptDialog = usePrompt();
+  const toast = useToast();
 
   const contracts = useMemo(
     () => (Array.isArray(data?.contracts) ? data.contracts : []).filter((c) => contractInDateRange(c, dateRange)),
@@ -198,12 +202,12 @@ export function Contrats() {
   const copySigningLink = () => {
     const link = signingUrlFromContract(detail || selectedSummary, signingLinks);
     if (!link) {
-      window.alert("Envoyez d'abord le contrat pour obtenir un lien de signature.");
+      toast.error(t("Envoyez d'abord le contrat pour obtenir un lien de signature."));
       return;
     }
     navigator.clipboard.writeText(link).then(
-      () => {},
-      () => window.prompt("Copiez le lien de signature :", link),
+      () => toast.success(t("Lien de signature copié.")),
+      () => promptDialog({ title: t("Lien de signature"), label: t("Copiez le lien :"), defaultValue: link, readOnly: true, copyable: true }),
     );
   };
 
@@ -225,9 +229,12 @@ export function Contrats() {
 
   const handleDelete = async () => {
     if (!selectedId) return;
-    const ok = window.confirm(
-      "Retirer ce contrat des vues actives ? (suppression logique — l'historique est conservé.)",
-    );
+    const ok = await confirm({
+      title: t("Retirer le contrat"),
+      message: t("Retirer ce contrat des vues actives ? (suppression logique — l'historique est conservé.)"),
+      confirmLabel: t("Retirer"),
+      danger: true,
+    });
     if (!ok) return;
     setBusy("delete");
     setActionError("");
@@ -265,7 +272,12 @@ export function Contrats() {
     }
   };
   const handleDeleteTemplate = async (t) => {
-    if (!window.confirm(`Supprimer le modèle « ${t.name} » ?`)) return;
+    if (!(await confirm({
+      title: "Supprimer le modèle",
+      message: `Supprimer le modèle « ${t.name} » ?`,
+      confirmLabel: "Supprimer",
+      danger: true,
+    }))) return;
     setBusy(`tpl-del-${t.id}`);
     setActionError("");
     try {
@@ -386,7 +398,7 @@ export function Contrats() {
                 </div>
                 <div className="contrats-detail-actions">
                   <button type="button" className="btn" onClick={() => setDetailOpen(false)} title="Fermer"><X size={14} /></button>
-                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail)}>
+                  <button type="button" className="btn" disabled={!detail} onClick={() => detail && openContractPrint(detail, { onError: toast.error })}>
                     <Printer size={14} /> Imprimer
                   </button>
                   <button type="button" className="btn" disabled={!detail} onClick={() => detail && downloadSignedContractPdf(detail)}>

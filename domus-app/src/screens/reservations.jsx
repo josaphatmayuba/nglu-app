@@ -26,6 +26,7 @@ import { t, tf } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { DomusPropertyField, DomusPropertySelect, FormSection, Modal, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 import { takeReservationPrefill } from "./reservationPrefill.js";
 
 // Réservation temporaire type hôtel : un client occupe un bien entier OU une
@@ -113,6 +114,7 @@ export function Reservations({ go }) {
   const [busyId, setBusyId] = useState(null);
   const [actionError, setActionError] = useState("");
 
+  const confirm = useConfirm();
   const reservationsApi = useApi(() => api.reservations(), []);
   const propertiesApi = useApi(() => api.properties(), []);
   const unitsApi = useApi(() => api.units(), []);
@@ -297,7 +299,7 @@ export function Reservations({ go }) {
   };
 
   const runAction = async (id, fn, confirmMsg) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirm({ message: confirmMsg }))) return;
     setBusyId(id);
     setActionError("");
     try {
@@ -311,7 +313,7 @@ export function Reservations({ go }) {
   };
 
   const runCouponAction = async (id, fn, confirmMsg) => {
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (confirmMsg && !(await confirm({ message: confirmMsg }))) return;
     setBusyId(id);
     setActionError("");
     try {

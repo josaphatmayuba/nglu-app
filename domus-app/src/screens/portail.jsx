@@ -13,6 +13,7 @@ import { t } from "../i18n.js";
 import { ApiError, Loading } from "./dashboard.jsx";
 import { buildLeaseCards } from "./loyers.jsx";
 import { Autocomplete } from "../components/Autocomplete.jsx";
+import { useToast } from "../components/Dialog.jsx";
 
 const STORAGE_TENANT = "domus-portail-tenant-id";
 const MONTHS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -70,6 +71,7 @@ export function Portail({ go }) {
   const { data, loading, error, reload } = useApi(loadPortailModule, []);
   useRealtimeReload(reload, ["tenants", "leases", "payments", "contracts"]);
   const dateRange = useDateRange();
+  const toast = useToast();
 
   const tenants = useMemo(() => filterTenants(Array.isArray(data?.tenants) ? data.tenants : [], dateRange), [data?.tenants, dateRange]);
   const leases = useMemo(
@@ -189,7 +191,7 @@ export function Portail({ go }) {
       window.location.href = `tel:${phone}`;
       return;
     }
-    window.alert("Coordonnées du gestionnaire non configurées dans les réglages.");
+    toast.error(t("Coordonnées du gestionnaire non configurées dans les réglages."));
   };
 
   if (loading) return <Loading />;

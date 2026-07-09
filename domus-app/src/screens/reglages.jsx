@@ -12,6 +12,7 @@ import {
 import { ApiError, Loading } from "./dashboard.jsx";
 import { LandlordSignatureCard } from "./landlordSignature.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
+import { useConfirm } from "../components/Dialog.jsx";
 
 async function loadConfig() {
   // status=all → toutes les devises (actives + inactives) pour la liste « Devises supportees ».
@@ -523,6 +524,7 @@ const DEFAULT_MESSAGES = [
 ];
 
 function MessagesCard() {
+  const confirm = useConfirm();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -560,7 +562,12 @@ function MessagesCard() {
     }
   };
   const remove = async (t) => {
-    if (!window.confirm(`Supprimer le message « ${t.name} » ?`)) return;
+    if (!(await confirm({
+      title: "Supprimer le message",
+      message: `Supprimer le message « ${t.name} » ?`,
+      confirmLabel: "Supprimer",
+      danger: true,
+    }))) return;
     try {
       await api.deleteMessageTemplate(t.id);
       await load();
