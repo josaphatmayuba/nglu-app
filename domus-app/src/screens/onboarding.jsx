@@ -8,7 +8,7 @@
 import { useMemo, useState } from "react";
 import {
   Link2, Link, User, FileText, ShieldCheck, CheckCircle2, Info, UserPlus,
-  LayoutGrid, Rows3, List, ExternalLink, Copy,
+  LayoutGrid, Rows3, List, ExternalLink, Copy, Pencil, MessageSquare, Mail, Trash2,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -82,13 +82,17 @@ function ProgressBar({ steps }) {
 
 // Carte compacte (vue par défaut, comme la maquette) : avatar, localisation,
 // barre de progression, bouton « Valider le dossier » si prêt.
-function OnboardingSummaryCard({ record, index, onCopy, onOpen, onValidate }) {
+function OnboardingSummaryCard({
+  record, index, sendingId, onEdit, onCopy, onOpen, onValidate, onResendSms, onResendEmail, onDelete,
+}) {
   const name = onboardingDisplayName(record);
   const status = onboardingStatusMeta[record.status] || onboardingStatusMeta.sent;
   const tone = avatarTones[index % avatarTones.length];
   const steps = onboardingProgress(record);
   const location = onboardingLocation(record);
   const ready = record.status === "submitted";
+  const smsBusy = sendingId === `${record.id}:sms`;
+  const emailBusy = sendingId === `${record.id}:email`;
   return (
     <article className={`domus-onboarding-summary${ready ? " ready" : ""}`}>
       <div className="domus-onboarding-summary-head">
@@ -100,29 +104,37 @@ function OnboardingSummaryCard({ record, index, onCopy, onOpen, onValidate }) {
         <span className={`domus-onboarding-badge ${status.className}`}>{status.label}</span>
       </div>
       <ProgressBar steps={steps} />
-      {ready ? (
+      {ready && (
         <button type="button" className="domus-onboarding-validate" onClick={() => onValidate(record)}>
           <CheckCircle2 size={16} /> {t("Valider le dossier")}
         </button>
-      ) : (
-        <div className="domus-onboarding-summary-foot">
-          <span className="muted">{status.label}</span>
-          <div className="domus-onboarding-summary-quick">
-            <button type="button" title={t("Copier")} onClick={() => onCopy(record)}><Copy size={14} /></button>
-            <button type="button" title={t("Ouvrir")} onClick={() => onOpen(record)}><ExternalLink size={14} /></button>
-          </div>
-        </div>
       )}
+      <div className="domus-onboarding-summary-actions">
+        <button type="button" onClick={() => onEdit(record)}><Pencil size={14} /> {t("Remplir")}</button>
+        <button type="button" onClick={() => onCopy(record)}><Copy size={14} /> {t("Copier")}</button>
+        <button type="button" onClick={() => onOpen(record)}><ExternalLink size={14} /> {t("Ouvrir")}</button>
+        <button type="button" disabled={smsBusy} onClick={() => onResendSms(record)}>
+          <MessageSquare size={14} /> {smsBusy ? t("Envoi...") : record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")}
+        </button>
+        <button type="button" disabled={emailBusy} onClick={() => onResendEmail(record)}>
+          <Mail size={14} /> {emailBusy ? t("Envoi...") : record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")}
+        </button>
+        <button type="button" className="danger" onClick={() => onDelete(record)}><Trash2 size={14} /> {t("Supprimer")}</button>
+      </div>
     </article>
   );
 }
 
 // Ligne de tableau (vue liste).
-function OnboardingListRow({ record, index, onCopy, onOpen, onValidate }) {
+function OnboardingListRow({
+  record, index, sendingId, onEdit, onCopy, onOpen, onValidate, onResendSms, onResendEmail, onDelete,
+}) {
   const name = onboardingDisplayName(record);
   const status = onboardingStatusMeta[record.status] || onboardingStatusMeta.sent;
   const tone = avatarTones[index % avatarTones.length];
   const steps = onboardingProgress(record);
+  const smsBusy = sendingId === `${record.id}:sms`;
+  const emailBusy = sendingId === `${record.id}:email`;
   return (
     <tr>
       <td>
@@ -138,8 +150,12 @@ function OnboardingListRow({ record, index, onCopy, onOpen, onValidate }) {
       <td><ProgressBar steps={steps} /></td>
       <td>{formatShortDate(record.expiresAt)}</td>
       <td className="domus-onboarding-list-actions">
+        <button type="button" title={t("Remplir")} onClick={() => onEdit(record)}><Pencil size={14} /></button>
         <button type="button" title={t("Copier")} onClick={() => onCopy(record)}><Copy size={14} /></button>
         <button type="button" title={t("Ouvrir")} onClick={() => onOpen(record)}><ExternalLink size={14} /></button>
+        <button type="button" disabled={smsBusy} title={record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")} onClick={() => onResendSms(record)}><MessageSquare size={14} /></button>
+        <button type="button" disabled={emailBusy} title={record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")} onClick={() => onResendEmail(record)}><Mail size={14} /></button>
+        <button type="button" className="danger" title={t("Supprimer")} onClick={() => onDelete(record)}><Trash2 size={14} /></button>
         {record.status === "submitted" && (
           <button type="button" className="primary" onClick={() => onValidate(record)}>
             <CheckCircle2 size={14} /> {t("Valider")}
@@ -299,9 +315,14 @@ export function Onboarding({ go } = {}) {
               key={`onboarding-${record.id}`}
               record={record}
               index={index}
+              sendingId={sendingId}
+              onEdit={goValidate}
               onCopy={() => copyText(onboardingUrl(record))}
               onOpen={() => openLink(onboardingUrl(record))}
               onValidate={goValidate}
+              onResendSms={resendSms}
+              onResendEmail={resendEmail}
+              onDelete={deleteOnboarding}
             />
           ))}
         </div>
@@ -323,9 +344,14 @@ export function Onboarding({ go } = {}) {
                   key={`onboarding-${record.id}`}
                   record={record}
                   index={index}
+                  sendingId={sendingId}
+                  onEdit={goValidate}
                   onCopy={() => copyText(onboardingUrl(record))}
                   onOpen={() => openLink(onboardingUrl(record))}
                   onValidate={goValidate}
+                  onResendSms={resendSms}
+                  onResendEmail={resendEmail}
+                  onDelete={deleteOnboarding}
                 />
               ))}
             </tbody>
