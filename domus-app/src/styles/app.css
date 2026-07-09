@@ -1239,6 +1239,45 @@ table.tbl tbody td { padding:12px 16px; border-top:1px solid var(--ink-100); }
 .domus-onboarding-actions button.danger{border-color:#fecaca;color:#dc2626;}
 .shell[data-layout="mobile"] .domus-onboarding-card{padding:18px;}.shell[data-layout="mobile"] .domus-onboarding-strip{grid-template-columns:1fr;}
 
+/* ── Sélecteur de vue + vue cartes/liste (maquette Onboarding) ── */
+.domus-onboarding-section-head{align-items:center;display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin:12px 0 14px;}
+.domus-view-switch{background:#f4f4f6;border:1px solid #e4e4e7;border-radius:9px;display:inline-flex;gap:2px;padding:3px;}
+.domus-view-switch button{align-items:center;background:transparent;border:none;border-radius:6px;color:#52525b;cursor:pointer;display:inline-flex;font-family:inherit;font-size:13px;font-weight:700;gap:6px;padding:6px 11px;}
+.domus-view-switch button.active{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);color:#4f46e5;}
+.domus-view-switch button svg{flex:none;}
+
+.domus-onboarding-summary-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin:0 0 16px;}
+.domus-onboarding-summary{background:#fff;border:1px solid #e4e4e7;border-radius:14px;display:flex;flex-direction:column;gap:16px;padding:20px 22px;}
+.domus-onboarding-summary.ready{background:#fdfdff;border-color:#fcd34d;}
+.domus-onboarding-summary-head{align-items:flex-start;display:flex;gap:14px;}
+.domus-onboarding-summary-head .tenant-avatar{font-size:14px;height:42px;min-width:42px;width:42px;}
+.domus-onboarding-summary-id{flex:1;min-width:0;}
+.domus-onboarding-summary-id h3{color:#09090b;font-size:18px;font-weight:800;line-height:1.2;margin:2px 0 3px;overflow-wrap:anywhere;}
+.domus-onboarding-summary-id p{color:#71717a;font-size:13px;margin:0;}
+.domus-onboarding-progress{display:grid;gap:6px;grid-template-columns:repeat(4,1fr);}
+.domus-onboarding-progress span{background:#e4e4e7;border-radius:5px;height:8px;}
+.domus-onboarding-progress span.done{background:#10b981;}
+.domus-onboarding-validate{align-items:center;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:none;border-radius:10px;color:#fff;cursor:pointer;display:inline-flex;font-family:inherit;font-size:15px;font-weight:800;gap:8px;justify-content:center;padding:12px;}
+.domus-onboarding-validate:hover{filter:brightness(1.05);}
+.domus-onboarding-summary-foot{align-items:center;color:#71717a;display:flex;font-size:13px;justify-content:space-between;}
+.domus-onboarding-summary-quick{display:flex;gap:6px;}
+.domus-onboarding-summary-quick button,.domus-onboarding-list-actions button{align-items:center;background:#fff;border:1px solid #e4e4e7;border-radius:7px;color:#3f3f46;cursor:pointer;display:inline-flex;gap:5px;justify-content:center;min-height:30px;padding:5px 9px;}
+.domus-onboarding-summary-quick button:hover,.domus-onboarding-list-actions button:hover{background:#fafafa;}
+.domus-onboarding-list-actions button.primary{background:#4f46e5;border-color:#4f46e5;color:#fff;font-family:inherit;font-size:13px;font-weight:700;}
+
+.domus-onboarding-list-wrap{overflow-x:auto;padding:6px;}
+.domus-onboarding-list{border-collapse:collapse;width:100%;}
+.domus-onboarding-list th{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.05em;padding:10px 12px;text-align:left;text-transform:uppercase;}
+.domus-onboarding-list td{border-top:1px solid #f0f0f3;font-size:14px;padding:12px;vertical-align:middle;}
+.domus-onboarding-list td .domus-onboarding-progress{min-width:120px;}
+.domus-onboarding-list-name{align-items:center;display:flex;gap:11px;}
+.domus-onboarding-list-name strong{color:#18181b;display:block;font-size:14px;}
+.domus-onboarding-list-name small{color:#a1a1aa;font-size:12px;}
+.domus-onboarding-list-actions{display:flex;gap:6px;}
+.tenant-avatar.sm{font-size:12px;height:34px;min-width:34px;width:34px;}
+.shell[data-layout="mobile"] .domus-onboarding-summary-grid{grid-template-columns:1fr;}
+.shell[data-layout="mobile"] .domus-view-switch button span{display:none;}
+
 /* ── Écran interne Onboarding (SCRUM-246) ── */
 .immo-eyebrow{color:#71717a;font-size:11px;font-weight:700;letter-spacing:.08em;margin:0 0 2px;text-transform:uppercase;}
 .domus-onboarding-top{align-items:stretch;display:grid;gap:14px;grid-template-columns:2fr 1fr;margin:0 0 8px;}
