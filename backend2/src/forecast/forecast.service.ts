@@ -6,7 +6,7 @@ import type {
   ForecastScope,
 } from "./forecast.types";
 import { FORECAST_PRODUCERS } from "./forecast.types";
-import { round2 } from "./forecast.util";
+import { addMonths, monthKey, round2 } from "./forecast.util";
 
 export type ForecastMode = "prudent" | "realiste" | "optimiste";
 
@@ -99,6 +99,37 @@ export class ForecastService {
       bucket.lines.push(line);
       monthMap.set(key, bucket);
       byMonth.set(line.month, monthMap);
+    }
+
+    // 2b. SOCLE TEMPOREL : on garantit un point pour CHAQUE mois de l'horizon,
+    // meme sans flux (net=0). Sinon la courbe/le KPI se figent au dernier mois
+    // ayant des donnees et l'horizon choisi n'a aucun effet visible.
+    // Les devises connues = celles vues dans les lignes (aucune supposee).
+    const now = new Date();
+    const horizonMonthKeys: string[] = [];
+    for (let i = 0; i < query.horizonMonths; i++) {
+      horizonMonthKeys.push(monthKey(addMonths(now, i)));
+    }
+    const currencyTemplates = new Map<string, Omit<CurrencyBucket, "net" | "opening" | "lines">>();
+    for (const monthMap of byMonth.values()) {
+      for (const [key, b] of monthMap) {
+        if (!currencyTemplates.has(key)) {
+          currencyTemplates.set(key, {
+            currencyId: b.currencyId,
+            currencyCode: b.currencyCode,
+            currencySymbol: b.currencySymbol,
+          });
+        }
+      }
+    }
+    for (const month of horizonMonthKeys) {
+      const monthMap = byMonth.get(month) ?? new Map<string, CurrencyBucket>();
+      for (const [key, tpl] of currencyTemplates) {
+        if (!monthMap.has(key)) {
+          monthMap.set(key, { ...tpl, net: 0, opening: 0, lines: [] });
+        }
+      }
+      byMonth.set(month, monthMap);
     }
 
     // 3. Mise en forme triee par mois croissant, avec CONE D'INCERTITUDE :

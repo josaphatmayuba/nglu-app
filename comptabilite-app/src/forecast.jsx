@@ -1,4 +1,15 @@
 import React from "react";
+import {
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+} from "recharts";
 import { api } from "./api.js";
 import { cleanCurrencySymbol } from "./currency.js";
 
@@ -62,86 +73,84 @@ function buildSeries(months) {
   return [...byCur.values()];
 }
 
-/** Chemin lissé (Catmull-Rom → Bézier) pour des courbes douces façon "area chart". */
-function smoothPath(coords) {
-  if (coords.length < 2) return "";
-  let d = `M${coords[0][0].toFixed(1)},${coords[0][1].toFixed(1)}`;
-  for (let i = 0; i < coords.length - 1; i++) {
-    const p0 = coords[i - 1] || coords[i];
-    const p1 = coords[i];
-    const p2 = coords[i + 1];
-    const p3 = coords[i + 2] || p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  return d;
+/** Tooltip custom : une ligne par devise avec cumul + fourchette (cône). */
+function ChartTooltip({ active, payload, label, series, colors }) {
+  if (!active || !payload || !payload.length) return null;
+  const row = payload[0]?.payload || {};
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 10px", fontSize: 12, boxShadow: "0 4px 12px rgba(0,0,0,.08)" }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>{monthLabel(label)}</div>
+      {series.map((s, i) => {
+        const v = row[`cumul_${i}`];
+        if (v == null) return null;
+        const lo = row[`low_${i}`], hi = row[`high_${i}`];
+        const hasRange = lo != null && hi != null && (hi - lo) > 1;
+        return (
+          <div key={s.code} style={{ color: colors[i % colors.length] }}>
+            {s.code} : <strong>{fmtSigned(v)}</strong>
+            {hasRange && <span style={{ color: "#94a3b8" }}> ({fmtSigned(lo)} … {fmtSigned(hi)})</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
- * Graphe unique multi-devises en aires superposées translucides (façon maquette).
- * Compact (hauteur réduite). Le 1er point = solde RÉEL de départ (trait plein),
- * la suite = projection (trait pointillé), séparés par la ligne "aujourd'hui".
+ * Graphe multi-devises (Recharts). Aire = cône d'incertitude (low→high),
+ * ligne = cumul projeté (pointillé). Le repère "aujourd'hui" sépare le réel
+ * de la projection. Une courbe par devise, sans conversion (règle SIFA).
  */
 function StackedChart({ series, colors }) {
-  const W = 720, H = 230, padX = 12, padTop = 16, padBottom = 26;
   const drawn = series.filter((s) => s.points.length >= 2);
   if (drawn.length === 0) return <div className="muted" style={{ fontSize: 13, padding: "12px 0" }}>Pas assez de points pour tracer une courbe.</div>;
-  const n = drawn[0].points.length;
-  const months = drawn[0].points.map((p) => p.month);
-  const allY = drawn.flatMap((s) => s.points.flatMap((p) => [p.cumul, p.low ?? p.cumul, p.high ?? p.cumul]));
-  const min = Math.min(0, ...allY), max = Math.max(0, ...allY);
-  const span = max - min || 1;
-  const x = (i) => padX + (i * (W - 2 * padX)) / (n - 1);
-  const y = (v) => H - padBottom - ((v - min) * (H - padTop - padBottom)) / span;
-  const zeroY = y(0);
-  const x0 = x(0); // "aujourd'hui" = point de départ réel
+
+  // Dataset à plat : un objet par mois, un champ par devise (cumul/low/high).
+  const monthsRef = drawn[0].points.map((p) => p.month);
+  const data = monthsRef.map((month, k) => {
+    const row = { month };
+    drawn.forEach((s, i) => {
+      const p = s.points[k];
+      if (!p) return;
+      row[`cumul_${i}`] = p.cumul;
+      row[`low_${i}`] = p.low ?? p.cumul;
+      row[`high_${i}`] = p.high ?? p.cumul;
+    });
+    return row;
+  });
+  const todayLabel = monthsRef[0]; // 1er point = solde réel de départ
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", overflow: "visible" }} role="img" aria-label="Trésorerie projetée par devise">
-      <defs>
-        {drawn.map((s, i) => (
-          <linearGradient key={s.code} id={`fc-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={colors[i % colors.length]} stopOpacity="0.28" />
-            <stop offset="100%" stopColor={colors[i % colors.length]} stopOpacity="0.04" />
-          </linearGradient>
-        ))}
-      </defs>
-
-      {/* ligne du zéro */}
-      <line x1={padX} y1={zeroY} x2={W - padX} y2={zeroY} stroke="#e2e8f0" />
-      {/* repère "aujourd'hui" */}
-      <line x1={x0} y1={padTop} x2={x0} y2={H - padBottom} stroke="#cbd5e1" strokeDasharray="2 3" />
-      <text x={x0 + 4} y={padTop + 9} fontSize="9" fill="#94a3b8">aujourd'hui</text>
-
-      {drawn.map((s, i) => {
-        const color = colors[i % colors.length];
-        const coords = s.points.map((p, k) => [x(k), y(p.cumul)]);
-        const linePath = smoothPath(coords);
-        const areaPath = `${linePath} L${x(n - 1).toFixed(1)},${y(min).toFixed(1)} L${x(0).toFixed(1)},${y(min).toFixed(1)} Z`;
-        return (
-          <g key={s.code}>
-            <path d={areaPath} fill={`url(#fc-grad-${i})`} stroke="none" />
-            {/* projection en pointillé */}
-            <path d={linePath} fill="none" stroke={color} strokeWidth="2.4" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" opacity="0.95" />
-            {/* point de départ réel (plein, marqueur net) */}
-            <circle cx={coords[0][0]} cy={coords[0][1]} r="4" fill={color} stroke="#fff" strokeWidth="1.5">
-              <title>{`${monthLabel(s.points[0].month)} (réel) : ${fmtSigned(s.points[0].cumul)} ${s.code}`}</title>
-            </circle>
-            {/* point final projeté */}
-            <circle cx={coords[n - 1][0]} cy={coords[n - 1][1]} r="4" fill="#fff" stroke={color} strokeWidth="2.2">
-              <title>{`${monthLabel(s.points[n - 1].month)} (projeté) : ${fmtSigned(s.points[n - 1].cumul)} ${s.code}`}</title>
-            </circle>
-          </g>
-        );
-      })}
-
-      {/* labels début / fin */}
-      <text x={x(0)} y={H - 8} textAnchor="start" fontSize="10" fill="#94a3b8">{monthLabel(months[0])}</text>
-      <text x={x(n - 1)} y={H - 8} textAnchor="end" fontSize="10" fill="#94a3b8">{monthLabel(months[n - 1])}</text>
-    </svg>
+    <ResponsiveContainer width="100%" height={230}>
+      <ComposedChart data={data} margin={{ top: 16, right: 12, bottom: 4, left: 4 }}>
+        <defs>
+          {drawn.map((s, i) => (
+            <linearGradient key={s.code} id={`fc-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={colors[i % colors.length]} stopOpacity="0.24" />
+              <stop offset="100%" stopColor={colors[i % colors.length]} stopOpacity="0.03" />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+        <XAxis dataKey="month" tickFormatter={monthLabel} tick={{ fontSize: 10, fill: "#94a3b8" }} interval="preserveStartEnd" minTickGap={40} />
+        <YAxis tickFormatter={(v) => nf.format(v)} tick={{ fontSize: 10, fill: "#94a3b8" }} width={60} />
+        <Tooltip content={<ChartTooltip series={drawn} colors={colors} />} />
+        <ReferenceLine y={0} stroke="#e2e8f0" />
+        <ReferenceLine x={todayLabel} stroke="#cbd5e1" strokeDasharray="2 3" label={{ value: "aujourd'hui", position: "insideTopRight", fontSize: 9, fill: "#94a3b8" }} />
+        {drawn.map((s, i) => {
+          const color = colors[i % colors.length];
+          return (
+            <React.Fragment key={s.code}>
+              {/* cône d'incertitude : aire entre low et high */}
+              <Area type="monotone" dataKey={`high_${i}`} stroke="none" fill={`url(#fc-grad-${i})`} isAnimationActive={false} activeDot={false} legendType="none" />
+              <Area type="monotone" dataKey={`low_${i}`} stroke="none" fill="#fff" fillOpacity={1} isAnimationActive={false} activeDot={false} legendType="none" />
+              {/* cumul projeté (pointillé) */}
+              <Line type="monotone" dataKey={`cumul_${i}`} stroke={color} strokeWidth={2.4} strokeDasharray="5 4" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+            </React.Fragment>
+          );
+        })}
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 

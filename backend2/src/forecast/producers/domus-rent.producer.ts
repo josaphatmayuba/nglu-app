@@ -55,9 +55,12 @@ export class DomusRentProducer implements ForecastProducer {
 
       for (let i = 0; i < horizonMonths; i++) {
         const due = addMonths(start, i);
-        // On ne projette pas avant aujourd'hui ni au-dela de la fin du bail.
+        // On ne projette pas avant aujourd'hui.
         if (monthKey(due) < monthKey(now)) continue;
-        if (end && due > end) break;
+        // Jusqu'a la fin du bail = loyer certain (couche 1). Au-dela, on suppose
+        // le renouvellement = tendance (couche 2, visible en mode Realiste).
+        // Un bail sans endDate reste couche 1 sur tout l'horizon.
+        const beyondEnd = end != null && due > end;
 
         lines.push({
           month: monthKey(due),
@@ -65,11 +68,11 @@ export class DomusRentProducer implements ForecastProducer {
           currencyId: lease.currencyId ?? null,
           currencyCode: lease.currencyCode ?? null,
           currencySymbol: lease.currencySymbol ?? null,
-          layer: 1,
-          confidence: "certain",
+          layer: beyondEnd ? 2 : 1,
+          confidence: beyondEnd ? "estimated" : "certain",
           scope: "domus",
           source: `Loyer bail ${lease.reference}`,
-          basis: "bail actif (cycle mensuel)",
+          basis: beyondEnd ? "renouvellement suppose du bail" : "bail actif (cycle mensuel)",
         });
       }
     }

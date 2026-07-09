@@ -54,18 +54,21 @@ export class HrPayrollProducer implements ForecastProducer {
 
       for (let i = 0; i < horizonMonths; i++) {
         const due = addMonths(now, i);
-        if (end && due > end) break;
+        // Jusqu'a la fin du contrat = engage certain (couche 1). Au-dela, on
+        // suppose la reconduction du poste = tendance (couche 2, visible en
+        // mode Realiste seulement). Un contrat sans endDate (CDI) reste couche 1.
+        const beyondEnd = end != null && due > end;
         lines.push({
           month: monthKey(due),
           amount: -monthly, // sortie
           currencyId: c.currencyId ?? null,
           currencyCode: c.currencyCode ?? null,
           currencySymbol: c.currencySymbol ?? null,
-          layer: 1,
-          confidence: "certain",
+          layer: beyondEnd ? 2 : 1,
+          confidence: beyondEnd ? "estimated" : "certain",
           scope: "hr",
           source: `Salaire ${c.reference || `contrat #${c.id}`}`,
-          basis: "contrat actif (base + primes)",
+          basis: beyondEnd ? "reconduction supposee du poste" : "contrat actif (base + primes)",
         });
       }
     }
