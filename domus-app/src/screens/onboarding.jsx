@@ -8,7 +8,7 @@
 import { useMemo, useState } from "react";
 import {
   Link2, Link, User, FileText, ShieldCheck, CheckCircle2, Info, UserPlus,
-  LayoutGrid, Rows3, List, ExternalLink, Copy, Pencil, MessageSquare, Mail, Trash2,
+  LayoutGrid, Rows3, List, ExternalLink, Copy, Pencil, MessageSquare, Mail, MailCheck, Check, Trash2,
 } from "lucide-react";
 import { api } from "../api.js";
 import { t, tf } from "../i18n.js";
@@ -69,6 +69,18 @@ const VIEW_MODES = [
   { id: "list", icon: <List size={15} />, label: t("Liste") },
 ];
 
+// Icône SMS : bulle de message, avec un check en pastille quand le SMS a déjà
+// été transmis (comme un accusé de lecture).
+function SmsIcon({ sent }) {
+  if (!sent) return <MessageSquare size={15} />;
+  return (
+    <span className="domus-icon-badge">
+      <MessageSquare size={15} />
+      <Check size={9} className="domus-icon-badge-check" />
+    </span>
+  );
+}
+
 // Barre de progression 4 segments (maquette).
 function ProgressBar({ steps }) {
   return (
@@ -110,16 +122,16 @@ function OnboardingSummaryCard({
         </button>
       )}
       <div className="domus-onboarding-summary-actions">
-        <button type="button" onClick={() => onEdit(record)}><Pencil size={14} /> {t("Remplir")}</button>
-        <button type="button" onClick={() => onCopy(record)}><Copy size={14} /> {t("Copier")}</button>
-        <button type="button" onClick={() => onOpen(record)}><ExternalLink size={14} /> {t("Ouvrir")}</button>
-        <button type="button" disabled={smsBusy} onClick={() => onResendSms(record)}>
-          <MessageSquare size={14} /> {smsBusy ? t("Envoi...") : record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")}
+        <button type="button" title={t("Remplir")} onClick={() => onEdit(record)}><Pencil size={15} /></button>
+        <button type="button" title={t("Copier")} onClick={() => onCopy(record)}><Copy size={15} /></button>
+        <button type="button" title={t("Ouvrir")} onClick={() => onOpen(record)}><ExternalLink size={15} /></button>
+        <button type="button" disabled={smsBusy} title={smsBusy ? t("Envoi...") : record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")} onClick={() => onResendSms(record)}>
+          <SmsIcon sent={!!record.smsSentAt} />
         </button>
-        <button type="button" disabled={emailBusy} onClick={() => onResendEmail(record)}>
-          <Mail size={14} /> {emailBusy ? t("Envoi...") : record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")}
+        <button type="button" disabled={emailBusy} title={emailBusy ? t("Envoi...") : record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")} onClick={() => onResendEmail(record)}>
+          {record.emailSentAt ? <MailCheck size={15} /> : <Mail size={15} />}
         </button>
-        <button type="button" className="danger" onClick={() => onDelete(record)}><Trash2 size={14} /> {t("Supprimer")}</button>
+        <button type="button" className="danger" title={t("Supprimer")} onClick={() => onDelete(record)}><Trash2 size={15} /></button>
       </div>
     </article>
   );
@@ -153,8 +165,8 @@ function OnboardingListRow({
         <button type="button" title={t("Remplir")} onClick={() => onEdit(record)}><Pencil size={14} /></button>
         <button type="button" title={t("Copier")} onClick={() => onCopy(record)}><Copy size={14} /></button>
         <button type="button" title={t("Ouvrir")} onClick={() => onOpen(record)}><ExternalLink size={14} /></button>
-        <button type="button" disabled={smsBusy} title={record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")} onClick={() => onResendSms(record)}><MessageSquare size={14} /></button>
-        <button type="button" disabled={emailBusy} title={record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")} onClick={() => onResendEmail(record)}><Mail size={14} /></button>
+        <button type="button" disabled={smsBusy} title={record.smsSentAt ? t("Renvoyer SMS") : t("Envoyer SMS")} onClick={() => onResendSms(record)}><SmsIcon sent={!!record.smsSentAt} /></button>
+        <button type="button" disabled={emailBusy} title={record.emailSentAt ? t("Renvoyer email") : t("Envoyer email")} onClick={() => onResendEmail(record)}>{record.emailSentAt ? <MailCheck size={14} /> : <Mail size={14} />}</button>
         <button type="button" className="danger" title={t("Supprimer")} onClick={() => onDelete(record)}><Trash2 size={14} /></button>
         {record.status === "submitted" && (
           <button type="button" className="primary" onClick={() => onValidate(record)}>
