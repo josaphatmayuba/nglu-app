@@ -10,6 +10,7 @@ import { filterTenants, useDateRange } from "../dateRange.jsx";
 import { normalizeCurrencyModule, useApi } from "../data.js";
 import { useRealtimeReload } from "../realtime.js";
 import { ApiError, Loading } from "./dashboard.jsx";
+import { tenantBadge, tenantLeaseInfo } from "./tenantBadge.js";
 import { Metric, MetricsGrid } from "./ui.jsx";
 import { Modal, FormSection, DomusPropertyField, DomusPropertySelect, ModalActions } from "./biens.jsx";
 import { DomusPhoneField } from "../components/PhoneField.jsx";
@@ -127,47 +128,6 @@ async function loadTenantsModule() {
     api.setting().catch(() => null),
   ]);
   return { tenants, onboarding, leases, units, currencies, setting };
-}
-
-// ── Liaison locataire → bail actif → unité (comme le CRM TenantsPanel) ──
-function tenantLeaseInfo(tenant, leases, units) {
-  const tenantLeases = leases.filter((l) => String(l.tenantId) === String(tenant.id));
-  const activeLease = tenantLeases.find((l) => l.status === "active") || tenantLeases[0] || null;
-  const activeUnit = activeLease ? units.find((u) => String(u.id) === String(activeLease.unitId)) || null : null;
-  return { tenantLeases, activeLease, activeUnit };
-}
-
-function tenantBadge(tenant, tenantLeases, activeLease) {
-  const isLate = activeLease?.isOverdue || activeLease?.status === "late";
-  if (isLate) {
-    const d = activeLease?.overdueDays;
-    return { label: `En retard${d ? ` ${d}j` : ""}`, tone: "danger" };
-  }
-  // Retard historique (payé en retard sur le passé, pas seulement l'échéance
-  // courante) : cumulé sur tous les baux du locataire, calculé côté backend
-  // (lateCount/dueCount par bail via property-management.service.ts).
-  const totalLate = tenantLeases.reduce((s, l) => s + Number(l.lateCount || 0), 0);
-  const totalDue = tenantLeases.reduce((s, l) => s + Number(l.dueCount || 0), 0);
-  if (totalDue >= 3 && totalLate / totalDue > 0.3) {
-    return { label: `Mauvais payeur · ${totalLate} retards`, tone: "danger" };
-  }
-  const daysToEnd = activeLease?.endDate
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - Date.now()) / 86400000)
-    : null;
-  if (daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= 60) return { label: "Bail à renouveler", tone: "warning" };
-  const isCompany = Boolean(tenant?.entityName) && /\b(sarl|sas|sa|sprl|entreprise|company|ltd|inc|group)\b/i.test(String(tenant.entityName));
-  if (isCompany) return { label: "Pro · Entreprise", tone: "brand" };
-  const years = activeLease?.startDate
-    ? Math.max(1, Math.floor((Date.now() - new Date(activeLease.startDate).getTime()) / (365 * 86400000)))
-    : 0;
-  const hasAnyLate = tenantLeases.some((l) => l.isOverdue || l.status === "late") || totalLate > 0;
-  const y = years || 1;
-  const plural = y > 1 ? "s" : "";
-  if (!hasAnyLate) {
-    if (tenantLeases.length >= 2 || years >= 3) return { label: `Or · ${tenantLeases.length >= 2 ? `${tenantLeases.length} baux` : `${years} ans`}`, tone: "success" };
-    if (years >= 2) return { label: `Argent · ${y} an${plural}`, tone: "brand" };
-  }
-  return { label: `Bronze · ${y} an${plural}`, tone: "neutral" };
 }
 
 function unitKindIcon(kind) {
