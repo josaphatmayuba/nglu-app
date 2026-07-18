@@ -140,6 +140,14 @@ export class AuthService {
     // SCRUM-112: block locked-out usernames before hitting the DB
     this.checkLockout(dto.username);
 
+    // L identifiant recu (`username`) peut etre un username (ERP ongdngolu) OU
+    // un email (site Avelomi qui envoie l email sous cette cle). On resout donc
+    // par username exact OU par email normalise (les emails sont stockes en
+    // trim().toLowerCase() a l inscription). Le username reste compare tel quel
+    // pour ne pas changer le comportement historique de l ERP.
+    const identifier = dto.username;
+    const emailCandidate = identifier.trim().toLowerCase();
+
     const [user] = await this.db
       .select({
         id: users.id,
@@ -157,7 +165,7 @@ export class AuthService {
         email: users.email,
       })
       .from(users)
-      .where(eq(users.username, dto.username))
+      .where(or(eq(users.username, identifier), eq(users.email, emailCandidate)))
       .limit(1);
 
     if (!user) {

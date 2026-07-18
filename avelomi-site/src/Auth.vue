@@ -1,7 +1,7 @@
 <script setup>
 // Pages Connexion / Inscription / Espace propres a Avelomi (site Vue).
 // Tapent le MEME backend que l'ERP via le proxy /api (nginx -> middleware) :
-//   POST /api/auth/login    { email, password }              -> { token, ... } | { requireMfa, mfaToken }
+//   POST /api/auth/login    { username, password }           -> { token, ... } | { requireMfa, mfaToken }  (username = email)
 //   POST /api/auth/register { firstName,lastName,email,... }  -> { token, organization }
 // Token en memoire applicative (SCRUM-119) ; cookie refresh pose par le backend.
 // Vues pilotees par le hash : #/login, #/signup, #/accueil (espace).
@@ -148,7 +148,7 @@ async function submitLogin() {
     const res = await fetch(`${API}/auth/login`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email: login.email.trim().toLowerCase(), password: login.password }),
+      body: JSON.stringify({ username: login.email.trim().toLowerCase(), password: login.password }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.message || t('Identifiants invalides.', 'Invalid credentials.'));
