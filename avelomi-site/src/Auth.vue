@@ -273,13 +273,17 @@ async function submitSignup() {
 }
 
 // ───────────────────────── Espace ─────────────────────────
+// Les SPA (FarmOS, Compta, Domus, BatiPro, HR) ne sont routees que sur la prod
+// avelomi.com ; le stack dev.avelomi.com n'a que la vitrine + /api. On pointe
+// donc les cartes vers les chemins ABSOLUS de prod, qui existent reellement.
+const APP_BASE = 'https://avelomi.com';
 const apps = computed(() => ([
-  { img: '/img/farmos-icon.png', nm: 'FarmOS', url: '/farmos' },
-  { img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: '/comptabilite' },
-  { img: '/img/domus-icon.svg', nm: 'Domus', url: '/domus' },
-  { img: '/img/batipro-icon.svg', nm: 'BatiPro', url: '/batipro' },
-  { img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: '/hr' },
-  { ico: '📊', nm: t('Stats', 'Stats'), url: '/crm' },
+  { img: '/img/farmos-icon.png', nm: 'FarmOS', url: `${APP_BASE}/farmos` },
+  { img: '/img/comptabilite-icon.svg', nm: t('Comptabilité', 'Accounting'), url: `${APP_BASE}/comptabilite` },
+  { img: '/img/domus-icon.svg', nm: 'Domus', url: `${APP_BASE}/domus` },
+  { img: '/img/batipro-icon.svg', nm: 'BatiPro', url: `${APP_BASE}/batipro` },
+  { img: '/img/hr-icon.svg', nm: t('RH', 'HR'), url: `${APP_BASE}/hr` },
+  { ico: '📊', nm: t('Stats', 'Stats'), url: `${APP_BASE}/crm` },
 ]));
 function enterWorkspace() { success.value = false; inWorkspace.value = true; go('#/accueil'); }
 function go(hash) { location.hash = hash; }
@@ -293,7 +297,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       <div class="ws-brand"><span class="mark"><svg viewBox="0 0 64 64"><g transform="translate(32 32)"><rect x="-17.5" y="-17.5" width="14" height="14" rx="4.5" fill="#34d27e"/><rect x="3.5" y="-17.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="-17.5" y="3.5" width="14" height="14" rx="4.5" fill="#1fbf73"/><rect x="3.5" y="3.5" width="14" height="14" rx="4.5" fill="#0e7a48"/></g></svg></span>{{ me?.org || 'Avelomi' }}</div>
       <div class="ws-side-sub">{{ t('Votre espace', 'Your workspace') }}</div>
       <div class="ws-nav active">📊 <span>{{ t('Accueil', 'Home') }}</span></div>
-      <a class="ws-nav" v-for="a in apps" :key="a.nm" :href="a.url"><img v-if="a.img" :src="a.img" :alt="a.nm" class="ws-nav-ic" /><template v-else>{{ a.ico }}</template> <span>{{ a.nm }}</span></a>
+      <a class="ws-nav" v-for="a in apps" :key="a.nm" :href="a.url" target="_blank" rel="noopener"><img v-if="a.img" :src="a.img" :alt="a.nm" class="ws-nav-ic" /><template v-else>{{ a.ico }}</template> <span>{{ a.nm }}</span></a>
       <div class="ws-nav" @click="logout">⏻ <span>{{ t('Se déconnecter', 'Sign out') }}</span></div>
     </aside>
     <main class="ws-main">
@@ -305,7 +309,7 @@ function logout() { accessToken = null; me.value = null; success.value = false; 
       <p class="ws-sub">{{ t('Vous gérez', 'You manage') }} <strong>{{ me?.org }}</strong>. {{ t('Vos données sont isolées à votre organisation.', 'Your data is isolated to your organization.') }}</p>
       <h3>{{ t('Vos applications', 'Your apps') }}</h3>
       <div class="mod-grid">
-        <a class="mod-card" v-for="a in apps" :key="a.nm" :href="a.url">
+        <a class="mod-card" v-for="a in apps" :key="a.nm" :href="a.url" target="_blank" rel="noopener">
           <div class="ico"><img v-if="a.img" :src="a.img" :alt="a.nm" class="mod-ic" /><template v-else>{{ a.ico }}</template></div><div class="nm">{{ a.nm }}</div>
         </a>
       </div>
