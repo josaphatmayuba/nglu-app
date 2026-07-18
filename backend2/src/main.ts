@@ -56,11 +56,24 @@ async function bootstrap() {
   // pour que l'app native FarmOS puisse appeler l'API.
   const corsOrigins = String(env.corsOrigin).split(",").map((s) => s.trim()).filter(Boolean);
   const NATIVE_ORIGINS = ["capacitor://localhost", "https://localhost", "http://localhost"];
+  // Chaque app Avelomi vit sur son propre sous-domaine (prod: <app>.avelomi.com,
+  // dev: dev.<app>.avelomi.com — farmos/compta/domus/batipro/rh). On autorise
+  // TOUT sous-domaine https de avelomi.com sans avoir à les lister un par un.
+  // Purement additif : ongdngolu.org & la liste corsOrigin existante inchangés.
+  const isAvelomiOrigin = (origin: string): boolean => {
+    try {
+      const u = new URL(origin);
+      return u.protocol === "https:" && (u.hostname === "avelomi.com" || u.hostname.endsWith(".avelomi.com"));
+    } catch {
+      return false;
+    }
+  };
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return cb(null, true);
       if (corsOrigins.includes(origin)) return cb(null, true);
       if (NATIVE_ORIGINS.includes(origin)) return cb(null, true);
+      if (isAvelomiOrigin(origin)) return cb(null, true);
       cb(null, false);
     },
     credentials: true,
